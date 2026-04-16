@@ -14,12 +14,8 @@ Aktuell verfügbar (Stand im Repository):
 - Erweiterte Call-Steuerung: DTMF, Blind/Attended Transfer
 - In-Dialog-Operationen: `INFO`, `OPTIONS`, `SUBSCRIBE`, `NOTIFY`
 - Medienpfad: RTP-Sessions, Sender/Receiver, `MediaConnector` (inkl. Cross-Connect)
-- Conference Rooms: `ConferenceManager` + `ConferenceRoom` mit PCM16-Mixing, Mute und Teilnehmer-Level
-- Recording/Playback: WAV/MP3 + Built-in Payload-Transcoding fuer L16/PCMU/PCMA/G.722
 - Audio-Geräte für Linux und Windows als separate Projekte
 - Runtime Device Controls: Device-Hot-Switch, Input/Output Mute, Input/Output Volume, Format-Update
-- Runtime Plugin-System: dynamische Modul-Exports mit `install/activate/deactivate/uninstall` ohne Prozessneustart
-- Plugin-Katalog mit Mehrfach-Exports je Vertragstyp (mehrere Erweiterungen parallel moeglich)
 - Umfangreiche RFC-orientierte Unit- und Compliance-Tests
 
 ## Architektur (DDD)
@@ -28,27 +24,6 @@ Aktuell verfügbar (Stand im Repository):
 - `src/Core/Application`: Use-Cases und Orchestrierung (Calls, Lines, Media)
 - `src/Core/Infrastructure`: SIP/RTP/SDP/Audio-Adaptionen
 - `src/Client`: öffentliche Facade und DX-Manager (`VoipClient`, Convenience APIs, DI)
-- `src/Host/PluginContracts`: host-zentrierte Kernel-Vertraege fuer Plugin-Lifecycle und Runtime-Entrypoints
-- `src/Plugins/Voip`: telephony-orientiertes `voip`-Plugin (Engine-Export)
-
-## Plattformbegriffe
-
-- `Admin UI`: Betreiber-/Backoffice-Oberflaeche.
-- `Workspace UI`: Nutzer-/Agenten-Oberflaeche.
-
-Der Begriff `Storefront` wird fuer CalloraVoipSdk nicht verwendet.
-
-## Plattform-Start (Engine + Host + Plugins)
-
-Minimaler Startstack:
-
-- `Engine`: dieses Repository (`VoipClient`, SIP/RTP/RTCP/SRTP, Media)
-- `Host Backend`: ASP.NET Core API + PostgreSQL + Redis + OpenTelemetry
-- `Admin UI`: Betreiber-/Backoffice-Flaechen
-- `Workspace UI`: Agenten-/Nutzerflaechen
-- `Plugins`: runtime-faehig installierbar/aktivierbar ohne Neustart
-
-Details: `docs/portal/architecture/platform-bootstrap.md`
 
 ## API-Sichtbarkeit
 
@@ -72,16 +47,12 @@ Details: `docs/portal/architecture/platform-bootstrap.md`
 - Für echte Audio-I/O auf Linux: `CalloraVoipSdk.Audio.Linux` (PortAudio-basiert)
 - Für echte Audio-I/O auf Windows: `CalloraVoipSdk.Audio.Windows` (NAudio-basiert)
 
-## Build, Test, Demo
+## Build, Test
 
 ```bash
 dotnet restore CalloraVoipSdk.sln
 dotnet build CalloraVoipSdk.sln
 dotnet test CalloraVoipSdk.sln
-dotnet run --project samples/CalloraVoipSdk.Sample.BasicCalling/CalloraVoipSdk.Sample.BasicCalling.csproj
-dotnet run --project samples/CalloraVoipSdk.Sample.Conference/CalloraVoipSdk.Sample.Conference.csproj
-dotnet run --project samples/CalloraVoipSdk.Sample.RealtimeBridge/CalloraVoipSdk.Sample.RealtimeBridge.csproj
-dotnet run --project perf/CalloraVoipSdk.Conferencing.Performance/CalloraVoipSdk.Conferencing.Performance.csproj
 ```
 
 ## Einbindung ins eigene Projekt
@@ -105,87 +76,6 @@ Alternativ per `ProjectReference` (lokale Entwicklung):
   <!-- oder -->
   <ProjectReference Include="..\voip\src\Audio\Windows\CalloraVoipSdk.Audio.Windows.csproj" />
 </ItemGroup>
-```
-
-## Runtime Plugins (ohne Neustart)
-
-```csharp
-// Voraussetzung: Host wiring muss ICalloraPluginRuntime bereitstellen (CalloraVoipSdk.Hosting).
-var install = await client.ModuleManager.InstallAsync(
-    "/opt/voipsdk/plugins/Acme.PlaybackPlugin.dll",
-    entryTypeName: "Acme.Playback.PluginEntry");
-if (!install.IsSuccess || install.Plugin is null)
-    throw new InvalidOperationException(install.Message);
-
-var activate = await client.ModuleManager.ActivateAsync(install.Plugin.PluginId);
-if (!activate.IsSuccess)
-    throw new InvalidOperationException(activate.Message);
-
-// Plugin-Module sind danach sofort ueber die bestehenden Facades wirksam
-// (z. B. client.PlaybackManager / client.ConferenceManager), ohne Neustart.
-
-await client.ModuleManager.DeactivateAsync(install.Plugin.PluginId);
-await client.ModuleManager.UninstallAsync(install.Plugin.PluginId);
-```
-
-Plugin-Paketmetadaten:
-
-- Plugins liefern eine `registry.json` neben der Plugin-DLL (Composer-artiges Paketmanifest).
-- Der Host liest diese Datei bei `/api/plugins/install` automatisch.
-- Wenn `entryTypeName` im Request fehlt, wird er aus `registry.json` uebernommen.
-
-## Host Backend API (erste Instanz)
-
-Projekt:
-
-- `src/Host/Backend/CalloraVoipSdk.Host.Backend.csproj`
-
-Swagger/OpenAPI:
-
-- UI: `http://localhost:5000/swagger`
-- JSON: `http://localhost:5000/swagger/v1/swagger.json`
-
-Start:
-
-```bash
-dotnet run --project src/Host/Backend/CalloraVoipSdk.Host.Backend.csproj
-```
-
-Authentifizierung:
-
-- Header: `X-CalloraVoipSdk-Api-Key`
-- Key-Quelle: `BackendHost:ApiKeys` in `src/Host/Backend/appsettings.json`
-- Ohne gueltigen API-Key sind alle `/api/plugins/*` Endpunkte gesperrt.
-
-Persistenz (lokal, Phase 1):
-
-- SQLite-Datei: `BackendHost:DatabasePath` (Standard: `plugins/host.db`)
-- Entity-Registry: installierter Plugin-Zustand (`Installed/Active/Inactive/Uninstalled`)
-- Audit-Log: append-only Lifecycle-Audit in DB
-
-Erste Endpunkte:
-
-- `GET /health`
-- `GET /api/plugins`
-- `GET /api/plugins/installed`
-- `GET /api/plugins/audit`
-- `POST /api/plugins/install`
-- `POST /api/plugins/install/nuget`
-- `POST /api/plugins/{pluginId}/activate`
-- `POST /api/plugins/{pluginId}/deactivate`
-- `DELETE /api/plugins/{pluginId}`
-
-NuGet-Install (lokaler Cache, Shopware-aehnlicher zweiter Pfad):
-
-```bash
-curl -X POST http://localhost:5000/api/plugins/install/nuget \
-  -H "X-CalloraVoipSdk-Api-Key: callora-local-dev-key-change-me" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "packageId": "acme.callora.voice-plugin",
-    "packageVersion": "1.2.3",
-    "assemblyFileName": "Acme.CalloraVoipSdk.VoicePlugin.dll"
-  }'
 ```
 
 ## Quickstart: Happy Path (Convenience)
@@ -370,40 +260,9 @@ using var bridge = client.Media.CreateConnector().CrossConnect(aRx, aTx, bRx, bT
 // bridge.Dispose() trennt die Medienkopplung wieder.
 ```
 
-## Beispiel 5: Conference Room mit drei Teilnehmern
-
-```csharp
-using CalloraVoipSdk.Modules;
-
-var conference = client.ConferenceManager.Create();
-
-await conference.AddParticipantAsync(callA);
-await conference.AddParticipantAsync(callB);
-await conference.AddParticipantAsync(callC);
-
-// Teilnehmer B stummschalten
-await conference.SetParticipantMuteAsync(callB.CallId, true);
-
-// Teilnehmer C leiser in den Mix einspeisen
-await conference.SetParticipantLevelAsync(callC.CallId, 0.6f);
-
-// Teilnehmer entfernen
-await conference.RemoveParticipantAsync(callB.CallId);
-
-// Konferenz sauber schließen (Ressourcenfreigabe)
-await conference.CloseAsync();
-```
-
 ## Wichtige Hinweise für Produktion
 
 - `VoipClient`, `IPhoneLine`, `ICall` sauber über Lifecycle steuern und am Ende disposen/unregistern
 - Call-Aktionen zustandsabhängig ausführen (`Connected`, `Ringing`, `OnHold`)
 - Bei hoher Last Event-Handler kurz halten und nicht-blockierend implementieren
 - Audio-Provider als separate Plattform-Module bewusst auswählen
-
-## Relevante Doku im Repo
-
-- `docs/SDK_PRODUCT_MEMORY.md`
-- `docs/SDK_COMPLETION_TODO.md`
-- `docs/RFC_VOIP_SDK_COMPLIANCE.md`
-- `docs/RFC3261_CHAPTER_STATUS.md`
