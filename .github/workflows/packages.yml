@@ -15,7 +15,7 @@ jobs:
   pack:
     runs-on: ubuntu-latest
     env:
-      NUGET_API_KEY: "oy2dncpfcrhoxqwa4claqcu6mdi4ctuufkok7cftz563yi"
+      NUGET_API_KEY: "${{ secrets }}"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
