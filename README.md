@@ -336,9 +336,9 @@ using var bridge = client.Media.CreateConnector().CrossConnect(aRx, aTx, bRx, bT
 - Choose audio providers explicitly via platform-specific packages
 - Treat infrastructure details as non-public integration surface
 
-## Roadmap to 1.0
+## Roadmap to 1.0.1
 
-The current `0.9.x` line is already usable, but `1.0.0` is the first stable public release target.
+The current `1.0.0` line is already usable, but `1.0.1` is the first stable public release target.
 
 Typical focus areas on the road to `1.0.0`:
 
