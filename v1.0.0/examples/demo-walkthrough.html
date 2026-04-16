@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Demo App Walkthrough | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Demo App Walkthrough | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.0/docs/portal/examples/demo-walkthrough.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="demo-app-walkthrough">Demo App Walkthrough</h1>
+
+<p>The <code>CalloraVoipSdk.Sample.BasicCalling</code> project (<code>samples/CalloraVoipSdk.Sample.BasicCalling/Program.cs</code>) is an interactive console app
+that demonstrates the full call lifecycle against a real SIP server.</p>
+<h2 id="run-it">Run It</h2>
+<pre><code class="lang-bash">dotnet run --project samples/CalloraVoipSdk.Sample.BasicCalling/CalloraVoipSdk.Sample.BasicCalling.csproj
+</code></pre>
+<p>You will be prompted for SIP credentials (server, username, password, display name).</p>
+<h2 id="what-it-demonstrates">What It Demonstrates</h2>
+<h3 id="1-sdk-initialization">1. SDK Initialization</h3>
+<pre><code class="lang-csharp">using var client = new VoipClient(new SdkConfiguration
+{
+    LoggerFactory = loggerFactory,
+    UserAgent     = &quot;CalloraVoipSdk-Demo/1.0&quot;,
+});
+</code></pre>
+<p><code>SdkConfiguration</code> wires up the logger factory and user-agent header. Audio routing is done via convenience APIs (<code>AttachDefaultAudioAsync</code>) and stays additive to the manual media API.</p>
+<h3 id="2-registration">2. Registration</h3>
+<pre><code class="lang-csharp">var connectResult = await client.ConnectAsync(
+    account,
+    new ConnectOptions
+    {
+        Timeout = TimeSpan.FromSeconds(15),
+        FailFastOnRegistrationFailed = true
+    });
+
+if (!connectResult.IsSuccess || connectResult.Line is null)
+    return 1;
+
+var line = connectResult.Line;
+</code></pre>
+<p>After a successful <code>ConnectAsync</code>, the line is ready to place and receive calls.</p>
+<h3 id="3-audio-device-binding">3. Audio Device Binding</h3>
+<p>The demo uses convenience default audio attach/detach. On <code>CallState.Connected</code>
+it calls <code>AttachDefaultAudioAsync</code>, and cleanup on <code>Terminated</code> happens automatically.</p>
+<pre><code class="lang-csharp">if (e.NewState == CallState.Connected)
+{
+    activeCall = e.Call;
+    _ = client.AttachDefaultAudioAsync(e.Call);
+}
+</code></pre>
+<h3 id="4-interactive-call-control">4. Interactive Call Control</h3>
+<p>Once a call is connected, the demo accepts keyboard input for live call control:</p>
+<ul>
+<li><strong><code>d &lt;target&gt;</code></strong> — Dial a SIP URI (e.g., <code>d sip:100@192.168.1.1</code>)</li>
+<li><strong><code>a</code></strong> — Accept an incoming call</li>
+<li><strong><code>r</code></strong> — Reject an incoming call</li>
+<li><strong><code>Enter</code> or <code>h</code></strong> — Hangup the active call</li>
+<li><strong><code>q</code></strong> — Quit the demo</li>
+</ul>
+<h3 id="5-incoming-call-handling">5. Incoming Call Handling</h3>
+<p>The demo auto-rejects incoming calls when already in a call (busy), otherwise prompts the user:</p>
+<pre><code class="lang-csharp">line.IncomingCall += (_, e) =&gt;
+{
+    if (activeCall is not null || pendingInbound is not null)
+    {
+        Console.WriteLine($&quot;[Eingehend] Von: {e.Call.RemoteParty} — abgelehnt (besetzt).&quot;);
+        _ = e.Call.HangupAsync();
+        return;
+    }
+    
+    pendingInbound = e.Call;
+    Console.WriteLine($&quot;[Eingehend] Von: {e.Call.RemoteParty}&quot;);
+    Console.WriteLine(&quot;  a = annehmen   r = ablehnen&quot;);
+};
+</code></pre>
+<h2 id="cleanup">Cleanup</h2>
+<p>On exit, the demo gracefully:</p>
+<ol>
+<li>Hangs up any active or pending call</li>
+<li>Unregisters the line from the SIP server</li>
+<li>Disposes <code>VoipClient</code> (including convenience audio/session resources)</li>
+</ol>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.0/docs/portal/examples/demo-walkthrough.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>
