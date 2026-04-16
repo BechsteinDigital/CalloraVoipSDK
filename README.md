@@ -1,7 +1,6 @@
 # CalloraVoipSdk
 
 [![CI](https://github.com/BechsteinDigital/CalloraVoipSdk/actions/workflows/ci.yml/badge.svg)](https://github.com/BechsteinDigital/CalloraVoipSdk/actions/workflows/ci.yml)
-[![License](https://img.shields.io/github/license/BechsteinDigital/CalloraVoipSdk)](https://github.com/BechsteinDigital/CalloraVoipSdk/blob/main/LICENSE)
 [![NuGet Version](https://img.shields.io/nuget/v/CalloraVoipSdk.Core)](https://www.nuget.org/packages/CalloraVoipSdk.Core)
 [![NuGet Downloads](https://img.shields.io/nuget/dt/CalloraVoipSdk.Core)](https://www.nuget.org/packages/CalloraVoipSdk.Core)
 ![Coverage](https://img.shields.io/badge/coverage-cobertura%20artifact-blue)
