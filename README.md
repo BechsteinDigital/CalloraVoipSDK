@@ -94,17 +94,14 @@ This keeps the external API compact and stable while allowing internal evolution
 
 CalloraVoipSdk follows Semantic Versioning (`MAJOR.MINOR.PATCH`).
 
-- Current pre-release line: `0.9.x`
-- `1.0.0` will be the first stable public release
+- Current public release line: `1.0.x`
 - Public API changes are guarded by snapshot tests in `tests/CalloraVoipSdk.Core.Tests/PublicApi.approved.txt`
 - Deprecations are introduced through `[Obsolete(...)]` before removal
 - Consumer-relevant changes are documented in [`CHANGELOG.md`](CHANGELOG.md)
 
-Further details: [`docs/SEMVER_POLICY.md`](docs/SEMVER_POLICY.md)
-
 ## Requirements
 
-- .NET SDK 8.0+
+- .NET SDK 8.0+ (will be updated soon to .NET SDK 10.0+)
 - SIP account or PBX credentials
 - For real audio I/O on Linux: `CalloraVoipSdk.Audio.Linux`
 - For real audio I/O on Windows: `CalloraVoipSdk.Audio.Windows`
