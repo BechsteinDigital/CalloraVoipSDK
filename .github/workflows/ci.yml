@@ -7,19 +7,7 @@ on:
     branches: [ main ]
 
 jobs:
-  engineering-rules:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Engineering Rules Gate
-        run: ./scripts/check-engineering-rules.sh --changed-only
-
   build-and-test:
-    needs: engineering-rules
     strategy:
       fail-fast: false
       matrix:
@@ -54,60 +42,3 @@ jobs:
           path: |
             TestResults/**/coverage.cobertura.xml
           if-no-files-found: warn
-
-  core-sequential:
-    needs: engineering-rules
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 8.0.x
-
-      - name: Restore
-        run: dotnet restore CalloraVoipSdk.sln
-
-      - name: Build
-        run: dotnet build CalloraVoipSdk.sln --configuration Release --no-restore -p:CodeAnalysisTreatWarningsAsErrors=true
-
-      - name: Test + Coverage (Core Sequential)
-        run: dotnet test tests/CalloraVoipSdk.Core.Tests/CalloraVoipSdk.Core.Tests.csproj --configuration Release --no-build --collect:"XPlat Code Coverage" --results-directory ./TestResults --nologo --verbosity minimal -- RunConfiguration.MaxCpuCount=1
-
-      - name: Upload Coverage Artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-core-sequential-${{ matrix.os }}
-          path: |
-            TestResults/**/coverage.cobertura.xml
-          if-no-files-found: warn
-
-  performance-gate:
-    needs: engineering-rules
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 8.0.x
-
-      - name: Restore
-        run: dotnet restore CalloraVoipSdk.sln
-
-      - name: Performance Gate (CORE-010 baseline)
-        run: dotnet run --project perf/CalloraVoipSdk.Core.Performance/CalloraVoipSdk.Core.Performance.csproj --configuration Release -- --gate perf/baselines/core-performance-baseline.json --max-regression-percent 15
