@@ -1,0 +1,1193 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IVoipClient | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IVoipClient | CalloraVoipSdk ">
+      
+      <meta name="description" content="Public SDK client contract for dependency-injection and consumer testability.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/CalloraVoipSDK/new/v1.0.1/apiSpec/new?filename=CalloraVoipSdk_IVoipClient.md&amp;value=---%0Auid%3A%20CalloraVoipSdk.IVoipClient%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="CalloraVoipSdk.IVoipClient">
+
+
+
+  <h1 id="CalloraVoipSdk_IVoipClient" data-uid="CalloraVoipSdk.IVoipClient" class="text-break">
+Interface IVoipClient  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Client/Application/Facades/IVoipClient.cs/#L15"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="CalloraVoipSdk.html">CalloraVoipSdk</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>CalloraVoipSdk.Client.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Public SDK client contract for dependency-injection and consumer testability.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IVoipClient : IDisposable</code></pre>
+  </div>
+
+
+
+
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.idisposable.dispose">IDisposable.Dispose()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="CalloraVoipSdk_IVoipClient_Calls_" data-uid="CalloraVoipSdk.IVoipClient.Calls*"></a>
+
+  <h3 id="CalloraVoipSdk_IVoipClient_Calls" data-uid="CalloraVoipSdk.IVoipClient.Calls">
+  Calls
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Client/Application/Facades/IVoipClient.cs/#L18"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Active call manager for this SDK instance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">CallManager Calls { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="CalloraVoipSdk.Core.Application.Calls.CallManager.html">CallManager</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_IVoipClient_ConferenceManager_" data-uid="CalloraVoipSdk.IVoipClient.ConferenceManager*"></a>
+
+  <h3 id="CalloraVoipSdk_IVoipClient_ConferenceManager" data-uid="CalloraVoipSdk.IVoipClient.ConferenceManager">
+  ConferenceManager
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Client/Application/Facades/IVoipClient.cs/#L27"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Conferencing module facade.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IConferencingModule ConferenceManager { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="CalloraVoipSdk.Modules.IConferencingModule.html">IConferencingModule</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_IVoipClient_DeviceManager_" data-uid="CalloraVoipSdk.IVoipClient.DeviceManager*"></a>
+
+  <h3 id="CalloraVoipSdk_IVoipClient_DeviceManager" data-uid="CalloraVoipSdk.IVoipClient.DeviceManager">
+  DeviceManager
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Client/Application/Facades/IVoipClient.cs/#L48"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Runtime audio-device facade.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">DeviceManager DeviceManager { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="CalloraVoipSdk.DeviceManager.html">DeviceManager</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_IVoipClient_Lines_" data-uid="CalloraVoipSdk.IVoipClient.Lines*"></a>
+
+  <h3 id="CalloraVoipSdk_IVoipClient_Lines" data-uid="CalloraVoipSdk.IVoipClient.Lines">
+  Lines
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Client/Application/Facades/IVoipClient.cs/#L21"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Registered line manager for this SDK instance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">PhoneLineManager Lines { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="CalloraVoipSdk.Core.Application.Lines.PhoneLineManager.html">PhoneLineManager</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_IVoipClient_Media_" data-uid="CalloraVoipSdk.IVoipClient.Media*"></a>
+
+  <h3 id="CalloraVoipSdk_IVoipClient_Media" data-uid="CalloraVoipSdk.IVoipClient.Media">
+  Media
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Client/Application/Facades/IVoipClient.cs/#L24"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Media manager for sender/receiver/connector orchestration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">MediaManager Media { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="CalloraVoipSdk.Core.Application.Media.MediaManager.html">MediaManager</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_IVoipClient_ModuleManager_" data-uid="CalloraVoipSdk.IVoipClient.ModuleManager*"></a>
+
+  <h3 id="CalloraVoipSdk_IVoipClient_ModuleManager" data-uid="CalloraVoipSdk.IVoipClient.ModuleManager">
+  ModuleManager
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Client/Application/Facades/IVoipClient.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Module availability facade.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">ModuleManager ModuleManager { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="CalloraVoipSdk.ModuleManager.html">ModuleManager</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_IVoipClient_PlaybackManager_" data-uid="CalloraVoipSdk.IVoipClient.PlaybackManager*"></a>
+
+  <h3 id="CalloraVoipSdk_IVoipClient_PlaybackManager" data-uid="CalloraVoipSdk.IVoipClient.PlaybackManager">
+  PlaybackManager
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Client/Application/Facades/IVoipClient.cs/#L30"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Playback module facade.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IPlaybackModule PlaybackManager { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="CalloraVoipSdk.Modules.IPlaybackModule.html">IPlaybackModule</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_IVoipClient_PolicyManager_" data-uid="CalloraVoipSdk.IVoipClient.PolicyManager*"></a>
+
+  <h3 id="CalloraVoipSdk_IVoipClient_PolicyManager" data-uid="CalloraVoipSdk.IVoipClient.PolicyManager">
+  PolicyManager
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Client/Application/Facades/IVoipClient.cs/#L54"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Runtime policy facade.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">PolicyManager PolicyManager { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="CalloraVoipSdk.PolicyManager.html">PolicyManager</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_IVoipClient_QualityManager_" data-uid="CalloraVoipSdk.IVoipClient.QualityManager*"></a>
+
+  <h3 id="CalloraVoipSdk_IVoipClient_QualityManager" data-uid="CalloraVoipSdk.IVoipClient.QualityManager">
+  QualityManager
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Client/Application/Facades/IVoipClient.cs/#L51"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Runtime quality facade.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">QualityManager QualityManager { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="CalloraVoipSdk.QualityManager.html">QualityManager</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_IVoipClient_RealtimeManager_" data-uid="CalloraVoipSdk.IVoipClient.RealtimeManager*"></a>
+
+  <h3 id="CalloraVoipSdk_IVoipClient_RealtimeManager" data-uid="CalloraVoipSdk.IVoipClient.RealtimeManager">
+  RealtimeManager
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Client/Application/Facades/IVoipClient.cs/#L36"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Realtime bridge module facade.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IRealtimeModule RealtimeManager { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="CalloraVoipSdk.Modules.IRealtimeModule.html">IRealtimeModule</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_IVoipClient_RecordingManager_" data-uid="CalloraVoipSdk.IVoipClient.RecordingManager*"></a>
+
+  <h3 id="CalloraVoipSdk_IVoipClient_RecordingManager" data-uid="CalloraVoipSdk.IVoipClient.RecordingManager">
+  RecordingManager
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Client/Application/Facades/IVoipClient.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Recording module facade.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IRecordingModule RecordingManager { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="CalloraVoipSdk.Modules.IRecordingModule.html">IRecordingModule</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_IVoipClient_SessionManager_" data-uid="CalloraVoipSdk.IVoipClient.SessionManager*"></a>
+
+  <h3 id="CalloraVoipSdk_IVoipClient_SessionManager" data-uid="CalloraVoipSdk.IVoipClient.SessionManager">
+  SessionManager
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Client/Application/Facades/IVoipClient.cs/#L45"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Runtime session view facade.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">SessionManager SessionManager { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="CalloraVoipSdk.SessionManager.html">SessionManager</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_IVoipClient_TelemetryManager_" data-uid="CalloraVoipSdk.IVoipClient.TelemetryManager*"></a>
+
+  <h3 id="CalloraVoipSdk_IVoipClient_TelemetryManager" data-uid="CalloraVoipSdk.IVoipClient.TelemetryManager">
+  TelemetryManager
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Client/Application/Facades/IVoipClient.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Runtime telemetry facade.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">TelemetryManager TelemetryManager { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="CalloraVoipSdk.TelemetryManager.html">TelemetryManager</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_IVoipClient_WebSocketManager_" data-uid="CalloraVoipSdk.IVoipClient.WebSocketManager*"></a>
+
+  <h3 id="CalloraVoipSdk_IVoipClient_WebSocketManager" data-uid="CalloraVoipSdk.IVoipClient.WebSocketManager">
+  WebSocketManager
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Client/Application/Facades/IVoipClient.cs/#L39"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>WebSocket transport module facade.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IWebSocketModule WebSocketManager { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="CalloraVoipSdk.Modules.IWebSocketModule.html">IWebSocketModule</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="CalloraVoipSdk_IVoipClient_AttachDefaultAudioAsync_" data-uid="CalloraVoipSdk.IVoipClient.AttachDefaultAudioAsync*"></a>
+
+  <h3 id="CalloraVoipSdk_IVoipClient_AttachDefaultAudioAsync_CalloraVoipSdk_Core_Domain_Calls_ICall_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.IVoipClient.AttachDefaultAudioAsync(CalloraVoipSdk.Core.Domain.Calls.ICall,System.Threading.CancellationToken)">
+  AttachDefaultAudioAsync(ICall, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Client/Application/Facades/IVoipClient.cs/#L76"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Attaches default audio routing to the specified call.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task AttachDefaultAudioAsync(ICall call, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>call</code> <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.ICall.html">ICall</a></dt>
+    <dd></dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task">Task</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_IVoipClient_ConnectAsync_" data-uid="CalloraVoipSdk.IVoipClient.ConnectAsync*"></a>
+
+  <h3 id="CalloraVoipSdk_IVoipClient_ConnectAsync_CalloraVoipSdk_Core_Domain_Lines_SipAccount_CalloraVoipSdk_ConnectOptions_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.IVoipClient.ConnectAsync(CalloraVoipSdk.Core.Domain.Lines.SipAccount,CalloraVoipSdk.ConnectOptions,System.Threading.CancellationToken)">
+  ConnectAsync(SipAccount, ConnectOptions?, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Client/Application/Facades/IVoipClient.cs/#L70"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Registers one line and waits for a terminal connect outcome.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task&lt;ConnectResult&gt; ConnectAsync(SipAccount account, ConnectOptions? options = null, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>account</code> <a class="xref" href="CalloraVoipSdk.Core.Domain.Lines.SipAccount.html">SipAccount</a></dt>
+    <dd></dd>
+    <dt><code>options</code> <a class="xref" href="CalloraVoipSdk.ConnectOptions.html">ConnectOptions</a></dt>
+    <dd></dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="CalloraVoipSdk.ConnectResult.html">ConnectResult</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_IVoipClient_DetachDefaultAudioAsync_" data-uid="CalloraVoipSdk.IVoipClient.DetachDefaultAudioAsync*"></a>
+
+  <h3 id="CalloraVoipSdk_IVoipClient_DetachDefaultAudioAsync_CalloraVoipSdk_Core_Domain_Calls_ICall_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.IVoipClient.DetachDefaultAudioAsync(CalloraVoipSdk.Core.Domain.Calls.ICall,System.Threading.CancellationToken)">
+  DetachDefaultAudioAsync(ICall, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Client/Application/Facades/IVoipClient.cs/#L79"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Detaches default audio routing from the specified call.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task DetachDefaultAudioAsync(ICall call, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>call</code> <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.ICall.html">ICall</a></dt>
+    <dd></dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task">Task</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_IVoipClient_DialAndWaitUntilConnectedAsync_" data-uid="CalloraVoipSdk.IVoipClient.DialAndWaitUntilConnectedAsync*"></a>
+
+  <h3 id="CalloraVoipSdk_IVoipClient_DialAndWaitUntilConnectedAsync_CalloraVoipSdk_Core_Domain_Lines_IPhoneLine_System_String_CalloraVoipSdk_DialWaitOptions_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.IVoipClient.DialAndWaitUntilConnectedAsync(CalloraVoipSdk.Core.Domain.Lines.IPhoneLine,System.String,CalloraVoipSdk.DialWaitOptions,System.Threading.CancellationToken)">
+  DialAndWaitUntilConnectedAsync(IPhoneLine, string, DialWaitOptions?, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Client/Application/Facades/IVoipClient.cs/#L73"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Dials a target and waits until the call reaches connected state.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task&lt;DialResult&gt; DialAndWaitUntilConnectedAsync(IPhoneLine line, string targetUri, DialWaitOptions? options = null, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>line</code> <a class="xref" href="CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.html">IPhoneLine</a></dt>
+    <dd></dd>
+    <dt><code>targetUri</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>options</code> <a class="xref" href="CalloraVoipSdk.DialWaitOptions.html">DialWaitOptions</a></dt>
+    <dd></dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="CalloraVoipSdk.DialResult.html">DialResult</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_IVoipClient_GetAudioDeviceRuntimeSnapshot_" data-uid="CalloraVoipSdk.IVoipClient.GetAudioDeviceRuntimeSnapshot*"></a>
+
+  <h3 id="CalloraVoipSdk_IVoipClient_GetAudioDeviceRuntimeSnapshot" data-uid="CalloraVoipSdk.IVoipClient.GetAudioDeviceRuntimeSnapshot">
+  GetAudioDeviceRuntimeSnapshot()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Client/Application/Facades/IVoipClient.cs/#L88"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the current runtime audio-device snapshot.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">AudioDeviceRuntimeSnapshot GetAudioDeviceRuntimeSnapshot()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">AudioDeviceRuntimeSnapshot</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_IVoipClient_GetAvailableInputAudioDevices_" data-uid="CalloraVoipSdk.IVoipClient.GetAvailableInputAudioDevices*"></a>
+
+  <h3 id="CalloraVoipSdk_IVoipClient_GetAvailableInputAudioDevices" data-uid="CalloraVoipSdk.IVoipClient.GetAvailableInputAudioDevices">
+  GetAvailableInputAudioDevices()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Client/Application/Facades/IVoipClient.cs/#L82"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Lists runtime-selectable input devices.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IReadOnlyList&lt;AudioDeviceDescriptor&gt; GetAvailableInputAudioDevices()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<span class="xref">AudioDeviceDescriptor</span>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_IVoipClient_GetAvailableOutputAudioDevices_" data-uid="CalloraVoipSdk.IVoipClient.GetAvailableOutputAudioDevices*"></a>
+
+  <h3 id="CalloraVoipSdk_IVoipClient_GetAvailableOutputAudioDevices" data-uid="CalloraVoipSdk.IVoipClient.GetAvailableOutputAudioDevices">
+  GetAvailableOutputAudioDevices()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Client/Application/Facades/IVoipClient.cs/#L85"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Lists runtime-selectable output devices.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IReadOnlyList&lt;AudioDeviceDescriptor&gt; GetAvailableOutputAudioDevices()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<span class="xref">AudioDeviceDescriptor</span>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_IVoipClient_OnIncomingCall_" data-uid="CalloraVoipSdk.IVoipClient.OnIncomingCall*"></a>
+
+  <h3 id="CalloraVoipSdk_IVoipClient_OnIncomingCall_System_Func_CalloraVoipSdk_Core_Domain_Calls_ICall_System_Threading_Tasks_Task__" data-uid="CalloraVoipSdk.IVoipClient.OnIncomingCall(System.Func{CalloraVoipSdk.Core.Domain.Calls.ICall,System.Threading.Tasks.Task})">
+  OnIncomingCall(Func&lt;ICall, Task&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Client/Application/Facades/IVoipClient.cs/#L112"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Registers a simplified asynchronous inbound call handler.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IDisposable OnIncomingCall(Func&lt;ICall, Task&gt; handler)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handler</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.ICall.html">ICall</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task">Task</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.idisposable">IDisposable</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_IVoipClient_SetAudioInputMuted_" data-uid="CalloraVoipSdk.IVoipClient.SetAudioInputMuted*"></a>
+
+  <h3 id="CalloraVoipSdk_IVoipClient_SetAudioInputMuted_System_Boolean_" data-uid="CalloraVoipSdk.IVoipClient.SetAudioInputMuted(System.Boolean)">
+  SetAudioInputMuted(bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Client/Application/Facades/IVoipClient.cs/#L103"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Mutes or unmutes runtime microphone capture.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void SetAudioInputMuted(bool isMuted)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>isMuted</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_IVoipClient_SetAudioInputVolume_" data-uid="CalloraVoipSdk.IVoipClient.SetAudioInputVolume*"></a>
+
+  <h3 id="CalloraVoipSdk_IVoipClient_SetAudioInputVolume_System_Single_" data-uid="CalloraVoipSdk.IVoipClient.SetAudioInputVolume(System.Single)">
+  SetAudioInputVolume(float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Client/Application/Facades/IVoipClient.cs/#L97"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets runtime input gain for the configured SDK audio device.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void SetAudioInputVolume(float volume)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>volume</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_IVoipClient_SetAudioOutputMuted_" data-uid="CalloraVoipSdk.IVoipClient.SetAudioOutputMuted*"></a>
+
+  <h3 id="CalloraVoipSdk_IVoipClient_SetAudioOutputMuted_System_Boolean_" data-uid="CalloraVoipSdk.IVoipClient.SetAudioOutputMuted(System.Boolean)">
+  SetAudioOutputMuted(bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Client/Application/Facades/IVoipClient.cs/#L106"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Mutes or unmutes runtime speaker playback.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void SetAudioOutputMuted(bool isMuted)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>isMuted</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_IVoipClient_SetAudioOutputVolume_" data-uid="CalloraVoipSdk.IVoipClient.SetAudioOutputVolume*"></a>
+
+  <h3 id="CalloraVoipSdk_IVoipClient_SetAudioOutputVolume_System_Single_" data-uid="CalloraVoipSdk.IVoipClient.SetAudioOutputVolume(System.Single)">
+  SetAudioOutputVolume(float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Client/Application/Facades/IVoipClient.cs/#L100"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets runtime output gain for the configured SDK audio device.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void SetAudioOutputVolume(float volume)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>volume</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_IVoipClient_SwitchAudioInputDevice_" data-uid="CalloraVoipSdk.IVoipClient.SwitchAudioInputDevice*"></a>
+
+  <h3 id="CalloraVoipSdk_IVoipClient_SwitchAudioInputDevice_System_String_" data-uid="CalloraVoipSdk.IVoipClient.SwitchAudioInputDevice(System.String)">
+  SwitchAudioInputDevice(string?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Client/Application/Facades/IVoipClient.cs/#L91"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Switches the configured SDK input device at runtime.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void SwitchAudioInputDevice(string? deviceId)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>deviceId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_IVoipClient_SwitchAudioOutputDevice_" data-uid="CalloraVoipSdk.IVoipClient.SwitchAudioOutputDevice*"></a>
+
+  <h3 id="CalloraVoipSdk_IVoipClient_SwitchAudioOutputDevice_System_String_" data-uid="CalloraVoipSdk.IVoipClient.SwitchAudioOutputDevice(System.String)">
+  SwitchAudioOutputDevice(string?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Client/Application/Facades/IVoipClient.cs/#L94"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Switches the configured SDK output device at runtime.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void SwitchAudioOutputDevice(string? deviceId)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>deviceId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_IVoipClient_UpdateAudioFormat_" data-uid="CalloraVoipSdk.IVoipClient.UpdateAudioFormat*"></a>
+
+  <h3 id="CalloraVoipSdk_IVoipClient_UpdateAudioFormat_CalloraVoipSdk_Core_Application_Ports_Audio_AudioDeviceFormat_" data-uid="CalloraVoipSdk.IVoipClient.UpdateAudioFormat(CalloraVoipSdk.Core.Application.Ports.Audio.AudioDeviceFormat)">
+  UpdateAudioFormat(AudioDeviceFormat)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Client/Application/Facades/IVoipClient.cs/#L109"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates runtime capture/playback format for the configured SDK audio device.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void UpdateAudioFormat(AudioDeviceFormat format)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>format</code> <span class="xref">AudioDeviceFormat</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="events">Events
+</h2>
+
+
+
+  <h3 id="CalloraVoipSdk_IVoipClient_CallStateChanged" data-uid="CalloraVoipSdk.IVoipClient.CallStateChanged">
+  CallStateChanged
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Client/Application/Facades/IVoipClient.cs/#L63"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Raised when any active call changes state.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">event EventHandler&lt;CallStateChangedEventArgs&gt;? CallStateChanged</code></pre>
+  </div>
+
+
+
+
+
+
+  <h4 class="section">Event Type</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.eventhandler-1">EventHandler</a>&lt;<a class="xref" href="CalloraVoipSdk.Core.Domain.Events.CallStateChangedEventArgs.html">CallStateChangedEventArgs</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h3 id="CalloraVoipSdk_IVoipClient_IncomingCall" data-uid="CalloraVoipSdk.IVoipClient.IncomingCall">
+  IncomingCall
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Client/Application/Facades/IVoipClient.cs/#L60"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Raised when a new inbound call arrives on any registered line.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">event EventHandler&lt;IncomingCallEventArgs&gt;? IncomingCall</code></pre>
+  </div>
+
+
+
+
+
+
+  <h4 class="section">Event Type</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.eventhandler-1">EventHandler</a>&lt;<a class="xref" href="CalloraVoipSdk.Core.Domain.Events.IncomingCallEventArgs.html">IncomingCallEventArgs</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Client/Application/Facades/IVoipClient.cs/#L15" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

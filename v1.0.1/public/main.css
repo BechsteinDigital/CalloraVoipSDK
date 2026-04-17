@@ -1,0 +1,413 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   CalloraVoipSdk Documentation — Custom Theme
+   Overrides DocFX modern template (Bootstrap 5)
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* ── Fonts ─────────────────────────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+/* ── Global tokens ─────────────────────────────────────────────────────────── */
+:root {
+  /* Brand palette */
+  --voip-blue:        #1d4ed8;   /* primary action */
+  --voip-blue-light:  #3b82f6;   /* hover / links */
+  --voip-cyan:        #06b6d4;   /* accent / highlights */
+  --voip-dark:        #0f172a;   /* navbar background */
+  --voip-surface:     #f8fafc;   /* page background */
+  --voip-border:      #e2e8f0;   /* borders */
+  --voip-text:        #1e293b;   /* body text */
+  --voip-muted:       #64748b;   /* secondary text */
+  --voip-code-bg:     #0f172a;   /* code block background */
+  --voip-code-text:   #e2e8f0;   /* code block text */
+
+  /* Bootstrap overrides */
+  --bs-primary:              var(--voip-blue);
+  --bs-primary-rgb:          29, 78, 216;
+  --bs-link-color:           var(--voip-blue-light);
+  --bs-link-hover-color:     var(--voip-cyan);
+  --bs-body-font-family:     'Inter', system-ui, -apple-system, sans-serif;
+  --bs-body-font-size:       0.9375rem;
+  --bs-body-color:           var(--voip-text);
+  --bs-body-bg:              var(--voip-surface);
+  --bs-border-color:         var(--voip-border);
+  --bs-border-radius:        0.5rem;
+  --bs-border-radius-sm:     0.375rem;
+  --bs-border-radius-lg:     0.75rem;
+  --bs-code-color:           var(--voip-cyan);
+}
+
+/* ── Navbar ────────────────────────────────────────────────────────────────── */
+header.bg-body {
+  background-color: var(--voip-dark) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+  box-shadow: 0 1px 16px rgba(0, 0, 0, 0.25);
+}
+
+header .navbar-brand,
+header .navbar-brand:hover {
+  color: #fff;
+  font-weight: 700;
+  font-size: 1.1rem;
+  letter-spacing: -0.01em;
+}
+
+header .navbar-brand img#logo {
+  height: 28px;
+  margin-right: 0.5rem;
+}
+
+header .nav-link {
+  color: rgba(255, 255, 255, 0.75) !important;
+  font-size: 0.875rem;
+  font-weight: 500;
+  padding: 0.4rem 0.75rem;
+  border-radius: var(--bs-border-radius-sm);
+  transition: color 0.15s, background 0.15s;
+}
+
+header .nav-link:hover,
+header .nav-link.active {
+  color: #fff !important;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* Search bar in navbar */
+header .search input.form-control {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #fff;
+  border-radius: 0.5rem;
+  font-size: 0.85rem;
+}
+
+header .search input.form-control::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+header .search .bi-search {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* ── Sidebar / TOC ─────────────────────────────────────────────────────────── */
+.sidetoc {
+  border-right: 1px solid var(--voip-border);
+  padding-top: 1.5rem;
+}
+
+.toc .nav-item .nav-link {
+  font-size: 0.875rem;
+  color: var(--voip-muted);
+  padding: 0.3rem 0.75rem;
+  border-radius: var(--bs-border-radius-sm);
+  transition: color 0.15s, background 0.15s;
+}
+
+.toc .nav-item .nav-link:hover {
+  color: var(--voip-text);
+  background: var(--voip-border);
+}
+
+.toc .nav-item .nav-link.active {
+  color: var(--voip-blue);
+  background: rgba(29, 78, 216, 0.08);
+  font-weight: 600;
+}
+
+/* ── Article / content area ────────────────────────────────────────────────── */
+article {
+  max-width: 860px;
+  line-height: 1.75;
+}
+
+article h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--voip-dark);
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 2px solid var(--voip-border);
+}
+
+article h2 {
+  font-size: 1.35rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--voip-dark);
+  margin-top: 2.5rem;
+  margin-bottom: 0.75rem;
+}
+
+article h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--voip-text);
+  margin-top: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+article p {
+  color: var(--voip-text);
+  margin-bottom: 1rem;
+}
+
+article a {
+  color: var(--voip-blue-light);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.15s;
+}
+
+article a:hover {
+  color: var(--voip-cyan);
+  border-bottom-color: var(--voip-cyan);
+}
+
+/* ── Tables ────────────────────────────────────────────────────────────────── */
+article table {
+  font-size: 0.875rem;
+  border: 1px solid var(--voip-border);
+  border-radius: var(--bs-border-radius);
+  overflow: hidden;
+  width: 100%;
+  margin: 1.5rem 0;
+}
+
+article table thead tr {
+  background-color: var(--voip-dark);
+  color: #fff;
+}
+
+article table thead th {
+  font-weight: 600;
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.75rem 1rem;
+  border: none;
+}
+
+article table tbody tr:nth-child(even) {
+  background-color: #f1f5f9;
+}
+
+article table tbody td {
+  padding: 0.65rem 1rem;
+  border-top: 1px solid var(--voip-border);
+  vertical-align: middle;
+}
+
+/* ── Code blocks ───────────────────────────────────────────────────────────── */
+pre {
+  background: var(--voip-code-bg) !important;
+  border: none !important;
+  border-radius: var(--bs-border-radius) !important;
+  padding: 1.25rem 1.5rem !important;
+  margin: 1.5rem 0 !important;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.18);
+  overflow-x: auto;
+}
+
+pre code {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 0.82rem;
+  line-height: 1.7;
+  color: var(--voip-code-text) !important;
+  background: transparent !important;
+}
+
+/* Inline code */
+code:not(pre code) {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82em;
+  background: rgba(29, 78, 216, 0.07);
+  color: var(--voip-blue);
+  padding: 0.15em 0.45em;
+  border-radius: 0.3rem;
+  border: 1px solid rgba(29, 78, 216, 0.12);
+}
+
+/* ── Blockquotes / callouts ────────────────────────────────────────────────── */
+blockquote {
+  border-left: 3px solid var(--voip-cyan) !important;
+  background: rgba(6, 182, 212, 0.05);
+  border-radius: 0 var(--bs-border-radius) var(--bs-border-radius) 0;
+  padding: 0.75rem 1.25rem;
+  margin: 1.25rem 0;
+  color: var(--voip-muted);
+  font-size: 0.9rem;
+}
+
+/* ── Landing page layout ───────────────────────────────────────────────────── */
+[data-layout="landing"] article h1 {
+  font-size: 2.5rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  border-bottom: none;
+  background: linear-gradient(135deg, var(--voip-dark) 0%, var(--voip-blue) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 0.5rem;
+}
+
+[data-layout="landing"] article > p:first-of-type {
+  font-size: 1.15rem;
+  color: var(--voip-muted);
+  margin-bottom: 2rem;
+  font-weight: 400;
+}
+
+/* ── Footer ────────────────────────────────────────────────────────────────── */
+footer.border-top {
+  background: var(--voip-dark) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.06) !important;
+  color: rgba(255, 255, 255, 0.5) !important;
+  font-size: 0.8rem;
+}
+
+footer a {
+  color: rgba(255, 255, 255, 0.5) !important;
+}
+
+footer a:hover {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+
+/* ── API reference specifics ───────────────────────────────────────────────── */
+.xref {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85em;
+  color: var(--voip-blue-light);
+}
+
+.memberlist td:first-child {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Dark Mode overrides  (data-bs-theme="dark" set by DocFX theme switcher)
+   ───────────────────────────────────────────────────────────────────────────── */
+
+[data-bs-theme="dark"] {
+  --voip-surface:   #0f172a;
+  --voip-border:    #1e293b;
+  --voip-text:      #e2e8f0;
+  --voip-muted:     #94a3b8;
+  --voip-code-bg:   #020817;
+
+  --bs-body-bg:     #0f172a;
+  --bs-body-color:  #e2e8f0;
+  --bs-border-color: #1e293b;
+}
+
+/* Navbar — slightly lighter in dark mode so it stands out from the page */
+[data-bs-theme="dark"] header.bg-body {
+  background-color: #1e293b !important;
+  border-bottom-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Sidebar */
+[data-bs-theme="dark"] .sidetoc {
+  border-right-color: var(--voip-border);
+}
+
+[data-bs-theme="dark"] .toc .nav-item .nav-link {
+  color: var(--voip-muted);
+}
+
+[data-bs-theme="dark"] .toc .nav-item .nav-link:hover {
+  color: var(--voip-text);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+[data-bs-theme="dark"] .toc .nav-item .nav-link.active {
+  color: var(--voip-blue-light);
+  background: rgba(59, 130, 246, 0.12);
+}
+
+/* Article headings */
+[data-bs-theme="dark"] article h1,
+[data-bs-theme="dark"] article h2,
+[data-bs-theme="dark"] article h3 {
+  color: #f1f5f9;
+}
+
+[data-bs-theme="dark"] article h1 {
+  border-bottom-color: var(--voip-border);
+}
+
+[data-bs-theme="dark"] article p {
+  color: var(--voip-text);
+}
+
+/* Tables */
+[data-bs-theme="dark"] article table {
+  border-color: var(--voip-border);
+}
+
+[data-bs-theme="dark"] article table tbody tr:nth-child(even) {
+  background-color: #1e293b;
+}
+
+[data-bs-theme="dark"] article table tbody td {
+  border-top-color: var(--voip-border);
+  color: var(--voip-text);
+}
+
+/* Code blocks — even darker in dark mode */
+[data-bs-theme="dark"] pre {
+  background: var(--voip-code-bg) !important;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+}
+
+/* Inline code */
+[data-bs-theme="dark"] code:not(pre code) {
+  background: rgba(59, 130, 246, 0.1);
+  color: #93c5fd;
+  border-color: rgba(59, 130, 246, 0.2);
+}
+
+/* Blockquotes */
+[data-bs-theme="dark"] blockquote {
+  background: rgba(6, 182, 212, 0.07);
+  color: var(--voip-muted);
+}
+
+/* Landing page hero gradient in dark mode */
+[data-bs-theme="dark"] [data-layout="landing"] article h1 {
+  background: linear-gradient(135deg, #93c5fd 0%, #06b6d4 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+[data-bs-theme="dark"] [data-layout="landing"] article > p:first-of-type {
+  color: var(--voip-muted);
+}
+
+/* Search bar */
+[data-bs-theme="dark"] header .search input.form-control {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* ── Scrollbar (Webkit) ────────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--voip-border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--voip-muted);
+}

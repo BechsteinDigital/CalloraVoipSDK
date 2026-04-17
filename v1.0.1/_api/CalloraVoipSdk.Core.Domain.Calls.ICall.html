@@ -1,0 +1,1069 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface ICall | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface ICall | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/CalloraVoipSDK/new/v1.0.1/apiSpec/new?filename=CalloraVoipSdk_Core_Domain_Calls_ICall.md&amp;value=---%0Auid%3A%20CalloraVoipSdk.Core.Domain.Calls.ICall%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall">
+
+
+
+  <h1 id="CalloraVoipSdk_Core_Domain_Calls_ICall" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall" class="text-break">
+Interface ICall  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Core/Domain/Calls/ICall.cs/#L7"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="CalloraVoipSdk.html">CalloraVoipSdk</a>.<a class="xref" href="CalloraVoipSdk.Core.html">Core</a>.<a class="xref" href="CalloraVoipSdk.Core.Domain.html">Domain</a>.<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.html">Calls</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>CalloraVoipSdk.Core.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"></div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface ICall</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_CallId_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.CallId*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_CallId" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.CallId">
+  CallId
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Core/Domain/Calls/ICall.cs/#L9"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">CallId CallId { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallId.html">CallId</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_Direction_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.Direction*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_Direction" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.Direction">
+  Direction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Core/Domain/Calls/ICall.cs/#L11"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">CallDirection Direction { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallDirection.html">CallDirection</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_Line_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.Line*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_Line" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.Line">
+  Line
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Core/Domain/Calls/ICall.cs/#L16"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The phone line this call belongs to.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IPhoneLine Line { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.html">IPhoneLine</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_MediaParameters_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.MediaParameters*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_MediaParameters" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.MediaParameters">
+  MediaParameters
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Core/Domain/Calls/ICall.cs/#L22"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Negotiated media parameters (codec, endpoints). Set once
+<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallState.html#CalloraVoipSdk_Core_Domain_Calls_CallState_Connected">Connected</a> is reached; null before that.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">CallMediaParameters? MediaParameters { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.html">CallMediaParameters</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_QualitySnapshot_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.QualitySnapshot*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_QualitySnapshot" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.QualitySnapshot">
+  QualitySnapshot
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Core/Domain/Calls/ICall.cs/#L28"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Latest quality snapshot derived from RTP/RTCP runtime metrics.
+Before media starts, this value is an empty baseline snapshot.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">CallQualitySnapshot QualitySnapshot { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallQualitySnapshot.html">CallQualitySnapshot</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_RemoteParty_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.RemoteParty*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_RemoteParty" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.RemoteParty">
+  RemoteParty
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Core/Domain/Calls/ICall.cs/#L12"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string RemoteParty { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_StartedAt_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.StartedAt*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_StartedAt" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.StartedAt">
+  StartedAt
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Core/Domain/Calls/ICall.cs/#L13"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">DateTimeOffset StartedAt { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.datetimeoffset">DateTimeOffset</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_State_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.State*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_State" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.State">
+  State
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Core/Domain/Calls/ICall.cs/#L10"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">CallState State { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallState.html">CallState</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_AcceptAsync_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.AcceptAsync*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_AcceptAsync_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.AcceptAsync(System.Threading.CancellationToken)">
+  AcceptAsync(CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Core/Domain/Calls/ICall.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task AcceptAsync(CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task">Task</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_AttendedTransferAsync_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.AttendedTransferAsync*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_AttendedTransferAsync_CalloraVoipSdk_Core_Domain_Calls_ICall_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.AttendedTransferAsync(CalloraVoipSdk.Core.Domain.Calls.ICall,System.Threading.CancellationToken)">
+  AttendedTransferAsync(ICall, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Core/Domain/Calls/ICall.cs/#L49"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Attended transfer: transfer this call to the party in <code class="paramref">consultationCall</code>.
+Both calls must be Connected or OnHold.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task&lt;bool&gt; AttendedTransferAsync(ICall consultationCall, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>consultationCall</code> <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.ICall.html">ICall</a></dt>
+    <dd></dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_BlindTransferAsync_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.BlindTransferAsync*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_BlindTransferAsync_System_String_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.BlindTransferAsync(System.String,System.Threading.CancellationToken)">
+  BlindTransferAsync(string, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Core/Domain/Calls/ICall.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task BlindTransferAsync(string targetUri, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>targetUri</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task">Task</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_HangupAsync_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.HangupAsync*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_HangupAsync_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.HangupAsync(System.Threading.CancellationToken)">
+  HangupAsync(CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Core/Domain/Calls/ICall.cs/#L39"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task HangupAsync(CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task">Task</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_HoldAsync_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.HoldAsync*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_HoldAsync_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.HoldAsync(System.Threading.CancellationToken)">
+  HoldAsync(CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Core/Domain/Calls/ICall.cs/#L40"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task HoldAsync(CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task">Task</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_RedirectAsync_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.RedirectAsync*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_RedirectAsync_System_Collections_Generic_IReadOnlyList_System_String__System_Int32_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.RedirectAsync(System.Collections.Generic.IReadOnlyList{System.String},System.Int32,System.Threading.CancellationToken)">
+  RedirectAsync(IReadOnlyList&lt;string&gt;, int, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Core/Domain/Calls/ICall.cs/#L62"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Redirects an inbound ringing call with a 3xx SIP response and contact targets.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task&lt;CallActionResult&gt; RedirectAsync(IReadOnlyList&lt;string&gt; contactUris, int statusCode = 302, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>contactUris</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>statusCode</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionResult.html">CallActionResult</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_RejectAsync_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.RejectAsync*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_RejectAsync_System_Int32_System_String_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.RejectAsync(System.Int32,System.String,System.Threading.CancellationToken)">
+  RejectAsync(int, string?, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Core/Domain/Calls/ICall.cs/#L54"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Rejects an inbound ringing call with a 4xx/5xx/6xx SIP status.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task&lt;CallActionResult&gt; RejectAsync(int statusCode = 486, string? reasonPhrase = null, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>statusCode</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>reasonPhrase</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionResult.html">CallActionResult</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_SendDtmfAsync_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.SendDtmfAsync*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_SendDtmfAsync_CalloraVoipSdk_Core_Domain_Calls_DtmfTone_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.SendDtmfAsync(CalloraVoipSdk.Core.Domain.Calls.DtmfTone,System.Threading.CancellationToken)">
+  SendDtmfAsync(DtmfTone, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Core/Domain/Calls/ICall.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task SendDtmfAsync(DtmfTone tone, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tone</code> <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.DtmfTone.html">DtmfTone</a></dt>
+    <dd></dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task">Task</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_SendInfoAsync_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.SendInfoAsync*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_SendInfoAsync_System_String_System_String_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.SendInfoAsync(System.String,System.String,System.Threading.CancellationToken)">
+  SendInfoAsync(string, string, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Core/Domain/Calls/ICall.cs/#L70"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sends in-dialog SIP INFO.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task&lt;CallActionResult&gt; SendInfoAsync(string contentType, string body, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>contentType</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>body</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionResult.html">CallActionResult</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_SendNotifyAsync_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.SendNotifyAsync*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_SendNotifyAsync_System_String_System_String_System_String_System_String_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.SendNotifyAsync(System.String,System.String,System.String,System.String,System.Threading.CancellationToken)">
+  SendNotifyAsync(string, string, string?, string?, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Core/Domain/Calls/ICall.cs/#L93"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sends in-dialog SIP NOTIFY.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task&lt;CallActionResult&gt; SendNotifyAsync(string eventType, string subscriptionState, string? contentType = null, string? body = null, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>eventType</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>subscriptionState</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>contentType</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>body</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionResult.html">CallActionResult</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_SendOptionsAsync_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.SendOptionsAsync*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_SendOptionsAsync_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.SendOptionsAsync(System.Threading.CancellationToken)">
+  SendOptionsAsync(CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Core/Domain/Calls/ICall.cs/#L78"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sends in-dialog SIP OPTIONS.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task&lt;CallActionResult&gt; SendOptionsAsync(CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionResult.html">CallActionResult</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_SendSubscribeAsync_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.SendSubscribeAsync*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_SendSubscribeAsync_System_String_System_Int32_System_String_System_String_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.SendSubscribeAsync(System.String,System.Int32,System.String,System.String,System.Threading.CancellationToken)">
+  SendSubscribeAsync(string, int, string?, string?, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Core/Domain/Calls/ICall.cs/#L83"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sends in-dialog SIP SUBSCRIBE.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task&lt;CallActionResult&gt; SendSubscribeAsync(string eventType, int expiresSeconds = 300, string? acceptHeader = null, string? body = null, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>eventType</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>expiresSeconds</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>acceptHeader</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>body</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionResult.html">CallActionResult</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_UnholdAsync_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.UnholdAsync*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_UnholdAsync_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.UnholdAsync(System.Threading.CancellationToken)">
+  UnholdAsync(CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Core/Domain/Calls/ICall.cs/#L41"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task UnholdAsync(CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task">Task</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="events">Events
+</h2>
+
+
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_DtmfReceived" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.DtmfReceived">
+  DtmfReceived
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Core/Domain/Calls/ICall.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">event EventHandler&lt;DtmfReceivedEventArgs&gt;? DtmfReceived</code></pre>
+  </div>
+
+
+
+
+
+
+  <h4 class="section">Event Type</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.eventhandler-1">EventHandler</a>&lt;<a class="xref" href="CalloraVoipSdk.Core.Domain.Events.DtmfReceivedEventArgs.html">DtmfReceivedEventArgs</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_HoldStateChanged" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.HoldStateChanged">
+  HoldStateChanged
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Core/Domain/Calls/ICall.cs/#L32"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">event EventHandler&lt;HoldStateChangedEventArgs&gt;? HoldStateChanged</code></pre>
+  </div>
+
+
+
+
+
+
+  <h4 class="section">Event Type</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.eventhandler-1">EventHandler</a>&lt;<a class="xref" href="CalloraVoipSdk.Core.Domain.Events.HoldStateChangedEventArgs.html">HoldStateChangedEventArgs</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_QualitySnapshotChanged" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.QualitySnapshotChanged">
+  QualitySnapshotChanged
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Core/Domain/Calls/ICall.cs/#L35"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">event EventHandler&lt;CallQualitySnapshotChangedEventArgs&gt;? QualitySnapshotChanged</code></pre>
+  </div>
+
+
+
+
+
+
+  <h4 class="section">Event Type</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.eventhandler-1">EventHandler</a>&lt;<a class="xref" href="CalloraVoipSdk.Core.Domain.Events.CallQualitySnapshotChangedEventArgs.html">CallQualitySnapshotChangedEventArgs</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_StateChanged" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.StateChanged">
+  StateChanged
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Core/Domain/Calls/ICall.cs/#L31"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">event EventHandler&lt;CallStateChangedEventArgs&gt;? StateChanged</code></pre>
+  </div>
+
+
+
+
+
+
+  <h4 class="section">Event Type</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.eventhandler-1">EventHandler</a>&lt;<a class="xref" href="CalloraVoipSdk.Core.Domain.Events.CallStateChangedEventArgs.html">CallStateChangedEventArgs</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_TransferRequested" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.TransferRequested">
+  TransferRequested
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Core/Domain/Calls/ICall.cs/#L34"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">event EventHandler&lt;TransferRequestedEventArgs&gt;? TransferRequested</code></pre>
+  </div>
+
+
+
+
+
+
+  <h4 class="section">Event Type</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.eventhandler-1">EventHandler</a>&lt;<a class="xref" href="CalloraVoipSdk.Core.Domain.Events.TransferRequestedEventArgs.html">TransferRequestedEventArgs</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.1/src/Core/Domain/Calls/ICall.cs/#L7" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>
