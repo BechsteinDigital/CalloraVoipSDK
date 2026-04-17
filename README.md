@@ -111,9 +111,9 @@ CalloraVoipSdk follows Semantic Versioning (`MAJOR.MINOR.PATCH`).
 ### NuGet
 
 ```bash
-dotnet add package CalloraVoipSdk.Core
-dotnet add package CalloraVoipSdk.Audio.Windows
-dotnet add package CalloraVoipSdk.Audio.Linux
+dotnet add package CalloraVoipSdk
+dotnet add package CalloraVoipSdk.Audio.Windows   # Windows
+dotnet add package CalloraVoipSdk.Audio.Linux     # Linux
 ```
 
 ### Local development via `ProjectReference`

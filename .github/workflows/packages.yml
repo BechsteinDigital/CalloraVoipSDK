@@ -14,8 +14,6 @@ on:
 jobs:
   pack:
     runs-on: ubuntu-latest
-    env:
-      NUGET_API_KEY: "${{ secrets.NUGET_API_KEY }}"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -42,6 +40,15 @@ jobs:
       - name: Pack CalloraVoipSdk.Core
         run: dotnet pack src/Core/CalloraVoipSdk.Core.csproj -c Release --no-restore -o artifacts/nuget /p:PackageVersion=${{ steps.version.outputs.version }}
 
+      - name: Pack CalloraVoipSdk
+        run: dotnet pack src/CalloraVoipSdk/CalloraVoipSdk.csproj -c Release --no-restore -o artifacts/nuget /p:PackageVersion=${{ steps.version.outputs.version }}
+
+      - name: Pack CalloraVoipSdk.Client
+        run: dotnet pack src/Client/CalloraVoipSdk.Client.csproj -c Release --no-restore -o artifacts/nuget /p:PackageVersion=${{ steps.version.outputs.version }}
+
+      - name: Pack CalloraVoipSdk.Audio.Abstractions
+        run: dotnet pack src/Audio/Abstractions/CalloraVoipSdk.Audio.Abstractions.csproj -c Release --no-restore -o artifacts/nuget /p:PackageVersion=${{ steps.version.outputs.version }}
+
       - name: Pack CalloraVoipSdk.Audio.Windows
         run: dotnet pack src/Audio/Windows/CalloraVoipSdk.Audio.Windows.csproj -c Release --no-restore -o artifacts/nuget /p:PackageVersion=${{ steps.version.outputs.version }}
 
@@ -55,5 +62,18 @@ jobs:
           path: artifacts/nuget/*
 
       - name: Publish to NuGet.org
-        if: ${{ env.NUGET_API_KEY != '' }}
-        run: dotnet nuget push "artifacts/nuget/*.nupkg" --api-key "${{ env.NUGET_API_KEY }}" --source "https://api.nuget.org/v3/index.json" --skip-duplicate
+        if: ${{ secrets.NUGET_API_KEY != '' }}
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOURCE="https://api.nuget.org/v3/index.json"
+          VERSION="${{ steps.version.outputs.version }}"
+
+          dotnet nuget push "artifacts/nuget/CalloraVoipSdk.Core.${VERSION}.nupkg" --api-key "$NUGET_API_KEY" --source "$SOURCE" --skip-duplicate
+          dotnet nuget push "artifacts/nuget/CalloraVoipSdk.Client.${VERSION}.nupkg" --api-key "$NUGET_API_KEY" --source "$SOURCE" --skip-duplicate
+          dotnet nuget push "artifacts/nuget/CalloraVoipSdk.Audio.Abstractions.${VERSION}.nupkg" --api-key "$NUGET_API_KEY" --source "$SOURCE" --skip-duplicate
+          dotnet nuget push "artifacts/nuget/CalloraVoipSdk.Audio.Windows.${VERSION}.nupkg" --api-key "$NUGET_API_KEY" --source "$SOURCE" --skip-duplicate
+          dotnet nuget push "artifacts/nuget/CalloraVoipSdk.Audio.Linux.${VERSION}.nupkg" --api-key "$NUGET_API_KEY" --source "$SOURCE" --skip-duplicate
+          dotnet nuget push "artifacts/nuget/CalloraVoipSdk.${VERSION}.nupkg" --api-key "$NUGET_API_KEY" --source "$SOURCE" --skip-duplicate

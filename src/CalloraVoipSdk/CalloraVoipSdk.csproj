@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Description>Meta package for CalloraVoipSdk runtime facade and shared abstractions.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Client\CalloraVoipSdk.Client.csproj" />
+    <ProjectReference Include="..\Audio\Abstractions\CalloraVoipSdk.Audio.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>
