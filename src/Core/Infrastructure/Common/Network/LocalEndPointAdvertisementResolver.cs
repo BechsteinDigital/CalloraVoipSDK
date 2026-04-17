@@ -20,11 +20,12 @@ internal static class LocalEndPointAdvertisementResolver
         ArgumentNullException.ThrowIfNull(boundLocalEndPoint);
         ArgumentNullException.ThrowIfNull(remoteEndPoint);
 
-        if (!IPAddress.Any.Equals(boundLocalEndPoint.Address)
-            && !IPAddress.IPv6Any.Equals(boundLocalEndPoint.Address))
-        {
-            return boundLocalEndPoint;
-        }
+        if (!IPAddress.Any.Equals(boundLocalEndPoint.Address)                                                                                                                                
+            && !IPAddress.IPv6Any.Equals(boundLocalEndPoint.Address)                                                                                                                         
+            && !IPAddress.IsLoopback(boundLocalEndPoint.Address))                                                                                                                            
+        {                                                                                                                                                                                    
+            return boundLocalEndPoint;                                                                                                                                                       
+        }  
 
         try
         {
