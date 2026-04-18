@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -46,11 +47,15 @@ jobs:
           dotnet build src/Core/CalloraVoipSdk.Core.csproj --no-restore -c Release
           dotnet build src/Client/CalloraVoipSdk.Client.csproj --no-restore -c Release
 
-      - name: Extract version from tag
+      - name: Extract version from tag or fallback
         id: version
         shell: bash
         run: |
-          RAW_VERSION="${GITHUB_REF_NAME}"
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            RAW_VERSION="${GITHUB_REF_NAME}"
+          else
+            RAW_VERSION="dev"
+          fi
           VERSION="${RAW_VERSION#v}"
           echo "raw=${RAW_VERSION}" >> "$GITHUB_OUTPUT"
           echo "clean=${VERSION}" >> "$GITHUB_OUTPUT"
@@ -76,13 +81,9 @@ jobs:
           rm -rf pages-dist
           mkdir -p "pages-dist/${{ steps.version.outputs.raw }}"
 
-          # latest at root
           cp -R _site/. pages-dist/
-
-          # immutable snapshot under /vX.Y.Z/
           cp -R _site/. "pages-dist/${{ steps.version.outputs.raw }}/"
 
-          # ensure Pages does not run Jekyll
           touch pages-dist/.nojekyll
 
       - name: Upload Pages artifact

@@ -33,7 +33,6 @@ All runtime operations go through `VoipClient`:
 | `client.Lines` | Register / unregister SIP lines |
 | `client.Calls` | Query active calls |
 | `client.Media` | Create senders, receivers, connectors |
-| `client.ConferenceManager` | Create and manage conference rooms |
 
 ## Events
 
@@ -44,6 +43,3 @@ All state changes are delivered as events on the relevant domain object:
 | `IPhoneLine` | `StateChanged` | Registration state change |
 | `ICall` | `StateChanged` | Call state change |
 | `VoipClient` | `IncomingCall` | Inbound INVITE received |
-| `IConference` | `ParticipantJoined` | Participant added to conference |
-| `IConference` | `ParticipantLeft` | Participant removed from conference |
-| `IConference` | `ParticipantAudioSettingsChanged` | Participant mute or level changed |

@@ -7,8 +7,5 @@
 - name: Examples
   href: examples/
   homepage: examples/demo-walkthrough.md
-- name: Modules
-  href: modules/
-  homepage: modules/privacy.md
 - name: API Reference
   href: _api/
