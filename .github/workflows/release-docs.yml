@@ -1,6 +1,3 @@
-# .github/workflows/release-docs.yml
-# NOTE: This workflow deploys to GitHub Pages.
-# Enable only after the repository is made public.
 name: Release Documentation
 
 on:
@@ -9,28 +6,39 @@ on:
       - 'v*'
 
 permissions:
-  contents: write
+  contents: read
   pages: write
   id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
 
 jobs:
   release-docs:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
 
-      - name: Restore tools
+      - name: Restore local tools
         run: dotnet tool restore
 
-      - name: Restore packages
+      - name: Restore solution
         run: dotnet restore CalloraVoipSdk.sln
 
       - name: Build API projects
@@ -40,28 +48,48 @@ jobs:
 
       - name: Extract version from tag
         id: version
-        run: echo "VERSION=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
-
-      - name: Inject version into DocFX globalMetadata
+        shell: bash
         run: |
-          jq --arg v "${{ steps.version.outputs.VERSION }}" \
-            '.build.globalMetadata._appVersion = $v' \
-            docfx.json > docfx.tmp.json && mv docfx.tmp.json docfx.json
+          RAW_VERSION="${GITHUB_REF_NAME}"
+          VERSION="${RAW_VERSION#v}"
+          echo "raw=${RAW_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "clean=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Inject version into DocFX metadata
+        run: |
+          jq \
+            --arg raw "${{ steps.version.outputs.raw }}" \
+            --arg clean "${{ steps.version.outputs.clean }}" \
+            '
+            .build.globalMetadata._appVersion = $raw
+            | .build.globalMetadata._appVersionClean = $clean
+            ' \
+            docfx.json > docfx.tmp.json
+          mv docfx.tmp.json docfx.json
 
       - name: Build DocFX site
         run: dotnet tool run docfx docfx.json
 
-      - name: Deploy versioned docs to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./_site
-          publish_branch: gh-pages
-          destination_dir: ${{ steps.version.outputs.VERSION }}
+      - name: Prepare Pages artifact
+        shell: bash
+        run: |
+          rm -rf pages-dist
+          mkdir -p "pages-dist/${{ steps.version.outputs.raw }}"
 
-      - name: Update root (latest) docs
-        uses: peaceiris/actions-gh-pages@v4
+          # latest at root
+          cp -R _site/. pages-dist/
+
+          # immutable snapshot under /vX.Y.Z/
+          cp -R _site/. "pages-dist/${{ steps.version.outputs.raw }}/"
+
+          # ensure Pages does not run Jekyll
+          touch pages-dist/.nojekyll
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./_site
-          publish_branch: gh-pages
+          path: ./pages-dist
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
