@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Media &amp; Audio | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Media &amp; Audio | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.2/docs/portal/guides/media-and-audio.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="media--audio">Media &amp; Audio</h1>
+
+<h2 id="attach-default-audio-convenience">Attach Default Audio (Convenience)</h2>
+<pre><code class="lang-csharp">// Uses the SDK's configured default audio device + receiver/sender wiring.
+await client.AttachDefaultAudioAsync(call);
+// Auto-detach happens on call termination.
+</code></pre>
+<h2 id="runtime-device-controls-public-sdk-api">Runtime Device Controls (Public SDK API)</h2>
+<pre><code class="lang-csharp">// Works with the SDK-configured device (outside convenience attach as well).
+var inputDevices = client.GetAvailableInputAudioDevices();
+var outputDevices = client.GetAvailableOutputAudioDevices();
+
+if (inputDevices.Count &gt; 1)
+    client.SwitchAudioInputDevice(inputDevices[1].Id);
+if (outputDevices.Count &gt; 1)
+    client.SwitchAudioOutputDevice(outputDevices[1].Id);
+
+client.SetAudioInputMuted(false);
+client.SetAudioOutputMuted(false);
+client.SetAudioInputVolume(0.8f);   // 0..2
+client.SetAudioOutputVolume(1.1f);  // 0..2
+
+client.UpdateAudioFormat(new AudioDeviceFormat
+{
+    SampleRate = 16000,
+    BitsPerSample = 16,
+    Channels = 1
+});
+
+var snapshot = client.GetAudioDeviceRuntimeSnapshot();
+Console.WriteLine(
+    $&quot;Audio runtime: in={snapshot.InputDeviceId}, out={snapshot.OutputDeviceId}, &quot; +
+    $&quot;muted(in/out)={snapshot.InputMuted}/{snapshot.OutputMuted}, &quot; +
+    $&quot;vol(in/out)={snapshot.InputVolume:F2}/{snapshot.OutputVolume:F2}&quot;);
+</code></pre>
+<h2 id="attach-an-audio-device-manually-advanced">Attach an Audio Device Manually (Advanced)</h2>
+<pre><code class="lang-csharp">using CalloraVoipSdk.Audio.Linux; // Windows: CalloraVoipSdk.Audio.Windows + WindowsAudioDevice
+using CalloraVoipSdk.Core.Application.Ports.Audio;
+using CalloraVoipSdk.Core.Domain.Calls;
+
+using var audioDevice = new LinuxAudioDevice();
+using var receiver    = client.Media.CreateReceiver();
+using var sender      = client.Media.CreateSender();
+
+call.StateChanged += (_, e) =&gt;
+{
+    if (e.NewState == CallState.Connected)
+    {
+        receiver.AttachToCall(call);
+        sender.AttachToCall(call);
+
+        var audioParams = call.MediaParameters is { } mp
+            ? AudioConnectionParameters.From(mp)
+            : AudioConnectionParameters.Default;
+
+        audioDevice.Connect(receiver, sender, audioParams);
+
+        if (audioDevice is IAudioDeviceRuntimeControl runtime)
+        {
+            runtime.SetInputVolume(0.9f);
+            runtime.SetOutputVolume(1.0f);
+            runtime.SetInputMuted(false);
+            runtime.SetOutputMuted(false);
+        }
+    }
+
+    if (e.NewState == CallState.Terminated)
+    {
+        audioDevice.Disconnect();
+        receiver.Detach();
+        sender.Detach();
+    }
+};
+</code></pre>
+<h2 id="bridge-two-calls-media-cross-connect">Bridge Two Calls (Media Cross-Connect)</h2>
+<p>Directly couple two call legs without involving the local audio device:</p>
+<pre><code class="lang-csharp">using var aRx = client.Media.CreateReceiver();
+using var aTx = client.Media.CreateSender();
+using var bRx = client.Media.CreateReceiver();
+using var bTx = client.Media.CreateSender();
+
+aRx.AttachToCall(callA);
+aTx.AttachToCall(callA);
+bRx.AttachToCall(callB);
+bTx.AttachToCall(callB);
+
+using var bridge = client.Media.CreateConnector()
+    .CrossConnect(aRx, aTx, bRx, bTx);
+
+// bridge.Dispose() removes the media coupling
+</code></pre>
+<h2 id="conference-room">Conference Room</h2>
+<pre><code class="lang-csharp">using CalloraVoipSdk.Modules;
+
+var conference = client.ConferenceManager.Create();
+
+var addResult = await conference.AddParticipantAsync(callA);
+// Check addResult.Success for error handling in production
+_ = await conference.AddParticipantAsync(callB);
+_ = await conference.AddParticipantAsync(callC);
+
+// Mute a participant
+_ = await conference.SetParticipantMuteAsync(callB.CallId, isMuted: true);
+
+// Adjust mix level (0.0 – 1.0)
+_ = await conference.SetParticipantLevelAsync(callC.CallId, level: 0.6f);
+
+// Remove one participant
+_ = await conference.RemoveParticipantAsync(callB.CallId);
+
+// Tear down the conference
+_ = await conference.CloseAsync();
+</code></pre>
+<h2 id="rtcp-quality-metrics">RTCP Quality Metrics</h2>
+<pre><code class="lang-csharp">var quality = call.QualitySnapshot;
+if (quality.RtcpActive)
+{
+    Console.WriteLine($&quot;Packet loss: {quality.LocalReceivePacketLossPercent:F1}%&quot;);
+    Console.WriteLine($&quot;Round-trip:  {quality.RoundTripTimeMs} ms&quot;);
+    Console.WriteLine($&quot;Jitter:      {quality.LocalReceiveJitterMs} ms&quot;);
+}
+</code></pre>
+<h2 id="recording-call-und-conference">Recording (Call und Conference)</h2>
+<pre><code class="lang-csharp">// Call recording (WAV)
+await using var callRecording = await client.Media.StartCallRecordingAsync(
+    call,
+    new RecordingOptions
+    {
+        OutputDirectory = &quot;recordings&quot;,
+        FileNamePrefix = &quot;call&quot;,
+        Format = AudioFileFormat.Wav,
+        RotateAfterBytes = 25 * 1024 * 1024 // 25 MB parts
+    });
+
+// Pause/Resume/Stop
+await callRecording.PauseAsync();
+await callRecording.ResumeAsync();
+await callRecording.StopAsync();
+
+// Conference recording (mixed bus)
+await using var conferenceRecording = await client.Media.StartConferenceRecordingAsync(
+    conference,
+    new RecordingOptions
+    {
+        OutputDirectory = &quot;recordings&quot;,
+        FileNamePrefix = &quot;conference&quot;,
+        Format = AudioFileFormat.Wav,
+        SkipSilence = true,
+        SilenceThresholdPcm16 = 96
+    });
+</code></pre>
+<h2 id="playback-call-und-conference">Playback (Call und Conference)</h2>
+<pre><code class="lang-csharp">// Inject WAV playback into an active call
+await using var callPlayback = await client.Media.StartCallPlaybackAsync(
+    call,
+    new PlaybackRequest
+    {
+        FilePath = &quot;prompts/welcome.wav&quot;,
+        Format = AudioFileFormat.Wav,
+        Options = new PlaybackOptions
+        {
+            StartPaused = false,
+            Loop = false
+        }
+    });
+
+// Broadcast WAV playback into an active conference
+await using var conferencePlayback = await client.Media.StartConferencePlaybackAsync(
+    conference,
+    new PlaybackRequest
+    {
+        FilePath = &quot;prompts/announcement.wav&quot;,
+        Format = AudioFileFormat.Wav
+    });
+</code></pre>
+<p>Hinweis:</p>
+<ul>
+<li>WAV Recording/Playback ist end-to-end verfuegbar.</li>
+<li>MP3 Recording/Playback ist ueber den MP3 Infrastructure-Adapter verfuegbar (Encode/Decode ueber ffmpeg).</li>
+<li>Fuer bereits MP3-negotiated Calls nutzt die Session MP3-Passthrough ohne zusaetzliches Re-Encoding.</li>
+<li>Optional: Recordings koennen ueber <code>RecordingOptions.EncryptionProvider</code> (z. B. <code>AesGcmRecordingEncryptionProvider</code>) verschluesselt werden.</li>
+<li>Built-in Payload-Transcoding deckt L16/PCMU/PCMA/G.722 ab; weitere Codec-Familien koennen als zusaetzliche Adapter eingebunden werden.</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/v1.0.2/docs/portal/guides/media-and-audio.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>
