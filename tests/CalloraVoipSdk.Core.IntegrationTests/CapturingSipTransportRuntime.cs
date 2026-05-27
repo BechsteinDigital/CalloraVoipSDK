@@ -8,11 +8,17 @@ namespace CalloraVoipSdk.Core.IntegrationTests;
 internal sealed class CapturingSipTransportRuntime : ISipTransportRuntime
 {
     private readonly List<CapturedSipRequest> _requests = new();
+    private readonly Dictionary<int, Action<IPEndPoint, SipResponse>> _responseHandlers = new();
     private readonly object _sync = new();
     private TaskCompletionSource<CapturedSipRequest> _nextRequest =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private int _responseHandlerId;
 
     public IPEndPoint LocalEndPoint { get; } = new(IPAddress.Loopback, 5060);
+
+    public Func<CapturedSipRequest, SipResponse?>? ResponseFactory { get; set; }
+
+    public int ResponseSubscriptionsCreated { get; private set; }
 
     public void Dispose()
     {
@@ -20,7 +26,17 @@ internal sealed class CapturingSipTransportRuntime : ISipTransportRuntime
 
     public IDisposable SubscribeRequests(Action<IPEndPoint, SipRequest> handler) => NoopDisposable.Instance;
 
-    public IDisposable SubscribeResponses(Action<IPEndPoint, SipResponse> handler) => NoopDisposable.Instance;
+    public IDisposable SubscribeResponses(Action<IPEndPoint, SipResponse> handler)
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+        lock (_sync)
+        {
+            ResponseSubscriptionsCreated++;
+            var id = ++_responseHandlerId;
+            _responseHandlers[id] = handler;
+            return new DelegateDisposable(() => RemoveResponseHandler(id));
+        }
+    }
 
     public Task SendRequestAsync(
         string method,
@@ -102,5 +118,25 @@ internal sealed class CapturingSipTransportRuntime : ISipTransportRuntime
         }
 
         signal.TrySetResult(request);
+
+        var response = ResponseFactory?.Invoke(request);
+        if (response is not null)
+            DispatchResponse(remoteEndPoint, response);
+    }
+
+    private void DispatchResponse(IPEndPoint remoteEndPoint, SipResponse response)
+    {
+        Action<IPEndPoint, SipResponse>[] handlers;
+        lock (_sync)
+            handlers = _responseHandlers.Values.ToArray();
+
+        foreach (var handler in handlers)
+            handler(remoteEndPoint, response);
+    }
+
+    private void RemoveResponseHandler(int id)
+    {
+        lock (_sync)
+            _responseHandlers.Remove(id);
     }
 }

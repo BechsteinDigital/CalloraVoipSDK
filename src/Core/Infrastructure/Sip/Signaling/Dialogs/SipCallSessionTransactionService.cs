@@ -672,24 +672,28 @@ internal sealed class SipCallSessionTransactionService
         if (_context.ActiveInviteCSeq <= 0 || string.IsNullOrWhiteSpace(_context.ActiveInviteBranch))
             return;
 
-        // RFC 3261 §9.1: CANCEL MUST carry its own new branch — the branch MUST differ from
-        // the INVITE being cancelled. The CSeq number equals the INVITE's CSeq number.
+        // RFC 3261 §9.1: CANCEL matches the INVITE transaction by reusing the INVITE
+        // request's top Via branch. The numeric CSeq equals the INVITE CSeq; the method is CANCEL.
         var headers = _headers.CreateDialogRequestHeaders(
             method: "CANCEL",
             cseq: _context.ActiveInviteCSeq,
-            branch: SipProtocol.NewBranch(),
+            branch: _context.ActiveInviteBranch,
             authorizationHeaderName: null,
             authorizationHeader: null,
             includeContentType: false);
         SipCallSessionTransactionUtilities.AppendReasonHeader(headers, reason);
 
-        await _context.Transport.SendRequestAsync(
-                "CANCEL",
-                _context.RemoteRequestUri,
-                headers,
-                body: null,
-                _context.RemoteEndPoint,
-                _context.SignalingTransport,
+        await _clientTransactions.ExecuteAsync(
+                new SipClientTransactionRequest
+                {
+                    Method = "CANCEL",
+                    RequestUri = _context.RemoteRequestUri,
+                    Headers = headers,
+                    Body = null,
+                    RemoteEndPoint = _context.RemoteEndPoint,
+                    Transport = _context.SignalingTransport,
+                    Timeout = _context.Timeout
+                },
                 ct)
             .ConfigureAwait(false);
     }
