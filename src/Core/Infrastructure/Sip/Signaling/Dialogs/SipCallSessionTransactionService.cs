@@ -17,7 +17,10 @@ internal sealed class SipCallSessionTransactionService
     private readonly SipCallSessionHeaderService _headers;
     private readonly ISipClientTransactionExecutor _clientTransactions;
     private readonly object _forkedInviteSync = new();
+    private readonly object _cancelledInviteSync = new();
     private readonly HashSet<string> _terminatedForkedInviteTags = new(StringComparer.Ordinal);
+    private int _cancelledInviteCSeq;
+    private SipDialogTerminationReason? _cancelledInviteReason;
 
     /// <summary>
     /// Creates a transaction service bound to one call session context.
@@ -369,6 +372,14 @@ internal sealed class SipCallSessionTransactionService
                 _context.RemoteTag = SipProtocol.ExtractTag(finalResponse.Response.Header("To")) ?? _context.RemoteTag;
                 await SendAckAsync(cseq, _context.RemoteEndPoint, ct).ConfigureAwait(false);
                 _context.ActiveInviteBranch = null;
+
+                if (TryConsumeCancelledInvite(cseq, out var cancelledInviteReason))
+                {
+                    await SendByeAsync(CancellationToken.None, cancelledInviteReason).ConfigureAwait(false);
+                    _context.TransitionTo(SipDialogState.Terminated, cancelledInviteReason);
+                    return;
+                }
+
                 // For outbound calls, the 200 OK body is the remote SDP answer.
                 if (!string.IsNullOrWhiteSpace(finalResponse.Response.Body))
                     _context.SetRemoteSdp(finalResponse.Response.Body);
@@ -435,6 +446,7 @@ internal sealed class SipCallSessionTransactionService
             }
 
             _context.ActiveInviteBranch = null;
+            ClearCancelledInvite(cseq);
 
             // RFC 3261 §20.33 / RFC 7339 §5.3: parse Retry-After from 503 responses.
             int? retryAfterSeconds = null;
@@ -672,6 +684,8 @@ internal sealed class SipCallSessionTransactionService
         if (_context.ActiveInviteCSeq <= 0 || string.IsNullOrWhiteSpace(_context.ActiveInviteBranch))
             return;
 
+        MarkCancelledInvite(_context.ActiveInviteCSeq, reason);
+
         // RFC 3261 §9.1: CANCEL matches the INVITE transaction by reusing the INVITE
         // request's top Via branch. The numeric CSeq equals the INVITE CSeq; the method is CANCEL.
         var headers = _headers.CreateDialogRequestHeaders(
@@ -696,6 +710,48 @@ internal sealed class SipCallSessionTransactionService
                 },
                 ct)
             .ConfigureAwait(false);
+    }
+
+    private void MarkCancelledInvite(
+        int inviteCseq,
+        SipDialogTerminationReason? reason)
+    {
+        lock (_cancelledInviteSync)
+        {
+            _cancelledInviteCSeq = inviteCseq;
+            _cancelledInviteReason = reason;
+        }
+    }
+
+    private bool TryConsumeCancelledInvite(
+        int inviteCseq,
+        out SipDialogTerminationReason? reason)
+    {
+        lock (_cancelledInviteSync)
+        {
+            if (_cancelledInviteCSeq != inviteCseq)
+            {
+                reason = null;
+                return false;
+            }
+
+            reason = _cancelledInviteReason;
+            _cancelledInviteCSeq = 0;
+            _cancelledInviteReason = null;
+            return true;
+        }
+    }
+
+    private void ClearCancelledInvite(int inviteCseq)
+    {
+        lock (_cancelledInviteSync)
+        {
+            if (_cancelledInviteCSeq != inviteCseq)
+                return;
+
+            _cancelledInviteCSeq = 0;
+            _cancelledInviteReason = null;
+        }
     }
 
     /// <summary>

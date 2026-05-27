@@ -12,6 +12,8 @@ namespace CalloraVoipSdk.Core.IntegrationTests;
 
 internal sealed class AckTestSipCallSessionContext : ISipCallSessionContext
 {
+    private int _nextLocalCSeq = 7;
+
     public AckTestSipCallSessionContext(ISipTransportRuntime transport)
     {
         Transport = transport;
@@ -85,7 +87,7 @@ internal sealed class AckTestSipCallSessionContext : ISipCallSessionContext
 
     public bool IsDisposed => false;
 
-    public int NextLocalCSeq() => 8;
+    public int NextLocalCSeq() => Interlocked.Increment(ref _nextLocalCSeq);
 
     public void TransitionTo(
         SipDialogState next,

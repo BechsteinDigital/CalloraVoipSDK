@@ -100,6 +100,12 @@ internal sealed class CapturingSipTransportRuntime : ISipTransportRuntime
         }
     }
 
+    public IReadOnlyList<CapturedSipRequest> SnapshotRequests()
+    {
+        lock (_sync)
+            return _requests.ToArray();
+    }
+
     private void Capture(
         string method,
         string requestUri,
