@@ -66,6 +66,7 @@ internal sealed class SipReliableProvisionalManager : IDisposable
         try
         {
             await entry.WaitForPrackAsync(timeoutCts.Token).ConfigureAwait(false);
+            RemovePending(rseq);
             return true;
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
@@ -117,8 +118,6 @@ internal sealed class SipReliableProvisionalManager : IDisposable
                 rejectionReasonPhrase = "Call/Transaction Does Not Exist";
                 return false;
             }
-
-            _pendingByRseq.Remove(rseq);
         }
 
         entry.TryAcknowledge();
