@@ -39,17 +39,14 @@ internal static class SrtpKeyDerivation
 
     private static byte[] DeriveKey(SrtpKeyMaterial material, byte label, int outputLength)
     {
-        // x = label * 2^48 (label in bit position 48..55 of 128-bit IV)
-        // IV = (master_salt XOR x) padded to 128 bits, with r=0 and index=0
-        // i.e. IV[7] = salt[7] XOR label (for r=0, index=0)
         var iv = new byte[16];
         var salt = material.MasterSalt.Span;
 
-        // Copy 14-byte salt into bytes 2..15 of 16-byte IV (left-justified in 128 bits)
-        salt.CopyTo(iv.AsSpan(2));
+        // x = (label || index_div_kdr) XOR master_salt, then x * 2^16.
+        salt.CopyTo(iv);
 
-        // XOR label into byte at position 2 + (14 - 7) = 9 (label occupies bits 48..55)
-        iv[2 + 7] ^= label;
+        // label is the first byte of the 7-octet key_id (label || 6 zero octets).
+        iv[7] ^= label;
 
         return AesCmPrf(material.MasterKey.Span, iv, outputLength);
     }
@@ -62,33 +59,29 @@ internal static class SrtpKeyDerivation
     {
         var output  = new byte[outputLength];
         var written = 0;
-        var counter = (ulong)0;
+        var counter = 0;
 
-        // Use AES-ECB to generate keystream blocks
         using var aes = Aes.Create();
         aes.Key     = key.ToArray();
         aes.Mode    = CipherMode.ECB;
         aes.Padding = PaddingMode.None;
+        using var encryptor = aes.CreateEncryptor();
 
         var block = new byte[16];
         var counterIv = (byte[])iv.Clone();
 
         while (written < outputLength)
         {
-            // Encrypt current counter block
-            using var encryptor = aes.CreateEncryptor();
+            counterIv[14] = (byte)(counter >> 8);
+            counterIv[15] = (byte)counter;
+
             encryptor.TransformBlock(counterIv, 0, 16, block, 0);
 
             var toCopy = Math.Min(16, outputLength - written);
             block.AsSpan(0, toCopy).CopyTo(output.AsSpan(written));
             written += toCopy;
 
-            // Increment counter in the last 4 bytes (big-endian, RFC 3711 §4.1.1)
             counter++;
-            counterIv[12] = (byte)(counter >> 24);
-            counterIv[13] = (byte)(counter >> 16);
-            counterIv[14] = (byte)(counter >>  8);
-            counterIv[15] = (byte)(counter);
         }
 
         return output;

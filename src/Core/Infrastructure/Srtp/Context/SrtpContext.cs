@@ -12,6 +12,8 @@ namespace CalloraVoipSdk.Core.Infrastructure.Srtp.Context;
 internal sealed class SrtpContext : ISrtpContext
 {
     private const int AuthTagFullLength = 20;
+    private const int AesCmBlockLength = 16;
+    private const int MaxAesCmKeystreamBytes = 1 << 20;
     private readonly SrtpSessionKeys _keys;
     private readonly SrtpCryptoSuite _suite;
     private readonly int _authTagLength;
@@ -64,7 +66,7 @@ internal sealed class SrtpContext : ISrtpContext
 
         // Append auth tag over header + encrypted payload
         Span<byte> tag = stackalloc byte[AuthTagFullLength];
-        ComputeAuthTag(result.AsSpan(0, rtpPacket.Length), tag);
+        ComputeAuthTag(result.AsSpan(0, rtpPacket.Length), GetRoc(packetIndex), tag);
         tag[.._authTagLength].CopyTo(result.AsSpan(rtpPacket.Length, _authTagLength));
 
         // Advance sender-side index so ROC is correct for subsequent packets
@@ -87,16 +89,15 @@ internal sealed class SrtpContext : ISrtpContext
         var rtpLen     = srtpPacket.Length - _authTagLength;
         var rtpSpan    = srtpPacket[..rtpLen];
         var receivedTag = srtpPacket[rtpLen..];
-
-        // 1. Verify auth tag before decryption (RFC 3711 §3.3 — verify-then-decrypt)
-        Span<byte> expectedTag = stackalloc byte[AuthTagFullLength];
-        ComputeAuthTag(rtpSpan, expectedTag);
-        if (!CryptographicOperations.FixedTimeEquals(receivedTag, expectedTag[.._authTagLength]))
-            throw new SrtpAuthenticationException("SRTP authentication tag mismatch.");
-
         var seq  = BinaryPrimitives.ReadUInt16BigEndian(rtpSpan[2..]);
         var ssrc = BinaryPrimitives.ReadUInt32BigEndian(rtpSpan[8..]);
         var packetIndex = ComputePacketIndex(seq);
+
+        // 1. Verify auth tag before decryption (RFC 3711 §3.3 — verify-then-decrypt)
+        Span<byte> expectedTag = stackalloc byte[AuthTagFullLength];
+        ComputeAuthTag(rtpSpan, GetRoc(packetIndex), expectedTag);
+        if (!CryptographicOperations.FixedTimeEquals(receivedTag, expectedTag[.._authTagLength]))
+            throw new SrtpAuthenticationException("SRTP authentication tag mismatch.");
 
         // 2. Replay check (RFC 3711 §3.3.2)
         CheckReplay(packetIndex);
@@ -126,6 +127,9 @@ internal sealed class SrtpContext : ISrtpContext
 
     private static void AesCmXor(byte[] key, ReadOnlySpan<byte> iv, Span<byte> data)
     {
+        if (data.Length > MaxAesCmKeystreamBytes)
+            throw new CryptographicException("SRTP AES-CM payload exceeds the RFC3711 2^16-block keystream limit.");
+
         using var aes  = Aes.Create();
         aes.Key        = key;
         aes.Mode       = CipherMode.ECB;
@@ -136,22 +140,21 @@ internal sealed class SrtpContext : ISrtpContext
         var counterIv = new byte[16];
         iv.CopyTo(counterIv);
         var offset = 0;
-        uint counter = 0;
+        var counter = 0;
 
         while (offset < data.Length)
         {
-            enc.TransformBlock(counterIv, 0, 16, block, 0);
+            counterIv[14] = (byte)(counter >> 8);
+            counterIv[15] = (byte)counter;
 
-            var chunk = Math.Min(16, data.Length - offset);
+            enc.TransformBlock(counterIv, 0, AesCmBlockLength, block, 0);
+
+            var chunk = Math.Min(AesCmBlockLength, data.Length - offset);
             for (var i = 0; i < chunk; i++)
                 data[offset + i] ^= block[i];
 
             offset += chunk;
             counter++;
-            counterIv[12] = (byte)(counter >> 24);
-            counterIv[13] = (byte)(counter >> 16);
-            counterIv[14] = (byte)(counter >>  8);
-            counterIv[15] = (byte) counter;
         }
     }
 
@@ -163,7 +166,7 @@ internal sealed class SrtpContext : ISrtpContext
     private void BuildIv(uint ssrc, ulong index, Span<byte> iv)
     {
         iv.Clear();
-        _keys.Salt.CopyTo(iv[2..]); // salt is 14 bytes, placed at bytes 2..15
+        _keys.Salt.CopyTo(iv); // k_s * 2^16 leaves bytes 14..15 reserved for the block counter.
 
         // XOR SSRC into bytes 4..7 (SSRC * 2^64 means bits 64..95)
         iv[4] ^= (byte)(ssrc >> 24);
@@ -181,12 +184,19 @@ internal sealed class SrtpContext : ISrtpContext
     }
 
     // -------------------------------------------------------------------------
-    // Authentication (RFC 3711 §4.2) — HMAC-SHA1 over RTP packet
+    // Authentication (RFC 3711 §4.2) — HMAC-SHA1 over RTP packet plus ROC
     // -------------------------------------------------------------------------
 
-    private void ComputeAuthTag(ReadOnlySpan<byte> data, Span<byte> destination)
+    private void ComputeAuthTag(ReadOnlySpan<byte> data, uint roc, Span<byte> destination)
     {
-        if (!HMACSHA1.TryHashData(_keys.AuthKey, data, destination, out var bytesWritten)
+        using var hmac = IncrementalHash.CreateHMAC(HashAlgorithmName.SHA1, _keys.AuthKey);
+        hmac.AppendData(data);
+
+        Span<byte> rocBytes = stackalloc byte[4];
+        BinaryPrimitives.WriteUInt32BigEndian(rocBytes, roc);
+        hmac.AppendData(rocBytes);
+
+        if (!hmac.TryGetHashAndReset(destination, out var bytesWritten)
             || bytesWritten != AuthTagFullLength)
         {
             throw new CryptographicException("Failed to compute SRTP HMAC-SHA1 authentication tag.");
@@ -209,6 +219,8 @@ internal sealed class SrtpContext : ISrtpContext
         var estimated = (long)_senderIndex + delta;
         return estimated >= 0 ? (ulong)estimated : (ulong)seq;
     }
+
+    private static uint GetRoc(ulong packetIndex) => (uint)(packetIndex >> 16);
 
     private ulong ComputePacketIndex(ushort seq)
     {
