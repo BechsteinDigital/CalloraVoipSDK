@@ -1,11 +1,5 @@
 - name: Overview
   href: overview.md
-- name: Platform Model
-  href: platform-model.md
-- name: Platform Bootstrap
-  href: platform-bootstrap.md
-- name: Host Backend API
-  href: host-backend-api.md
 - name: Call Lifecycle
   href: call-lifecycle.md
 - name: Media Pipeline
