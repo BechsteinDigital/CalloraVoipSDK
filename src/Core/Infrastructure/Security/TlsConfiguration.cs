@@ -60,8 +60,15 @@ public class TlsConfiguration
         if (CertificatePath == null)
             return null;
 
-        _certificate = new X509Certificate2(CertificatePath, CertificatePassword);
+        _certificate = LoadCertificate(CertificatePath, CertificatePassword);
         return _certificate;
+    }
+
+    private static X509Certificate2 LoadCertificate(string path, string? password)
+    {
+#pragma warning disable SYSLIB0057
+        return new X509Certificate2(path, password);
+#pragma warning restore SYSLIB0057
     }
 
     /// <summary>
