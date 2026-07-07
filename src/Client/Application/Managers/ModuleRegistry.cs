@@ -20,20 +20,21 @@ public sealed class ModuleRegistry
     }
 
     /// <summary>
-    /// Registers one module instance and invokes its <see cref="IVoipClientModule.OnAttached"/> hook.
-    /// When multiple registered modules satisfy the same contract, resolution returns the first
-    /// registered match.
+    /// Registers one module instance. The <see cref="IVoipClientModule.OnAttached"/> hook runs
+    /// first; the module only becomes resolvable after the hook completed, so consumers never
+    /// observe a partially initialized module. When multiple registered modules satisfy the same
+    /// contract, resolution returns the first registered match.
     /// </summary>
     public void Register(IVoipClientModule module)
     {
         ArgumentNullException.ThrowIfNull(module);
 
+        module.OnAttached(_owner);
+
         lock (_sync)
         {
             _modules.Add(module);
         }
-
-        module.OnAttached(_owner);
     }
 
     /// <summary>

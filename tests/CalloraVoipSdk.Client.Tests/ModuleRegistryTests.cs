@@ -101,6 +101,18 @@ public sealed class ModuleRegistryTests
     }
 
     [Fact]
+    public void Module_is_not_resolvable_before_attach_hook_completed()
+    {
+        using var client = new VoipClient(TestConfiguration());
+        var module = new AttachProbeModule();
+
+        client.Modules.Register(module);
+
+        Assert.False(module.WasResolvableDuringAttach);
+        Assert.True(client.Modules.TryGet<AttachProbeModule>(out _));
+    }
+
+    [Fact]
     public void Register_rejects_null_module()
     {
         using var client = new VoipClient(TestConfiguration());
@@ -188,4 +200,18 @@ public sealed class OtherFeatureModule : IVoipClientModule, IOtherFeature
 {
     /// <inheritdoc />
     public string ModuleId => "other-feature";
+}
+
+/// <summary>Module probing its own visibility during the attach hook.</summary>
+public sealed class AttachProbeModule : IVoipClientModule
+{
+    /// <inheritdoc />
+    public string ModuleId => "attach-probe";
+
+    /// <summary>True when the module could already be resolved while attaching.</summary>
+    public bool WasResolvableDuringAttach { get; private set; }
+
+    /// <inheritdoc />
+    public void OnAttached(IVoipClient client) =>
+        WasResolvableDuringAttach = client.Modules.TryGet<AttachProbeModule>(out _);
 }
