@@ -296,9 +296,19 @@ public sealed class VoipClient : IVoipClient
         var injectedModules = ResolveService<IEnumerable<IVoipClientModule>>(services);
         if (injectedModules is not null)
         {
-            foreach (var module in injectedModules)
+            try
             {
-                Modules.Register(module);
+                foreach (var module in injectedModules)
+                {
+                    Modules.Register(module);
+                }
+            }
+            catch
+            {
+                // Third-party module code failed during attach: release already
+                // constructed runtime resources, then surface the original error.
+                Dispose();
+                throw;
             }
         }
     }
