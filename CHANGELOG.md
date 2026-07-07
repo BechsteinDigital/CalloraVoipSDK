@@ -6,6 +6,18 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-07-07
+
+### Added
+- Generic module registry as the SDK extension point: `IVoipClientModule`, `ModuleRegistry`, `IVoipClient.Modules`. Modules from separate packages register via DI (`IVoipClientModule` services before `AddCallora`) or programmatically via `client.Modules.Register(...)`; typed resolution via `Get<T>`/`TryGet<T>`. The `OnAttached` hook hands modules the owning client; modules only become resolvable after the hook completed.
+- Per-call media tap pinned as a public, tested contract: parallel `IMediaReceiver` fan-out, detach/dispose isolation, `IMediaSender` injection and format discovery via `ICall.MediaParameters`. XML docs now state the blocking contract (`FrameReceived` runs synchronously on the media path; consumers must buffer).
+
+### Changed
+- `VoipClient` construction now disposes already created runtime resources when a module throws during `OnAttached`, then rethrows the original error.
+
+### Removed
+- **Breaking:** `ModuleOperationResult` removed (unreferenced since 2.0.0).
+
 ## [2.0.0] - 2026-07-07
 
 ### Removed
