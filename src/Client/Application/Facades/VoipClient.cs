@@ -66,11 +66,6 @@ public sealed class VoipClient : IVoipClient
     public MediaManager Media { get; }
 
     /// <summary>
-    /// Conferencing module facade.
-    /// </summary>
-    public IConferencingModule ConferenceManager => ModuleManager.Conferencing;
-
-    /// <summary>
     /// Playback module facade.
     /// </summary>
     public IPlaybackModule PlaybackManager => ModuleManager.Playback;
@@ -79,16 +74,6 @@ public sealed class VoipClient : IVoipClient
     /// Recording module facade.
     /// </summary>
     public IRecordingModule RecordingManager => ModuleManager.Recording;
-
-    /// <summary>
-    /// Realtime bridge module facade.
-    /// </summary>
-    public IRealtimeModule RealtimeManager => ModuleManager.Realtime;
-
-    /// <summary>
-    /// WebSocket transport module facade.
-    /// </summary>
-    public IWebSocketModule WebSocketManager => ModuleManager.WebSocket;
 
     /// <summary>
     /// Module availability facade.
@@ -261,8 +246,8 @@ public sealed class VoipClient : IVoipClient
         var audioFileCodecs = ResolveService<IAudioFileCodecRegistry>(services)
             ?? new AudioFileCodecRegistry();
         Media = new MediaManager(logFactory, audioFileCodecs);
-        ModuleManager = new ModuleManager(Media, logFactory);
-        SessionManager = new SessionManager(Calls, ModuleManager.Conferencing, ModuleManager.Playback, ModuleManager.Recording);
+        ModuleManager = new ModuleManager(Media);
+        SessionManager = new SessionManager(Calls, ModuleManager.Playback, ModuleManager.Recording);
         DeviceManager = new DeviceManager(GetAudioDeviceRuntimeControl, ThrowIfDisposed);
         QualityManager = new QualityManager();
         PolicyManager = new PolicyManager(config.SrtpPolicy);

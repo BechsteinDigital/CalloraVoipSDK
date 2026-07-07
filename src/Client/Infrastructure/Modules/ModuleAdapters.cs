@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Logging;
 using CalloraVoipSdk.Core.Application.Media;
 using CalloraVoipSdk.Core.Domain.Calls;
 
@@ -6,13 +5,6 @@ namespace CalloraVoipSdk.Modules;
 
 internal static class ModuleAdapters
 {
-    public static IConferencingModule CreateConferencing(
-        MediaManager media,
-        ILoggerFactory loggerFactory)
-    {
-        return new UnavailableConferencingModule("conferencing");
-    }
-
     public static IPlaybackModule CreatePlayback(MediaManager media)
     {
         return new CorePlaybackModule(media);
@@ -21,18 +13,6 @@ internal static class ModuleAdapters
     public static IRecordingModule CreateRecording(MediaManager media)
     {
         return new CoreRecordingModule(media);
-    }
-
-    public static IRealtimeModule CreateRealtime(
-        MediaManager media,
-        ILoggerFactory loggerFactory)
-    {
-        return new UnavailableRealtimeModule("realtime");
-    }
-
-    public static IWebSocketModule CreateWebSocketAudioTransport(ILoggerFactory loggerFactory)
-    {
-        return new UnavailableWebSocketAudioTransportModule("websocket");
     }
 }
 
@@ -60,44 +40,4 @@ internal sealed class CoreRecordingModule(MediaManager media) : IRecordingModule
 
     public Task<IRecordingSession> StartMixedBusAsync(IMixedMediaBus bus, RecordingOptions? options = null, CancellationToken ct = default) =>
         media.StartConferenceRecordingAsync(bus, options, ct);
-}
-
-internal sealed class UnavailableConferencingModule(string moduleId) : IConferencingModule
-{
-    public bool IsAvailable => false;
-
-    public IReadOnlyCollection<IConferenceSession> Active => [];
-
-    public IConferenceSession Create() => throw new ModuleFeatureUnavailableException(moduleId);
-}
-
-internal sealed class UnavailableRealtimeModule(string moduleId) : IRealtimeModule
-{
-    public bool IsAvailable => false;
-
-    public IReadOnlyCollection<ICallRealtimeBridge> Active => [];
-
-    public Task<ICallRealtimeBridge> StartCallBridgeAsync(
-        ICall call,
-        IAudioFrameStreamTransport transport,
-        RealtimeBridgeOptions? options = null,
-        CancellationToken ct = default) =>
-        throw new ModuleFeatureUnavailableException(moduleId);
-}
-
-internal sealed class UnavailableWebSocketAudioTransportModule(string moduleId) : IWebSocketModule
-{
-    public bool IsAvailable => false;
-
-    public IWebSocketConnection CreateConnection(
-        Uri endpoint,
-        WebSocketClientOptions? options = null,
-        IReadOnlyDictionary<string, string>? headers = null) =>
-        throw new ModuleFeatureUnavailableException(moduleId);
-
-    public IAudioFrameStreamTransport Create(
-        Uri endpoint,
-        WebSocketAudioFrameTransportOptions? options = null,
-        IReadOnlyDictionary<string, string>? headers = null) =>
-        throw new ModuleFeatureUnavailableException(moduleId);
 }

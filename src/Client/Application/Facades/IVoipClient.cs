@@ -23,20 +23,11 @@ public interface IVoipClient : IDisposable
     /// <summary>Media manager for sender/receiver/connector orchestration.</summary>
     MediaManager Media { get; }
 
-    /// <summary>Conferencing module facade.</summary>
-    IConferencingModule ConferenceManager { get; }
-
     /// <summary>Playback module facade.</summary>
     IPlaybackModule PlaybackManager { get; }
 
     /// <summary>Recording module facade.</summary>
     IRecordingModule RecordingManager { get; }
-
-    /// <summary>Realtime bridge module facade.</summary>
-    IRealtimeModule RealtimeManager { get; }
-
-    /// <summary>WebSocket transport module facade.</summary>
-    IWebSocketModule WebSocketManager { get; }
 
     /// <summary>Module availability facade.</summary>
     ModuleManager ModuleManager { get; }
