@@ -6,11 +6,28 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-07-07
+
+### Removed
+- **Breaking:** Unimplemented module facades removed from the public SDK surface: `IConferencingModule`, `IConferenceSession`, `IRealtimeModule`, `ICallRealtimeBridge`, `IAudioFrameStreamTransport`, `IWebSocketModule`, `IWebSocketAudioTransportModule` and related option/event types.
+- **Breaking:** `IVoipClient`/`VoipClient` properties `ConferenceManager`, `RealtimeManager` and `WebSocketManager` removed. `ModuleManager` no longer exposes `Conferencing`, `Realtime`, `WebSocket` or their availability flags.
+- **Breaking:** `SessionManager.ActiveConferences` removed.
+- These features previously threw `ModuleFeatureUnavailableException` on every call; they return as separate plugin packages built on the public media API.
+
 ### Added
-- API baseline snapshot test (`tests/CalloraVoipSdk.Core.Tests/PublicApi.approved.txt`) to make public-surface changes explicit in review.
+- `net9.0` and `net10.0` target frameworks in addition to `net8.0`.
+
+### Fixed
+- SRTP RFC 3711 IV derivation and auth handling.
+- PRACK wait race during reliable provisional handling.
+- CANCEL transaction branch handling; BYE is now sent when CANCEL loses the INVITE race.
+
+## [1.0.2] - 2026-04-17
+
+### Added (previously listed under Unreleased)
 - `SdkOptionsValidator` with startup validation for DI-based configuration.
 
-### Changed
+### Changed (previously listed under Unreleased)
 - `AddCallora(...)` now validates options on startup (`ValidateOnStart`).
 - `CalloraHostedService` now coordinates lifecycle through `VoipClient` runtime hooks.
 - DI path no longer uses `SdkConfiguration.Services` escape-hatch.
