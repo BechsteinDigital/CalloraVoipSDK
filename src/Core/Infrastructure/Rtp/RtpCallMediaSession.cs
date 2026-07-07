@@ -8,6 +8,7 @@ using CalloraVoipSdk.Core.Infrastructure.Rtp.JitterBuffer;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Session;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Wire;
+using CalloraVoipSdk.Core.Infrastructure.Srtp.Context;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
 
@@ -85,8 +86,23 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
     /// <inheritdoc />
     public event Action<byte[]>? RtcpMuxDatagramReceived;
 
-    internal RtpCallMediaSession(CallMediaParameters parameters, ILoggerFactory loggerFactory)
-        : this(parameters, loggerFactory, jitterBufferOptions: null, playoutInterval: null, metricsPublishInterval: null)
+    internal RtpCallMediaSession(
+        CallMediaParameters parameters,
+        ILoggerFactory loggerFactory,
+        ISrtpContext? outboundSrtp = null,
+        ISrtpContext? inboundSrtp = null,
+        ISrtcpContext? outboundSrtcp = null,
+        ISrtcpContext? inboundSrtcp = null)
+        : this(
+            parameters,
+            loggerFactory,
+            jitterBufferOptions: null,
+            playoutInterval: null,
+            metricsPublishInterval: null,
+            outboundSrtp,
+            inboundSrtp,
+            outboundSrtcp,
+            inboundSrtcp)
     {
     }
 
@@ -95,7 +111,11 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
         ILoggerFactory loggerFactory,
         JitterBufferOptions? jitterBufferOptions,
         TimeSpan? playoutInterval,
-        TimeSpan? metricsPublishInterval)
+        TimeSpan? metricsPublishInterval,
+        ISrtpContext? outboundSrtp = null,
+        ISrtpContext? inboundSrtp = null,
+        ISrtcpContext? outboundSrtcp = null,
+        ISrtcpContext? inboundSrtcp = null)
     {
         ArgumentNullException.ThrowIfNull(parameters);
         ArgumentNullException.ThrowIfNull(loggerFactory);
@@ -121,7 +141,11 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
             RemoteEndPoint   = parameters.RemoteEndPoint,
             PayloadType      = (byte)parameters.PayloadType,
             ClockRate        = _clockRate,
-            SamplesPerPacket = parameters.SamplesPerPacket
+            SamplesPerPacket = parameters.SamplesPerPacket,
+            OutboundSrtp     = outboundSrtp,
+            InboundSrtp      = inboundSrtp,
+            OutboundSrtcp    = outboundSrtcp,
+            InboundSrtcp     = inboundSrtcp
         };
 
         var logger = loggerFactory.CreateLogger<RtpSession>();

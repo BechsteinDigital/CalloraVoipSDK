@@ -1,5 +1,7 @@
 using System.Buffers.Binary;
 using System.Security.Cryptography;
+using System.Threading;
+using System.Threading.Tasks;
 using CalloraVoipSdk.Core.Infrastructure.Srtp.Context;
 using CalloraVoipSdk.Core.Infrastructure.Srtp.Crypto;
 
@@ -64,6 +66,102 @@ public sealed class SrtpContextTests
 
         Assert.Equal(seq65535Packet, context.Unprotect(protectedSeq65535));
         Assert.Equal(seq0Packet, context.Unprotect(protectedSeq0AfterWrap));
+    }
+
+    [Fact]
+    public void ProtectAndUnprotect_RunConcurrentlyOnSharedInstance_StayCorrect()
+    {
+        const int count = 1000;
+        using var context = new SrtpContext(CreateRfcMaterial());
+
+        // Outbound direction (SSRC A): each seq maps deterministically to index == seq
+        // while the sender index stays below 2^16, so a fixed reference is well defined.
+        var outboundPlain = new byte[count][];
+        var outboundExpected = new byte[count][];
+        for (var i = 0; i < count; i++)
+        {
+            outboundPlain[i] = CreateRtpPacket((ushort)i, ssrc: 0x11111111, payloadLength: 40);
+            outboundExpected[i] = ProtectReference(outboundPlain[i], packetIndex: (ulong)i);
+        }
+
+        // Inbound direction (SSRC B): reference-protected packets to unprotect in order.
+        var inboundPlain = new byte[count][];
+        var inboundProtected = new byte[count][];
+        for (var i = 0; i < count; i++)
+        {
+            inboundPlain[i] = CreateRtpPacket((ushort)i, ssrc: 0x22222222, payloadLength: 40);
+            inboundProtected[i] = ProtectReference(inboundPlain[i], packetIndex: (ulong)i);
+        }
+
+        var outboundActual = new byte[count][];
+        var inboundActual = new byte[count][];
+
+        // Send pump: many threads Protect in parallel. Receive pump: Unprotect in order.
+        // Both run against the SAME instance at the same time.
+        var sender = Task.Run(() =>
+            Parallel.For(0, count, i => outboundActual[i] = context.Protect(outboundPlain[i])));
+
+        var receiver = Task.Run(() =>
+        {
+            for (var i = 0; i < count; i++)
+                inboundActual[i] = context.Unprotect(inboundProtected[i]);
+        });
+
+        Task.WaitAll(sender, receiver);
+
+        for (var i = 0; i < count; i++)
+        {
+            Assert.Equal(outboundExpected[i], outboundActual[i]);
+            Assert.Equal(inboundPlain[i], inboundActual[i]);
+        }
+    }
+
+    [Fact]
+    public void Unprotect_ConcurrentDuplicatePackets_AcceptsExactlyOnce()
+    {
+        const int threads = 64;
+        var packet = CreateRtpPacket(sequenceNumber: 5, ssrc: 0x0A0B0C0D, payloadLength: 16);
+        var inbound = ProtectReference(packet, packetIndex: 5);
+        using var context = new SrtpContext(CreateRfcMaterial());
+
+        using var start = new ManualResetEventSlim(false);
+        var accepted = 0;
+        var replays = 0;
+        var unexpectedFailures = 0;
+        Exception? unexpected = null;
+        byte[]? acceptedPlain = null;
+
+        var workers = new Task[threads];
+        for (var t = 0; t < threads; t++)
+        {
+            workers[t] = Task.Run(() =>
+            {
+                start.Wait();
+                try
+                {
+                    var plain = context.Unprotect(inbound);
+                    Interlocked.Increment(ref accepted);
+                    acceptedPlain = plain;
+                }
+                catch (SrtpReplayException)
+                {
+                    Interlocked.Increment(ref replays);
+                }
+                catch (Exception ex)
+                {
+                    Interlocked.Increment(ref unexpectedFailures);
+                    Volatile.Write(ref unexpected, ex);
+                }
+            });
+        }
+
+        start.Set();
+        Task.WaitAll(workers);
+
+        Assert.True(unexpectedFailures == 0, $"Unexpected exception during concurrent Unprotect: {unexpected}");
+        Assert.Equal(1, accepted);
+        Assert.Equal(threads - 1, replays);
+        Assert.Equal(packet, acceptedPlain);
     }
 
     private static SrtpKeyMaterial CreateRfcMaterial() =>

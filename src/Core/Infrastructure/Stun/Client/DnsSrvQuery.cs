@@ -1,6 +1,8 @@
 using System.Buffers.Binary;
+using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Net.Sockets;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Stun.Client;
@@ -20,6 +22,7 @@ internal static class DnsSrvQuery
     private const ushort ClassIn  = 1;
     private const int    DnsPort  = 53;
     private const int    TimeoutMs = 3_000;
+    private const string ResolvConfPath = "/etc/resolv.conf";
 
     /// <summary>
     /// Queries the given DNS server for SRV records matching <paramref name="srvName"/>.
@@ -52,7 +55,10 @@ internal static class DnsSrvQuery
 
         try
         {
-            var txId  = (ushort)Random.Shared.Next(0, 65535);
+            // Cryptographically secure transaction ID over the full 16-bit range (0..65535
+            // inclusive) as an anti-spoofing measure (CWE-330). GetInt32's upper bound is
+            // exclusive, so 65536 is used to include 65535.
+            var txId  = (ushort)RandomNumberGenerator.GetInt32(0, 65536);
             var query = BuildQuery(txId, srvName);
 
             using var udp = new UdpClient(dnsServer.AddressFamily);
@@ -142,7 +148,9 @@ internal static class DnsSrvQuery
             offset += 4; // QTYPE + QCLASS
         }
 
-        var records = new List<DnsSrvRecord>(anCount);
+        // Cap the pre-allocation to the datagram's real answer capacity: each SRV answer RR
+        // needs at least ~13 wire bytes, so a spoofed ANCount cannot force an oversized list.
+        var records = new List<DnsSrvRecord>(Math.Min((int)anCount, data.Length / 13 + 1));
 
         // Parse the answer section.
         for (int i = 0; i < anCount && offset + 10 <= data.Length; i++)
@@ -156,7 +164,9 @@ internal static class DnsSrvQuery
             ushort rdLen   = BinaryPrimitives.ReadUInt16BigEndian(span[(offset + 8)..]);
             offset += 10;
 
-            if (rrType == TypeSrv && rrClass == ClassIn && offset + rdLen <= data.Length)
+            // SRV RDATA is priority(2)+weight(2)+port(2)+target; require the 6 fixed bytes to be
+            // present so a hostile short RDLEN cannot drive the fixed-field reads past the buffer.
+            if (rrType == TypeSrv && rrClass == ClassIn && rdLen >= 6 && offset + rdLen <= data.Length)
             {
                 ushort priority = BinaryPrimitives.ReadUInt16BigEndian(span[offset..]);
                 ushort weight   = BinaryPrimitives.ReadUInt16BigEndian(span[(offset + 2)..]);
@@ -224,31 +234,75 @@ internal static class DnsSrvQuery
     // ── System DNS resolver ────────────────────────────────────────────────────
 
     /// <summary>
-    /// Returns the first system DNS resolver endpoint found in <c>/etc/resolv.conf</c> (Linux/macOS)
-    /// or falls back to Google's public resolver at 8.8.8.8:53.
+    /// Returns the first usable system DNS resolver endpoint found in <c>/etc/resolv.conf</c>
+    /// (Linux/macOS). All <c>nameserver</c> entries (IPv4 and IPv6) are scanned; the first one
+    /// that parses as a valid IP address is returned.
+    /// <para>
+    /// There is deliberately no silent fallback to a third-party public resolver: callers that
+    /// require a specific resolver must supply one explicitly rather than relying on system
+    /// discovery.
+    /// </para>
     /// </summary>
+    /// <returns>The first valid system DNS resolver endpoint.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when no usable system DNS resolver can be determined — for example when the platform
+    /// is neither Linux nor macOS, <c>/etc/resolv.conf</c> is missing or unreadable, or the file
+    /// contains no valid <c>nameserver</c> entry.
+    /// </exception>
     public static IPEndPoint GetSystemDnsServer()
     {
-        try
+        if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
         {
-            if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
+            try
             {
-                foreach (var line in File.ReadLines("/etc/resolv.conf"))
-                {
-                    const string prefix = "nameserver ";
-                    if (!line.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) continue;
-
-                    var ip = line[prefix.Length..].Trim();
-                    if (IPAddress.TryParse(ip, out var addr))
-                        return new IPEndPoint(addr, DnsPort);
-                }
+                if (TryParseResolvConf(File.ReadLines(ResolvConfPath), out var resolver))
+                    return resolver;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                throw new InvalidOperationException(
+                    $"No system DNS resolver configured (failed to read {ResolvConfPath}).", ex);
             }
         }
-        catch
+
+        throw new InvalidOperationException(
+            $"No system DNS resolver configured ({ResolvConfPath}).");
+    }
+
+    /// <summary>
+    /// Parses <c>resolv.conf</c>-style lines and returns the first valid <c>nameserver</c>
+    /// resolver endpoint. Both IPv4 and IPv6 addresses are supported. All <c>nameserver</c>
+    /// lines are scanned; the first one whose address parses wins.
+    /// </summary>
+    /// <param name="lines">Lines of a <c>resolv.conf</c> file.</param>
+    /// <param name="resolver">The resolved endpoint on success; otherwise <c>null</c>.</param>
+    /// <returns><c>true</c> when a valid resolver was found; otherwise <c>false</c>.</returns>
+    internal static bool TryParseResolvConf(IEnumerable<string> lines, [NotNullWhen(true)] out IPEndPoint? resolver)
+    {
+        ArgumentNullException.ThrowIfNull(lines);
+
+        const string prefix = "nameserver ";
+        foreach (var line in lines)
         {
-            // Ignore — fall through to default.
+            if (line is null) continue;
+
+            var trimmed = line.TrimStart();
+            if (!trimmed.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) continue;
+
+            var value = trimmed[prefix.Length..].Trim();
+
+            // Keep only the address token; ignore any trailing tokens on the line.
+            var spaceIdx = value.IndexOf(' ');
+            if (spaceIdx >= 0) value = value[..spaceIdx];
+
+            if (IPAddress.TryParse(value, out var addr))
+            {
+                resolver = new IPEndPoint(addr, DnsPort);
+                return true;
+            }
         }
 
-        return new IPEndPoint(IPAddress.Parse("8.8.8.8"), DnsPort);
+        resolver = null;
+        return false;
     }
 }

@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+using System.Formats.Asn1;
 using System.Security.Cryptography.X509Certificates;
 
 namespace CalloraVoipSdk.Core.Security;
@@ -39,6 +39,19 @@ public static class SipDomainCertificateValidator
     private const string SubjectAlternativeNameOid = "2.5.29.17";
 
     /// <summary>
+    /// Context-specific tag <c>[2]</c> for the <c>dNSName</c> GeneralName choice
+    /// (RFC 5280 §4.2.1.6). The underlying value is an IMPLICITLY tagged IA5String.
+    /// </summary>
+    private static readonly Asn1Tag DnsNameTag = new(TagClass.ContextSpecific, 2);
+
+    /// <summary>
+    /// Context-specific tag <c>[6]</c> for the <c>uniformResourceIdentifier</c>
+    /// GeneralName choice (RFC 5280 §4.2.1.6). The underlying value is an
+    /// IMPLICITLY tagged IA5String.
+    /// </summary>
+    private static readonly Asn1Tag UniformResourceIdentifierTag = new(TagClass.ContextSpecific, 6);
+
+    /// <summary>
     /// Validates that the provided certificate is appropriate for the given SIP domain
     /// per RFC 5922 §7.1.
     /// </summary>
@@ -71,12 +84,12 @@ public static class SipDomainCertificateValidator
         if (sanExtension is null)
             return false;
 
-        var sanEntries = ParseSubjectAlternativeNames(sanExtension);
-        foreach (var entry in sanEntries)
+        foreach (var entry in ExtractSanEntries(sanExtension))
         {
-            if (MatchesSipUriSan(entry, normalizedDomain))
-                return true;
-            if (MatchesDnsNameSan(entry, normalizedDomain))
+            var matched = entry.IsDnsName
+                ? MatchesDnsNameSan(entry.Value, normalizedDomain)
+                : MatchesSipUriSan(entry.Value, normalizedDomain);
+            if (matched)
                 return true;
         }
 
@@ -88,14 +101,25 @@ public static class SipDomainCertificateValidator
     /// </summary>
     /// <param name="certificate">The certificate to inspect.</param>
     /// <returns>
-    /// A read-only list of SAN string values; empty if the extension is absent.
+    /// A read-only list of the actual <c>dNSName</c> and
+    /// <c>uniformResourceIdentifier</c> SAN values decoded from the ASN.1 structure;
+    /// empty if the extension is absent or malformed.
     /// </returns>
     public static IReadOnlyList<string> GetSubjectAlternativeNames(X509Certificate2 certificate)
     {
         var sanExtension = certificate.Extensions[SubjectAlternativeNameOid];
-        return sanExtension is null
-            ? []
-            : ParseSubjectAlternativeNames(sanExtension);
+        if (sanExtension is null)
+            return [];
+
+        var entries = ExtractSanEntries(sanExtension);
+        if (entries.Count == 0)
+            return [];
+
+        var values = new List<string>(entries.Count);
+        foreach (var entry in entries)
+            values.Add(entry.Value);
+
+        return values;
     }
 
     // ──────────────────────────────────────────────────────────────
@@ -103,46 +127,75 @@ public static class SipDomainCertificateValidator
     // ──────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Parses the raw SAN extension bytes into a list of string entries.
+    /// Decodes the raw SAN extension bytes into typed entries by walking the
+    /// ASN.1 <c>SEQUENCE OF GeneralName</c> structure (RFC 5280 §4.2.1.6) with
+    /// <see cref="AsnReader"/>.
     /// <para>
-    /// On Linux/.NET, <see cref="X509Extension.Format"/> returns a comma-separated
-    /// single-line string of the form: <c>DNS:example.com, URI:sip:proxy@example.com</c>.
-    /// On Windows, the format may use newlines and different prefix styles.
-    /// This method normalises both variants into a flat list of trimmed tokens.
+    /// Only the two GeneralName choices relevant to SIP domain identity are
+    /// captured: <c>dNSName</c> (<c>[2] IA5String</c>) and
+    /// <c>uniformResourceIdentifier</c> (<c>[6] IA5String</c>). All other choices
+    /// (<c>rfc822Name</c>, <c>iPAddress</c>, <c>otherName</c>, …) are skipped by
+    /// advancing the reader past their encoded value.
+    /// </para>
+    /// <para>
+    /// This replaces the previous, brittle approach of scraping the culture- and
+    /// platform-dependent <see cref="X509Extension.Format(bool)"/> display string.
     /// </para>
     /// </summary>
-    private static IReadOnlyList<string> ParseSubjectAlternativeNames(X509Extension sanExtension)
+    /// <param name="sanExtension">The Subject Alternative Name extension to decode.</param>
+    /// <returns>
+    /// The decoded DNS and URI SAN entries; an empty list if the encoded structure
+    /// is malformed.
+    /// </returns>
+    private static IReadOnlyList<(bool IsDnsName, string Value)> ExtractSanEntries(X509Extension sanExtension)
     {
-        var formatted = sanExtension.Format(multiLine: true);
-        if (string.IsNullOrWhiteSpace(formatted))
-            return [];
+        var entries = new List<(bool IsDnsName, string Value)>();
 
-        var entries = new List<string>();
-
-        // Split on commas (Linux) and newlines (Windows) to cover both platforms.
-        foreach (var segment in formatted.Split(new[] { ',', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries))
+        try
         {
-            var trimmed = segment.Trim();
-            if (!string.IsNullOrEmpty(trimmed))
-                entries.Add(trimmed);
+            var reader = new AsnReader(sanExtension.RawData, AsnEncodingRules.DER);
+            var generalNames = reader.ReadSequence();
+
+            while (generalNames.HasData)
+            {
+                var tag = generalNames.PeekTag();
+
+                if (tag.HasSameClassAndValue(DnsNameTag))
+                {
+                    var dnsName = generalNames.ReadCharacterString(UniversalTagNumber.IA5String, DnsNameTag);
+                    entries.Add((true, dnsName));
+                }
+                else if (tag.HasSameClassAndValue(UniformResourceIdentifierTag))
+                {
+                    var uri = generalNames.ReadCharacterString(UniversalTagNumber.IA5String, UniformResourceIdentifierTag);
+                    entries.Add((false, uri));
+                }
+                else
+                {
+                    // Skip every other GeneralName choice (rfc822Name [1], iPAddress [7],
+                    // otherName [0], directoryName [4], …) by consuming its encoded value
+                    // so the reader stays aligned on the next GeneralName.
+                    generalNames.ReadEncodedValue();
+                }
+            }
+        }
+        catch (AsnContentException)
+        {
+            // The SAN extension is not well-formed DER. Treat it as containing no
+            // usable identities rather than throwing or asserting a match.
+            return [];
         }
 
         return entries;
     }
 
     /// <summary>
-    /// Returns <see langword="true"/> if the formatted SAN entry represents a
-    /// <c>uniformResourceIdentifier</c> SAN with a <c>sip:</c> or <c>sips:</c>
-    /// URI whose host component matches <paramref name="normalizedDomain"/>.
+    /// Returns <see langword="true"/> if the decoded <c>uniformResourceIdentifier</c>
+    /// SAN value is a <c>sip:</c> or <c>sips:</c> URI whose host component matches
+    /// <paramref name="normalizedDomain"/>.
     /// </summary>
-    private static bool MatchesSipUriSan(string sanEntry, string normalizedDomain)
+    private static bool MatchesSipUriSan(string sipUri, string normalizedDomain)
     {
-        // Linux/.NET format:  "URI:sip:proxy@example.com"
-        // Windows format:     "URL=sip:proxy@example.com" or "uniformResourceIdentifier=sip:..."
-        var sipUri = ExtractSanValue(sanEntry, "uri:", "url=", "uri=", "uniformresourceidentifier=");
-        if (sipUri is null)
-            return false;
-
         // Accept sip: and sips: schemes per RFC 5922 §7.1
         if (!sipUri.StartsWith("sip:", StringComparison.OrdinalIgnoreCase) &&
             !sipUri.StartsWith("sips:", StringComparison.OrdinalIgnoreCase))
@@ -171,18 +224,12 @@ public static class SipDomainCertificateValidator
     }
 
     /// <summary>
-    /// Returns <see langword="true"/> if the formatted SAN entry represents a
-    /// <c>dNSName</c> SAN that matches <paramref name="normalizedDomain"/>,
-    /// including wildcard matching for the leftmost label per RFC 2818 §3.1.
+    /// Returns <see langword="true"/> if the decoded <c>dNSName</c> SAN value
+    /// matches <paramref name="normalizedDomain"/>, including wildcard matching
+    /// for the leftmost label per RFC 2818 §3.1.
     /// </summary>
-    private static bool MatchesDnsNameSan(string sanEntry, string normalizedDomain)
+    private static bool MatchesDnsNameSan(string dnsValue, string normalizedDomain)
     {
-        // Linux/.NET format:  "DNS:example.com"
-        // Windows format:     "DNS Name=example.com" or "dNSName=example.com"
-        var dnsValue = ExtractSanValue(sanEntry, "dns:", "dns name=", "dns=", "dnsname=");
-        if (dnsValue is null)
-            return false;
-
         var normalizedSan = NormalizeDomain(dnsValue);
         if (string.IsNullOrEmpty(normalizedSan))
             return false;
@@ -204,21 +251,6 @@ public static class SipDomainCertificateValidator
         }
 
         return false;
-    }
-
-    /// <summary>
-    /// Attempts to extract the value part of a SAN entry by stripping one of the
-    /// provided case-insensitive prefixes.
-    /// </summary>
-    private static string? ExtractSanValue(string sanEntry, params string[] prefixes)
-    {
-        foreach (var prefix in prefixes)
-        {
-            if (sanEntry.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                return sanEntry[prefix.Length..].Trim();
-        }
-
-        return null;
     }
 
     /// <summary>

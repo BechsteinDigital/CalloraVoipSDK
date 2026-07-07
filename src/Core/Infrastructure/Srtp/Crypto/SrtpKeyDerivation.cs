@@ -9,27 +9,50 @@ namespace CalloraVoipSdk.Core.Infrastructure.Srtp.Crypto;
 /// </summary>
 internal static class SrtpKeyDerivation
 {
-    // Label constants (RFC 3711 §4.3.1)
-    private const byte LabelCipherKey = 0x00;
-    private const byte LabelSalt      = 0x02;
-    private const byte LabelAuthKey   = 0x01;
+    // Label constants (RFC 3711 §4.3.1). Labels 0/1/2 derive the SRTP session keys,
+    // labels 3/4/5 derive the SRTCP session keys from the SAME master key + master salt.
+    private const byte LabelCipherKey      = 0x00;
+    private const byte LabelAuthKey        = 0x01;
+    private const byte LabelSalt           = 0x02;
+    private const byte LabelSrtcpCipherKey = 0x03;
+    private const byte LabelSrtcpAuthKey   = 0x04;
+    private const byte LabelSrtcpSalt      = 0x05;
+
+    // HMAC-SHA1 authentication key length (RFC 3711 §4.3) — same for SRTP and SRTCP.
+    private const int AuthKeyLength   = 20;
+    private const int SessionSaltLength = 14;
 
     /// <summary>
-    /// Derives all session keys for the given master key material.
+    /// Derives all SRTP session keys for the given master key material (labels 0/1/2).
     /// Key derivation rate r = 0 (default — keys derived once per session).
     /// </summary>
     public static SrtpSessionKeys Derive(SrtpKeyMaterial material)
+        => DeriveWithLabels(material, LabelCipherKey, LabelAuthKey, LabelSalt);
+
+    /// <summary>
+    /// Derives all SRTCP session keys for the given master key material (labels 3/4/5).
+    /// Uses the same AES-CM PRF and the same master key/salt as <see cref="Derive"/>,
+    /// only the key-derivation labels differ (RFC 3711 §4.3.2).
+    /// </summary>
+    public static SrtpSessionKeys DeriveSrtcp(SrtpKeyMaterial material)
+        => DeriveWithLabels(material, LabelSrtcpCipherKey, LabelSrtcpAuthKey, LabelSrtcpSalt);
+
+    // Shared derivation body so SRTP and SRTCP keys go through one PRF implementation.
+    private static SrtpSessionKeys DeriveWithLabels(
+        SrtpKeyMaterial material,
+        byte cipherLabel,
+        byte authLabel,
+        byte saltLabel)
     {
         ArgumentNullException.ThrowIfNull(material);
 
-        var keyLength  = material.MasterKey.Length; // 16 or 32
-        var authLength = 20; // HMAC-SHA1 key = 20 bytes
+        var keyLength = material.MasterKey.Length; // 16 or 32
 
         return new SrtpSessionKeys
         {
-            CipherKey = DeriveKey(material, LabelCipherKey, keyLength),
-            Salt      = DeriveKey(material, LabelSalt,      14),
-            AuthKey   = DeriveKey(material, LabelAuthKey,   authLength),
+            CipherKey = DeriveKey(material, cipherLabel, keyLength),
+            Salt      = DeriveKey(material, saltLabel,   SessionSaltLength),
+            AuthKey   = DeriveKey(material, authLabel,   AuthKeyLength),
         };
     }
 

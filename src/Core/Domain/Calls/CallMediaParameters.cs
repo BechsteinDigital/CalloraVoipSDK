@@ -131,4 +131,12 @@ public sealed class CallMediaParameters
     /// See <see cref="SrtpDecisionReasonCodes"/>.
     /// </summary>
     public string SrtpDecisionReasonCode { get; init; } = SrtpDecisionReasonCodes.NotEvaluated;
+
+    /// <summary>
+    /// SDES master key material negotiated for this call leg (RFC 4568).
+    /// <see langword="null"/> when no SDES <c>a=crypto</c> was negotiated — for example plain
+    /// RTP/AVP, or DTLS-SRTP keying (which is signaled via fingerprint, not carried here).
+    /// Present only when both sides exchanged an <c>a=crypto</c> line for a supported suite.
+    /// </summary>
+    public SrtpSessionKeyMaterial? SrtpKeys { get; init; }
 }

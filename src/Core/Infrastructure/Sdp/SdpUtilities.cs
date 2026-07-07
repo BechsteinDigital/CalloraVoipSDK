@@ -5,6 +5,7 @@ using CalloraVoipSdk.Core.Domain.Calls;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Models;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.OfferAnswer;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Parsing;
+using CalloraVoipSdk.Core.Infrastructure.Sdp.Sdes;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Sdp;
 
@@ -77,9 +78,17 @@ internal static class SdpUtilities
     /// create an RTP session. Returns <see langword="null"/> when the SDP cannot be parsed
     /// or contains no usable audio stream.
     /// </summary>
+    /// <param name="remoteSdp">The far end's SDP (their offer or answer). Source of the remote key.</param>
+    /// <param name="localEndPoint">Local UDP endpoint to bind RTP to.</param>
+    /// <param name="localSdp">
+    /// Optional: the SDP we sent (our answer or offer). When it carries a matching SDES
+    /// <c>a=crypto</c> line, both keys are composed into
+    /// <see cref="CallMediaParameters.SrtpKeys"/>. When null, no SDES keys are carried.
+    /// </param>
     public static CallMediaParameters? TryParseMediaParameters(
         string remoteSdp,
-        IPEndPoint localEndPoint)
+        IPEndPoint localEndPoint,
+        string? localSdp = null)
     {
         if (string.IsNullOrWhiteSpace(remoteSdp)) return null;
         try
@@ -124,6 +133,12 @@ internal static class SdpUtilities
                              && !string.IsNullOrWhiteSpace(remoteIcePwd)
                              && remoteIceCandidates.Count > 0;
 
+            // SDES key material (RFC 4568): remote key from the peer's a=crypto, local key from
+            // the a=crypto we advertised in localSdp. Null unless both sides carry a supported suite.
+            var remoteCrypto = audio.Crypto.Count > 0 ? audio.Crypto[0] : null;
+            var localCrypto = TryGetFirstAudioCrypto(localSdp);
+            var srtpKeys = SdesKeyExchange.TryBuildSessionKeyMaterial(localCrypto, remoteCrypto);
+
             return new CallMediaParameters
             {
                 LocalEndPoint    = localEndPoint,
@@ -144,11 +159,36 @@ internal static class SdpUtilities
                 RemoteIcePwd = remoteIcePwd,
                 RemoteIceOptions = remoteIceOptions,
                 RemoteIceCandidates = remoteIceCandidates,
-                RemoteIceEndOfCandidates = audio.EndOfCandidates
+                RemoteIceEndOfCandidates = audio.EndOfCandidates,
+                SrtpKeys = srtpKeys
             };
         }
         catch
         {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Parses an SDP body and returns the first <c>a=crypto</c> line of its first audio m-line.
+    /// Returns <see langword="null"/> for null/blank input, a missing audio section, an absent
+    /// crypto line, or any parse failure — SDES key extraction is best-effort and never throws.
+    /// </summary>
+    private static SdpCryptoAttribute? TryGetFirstAudioCrypto(string? sdp)
+    {
+        if (string.IsNullOrWhiteSpace(sdp))
+            return null;
+
+        try
+        {
+            var parsed = Parser.Parse(sdp);
+            var audio = parsed.Media.FirstOrDefault(
+                m => m.MediaType.Equals("audio", StringComparison.OrdinalIgnoreCase));
+            return audio is { Crypto.Count: > 0 } ? audio.Crypto[0] : null;
+        }
+        catch (Exception ex) when (ex is FormatException or ArgumentException)
+        {
+            // Malformed local SDP: degrade to "no local key" so valid remote media still parses.
             return null;
         }
     }
@@ -300,10 +340,11 @@ internal static class SdpUtilities
 
         var ice = options.Ice;
         if (ice is null)
-            return new SdpMediaOptions();
+            return new SdpMediaOptions { OfferSdes = options.OfferSdes };
 
         return new SdpMediaOptions
         {
+            OfferSdes = options.OfferSdes,
             Ice = new SdpIceParameters
             {
                 Ufrag = ice.Ufrag,

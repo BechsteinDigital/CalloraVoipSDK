@@ -34,8 +34,11 @@ jobs:
       - name: Build
         run: dotnet build CalloraVoipSdk.sln --configuration Release --no-restore -p:CodeAnalysisTreatWarningsAsErrors=true
 
-      - name: Test + Coverage (Non-Core)
-        run: dotnet test CalloraVoipSdk.sln --configuration Release --no-build --filter "FullyQualifiedName!~CalloraVoipSdk.Core.Tests" --collect:"XPlat Code Coverage" --results-directory ./TestResults --nologo --verbosity minimal
+      # Build validates all target frameworks (net8.0;net9.0;net10.0); tests are
+      # executed on net10.0 (the global.json SDK / primary target) so a green run is
+      # authoritative regardless of older shared-runtime/test-host availability.
+      - name: Test + Coverage (net10.0)
+        run: dotnet test CalloraVoipSdk.sln --configuration Release --no-build --framework net10.0 --filter "FullyQualifiedName!~CalloraVoipSdk.Core.Tests" --collect:"XPlat Code Coverage" --results-directory ./TestResults --nologo --verbosity minimal
 
       - name: Upload Coverage Artifacts
         if: always()

@@ -46,6 +46,12 @@ internal sealed class SipCoreCallChannel : ICallChannel
     private Func<byte, int, CancellationToken, Task>? _dtmfSendDelegate;
     private CallIceLocalDescription? _localIceDescription;
     private ISipCallSession? _session;
+
+    // The SDP body we advertised for this leg (our answer or offer). Carries our own
+    // SDES a=crypto line so SrtpKeys can be composed alongside the remote key. Written before
+    // the answer is sent so the Established state-change handler can also read it (RFC 4568 §6.1).
+    private volatile string? _localNegotiatedSdp;
+
     private int _mediaParametersFired;
     private int _disposed;
 
@@ -92,7 +98,19 @@ internal sealed class SipCoreCallChannel : ICallChannel
     {
         ArgumentNullException.ThrowIfNull(localMediaEndPoint);
         await EnsureLocalIceDescriptionAsync(localMediaEndPoint, ct).ConfigureAwait(false);
-        return _sdpNegotiator.BuildDefaultSdp(localMediaEndPoint, hold, BuildSdpOptions());
+
+        // SRTP policy Required → advertise SDES (RTP/SAVP + a=crypto, RFC 4568) so the SDK can
+        // initiate SRTP, not merely answer it. Optional/Disabled keep the plain RTP/AVP offer
+        // unchanged (no regression, plaintext fallback preserved). Offering AVP-with-crypto or
+        // multiple SAVP/AVP m-lines for Optional-with-fallback is deliberately follow-up work.
+        var offerSdes = _appliedSrtpPolicy == SrtpPolicy.Required;
+        var offerSdp = _sdpNegotiator.BuildDefaultSdp(localMediaEndPoint, hold, BuildSdpOptions(offerSdes));
+
+        // Persist the offer we actually send as our local SDP. When it carries a=crypto, the far
+        // end's answer is later composed with our own local key into CallMediaParameters.SrtpKeys
+        // (offerer-role key recovery, symmetric to the answerer path — RFC 4568 §6.1).
+        _localNegotiatedSdp = offerSdp;
+        return offerSdp;
     }
 
     /// <summary>
@@ -178,6 +196,10 @@ internal sealed class SipCoreCallChannel : ICallChannel
                 $"Inbound SDP answer negotiation failed ({reasonCode}).");
         }
 
+        // Publish our advertised SDP before sending it, so the Established state-change handler
+        // (which may win the media-publication race) can recover our local SDES key.
+        _localNegotiatedSdp = answerSdp;
+
         await session.AnswerAsync(answerSdp, ct: ct).ConfigureAwait(false);
 
         // Fire media parameters so the orchestrator can start RTP.
@@ -247,20 +269,28 @@ internal sealed class SipCoreCallChannel : ICallChannel
     /// <summary>
     /// Creates optional SDP negotiation options from the currently gathered local ICE description.
     /// </summary>
-    private SdpMediaNegotiationOptions? BuildSdpOptions()
+    /// <param name="offerSdes">
+    /// When <see langword="true"/>, requests an SDES/SRTP offer (RTP/SAVP + a=crypto). Only the
+    /// initial dial offer sets this; hold/unhold re-INVITEs and answers keep it <see langword="false"/>.
+    /// </param>
+    private SdpMediaNegotiationOptions? BuildSdpOptions(bool offerSdes = false)
     {
-        if (_localIceDescription is null)
+        var ice = _localIceDescription;
+        if (ice is null && !offerSdes)
             return null;
 
         return new SdpMediaNegotiationOptions
         {
-            Ice = new SdpIceNegotiationOptions
-            {
-                Ufrag = _localIceDescription.Ufrag,
-                Pwd = _localIceDescription.Pwd,
-                Options = _localIceDescription.Options,
-                Candidates = _localIceDescription.Candidates
-            }
+            OfferSdes = offerSdes,
+            Ice = ice is null
+                ? null
+                : new SdpIceNegotiationOptions
+                {
+                    Ufrag = ice.Ufrag,
+                    Pwd = ice.Pwd,
+                    Options = ice.Options,
+                    Candidates = ice.Candidates
+                }
         };
     }
 
@@ -516,7 +546,7 @@ internal sealed class SipCoreCallChannel : ICallChannel
         var localIp = session.LocalSignalingEndPoint.Address;
         var localEndPoint = new IPEndPoint(localIp, _localMediaPort);
 
-        var parameters = _sdpNegotiator.TryParseMediaParameters(remoteSdp, localEndPoint);
+        var parameters = _sdpNegotiator.TryParseMediaParameters(remoteSdp, localEndPoint, _localNegotiatedSdp);
         if (parameters is null)
         {
             _logger.LogWarning("Failed to parse remote SDP for call {CallId}; RTP will not start.", session.CallId);
@@ -681,7 +711,8 @@ internal sealed class SipCoreCallChannel : ICallChannel
             RemoteIcePwd = parameters.RemoteIcePwd,
             RemoteIceOptions = parameters.RemoteIceOptions,
             RemoteIceCandidates = parameters.RemoteIceCandidates,
-            RemoteIceEndOfCandidates = parameters.RemoteIceEndOfCandidates
+            RemoteIceEndOfCandidates = parameters.RemoteIceEndOfCandidates,
+            SrtpKeys = parameters.SrtpKeys
         };
     }
 
@@ -717,7 +748,8 @@ internal sealed class SipCoreCallChannel : ICallChannel
             RemoteIceCandidates = parameters.RemoteIceCandidates,
             RemoteIceEndOfCandidates = parameters.RemoteIceEndOfCandidates,
             AppliedSrtpPolicy = _appliedSrtpPolicy,
-            SrtpDecisionReasonCode = reasonCode
+            SrtpDecisionReasonCode = reasonCode,
+            SrtpKeys = parameters.SrtpKeys
         };
 
     /// <summary>

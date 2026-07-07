@@ -37,4 +37,11 @@ public sealed class SdpMediaNegotiationOptions
     /// ICE settings to include in local SDP.
     /// </summary>
     public SdpIceNegotiationOptions? Ice { get; init; }
+
+    /// <summary>
+    /// When <see langword="true"/>, an outbound offer advertises SDES/SRTP (RTP/SAVP profile plus a
+    /// generated <c>a=crypto</c> line, RFC 4568). Has no effect on the answer path. Default
+    /// <see langword="false"/> keeps the plain RTP/AVP offer.
+    /// </summary>
+    public bool OfferSdes { get; init; }
 }

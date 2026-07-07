@@ -326,6 +326,17 @@ internal sealed class SipLineChannel : ILineChannel
                     hadSuccessfulRegistration = true;
                     _onState?.Invoke(LineState.Registered);
 
+                    // AutoReregister disabled: register once and stop. No proactive refresh is
+                    // scheduled and no failure recovery is attempted; the binding is expected to be
+                    // renewed manually. This is the documented off-switch on <see cref="ReregisterOptions"/>.
+                    if (!options.AutoReregister)
+                    {
+                        _logger.LogDebug(
+                            "Proactive re-registration is disabled for [{User}] (AutoReregister=false); staying registered without refresh.",
+                            _account.Username);
+                        return;
+                    }
+
                     var refreshDelay = ComputeRefreshDelay(result.EffectiveExpiresSeconds);
                     _logger.LogDebug(
                         "SIP registration for [{User}] will refresh in {Delay}.",

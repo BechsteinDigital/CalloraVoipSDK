@@ -25,8 +25,11 @@ internal sealed class SdpNegotiator : ISdpNegotiator
         => SdpUtilities.TryBuildNegotiatedAnswer(remoteOffer, localEndPoint, hold, localOptions);
 
     /// <inheritdoc />
-    public CallMediaParameters? TryParseMediaParameters(string remoteSdp, IPEndPoint localEndPoint)
-        => SdpUtilities.TryParseMediaParameters(remoteSdp, localEndPoint);
+    public CallMediaParameters? TryParseMediaParameters(
+        string remoteSdp,
+        IPEndPoint localEndPoint,
+        string? localSdp = null)
+        => SdpUtilities.TryParseMediaParameters(remoteSdp, localEndPoint, localSdp);
 
     /// <inheritdoc />
     public bool IsRemoteHoldSdp(string? sdp)

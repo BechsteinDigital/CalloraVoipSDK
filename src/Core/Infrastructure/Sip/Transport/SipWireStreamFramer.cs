@@ -9,6 +9,15 @@ namespace CalloraVoipSdk.Core.Infrastructure.Sip.Transport;
 /// </summary>
 internal sealed class SipWireStreamFramer
 {
+    /// <summary>
+    /// Maximum bytes buffered for a single in-flight stream message (headers + body).
+    /// A peer that never sends the CRLFCRLF header terminator, or that declares an
+    /// oversized/overflowing Content-Length, would otherwise force unbounded buffering
+    /// (memory-exhaustion DoS). Exceeding this limit aborts framing so the transport
+    /// tears the connection down.
+    /// </summary>
+    private const int MaxMessageBytes = 262_144;
+
     private readonly List<byte> _buffer = [];
     private bool _consumedKeepalivePing;
 
@@ -46,7 +55,14 @@ internal sealed class SipWireStreamFramer
         var bufferSpan = CollectionsMarshal.AsSpan(_buffer);
         var headerEndIndex = IndexOfHeaderTerminator(bufferSpan);
         if (headerEndIndex < 0)
+        {
+            // Header terminator not seen yet. Keep waiting, but only up to the cap so a peer
+            // that never terminates the headers cannot grow the buffer without bound.
+            if (_buffer.Count > MaxMessageBytes)
+                throw new InvalidOperationException(
+                    $"SIP stream headers exceed {MaxMessageBytes} bytes without a terminator.");
             return false;
+        }
 
         var headerLength = headerEndIndex + 4;
         var headerText = Encoding.UTF8.GetString(bufferSpan[..headerEndIndex]);
@@ -58,13 +74,19 @@ internal sealed class SipWireStreamFramer
         if (!hasContentLength)
             throw new InvalidOperationException("SIP stream message over stream transport must include Content-Length.");
 
-        var totalLength = headerLength + contentLength;
+        // Compute in long to avoid int overflow from a near-int.MaxValue Content-Length, and
+        // reject a declared size beyond the cap before it can drive unbounded buffering.
+        var totalLength = (long)headerLength + contentLength;
+        if (totalLength > MaxMessageBytes)
+            throw new InvalidOperationException(
+                $"SIP stream message length {totalLength} exceeds the {MaxMessageBytes}-byte maximum.");
         if (bufferSpan.Length < totalLength)
             return false;
 
-        frame = GC.AllocateUninitializedArray<byte>(totalLength);
-        bufferSpan[..totalLength].CopyTo(frame);
-        _buffer.RemoveRange(0, totalLength);
+        var frameLength = (int)totalLength;
+        frame = GC.AllocateUninitializedArray<byte>(frameLength);
+        bufferSpan[..frameLength].CopyTo(frame);
+        _buffer.RemoveRange(0, frameLength);
         return true;
     }
 

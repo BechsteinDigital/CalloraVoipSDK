@@ -1,6 +1,7 @@
 using System.Net;
 using CalloraVoipSdk.Core.Infrastructure.Common.Network;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Models;
+using CalloraVoipSdk.Core.Infrastructure.Sdp.Sdes;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Sdp.OfferAnswer;
 
@@ -13,6 +14,12 @@ namespace CalloraVoipSdk.Core.Infrastructure.Sdp.OfferAnswer;
 /// </summary>
 internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
 {
+    /// <summary>
+    /// Default SDES crypto suite advertised in an SRTP offer (RFC 4568 §6.2). AES-128 CM with
+    /// an 80-bit HMAC-SHA1 auth tag is the mandatory-to-implement, most widely interoperable suite.
+    /// </summary>
+    private const string DefaultOfferCryptoSuite = "AES_CM_128_HMAC_SHA1_80";
+
     /// <inheritdoc />
     public SdpSessionDescription CreateOffer(
         IPEndPoint localEndPoint,
@@ -28,8 +35,26 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
         var dtls = options?.Dtls;
         var ice = options?.Ice;
 
-        // RFC 5763: use UDP/TLS/RTP/SAVPF when DTLS parameters are provided.
-        var profile = dtls is not null ? "UDP/TLS/RTP/SAVPF" : "RTP/AVP";
+        // Transport profile + SDES keying (RFC 4568 / RFC 5763):
+        //  - DTLS parameters present    → UDP/TLS/RTP/SAVPF (DTLS-SRTP, keys out of band).
+        //  - OfferSdes requested        → RTP/SAVP with a freshly generated a=crypto line.
+        //  - otherwise                  → plain RTP/AVP (unchanged default, no regression).
+        string profile;
+        IReadOnlyList<SdpCryptoAttribute> crypto = [];
+        if (dtls is not null)
+        {
+            profile = "UDP/TLS/RTP/SAVPF";
+        }
+        else if (options?.OfferSdes == true
+                 && SdesKeyExchange.TryCreateOfferCrypto(DefaultOfferCryptoSuite) is { } offerCrypto)
+        {
+            profile = "RTP/SAVP";
+            crypto = [offerCrypto];
+        }
+        else
+        {
+            profile = "RTP/AVP";
+        }
 
         // BUNDLE: session-level group + media-level mid
         string? group = null;
@@ -49,6 +74,7 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             Codecs = codecs,
             Fmtp = fmtp,
             Mid = mid,
+            Crypto = crypto,
             RtcpMux = options?.RtcpMux == true,
             IceUfrag = ice?.Ufrag,
             IcePwd = ice?.Pwd,
@@ -128,10 +154,22 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             group = remoteOffer.Group;
         }
 
-        // --- SDES crypto (RFC 4568): mirror first offered suite ---
+        // --- SDES crypto (RFC 4568 §6.1): accept the first offered suite we support and
+        //     generate our OWN local key. We must never echo the offerer's key back. ---
         IReadOnlyList<SdpCryptoAttribute> crypto = [];
-        if (offeredAudio.Crypto.Count > 0)
-            crypto = [offeredAudio.Crypto[0]];
+        SdpCryptoAttribute? acceptedRemoteCrypto = null;
+        SdpCryptoAttribute? localCrypto = null;
+        foreach (var offered in offeredAudio.Crypto)
+        {
+            var generatedLocal = SdesKeyExchange.TryCreateLocalCrypto(offered);
+            if (generatedLocal is null)
+                continue; // Unsupported suite — try the next offered crypto line.
+
+            acceptedRemoteCrypto = offered;
+            localCrypto = generatedLocal;
+            crypto = [generatedLocal];
+            break;
+        }
 
         // --- DTLS (RFC 5763): resolve fingerprint and setup role ---
         SdpFingerprint? fingerprint = null;
@@ -197,7 +235,8 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             RtcpMuxNegotiated = rtcpMux,
             RemoteFingerprint = remoteFp,
             RemoteDtlsSetup = remoteSetup,
-            NegotiatedCrypto = crypto.Count > 0 ? crypto[0] : null
+            NegotiatedCrypto = acceptedRemoteCrypto,
+            LocalCrypto = localCrypto
         };
     }
 

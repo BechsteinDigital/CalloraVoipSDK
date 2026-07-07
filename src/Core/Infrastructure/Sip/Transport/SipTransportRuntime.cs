@@ -622,7 +622,7 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
                             "SIP {Transport} send to {Remote} failed; retrying on new connection (RFC §18.4).",
                             transport,
                             targetEndPoint);
-                        stale.Dispose();
+                        await stale.DisposeAsync().ConfigureAwait(false);
                     }
 
                     var fresh = await GetOrCreateOutboundStreamConnectionAsync(targetEndPoint, transport, ct)

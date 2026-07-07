@@ -26,4 +26,20 @@ public sealed class SipReliableProvisionalManagerTests
         Assert.Equal(string.Empty, rejectionReasonPhrase);
         Assert.True(waitResult);
     }
+
+    [Fact]
+    public void RegisterPendingInviteProvisional_ProducesPositiveMonotonicRseq()
+    {
+        using var manager = new SipReliableProvisionalManager(NullLogger.Instance);
+
+        var first  = manager.RegisterPendingInviteProvisional(inviteCseq: 1);
+        var second = manager.RegisterPendingInviteProvisional(inviteCseq: 1);
+        var third  = manager.RegisterPendingInviteProvisional(inviteCseq: 1);
+
+        // RSeq must be a valid RFC 3262 sequence number: strictly positive and increasing.
+        // Guards the thread-safe Random.Shared seeding (no 0-series from a corrupted Random).
+        Assert.True(first > 0);
+        Assert.Equal(first + 1, second);
+        Assert.Equal(second + 1, third);
+    }
 }

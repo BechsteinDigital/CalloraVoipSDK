@@ -535,6 +535,10 @@ internal sealed class StunMessageCodec : IStunMessageCodec
         IPAddress address;
         if (family == 0x01) // IPv4
         {
+            // Guard against a hostile attribute that claims IPv4 but is too short to hold a
+            // 4-byte address; slicing value[4..8] would otherwise throw out of the parser.
+            if (value.Length < 8)
+                return new UnknownRawAttribute(typeCode) { Value = value.ToArray() };
             var addrBytes = value[4..8].ToArray();
             if (xor)
             {
@@ -544,8 +548,11 @@ internal sealed class StunMessageCodec : IStunMessageCodec
             }
             address = new IPAddress(addrBytes);
         }
-        else // IPv6 (family == 0x02)
+        else // IPv6 (any non-IPv4 family byte)
         {
+            // Same guard for the 16-byte IPv6 address form.
+            if (value.Length < 20)
+                return new UnknownRawAttribute(typeCode) { Value = value.ToArray() };
             var addrBytes = value[4..20].ToArray();
             if (xor)
             {
@@ -575,7 +582,8 @@ internal sealed class StunMessageCodec : IStunMessageCodec
         IPAddress address;
         if (family == 0x01)
         {
-            address = new IPAddress(value[4..8].ToArray());
+            // A too-short IPv4 form must not slice past the value; fall back like the IPv6 branch.
+            address = value.Length >= 8 ? new IPAddress(value[4..8].ToArray()) : IPAddress.Any;
         }
         else
         {

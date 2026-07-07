@@ -5,7 +5,7 @@ namespace CalloraVoipSdk.Core.Application.Media;
 /// <summary>
 /// One-way media forwarding link between a receiver and sender.
 /// </summary>
-internal sealed class MediaConnection : IDisposable
+internal sealed class MediaConnection : IDisposable, IAsyncDisposable
 {
     private readonly IMediaReceiver _receiver;
     private readonly IMediaSender _sender;
@@ -88,23 +88,54 @@ internal sealed class MediaConnection : IDisposable
     }
 
     /// <summary>
-    /// Stops the forwarding loop and detaches frame subscriptions.
+    /// Signals shutdown once and detaches frame subscriptions without awaiting the pump loop.
     /// </summary>
-    public void Dispose()
+    /// <returns><c>true</c> when this call transitioned the link into the disposed state.</returns>
+    private bool BeginShutdown()
     {
-        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            return false;
 
         _receiver.FrameReceived -= OnFrameReceived;
         _queue.Writer.TryComplete();
         _shutdownCts.Cancel();
+        return true;
+    }
+
+    /// <summary>
+    /// Synchronously stops the forwarding loop and detaches frame subscriptions.
+    /// </summary>
+    /// <remarks>
+    /// The pump task is only signaled here, never awaited: blocking on it inside a
+    /// synchronous <see cref="IDisposable.Dispose"/> can deadlock when a
+    /// <see cref="SynchronizationContext"/> is present. Use <see cref="DisposeAsync"/>
+    /// to deterministically await pump completion.
+    /// </remarks>
+    public void Dispose()
+    {
+        if (!BeginShutdown())
+            return;
+
+        _shutdownCts.Dispose();
+    }
+
+    /// <summary>
+    /// Asynchronously stops the forwarding loop, awaits pump completion, and releases resources.
+    /// </summary>
+    public async ValueTask DisposeAsync()
+    {
+        if (!BeginShutdown())
+            return;
+
         try
         {
-            _pumpTask.GetAwaiter().GetResult();
+            await _pumpTask.ConfigureAwait(false);
         }
-        catch
+        catch (OperationCanceledException)
         {
-            // Best effort shutdown.
+            // Expected: the pump observes shutdown cancellation.
         }
+
         _shutdownCts.Dispose();
     }
 }

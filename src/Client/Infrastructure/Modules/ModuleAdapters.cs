@@ -60,6 +60,21 @@ internal sealed class CoreRecordingModule(MediaManager media) : IRecordingModule
 
     public Task<IRecordingSession> StartMixedBusAsync(IMixedMediaBus bus, RecordingOptions? options = null, CancellationToken ct = default) =>
         media.StartConferenceRecordingAsync(bus, options, ct);
+
+    public Task DecryptRecordingAsync(
+        string encryptedInputPath,
+        string decryptedOutputPath,
+        IRecordingEncryptionProvider provider,
+        CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(encryptedInputPath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(decryptedOutputPath);
+        ArgumentNullException.ThrowIfNull(provider);
+
+        // Pure file operation: no active session required, delegates to the provider's
+        // streaming decryption. Failures (auth/format) propagate unchanged to the caller.
+        return provider.DecryptFileAsync(encryptedInputPath, decryptedOutputPath, ct).AsTask();
+    }
 }
 
 internal sealed class UnavailableConferencingModule(string moduleId) : IConferencingModule

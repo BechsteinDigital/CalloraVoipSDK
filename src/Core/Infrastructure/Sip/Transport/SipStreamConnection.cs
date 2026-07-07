@@ -8,7 +8,7 @@ namespace CalloraVoipSdk.Core.Infrastructure.Sip.Transport;
 /// Represents one stateful SIP TCP/TLS stream connection with
 /// framed message receive loop and serialized send path.
 /// </summary>
-internal sealed class SipStreamConnection : IDisposable
+internal sealed class SipStreamConnection : IDisposable, IAsyncDisposable
 {
     private static readonly byte[] KeepalivePong = [(byte)'\r', (byte)'\n'];
     private readonly TcpClient _client;
@@ -130,23 +130,23 @@ internal sealed class SipStreamConnection : IDisposable
     }
 
     /// <summary>
-    /// Stops receive loop and disposes socket and stream resources.
+    /// Signals shutdown once by cancelling the receive loop.
     /// </summary>
-    public void Dispose()
+    /// <returns><c>true</c> when this call transitioned the connection into the disposed state.</returns>
+    private bool BeginShutdown()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
-            return;
+            return false;
 
         _stop.Cancel();
-        try
-        {
-            _receiveLoop.GetAwaiter().GetResult();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "SIP stream connection loop ended with exception during disposal.");
-        }
+        return true;
+    }
 
+    /// <summary>
+    /// Disposes socket, stream, and synchronization resources.
+    /// </summary>
+    private void ReleaseResources()
+    {
         try
         {
             _stream.Dispose();
@@ -167,5 +167,43 @@ internal sealed class SipStreamConnection : IDisposable
 
         _sendGate.Dispose();
         _stop.Dispose();
+    }
+
+    /// <summary>
+    /// Synchronously cancels the receive loop and disposes socket and stream resources.
+    /// </summary>
+    /// <remarks>
+    /// The receive loop is only cancelled here, never awaited: blocking on it inside a
+    /// synchronous <see cref="IDisposable.Dispose"/> can deadlock when a
+    /// <see cref="SynchronizationContext"/> is present. Disposing the underlying stream
+    /// aborts any in-flight read so the loop unwinds promptly in the background. Use
+    /// <see cref="DisposeAsync"/> to deterministically await loop completion.
+    /// </remarks>
+    public void Dispose()
+    {
+        if (!BeginShutdown())
+            return;
+
+        ReleaseResources();
+    }
+
+    /// <summary>
+    /// Asynchronously cancels the receive loop, awaits its completion, and releases resources.
+    /// </summary>
+    public async ValueTask DisposeAsync()
+    {
+        if (!BeginShutdown())
+            return;
+
+        try
+        {
+            await _receiveLoop.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected: the receive loop observes shutdown cancellation.
+        }
+
+        ReleaseResources();
     }
 }

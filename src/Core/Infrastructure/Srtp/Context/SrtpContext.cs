@@ -9,7 +9,15 @@ namespace CalloraVoipSdk.Core.Infrastructure.Srtp.Context;
 /// Implements AES-CM encryption (§4.1), HMAC-SHA1 authentication (§4.2),
 /// and replay protection via a 64-packet sliding window (§3.3.2).
 /// </summary>
-internal sealed class SrtpContext : ISrtpContext
+/// <remarks>
+/// Thread-safe by design: <see cref="Protect"/> and <see cref="Unprotect"/> may run
+/// concurrently on the same instance. Each direction owns a dedicated lock, a cached
+/// AES-CM encryptor and reusable scratch buffers, so the send pump and receive pump
+/// never contend and never corrupt each other's state. The cached
+/// <see cref="ICryptoTransform"/> instances are not thread-safe themselves; each is only
+/// ever touched under its own lock. Call <see cref="Dispose"/> to release them.
+/// </remarks>
+internal sealed class SrtpContext : ISrtpContext, IDisposable
 {
     private const int AuthTagFullLength = 20;
     private const int AesCmBlockLength = 16;
@@ -18,12 +26,36 @@ internal sealed class SrtpContext : ISrtpContext
     private readonly SrtpCryptoSuite _suite;
     private readonly int _authTagLength;
 
+    // Per-direction synchronization. Protect (send pump) and Unprotect (receive pump)
+    // mutate disjoint state and use disjoint crypto resources, so separate locks let
+    // both run in parallel without contention.
+    private readonly object _protectSync = new();
+    private readonly object _unprotectSync = new();
+
+    // Cached AES-CM encryptors, one per direction. AES-CM uses the same cipher key in
+    // both directions, but Aes/ICryptoTransform are not thread-safe, so each direction
+    // gets its own instance to avoid a shared lock across send and receive.
+    private readonly Aes _protectAes;
+    private readonly Aes _unprotectAes;
+    private readonly ICryptoTransform _protectEncryptor;
+    private readonly ICryptoTransform _unprotectEncryptor;
+
+    // Reusable AES-CM scratch buffers, one set per direction. TransformBlock requires
+    // byte[] input/output, so these replace the per-packet allocations. Only touched
+    // under the matching direction lock.
+    private readonly byte[] _protectCounterIv = new byte[AesCmBlockLength];
+    private readonly byte[] _protectBlock = new byte[AesCmBlockLength];
+    private readonly byte[] _unprotectCounterIv = new byte[AesCmBlockLength];
+    private readonly byte[] _unprotectBlock = new byte[AesCmBlockLength];
+
     // Sender-side index: tracks the last outbound packet index for ROC advancement.
-    // Separate from the receiver replay window so Protect and Unprotect can safely
-    // share one context instance (though RFC 3711 recommends per-direction contexts).
+    // Guarded by _protectSync. Separate from the receiver replay window so Protect and
+    // Unprotect can safely share one context instance (RFC 3711 recommends per-direction
+    // contexts, but full-duplex sharing must remain correct).
     private ulong _senderIndex;
 
-    // Receiver replay window: 64-bit bitmap, high bit = newest packet (RFC 3711 §3.3.2)
+    // Receiver replay window: 64-bit bitmap, high bit = newest packet (RFC 3711 §3.3.2).
+    // Guarded by _unprotectSync.
     private ulong _replayWindowIndex;
     private ulong _replayWindowBitmap;
     private const int ReplayWindowSize = 64;
@@ -36,6 +68,20 @@ internal sealed class SrtpContext : ISrtpContext
         _authTagLength = material.Suite is SrtpCryptoSuite.AesCm128HmacSha1_32
                                        or SrtpCryptoSuite.AesCm256HmacSha1_32
             ? 4 : 10;
+
+        _protectAes         = CreateAesCmCipher(_keys.CipherKey);
+        _unprotectAes       = CreateAesCmCipher(_keys.CipherKey);
+        _protectEncryptor   = _protectAes.CreateEncryptor();
+        _unprotectEncryptor = _unprotectAes.CreateEncryptor();
+    }
+
+    private static Aes CreateAesCmCipher(byte[] cipherKey)
+    {
+        var aes     = Aes.Create();
+        aes.Key     = cipherKey;
+        aes.Mode    = CipherMode.ECB;
+        aes.Padding = PaddingMode.None;
+        return aes;
     }
 
     // -------------------------------------------------------------------------
@@ -52,28 +98,35 @@ internal sealed class SrtpContext : ISrtpContext
         var payloadLen  = rtpPacket.Length - headerLen;
         var ssrc        = BinaryPrimitives.ReadUInt32BigEndian(rtpPacket[8..]);
         var seq         = BinaryPrimitives.ReadUInt16BigEndian(rtpPacket[2..]);
-        var packetIndex = ComputeSenderIndex(seq);
 
-        // Encrypt payload in-place in final SRTP buffer.
-        var result = GC.AllocateUninitializedArray<byte>(rtpPacket.Length + _authTagLength);
-        rtpPacket.CopyTo(result);
-        if (payloadLen > 0)
+        // Whole send path (sender index, cached encryptor and scratch buffers) under one
+        // lock so concurrent Protect calls cannot corrupt the AES-CM state or ROC.
+        lock (_protectSync)
         {
-            Span<byte> iv = stackalloc byte[16];
-            BuildIv(ssrc, packetIndex, iv);
-            AesCmXor(_keys.CipherKey, iv, result.AsSpan(headerLen, payloadLen));
+            var packetIndex = ComputeSenderIndex(seq);
+
+            // Encrypt payload in-place in final SRTP buffer.
+            var result = GC.AllocateUninitializedArray<byte>(rtpPacket.Length + _authTagLength);
+            rtpPacket.CopyTo(result);
+            if (payloadLen > 0)
+            {
+                Span<byte> iv = stackalloc byte[16];
+                BuildIv(ssrc, packetIndex, iv);
+                AesCmXor(_protectEncryptor, _protectCounterIv, _protectBlock, iv,
+                    result.AsSpan(headerLen, payloadLen));
+            }
+
+            // Append auth tag over header + encrypted payload
+            Span<byte> tag = stackalloc byte[AuthTagFullLength];
+            ComputeAuthTag(result.AsSpan(0, rtpPacket.Length), GetRoc(packetIndex), tag);
+            tag[.._authTagLength].CopyTo(result.AsSpan(rtpPacket.Length, _authTagLength));
+
+            // Advance sender-side index so ROC is correct for subsequent packets
+            if (packetIndex >= _senderIndex)
+                _senderIndex = packetIndex;
+
+            return result;
         }
-
-        // Append auth tag over header + encrypted payload
-        Span<byte> tag = stackalloc byte[AuthTagFullLength];
-        ComputeAuthTag(result.AsSpan(0, rtpPacket.Length), GetRoc(packetIndex), tag);
-        tag[.._authTagLength].CopyTo(result.AsSpan(rtpPacket.Length, _authTagLength));
-
-        // Advance sender-side index so ROC is correct for subsequent packets
-        if (packetIndex >= _senderIndex)
-            _senderIndex = packetIndex;
-
-        return result;
     }
 
     // -------------------------------------------------------------------------
@@ -91,53 +144,61 @@ internal sealed class SrtpContext : ISrtpContext
         var receivedTag = srtpPacket[rtpLen..];
         var seq  = BinaryPrimitives.ReadUInt16BigEndian(rtpSpan[2..]);
         var ssrc = BinaryPrimitives.ReadUInt32BigEndian(rtpSpan[8..]);
-        var packetIndex = ComputePacketIndex(seq);
 
-        // 1. Verify auth tag before decryption (RFC 3711 §3.3 — verify-then-decrypt)
-        Span<byte> expectedTag = stackalloc byte[AuthTagFullLength];
-        ComputeAuthTag(rtpSpan, GetRoc(packetIndex), expectedTag);
-        if (!CryptographicOperations.FixedTimeEquals(receivedTag, expectedTag[.._authTagLength]))
-            throw new SrtpAuthenticationException("SRTP authentication tag mismatch.");
-
-        // 2. Replay check (RFC 3711 §3.3.2)
-        CheckReplay(packetIndex);
-
-        // 3. Decrypt
-        var output = GC.AllocateUninitializedArray<byte>(rtpLen);
-        rtpSpan.CopyTo(output);
-        var headerLen = GetRtpHeaderLength(rtpSpan);
-        var payloadLen = output.Length - headerLen;
-
-        if (payloadLen > 0)
+        // Whole receive path (replay window, cached encryptor and scratch buffers) under
+        // one lock so concurrent Unprotect calls cannot corrupt the replay window,
+        // double-accept a replay, or corrupt the AES-CM state.
+        lock (_unprotectSync)
         {
-            Span<byte> iv = stackalloc byte[16];
-            BuildIv(ssrc, packetIndex, iv);
-            AesCmXor(_keys.CipherKey, iv, output.AsSpan(headerLen, payloadLen));
+            var packetIndex = ComputePacketIndex(seq);
+
+            // 1. Verify auth tag before decryption (RFC 3711 §3.3 — verify-then-decrypt)
+            Span<byte> expectedTag = stackalloc byte[AuthTagFullLength];
+            ComputeAuthTag(rtpSpan, GetRoc(packetIndex), expectedTag);
+            if (!CryptographicOperations.FixedTimeEquals(receivedTag, expectedTag[.._authTagLength]))
+                throw new SrtpAuthenticationException("SRTP authentication tag mismatch.");
+
+            // 2. Replay check (RFC 3711 §3.3.2)
+            CheckReplay(packetIndex);
+
+            // 3. Decrypt
+            var output = GC.AllocateUninitializedArray<byte>(rtpLen);
+            rtpSpan.CopyTo(output);
+            var headerLen = GetRtpHeaderLength(rtpSpan);
+            var payloadLen = output.Length - headerLen;
+
+            if (payloadLen > 0)
+            {
+                Span<byte> iv = stackalloc byte[16];
+                BuildIv(ssrc, packetIndex, iv);
+                AesCmXor(_unprotectEncryptor, _unprotectCounterIv, _unprotectBlock, iv,
+                    output.AsSpan(headerLen, payloadLen));
+            }
+
+            // 4. Update replay window
+            UpdateReplayWindow(packetIndex);
+
+            return output;
         }
-
-        // 4. Update replay window
-        UpdateReplayWindow(packetIndex);
-
-        return output;
     }
 
     // -------------------------------------------------------------------------
     // AES-CM encryption/decryption (symmetric, RFC 3711 §4.1)
     // -------------------------------------------------------------------------
 
-    private static void AesCmXor(byte[] key, ReadOnlySpan<byte> iv, Span<byte> data)
+    // Uses a cached direction-specific encryptor and reusable scratch buffers instead of
+    // per-packet allocations. The caller must hold the matching direction lock so that
+    // the non-thread-safe encryptor and buffers are never touched concurrently.
+    private static void AesCmXor(
+        ICryptoTransform encryptor,
+        byte[] counterIv,
+        byte[] block,
+        ReadOnlySpan<byte> iv,
+        Span<byte> data)
     {
         if (data.Length > MaxAesCmKeystreamBytes)
             throw new CryptographicException("SRTP AES-CM payload exceeds the RFC3711 2^16-block keystream limit.");
 
-        using var aes  = Aes.Create();
-        aes.Key        = key;
-        aes.Mode       = CipherMode.ECB;
-        aes.Padding    = PaddingMode.None;
-        using var enc = aes.CreateEncryptor();
-
-        var block = new byte[16];
-        var counterIv = new byte[16];
         iv.CopyTo(counterIv);
         var offset = 0;
         var counter = 0;
@@ -147,7 +208,7 @@ internal sealed class SrtpContext : ISrtpContext
             counterIv[14] = (byte)(counter >> 8);
             counterIv[15] = (byte)counter;
 
-            enc.TransformBlock(counterIv, 0, AesCmBlockLength, block, 0);
+            encryptor.TransformBlock(counterIv, 0, AesCmBlockLength, block, 0);
 
             var chunk = Math.Min(AesCmBlockLength, data.Length - offset);
             for (var i = 0; i < chunk; i++)
@@ -156,6 +217,17 @@ internal sealed class SrtpContext : ISrtpContext
             offset += chunk;
             counter++;
         }
+    }
+
+    /// <summary>
+    /// Releases the cached AES-CM cipher and encryptor instances held for each direction.
+    /// </summary>
+    public void Dispose()
+    {
+        _protectEncryptor.Dispose();
+        _unprotectEncryptor.Dispose();
+        _protectAes.Dispose();
+        _unprotectAes.Dispose();
     }
 
     // -------------------------------------------------------------------------

@@ -778,7 +778,7 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
             BuildOffer              = (ep, hold) => neg.BuildDefaultSdp(ep, hold, null),
             TryNegotiateAnswer      = (offer, ep, hold) =>
                 offer is null ? null : neg.TryBuildNegotiatedAnswer(offer, ep, hold, null),
-            TryParseMediaParameters = neg.TryParseMediaParameters,
+            TryParseMediaParameters = (sdp, ep) => neg.TryParseMediaParameters(sdp, ep),
             IsRemoteHold            = neg.IsRemoteHoldSdp,
         };
     }

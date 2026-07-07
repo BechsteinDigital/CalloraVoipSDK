@@ -209,7 +209,7 @@ public sealed class VoipClient : IVoipClient
             BuildOffer = (ep, hold) => sdpNegotiator.BuildDefaultSdp(ep, hold, null),
             TryNegotiateAnswer = (offer, ep, hold) =>
                 offer is null ? null : sdpNegotiator.TryBuildNegotiatedAnswer(offer, ep, hold, null),
-            TryParseMediaParameters = sdpNegotiator.TryParseMediaParameters,
+            TryParseMediaParameters = (sdp, ep) => sdpNegotiator.TryParseMediaParameters(sdp, ep),
             IsRemoteHold = sdpNegotiator.IsRemoteHoldSdp,
         };
 

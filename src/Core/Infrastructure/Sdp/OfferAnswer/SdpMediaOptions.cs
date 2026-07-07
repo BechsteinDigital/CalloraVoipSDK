@@ -56,4 +56,11 @@ internal sealed class SdpMediaOptions
 
     /// <summary>Whether to add BUNDLE grouping and <c>a=mid:audio</c> (RFC 5888).</summary>
     public bool Bundle { get; init; }
+
+    /// <summary>
+    /// Whether the offer should advertise SDES/SRTP: emit the <c>RTP/SAVP</c> profile plus a
+    /// freshly generated local <c>a=crypto</c> line (RFC 4568). Ignored when <see cref="Dtls"/>
+    /// is set (DTLS-SRTP takes precedence). Default <see langword="false"/> keeps plain RTP/AVP.
+    /// </summary>
+    public bool OfferSdes { get; init; }
 }

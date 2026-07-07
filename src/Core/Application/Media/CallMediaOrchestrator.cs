@@ -305,7 +305,8 @@ internal sealed class CallMediaOrchestrator : IDisposable
                 RemoteIcePwd = parameters.RemoteIcePwd,
                 RemoteIceOptions = parameters.RemoteIceOptions,
                 RemoteIceCandidates = parameters.RemoteIceCandidates,
-                RemoteIceEndOfCandidates = parameters.RemoteIceEndOfCandidates
+                RemoteIceEndOfCandidates = parameters.RemoteIceEndOfCandidates,
+                SrtpKeys = parameters.SrtpKeys
             };
         }
         catch (Exception ex)

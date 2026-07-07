@@ -34,8 +34,14 @@ internal sealed class StunServerResolver : IStunServerResolver
 
     /// <summary>
     /// Initialises the resolver using the system's DNS server (read from <c>/etc/resolv.conf</c>
-    /// on Linux/macOS, or falling back to 8.8.8.8).
+    /// on Linux/macOS). There is no fallback to a public third-party resolver; use the
+    /// <see cref="StunServerResolver(IPEndPoint, ILogger{StunServerResolver})"/> overload to
+    /// supply a resolver explicitly.
     /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when no usable system DNS resolver can be determined
+    /// (see <see cref="DnsSrvQuery.GetSystemDnsServer"/>).
+    /// </exception>
     public StunServerResolver(ILogger<StunServerResolver> logger)
         : this(
             DnsSrvQuery.GetSystemDnsServer(),

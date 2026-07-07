@@ -29,7 +29,16 @@ public interface ISdpNegotiator
     /// Parses a remote SDP and extracts RTP session parameters.
     /// Returns null when the SDP cannot be parsed or has no usable audio stream.
     /// </summary>
-    CallMediaParameters? TryParseMediaParameters(string remoteSdp, IPEndPoint localEndPoint);
+    /// <param name="remoteSdp">The far end's SDP (source of remote SDES key material).</param>
+    /// <param name="localEndPoint">Local UDP endpoint to bind RTP to.</param>
+    /// <param name="localSdp">
+    /// Optional SDP we advertised (our answer/offer). When it carries a matching SDES
+    /// <c>a=crypto</c> line, both keys are composed into <c>CallMediaParameters.SrtpKeys</c>.
+    /// </param>
+    CallMediaParameters? TryParseMediaParameters(
+        string remoteSdp,
+        IPEndPoint localEndPoint,
+        string? localSdp = null);
 
     /// <summary>Returns true when the SDP signals remote hold semantics.</summary>
     bool IsRemoteHoldSdp(string? sdp);

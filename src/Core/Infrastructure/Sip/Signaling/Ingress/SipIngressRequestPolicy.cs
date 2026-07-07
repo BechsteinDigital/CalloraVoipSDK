@@ -80,7 +80,13 @@ internal static class SipIngressRequestPolicy
     }
 
     /// <summary>
-    /// Returns true when request Via chain indicates this SDK instance already handled it.
+    /// Returns true when the Via chain shows one of our own locally generated branches
+    /// <b>below</b> the top Via — i.e. a request we previously forwarded has spiraled back to us.
+    /// The top-most Via belongs to the immediate previous hop (the sender), so its branch is never
+    /// evidence that we already handled the request: rejecting on it would break legitimate direct
+    /// requests from another SDK instance that shares this process's branch prefix (e.g. two
+    /// in-process endpoints on loopback). Genuine spirals always carry our branch beneath a newer
+    /// hop's Via, so skipping only the top entry preserves loop protection.
     /// </summary>
     public static bool IsLoopDetected(SipRequest request)
     {
@@ -88,8 +94,16 @@ internal static class SipIngressRequestPolicy
         if (string.IsNullOrWhiteSpace(viaHeader))
             return false;
 
+        var isTopVia = true;
         foreach (var viaEntry in viaHeader.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
         {
+            if (isTopVia)
+            {
+                // The top Via is the immediate sender's own branch, not a hop we inserted.
+                isTopVia = false;
+                continue;
+            }
+
             var marker = "branch=";
             var markerIndex = viaEntry.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
             if (markerIndex < 0)

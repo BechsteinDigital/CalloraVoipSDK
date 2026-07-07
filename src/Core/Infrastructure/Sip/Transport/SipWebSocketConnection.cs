@@ -8,7 +8,7 @@ namespace CalloraVoipSdk.Core.Infrastructure.Sip.Transport;
 /// <summary>
 /// Represents one SIP-over-WebSocket connection with message receive loop and serialized sends.
 /// </summary>
-internal sealed class SipWebSocketConnection : IDisposable
+internal sealed class SipWebSocketConnection : IDisposable, IAsyncDisposable
 {
     private readonly WebSocket _socket;
     private readonly ILogger _logger;
@@ -119,22 +119,24 @@ internal sealed class SipWebSocketConnection : IDisposable
         }
     }
 
-    /// <inheritdoc />
-    public void Dispose()
+    /// <summary>
+    /// Signals shutdown once by cancelling the receive loop.
+    /// </summary>
+    /// <returns><c>true</c> when this call transitioned the connection into the disposed state.</returns>
+    private bool BeginShutdown()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
-            return;
+            return false;
 
         _stop.Cancel();
-        try
-        {
-            _receiveLoop.GetAwaiter().GetResult();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "SIP WebSocket loop ended with exception during disposal.");
-        }
+        return true;
+    }
 
+    /// <summary>
+    /// Aborts and disposes the socket and synchronization resources.
+    /// </summary>
+    private void ReleaseResources()
+    {
         try
         {
             _socket.Abort();
@@ -147,6 +149,44 @@ internal sealed class SipWebSocketConnection : IDisposable
 
         _sendGate.Dispose();
         _stop.Dispose();
+    }
+
+    /// <summary>
+    /// Synchronously cancels the receive loop and disposes the socket.
+    /// </summary>
+    /// <remarks>
+    /// The receive loop is only cancelled here, never awaited: blocking on it inside a
+    /// synchronous <see cref="IDisposable.Dispose"/> can deadlock when a
+    /// <see cref="SynchronizationContext"/> is present. Aborting the socket unblocks any
+    /// in-flight receive so the loop unwinds promptly in the background. Use
+    /// <see cref="DisposeAsync"/> to deterministically await loop completion.
+    /// </remarks>
+    public void Dispose()
+    {
+        if (!BeginShutdown())
+            return;
+
+        ReleaseResources();
+    }
+
+    /// <summary>
+    /// Asynchronously cancels the receive loop, awaits its completion, and releases resources.
+    /// </summary>
+    public async ValueTask DisposeAsync()
+    {
+        if (!BeginShutdown())
+            return;
+
+        try
+        {
+            await _receiveLoop.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected: the receive loop observes shutdown cancellation.
+        }
+
+        ReleaseResources();
     }
 }
 

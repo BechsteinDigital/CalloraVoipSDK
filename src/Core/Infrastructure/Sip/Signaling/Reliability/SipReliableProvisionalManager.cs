@@ -11,7 +11,6 @@ internal sealed class SipReliableProvisionalManager : IDisposable
     private readonly object _sync = new();
     private readonly Dictionary<int, SipReliableProvisionalEntry> _pendingByRseq = new();
     private readonly CancellationTokenSource _lifecycleCts = new();
-    private readonly Random _random = new();
     private int _lastRseq;
     private int _disposed;
 
@@ -21,7 +20,8 @@ internal sealed class SipReliableProvisionalManager : IDisposable
     public SipReliableProvisionalManager(ILogger logger)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _lastRseq = _random.Next(1, int.MaxValue / 2);
+        // Random.Shared is thread-safe; the RSeq seed range is unchanged ([1, int.MaxValue/2)).
+        _lastRseq = Random.Shared.Next(1, int.MaxValue / 2);
     }
 
     /// <summary>

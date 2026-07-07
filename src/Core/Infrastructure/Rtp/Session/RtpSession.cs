@@ -3,6 +3,7 @@ using System.Net.Sockets;
 using Microsoft.Extensions.Logging;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Wire;
+using CalloraVoipSdk.Core.Infrastructure.Srtp.Context;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Rtp.Session;
 
@@ -22,6 +23,18 @@ internal sealed class RtpSession : IRtpSession
     private readonly UdpClient _udp;
     private readonly uint _ssrc;
     private readonly Dictionary<uint, RtpSequenceValidator> _validators = new();
+
+    // SRTP contexts for this leg (RFC 3711). Null when SRTP was not negotiated, in which
+    // case RTP is exchanged as cleartext exactly as before. Outbound protects sent packets,
+    // inbound unprotects received packets. SRTP applies to the media (RTP) path only.
+    private readonly ISrtpContext? _outboundSrtp;
+    private readonly ISrtpContext? _inboundSrtp;
+
+    // SRTCP contexts for this leg (RFC 3711 §3.4). Null when SRTP was not negotiated, in
+    // which case RTCP (the RTCP-MUX control path) stays cleartext. Outbound protects sent
+    // control datagrams, inbound unprotects received control datagrams.
+    private readonly ISrtcpContext? _outboundSrtcp;
+    private readonly ISrtcpContext? _inboundSrtcp;
 
     private ushort _sequenceNumber;
     private uint _timestamp;
@@ -55,6 +68,10 @@ internal sealed class RtpSession : IRtpSession
         _codec   = codec;
         _logger  = logger;
         _ssrc    = options.Ssrc ?? (uint)Random.Shared.Next();
+        _outboundSrtp = options.OutboundSrtp;
+        _inboundSrtp  = options.InboundSrtp;
+        _outboundSrtcp = options.OutboundSrtcp;
+        _inboundSrtcp  = options.InboundSrtcp;
 
         // Random initial sequence number and timestamp offset (RFC 3550 §5.1)
         _sequenceNumber = (ushort)Random.Shared.Next(ushort.MaxValue);
@@ -140,6 +157,12 @@ internal sealed class RtpSession : IRtpSession
         ReadOnlyMemory<byte> datagram,
         CancellationToken cancellationToken)
     {
+        // SRTCP protect (RFC 3711 §3.4): encrypt the RTCP payload and append the E||index
+        // word plus the auth tag. When SRTP was not negotiated (_outboundSrtcp == null) the
+        // datagram is sent as cleartext RTCP. SrtcpContext is thread-safe.
+        if (_outboundSrtcp is not null)
+            datagram = _outboundSrtcp.Protect(datagram.Span);
+
         await _udp.SendAsync(datagram, _options.RemoteEndPoint, cancellationToken).ConfigureAwait(false);
     }
 
@@ -190,6 +213,28 @@ internal sealed class RtpSession : IRtpSession
     {
         if (LooksLikeRtcpDatagram(datagram))
         {
+            // RTCP is routed on its unencrypted header even under SRTP (RFC 5761): the 8-byte
+            // SRTCP header stays cleartext, so this check still works. SRTCP unprotect
+            // (RFC 3711 §3.4) authenticates and decrypts before dispatch. A failed auth tag or
+            // a replayed control packet is dropped silently while the receive loop keeps running.
+            if (_inboundSrtcp is not null)
+            {
+                try
+                {
+                    datagram = _inboundSrtcp.Unprotect(datagram);
+                }
+                catch (SrtpAuthenticationException ex)
+                {
+                    _logger.LogDebug("Dropping inbound SRTCP packet with invalid authentication tag: {Message}", ex.Message);
+                    return;
+                }
+                catch (SrtpReplayException ex)
+                {
+                    _logger.LogDebug("Dropping replayed inbound SRTCP packet: {Message}", ex.Message);
+                    return;
+                }
+            }
+
             try
             {
                 ControlPacketReceived?.Invoke(datagram);
@@ -199,6 +244,27 @@ internal sealed class RtpSession : IRtpSession
                 _logger.LogError(ex, "Unhandled exception in RTP control datagram handler.");
             }
             return;
+        }
+
+        // SRTP unprotect (RFC 3711): authenticate and decrypt before decoding. A failed auth
+        // tag or a replayed packet is dropped silently (packet discarded, receive loop keeps
+        // running) rather than surfaced as an error, per RFC 3711 §3.3.
+        if (_inboundSrtp is not null)
+        {
+            try
+            {
+                datagram = _inboundSrtp.Unprotect(datagram);
+            }
+            catch (SrtpAuthenticationException ex)
+            {
+                _logger.LogDebug("Dropping inbound SRTP packet with invalid authentication tag: {Message}", ex.Message);
+                return;
+            }
+            catch (SrtpReplayException ex)
+            {
+                _logger.LogDebug("Dropping replayed inbound SRTP packet: {Message}", ex.Message);
+                return;
+            }
         }
 
         RtpPacket packet;
@@ -273,6 +339,13 @@ internal sealed class RtpSession : IRtpSession
             catch (OperationCanceledException) { }
         }
 
+        // Release cached SRTP/SRTCP crypto resources (AES transforms) once the receive loop
+        // is guaranteed to be stopped, so Unprotect can no longer touch a disposed context.
+        (_outboundSrtp as IDisposable)?.Dispose();
+        (_inboundSrtp as IDisposable)?.Dispose();
+        (_outboundSrtcp as IDisposable)?.Dispose();
+        (_inboundSrtcp as IDisposable)?.Dispose();
+
         ControlPacketReceived = null;
     }
 
@@ -334,9 +407,18 @@ internal sealed class RtpSession : IRtpSession
         };
 
         var datagram = _codec.Encode(packet);
+
+        // SRTP protect (RFC 3711): encrypt the payload and append the auth tag. When SRTP
+        // was not negotiated (_outboundSrtp == null) the datagram is sent as cleartext RTP.
+        // SrtpContext is thread-safe and this call already runs after the _sendSync section.
+        if (_outboundSrtp is not null)
+            datagram = _outboundSrtp.Protect(datagram);
+
         await _udp.SendAsync(datagram, _options.RemoteEndPoint, cancellationToken).ConfigureAwait(false);
 
         Interlocked.Increment(ref _packetsSent);
+        // Octet count intentionally tracks RTP payload length (RFC 3550 SR semantics),
+        // not the SRTP auth-tag overhead added by Protect above.
         Interlocked.Add(ref _octetsSent, payload.Length);
         Volatile.Write(ref _lastSentTimestamp, unchecked((int)timestamp));
         Volatile.Write(ref _hasSentPackets, 1);

@@ -272,6 +272,8 @@ internal sealed class SdpSessionParser : ISdpSessionParser
             .Skip(3)
             .Select(v => int.TryParse(v, out var pt) ? pt : -1)
             .Where(v => v >= 0)
+            .Distinct() // A malformed m-line may repeat a payload type; dedupe so the
+                        // ToDictionary below cannot throw on a duplicate key (DoS guard).
             .ToArray();
 
         var codecs = payloadTypes.ToDictionary(
