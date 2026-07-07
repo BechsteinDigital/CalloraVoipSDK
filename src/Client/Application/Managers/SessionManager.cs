@@ -30,12 +30,12 @@ public sealed class SessionManager
     public IReadOnlyCollection<ICall> ActiveCalls => _calls.Active;
 
     /// <summary>
-    /// Active playback sessions (empty when module unavailable).
+    /// Active playback sessions.
     /// </summary>
     public IReadOnlyCollection<IPlaybackSession> ActivePlaybacks => _playback.Active;
 
     /// <summary>
-    /// Active recording sessions (empty when module unavailable).
+    /// Active recording sessions.
     /// </summary>
     public IReadOnlyCollection<IRecordingSession> ActiveRecordings => _recording.Active;
 }

@@ -32,6 +32,9 @@ public interface IVoipClient : IDisposable
     /// <summary>Module availability facade.</summary>
     ModuleManager ModuleManager { get; }
 
+    /// <summary>Registry resolving optional modules contributed by separate packages.</summary>
+    ModuleRegistry Modules { get; }
+
     /// <summary>Runtime session view facade.</summary>
     SessionManager SessionManager { get; }
 

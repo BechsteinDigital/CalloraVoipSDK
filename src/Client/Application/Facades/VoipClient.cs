@@ -81,6 +81,11 @@ public sealed class VoipClient : IVoipClient
     public ModuleManager ModuleManager { get; }
 
     /// <summary>
+    /// Registry resolving optional modules contributed by separate packages.
+    /// </summary>
+    public ModuleRegistry Modules { get; }
+
+    /// <summary>
     /// Runtime session view facade.
     /// </summary>
     public SessionManager SessionManager { get; }
@@ -285,6 +290,17 @@ public sealed class VoipClient : IVoipClient
 
         Lines.IncomingCall += (s, e) => IncomingCall?.Invoke(s, e);
         _convenienceOrchestrator = new SdkConvenienceOrchestrator(Lines, Media, _audioDevice, logFactory);
+
+        // Module registration is the last construction step so OnAttached sees a fully built client.
+        Modules = new ModuleRegistry(this);
+        var injectedModules = ResolveService<IEnumerable<IVoipClientModule>>(services);
+        if (injectedModules is not null)
+        {
+            foreach (var module in injectedModules)
+            {
+                Modules.Register(module);
+            }
+        }
     }
 
     internal Task StartRuntimeAsync(CancellationToken ct = default)
