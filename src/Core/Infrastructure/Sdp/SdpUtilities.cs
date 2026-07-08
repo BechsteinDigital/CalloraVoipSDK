@@ -27,6 +27,38 @@ internal static class SdpUtilities
     ];
 
     /// <summary>
+    /// Extracts the first SDES crypto attribute with a supported suite and an inline key
+    /// from the first active audio m-line of an SDP body (RFC 4568). Used to recover key
+    /// material at the media layer from the SDP that actually went over the wire — both
+    /// the peer's offer (inbound decrypt key) and our serialized answer (outbound encrypt
+    /// key). Returns <see langword="null"/> on plain-RTP SDP or parse failure.
+    /// </summary>
+    public static SdpCryptoAttribute? TryExtractAudioCrypto(string? sdp)
+    {
+        if (string.IsNullOrWhiteSpace(sdp))
+            return null;
+
+        try
+        {
+            var parsed = Parser.Parse(sdp);
+            var audio = parsed.Media.FirstOrDefault(
+                m => m.MediaType.Equals("audio", StringComparison.OrdinalIgnoreCase)
+                     && !m.Disabled
+                     && m.Port > 0);
+            if (audio is null)
+                return null;
+
+            return audio.Crypto.FirstOrDefault(
+                c => SdesCryptoSelector.TryMapSuite(c.CryptoSuite) is not null
+                     && c.KeyParams.StartsWith("inline:", StringComparison.OrdinalIgnoreCase));
+        }
+        catch (FormatException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Builds a default SDP offer for local capabilities.
     /// </summary>
     public static string BuildDefaultSdp(

@@ -49,6 +49,11 @@ internal sealed class SipCoreCallChannel : ICallChannel
     private IPAddress? _advertisedMediaAddress;
     private ISipCallSession? _session;
     private int _mediaParametersFired;
+
+    // The serialized answer SDP we sent (carries our own SDES crypto line when SRTP was
+    // negotiated). Written on the answer path before the session establishes, read by the
+    // media-parameter publication which may run on the signaling receive thread.
+    private volatile string? _localAnswerSdp;
     private int _disposed;
 
     /// <inheritdoc />
@@ -188,6 +193,10 @@ internal sealed class SipCoreCallChannel : ICallChannel
             throw new InvalidOperationException(
                 $"Inbound SDP answer negotiation failed ({reasonCode}).");
         }
+
+        // Retain the answer we send: it carries our own SDES crypto line (outbound
+        // encrypt key), which the media layer recovers in TryPublishMediaParameters.
+        _localAnswerSdp = answerSdp;
 
         await session.AnswerAsync(answerSdp, ct: ct).ConfigureAwait(false);
 
@@ -531,7 +540,7 @@ internal sealed class SipCoreCallChannel : ICallChannel
         var withIceMetadata = EnrichWithIceMetadata(parameters);
         reasonCode = SrtpPolicyEvaluator.ResolveReasonCode(_appliedSrtpPolicy, withIceMetadata.IsSrtpNegotiated);
         var violatesPolicy = SrtpPolicyEvaluator.IsPolicyViolation(_appliedSrtpPolicy, withIceMetadata.IsSrtpNegotiated);
-        var enrichedParameters = EnrichWithSrtpMetadata(withIceMetadata, reasonCode);
+        var enrichedParameters = EnrichWithSrtpMetadata(withIceMetadata, reasonCode, remoteSdp);
         PublishSrtpDecision(
             session,
             enrichedParameters.IsSrtpNegotiated,
@@ -691,8 +700,20 @@ internal sealed class SipCoreCallChannel : ICallChannel
     /// </summary>
     private CallMediaParameters EnrichWithSrtpMetadata(
         CallMediaParameters parameters,
-        string reasonCode) =>
-        new()
+        string reasonCode,
+        string remoteSdp)
+    {
+        // Recover SDES key material from the SDP that actually went over the wire:
+        // the peer's SDP carries their key (inbound decrypt), our answer carries the
+        // key we generated (outbound encrypt). Encryption only engages when both are
+        // present and agree on the suite — never half-encrypted.
+        var remoteCrypto = SdpUtilities.TryExtractAudioCrypto(remoteSdp);
+        var localCrypto = SdpUtilities.TryExtractAudioCrypto(_localAnswerSdp);
+        var sdesUsable = remoteCrypto is not null
+            && localCrypto is not null
+            && string.Equals(remoteCrypto.CryptoSuite, localCrypto.CryptoSuite, StringComparison.Ordinal);
+
+        return new()
         {
             LocalEndPoint = parameters.LocalEndPoint,
             RemoteEndPoint = parameters.RemoteEndPoint,
@@ -718,8 +739,12 @@ internal sealed class SipCoreCallChannel : ICallChannel
             RemoteIceCandidates = parameters.RemoteIceCandidates,
             RemoteIceEndOfCandidates = parameters.RemoteIceEndOfCandidates,
             AppliedSrtpPolicy = _appliedSrtpPolicy,
-            SrtpDecisionReasonCode = reasonCode
+            SrtpDecisionReasonCode = reasonCode,
+            SrtpSuite = sdesUsable ? remoteCrypto!.CryptoSuite : null,
+            SrtpLocalKeyParams = sdesUsable ? localCrypto!.KeyParams : null,
+            SrtpRemoteKeyParams = sdesUsable ? remoteCrypto!.KeyParams : null
         };
+    }
 
     /// <summary>
     /// Validates inbound offer security against the applied SRTP policy before sending 200 OK.

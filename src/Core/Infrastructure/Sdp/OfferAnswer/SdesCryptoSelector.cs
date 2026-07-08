@@ -55,14 +55,8 @@ internal static class SdesCryptoSelector
     /// Maps an RFC 4568/6188 suite token to the implemented <see cref="SrtpCryptoSuite"/>.
     /// Suite names are case-sensitive tokens; unknown suites yield <see langword="null"/>.
     /// </summary>
-    public static SrtpCryptoSuite? TryMapSuite(string suiteName) => suiteName switch
-    {
-        "AES_CM_128_HMAC_SHA1_80" => SrtpCryptoSuite.AesCm128HmacSha1_80,
-        "AES_CM_128_HMAC_SHA1_32" => SrtpCryptoSuite.AesCm128HmacSha1_32,
-        "AES_256_CM_HMAC_SHA1_80" => SrtpCryptoSuite.AesCm256HmacSha1_80,
-        "AES_256_CM_HMAC_SHA1_32" => SrtpCryptoSuite.AesCm256HmacSha1_32,
-        _ => null
-    };
+    public static SrtpCryptoSuite? TryMapSuite(string suiteName) =>
+        SrtpCryptoSuiteNames.TryParse(suiteName);
 
     /// <summary>
     /// Generates fresh master key + salt for one suite as an SDES inline key param
@@ -71,11 +65,8 @@ internal static class SdesCryptoSelector
     /// </summary>
     public static string GenerateInlineKeyParams(SrtpCryptoSuite suite)
     {
-        var keyLength = suite is SrtpCryptoSuite.AesCm256HmacSha1_80 or SrtpCryptoSuite.AesCm256HmacSha1_32
-            ? 32 : 16;
-        const int saltLength = 14;
-
-        var material = RandomNumberGenerator.GetBytes(keyLength + saltLength);
+        var material = RandomNumberGenerator.GetBytes(
+            SrtpCryptoSuiteNames.KeyLength(suite) + SrtpCryptoSuiteNames.SaltLength);
         return $"inline:{Convert.ToBase64String(material)}";
     }
 }

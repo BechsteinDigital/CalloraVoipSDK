@@ -131,4 +131,18 @@ public sealed class CallMediaParameters
     /// See <see cref="SrtpDecisionReasonCodes"/>.
     /// </summary>
     public string SrtpDecisionReasonCode { get; init; } = SrtpDecisionReasonCodes.NotEvaluated;
+
+    // ── SDES key material (RFC 4568) — internal media-layer contract ─────────
+    // Kept as plain SDP value strings so the domain stays free of crypto types;
+    // the RTP media session parses them into SRTP contexts. Both directions must
+    // be present for encryption to engage; null means plain RTP.
+
+    /// <summary>Negotiated SDES suite token (e.g. <c>AES_CM_128_HMAC_SHA1_80</c>).</summary>
+    internal string? SrtpSuite { get; init; }
+
+    /// <summary>Our answer's inline key params — encrypts the outbound direction.</summary>
+    internal string? SrtpLocalKeyParams { get; init; }
+
+    /// <summary>The peer's inline key params — decrypts the inbound direction.</summary>
+    internal string? SrtpRemoteKeyParams { get; init; }
 }
