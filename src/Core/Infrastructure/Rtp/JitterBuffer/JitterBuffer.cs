@@ -224,9 +224,13 @@ internal sealed class JitterBuffer : IJitterBuffer
 
     private void UpdateJitter(uint rtpTs, DateTimeOffset arrivalTime)
     {
-        // Convert arrival time to RTP clock units
-        var arrivalRtpUnits = (uint)(arrivalTime.ToUnixTimeMilliseconds()
-                                    * ClockRate / 1000.0);
+        // Convert arrival time to RTP clock units, truncated modulo 2^32 like every RTP
+        // timestamp. The previous double→uint cast overflowed (unix-ms × clock rate is
+        // ~1.4e13) and SATURATED to uint.MaxValue on .NET, making the transit fall by
+        // exactly one frame duration per packet — jitter converged to the frame interval
+        // (20.00 ms) on a clean link instead of ~0.
+        var arrivalRtpUnits = unchecked((uint)(arrivalTime.ToUnixTimeMilliseconds()
+                                    * ClockRate / 1000));
 
         // transit = arrival_time_in_rtp_units - send_timestamp
         var transit = arrivalRtpUnits - rtpTs;
