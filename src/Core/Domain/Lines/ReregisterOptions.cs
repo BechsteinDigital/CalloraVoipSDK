@@ -41,4 +41,25 @@ public sealed class ReregisterOptions
     /// Default: 60 seconds.
     /// </summary>
     public TimeSpan MaxRetryDelay { get; init; } = TimeSpan.FromSeconds(60);
+
+    /// <summary>
+    /// Fraction of the granted registration lifetime at which the binding is refreshed
+    /// (0 &lt; ratio &lt; 1). Default: <c>0.8</c> (refresh at 80% of the lifetime).
+    /// </summary>
+    public double RefreshRatio { get; init; } = 0.8;
+
+    /// <summary>
+    /// Lower bound on the refresh interval, guarding against REGISTER churn when a registrar
+    /// reports an implausibly short lifetime. Never applied above the binding lifetime itself.
+    /// Default: 15 seconds.
+    /// </summary>
+    public TimeSpan MinRefreshInterval { get; init; } = TimeSpan.FromSeconds(15);
+
+    /// <summary>
+    /// Maximum consecutive corrective re-registrations triggered by a changed NAT-learned
+    /// public contact within one cycle, before the line settles on the current address. Caps
+    /// a re-register storm on a pathological NAT that reflects a new port on every REGISTER.
+    /// Default: <c>3</c>.
+    /// </summary>
+    public int MaxCorrectiveReregistrations { get; init; } = 3;
 }

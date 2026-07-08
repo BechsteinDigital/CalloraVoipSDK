@@ -262,7 +262,13 @@ public sealed class VoipClient : IVoipClient
             ?? new RtpCallMediaSessionFactory(logFactory);
         var rtcpPacketCodec = ResolveService<IRtcpPacketCodec>(services)
             ?? new RtcpPacketCodec();
-        _mediaOrchestrator = new CallMediaOrchestrator(mediaSessionFactory, logFactory, rtcpPacketCodec, iceAgent);
+        var mediaSupervision = new MediaSupervisionOptions
+        {
+            InboundMediaTimeout = config.InboundMediaTimeout,
+            HangupHeldCallOnSilence = config.HangupHeldCallOnMediaSilence
+        };
+        _mediaOrchestrator = new CallMediaOrchestrator(
+            mediaSessionFactory, logFactory, rtcpPacketCodec, iceAgent, mediaSupervision);
         Calls.CallStateChanged += _mediaOrchestrator.OnCallStateChanged;
 
         Lines = new PhoneLineManager(account =>

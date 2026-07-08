@@ -31,13 +31,18 @@ internal static class TrunkInboundMatcher
     /// Optional DID whitelist. When non-empty, only these numbers (on the account domain)
     /// are accepted — everything else is rejected, regardless of peer/domain.
     /// </param>
+    /// <param name="acceptTrunkInbound">
+    /// When <see langword="false"/> only the exact username is accepted (strict 1:1 account);
+    /// peer- and domain-based trunk acceptance are disabled. Ignored when a whitelist is set.
+    /// </param>
     public static bool IsForThisLine(
         string localUri,
         string accountUsername,
         string accountDomain,
         IPAddress? sourceAddress,
         IReadOnlyCollection<IPAddress> trustedRegistrarAddresses,
-        IReadOnlyCollection<string>? inboundNumbers)
+        IReadOnlyCollection<string>? inboundNumbers,
+        bool acceptTrunkInbound)
     {
         if (!SipProtocol.TryParseSipUri(localUri, out var localUser, out var localHost, out _))
             return false;
@@ -48,15 +53,22 @@ internal static class TrunkInboundMatcher
         if (inboundNumbers is { Count: > 0 })
             return domainMatches && inboundNumbers.Contains(localUser, StringComparer.OrdinalIgnoreCase);
 
-        // 1:1 user account — exact user match (unchanged behavior).
+        // 1:1 user account — exact user match (always accepted).
         if (string.Equals(localUser, accountUsername, StringComparison.OrdinalIgnoreCase))
             return true;
+
+        // Strict 1:1 account: no peer/domain broadening (opt-out of trunk acceptance).
+        if (!acceptTrunkInbound)
+            return false;
 
         // Trunk: delivered by the registrar/proxy we registered to (peer trust).
         if (sourceAddress is not null && trustedRegistrarAddresses.Contains(sourceAddress))
             return true;
 
-        // Trunk: addressed to our registered domain (any DID on this trunk).
+        // Trunk: addressed to our registered domain. Providers deliver from IPs that need
+        // not appear in the registrar's DNS records, so this domain match is the reliable
+        // fallback that peer trust alone cannot cover. Callers that need strict source
+        // control set AcceptTrunkInbound=false or an InboundNumbers whitelist.
         return domainMatches;
     }
 }

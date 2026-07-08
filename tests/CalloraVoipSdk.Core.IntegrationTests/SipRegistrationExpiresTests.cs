@@ -1,3 +1,4 @@
+using CalloraVoipSdk.Core.Domain.Lines;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Adapters;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Signaling;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Wire;
@@ -91,14 +92,14 @@ public sealed class SipRegistrationExpiresTests
     [Fact]
     public void RefreshDelay_healthyGrant_refreshesAtEightyPercent()
     {
-        Assert.Equal(TimeSpan.FromSeconds(480), SipLineChannel.ComputeRefreshDelay(600));
+        Assert.Equal(TimeSpan.FromSeconds(480), SipLineChannel.ComputeRefreshDelay(600, ReregisterOptions.Default));
     }
 
     [Fact]
     public void RefreshDelay_shortButLegitimateBinding_neverOutlivesTheBinding()
     {
         // A genuinely short grant must still refresh before it lapses (below the churn floor).
-        var delay = SipLineChannel.ComputeRefreshDelay(6);
+        var delay = SipLineChannel.ComputeRefreshDelay(6, ReregisterOptions.Default);
 
         Assert.True(delay < TimeSpan.FromSeconds(6), $"expected <6s, got {delay}");
         Assert.True(delay >= TimeSpan.FromSeconds(1), $"expected >=1s, got {delay}");
@@ -107,6 +108,21 @@ public sealed class SipRegistrationExpiresTests
     [Fact]
     public void RefreshDelay_missingExpires_usesDefaultBaseline()
     {
-        Assert.Equal(TimeSpan.FromSeconds(240), SipLineChannel.ComputeRefreshDelay(0));
+        Assert.Equal(TimeSpan.FromSeconds(240), SipLineChannel.ComputeRefreshDelay(0, ReregisterOptions.Default));
+    }
+
+    [Fact]
+    public void RefreshDelay_honorsConfiguredRatioAndFloor()
+    {
+        var options = new ReregisterOptions
+        {
+            RefreshRatio = 0.5,
+            MinRefreshInterval = TimeSpan.FromSeconds(30)
+        };
+
+        // 0.5 × 600 = 300 (ratio applied).
+        Assert.Equal(TimeSpan.FromSeconds(300), SipLineChannel.ComputeRefreshDelay(600, options));
+        // 0.5 × 40 = 20, but the 30s floor lifts it (still below the 39s upper bound).
+        Assert.Equal(TimeSpan.FromSeconds(30), SipLineChannel.ComputeRefreshDelay(40, options));
     }
 }

@@ -38,6 +38,17 @@ public sealed class SipAccount
     public IReadOnlyList<string>? InboundNumbers { get; init; }
 
     /// <summary>
+    /// Whether the line accepts inbound INVITEs delivered by its registrar/proxy peer or,
+    /// only when the source is unknown, addressed to its registered domain (SIP-trunk
+    /// behavior). When <see langword="true"/> (default) a call for the exact username is
+    /// always accepted, plus — when no <see cref="InboundNumbers"/> whitelist is set — calls
+    /// from the trusted registrar peer and domain-addressed calls from an unknown source.
+    /// Set to <see langword="false"/> for a strict 1:1 user account that must accept only its
+    /// own username. Ignored when <see cref="InboundNumbers"/> is set (whitelist wins).
+    /// </summary>
+    public bool AcceptTrunkInbound { get; init; } = true;
+
+    /// <summary>
     /// Controls automatic re-registration when the SIP binding is lost.
     /// Defaults to <see cref="ReregisterOptions.Default"/> (unlimited retries, exponential backoff).
     /// </summary>

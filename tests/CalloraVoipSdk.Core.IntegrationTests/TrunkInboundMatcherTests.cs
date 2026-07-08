@@ -7,7 +7,7 @@ namespace CalloraVoipSdk.Core.IntegrationTests;
 /// Trunk inbound line-matching (package T1): a SIP trunk delivers the dialed number (DID)
 /// as the To-user, not the registration username. The matcher must accept trunk inbound
 /// (by peer or domain) without rejecting on the user-part, while a 1:1 user account keeps
-/// its exact-username behavior.
+/// its exact-username behavior. <c>acceptTrunkInbound=false</c> opts out of the broadening.
 /// </summary>
 public sealed class TrunkInboundMatcherTests
 {
@@ -25,7 +25,8 @@ public sealed class TrunkInboundMatcherTests
             accountDomain: Domain,
             sourceAddress: Registrar,
             trustedRegistrarAddresses: Trusted,
-            inboundNumbers: null);
+            inboundNumbers: null,
+            acceptTrunkInbound: true);
 
         Assert.True(match);
     }
@@ -39,7 +40,8 @@ public sealed class TrunkInboundMatcherTests
             accountDomain: Domain,
             sourceAddress: Registrar,
             trustedRegistrarAddresses: Trusted,
-            inboundNumbers: null);
+            inboundNumbers: null,
+            acceptTrunkInbound: true);
 
         Assert.True(match);
     }
@@ -53,7 +55,8 @@ public sealed class TrunkInboundMatcherTests
             accountDomain: Domain,
             sourceAddress: IPAddress.Parse("198.51.100.66"),
             trustedRegistrarAddresses: Trusted,
-            inboundNumbers: null);
+            inboundNumbers: null,
+            acceptTrunkInbound: true);
 
         Assert.False(match);
     }
@@ -67,7 +70,39 @@ public sealed class TrunkInboundMatcherTests
             accountDomain: "fritz.box",
             sourceAddress: null,
             trustedRegistrarAddresses: [],
-            inboundNumbers: null);
+            inboundNumbers: null,
+            acceptTrunkInbound: true);
+
+        Assert.True(match);
+    }
+
+    [Fact]
+    public void Strict_account_rejects_a_foreign_did_even_from_the_registrar()
+    {
+        // acceptTrunkInbound=false: only the exact username is accepted, no peer/domain.
+        var match = TrunkInboundMatcher.IsForThisLine(
+            localUri: "sip:00493075435072@sipconnect.sipgate.de",
+            accountUsername: "3089553t3",
+            accountDomain: Domain,
+            sourceAddress: Registrar,
+            trustedRegistrarAddresses: Trusted,
+            inboundNumbers: null,
+            acceptTrunkInbound: false);
+
+        Assert.False(match);
+    }
+
+    [Fact]
+    public void Strict_account_still_accepts_its_exact_username()
+    {
+        var match = TrunkInboundMatcher.IsForThisLine(
+            localUri: "sip:3089553t3@sipconnect.sipgate.de",
+            accountUsername: "3089553t3",
+            accountDomain: Domain,
+            sourceAddress: Registrar,
+            trustedRegistrarAddresses: Trusted,
+            inboundNumbers: null,
+            acceptTrunkInbound: false);
 
         Assert.True(match);
     }
@@ -81,7 +116,8 @@ public sealed class TrunkInboundMatcherTests
             accountDomain: Domain,
             sourceAddress: Registrar,
             trustedRegistrarAddresses: Trusted,
-            inboundNumbers: ["00493075435072"]);
+            inboundNumbers: ["00493075435072"],
+            acceptTrunkInbound: true);
 
         var rejected = TrunkInboundMatcher.IsForThisLine(
             localUri: "sip:00499999999999@sipconnect.sipgate.de",
@@ -89,7 +125,8 @@ public sealed class TrunkInboundMatcherTests
             accountDomain: Domain,
             sourceAddress: Registrar,
             trustedRegistrarAddresses: Trusted,
-            inboundNumbers: ["00493075435072"]);
+            inboundNumbers: ["00493075435072"],
+            acceptTrunkInbound: true);
 
         Assert.True(accepted);
         Assert.False(rejected);
@@ -104,7 +141,8 @@ public sealed class TrunkInboundMatcherTests
             accountDomain: Domain,
             sourceAddress: Registrar,
             trustedRegistrarAddresses: Trusted,
-            inboundNumbers: ["00493075435072"]);
+            inboundNumbers: ["00493075435072"],
+            acceptTrunkInbound: true);
 
         Assert.False(match);
     }
@@ -118,7 +156,8 @@ public sealed class TrunkInboundMatcherTests
             accountDomain: Domain,
             sourceAddress: Registrar,
             trustedRegistrarAddresses: Trusted,
-            inboundNumbers: null);
+            inboundNumbers: null,
+            acceptTrunkInbound: true);
 
         Assert.False(match);
     }

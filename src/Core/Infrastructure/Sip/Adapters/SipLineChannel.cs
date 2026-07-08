@@ -41,12 +41,18 @@ internal sealed class SipLineChannel : ILineChannel
     // RFC 3261 §10.2.4: preserve Call-ID and CSeq across re-registrations within one session.
     private string? _registrationCallId;
     private int _registrationNextCSeq = 1;
-    private IReadOnlyCollection<System.Net.IPAddress>? _trustedRegistrarAddresses;
 
-    // NAT: public address learned from the registrar's Via received=/rport= (N2).
-    // Single source of truth for the advertised Contact/Via when no manual override is set.
-    private string? _learnedPublicHost;
-    private int? _learnedPublicPort;
+    // Resolved once (background registration loop), read on the inbound-INVITE thread —
+    // published via a volatile reference for safe cross-thread visibility.
+    private volatile IReadOnlyCollection<System.Net.IPAddress>? _trustedRegistrarAddresses;
+
+    // NAT: public address learned from the registrar's Via received=/rport= (N2). Written on
+    // the registration loop, read on the inbound-INVITE thread; held as a single immutable
+    // record behind a volatile reference so readers never see a torn host/port pair.
+    private volatile LearnedPublicContact? _learnedPublicContact;
+
+    /// <summary>Immutable NAT-learned public signaling address.</summary>
+    private sealed record LearnedPublicContact(string Host, int? Port);
 
     /// <summary>
     /// Creates a SIP line channel and wires registration and inbound signaling handlers.
@@ -287,8 +293,9 @@ internal sealed class SipLineChannel : ILineChannel
         // NAT: advertise our public address in the in-dialog Contact (so the peer routes the
         // ACK to our 2xx) and in the media SDP. Manual override wins, else the learned
         // rport/received address.
-        var publicHost = HasManualPublicOverride ? _account.PublicSipHost : _learnedPublicHost;
-        var publicPort = HasManualPublicOverride ? _account.PublicSipPort : _learnedPublicPort;
+        var learned = _learnedPublicContact;
+        var publicHost = HasManualPublicOverride ? _account.PublicSipHost : learned?.Host;
+        var publicPort = HasManualPublicOverride ? _account.PublicSipPort : learned?.Port;
         args.Session.SetAdvertisedPublicContact(publicHost, publicPort);
 
         var channel = new SipCoreCallChannel(
@@ -321,6 +328,7 @@ internal sealed class SipLineChannel : ILineChannel
     private async Task RegisterAsync(CancellationToken ct)
     {
         var failureCount = 0;
+        var correctiveReregistrations = 0;
         var hadSuccessfulRegistration = false;
         var options = _account.Reregister;
 
@@ -343,28 +351,43 @@ internal sealed class SipLineChannel : ILineChannel
                     // NAT: adopt the public address the registrar reflected. When it changes
                     // the learned state (fresh discovery or IP change), re-register once
                     // immediately so the Contact becomes routable; an unchanged observation
-                    // falls through to the normal refresh — this cannot loop.
+                    // falls through to the normal refresh. A per-cycle cap
+                    // (ReregisterOptions.MaxCorrectiveReregistrations) bounds a re-register
+                    // storm on a pathological NAT that reflects a new port on every REGISTER.
                     var (host, port, changed) = NatPublicContactState.ApplyObserved(
                         HasManualPublicOverride,
-                        _learnedPublicHost,
-                        _learnedPublicPort,
+                        _learnedPublicContact?.Host,
+                        _learnedPublicContact?.Port,
                         result.ObservedPublicHost,
                         result.ObservedPublicPort);
                     if (changed)
                     {
-                        _learnedPublicHost = host;
-                        _learnedPublicPort = port;
-                        _logger.LogDebug(
-                            "SIP registration for [{User}]: learned public contact {Host}:{Port} from registrar; re-registering.",
-                            _account.Username, host, port?.ToString() ?? "(local)");
-                        continue;
+                        _learnedPublicContact = host is null ? null : new LearnedPublicContact(host, port);
+                        if (correctiveReregistrations < options.MaxCorrectiveReregistrations)
+                        {
+                            correctiveReregistrations++;
+                            _logger.LogDebug(
+                                "SIP registration for [{User}]: learned public contact {Host}:{Port} from registrar; re-registering ({Attempt}/{Max}).",
+                                _account.Username, host, port?.ToString() ?? "(local)",
+                                correctiveReregistrations, options.MaxCorrectiveReregistrations);
+                            continue;
+                        }
+
+                        _logger.LogWarning(
+                            "SIP registration for [{User}]: NAT-reflected public contact keeps changing (now {Host}:{Port}); settling after {Max} corrective re-registrations to avoid churn.",
+                            _account.Username, host, port?.ToString() ?? "(local)", options.MaxCorrectiveReregistrations);
+                        // Fall through: adopt the latest address, register as-is, stop correcting.
                     }
 
+                    correctiveReregistrations = 0;
                     failureCount = 0;
                     hadSuccessfulRegistration = true;
+                    // Resolve trusted registrar peers here (background loop), so the inbound
+                    // INVITE path never blocks on DNS; the result is cached and volatile.
+                    _ = ResolveTrustedRegistrarAddresses();
                     _onState?.Invoke(LineState.Registered);
 
-                    var refreshDelay = ComputeRefreshDelay(result.EffectiveExpiresSeconds);
+                    var refreshDelay = ComputeRefreshDelay(result.EffectiveExpiresSeconds, options);
                     _logger.LogDebug(
                         "SIP registration for [{User}] will refresh in {Delay}.",
                         _account.Username,
@@ -486,7 +509,8 @@ internal sealed class SipLineChannel : ILineChannel
             _account.SipServer,
             session.RemoteSignalingEndPoint?.Address,
             ResolveTrustedRegistrarAddresses(),
-            _account.InboundNumbers);
+            _account.InboundNumbers,
+            _account.AcceptTrunkInbound);
 
     /// <summary>
     /// Resolves and caches the registrar/outbound-proxy addresses this line trusts for
@@ -542,8 +566,8 @@ internal sealed class SipLineChannel : ILineChannel
             StartCSeq = startCSeq,
             // Manual override (N1) wins; otherwise the address learned from the
             // registrar's received=/rport= (N2); otherwise the local address.
-            PublicHost = HasManualPublicOverride ? _account.PublicSipHost : _learnedPublicHost,
-            PublicPort = HasManualPublicOverride ? _account.PublicSipPort : _learnedPublicPort
+            PublicHost = HasManualPublicOverride ? _account.PublicSipHost : _learnedPublicContact?.Host,
+            PublicPort = HasManualPublicOverride ? _account.PublicSipPort : _learnedPublicContact?.Port
         };
 
     private bool HasManualPublicOverride => !string.IsNullOrWhiteSpace(_account.PublicSipHost);
@@ -560,22 +584,22 @@ internal sealed class SipLineChannel : ILineChannel
         _ => Transport.SipTransportProtocol.Udp
     };
 
-    /// <summary>Lower bound for the refresh interval, guarding against REGISTER churn.</summary>
-    private const int MinRefreshSeconds = 15;
-
     /// <summary>
-    /// Computes next registration refresh delay based on effective expires value.
-    /// Refreshes at 80% of the granted lifetime, never later than the binding lives
-    /// (<c>baseline - 1</c>) and — as a secondary guard against churn when a registrar
-    /// reports an implausibly short lifetime — not sooner than <see cref="MinRefreshSeconds"/>
-    /// unless the binding itself is shorter than that.
+    /// Computes the next registration refresh delay from the granted lifetime, using the
+    /// account's <see cref="ReregisterOptions.RefreshRatio"/> and
+    /// <see cref="ReregisterOptions.MinRefreshInterval"/>. Refreshes at ratio × lifetime,
+    /// never later than the binding lives (<c>baseline - 1</c>) and — as a secondary guard
+    /// against churn when a registrar reports an implausibly short lifetime — not sooner than
+    /// the configured minimum, unless the binding itself is shorter than that.
     /// </summary>
-    internal static TimeSpan ComputeRefreshDelay(int effectiveExpiresSeconds)
+    internal static TimeSpan ComputeRefreshDelay(int effectiveExpiresSeconds, ReregisterOptions options)
     {
         var baseline = effectiveExpiresSeconds > 0 ? effectiveExpiresSeconds : 300;
-        var refreshSeconds = (int)Math.Round(baseline * 0.8, MidpointRounding.AwayFromZero);
+        var ratio = options.RefreshRatio is > 0 and < 1 ? options.RefreshRatio : 0.8;
+        var refreshSeconds = (int)Math.Round(baseline * ratio, MidpointRounding.AwayFromZero);
         var upperBound = Math.Max(1, baseline - 1);
-        var floor = Math.Min(MinRefreshSeconds, upperBound);
+        var minRefresh = Math.Max(1, (int)Math.Round(options.MinRefreshInterval.TotalSeconds));
+        var floor = Math.Min(minRefresh, upperBound);
         refreshSeconds = Math.Clamp(refreshSeconds, floor, upperBound);
         return TimeSpan.FromSeconds(refreshSeconds);
     }

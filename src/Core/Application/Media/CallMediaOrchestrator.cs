@@ -25,14 +25,8 @@ internal sealed class CallMediaOrchestrator : IDisposable
     private readonly ILogger<CallMediaOrchestrator> _logger;
     private readonly ConcurrentDictionary<CallId, ActiveMediaEntry> _active = new();
     private readonly ConcurrentDictionary<CallId, MediaActivity> _activity = new();
+    private readonly MediaSupervisionOptions _supervision;
     private bool _disposed;
-
-    /// <summary>
-    /// Hang up a connected call whose inbound RTP has been silent this long. Behind NAT a
-    /// far-end BYE may never reach us (it targets our in-dialog Contact); the media simply
-    /// stops. This bounds how long the agent keeps talking to a dead line.
-    /// </summary>
-    private static readonly TimeSpan InboundMediaTimeout = TimeSpan.FromSeconds(15);
 
     /// <summary>Mutable per-call inbound-activity tracker for media-timeout hangup.</summary>
     private sealed class MediaActivity
@@ -47,12 +41,14 @@ internal sealed class CallMediaOrchestrator : IDisposable
         ICallMediaSessionFactory sessionFactory,
         ILoggerFactory loggerFactory,
         IRtcpPacketCodec rtcpPacketCodec,
-        ICallIceAgent? iceAgent = null)
+        ICallIceAgent? iceAgent = null,
+        MediaSupervisionOptions? supervision = null)
     {
         _sessionFactory = sessionFactory ?? throw new ArgumentNullException(nameof(sessionFactory));
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
         _rtcpPacketCodec = rtcpPacketCodec ?? throw new ArgumentNullException(nameof(rtcpPacketCodec));
         _iceAgent = iceAgent;
+        _supervision = supervision ?? MediaSupervisionOptions.Default;
         _logger = _loggerFactory
             .CreateLogger<CallMediaOrchestrator>();
     }
@@ -86,11 +82,17 @@ internal sealed class CallMediaOrchestrator : IDisposable
 
     /// <summary>
     /// Hangs up a connected call whose inbound RTP has gone silent past
-    /// <see cref="InboundMediaTimeout"/> — a NAT-safe fallback when a far-end BYE never
-    /// reaches our in-dialog Contact. Fires at most once per call.
+    /// <see cref="MediaSupervisionOptions.InboundMediaTimeout"/> — a NAT-safe fallback when a
+    /// far-end BYE never reaches our in-dialog Contact. Disabled when the timeout is
+    /// non-positive; on-hold calls are exempt unless explicitly configured. Fires at most
+    /// once per call.
     /// </summary>
     private void CheckInboundMediaActivity(CallId callId, CallMediaRuntimeMetrics metrics)
     {
+        var timeout = _supervision.InboundMediaTimeout;
+        if (timeout <= TimeSpan.Zero)
+            return;
+
         if (!_activity.TryGetValue(callId, out var activity))
             return;
 
@@ -101,10 +103,14 @@ internal sealed class CallMediaOrchestrator : IDisposable
             return;
         }
 
-        // No new inbound RTP: only act once media was flowing and the call is still up.
+        // A held call legitimately carries no inbound RTP; only supervise it when configured.
+        var supervisedState = activity.Call.State is CallState.Connected
+            || (_supervision.HangupHeldCallOnSilence && activity.Call.State is CallState.OnHold);
+
+        // No new inbound RTP: only act once media was flowing and the call is still supervised.
         if (activity.LastReceived == 0
-            || DateTimeOffset.UtcNow - activity.LastActivityUtc < InboundMediaTimeout
-            || activity.Call.State is not (CallState.Connected or CallState.OnHold))
+            || DateTimeOffset.UtcNow - activity.LastActivityUtc < timeout
+            || !supervisedState)
             return;
 
         if (Interlocked.Exchange(ref activity.HungUp, 1) != 0)
@@ -112,7 +118,7 @@ internal sealed class CallMediaOrchestrator : IDisposable
 
         _logger.LogInformation(
             "Call {CallId}: no inbound RTP for {Timeout}s — hanging up (far-end likely gone, BYE not received).",
-            callId, InboundMediaTimeout.TotalSeconds);
+            callId, timeout.TotalSeconds);
         _ = activity.Call.HangupAsync();
     }
 
