@@ -11,6 +11,10 @@ on:
     tags:
       - "v*"
 
+# Publishing goes to nuget.org via NUGET_API_KEY (not GITHUB_TOKEN), so read is enough.
+permissions:
+  contents: read
+
 jobs:
   pack:
     runs-on: ubuntu-latest
