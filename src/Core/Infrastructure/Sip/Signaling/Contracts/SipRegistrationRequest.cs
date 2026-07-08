@@ -86,4 +86,18 @@ internal sealed class SipRegistrationRequest
     /// to fetch the current binding list from the registrar (RFC 3261 §10.2.3).
     /// </summary>
     public bool FetchBindings { get; init; }
+
+    /// <summary>
+    /// Optional public host (IP or FQDN) to advertise in the Contact URI and the Via
+    /// sent-by host instead of the route-probed local address. Required behind NAT for
+    /// public SIP trunks, whose registrar would otherwise bind the AOR to an unroutable
+    /// private address. <see langword="null"/> keeps the auto-resolved local address.
+    /// </summary>
+    public string? PublicHost { get; init; }
+
+    /// <summary>
+    /// Optional public port to pair with <see cref="PublicHost"/> for Contact/Via.
+    /// <see langword="null"/> or 0 reuses the local signaling port.
+    /// </summary>
+    public int? PublicPort { get; init; }
 }

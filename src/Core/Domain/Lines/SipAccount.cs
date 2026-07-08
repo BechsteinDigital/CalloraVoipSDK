@@ -12,6 +12,22 @@ public sealed class SipAccount
     public string?       OutboundProxy    { get; init; }
 
     /// <summary>
+    /// Optional public host (IP or FQDN) to advertise in the REGISTER Contact and Via
+    /// sent-by instead of the auto-resolved local address. Required behind NAT for public
+    /// SIP trunks (e.g. sipgate), whose registrar would otherwise bind the number to an
+    /// unroutable private LAN address and mark the line offline. <see langword="null"/>
+    /// keeps the local address (LAN/direct scenarios).
+    /// </summary>
+    public string?       PublicSipHost    { get; init; }
+
+    /// <summary>
+    /// Optional public signaling port paired with <see cref="PublicSipHost"/>. Use when a
+    /// NAT port mapping differs from the local port. <see langword="null"/> or 0 reuses
+    /// the local signaling port.
+    /// </summary>
+    public int?          PublicSipPort    { get; init; }
+
+    /// <summary>
     /// Optional inbound number (DID) whitelist for SIP trunks. When set, the line only
     /// accepts inbound INVITEs whose called number (To user-part on the registered domain)
     /// is in this list — useful to disambiguate multiple lines on the same provider domain.

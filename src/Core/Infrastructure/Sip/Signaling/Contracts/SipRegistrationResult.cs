@@ -49,6 +49,20 @@ internal sealed class SipRegistrationResult
     /// Contains one entry per active binding.
     /// </summary>
     public IReadOnlyList<SipRegistrationBinding> RegisteredBindings { get; init; } = [];
+
+    /// <summary>
+    /// Public host the registrar observed for this UA, read from the response top Via
+    /// <c>received=</c> parameter (RFC 3261 §18.2.1). Behind NAT this is the routable
+    /// address to advertise in the Contact. <see langword="null"/> when the registrar did
+    /// not reflect it.
+    /// </summary>
+    public string? ObservedPublicHost { get; init; }
+
+    /// <summary>
+    /// Public port the registrar observed for this UA, read from the response top Via
+    /// <c>rport=</c> parameter (RFC 3581 §4). <see langword="null"/> when not reflected.
+    /// </summary>
+    public int? ObservedPublicPort { get; init; }
 }
 
 /// <summary>
