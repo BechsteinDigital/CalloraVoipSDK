@@ -560,14 +560,23 @@ internal sealed class SipLineChannel : ILineChannel
         _ => Transport.SipTransportProtocol.Udp
     };
 
+    /// <summary>Lower bound for the refresh interval, guarding against REGISTER churn.</summary>
+    private const int MinRefreshSeconds = 15;
+
     /// <summary>
     /// Computes next registration refresh delay based on effective expires value.
+    /// Refreshes at 80% of the granted lifetime, never later than the binding lives
+    /// (<c>baseline - 1</c>) and — as a secondary guard against churn when a registrar
+    /// reports an implausibly short lifetime — not sooner than <see cref="MinRefreshSeconds"/>
+    /// unless the binding itself is shorter than that.
     /// </summary>
-    private static TimeSpan ComputeRefreshDelay(int effectiveExpiresSeconds)
+    internal static TimeSpan ComputeRefreshDelay(int effectiveExpiresSeconds)
     {
         var baseline = effectiveExpiresSeconds > 0 ? effectiveExpiresSeconds : 300;
         var refreshSeconds = (int)Math.Round(baseline * 0.8, MidpointRounding.AwayFromZero);
-        refreshSeconds = Math.Clamp(refreshSeconds, 5, Math.Max(5, baseline - 1));
+        var upperBound = Math.Max(1, baseline - 1);
+        var floor = Math.Min(MinRefreshSeconds, upperBound);
+        refreshSeconds = Math.Clamp(refreshSeconds, floor, upperBound);
         return TimeSpan.FromSeconds(refreshSeconds);
     }
 
