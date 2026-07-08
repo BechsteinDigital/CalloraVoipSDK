@@ -358,6 +358,20 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
     private void OnRtcpMuxDatagramReceived(byte[] datagram)
         => HandleInboundDatagram(datagram, DateTimeOffset.UtcNow);
 
+    /// <summary>Test seam: processes one inbound RTCP datagram as if received off the wire.</summary>
+    internal void ProcessInboundDatagramForTest(byte[] datagram, DateTimeOffset capturedAtUtc)
+        => HandleInboundDatagram(datagram, capturedAtUtc);
+
+    /// <summary>Test seam: records the local sender-report state normally set by the send loop.</summary>
+    internal void RecordLocalSenderReportForTest(DateTimeOffset sentAtUtc, uint ntpMiddle32)
+    {
+        lock (_sync)
+        {
+            _lastLocalSrSentAtUtc = sentAtUtc;
+            _lastLocalSrMiddle32 = ntpMiddle32;
+        }
+    }
+
     private void HandleInboundDatagram(byte[] datagram, DateTimeOffset capturedAtUtc)
     {
         if (datagram.Length == 0)
@@ -450,6 +464,12 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
             if (roundTripTimeMs.HasValue)
                 _roundTripTimeMs = roundTripTimeMs.Value;
         }
+
+        // Feed the measured RTT into the adaptive jitter buffer (outside the lock).
+        // Without this the buffer keeps its InitialRoundTripTimeMs default forever and
+        // media metrics report a configuration constant as if it were a measurement.
+        if (roundTripTimeMs.HasValue)
+            _mediaSession.UpdateRoundTripTimeHint(TimeSpan.FromMilliseconds(roundTripTimeMs.Value));
     }
 
     private void PublishSnapshot(CallMediaRtpSnapshot rtpSnapshot, DateTimeOffset capturedAtUtc, bool rtcpActive)
