@@ -12,6 +12,16 @@ public sealed class SipAccount
     public string?       OutboundProxy    { get; init; }
 
     /// <summary>
+    /// Optional inbound number (DID) whitelist for SIP trunks. When set, the line only
+    /// accepts inbound INVITEs whose called number (To user-part on the registered domain)
+    /// is in this list — useful to disambiguate multiple lines on the same provider domain.
+    /// When <see langword="null"/> or empty, the line accepts calls for its exact username,
+    /// calls delivered by the registrar it registered to, and any number on its registered
+    /// domain (trunk default). <see cref="Username"/>-only accounts are unaffected.
+    /// </summary>
+    public IReadOnlyList<string>? InboundNumbers { get; init; }
+
+    /// <summary>
     /// Controls automatic re-registration when the SIP binding is lost.
     /// Defaults to <see cref="ReregisterOptions.Default"/> (unlimited retries, exponential backoff).
     /// </summary>

@@ -41,6 +41,7 @@ internal sealed class SipLineChannel : ILineChannel
     // RFC 3261 §10.2.4: preserve Call-ID and CSeq across re-registrations within one session.
     private string? _registrationCallId;
     private int _registrationNextCSeq = 1;
+    private IReadOnlyCollection<System.Net.IPAddress>? _trustedRegistrarAddresses;
 
     /// <summary>
     /// Creates a SIP line channel and wires registration and inbound signaling handlers.
@@ -446,12 +447,45 @@ internal sealed class SipLineChannel : ILineChannel
     /// <summary>
     /// Returns true when an inbound session local URI targets this line account.
     /// </summary>
-    private bool IsSessionForThisLine(ISipCallSession session)
-    {
-        if (!SipProtocol.TryParseSipUri(session.LocalUri, out var localUser, out _, out _))
-            return false;
+    private bool IsSessionForThisLine(ISipCallSession session) =>
+        TrunkInboundMatcher.IsForThisLine(
+            session.LocalUri,
+            _account.Username,
+            _account.SipServer,
+            session.RemoteSignalingEndPoint?.Address,
+            ResolveTrustedRegistrarAddresses(),
+            _account.InboundNumbers);
 
-        return string.Equals(localUser, _account.Username, StringComparison.OrdinalIgnoreCase);
+    /// <summary>
+    /// Resolves and caches the registrar/outbound-proxy addresses this line trusts for
+    /// inbound peer matching. Best-effort DNS; an unresolvable host contributes nothing.
+    /// </summary>
+    private IReadOnlyCollection<System.Net.IPAddress> ResolveTrustedRegistrarAddresses()
+    {
+        if (_trustedRegistrarAddresses is not null)
+            return _trustedRegistrarAddresses;
+
+        var addresses = new HashSet<System.Net.IPAddress>();
+        foreach (var host in new[] { _account.SipServer, _account.OutboundProxy })
+        {
+            if (string.IsNullOrWhiteSpace(host))
+                continue;
+            var bareHost = SipProtocol.TryParseSipUri(host, out _, out var parsedHost, out _)
+                ? parsedHost
+                : host;
+            try
+            {
+                foreach (var address in System.Net.Dns.GetHostAddresses(bareHost))
+                    addresses.Add(address);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Could not resolve trusted registrar host '{Host}' for inbound matching.", bareHost);
+            }
+        }
+
+        _trustedRegistrarAddresses = addresses;
+        return _trustedRegistrarAddresses;
     }
 
     /// <summary>
