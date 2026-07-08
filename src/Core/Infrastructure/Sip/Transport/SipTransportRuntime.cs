@@ -204,6 +204,10 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
                 bytes.Length);
         }
 
+        _logger.LogTrace(
+            "SIP {Method} sent to {Remote} on {Transport} (CSeq: {CSeq}).",
+            method, remoteEndPoint, transport,
+            headers.TryGetValue("CSeq", out var cseq) ? cseq : null);
         await SendPayloadAsync(remoteEndPoint, bytes, transport, ct).ConfigureAwait(false);
     }
 
@@ -239,6 +243,10 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
         SipTransportProtocol transport,
         CancellationToken ct = default)
     {
+        _logger.LogTrace(
+            "SIP {Status} {Reason} sent to {Remote} on {Transport} (CSeq: {CSeq}).",
+            statusCode, reasonPhrase, remoteEndPoint, transport,
+            headers.TryGetValue("CSeq", out var cseq) ? cseq : null);
         var bytes = _wireCodec.SerializeResponse(statusCode, reasonPhrase, headers, body);
         await SendPayloadAsync(remoteEndPoint, bytes, transport, ct).ConfigureAwait(false);
     }
@@ -763,12 +771,18 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
         {
             if (_wireCodec.TryParseRequest(payload.Span, out var request) && request is not null)
             {
+                _logger.LogTrace(
+                    "SIP {Method} received from {Remote} on {Transport} (CSeq: {CSeq}).",
+                    request.Method, remoteEndPoint, transport, request.Header("CSeq"));
                 DispatchRequest(remoteEndPoint, request);
                 return Task.CompletedTask;
             }
 
             if (_wireCodec.TryParseResponse(payload.Span, out var response) && response is not null)
             {
+                _logger.LogTrace(
+                    "SIP {Status} {Reason} received from {Remote} on {Transport} (CSeq: {CSeq}).",
+                    response.StatusCode, response.ReasonPhrase, remoteEndPoint, transport, response.Header("CSeq"));
                 DispatchResponse(remoteEndPoint, response);
                 return Task.CompletedTask;
             }
