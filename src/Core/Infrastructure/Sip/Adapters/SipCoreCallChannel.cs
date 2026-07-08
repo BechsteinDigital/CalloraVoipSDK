@@ -27,6 +27,7 @@ internal sealed class SipCoreCallChannel : ICallChannel
     private readonly ISipTelemetrySink _telemetry;
     private readonly SrtpPolicy _appliedSrtpPolicy;
     private readonly string _srtpPolicySource;
+    private readonly IReadOnlyList<string>? _preferredCodecNames;
     private readonly object _callbackSync = new();
     private readonly object _sessionSync = new();
     private readonly object _audioSync = new();
@@ -67,7 +68,8 @@ internal sealed class SipCoreCallChannel : ICallChannel
         ISipTelemetrySink telemetry,
         SrtpPolicy appliedSrtpPolicy,
         string policySource,
-        ICallIceAgent? iceAgent = null)
+        ICallIceAgent? iceAgent = null,
+        IReadOnlyList<string>? preferredCodecNames = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _sdpNegotiator = sdpNegotiator ?? throw new ArgumentNullException(nameof(sdpNegotiator));
@@ -75,6 +77,7 @@ internal sealed class SipCoreCallChannel : ICallChannel
         _telemetry = telemetry ?? throw new ArgumentNullException(nameof(telemetry));
         _appliedSrtpPolicy = appliedSrtpPolicy;
         _srtpPolicySource = string.IsNullOrWhiteSpace(policySource) ? "unknown" : policySource;
+        _preferredCodecNames = preferredCodecNames;
 
         // Bind on any address, port 0 → OS assigns a free port.
         _localMediaSocket = new UdpClient(new IPEndPoint(IPAddress.Any, 0));
@@ -249,54 +252,33 @@ internal sealed class SipCoreCallChannel : ICallChannel
     /// </summary>
     private SdpMediaNegotiationOptions? BuildSdpOptions()
     {
-        if (_localIceDescription is null)
+        if (_localIceDescription is null && _preferredCodecNames is null)
             return null;
 
         return new SdpMediaNegotiationOptions
         {
-            Ice = new SdpIceNegotiationOptions
-            {
-                Ufrag = _localIceDescription.Ufrag,
-                Pwd = _localIceDescription.Pwd,
-                Options = _localIceDescription.Options,
-                Candidates = _localIceDescription.Candidates
-            }
+            Ice = _localIceDescription is null
+                ? null
+                : new SdpIceNegotiationOptions
+                {
+                    Ufrag = _localIceDescription.Ufrag,
+                    Pwd = _localIceDescription.Pwd,
+                    Options = _localIceDescription.Options,
+                    Candidates = _localIceDescription.Candidates
+                },
+            PreferredCodecNames = _preferredCodecNames
         };
     }
 
     /// <summary>
-    /// Resolves the local media address to advertise in SDP.
-    /// Uses the local signaling bind address when concrete, otherwise probes the
-    /// route toward the remote SIP host and falls back to loopback if resolution fails.
+    /// Resolves the local media address to advertise in SDP and to bind RTP/RTCP on.
+    /// See <see cref="AdvertisedMediaAddressResolver"/> for the decision rules.
     /// </summary>
-    private IPAddress ResolveAdvertisedMediaAddress(ISipCallSession session)
-    {
-        var localAddress = session.LocalSignalingEndPoint.Address;
-        if (!IPAddress.Any.Equals(localAddress) && !IPAddress.IPv6Any.Equals(localAddress))
-            return localAddress;
-
-        try
-        {
-            var remoteUri = SipProtocol.ExtractUriFromNameAddr(session.RemoteUri) ?? session.RemoteUri;
-            if (!SipProtocol.TryParseSipUri(remoteUri, out _, out var remoteHost, out var remotePort))
-                return IPAddress.Loopback;
-
-            using var probe = new UdpClient();
-            probe.Connect(remoteHost, remotePort ?? 5060);
-            if (probe.Client.LocalEndPoint is IPEndPoint discovered
-                && !IPAddress.Any.Equals(discovered.Address)
-                && !IPAddress.IPv6Any.Equals(discovered.Address))
-            {
-                return discovered.Address;
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "Failed to resolve advertised local media address for SIP session {CallId}.", session.CallId);
-        }
-
-        return IPAddress.Loopback;
-    }
+    private IPAddress ResolveAdvertisedMediaAddress(ISipCallSession session) =>
+        AdvertisedMediaAddressResolver.Resolve(
+            session,
+            AdvertisedMediaAddressResolver.ProbeRoute,
+            _logger);
 
     /// <inheritdoc />
     public async Task SendDtmfAsync(byte dtmfCode)
@@ -513,10 +495,12 @@ internal sealed class SipCoreCallChannel : ICallChannel
                 : MediaPublicationResult.Skipped;
         }
 
-        var localIp = session.LocalSignalingEndPoint.Address;
+        // Same address the SDP advertises: RTP/RTCP must bind where the peer sends to,
+        // and a loopback/wildcard signaling bind is not routable for a LAN peer.
+        var localIp = ResolveAdvertisedMediaAddress(session);
         var localEndPoint = new IPEndPoint(localIp, _localMediaPort);
 
-        var parameters = _sdpNegotiator.TryParseMediaParameters(remoteSdp, localEndPoint);
+        var parameters = _sdpNegotiator.TryParseMediaParameters(remoteSdp, localEndPoint, BuildSdpOptions());
         if (parameters is null)
         {
             _logger.LogWarning("Failed to parse remote SDP for call {CallId}; RTP will not start.", session.CallId);

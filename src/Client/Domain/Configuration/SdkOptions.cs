@@ -38,4 +38,10 @@ public sealed class SdkOptions
     /// Optional logger factory override.
     /// </summary>
     public ILoggerFactory? LoggerFactory { get; set; }
+
+    /// <summary>
+    /// Ordered audio codec preference by SDP encoding name ("PCMU", "PCMA", "G722").
+    /// See <see cref="SdkConfiguration.PreferredAudioCodecs"/> for semantics.
+    /// </summary>
+    public IReadOnlyList<string>? PreferredAudioCodecs { get; set; }
 }

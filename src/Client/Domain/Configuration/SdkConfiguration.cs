@@ -42,4 +42,13 @@ public sealed class SdkConfiguration
     /// is left at <see cref="SilenceAudioDevice"/>.
     /// </summary>
     public bool EnableAutomaticAudioDeviceSelection { get; init; } = true;
+
+    /// <summary>
+    /// Ordered audio codec preference by SDP encoding name ("PCMU", "PCMA", "G722").
+    /// When set, SDP offers and answers only include the listed codecs (plus DTMF
+    /// telephone-event) in this order, and RTP sessions use this preference to pick the
+    /// primary codec. Unsupported names are ignored; when nothing matches, the SDK
+    /// default set (G722, PCMA, PCMU) is used. <see langword="null"/> keeps defaults.
+    /// </summary>
+    public IReadOnlyList<string>? PreferredAudioCodecs { get; init; }
 }

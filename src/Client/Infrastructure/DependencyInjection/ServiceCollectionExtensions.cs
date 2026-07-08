@@ -40,7 +40,8 @@ public static class ServiceCollectionExtensions
                 Ice = options.Ice.ToConfiguration(),
                 MaxConcurrentCallsPerLine = options.MaxConcurrentCallsPerLine,
                 AudioDevice = options.AudioDevice ?? SilenceAudioDevice.Instance,
-                EnableAutomaticAudioDeviceSelection = options.EnableAutomaticAudioDeviceSelection
+                EnableAutomaticAudioDeviceSelection = options.EnableAutomaticAudioDeviceSelection,
+                PreferredAudioCodecs = options.PreferredAudioCodecs
             };
 
             return new VoipClient(configuration, sp);

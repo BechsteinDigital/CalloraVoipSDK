@@ -31,6 +31,18 @@ public interface ISdpNegotiator
     /// </summary>
     CallMediaParameters? TryParseMediaParameters(string remoteSdp, IPEndPoint localEndPoint);
 
+    /// <summary>
+    /// Parses a remote SDP and extracts RTP session parameters, honoring local negotiation
+    /// options (e.g. <see cref="SdpMediaNegotiationOptions.PreferredCodecNames"/> for primary
+    /// codec selection). The default implementation ignores the options so existing
+    /// implementations stay source- and binary-compatible.
+    /// </summary>
+    CallMediaParameters? TryParseMediaParameters(
+        string remoteSdp,
+        IPEndPoint localEndPoint,
+        SdpMediaNegotiationOptions? localOptions)
+        => TryParseMediaParameters(remoteSdp, localEndPoint);
+
     /// <summary>Returns true when the SDP signals remote hold semantics.</summary>
     bool IsRemoteHoldSdp(string? sdp);
 }

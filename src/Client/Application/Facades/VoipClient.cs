@@ -276,7 +276,8 @@ public sealed class VoipClient : IVoipClient
                 iceAgent,
                 config.SrtpPolicy,
                 telemetry,
-                logFactory);
+                logFactory,
+                config.PreferredAudioCodecs);
 
             return new PhoneLine(
                 account,

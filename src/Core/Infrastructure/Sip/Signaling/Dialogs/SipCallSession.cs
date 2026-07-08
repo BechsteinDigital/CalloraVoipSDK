@@ -184,6 +184,8 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
     public System.Net.IPEndPoint LocalSignalingEndPoint =>
         _transport.GetLocalEndPoint(_signalingTransport);
     /// <inheritdoc />
+    public System.Net.IPEndPoint? RemoteSignalingEndPoint => _remoteEndPoint;
+    /// <inheritdoc />
     public SipDialogTerminationReason? LastTerminationReason
     {
         get

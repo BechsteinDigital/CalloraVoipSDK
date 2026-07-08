@@ -57,6 +57,14 @@ internal interface ISipCallSession : IDisposable
     IPEndPoint LocalSignalingEndPoint { get; }
 
     /// <summary>
+    /// Remote signaling transport endpoint when known (inbound: source of the INVITE,
+    /// outbound: resolved request target). Used to pick the local interface to advertise
+    /// for media without any DNS lookup. Defaults to <see langword="null"/> so existing
+    /// implementations keep compiling.
+    /// </summary>
+    IPEndPoint? RemoteSignalingEndPoint => null;
+
+    /// <summary>
     /// Raised whenever the dialog state changes.
     /// </summary>
     event EventHandler<SipDialogStateChangedEventArgs>? StateChanged;

@@ -37,7 +37,7 @@ internal static class SdpUtilities
         var direction = hold ? SdpMediaDirection.SendOnly : SdpMediaDirection.SendRecv;
         var offer = Negotiator.CreateOffer(
             localEndPoint,
-            DefaultCodecs,
+            ResolveLocalCodecs(options),
             direction,
             ConvertOptions(options));
         return Serializer.Serialize(offer);
@@ -59,7 +59,7 @@ internal static class SdpUtilities
             var result = Negotiator.NegotiateAnswer(
                 parsedOffer,
                 localEndPoint,
-                DefaultCodecs,
+                ResolveLocalCodecs(localOptions),
                 localDirection,
                 ConvertOptions(localOptions));
             return result.Success && result.Answer is not null
@@ -79,7 +79,8 @@ internal static class SdpUtilities
     /// </summary>
     public static CallMediaParameters? TryParseMediaParameters(
         string remoteSdp,
-        IPEndPoint localEndPoint)
+        IPEndPoint localEndPoint,
+        SdpMediaNegotiationOptions? localOptions = null)
     {
         if (string.IsNullOrWhiteSpace(remoteSdp)) return null;
         try
@@ -95,7 +96,10 @@ internal static class SdpUtilities
             if (!IPAddress.TryParse(connectionAddress, out var remoteIp)) return null;
 
             var telephoneEventPayloadType = ResolveTelephoneEventPayloadType(audio);
-            var primaryCodec = SelectPrimaryCodec(audio.Codecs, telephoneEventPayloadType);
+            var primaryCodec = SelectPrimaryCodec(
+                audio.Codecs,
+                telephoneEventPayloadType,
+                localOptions?.PreferredCodecNames);
             if (primaryCodec is null) return null;
 
             var clockRate   = primaryCodec.ClockRate > 0 ? primaryCodec.ClockRate : 8000;
@@ -233,7 +237,8 @@ internal static class SdpUtilities
 
     private static SdpCodecDefinition? SelectPrimaryCodec(
         IReadOnlyList<SdpCodecDefinition> codecs,
-        int? telephoneEventPayloadType)
+        int? telephoneEventPayloadType,
+        IReadOnlyList<string>? preferredCodecNames = null)
     {
         SdpCodecDefinition? best = null;
         var bestRank = int.MaxValue;
@@ -247,7 +252,7 @@ internal static class SdpUtilities
             if (telephoneEventPayloadType == codec.PayloadType)
                 continue;
 
-            var rank = GetCodecPreferenceRank(codec, i);
+            var rank = GetCodecPreferenceRank(codec, i, preferredCodecNames);
             if (rank < bestRank)
             {
                 bestRank = rank;
@@ -258,9 +263,25 @@ internal static class SdpUtilities
         return best;
     }
 
-    private static int GetCodecPreferenceRank(SdpCodecDefinition codec, int position)
+    private static int GetCodecPreferenceRank(
+        SdpCodecDefinition codec,
+        int position,
+        IReadOnlyList<string>? preferredCodecNames = null)
     {
         var normalized = NormalizeCodecName(codec);
+
+        // An explicit local preference list overrides the built-in ranking: rank equals
+        // the index in the list; codecs not on the list lose against every listed one.
+        if (preferredCodecNames is { Count: > 0 })
+        {
+            for (var i = 0; i < preferredCodecNames.Count; i++)
+            {
+                if (normalized.Equals(preferredCodecNames[i], StringComparison.OrdinalIgnoreCase))
+                    return i;
+            }
+            return 1000 + position;
+        }
+
         return normalized switch
         {
             "G722" => 0,
@@ -268,6 +289,36 @@ internal static class SdpUtilities
             "PCMU" => 20 + position,
             _ => 100 + position
         };
+    }
+
+    /// <summary>
+    /// Resolves the local codec capability list for offers/answers. An explicit preference
+    /// filters and reorders the SDK defaults (telephone-event is always kept); when no
+    /// preferred name matches a supported codec, the defaults are used unchanged.
+    /// </summary>
+    private static IReadOnlyList<SdpCodecDefinition> ResolveLocalCodecs(
+        SdpMediaNegotiationOptions? options)
+    {
+        var preferred = options?.PreferredCodecNames;
+        if (preferred is null || preferred.Count == 0)
+            return DefaultCodecs;
+
+        var resolved = new List<SdpCodecDefinition>(preferred.Count + 1);
+        foreach (var name in preferred)
+        {
+            var match = DefaultCodecs.FirstOrDefault(c =>
+                !c.Name.Equals("telephone-event", StringComparison.OrdinalIgnoreCase)
+                && NormalizeCodecName(c).Equals(name, StringComparison.OrdinalIgnoreCase));
+            if (match is not null && !resolved.Contains(match))
+                resolved.Add(match);
+        }
+
+        if (resolved.Count == 0)
+            return DefaultCodecs;
+
+        resolved.Add(DefaultCodecs.First(c =>
+            c.Name.Equals("telephone-event", StringComparison.OrdinalIgnoreCase)));
+        return resolved;
     }
 
     private static int ResolveRtcpPort(int rtpPort, int? rtcpPortFromSdp, bool rtcpMux)
