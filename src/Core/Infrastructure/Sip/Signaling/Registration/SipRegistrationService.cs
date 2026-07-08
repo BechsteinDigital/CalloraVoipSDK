@@ -177,7 +177,10 @@ internal sealed class SipRegistrationService : ISipRegistrationService
                 var contactUri = SipSignalingFormat.BuildContactUri(
                     request.Username,
                     advertisedLocalEndPoint,
-                    routeCandidate.Transport);
+                    routeCandidate.Transport,
+                    forceSecureScheme: false,
+                    advertisedHost: request.PublicHost,
+                    advertisedPort: request.PublicPort);
                 var headers = BuildRegisterHeaders(
                     mode,
                     advertisedLocalEndPoint,
@@ -191,7 +194,9 @@ internal sealed class SipRegistrationService : ISipRegistrationService
                     effectiveExpiresSeconds,
                     request.UserAgent,
                     request.InstanceId,
-                    traceId);
+                    traceId,
+                    request.PublicHost,
+                    request.PublicPort);
 
                 if (!string.IsNullOrWhiteSpace(authorizationHeader)
                     && !string.IsNullOrWhiteSpace(authorizationHeaderName))
@@ -468,11 +473,13 @@ internal sealed class SipRegistrationService : ISipRegistrationService
         int expiresSeconds,
         string userAgent,
         string? instanceId,
-        string traceId)
+        string traceId,
+        string? publicHost = null,
+        int? publicPort = null)
     {
         var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            ["Via"] = SipSignalingFormat.BuildVia(localEndPoint, branch, transport),
+            ["Via"] = SipSignalingFormat.BuildVia(localEndPoint, branch, transport, publicHost, publicPort),
             ["Max-Forwards"] = "70",
             ["From"] = fromHeader,
             ["To"] = toHeader,

@@ -473,7 +473,9 @@ internal sealed class SipLineChannel : ILineChannel
             UserAgent = _userAgent,
             Transport = MapTransport(_account.Transport),
             ExistingCallId = existingCallId,
-            StartCSeq = startCSeq
+            StartCSeq = startCSeq,
+            PublicHost = string.IsNullOrWhiteSpace(_account.PublicSipHost) ? null : _account.PublicSipHost,
+            PublicPort = _account.PublicSipPort
         };
 
     /// <summary>
