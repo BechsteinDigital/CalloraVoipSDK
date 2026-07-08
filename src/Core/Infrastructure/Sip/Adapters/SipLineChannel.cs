@@ -42,6 +42,11 @@ internal sealed class SipLineChannel : ILineChannel
     private string? _registrationCallId;
     private int _registrationNextCSeq = 1;
 
+    // NAT: public address learned from the registrar's Via received=/rport= (N2).
+    // Single source of truth for the advertised Contact/Via when no manual override is set.
+    private string? _learnedPublicHost;
+    private int? _learnedPublicPort;
+
     /// <summary>
     /// Creates a SIP line channel and wires registration and inbound signaling handlers.
     /// </summary>
@@ -327,6 +332,26 @@ internal sealed class SipLineChannel : ILineChannel
                     _registrationCallId = result.CallId;
                     _registrationNextCSeq = result.NextCSeq;
 
+                    // NAT: adopt the public address the registrar reflected. When it changes
+                    // the learned state (fresh discovery or IP change), re-register once
+                    // immediately so the Contact becomes routable; an unchanged observation
+                    // falls through to the normal refresh — this cannot loop.
+                    var (host, port, changed) = NatPublicContactState.ApplyObserved(
+                        HasManualPublicOverride,
+                        _learnedPublicHost,
+                        _learnedPublicPort,
+                        result.ObservedPublicHost,
+                        result.ObservedPublicPort);
+                    if (changed)
+                    {
+                        _learnedPublicHost = host;
+                        _learnedPublicPort = port;
+                        _logger.LogDebug(
+                            "SIP registration for [{User}]: learned public contact {Host}:{Port} from registrar; re-registering.",
+                            _account.Username, host, port?.ToString() ?? "(local)");
+                        continue;
+                    }
+
                     failureCount = 0;
                     hadSuccessfulRegistration = true;
                     _onState?.Invoke(LineState.Registered);
@@ -474,9 +499,13 @@ internal sealed class SipLineChannel : ILineChannel
             Transport = MapTransport(_account.Transport),
             ExistingCallId = existingCallId,
             StartCSeq = startCSeq,
-            PublicHost = string.IsNullOrWhiteSpace(_account.PublicSipHost) ? null : _account.PublicSipHost,
-            PublicPort = _account.PublicSipPort
+            // Manual override (N1) wins; otherwise the address learned from the
+            // registrar's received=/rport= (N2); otherwise the local address.
+            PublicHost = HasManualPublicOverride ? _account.PublicSipHost : _learnedPublicHost,
+            PublicPort = HasManualPublicOverride ? _account.PublicSipPort : _learnedPublicPort
         };
+
+    private bool HasManualPublicOverride => !string.IsNullOrWhiteSpace(_account.PublicSipHost);
 
     /// <summary>
     /// Maps domain SIP transport choice to infrastructure transport protocol.

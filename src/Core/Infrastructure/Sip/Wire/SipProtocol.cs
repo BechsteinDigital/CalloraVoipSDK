@@ -201,6 +201,37 @@ internal static class SipProtocol
     }
 
     /// <summary>
+    /// Reads the public address a registrar reflected back in the top Via of its response
+    /// via the RFC 3261 §18.2.1 <c>received=</c> and RFC 3581 §4 <c>rport=</c> parameters.
+    /// This is the caller's public IP/port as the server actually saw it — the reliable
+    /// source for a NAT-routable Contact. Returns nulls when a parameter is absent.
+    /// </summary>
+    public static (string? Host, int? Port) ExtractViaReceivedRport(string? viaHeader)
+    {
+        var topVia = ExtractTopViaEntry(viaHeader);
+        if (string.IsNullOrWhiteSpace(topVia))
+            return (null, null);
+
+        return (ReadViaParameter(topVia, "received"), ParsePort(ReadViaParameter(topVia, "rport")));
+
+        static string? ReadViaParameter(string via, string name)
+        {
+            var marker = ";" + name + "=";
+            var index = via.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+            if (index < 0)
+                return null;
+
+            var tail = via[(index + marker.Length)..];
+            var end = tail.IndexOfAny([';', ' ', '\t', ',']);
+            var value = end >= 0 ? tail[..end] : tail;
+            return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        }
+
+        static int? ParsePort(string? value) =>
+            int.TryParse(value, out var port) && port is > 0 and <= 65535 ? port : null;
+    }
+
+    /// <summary>
     /// Reflects Via parameters per RFC 3261 §18.2.1 and RFC 3581 §4:
     /// <list type="bullet">
     ///   <item>If source IP differs from Via sent-by host, adds <c>;received=&lt;ip&gt;</c> (RFC 3261 §18.2.1 MUST).</item>

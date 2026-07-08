@@ -263,6 +263,9 @@ internal sealed class SipRegistrationService : ISipRegistrationService
                         }
                     });
 
+                    var (observedHost, observedPort) =
+                        SipProtocol.ExtractViaReceivedRport(response.Header("Via"));
+
                     return new SipRegistrationResult
                     {
                         CallId = callId,
@@ -272,7 +275,9 @@ internal sealed class SipRegistrationService : ISipRegistrationService
                         Authenticated = authAttempted,
                         NextCSeq = cseq + 1,
                         ServiceRoute = ExtractServiceRoute(response),
-                        RegisteredBindings = ParseRegisteredBindings(response)
+                        RegisteredBindings = ParseRegisteredBindings(response),
+                        ObservedPublicHost = observedHost,
+                        ObservedPublicPort = observedPort
                     };
                 }
 
