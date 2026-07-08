@@ -204,3 +204,53 @@ Hinweis:
 - Fuer bereits MP3-negotiated Calls nutzt die Session MP3-Passthrough ohne zusaetzliches Re-Encoding.
 - Optional: Recordings koennen ueber `RecordingOptions.EncryptionProvider` (z. B. `AesGcmRecordingEncryptionProvider`) verschluesselt werden.
 - Built-in Payload-Transcoding deckt L16/PCMU/PCMA/G.722 ab; weitere Codec-Familien koennen als zusaetzliche Adapter eingebunden werden.
+- Die Conference-Varianten (`StartConferenceRecordingAsync` / `StartConferencePlaybackAsync`) erwarten einen `IMixedMediaBus`. Seit 2.0.0 liefert der SDK-Kern selbst kein Conferencing mehr — der Mix-Bus kommt aus eigener Anbindung oder kuenftig aus dem kommerziellen Conferencing-Plugin.
+
+## Codec Preference
+
+Pin the audio codecs the SDK negotiates. The order is the preference; offers and
+answers only include the listed codecs (plus DTMF telephone-event), and RTP sessions
+pick their primary codec accordingly:
+
+```csharp
+using var client = new VoipClient(new SdkConfiguration
+{
+    UserAgent = "MyVoiceBot/1.0",
+    // e.g. G.711 µ-law passthrough towards a realtime AI API:
+    PreferredAudioCodecs = ["PCMU"]
+});
+```
+
+Unsupported names are ignored; when nothing matches, the SDK default set
+(G722, PCMA, PCMU) is used.
+
+## Per-Call Media Tap (Bots, Bridging, Streaming)
+
+`client.Media.CreateReceiver()` / `CreateSender()` give you raw frame access to any
+call — the foundation for voice bots, AI bridging and custom streaming:
+
+```csharp
+using var receiver = client.Media.CreateReceiver();
+using var sender   = client.Media.CreateSender();
+
+receiver.AttachToCall(call);
+sender.AttachToCall(call);
+
+receiver.FrameReceived += (_, e) =>
+{
+    // CONTRACT: this event fires synchronously on the media path.
+    // Buffer the frame (e.g. into a Channel<T>) and return immediately — never block.
+    myChannel.Writer.TryWrite(e.Frame);
+};
+
+// Discover the negotiated format before interpreting payloads:
+var mp = call.MediaParameters;   // PayloadType, CodecName, ClockRate, SamplesPerPacket
+```
+
+## Call Quality Metrics
+
+RTCP-based quality data is measured, not estimated defaults: local and remote jitter,
+packet loss, and round-trip time computed from SR/RR reports (LSR/DLSR). Compound
+datagrams containing unknown packet types (e.g. RFC 3611 XR appended by many PBXes)
+are decoded tolerantly. Metrics surface via `call.QualitySnapshot` and the media
+runtime metrics events.

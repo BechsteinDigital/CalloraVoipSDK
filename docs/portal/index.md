@@ -19,7 +19,9 @@ and intelligent decision logic.
 - Voicebot and AI agent platforms
 - Fraud, spam and scam detection systems
 
-## Current Status — Phase 1 (active development)
+## Current Status
+
+**Available on [nuget.org](https://www.nuget.org/packages/CalloraVoipSdk) — current release: v3.1.1.**
 
 **What works today:**
 
@@ -29,26 +31,22 @@ and intelligent decision logic.
 | Hold / Unhold / Blind + Attended Transfer | ✅ Production-ready |
 | RTP/SRTP media transport | ✅ Production-ready |
 | Adaptive jitter buffer | ✅ Production-ready |
-| Conference rooms (PCM16 mixing, mute, levels) | ✅ Production-ready |
 | Media cross-connect / bridge | ✅ Production-ready |
+| Per-call media tap (frame receivers/senders for bots and streaming) | ✅ Production-ready |
+| Module registry (`client.Modules`) as plugin extension point | ✅ Production-ready |
+| Configurable audio codec preference | ✅ Production-ready |
 | DTMF send/receive (RFC 4733) | ✅ Production-ready |
-| RTCP quality metrics | ✅ Production-ready |
+| RTCP quality metrics (measured jitter, loss, round-trip time) | ✅ Production-ready |
+| Recording + Playback (WAV/MP3) | ✅ Production-ready |
 | Linux + Windows audio devices | ✅ Production-ready |
 | Runtime device hot-switch + controls | ✅ Production-ready |
-| Runtime plugin lifecycle (`install/activate/deactivate/uninstall`) | ✅ Production-ready |
 
 **In progress / planned:**
 
 | Capability | Status |
 |-----------|--------|
-| ICE / STUN / TURN (NAT traversal) | 🔧 In progress |
-| Recording + Playback (WAV/MP3) | ✅ Production-ready |
+| ICE (NAT traversal; STUN/TURN transport in place) | 🔧 In progress |
 | Backend/API for signed plugin marketplace + tenant entitlements | 📋 Roadmap |
-| CalloraVoipSdk.Privacy module | 📋 Roadmap |
-| CalloraVoipSdk.Risk module | 📋 Roadmap |
-| CalloraVoipSdk.Intelligence module | 📋 Roadmap |
-
-> NuGet packaging and first public release are planned once Phase 1 is complete.
 
 ## SDK Structure
 
@@ -57,11 +55,19 @@ and intelligent decision logic.
 Clean DDD architecture: Domain → Application → Infrastructure → public `VoipClient` facade.
 No vendor lock-in. Full protocol stack owned in-house (SIP, RTP, SRTP, SDP, STUN).
 
-**Differentiating modules** *(roadmap)*
+**Commercial plugins** *(private feed, licensed separately — in development)*
 
-- **CalloraVoipSdk.Privacy** — Redaction, consent management, policy gates, audit trail
-- **CalloraVoipSdk.Risk** — Spam/scam signals, call risk screening, PBX abuse prevention
-- **CalloraVoipSdk.Intelligence** — AMD, sentiment, transcription, local model integration
+The SDK core is open and free. Advanced capabilities ship as paid plugins on a private
+feed, built on the public module registry and media-tap contract:
+
+- **Callora.Realtime** — bridge call audio to realtime AI APIs (e.g. OpenAI Realtime)
+  with pacing, backpressure and barge-in; the foundation for AI voice agents
+- **Callora.WebSocket** — raw call-audio streaming over WebSocket
+- **Callora.Privacy** — redaction, consent management, policy gates, audit trail
+- **Callora.Risk** — spam/scam signals, call risk screening, PBX abuse prevention
+- **Callora.Intelligence** — AMD, sentiment, transcription, local model integration
+
+Interested in early access? Contact [info@bechstein.digital](mailto:info@bechstein.digital).
 
 ## Quickstart
 
