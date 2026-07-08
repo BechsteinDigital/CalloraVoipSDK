@@ -33,6 +33,7 @@ All runtime operations go through `VoipClient`:
 | `client.Lines` | Register / unregister SIP lines |
 | `client.Calls` | Query active calls |
 | `client.Media` | Create senders, receivers, connectors |
+| `client.Modules` | Register and resolve feature modules (`IVoipClientModule`, `Get<T>`/`TryGet<T>`) — the plugin extension point |
 
 ## Events
 

@@ -1,15 +1,16 @@
-# Demo App Walkthrough
+# Demo Walkthrough
 
-The `CalloraVoipSdk.Sample.BasicCalling` project (`samples/CalloraVoipSdk.Sample.BasicCalling/Program.cs`) is an interactive console app
-that demonstrates the full call lifecycle against a real SIP server.
-
-## Run It
+This walkthrough builds an interactive console app that demonstrates the full call
+lifecycle against a real SIP server. Create a new console project, add the
+[NuGet packages](../guides/getting-started.md#installation), and follow the sections
+below — together they form a complete `Program.cs`.
 
 ```bash
-dotnet run --project samples/CalloraVoipSdk.Sample.BasicCalling/CalloraVoipSdk.Sample.BasicCalling.csproj
+dotnet new console -n BasicCallingDemo
+cd BasicCallingDemo
+dotnet add package CalloraVoipSdk
+dotnet add package CalloraVoipSdk.Audio.Linux   # or .Windows
 ```
-
-You will be prompted for SIP credentials (server, username, password, display name).
 
 ## What It Demonstrates
 

@@ -1,22 +1,31 @@
 # Changelog
 
-## Unreleased
+The authoritative changelog lives in the repository:
+[`CHANGELOG.md`](https://github.com/BechsteinDigital/CalloraVoipSDK/blob/main/CHANGELOG.md)
 
-- ICE State Machine (CORE-006) — in progress
-- RTCP quality metrics (CORE-008) — in progress
-- RFC 4733 DTMF / telephone-event (CORE-009) — in progress
-- Recording/Playback (CORE-003) — done (WAV e2e + MP3 encode/decode)
-- Runtime Device Controls (CORE-004) — done (runtime hot-switch + mute/volume + format update)
-- Conferencing perf runner (N=2/4/8 mix benchmark + optional baseline gate) — done
-- Recording options extended: optional AES-GCM file encryption + silence skipping (VAD-lite) — done
-- Recording/Playback transcoding now includes G.722 (PT=9) via built-in codec adapter — done
-- Conference hotpath mixing/allocation hardening: ArrayPool end-to-end + SIMD path + RFC3389 CN fallback for silent target frames — done
-- Runtime plugin lifecycle added: install/activate/deactivate/uninstall + persisted plugin registry + dynamic module facade switching without restart — done
+## Release highlights
 
-## 0.1.0 — Initial Release
+### 3.1.1 — 2026-07-08
+- RFC 3550 jitter estimator fixed (arrival-time overflow made jitter converge to the
+  frame interval); RTT measured from RTCP LSR/DLSR now feeds the adaptive jitter buffer
 
-- SIP signaling fundamentals (Register, Dial, Accept, Hangup, Hold/Unhold, Transfer)
-- RTP/SRTP media transport with adaptive jitter buffer
-- Conference rooms with PCM16 mixing
-- Media cross-connect (bridge two calls)
-- Linux (PortAudio) and Windows (NAudio) audio device support
+### 3.1.0 — 2026-07-08
+Hardening from the first real-world interop test (AVM Fritz!Box, AI voice agent):
+- `SdkConfiguration.PreferredAudioCodecs` — ordered codec preference for offers,
+  answers and RTP sessions
+- Advertised media address resolution fixed (no loopback towards LAN peers)
+- Static payload types without rtpmap now negotiate correctly
+- Reliable provisionals (RFC 3262) only on explicit `Require: 100rel`
+- RTCP compound decoding tolerates unknown packet types (e.g. RFC 3611 XR)
+- SIP wire trace diagnostics (Trace level, includes SDP bodies)
+
+### 3.0.0 — 2026-07-07
+- Module registry as the SDK extension point: `IVoipClientModule`, `client.Modules`,
+  typed resolution via `Get<T>`/`TryGet<T>`
+- Per-call media tap pinned as a public, tested contract
+
+### 2.0.0 — 2026-07-07
+- **Breaking:** unimplemented module facades removed from the public surface —
+  these capabilities return as separate commercial plugins
+- `net9.0` and `net10.0` target frameworks added
+- First releases published to nuget.org

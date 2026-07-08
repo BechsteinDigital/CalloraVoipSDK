@@ -7,20 +7,24 @@
 
 ## Installation
 
-Add CalloraVoipSdk to your project:
+Install from [nuget.org](https://www.nuget.org/packages/CalloraVoipSdk):
+
+```bash
+dotnet add package CalloraVoipSdk
+dotnet add package CalloraVoipSdk.Audio.Linux     # Linux audio I/O
+# or
+dotnet add package CalloraVoipSdk.Audio.Windows   # Windows audio I/O
+```
+
+For local development against a checkout, `ProjectReference` works as well:
 
 ```xml
 <ItemGroup>
   <ProjectReference Include="..\voip\src\Client\CalloraVoipSdk.Client.csproj" />
   <ProjectReference Include="..\voip\src\Core\CalloraVoipSdk.Core.csproj" />
-  <!-- Choose your platform audio module: -->
   <ProjectReference Include="..\voip\src\Audio\Linux\CalloraVoipSdk.Audio.Linux.csproj" />
-  <!-- or -->
-  <!-- <ProjectReference Include="..\voip\src\Audio\Windows\CalloraVoipSdk.Audio.Windows.csproj" /> -->
 </ItemGroup>
 ```
-
-> NuGet packaging is planned for a future release.
 
 ## Create VoipClient
 

@@ -10,8 +10,8 @@
 
 Commercial-grade .NET VoIP SDK for SIP signaling, RTP media, PBX integrations and voice automation.
 
-CalloraVoipSdk is a .NET 8 VoIP SDK for building softphones, PBX integrations, contact-center workflows and voice automation systems.  
-It exposes a stable, developer-friendly API through `VoipClient` while keeping transport, media and device internals behind a clean facade.
+CalloraVoipSdk is a .NET VoIP SDK (net8.0 / net9.0 / net10.0) for building softphones, PBX integrations, contact-center workflows and voice automation systems.  
+It exposes a stable, developer-friendly API through `VoipClient` while keeping transport, media and device internals behind a clean facade — and opens up through a module registry for building products like AI voice agents on top.
 
 ## Why CalloraVoipSdk
 
@@ -41,6 +41,13 @@ Available in the repository today:
 - Advanced call control: DTMF, blind transfer, attended transfer
 - In-dialog operations: `INFO`, `OPTIONS`, `SUBSCRIBE`, `NOTIFY`
 - Media stack: RTP sessions, sender, receiver, `MediaConnector`, cross-connect
+- Per-call media tap: attach frame receivers/senders to any call for bots, bridging
+  and streaming scenarios (`client.Media.CreateReceiver()/CreateSender()`)
+- Module registry (`client.Modules`) as the extension point for separately shipped
+  feature modules
+- Configurable audio codec preference (`SdkConfiguration.PreferredAudioCodecs`)
+- RTCP quality metrics with measured values: local/remote jitter, packet loss and
+  round-trip time from SR/RR (LSR/DLSR); RFC 3611 XR-tolerant compound decoding
 - Linux audio devices via `CalloraVoipSdk.Audio.Linux`
 - Windows audio devices via `CalloraVoipSdk.Audio.Windows`
 - Runtime device controls:
@@ -94,14 +101,14 @@ This keeps the external API compact and stable while allowing internal evolution
 
 CalloraVoipSdk follows Semantic Versioning (`MAJOR.MINOR.PATCH`).
 
-- Current public release line: `1.0.x`
-- Public API changes are guarded by snapshot tests in `tests/CalloraVoipSdk.Core.Tests/PublicApi.approved.txt`
-- Deprecations are introduced through `[Obsolete(...)]` before removal
+- Current public release line: `3.x` (see [releases](https://github.com/BechsteinDigital/CalloraVoipSDK/releases))
+- Public API removals only happen in MAJOR releases; deprecations are introduced
+  through `[Obsolete(...)]` before removal
 - Consumer-relevant changes are documented in [`CHANGELOG.md`](CHANGELOG.md)
 
 ## Requirements
 
-- .NET SDK 8.0+ (will be updated soon to .NET SDK 10.0+)
+- .NET SDK 8.0+ (packages target `net8.0`, `net9.0` and `net10.0`)
 - SIP account or PBX credentials
 - For real audio I/O on Linux: `CalloraVoipSdk.Audio.Linux`
 - For real audio I/O on Windows: `CalloraVoipSdk.Audio.Windows`
@@ -324,6 +331,54 @@ bTx.AttachToCall(callB);
 using var bridge = client.Media.CreateConnector().CrossConnect(aRx, aTx, bRx, bTx);
 ```
 
+### 7. Pin the audio codec
+
+```csharp
+using var client = new VoipClient(new SdkConfiguration
+{
+    UserAgent = "MyVoiceBot/1.0",
+    // Order = preference. Offers/answers only include the listed codecs (plus DTMF
+    // telephone-event), and RTP sessions pick their primary codec accordingly.
+    // Useful for passthrough scenarios, e.g. G.711 µ-law towards a realtime AI API.
+    PreferredAudioCodecs = ["PCMU"]
+});
+```
+
+## Extending the SDK — module registry
+
+`client.Modules` is the extension point for feature modules that ship as separate
+packages. A module implements `IVoipClientModule`, gets attached to the client and is
+then resolvable by any interface it implements:
+
+```csharp
+// Register (or inject via DI as IVoipClientModule before AddCallora):
+client.Modules.Register(new MyRecordingModule());
+
+// Resolve anywhere:
+var recording = client.Modules.Get<IMyRecordingFeature>();      // throws if unavailable
+if (client.Modules.TryGet<IMyRecordingFeature>(out var feature)) // or probe
+    feature.Start();
+```
+
+Modules build on the public per-call media tap. Its contract in two sentences:
+`IMediaReceiver.FrameReceived` fires **synchronously on the media path** — handlers must
+buffer and return immediately, never block. Negotiated format details (payload type,
+clock rate, samples per packet) are available via `ICall.MediaParameters`.
+
+### Commercial plugins (private, paid — in development)
+
+On top of this extension point we are building a set of commercial plugins, distributed
+through a private feed (not on nuget.org):
+
+- **Callora.Realtime** — bridge call audio to realtime AI APIs (e.g. OpenAI Realtime)
+  with pacing, backpressure and barge-in support; powers AI voice agents
+- **Callora.WebSocket** — raw call-audio streaming over WebSocket
+- **Callora.Privacy / Callora.Risk / Callora.Intelligence** — redaction & consent,
+  spam/scam screening, AMD/transcription/sentiment
+
+The SDK core stays open and free; plugins are licensed separately. Contact
+[info@bechstein.digital](mailto:info@bechstein.digital) for early access.
+
 ## Production guidance
 
 - Dispose and unregister `VoipClient`, `IPhoneLine` and `ICall` cleanly
@@ -332,17 +387,13 @@ using var bridge = client.Media.CreateConnector().CrossConnect(aRx, aTx, bRx, bT
 - Choose audio providers explicitly via platform-specific packages
 - Treat infrastructure details as non-public integration surface
 
-## Roadmap to 1.0.1
+## Roadmap
 
-The current `1.0.0` line is already usable, but `1.0.1` is the first stable public release target.
-
-Typical focus areas on the road to `1.0.0`:
-
-- public API hardening
-- more end-to-end examples
-- additional RFC coverage
-- stronger interoperability validation
-- documentation and package ergonomics
+- ICE state machine completion for full NAT traversal (STUN/TURN transport is in place)
+- Commercial plugin line-up (private feed, licensed): Callora.Realtime, WebSocket
+  streaming, Privacy/Risk/Intelligence — in development
+- CI/CD hardening: soak, interop and chaos gates
+- More end-to-end examples and interoperability validation
 
 ## License
 
