@@ -175,6 +175,16 @@ internal sealed class SipCallSessionHeaderService
                 ?? _context.CallId
         };
 
+        // RFC 3261 §12.1.1: copy the request's Record-Route header field values into the
+        // response, preserving their order. Without this the peer builds an empty route set
+        // and sends in-dialog requests (the ACK to our 2xx, a BYE) straight to our Contact
+        // from the far-end UAC — a node our NAT has never spoken to, so a restricted NAT
+        // drops it. Echoing Record-Route keeps those requests on the proxy chain, whose last
+        // hop is the peer we actively exchange packets with (open pinhole).
+        var recordRoute = CombineHeaderRows(request.HeaderValues("Record-Route"));
+        if (!string.IsNullOrEmpty(recordRoute))
+            headers["Record-Route"] = recordRoute;
+
         if (includeContentType)
         {
             headers["Content-Type"] = "application/sdp";
@@ -182,6 +192,18 @@ internal sealed class SipCallSessionHeaderService
         }
 
         return headers;
+    }
+
+    /// <summary>
+    /// Joins individual header rows back into one stored header value, preserving order,
+    /// so the wire serializer re-emits them as separate header lines.
+    /// </summary>
+    private static string CombineHeaderRows(IReadOnlyList<string> rows)
+    {
+        var combined = string.Empty;
+        foreach (var row in rows)
+            combined = SipHeaderValueStorage.AppendRow(combined, row);
+        return combined;
     }
 
     /// <summary>
