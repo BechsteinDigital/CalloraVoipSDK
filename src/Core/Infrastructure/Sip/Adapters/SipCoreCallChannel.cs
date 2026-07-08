@@ -46,6 +46,7 @@ internal sealed class SipCoreCallChannel : ICallChannel
     private Func<CallAudioFrame, CancellationToken, Task>? _audioSendDelegate;
     private Func<byte, int, CancellationToken, Task>? _dtmfSendDelegate;
     private CallIceLocalDescription? _localIceDescription;
+    private IPAddress? _advertisedMediaAddress;
     private ISipCallSession? _session;
     private int _mediaParametersFired;
     private int _disposed;
@@ -272,10 +273,12 @@ internal sealed class SipCoreCallChannel : ICallChannel
 
     /// <summary>
     /// Resolves the local media address to advertise in SDP and to bind RTP/RTCP on.
+    /// Cached per channel so SDP and RTP always agree even on multi-homed hosts
+    /// (a benign race may probe twice; both probes see the same routing table).
     /// See <see cref="AdvertisedMediaAddressResolver"/> for the decision rules.
     /// </summary>
     private IPAddress ResolveAdvertisedMediaAddress(ISipCallSession session) =>
-        AdvertisedMediaAddressResolver.Resolve(
+        _advertisedMediaAddress ??= AdvertisedMediaAddressResolver.Resolve(
             session,
             AdvertisedMediaAddressResolver.ProbeRoute,
             _logger);

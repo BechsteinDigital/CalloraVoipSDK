@@ -748,28 +748,13 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
             if (old == next || old == SipDialogState.Terminated)
                 return;
             _state = next;
-            if (next == SipDialogState.Terminated
-                && terminationReason is not null)
-            {
+            if (next == SipDialogState.Terminated && terminationReason is not null)
                 _lastTerminationReason = terminationReason;
-            }
-            effectiveTerminationReason = next == SipDialogState.Terminated
-                ? _lastTerminationReason
-                : null;
+            effectiveTerminationReason = next == SipDialogState.Terminated ? _lastTerminationReason : null;
         }
-        if (next == SipDialogState.Terminated && effectiveTerminationReason is not null)
-        {
-            _logger.LogDebug(
-                "SIP session {CallId}: {Old} -> {New} (reason: {Protocol} {Cause} {Text})",
-                CallId, old, next,
-                effectiveTerminationReason.Protocol,
-                effectiveTerminationReason.Cause,
-                effectiveTerminationReason.Text ?? string.Empty);
-        }
-        else
-        {
-            _logger.LogDebug("SIP session {CallId}: {Old} -> {New}", CallId, old, next);
-        }
+        _logger.LogDebug(
+            "SIP session {CallId}: {Old} -> {New}{Reason}", CallId, old, next,
+            effectiveTerminationReason is { } r ? $" (reason: {r.Protocol} {r.Cause} {r.Text})" : string.Empty);
         if (next == SipDialogState.Terminated)
             _sessionTimerManager.Stop();
         StateChanged?.Invoke(this, new SipDialogStateChangedEventArgs(old, next, effectiveTerminationReason));

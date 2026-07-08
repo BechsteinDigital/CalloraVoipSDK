@@ -200,15 +200,10 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
             bytes     = _wireCodec.SerializeRequest(method, requestUri, headers, body);
             _logger.LogDebug(
                 "SIP {Method} message ({Size} bytes) exceeds UDP MTU threshold; escalated to TCP.",
-                method,
-                bytes.Length);
+                method, bytes.Length);
         }
 
-        _logger.LogTrace(
-            "SIP {Method} sent to {Remote} on {Transport} (CSeq: {CSeq}).{Body}",
-            method, remoteEndPoint, transport,
-            headers.TryGetValue("CSeq", out var cseq) ? cseq : null,
-            FormatBodyForTrace(body));
+        SipWireTraceLogger.RequestSent(_logger, method, headers, body, remoteEndPoint, transport);
         await SendPayloadAsync(remoteEndPoint, bytes, transport, ct).ConfigureAwait(false);
     }
 
@@ -216,13 +211,6 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
     /// Maximum datagram size for UDP before escalating to TCP per RFC 3261 §18.1.1.
     /// </summary>
     internal const int UdpMtuThreshold = 1300;
-
-    /// <summary>
-    /// Renders a message body for trace logging: empty bodies vanish, non-empty ones are
-    /// emitted on their own lines so SDP offers/answers appear verbatim in wire traces.
-    /// </summary>
-    private static string FormatBodyForTrace(string? body) =>
-        string.IsNullOrWhiteSpace(body) ? string.Empty : $"\n{body.TrimEnd()}";
 
     /// <summary>
     /// Sends a SIP response, inferring transport from endpoint hints.
@@ -251,11 +239,7 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
         SipTransportProtocol transport,
         CancellationToken ct = default)
     {
-        _logger.LogTrace(
-            "SIP {Status} {Reason} sent to {Remote} on {Transport} (CSeq: {CSeq}).{Body}",
-            statusCode, reasonPhrase, remoteEndPoint, transport,
-            headers.TryGetValue("CSeq", out var cseq) ? cseq : null,
-            FormatBodyForTrace(body));
+        SipWireTraceLogger.ResponseSent(_logger, statusCode, reasonPhrase, headers, body, remoteEndPoint, transport);
         var bytes = _wireCodec.SerializeResponse(statusCode, reasonPhrase, headers, body);
         await SendPayloadAsync(remoteEndPoint, bytes, transport, ct).ConfigureAwait(false);
     }
@@ -304,9 +288,7 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
             _logger.LogWarning(
                 ex,
                 "SIP route resolution failed for {Host}:{Port} ({Transport}); falling back to direct host lookup.",
-                host,
-                port,
-                transport);
+                host, port, transport);
             var effectivePort = port > 0
                 ? port
                 : transport switch
@@ -637,8 +619,7 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
                         _logger.LogDebug(
                             ex,
                             "SIP {Transport} send to {Remote} failed; retrying on new connection (RFC §18.4).",
-                            transport,
-                            targetEndPoint);
+                            transport, targetEndPoint);
                         stale.Dispose();
                     }
 
@@ -780,20 +761,14 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
         {
             if (_wireCodec.TryParseRequest(payload.Span, out var request) && request is not null)
             {
-                _logger.LogTrace(
-                    "SIP {Method} received from {Remote} on {Transport} (CSeq: {CSeq}).{Body}",
-                    request.Method, remoteEndPoint, transport, request.Header("CSeq"),
-                    FormatBodyForTrace(request.Body));
+                SipWireTraceLogger.RequestReceived(_logger, request, remoteEndPoint, transport);
                 DispatchRequest(remoteEndPoint, request);
                 return Task.CompletedTask;
             }
 
             if (_wireCodec.TryParseResponse(payload.Span, out var response) && response is not null)
             {
-                _logger.LogTrace(
-                    "SIP {Status} {Reason} received from {Remote} on {Transport} (CSeq: {CSeq}).{Body}",
-                    response.StatusCode, response.ReasonPhrase, remoteEndPoint, transport, response.Header("CSeq"),
-                    FormatBodyForTrace(response.Body));
+                SipWireTraceLogger.ResponseReceived(_logger, response, remoteEndPoint, transport);
                 DispatchResponse(remoteEndPoint, response);
                 return Task.CompletedTask;
             }
