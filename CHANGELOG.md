@@ -6,6 +6,17 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
 
 ## [Unreleased]
 
+## [3.1.1] - 2026-07-08
+
+### Fixed
+- RFC 3550 jitter estimator: the arrival-time conversion to RTP units saturated on a
+  double-to-uint overflow, so reported jitter converged to the frame interval (20 ms)
+  on a clean link instead of ~0. Arrival units are now computed in integer math and
+  truncated modulo 2^32 like every RTP timestamp.
+- Round-trip time measured from RTCP receiver reports (LSR/DLSR) now feeds the adaptive
+  jitter buffer; media metrics previously reported the static 60 ms initialization
+  default as if it were a measurement.
+
 ## [3.1.0] - 2026-07-08
 
 Hardening release driven by the first real-world interop test against an AVM Fritz!Box
