@@ -40,7 +40,9 @@ internal sealed class StunIceProbe : IIceStunProbe
         try
         {
             var transport = MapTransport(server.Transport);
-            var serverEndPoint = await ResolveServerEndPointAsync(server, transport, ct).ConfigureAwait(false);
+            var serverEndPoint = await ResolveServerEndPointAsync(
+                    server, transport, localEndPoint.AddressFamily, ct)
+                .ConfigureAwait(false);
             var result = await _stunClient.QueryBindingAsync(
                     serverEndPoint,
                     credentials: BuildCredentials(server),
@@ -126,6 +128,7 @@ internal sealed class StunIceProbe : IIceStunProbe
     private static async Task<IPEndPoint> ResolveServerEndPointAsync(
         IceServerConfiguration server,
         StunTransport transport,
+        System.Net.Sockets.AddressFamily addressFamily,
         CancellationToken ct)
     {
         var port = server.Port ?? DefaultPortFor(transport);
@@ -133,10 +136,22 @@ internal sealed class StunIceProbe : IIceStunProbe
             return new IPEndPoint(ipAddress, port);
 
         var addresses = await Dns.GetHostAddressesAsync(server.Host, ct).ConfigureAwait(false);
-        var firstAddress = addresses.FirstOrDefault()
-            ?? throw new InvalidOperationException($"Unable to resolve STUN host '{server.Host}'.");
-        return new IPEndPoint(firstAddress, port);
+        var address = PickAddressForFamily(addresses, addressFamily)
+            ?? throw new InvalidOperationException(
+                $"Unable to resolve STUN host '{server.Host}' to an address in family {addressFamily} " +
+                "(the query must use the media socket's address family).");
+        return new IPEndPoint(address, port);
     }
+
+    /// <summary>
+    /// Picks a resolved address matching the local socket's address family. DNS may
+    /// return AAAA records first (e.g. stun.l.google.com) — sending from an IPv4-bound
+    /// media socket to an IPv6 server fails with "address family not supported".
+    /// </summary>
+    internal static IPAddress? PickAddressForFamily(
+        IPAddress[] addresses,
+        System.Net.Sockets.AddressFamily addressFamily)
+        => addresses.FirstOrDefault(a => a.AddressFamily == addressFamily);
 
     private static int DefaultPortFor(StunTransport transport)
         => transport == StunTransport.Tls ? 5349 : 3478;

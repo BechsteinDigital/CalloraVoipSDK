@@ -67,4 +67,18 @@ public sealed class StunSharedSocketTests
                 server.LocalEndPoint,
                 localEndPoint: mediaEndPoint));
     }
+
+    [Fact]
+    public void Dns_address_selection_respects_the_media_sockets_address_family()
+    {
+        // Regression: stun.l.google.com resolved to an AAAA record first; sending from
+        // the IPv4-bound media socket failed with "address family not supported" (97).
+        IPAddress[] mixed = [IPAddress.Parse("2001:4860:4864:5:8000::1"), IPAddress.Parse("74.125.250.129")];
+
+        var picked = StunIceProbe.PickAddressForFamily(mixed, AddressFamily.InterNetwork);
+
+        Assert.Equal(IPAddress.Parse("74.125.250.129"), picked);
+        Assert.Null(StunIceProbe.PickAddressForFamily(
+            [IPAddress.Parse("2001:4860:4864:5:8000::1")], AddressFamily.InterNetwork));
+    }
 }
