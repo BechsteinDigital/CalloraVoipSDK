@@ -3,8 +3,10 @@ namespace CalloraVoipSdk.Core.Infrastructure.Srtp.Context;
 /// <summary>
 /// Encrypts and decrypts RTP packets according to SRTP (RFC 3711).
 /// One context covers one SSRC and one direction (send or receive).
+/// Disposing a context zeroes its derived session keys; the owner that created the
+/// context is responsible for disposing it once the media session ends.
 /// </summary>
-internal interface ISrtpContext
+internal interface ISrtpContext : IDisposable
 {
     /// <summary>
     /// Encrypts and authenticates a plain RTP packet for sending.

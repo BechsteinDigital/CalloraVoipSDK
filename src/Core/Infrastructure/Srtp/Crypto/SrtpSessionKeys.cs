@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+
 namespace CalloraVoipSdk.Core.Infrastructure.Srtp.Crypto;
 
 /// <summary>
@@ -14,4 +16,17 @@ internal sealed class SrtpSessionKeys
 
     /// <summary>Session authentication key — 20 bytes for HMAC-SHA1 (RFC 3711 §4.3).</summary>
     public required byte[] AuthKey { get; init; }
+
+    /// <summary>
+    /// Overwrites all session key bytes with zeros (RFC 3711 §9.4 key hygiene). Called by
+    /// the owning context on dispose so derived keys do not linger in the heap until GC.
+    /// The master key/salt in <see cref="SrtpKeyMaterial"/> is caller-owned and not covered
+    /// here — it originates from SDP text that lives in the heap anyway.
+    /// </summary>
+    public void Zero()
+    {
+        CryptographicOperations.ZeroMemory(CipherKey);
+        CryptographicOperations.ZeroMemory(Salt);
+        CryptographicOperations.ZeroMemory(AuthKey);
+    }
 }
