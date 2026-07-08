@@ -41,6 +41,7 @@ internal sealed class CallIceAgent : ICallIceAgent
     /// <inheritdoc />
     public async Task<CallIceLocalDescription?> BuildLocalDescriptionAsync(
         IPEndPoint localEndPoint,
+        System.Net.Sockets.Socket? sharedMediaSocket = null,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(localEndPoint);
@@ -69,7 +70,7 @@ internal sealed class CallIceAgent : ICallIceAgent
 
             var server = stunServers[i];
             var mapped = await _stunProbe
-                .TryGetServerReflexiveEndPointAsync(localEndPoint, server, ct)
+                .TryGetServerReflexiveEndPointAsync(localEndPoint, server, sharedMediaSocket, ct)
                 .ConfigureAwait(false);
             if (mapped is null)
                 continue;

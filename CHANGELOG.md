@@ -6,6 +6,25 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
 
 ## [Unreleased]
 
+## [3.1.2] - 2026-07-08
+
+First real-world verification of the ICE gathering path (STUN against a public server
+with an active call) and a rebuilt ICE test suite.
+
+### Fixed
+- ICE STUN gathering no longer fails with "address already in use": the binding query
+  is sent through the call's reserved RTP media socket (SendTo/ReceiveFrom, socket
+  ownership stays with the call) instead of binding a second socket to the media port.
+- STUN server DNS resolution now picks an address matching the media socket's address
+  family — hosts whose AAAA record resolves first (e.g. stun.l.google.com) failed with
+  "address family not supported by protocol" from an IPv4-bound socket.
+
+### Added
+- Deterministic ICE agent test suite: candidate gathering (host/srflx/relay with
+  fallbacks), pair selection including relay/srflx fallback and retry behavior, and
+  all failure reasons. Loopback regression tests run a real STUN binding query over a
+  reserved socket against the in-repo STUN server.
+
 ## [3.1.1] - 2026-07-08
 
 ### Fixed

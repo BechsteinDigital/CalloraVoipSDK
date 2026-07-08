@@ -237,8 +237,10 @@ internal sealed class SipCoreCallChannel : ICallChannel
 
         try
         {
+            // Route STUN gathering through the reserved media socket so the srflx
+            // candidate carries the real RTP port (a second bind would EADDRINUSE).
             _localIceDescription = await _iceAgent
-                .BuildLocalDescriptionAsync(localEndPoint, ct)
+                .BuildLocalDescriptionAsync(localEndPoint, _localMediaSocket.Client, ct)
                 .ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)

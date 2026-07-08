@@ -59,6 +59,7 @@ internal sealed class StunClient : IStunClient
         string? tlsTargetHost = null,
         RemoteCertificateValidationCallback? tlsRemoteCertificateValidationCallback = null,
         IPEndPoint? localEndPoint = null,
+        Socket? sharedUdpSocket = null,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(serverEndPoint);
@@ -70,6 +71,7 @@ internal sealed class StunClient : IStunClient
             tlsTargetHost: tlsTargetHost,
             tlsRemoteCertificateValidationCallback: tlsRemoteCertificateValidationCallback,
             localEndPoint: localEndPoint,
+            sharedUdpSocket: sharedUdpSocket,
             ct: ct);
     }
 
@@ -87,6 +89,7 @@ internal sealed class StunClient : IStunClient
         string? tlsTargetHost,
         RemoteCertificateValidationCallback? tlsRemoteCertificateValidationCallback,
         IPEndPoint? localEndPoint,
+        Socket? sharedUdpSocket,
         CancellationToken ct)
     {
         if (credentials is null || !credentials.IsLongTerm)
@@ -99,6 +102,7 @@ internal sealed class StunClient : IStunClient
                     tlsTargetHost,
                     tlsRemoteCertificateValidationCallback,
                     localEndPoint,
+                    sharedUdpSocket,
                     ct)
                 .ConfigureAwait(false);
         }
@@ -114,6 +118,7 @@ internal sealed class StunClient : IStunClient
                     tlsTargetHost,
                     tlsRemoteCertificateValidationCallback,
                     localEndPoint,
+                    sharedUdpSocket,
                     ct)
                 .ConfigureAwait(false);
         }
@@ -138,6 +143,7 @@ internal sealed class StunClient : IStunClient
                     tlsTargetHost,
                     tlsRemoteCertificateValidationCallback,
                     localEndPoint,
+                    sharedUdpSocket,
                     ct)
                 .ConfigureAwait(false);
         }
@@ -156,6 +162,7 @@ internal sealed class StunClient : IStunClient
                 tlsTargetHost,
                 tlsRemoteCertificateValidationCallback,
                 localEndPoint,
+                sharedUdpSocket,
                 ct)
             .ConfigureAwait(false);
     }
@@ -170,14 +177,15 @@ internal sealed class StunClient : IStunClient
         string? tlsTargetHost,
         RemoteCertificateValidationCallback? tlsRemoteCertificateValidationCallback,
         IPEndPoint? localEndPoint,
+        Socket? sharedUdpSocket,
         CancellationToken ct)
         => transport switch
         {
-            StunTransport.Udp => QueryCoreUdpAsync(server, credentialsToSend, allowRedirect, localEndPoint, ct),
+            StunTransport.Udp => QueryCoreUdpAsync(server, credentialsToSend, allowRedirect, localEndPoint, sharedUdpSocket, ct),
             StunTransport.Tcp => QueryCoreStreamAsync(
-                server, credentialsToSend, transport, allowRedirect, tlsTargetHost, tlsRemoteCertificateValidationCallback, localEndPoint, ct),
+                server, credentialsToSend, transport, allowRedirect, tlsTargetHost, tlsRemoteCertificateValidationCallback, localEndPoint, sharedUdpSocket, ct),
             StunTransport.Tls => QueryCoreStreamAsync(
-                server, credentialsToSend, transport, allowRedirect, tlsTargetHost, tlsRemoteCertificateValidationCallback, localEndPoint, ct),
+                server, credentialsToSend, transport, allowRedirect, tlsTargetHost, tlsRemoteCertificateValidationCallback, localEndPoint, sharedUdpSocket, ct),
             _ => throw new ArgumentOutOfRangeException(nameof(transport), transport, "Unsupported STUN transport.")
         };
 
@@ -186,6 +194,7 @@ internal sealed class StunClient : IStunClient
         StunCredentials? credentialsToSend,
         bool allowRedirect,
         IPEndPoint? localEndPoint,
+        Socket? sharedUdpSocket,
         CancellationToken ct)
     {
         var request = BuildRequest(credentialsToSend);
@@ -200,17 +209,26 @@ internal sealed class StunClient : IStunClient
                 ? (credentialsToSend.IsLongTerm ? "long-term" : "short-term")
                 : "none");
 
-        using var udp = localEndPoint is null
-            ? new UdpClient(server.AddressFamily)
-            : new UdpClient(localEndPoint);
-        udp.Connect(server);
+        // A shared socket (e.g. the reserved RTP media port during ICE gathering) is
+        // used as-is via SendTo/ReceiveFrom: binding a second socket to that port would
+        // fail with EADDRINUSE, and connecting the shared socket would filter later
+        // inbound traffic. Ownership stays with the caller.
+        using var udp = sharedUdpSocket is not null
+            ? null
+            : localEndPoint is null
+                ? new UdpClient(server.AddressFamily)
+                : new UdpClient(localEndPoint);
+        udp?.Connect(server);
 
         int rto = InitialRtoMs;
         for (int attempt = 1; attempt <= MaxAttempts; attempt++)
         {
             try
             {
-                await udp.SendAsync(requestBytes, ct).ConfigureAwait(false);
+                if (sharedUdpSocket is not null)
+                    await sharedUdpSocket.SendToAsync(requestBytes, SocketFlags.None, server, ct).ConfigureAwait(false);
+                else
+                    await udp!.SendAsync(requestBytes, ct).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -218,8 +236,11 @@ internal sealed class StunClient : IStunClient
                 throw new StunException($"STUN UDP send failed: {ex.Message}", ex);
             }
 
-            var response = await ReceiveMatchingUdpAsync(udp, request.TransactionId, rto, ct)
-                .ConfigureAwait(false);
+            var response = sharedUdpSocket is not null
+                ? await ReceiveMatchingSharedUdpAsync(sharedUdpSocket, request.TransactionId, rto, ct)
+                    .ConfigureAwait(false)
+                : await ReceiveMatchingUdpAsync(udp!, request.TransactionId, rto, ct)
+                    .ConfigureAwait(false);
 
             if (response is null)
             {
@@ -236,6 +257,7 @@ internal sealed class StunClient : IStunClient
                     tlsTargetHost: null,
                     tlsRemoteCertificateValidationCallback: null,
                     localEndPoint,
+                    sharedUdpSocket,
                     ct)
                 .ConfigureAwait(false);
         }
@@ -251,6 +273,7 @@ internal sealed class StunClient : IStunClient
         string? tlsTargetHost,
         RemoteCertificateValidationCallback? tlsRemoteCertificateValidationCallback,
         IPEndPoint? localEndPoint,
+        Socket? sharedUdpSocket,
         CancellationToken ct)
     {
         var request = BuildRequest(credentialsToSend);
@@ -335,6 +358,7 @@ internal sealed class StunClient : IStunClient
                 tlsTargetHost,
                 tlsRemoteCertificateValidationCallback,
                 localEndPoint,
+                sharedUdpSocket,
                 ct)
             .ConfigureAwait(false);
     }
@@ -423,6 +447,53 @@ internal sealed class StunClient : IStunClient
     }
 
     /// <summary>
+    /// Waits for a matching response on a caller-owned (shared) UDP socket via
+    /// ReceiveFrom, without connecting or disposing it. Returns null when the RTO expires.
+    /// </summary>
+    private async Task<StunMessage?> ReceiveMatchingSharedUdpAsync(
+        Socket sharedSocket,
+        byte[] transactionId,
+        int timeoutMs,
+        CancellationToken ct)
+    {
+        using var rtoSource = new CancellationTokenSource(timeoutMs);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(rtoSource.Token, ct);
+        var buffer = new byte[1500];
+        var anyEndPoint = new IPEndPoint(
+            sharedSocket.AddressFamily == AddressFamily.InterNetworkV6 ? IPAddress.IPv6Any : IPAddress.Any, 0);
+
+        while (!linked.Token.IsCancellationRequested)
+        {
+            SocketReceiveFromResult received;
+            try
+            {
+                received = await sharedSocket
+                    .ReceiveFromAsync(buffer, SocketFlags.None, anyEndPoint, linked.Token)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw; // Propagate caller cancellation.
+            }
+            catch (OperationCanceledException)
+            {
+                return null; // RTO expired.
+            }
+
+            var msg = _codec.Decode(buffer.AsSpan(0, received.ReceivedBytes).ToArray());
+            if (msg is not null && msg.TransactionId.SequenceEqual(transactionId))
+                return msg;
+
+            _logger.LogTrace(
+                "STUN discarded non-matching packet on shared socket ({Bytes} bytes from {Remote})",
+                received.ReceivedBytes,
+                received.RemoteEndPoint);
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Waits for a TCP/TLS response whose transaction ID matches the request within <paramref name="timeoutMs"/>.
     /// Returns null on timeout or clean end-of-stream.
     /// </summary>
@@ -481,6 +552,7 @@ internal sealed class StunClient : IStunClient
         string? tlsTargetHost,
         RemoteCertificateValidationCallback? tlsRemoteCertificateValidationCallback,
         IPEndPoint? localEndPoint,
+        Socket? sharedUdpSocket,
         CancellationToken ct)
     {
         if (response.MessageClass == StunMessageClass.ErrorResponse)
@@ -505,6 +577,7 @@ internal sealed class StunClient : IStunClient
                             tlsTargetHost: null,
                             tlsRemoteCertificateValidationCallback: tlsRemoteCertificateValidationCallback,
                             localEndPoint: localEndPoint,
+                            sharedUdpSocket: sharedUdpSocket,
                             ct: ct)
                         .ConfigureAwait(false);
                 }
