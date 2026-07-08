@@ -39,4 +39,9 @@ internal enum PayloadCodecKind
     /// Unrecognized or unsupported payload codec.
     /// </summary>
     Unknown = 6,
+
+    /// <summary>
+    /// Opus audio (RFC 7587, 48 kHz RTP clock, dynamic payload type).
+    /// </summary>
+    Opus = 7,
 }

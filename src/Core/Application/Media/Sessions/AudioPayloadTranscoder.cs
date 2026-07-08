@@ -139,7 +139,7 @@ internal static class AudioPayloadTranscoder
             out error);
     }
 
-    private static bool TryCreatePcmFilePlanForCall(
+    internal static bool TryCreatePcmFilePlanForCall(
         PayloadCodecKind codecKind,
         int payloadType,
         int clockRate,
@@ -224,6 +224,28 @@ internal static class AudioPayloadTranscoder
                 error = string.Empty;
                 return true;
 
+            case PayloadCodecKind.Opus:
+            {
+                // Opus is stateful across frames (prediction/FEC); the plan owns one
+                // decoder and one encoder instance for the lifetime of this call leg.
+                var opus = new OpusPayloadCodec();
+                plan = new AudioPayloadTranscodingPlan(
+                    context,
+                    toFileFrame: frame =>
+                    {
+                        var decoded = opus.Decode(frame.Payload.Span);
+                        return new MediaFrame(decoded, payloadType, frame.DurationRtpUnits);
+                    },
+                    fromFileFrame: frame =>
+                    {
+                        EnsurePcm16(frame.Payload.Span);
+                        var encoded = opus.Encode(frame.Payload.Span);
+                        return new MediaFrame(encoded, payloadType, frame.DurationRtpUnits);
+                    });
+                error = string.Empty;
+                return true;
+            }
+
             default:
                 plan = null;
                 error = $"Transcoding is not supported for codec '{codecName}'.";
@@ -260,7 +282,7 @@ internal static class AudioPayloadTranscoder
         };
     }
 
-    private static PayloadCodecKind ResolveCodecKind(string codecName, int payloadType)
+    internal static PayloadCodecKind ResolveCodecKind(string codecName, int payloadType)
     {
         var normalized = codecName.Trim().ToUpperInvariant();
         if (normalized.Contains("PCMU", StringComparison.Ordinal) ||
@@ -295,6 +317,9 @@ internal static class AudioPayloadTranscoder
         {
             return PayloadCodecKind.G722;
         }
+
+        if (normalized.Contains("OPUS", StringComparison.Ordinal))
+            return PayloadCodecKind.Opus;
 
         if (normalized.Contains("CN", StringComparison.Ordinal) ||
             normalized.Contains("COMFORT-NOISE", StringComparison.Ordinal))

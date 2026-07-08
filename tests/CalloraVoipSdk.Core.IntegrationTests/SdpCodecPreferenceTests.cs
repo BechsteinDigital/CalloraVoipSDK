@@ -126,13 +126,28 @@ public sealed class SdpCodecPreferenceTests
     [Fact]
     public void Unknown_preference_names_fall_back_to_defaults()
     {
-        var options = new SdpMediaNegotiationOptions { PreferredCodecNames = ["OPUS", "EVS"] };
+        // AMR/EVS are genuinely unknown to the SDK. (OPUS used to be the example here,
+        // but it is a known opt-in codec since B.2 — see OpusCodecTests.)
+        var options = new SdpMediaNegotiationOptions { PreferredCodecNames = ["AMR", "EVS"] };
 
         var answer = SdpUtilities.TryBuildNegotiatedAnswer(
             FritzBoxStyleOffer, LocalEndPoint, hold: false, options);
 
         Assert.NotNull(answer);
         Assert.Contains("G722", answer);
+    }
+
+    [Fact]
+    public void Pinned_optin_codec_the_peer_lacks_fails_negotiation_instead_of_audioless_answer()
+    {
+        // Opus is known but the Fritz!Box-style offer has no Opus line: pinning it must
+        // fail the negotiation (→ 488) rather than answer with only telephone-event.
+        var options = new SdpMediaNegotiationOptions { PreferredCodecNames = ["opus"] };
+
+        var answer = SdpUtilities.TryBuildNegotiatedAnswer(
+            FritzBoxStyleOffer, LocalEndPoint, hold: false, options);
+
+        Assert.Null(answer);
     }
 
     [Fact]

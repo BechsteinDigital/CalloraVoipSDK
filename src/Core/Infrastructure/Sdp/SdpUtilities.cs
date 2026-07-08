@@ -26,6 +26,14 @@ internal static class SdpUtilities
         new SdpCodecDefinition { PayloadType = 101, Name = "telephone-event", ClockRate = 8000 }
     ];
 
+    // Codecs the SDK implements but does not offer by default — selectable via
+    // SdkConfiguration.PreferredAudioCodecs. Opus per RFC 7587: the encoding is always
+    // announced as opus/48000/2 (dynamic PT), regardless of the operating mode.
+    private static readonly IReadOnlyList<SdpCodecDefinition> OptInCodecs =
+    [
+        new SdpCodecDefinition { PayloadType = 107, Name = "opus", ClockRate = 48000, Channels = 2 }
+    ];
+
     /// <summary>
     /// Extracts the first SDES crypto attribute with a supported suite and an inline key
     /// from the first active audio m-line of an SDP body (RFC 4568). Used to recover key
@@ -127,14 +135,19 @@ internal static class SdpUtilities
                 ?? string.Empty;
             if (!IPAddress.TryParse(connectionAddress, out var remoteIp)) return null;
 
-            var telephoneEventPayloadType = ResolveTelephoneEventPayloadType(audio);
+            var anyTelephoneEventPayloadType = ResolveTelephoneEventPayloadType(audio, preferredClockRate: null);
             var primaryCodec = SelectPrimaryCodec(
                 audio.Codecs,
-                telephoneEventPayloadType,
+                anyTelephoneEventPayloadType,
                 localOptions?.PreferredCodecNames);
             if (primaryCodec is null) return null;
 
             var clockRate   = primaryCodec.ClockRate > 0 ? primaryCodec.ClockRate : 8000;
+
+            // RFC 4733: prefer the telephone-event line whose clock matches the negotiated
+            // audio codec (offers like sipgate's list one per clock, e.g. 101/48000 for
+            // Opus and 113/8000 for G.711); fall back to any offered event line.
+            var telephoneEventPayloadType = ResolveTelephoneEventPayloadType(audio, clockRate);
             var ptimeMs     = (audio.Ptime ?? 0) > 0 ? audio.Ptime!.Value : 20;
             var samplesPerPacket = clockRate * ptimeMs / 1000;
             var codecMap = BuildCodecMap(audio.Codecs, telephoneEventPayloadType);
@@ -227,16 +240,27 @@ internal static class SdpUtilities
         return new ReadOnlyDictionary<int, string>(map);
     }
 
-    private static int? ResolveTelephoneEventPayloadType(SdpMediaDescription audio)
+    private static int? ResolveTelephoneEventPayloadType(SdpMediaDescription audio, int? preferredClockRate)
     {
+        int? firstMatch = null;
         foreach (var codec in audio.Codecs)
         {
-            if (codec.Name.Equals("telephone-event", StringComparison.OrdinalIgnoreCase)
-                && IsValidPayloadType(codec.PayloadType))
+            if (!codec.Name.Equals("telephone-event", StringComparison.OrdinalIgnoreCase)
+                || !IsValidPayloadType(codec.PayloadType))
             {
-                return codec.PayloadType;
+                continue;
             }
+
+            // RFC 4733 §2.1: the event stream shares the audio stream's timestamp clock —
+            // when the offer lists one event line per clock, pick the matching one.
+            if (preferredClockRate is { } clock && codec.ClockRate == clock)
+                return codec.PayloadType;
+
+            firstMatch ??= codec.PayloadType;
         }
+
+        if (firstMatch is not null)
+            return firstMatch;
 
         foreach (var fmtp in audio.Fmtp)
         {
@@ -338,7 +362,9 @@ internal static class SdpUtilities
         var resolved = new List<SdpCodecDefinition>(preferred.Count + 1);
         foreach (var name in preferred)
         {
-            var match = DefaultCodecs.FirstOrDefault(c =>
+            // Preferred names resolve against defaults plus opt-in codecs (e.g. Opus),
+            // so a codec can be enabled explicitly without changing the default offer.
+            var match = DefaultCodecs.Concat(OptInCodecs).FirstOrDefault(c =>
                 !c.Name.Equals("telephone-event", StringComparison.OrdinalIgnoreCase)
                 && NormalizeCodecName(c).Equals(name, StringComparison.OrdinalIgnoreCase));
             if (match is not null && !resolved.Contains(match))

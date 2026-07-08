@@ -1,0 +1,230 @@
+using System.Text.RegularExpressions;
+using Xunit;
+
+namespace CalloraVoipSdk.ArchitectureTests;
+
+/// <summary>
+/// Mechanische Gates fuer ENGINEERING_RULES.md. Jede Regel prueft den gesamten
+/// Quellbaum und vergleicht gegen eine Baseline bekannter Altlasten
+/// (Voll-Audit 2026-07-08, docs/agent-log/2026-07-08-full-sdk-code-review.md).
+/// Baselines duerfen nur schrumpfen: neue Verstoesse schlagen fehl,
+/// behobene Eintraege muessen aus der Baseline entfernt werden.
+/// </summary>
+public sealed class EngineeringRulesTests
+{
+    // --- Regel: DDD-Schichtung — Domain haengt von niemandem, Application nicht von Infrastructure/Client ---
+
+    private static readonly string[] LayeringBaseline =
+    [
+        // Audit-Finding K4: DialOptions (Application) wird aus Domain referenziert.
+        "src/Core/Domain/Calls/ICall.cs",
+        "src/Core/Domain/Lines/ILineChannel.cs",
+        "src/Core/Domain/Lines/IPhoneLine.cs",
+        "src/Core/Domain/Lines/PhoneLine.cs",
+    ];
+
+    [Fact]
+    public void Domain_und_Application_halten_die_Schichtrichtung_ein()
+    {
+        var violations = new List<string>();
+
+        foreach (var file in SourceScan.CsFiles("src/Core/Domain"))
+        {
+            var content = File.ReadAllText(file);
+            if (Regex.IsMatch(content, @"^\s*using\s+CalloraVoipSdk\.Core\.(Application|Infrastructure)", RegexOptions.Multiline) ||
+                Regex.IsMatch(content, @"^\s*using\s+CalloraVoipSdk\.Client", RegexOptions.Multiline))
+            {
+                violations.Add(SourceScan.Relative(file));
+            }
+        }
+
+        foreach (var file in SourceScan.CsFiles("src/Core/Application"))
+        {
+            var content = File.ReadAllText(file);
+            if (Regex.IsMatch(content, @"^\s*using\s+CalloraVoipSdk\.Core\.Infrastructure", RegexOptions.Multiline) ||
+                Regex.IsMatch(content, @"^\s*using\s+CalloraVoipSdk\.Client", RegexOptions.Multiline))
+            {
+                violations.Add(SourceScan.Relative(file));
+            }
+        }
+
+        SourceScan.AssertMatchesBaseline("DDD-Schichtrichtung", violations, LayeringBaseline);
+    }
+
+    // --- Regel: Das Schicht-Segment des Namespace muss zur Ordner-Schicht passen ---
+    // Die Codebase nutzt bewusst logische Namespaces (Domain/Security -> Core.Security,
+    // Contracts/ klappt in den Elternnamespace). Strikte Ordner=Namespace-Gleichheit
+    // ist daher nicht die Regel. Architektonisch relevant ist nur: eine Datei unter
+    // Infrastructure/ darf keinen Application.- oder Domain.-Namespace tragen (und umgekehrt).
+
+    private static readonly string[] LayerSegmentBaseline =
+    [
+        // Audit-Finding K3: RTCP-Dateien unter Infrastructure/ deklarieren Application.Media.Rtcp.*
+        "src/Core/Infrastructure/Rtcp/Packets/RtcpByePacket.cs",
+        "src/Core/Infrastructure/Rtcp/Packets/RtcpPacket.cs",
+        "src/Core/Infrastructure/Rtcp/Packets/RtcpPacketType.cs",
+        "src/Core/Infrastructure/Rtcp/Packets/RtcpReceiverReport.cs",
+        "src/Core/Infrastructure/Rtcp/Packets/RtcpReportBlock.cs",
+        "src/Core/Infrastructure/Rtcp/Packets/RtcpSdesChunk.cs",
+        "src/Core/Infrastructure/Rtcp/Packets/RtcpSdesItem.cs",
+        "src/Core/Infrastructure/Rtcp/Packets/RtcpSdesItemType.cs",
+        "src/Core/Infrastructure/Rtcp/Packets/RtcpSdesPacket.cs",
+        "src/Core/Infrastructure/Rtcp/Packets/RtcpSenderReport.cs",
+        "src/Core/Infrastructure/Rtcp/Wire/IRtcpPacketCodec.cs",
+    ];
+
+    [Fact]
+    public void Schicht_Segment_des_Namespace_passt_zur_Ordner_Schicht()
+    {
+        var layers = new[] { "Domain", "Application", "Infrastructure" };
+        var violations = new List<string>();
+
+        foreach (var file in SourceScan.CsFiles("src/Core/Domain", "src/Core/Application", "src/Core/Infrastructure"))
+        {
+            var declared = SourceScan.DeclaredNamespace(File.ReadAllText(file));
+            if (declared is null)
+            {
+                continue;
+            }
+
+            var relative = SourceScan.Relative(file);
+            var folderLayer = layers.First(l => relative.Contains($"/{l}/", StringComparison.Ordinal));
+
+            // Fremdes Schicht-Segment im Namespace, das nicht die eigene Ordner-Schicht ist.
+            var foreignLayer = layers.FirstOrDefault(l =>
+                l != folderLayer &&
+                Regex.IsMatch(declared, $@"(^|\.){l}(\.|$)"));
+
+            if (foreignLayer is not null)
+            {
+                violations.Add(relative);
+            }
+        }
+
+        SourceScan.AssertMatchesBaseline("Schicht-Segment = Ordner-Schicht", violations, LayerSegmentBaseline);
+    }
+
+    // --- Regel: max. 1000 Zeilen pro Datei ---
+
+    private static readonly string[] FileLengthBaseline =
+    [
+        "src/Core/Infrastructure/Sip/Signaling/Dialogs/SipCallSession.cs",
+        "src/Core/Infrastructure/Sip/Signaling/Dialogs/SipCallSessionTransactionService.cs",
+    ];
+
+    [Fact]
+    public void Keine_Datei_ueberschreitet_1000_Zeilen()
+    {
+        var violations = SourceScan.CsFiles("src", "tests", "samples")
+            .Where(f => File.ReadLines(f).Count() > 1000)
+            .Select(SourceScan.Relative)
+            .ToList();
+
+        SourceScan.AssertMatchesBaseline("max. 1000 Zeilen", violations, FileLengthBaseline);
+    }
+
+    // --- Regel: keine verschachtelten Typen (private/protected class|interface|record in Typen) ---
+
+    private static readonly string[] NestedTypeBaseline =
+    [
+        // Audit-Finding: MediaActivity als private nested class.
+        "src/Core/Application/Media/CallMediaOrchestrator.cs",
+        "src/Core/Infrastructure/Sip/Adapters/SipLineChannel.cs",
+    ];
+
+    [Fact]
+    public void Keine_privaten_verschachtelten_Typen()
+    {
+        var pattern = new Regex(@"^\s*(private|protected)(\s+\w+)*\s+(class|interface|record)\s", RegexOptions.Multiline);
+
+        var violations = SourceScan.CsFiles("src")
+            .Where(f => pattern.IsMatch(File.ReadAllText(f)))
+            .Select(SourceScan.Relative)
+            .ToList();
+
+        SourceScan.AssertMatchesBaseline("keine verschachtelten Typen", violations, NestedTypeBaseline);
+    }
+
+    // --- Regel: kein stummer catch (leerer oder nur-Kommentar-Body ohne Logging) ---
+
+    private static readonly string[] SilentCatchBaseline =
+    [
+        // Vollstaendige Ist-Inventur (Stand 2026-07-08). Der Regex erfasst leere/
+        // nur-Kommentar-Catch-Bloecke — darunter echte Verstoesse UND akzeptable
+        // Shutdown-/Fallback-Catches. Ziel: Liste schrumpft; die echten Verstoesse
+        // aus dem Audit zuerst (MediaConnection, MediaReceiver, SipCoreCallChannel).
+        // Ein Catch mit Logging faellt automatisch aus der Liste und muss dann hier raus.
+        "src/Core/Application/Media/CallRtcpQualityMonitor.cs",
+        "src/Core/Application/Media/MediaConnection.cs",
+        "src/Core/Application/Media/MediaReceiver.cs",
+        "src/Core/Infrastructure/Common/Network/LocalEndPointAdvertisementResolver.cs",
+        "src/Core/Infrastructure/Media/Mp3AudioFileCodec.cs",
+        "src/Core/Infrastructure/Rtp/RtpCallMediaSession.cs",
+        "src/Core/Infrastructure/Rtp/Session/RtpSession.cs",
+        "src/Core/Infrastructure/Sip/Adapters/SipCoreCallChannel.cs",
+        "src/Core/Infrastructure/Sip/Signaling/Contracts/SipSubscriptionHandle.cs",
+        "src/Core/Infrastructure/Sip/Signaling/Dialogs/SipCallSession.cs",
+        "src/Core/Infrastructure/Sip/Signaling/Dialogs/SipCallSessionUtilities.cs",
+        "src/Core/Infrastructure/Sip/Signaling/SessionTimers/SipSessionTimerManager.cs",
+        "src/Core/Infrastructure/Sip/Signaling/Subscriptions/SipSubscriptionLifecycleManager.cs",
+        "src/Core/Infrastructure/Sip/Transactions/Server/SipServerTransactionEngine.cs",
+        "src/Core/Infrastructure/Sip/Transactions/SipClientTransactionExecutor.cs",
+        "src/Core/Infrastructure/Sip/Transport/SipStreamConnection.cs",
+        "src/Core/Infrastructure/Sip/Transport/SipTransportRuntime.cs",
+        "src/Core/Infrastructure/Sip/Transport/SipWebSocketConnection.cs",
+        "src/Core/Infrastructure/Stun/Client/DnsSrvQuery.cs",
+        "src/Core/Infrastructure/Stun/Server/StunServer.cs",
+        "src/Core/Infrastructure/Turn/Client/TurnTcpDataConnection.cs",
+        "src/Core/Infrastructure/Turn/Server/TurnServer.cs",
+        "src/Core/Infrastructure/Turn/Server/TurnServerAllocation.cs",
+        "src/Core/Infrastructure/Turn/Server/TurnTcpConnectionBroker.cs",
+        "src/Core/Infrastructure/Turn/Server/TurnTcpPendingConnection.cs",
+    ];
+
+    [Fact]
+    public void Keine_stummen_catch_Bloecke()
+    {
+        // catch [(...)] { } mit Body aus nur Whitespace und Kommentaren
+        var pattern = new Regex(
+            @"catch\s*(\([^)]*\))?\s*\{(\s|//[^\n]*|/\*.*?\*/)*\}",
+            RegexOptions.Singleline);
+
+        var violations = SourceScan.CsFiles("src")
+            .Where(f => pattern.IsMatch(File.ReadAllText(f)))
+            .Select(SourceScan.Relative)
+            .Distinct()
+            .ToList();
+
+        SourceScan.AssertMatchesBaseline("kein stummer catch", violations, SilentCatchBaseline);
+    }
+
+    // --- Regel: kein Sync-over-Async auf Runtime-Pfaden ---
+
+    private static readonly string[] SyncOverAsyncBaseline =
+    [
+        // Ist-Bestand 2026-07-08. Der eigentliche Audit-Befund ist CallMediaOrchestrator
+        // (ICE-Selektion blockt den SIP-Signaling-Thread — echter Fehler, zuerst beheben).
+        // Die uebrigen sind Dispose-/Transport-Pfade, in denen sync-over-async oft
+        // legitim ist (IDisposable erlaubt kein await) — pro Eintrag durch Auditor/Reviewer
+        // zu bewerten. Ziel: Liste schrumpft, CallMediaOrchestrator zuerst.
+        "src/Core/Application/Media/CallMediaOrchestrator.cs",
+        "src/Core/Application/Media/MediaConnection.cs",
+        "src/Core/Infrastructure/Media/Mp3TranscodingWriter.cs",
+        "src/Core/Infrastructure/Sip/Transport/SipStreamConnection.cs",
+        "src/Core/Infrastructure/Sip/Transport/SipWebSocketConnection.cs",
+    ];
+
+    [Fact]
+    public void Kein_GetAwaiter_GetResult_im_Produktcode()
+    {
+        // Toleriert Zeilenumbrueche zwischen den fluent-Aufrufen (.GetAwaiter()\n.GetResult()).
+        var pattern = new Regex(@"\.GetAwaiter\(\)\s*\.GetResult\(\)", RegexOptions.Singleline);
+
+        var violations = SourceScan.CsFiles("src")
+            .Where(f => pattern.IsMatch(File.ReadAllText(f)))
+            .Select(SourceScan.Relative)
+            .ToList();
+
+        SourceScan.AssertMatchesBaseline("kein Sync-over-Async", violations, SyncOverAsyncBaseline);
+    }
+}

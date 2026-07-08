@@ -101,7 +101,11 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
 
         var negotiated = NegotiateCodecs(offeredAudio.Codecs, localCapabilities);
 
-        if (negotiated.Count == 0)
+        // At least one real audio codec must be negotiated — an answer carrying only
+        // telephone-event would be an audio-less call. Reachable when the caller pins
+        // an opt-in codec (e.g. Opus) that the peer does not offer: negotiation fails
+        // (488) instead of producing a broken answer.
+        if (!negotiated.Any(c => !c.Name.Equals("telephone-event", StringComparison.OrdinalIgnoreCase)))
             return new SdpOfferAnswerResult { Success = false };
 
         var host = LocalEndPointHostResolver.ResolveHost(localEndPoint);
