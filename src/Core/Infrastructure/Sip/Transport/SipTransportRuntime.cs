@@ -205,9 +205,10 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
         }
 
         _logger.LogTrace(
-            "SIP {Method} sent to {Remote} on {Transport} (CSeq: {CSeq}).",
+            "SIP {Method} sent to {Remote} on {Transport} (CSeq: {CSeq}).{Body}",
             method, remoteEndPoint, transport,
-            headers.TryGetValue("CSeq", out var cseq) ? cseq : null);
+            headers.TryGetValue("CSeq", out var cseq) ? cseq : null,
+            FormatBodyForTrace(body));
         await SendPayloadAsync(remoteEndPoint, bytes, transport, ct).ConfigureAwait(false);
     }
 
@@ -215,6 +216,13 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
     /// Maximum datagram size for UDP before escalating to TCP per RFC 3261 §18.1.1.
     /// </summary>
     internal const int UdpMtuThreshold = 1300;
+
+    /// <summary>
+    /// Renders a message body for trace logging: empty bodies vanish, non-empty ones are
+    /// emitted on their own lines so SDP offers/answers appear verbatim in wire traces.
+    /// </summary>
+    private static string FormatBodyForTrace(string? body) =>
+        string.IsNullOrWhiteSpace(body) ? string.Empty : $"\n{body.TrimEnd()}";
 
     /// <summary>
     /// Sends a SIP response, inferring transport from endpoint hints.
@@ -244,9 +252,10 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
         CancellationToken ct = default)
     {
         _logger.LogTrace(
-            "SIP {Status} {Reason} sent to {Remote} on {Transport} (CSeq: {CSeq}).",
+            "SIP {Status} {Reason} sent to {Remote} on {Transport} (CSeq: {CSeq}).{Body}",
             statusCode, reasonPhrase, remoteEndPoint, transport,
-            headers.TryGetValue("CSeq", out var cseq) ? cseq : null);
+            headers.TryGetValue("CSeq", out var cseq) ? cseq : null,
+            FormatBodyForTrace(body));
         var bytes = _wireCodec.SerializeResponse(statusCode, reasonPhrase, headers, body);
         await SendPayloadAsync(remoteEndPoint, bytes, transport, ct).ConfigureAwait(false);
     }
@@ -772,8 +781,9 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
             if (_wireCodec.TryParseRequest(payload.Span, out var request) && request is not null)
             {
                 _logger.LogTrace(
-                    "SIP {Method} received from {Remote} on {Transport} (CSeq: {CSeq}).",
-                    request.Method, remoteEndPoint, transport, request.Header("CSeq"));
+                    "SIP {Method} received from {Remote} on {Transport} (CSeq: {CSeq}).{Body}",
+                    request.Method, remoteEndPoint, transport, request.Header("CSeq"),
+                    FormatBodyForTrace(request.Body));
                 DispatchRequest(remoteEndPoint, request);
                 return Task.CompletedTask;
             }
@@ -781,8 +791,9 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
             if (_wireCodec.TryParseResponse(payload.Span, out var response) && response is not null)
             {
                 _logger.LogTrace(
-                    "SIP {Status} {Reason} received from {Remote} on {Transport} (CSeq: {CSeq}).",
-                    response.StatusCode, response.ReasonPhrase, remoteEndPoint, transport, response.Header("CSeq"));
+                    "SIP {Status} {Reason} received from {Remote} on {Transport} (CSeq: {CSeq}).{Body}",
+                    response.StatusCode, response.ReasonPhrase, remoteEndPoint, transport, response.Header("CSeq"),
+                    FormatBodyForTrace(response.Body));
                 DispatchResponse(remoteEndPoint, response);
                 return Task.CompletedTask;
             }
