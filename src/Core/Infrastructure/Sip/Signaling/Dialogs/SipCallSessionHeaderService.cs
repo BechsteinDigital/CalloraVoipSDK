@@ -146,7 +146,13 @@ internal sealed class SipCallSessionHeaderService
         var localUser = SipProtocol.TryParseSipUri(_context.LocalUri, out var parsedUser, out _, out _)
             ? parsedUser
             : "user";
-        var contactUri = SipSignalingFormat.BuildContactUri(localUser, advertisedLocalEndPoint, _context.SignalingTransport);
+        var contactUri = SipSignalingFormat.BuildContactUri(
+            localUser,
+            advertisedLocalEndPoint,
+            _context.SignalingTransport,
+            forceSecureScheme: false,
+            advertisedHost: _context.AdvertisedPublicHost,
+            advertisedPort: _context.AdvertisedPublicPort);
         var toHeader = EnsureTag(request.Header("To"), localTag);
 
         // RFC 3581 §4: reflect rport/received into the top Via of responses to inbound requests.

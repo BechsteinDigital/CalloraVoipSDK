@@ -140,6 +140,19 @@ internal interface ISipCallSessionContext
     IPEndPoint RemoteEndPoint { get; set; }
 
     /// <summary>
+    /// Optional public host (IP or FQDN) to advertise in in-dialog Contact URIs instead of
+    /// the route-probed local address. Set behind NAT so a trunk peer can route the ACK to
+    /// a 2xx response and subsequent in-dialog requests. <see langword="null"/> keeps local.
+    /// </summary>
+    string? AdvertisedPublicHost { get; }
+
+    /// <summary>
+    /// Optional public port paired with <see cref="AdvertisedPublicHost"/>.
+    /// <see langword="null"/> or 0 reuses the local signaling port.
+    /// </summary>
+    int? AdvertisedPublicPort { get; }
+
+    /// <summary>
     /// Local SIP tag.
     /// </summary>
     string? LocalTag { get; set; }

@@ -47,6 +47,7 @@ internal sealed class SipCoreCallChannel : ICallChannel
     private Func<byte, int, CancellationToken, Task>? _dtmfSendDelegate;
     private CallIceLocalDescription? _localIceDescription;
     private IPAddress? _advertisedMediaAddress;
+    private readonly IPAddress? _publicMediaAddress;
     private ISipCallSession? _session;
     private int _mediaParametersFired;
     private int _disposed;
@@ -70,7 +71,8 @@ internal sealed class SipCoreCallChannel : ICallChannel
         SrtpPolicy appliedSrtpPolicy,
         string policySource,
         ICallIceAgent? iceAgent = null,
-        IReadOnlyList<string>? preferredCodecNames = null)
+        IReadOnlyList<string>? preferredCodecNames = null,
+        string? publicMediaHost = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _sdpNegotiator = sdpNegotiator ?? throw new ArgumentNullException(nameof(sdpNegotiator));
@@ -79,6 +81,10 @@ internal sealed class SipCoreCallChannel : ICallChannel
         _appliedSrtpPolicy = appliedSrtpPolicy;
         _srtpPolicySource = string.IsNullOrWhiteSpace(policySource) ? "unknown" : policySource;
         _preferredCodecNames = preferredCodecNames;
+        _publicMediaAddress =
+            !string.IsNullOrWhiteSpace(publicMediaHost) && IPAddress.TryParse(publicMediaHost, out var parsed)
+                ? parsed
+                : null;
 
         // Bind on any address, port 0 → OS assigns a free port.
         _localMediaSocket = new UdpClient(new IPEndPoint(IPAddress.Any, 0));
@@ -147,8 +153,9 @@ internal sealed class SipCoreCallChannel : ICallChannel
     {
         var session = EnsureSession();
 
-        // Build answer SDP with the correct local RTP port.
-        var localIp = ResolveAdvertisedMediaAddress(session);
+        // Advertise the public media address in the SDP when known (NAT) so the peer sends
+        // RTP to a routable host; the RTP socket still binds the local address below.
+        var localIp = ResolveAdvertisedSdpAddress(session);
         var localMediaEndPoint = new IPEndPoint(localIp, _localMediaPort);
         await EnsureLocalIceDescriptionAsync(localMediaEndPoint, ct).ConfigureAwait(false);
 
@@ -206,7 +213,7 @@ internal sealed class SipCoreCallChannel : ICallChannel
     public async Task HoldAsync()
     {
         var session = EnsureSession();
-        var localIp = ResolveAdvertisedMediaAddress(session);
+        var localIp = ResolveAdvertisedSdpAddress(session);
         var localEndPoint = new IPEndPoint(localIp, _localMediaPort);
         await EnsureLocalIceDescriptionAsync(localEndPoint, CancellationToken.None).ConfigureAwait(false);
         var holdSdp = _sdpNegotiator.BuildDefaultSdp(localEndPoint, hold: true, BuildSdpOptions());
@@ -217,7 +224,7 @@ internal sealed class SipCoreCallChannel : ICallChannel
     public async Task UnholdAsync()
     {
         var session = EnsureSession();
-        var localIp = ResolveAdvertisedMediaAddress(session);
+        var localIp = ResolveAdvertisedSdpAddress(session);
         var localEndPoint = new IPEndPoint(localIp, _localMediaPort);
         await EnsureLocalIceDescriptionAsync(localEndPoint, CancellationToken.None).ConfigureAwait(false);
         var unholdSdp = _sdpNegotiator.BuildDefaultSdp(localEndPoint, hold: false, BuildSdpOptions());
@@ -284,6 +291,16 @@ internal sealed class SipCoreCallChannel : ICallChannel
             session,
             AdvertisedMediaAddressResolver.ProbeRoute,
             _logger);
+
+    /// <summary>
+    /// Address to advertise in the SDP connection line: the configured/learned public media
+    /// address when set (NAT), otherwise the locally resolved address. The RTP/RTCP sockets
+    /// still bind the local address (see <see cref="ResolveAdvertisedMediaAddress"/>) — a
+    /// public IP is not a bindable local interface; the peer's SBC latches to our real
+    /// source port via symmetric RTP.
+    /// </summary>
+    private IPAddress ResolveAdvertisedSdpAddress(ISipCallSession session) =>
+        _publicMediaAddress ?? ResolveAdvertisedMediaAddress(session);
 
     /// <inheritdoc />
     public async Task SendDtmfAsync(byte dtmfCode)

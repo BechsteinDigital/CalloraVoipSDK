@@ -43,6 +43,8 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
     internal readonly TimeSpan _timeout;
     internal readonly SipRequest? _initialInvite;
     internal IPEndPoint _remoteEndPoint;
+    internal string? _advertisedPublicHost;
+    internal int? _advertisedPublicPort;
     internal string? _localTag;
     internal string? _remoteTag;
     private int _localCSeq;
@@ -185,6 +187,12 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
         _transport.GetLocalEndPoint(_signalingTransport);
     /// <inheritdoc />
     public System.Net.IPEndPoint? RemoteSignalingEndPoint => _remoteEndPoint;
+    /// <inheritdoc />
+    public void SetAdvertisedPublicContact(string? host, int? port)
+    {
+        _advertisedPublicHost = string.IsNullOrWhiteSpace(host) ? null : host.Trim();
+        _advertisedPublicPort = port is > 0 ? port : null;
+    }
     /// <inheritdoc />
     public SipDialogTerminationReason? LastTerminationReason
     {

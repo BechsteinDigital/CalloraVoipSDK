@@ -75,6 +75,10 @@ internal sealed class AckTestSipCallSessionContext : ISipCallSessionContext
 
     public IPEndPoint RemoteEndPoint { get; set; } = new(IPAddress.Parse("192.0.2.10"), 5060);
 
+    public string? AdvertisedPublicHost { get; set; }
+
+    public int? AdvertisedPublicPort { get; set; }
+
     public string? LocalTag { get; set; } = "local-tag";
 
     public string? RemoteTag { get; set; }

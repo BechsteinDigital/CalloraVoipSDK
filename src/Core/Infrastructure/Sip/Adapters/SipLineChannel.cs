@@ -284,6 +284,13 @@ internal sealed class SipLineChannel : ILineChannel
             return;
         }
 
+        // NAT: advertise our public address in the in-dialog Contact (so the peer routes the
+        // ACK to our 2xx) and in the media SDP. Manual override wins, else the learned
+        // rport/received address.
+        var publicHost = HasManualPublicOverride ? _account.PublicSipHost : _learnedPublicHost;
+        var publicPort = HasManualPublicOverride ? _account.PublicSipPort : _learnedPublicPort;
+        args.Session.SetAdvertisedPublicContact(publicHost, publicPort);
+
         var channel = new SipCoreCallChannel(
             _callChannelLogger,
             _sdpNegotiator,
@@ -291,7 +298,8 @@ internal sealed class SipLineChannel : ILineChannel
             _globalSrtpPolicy,
             policySource: "global",
             _iceAgent,
-            _preferredCodecNames);
+            _preferredCodecNames,
+            publicHost);
         channel.AttachSession(args.Session);
 
         try
