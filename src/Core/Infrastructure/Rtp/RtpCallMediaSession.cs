@@ -32,6 +32,12 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
 
     private readonly RtpSession _rtp;
     private readonly IJitterBuffer _jitterBuffer;
+
+    // SRTP contexts created (and thus owned) by this session; internal for test evidence.
+    internal ISrtpContext? OutboundSrtpContext => _outboundSrtp;
+    internal ISrtpContext? InboundSrtpContext => _inboundSrtp;
+    private readonly ISrtpContext? _outboundSrtp;
+    private readonly ISrtpContext? _inboundSrtp;
     private readonly ILogger<RtpCallMediaSession> _logger;
     private readonly CancellationTokenSource _cts = new();
     private readonly object _rtcpStatsSync = new();
@@ -117,7 +123,9 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
         _jitterBuffer = new global::CalloraVoipSdk.Core.Infrastructure.Rtp.JitterBuffer.JitterBuffer(effectiveJitterBufferOptions);
         _jitterBuffer.UpdateRoundTripTime(DefaultRoundTripTimeHintMs);
 
-        var (outboundSrtp, inboundSrtp) = TryCreateSrtpContexts(parameters, _logger);
+        // This session creates the SRTP contexts and therefore owns their disposal
+        // (key zeroing) — RtpSession only borrows them via options.
+        (_outboundSrtp, _inboundSrtp) = TryCreateSrtpContexts(parameters, _logger);
         var options = new RtpSessionOptions
         {
             LocalEndPoint    = parameters.LocalEndPoint,
@@ -125,8 +133,8 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
             PayloadType      = (byte)parameters.PayloadType,
             ClockRate        = _clockRate,
             SamplesPerPacket = parameters.SamplesPerPacket,
-            OutboundSrtp     = outboundSrtp,
-            InboundSrtp      = inboundSrtp
+            OutboundSrtp     = _outboundSrtp,
+            InboundSrtp      = _inboundSrtp
         };
 
         var logger = loggerFactory.CreateLogger<RtpSession>();
@@ -343,6 +351,10 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
         RuntimeMetricsUpdated = null;
         RtcpMuxDatagramReceived = null;
         _cts.Dispose();
+
+        // Zero the SRTP session keys once the RTP session (their only borrower) is down.
+        _outboundSrtp?.Dispose();
+        _inboundSrtp?.Dispose();
     }
 
     private int ResolveOutboundPayloadType(int framePayloadType)

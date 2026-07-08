@@ -19,14 +19,20 @@ internal sealed class SrtpContext : ISrtpContext
     private readonly int _authTagLength;
 
     // Sender-side index: tracks the last outbound packet index for ROC advancement.
-    // Separate from the receiver replay window so Protect and Unprotect can safely
-    // share one context instance (though RFC 3711 recommends per-direction contexts).
+    // Kept separate from the receiver replay window (RFC 3711 recommends per-direction
+    // contexts; the SDK creates one context per direction).
     private ulong _senderIndex;
 
     // Receiver replay window: 64-bit bitmap, high bit = newest packet (RFC 3711 §3.3.2)
     private ulong _replayWindowIndex;
     private ulong _replayWindowBitmap;
     private const int ReplayWindowSize = 64;
+
+    // Serializes all mutable state (sender index, replay window) and key usage so the
+    // context is thread-safe on its own — concurrent Protect calls would otherwise race
+    // the ROC advancement and concurrent Unprotect calls the replay window.
+    private readonly object _sync = new();
+    private bool _disposed;
 
     public SrtpContext(SrtpKeyMaterial material)
     {
@@ -38,6 +44,9 @@ internal sealed class SrtpContext : ISrtpContext
             ? 4 : 10;
     }
 
+    /// <summary>Derived session keys — internal test seam for dispose/zeroing evidence.</summary>
+    internal SrtpSessionKeys SessionKeys => _keys;
+
     // -------------------------------------------------------------------------
     // Protect (encrypt outbound)
     // -------------------------------------------------------------------------
@@ -48,6 +57,15 @@ internal sealed class SrtpContext : ISrtpContext
         if (rtpPacket.Length < 12)
             throw new ArgumentException("RTP packet too short (minimum 12 bytes).", nameof(rtpPacket));
 
+        lock (_sync)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            return ProtectLocked(rtpPacket);
+        }
+    }
+
+    private byte[] ProtectLocked(ReadOnlySpan<byte> rtpPacket)
+    {
         var headerLen   = GetRtpHeaderLength(rtpPacket);
         var payloadLen  = rtpPacket.Length - headerLen;
         var ssrc        = BinaryPrimitives.ReadUInt32BigEndian(rtpPacket[8..]);
@@ -86,6 +104,15 @@ internal sealed class SrtpContext : ISrtpContext
         if (srtpPacket.Length < 12 + _authTagLength)
             throw new ArgumentException("SRTP packet too short.", nameof(srtpPacket));
 
+        lock (_sync)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            return UnprotectLocked(srtpPacket);
+        }
+    }
+
+    private byte[] UnprotectLocked(ReadOnlySpan<byte> srtpPacket)
+    {
         var rtpLen     = srtpPacket.Length - _authTagLength;
         var rtpSpan    = srtpPacket[..rtpLen];
         var receivedTag = srtpPacket[rtpLen..];
@@ -269,18 +296,54 @@ internal sealed class SrtpContext : ISrtpContext
     // RTP header length (fixed + CSRC + optional extension)
     // -------------------------------------------------------------------------
 
-    private static int GetRtpHeaderLength(ReadOnlySpan<byte> packet)
+    /// <summary>
+    /// Computes the RTP header length including CSRC list and header extension
+    /// (RFC 3550 §5.1/§5.3.1), validating every step against the packet length.
+    /// A header claiming more CSRCs or extension words than the packet holds is
+    /// malformed — without these checks the computed payload length turns negative
+    /// and an uncontrolled <see cref="ArgumentOutOfRangeException"/> would escape
+    /// past the media path's SRTP error handling and kill the receive loop.
+    /// </summary>
+    internal static int GetRtpHeaderLength(ReadOnlySpan<byte> packet)
     {
         var csrcCount    = packet[0] & 0x0F;
         var hasExtension = (packet[0] & 0x10) != 0;
         var offset       = 12 + csrcCount * 4;
 
-        if (hasExtension && packet.Length >= offset + 4)
+        if (offset > packet.Length)
+            throw new CryptographicException(
+                $"Malformed RTP header: CSRC list ({csrcCount} entries) exceeds the {packet.Length}-byte packet.");
+
+        if (hasExtension)
         {
+            if (packet.Length < offset + 4)
+                throw new CryptographicException(
+                    "Malformed RTP header: extension flag set but the extension header is truncated.");
+
             var extWords = BinaryPrimitives.ReadUInt16BigEndian(packet[(offset + 2)..]);
             offset += 4 + extWords * 4;
+
+            if (offset > packet.Length)
+                throw new CryptographicException(
+                    $"Malformed RTP header: extension ({extWords} words) exceeds the {packet.Length}-byte packet.");
         }
 
         return offset;
+    }
+
+    /// <summary>
+    /// Zeroes the derived session keys (RFC 3711 §9.4 hygiene) and rejects further use.
+    /// Idempotent; safe to call while another thread is mid-Protect/Unprotect (the
+    /// operation in flight completes, subsequent calls throw).
+    /// </summary>
+    public void Dispose()
+    {
+        lock (_sync)
+        {
+            if (_disposed)
+                return;
+            _disposed = true;
+            _keys.Zero();
+        }
     }
 }
