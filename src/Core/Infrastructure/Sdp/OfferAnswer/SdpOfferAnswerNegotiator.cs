@@ -269,7 +269,29 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
     private static string BuildCodecIdentity(SdpCodecDefinition codec)
     {
         var channels = codec.Channels > 1 ? $"/{codec.Channels}" : string.Empty;
-        return $"{codec.Name.ToUpperInvariant()}:{codec.ClockRate}{channels}";
+        return $"{ResolveEffectiveName(codec)}:{codec.ClockRate}{channels}";
+    }
+
+    /// <summary>
+    /// Resolves the effective encoding name for identity matching. Offers may list static
+    /// payload types (RFC 3551) on the m-line without an rtpmap line — the parser then
+    /// names them "PT&lt;n&gt;". Those must still match our named capabilities, otherwise
+    /// an answer to e.g. a Fritz!Box offer (m=audio ... 9 8 0 101, rtpmap only for 101)
+    /// contains no audio codec at all and the peer drops the call with 488.
+    /// </summary>
+    private static string ResolveEffectiveName(SdpCodecDefinition codec)
+    {
+        var name = codec.Name.ToUpperInvariant();
+        if (!name.StartsWith("PT", StringComparison.Ordinal))
+            return name;
+
+        return codec.PayloadType switch
+        {
+            0 => "PCMU",
+            8 => "PCMA",
+            9 => "G722",
+            _ => name
+        };
     }
 
     // -------------------------------------------------------------------------

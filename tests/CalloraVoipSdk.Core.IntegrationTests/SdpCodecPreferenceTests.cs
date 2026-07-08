@@ -28,8 +28,55 @@ public sealed class SdpCodecPreferenceTests
         "a=fmtp:101 0-16\r\n" +
         "a=sendrecv\r\n";
 
+    // Verbatim Fritz!Box offer (wire trace 2026-07-08): static payload types 9/8/0/2 on
+    // the m-line WITHOUT rtpmap lines — RFC 3551 defaults apply.
+    private const string FritzBoxVerbatimOffer =
+        "v=0\r\n" +
+        "o=user 16756633 16756633 IN IP4 192.168.178.1\r\n" +
+        "s=call\r\n" +
+        "c=IN IP4 192.168.178.1\r\n" +
+        "t=0 0\r\n" +
+        "m=audio 7082 RTP/AVP 9 8 0 2 102 100 99 101 97 120 121\r\n" +
+        "a=sendrecv\r\n" +
+        "a=rtpmap:2 G726-32/8000\r\n" +
+        "a=rtpmap:102 G726-32/8000\r\n" +
+        "a=rtpmap:100 G726-40/8000\r\n" +
+        "a=rtpmap:99 G726-24/8000\r\n" +
+        "a=rtpmap:101 telephone-event/8000\r\n" +
+        "a=fmtp:101 0-15\r\n" +
+        "a=rtpmap:97 iLBC/8000\r\n" +
+        "a=fmtp:97 mode=30\r\n" +
+        "a=rtpmap:120 PCMA/16000\r\n" +
+        "a=rtpmap:121 PCMU/16000\r\n" +
+        "a=rtcp:7083\r\n";
+
     private static SdpMediaNegotiationOptions PreferPcmu() =>
         new() { PreferredCodecNames = ["PCMU"] };
+
+    [Fact]
+    public void Static_payload_types_without_rtpmap_negotiate_an_audio_codec()
+    {
+        // Regression: the answer to this offer contained ONLY telephone-event (PT 101) —
+        // no audio codec — and the box dropped the call with BYE reason "SIP 488".
+        var answer = SdpUtilities.TryBuildNegotiatedAnswer(
+            FritzBoxVerbatimOffer, LocalEndPoint, hold: false, PreferPcmu());
+
+        Assert.NotNull(answer);
+        var audioLine = answer!.Split("\r\n").Single(l => l.StartsWith("m=audio", StringComparison.Ordinal));
+        Assert.Matches(@"^m=audio \d+ RTP/AVP 0 101$", audioLine);
+        Assert.Contains("a=rtpmap:0 PCMU/8000", answer);
+    }
+
+    [Fact]
+    public void Static_payload_types_without_rtpmap_keep_default_g722_choice()
+    {
+        var answer = SdpUtilities.TryBuildNegotiatedAnswer(
+            FritzBoxVerbatimOffer, LocalEndPoint, hold: false);
+
+        Assert.NotNull(answer);
+        var audioLine = answer!.Split("\r\n").Single(l => l.StartsWith("m=audio", StringComparison.Ordinal));
+        Assert.StartsWith("m=audio 40000 RTP/AVP 9 ", audioLine);
+    }
 
     [Fact]
     public void Answer_without_preference_keeps_default_g722_choice()
