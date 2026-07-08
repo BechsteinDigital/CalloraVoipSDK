@@ -41,6 +41,12 @@ internal interface IStunClient
     /// Optional local endpoint to bind before sending the request.
     /// Mainly used by ICE candidate checks to preserve source-port semantics.
     /// </param>
+    /// <param name="sharedUdpSocket">
+    /// Optional already-bound UDP socket to send/receive through instead of binding a new
+    /// one. Required when the source port is owned by another component (e.g. the RTP
+    /// media port during ICE gathering) — binding a second socket to that port fails with
+    /// "address already in use". The socket is neither connected nor disposed. UDP only.
+    /// </param>
     /// <param name="ct">Cancellation token to abort all retry attempts immediately.</param>
     /// <returns>The resolved public endpoint.</returns>
     /// <exception cref="StunException">
@@ -53,5 +59,6 @@ internal interface IStunClient
         string?           tlsTargetHost = null,
         RemoteCertificateValidationCallback? tlsRemoteCertificateValidationCallback = null,
         IPEndPoint?       localEndPoint = null,
+        System.Net.Sockets.Socket? sharedUdpSocket = null,
         CancellationToken ct          = default);
 }

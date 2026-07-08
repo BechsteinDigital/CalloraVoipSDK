@@ -181,6 +181,49 @@ public sealed class CallIceAgentTests
         Assert.Equal(2, probe.ConnectivityAttempts);
     }
 
+    [Fact]
+    public async Task Srflx_pair_is_selected_when_host_paths_fail()
+    {
+        // STUN-only path on selection level: NAT'd peers reach each other via their
+        // server-reflexive candidates while direct host-host checks fail.
+        var remoteSrflx = new IPEndPoint(IPAddress.Parse("203.0.113.99"), 51000);
+        var probe = new FakeStunProbe
+        {
+            ConnectivityResults = { [remote => remote.Equals(remoteSrflx)] = true },
+        };
+        var agent = Agent(Config(), probe);
+
+        var result = await agent.SelectCandidatePairAsync(
+            CallId.New(),
+            Parameters(
+                [Candidate("host", LocalRtp, priority: 200), Candidate("srflx", Srflx, priority: 100)],
+                [
+                    Candidate("host", new IPEndPoint(IPAddress.Parse("192.0.2.30"), 41000), priority: 200),
+                    Candidate("srflx", remoteSrflx, priority: 100),
+                ]));
+
+        Assert.True(result.HasSelectedPair);
+        Assert.Equal("srflx", result.RemoteCandidate!.Type);
+        Assert.Equal(remoteSrflx, result.RemoteEndPoint);
+    }
+
+    [Fact]
+    public async Task Gathering_passes_the_shared_media_socket_to_the_stun_probe()
+    {
+        // Regression: gathering must reuse the reserved RTP socket for the STUN query —
+        // binding a second socket to the media port failed with "address already in use".
+        var probe = new FakeStunProbe { ReflexiveEndPoint = Srflx };
+        var agent = Agent(Config(), probe);
+        using var reservation = new System.Net.Sockets.Socket(
+            System.Net.Sockets.AddressFamily.InterNetwork,
+            System.Net.Sockets.SocketType.Dgram,
+            System.Net.Sockets.ProtocolType.Udp);
+
+        await agent.BuildLocalDescriptionAsync(LocalRtp, reservation);
+
+        Assert.Same(reservation, probe.ObservedSharedSocket);
+    }
+
     // --- Selection: failure paths ---
 
     [Fact]
@@ -223,6 +266,28 @@ public sealed class CallIceAgentTests
     }
 
     [Fact]
+    public async Task Missing_credentials_fail_with_dedicated_reason()
+    {
+        var agent = Agent(Config(), new FakeStunProbe());
+
+        var noCredentials = new CallMediaParameters
+        {
+            LocalEndPoint = LocalRtp,
+            RemoteEndPoint = new IPEndPoint(IPAddress.Parse("192.0.2.20"), 42000),
+            PayloadType = 0,
+            ClockRate = 8000,
+            SamplesPerPacket = 160,
+            PayloadTypeCodecMap = new Dictionary<int, string> { [0] = "PCMU" },
+            IceEnabled = true, // metadata present, but ufrag/pwd missing
+        };
+
+        var result = await agent.SelectCandidatePairAsync(CallId.New(), noCredentials);
+
+        Assert.Equal("ice_credentials_missing", result.ReasonCode);
+        Assert.Equal(CallIceNegotiationState.Failed, result.State);
+    }
+
+    [Fact]
     public async Task Missing_candidates_fail_with_dedicated_reason()
     {
         var agent = Agent(Config(), new FakeStunProbe());
@@ -243,10 +308,15 @@ public sealed class CallIceAgentTests
         public Dictionary<Func<IPEndPoint, bool>, bool> ConnectivityResults { get; } = [];
         public int SucceedOnAttempt { get; init; }
         public int ConnectivityAttempts;
+        public System.Net.Sockets.Socket? ObservedSharedSocket;
 
         public Task<IPEndPoint?> TryGetServerReflexiveEndPointAsync(
-            IPEndPoint localEndPoint, IceServerConfiguration server, CancellationToken ct = default)
-            => Task.FromResult(ReflexiveEndPoint);
+            IPEndPoint localEndPoint, IceServerConfiguration server,
+            System.Net.Sockets.Socket? sharedUdpSocket = null, CancellationToken ct = default)
+        {
+            ObservedSharedSocket = sharedUdpSocket;
+            return Task.FromResult(ReflexiveEndPoint);
+        }
 
         public Task<bool> TryCheckConnectivityAsync(
             IPEndPoint localEndPoint, IPEndPoint remoteEndPoint,

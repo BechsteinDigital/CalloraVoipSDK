@@ -28,6 +28,7 @@ internal sealed class StunIceProbe : IIceStunProbe
     public async Task<IPEndPoint?> TryGetServerReflexiveEndPointAsync(
         IPEndPoint localEndPoint,
         IceServerConfiguration server,
+        System.Net.Sockets.Socket? sharedUdpSocket = null,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(localEndPoint);
@@ -45,6 +46,7 @@ internal sealed class StunIceProbe : IIceStunProbe
                     credentials: BuildCredentials(server),
                     transport: transport,
                     localEndPoint: localEndPoint,
+                    sharedUdpSocket: sharedUdpSocket,
                     ct: ct)
                 .ConfigureAwait(false);
             return result.MappedEndPoint;
