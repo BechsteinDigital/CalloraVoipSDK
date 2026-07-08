@@ -60,6 +60,10 @@ internal sealed class SipCallSessionContextAdapter : ISipCallSessionContext
 
     public SipRequest? InitialInvite => _session._initialInvite;
 
+    public string? AdvertisedPublicHost => _session._advertisedPublicHost;
+
+    public int? AdvertisedPublicPort => _session._advertisedPublicPort;
+
     public IPEndPoint RemoteEndPoint
     {
         get { lock (_session._sync) return _session._remoteEndPoint; }

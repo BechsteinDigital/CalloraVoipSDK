@@ -147,10 +147,17 @@ internal sealed class SipCoreCallChannel : ICallChannel
     {
         var session = EnsureSession();
 
-        // Build answer SDP with the correct local RTP port.
+        // Route-local address for the SDP/bind. NAT reachability is handled by symmetric
+        // RTP (the peer's SBC latches to our real source), so the connection line does not
+        // need a STUN/public address — advertising one with the wrong RTP port breaks it.
         var localIp = ResolveAdvertisedMediaAddress(session);
         var localMediaEndPoint = new IPEndPoint(localIp, _localMediaPort);
-        await EnsureLocalIceDescriptionAsync(localMediaEndPoint, ct).ConfigureAwait(false);
+
+        // ICE only when the offer actually included it (RFC 8445): advertising ICE
+        // candidates unsolicited makes a non-ICE peer send STUN checks to our RTP port,
+        // which pollutes the media path and blocks plain RTP.
+        if (RemoteOfferHasIce(session.RemoteSdp))
+            await EnsureLocalIceDescriptionAsync(localMediaEndPoint, ct).ConfigureAwait(false);
 
         if (!ValidateInboundOfferAgainstPolicy(session.RemoteSdp, out var inboundOfferReasonCode))
         {
@@ -284,6 +291,11 @@ internal sealed class SipCoreCallChannel : ICallChannel
             session,
             AdvertisedMediaAddressResolver.ProbeRoute,
             _logger);
+
+    /// <summary>Returns true when the remote SDP offer signals ICE (a=ice-ufrag).</summary>
+    private static bool RemoteOfferHasIce(string? remoteSdp) =>
+        !string.IsNullOrWhiteSpace(remoteSdp)
+        && remoteSdp.Contains("ice-ufrag", StringComparison.OrdinalIgnoreCase);
 
     /// <inheritdoc />
     public async Task SendDtmfAsync(byte dtmfCode)

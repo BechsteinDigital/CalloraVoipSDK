@@ -42,6 +42,18 @@ internal sealed class SipLineChannel : ILineChannel
     private string? _registrationCallId;
     private int _registrationNextCSeq = 1;
 
+    // Resolved once (background registration loop), read on the inbound-INVITE thread —
+    // published via a volatile reference for safe cross-thread visibility.
+    private volatile IReadOnlyCollection<System.Net.IPAddress>? _trustedRegistrarAddresses;
+
+    // NAT: public address learned from the registrar's Via received=/rport= (N2). Written on
+    // the registration loop, read on the inbound-INVITE thread; held as a single immutable
+    // record behind a volatile reference so readers never see a torn host/port pair.
+    private volatile LearnedPublicContact? _learnedPublicContact;
+
+    /// <summary>Immutable NAT-learned public signaling address.</summary>
+    private sealed record LearnedPublicContact(string Host, int? Port);
+
     /// <summary>
     /// Creates a SIP line channel and wires registration and inbound signaling handlers.
     /// </summary>
@@ -278,6 +290,14 @@ internal sealed class SipLineChannel : ILineChannel
             return;
         }
 
+        // NAT: advertise our public address in the in-dialog Contact (so the peer routes the
+        // ACK to our 2xx) and in the media SDP. Manual override wins, else the learned
+        // rport/received address.
+        var learned = _learnedPublicContact;
+        var publicHost = HasManualPublicOverride ? _account.PublicSipHost : learned?.Host;
+        var publicPort = HasManualPublicOverride ? _account.PublicSipPort : learned?.Port;
+        args.Session.SetAdvertisedPublicContact(publicHost, publicPort);
+
         var channel = new SipCoreCallChannel(
             _callChannelLogger,
             _sdpNegotiator,
@@ -308,6 +328,7 @@ internal sealed class SipLineChannel : ILineChannel
     private async Task RegisterAsync(CancellationToken ct)
     {
         var failureCount = 0;
+        var correctiveReregistrations = 0;
         var hadSuccessfulRegistration = false;
         var options = _account.Reregister;
 
@@ -327,11 +348,46 @@ internal sealed class SipLineChannel : ILineChannel
                     _registrationCallId = result.CallId;
                     _registrationNextCSeq = result.NextCSeq;
 
+                    // NAT: adopt the public address the registrar reflected. When it changes
+                    // the learned state (fresh discovery or IP change), re-register once
+                    // immediately so the Contact becomes routable; an unchanged observation
+                    // falls through to the normal refresh. A per-cycle cap
+                    // (ReregisterOptions.MaxCorrectiveReregistrations) bounds a re-register
+                    // storm on a pathological NAT that reflects a new port on every REGISTER.
+                    var (host, port, changed) = NatPublicContactState.ApplyObserved(
+                        HasManualPublicOverride,
+                        _learnedPublicContact?.Host,
+                        _learnedPublicContact?.Port,
+                        result.ObservedPublicHost,
+                        result.ObservedPublicPort);
+                    if (changed)
+                    {
+                        _learnedPublicContact = host is null ? null : new LearnedPublicContact(host, port);
+                        if (correctiveReregistrations < options.MaxCorrectiveReregistrations)
+                        {
+                            correctiveReregistrations++;
+                            _logger.LogDebug(
+                                "SIP registration for [{User}]: learned public contact {Host}:{Port} from registrar; re-registering ({Attempt}/{Max}).",
+                                _account.Username, host, port?.ToString() ?? "(local)",
+                                correctiveReregistrations, options.MaxCorrectiveReregistrations);
+                            continue;
+                        }
+
+                        _logger.LogWarning(
+                            "SIP registration for [{User}]: NAT-reflected public contact keeps changing (now {Host}:{Port}); settling after {Max} corrective re-registrations to avoid churn.",
+                            _account.Username, host, port?.ToString() ?? "(local)", options.MaxCorrectiveReregistrations);
+                        // Fall through: adopt the latest address, register as-is, stop correcting.
+                    }
+
+                    correctiveReregistrations = 0;
                     failureCount = 0;
                     hadSuccessfulRegistration = true;
+                    // Resolve trusted registrar peers here (background loop), so the inbound
+                    // INVITE path never blocks on DNS; the result is cached and volatile.
+                    _ = ResolveTrustedRegistrarAddresses();
                     _onState?.Invoke(LineState.Registered);
 
-                    var refreshDelay = ComputeRefreshDelay(result.EffectiveExpiresSeconds);
+                    var refreshDelay = ComputeRefreshDelay(result.EffectiveExpiresSeconds, options);
                     _logger.LogDebug(
                         "SIP registration for [{User}] will refresh in {Delay}.",
                         _account.Username,
@@ -446,12 +502,46 @@ internal sealed class SipLineChannel : ILineChannel
     /// <summary>
     /// Returns true when an inbound session local URI targets this line account.
     /// </summary>
-    private bool IsSessionForThisLine(ISipCallSession session)
-    {
-        if (!SipProtocol.TryParseSipUri(session.LocalUri, out var localUser, out _, out _))
-            return false;
+    private bool IsSessionForThisLine(ISipCallSession session) =>
+        TrunkInboundMatcher.IsForThisLine(
+            session.LocalUri,
+            _account.Username,
+            _account.SipServer,
+            session.RemoteSignalingEndPoint?.Address,
+            ResolveTrustedRegistrarAddresses(),
+            _account.InboundNumbers,
+            _account.AcceptTrunkInbound);
 
-        return string.Equals(localUser, _account.Username, StringComparison.OrdinalIgnoreCase);
+    /// <summary>
+    /// Resolves and caches the registrar/outbound-proxy addresses this line trusts for
+    /// inbound peer matching. Best-effort DNS; an unresolvable host contributes nothing.
+    /// </summary>
+    private IReadOnlyCollection<System.Net.IPAddress> ResolveTrustedRegistrarAddresses()
+    {
+        if (_trustedRegistrarAddresses is not null)
+            return _trustedRegistrarAddresses;
+
+        var addresses = new HashSet<System.Net.IPAddress>();
+        foreach (var host in new[] { _account.SipServer, _account.OutboundProxy })
+        {
+            if (string.IsNullOrWhiteSpace(host))
+                continue;
+            var bareHost = SipProtocol.TryParseSipUri(host, out _, out var parsedHost, out _)
+                ? parsedHost
+                : host;
+            try
+            {
+                foreach (var address in System.Net.Dns.GetHostAddresses(bareHost))
+                    addresses.Add(address);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Could not resolve trusted registrar host '{Host}' for inbound matching.", bareHost);
+            }
+        }
+
+        _trustedRegistrarAddresses = addresses;
+        return _trustedRegistrarAddresses;
     }
 
     /// <summary>
@@ -473,8 +563,14 @@ internal sealed class SipLineChannel : ILineChannel
             UserAgent = _userAgent,
             Transport = MapTransport(_account.Transport),
             ExistingCallId = existingCallId,
-            StartCSeq = startCSeq
+            StartCSeq = startCSeq,
+            // Manual override (N1) wins; otherwise the address learned from the
+            // registrar's received=/rport= (N2); otherwise the local address.
+            PublicHost = HasManualPublicOverride ? _account.PublicSipHost : _learnedPublicContact?.Host,
+            PublicPort = HasManualPublicOverride ? _account.PublicSipPort : _learnedPublicContact?.Port
         };
+
+    private bool HasManualPublicOverride => !string.IsNullOrWhiteSpace(_account.PublicSipHost);
 
     /// <summary>
     /// Maps domain SIP transport choice to infrastructure transport protocol.
@@ -489,13 +585,22 @@ internal sealed class SipLineChannel : ILineChannel
     };
 
     /// <summary>
-    /// Computes next registration refresh delay based on effective expires value.
+    /// Computes the next registration refresh delay from the granted lifetime, using the
+    /// account's <see cref="ReregisterOptions.RefreshRatio"/> and
+    /// <see cref="ReregisterOptions.MinRefreshInterval"/>. Refreshes at ratio × lifetime,
+    /// never later than the binding lives (<c>baseline - 1</c>) and — as a secondary guard
+    /// against churn when a registrar reports an implausibly short lifetime — not sooner than
+    /// the configured minimum, unless the binding itself is shorter than that.
     /// </summary>
-    private static TimeSpan ComputeRefreshDelay(int effectiveExpiresSeconds)
+    internal static TimeSpan ComputeRefreshDelay(int effectiveExpiresSeconds, ReregisterOptions options)
     {
         var baseline = effectiveExpiresSeconds > 0 ? effectiveExpiresSeconds : 300;
-        var refreshSeconds = (int)Math.Round(baseline * 0.8, MidpointRounding.AwayFromZero);
-        refreshSeconds = Math.Clamp(refreshSeconds, 5, Math.Max(5, baseline - 1));
+        var ratio = options.RefreshRatio is > 0 and < 1 ? options.RefreshRatio : 0.8;
+        var refreshSeconds = (int)Math.Round(baseline * ratio, MidpointRounding.AwayFromZero);
+        var upperBound = Math.Max(1, baseline - 1);
+        var minRefresh = Math.Max(1, (int)Math.Round(options.MinRefreshInterval.TotalSeconds));
+        var floor = Math.Min(minRefresh, upperBound);
+        refreshSeconds = Math.Clamp(refreshSeconds, floor, upperBound);
         return TimeSpan.FromSeconds(refreshSeconds);
     }
 

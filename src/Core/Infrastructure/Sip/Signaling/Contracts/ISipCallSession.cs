@@ -65,6 +65,13 @@ internal interface ISipCallSession : IDisposable
     IPEndPoint? RemoteSignalingEndPoint => null;
 
     /// <summary>
+    /// Sets the public host/port to advertise in in-dialog Contact URIs (behind NAT), so a
+    /// trunk peer can route the ACK to a 2xx and later in-dialog requests. The default
+    /// implementation is a no-op for sessions that do not support it.
+    /// </summary>
+    void SetAdvertisedPublicContact(string? host, int? port) { }
+
+    /// <summary>
     /// Raised whenever the dialog state changes.
     /// </summary>
     event EventHandler<SipDialogStateChangedEventArgs>? StateChanged;

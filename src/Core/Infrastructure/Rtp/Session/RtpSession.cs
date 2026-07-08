@@ -23,6 +23,11 @@ internal sealed class RtpSession : IRtpSession
     private readonly uint _ssrc;
     private readonly Dictionary<uint, RtpSequenceValidator> _validators = new();
 
+    // Symmetric RTP / comedia (RFC dodging NAT without ICE): once a valid RTP packet
+    // arrives, remember its actual source and send back there instead of the SDP-advertised
+    // address. Lets media flow through NAT without STUN — the peer's SBC latches likewise.
+    private IPEndPoint? _latchedRemoteEndPoint;
+
     private ushort _sequenceNumber;
     private uint _timestamp;
     private Task? _receiveLoop;
@@ -140,7 +145,7 @@ internal sealed class RtpSession : IRtpSession
         ReadOnlyMemory<byte> datagram,
         CancellationToken cancellationToken)
     {
-        await _udp.SendAsync(datagram, _options.RemoteEndPoint, cancellationToken).ConfigureAwait(false);
+        await _udp.SendAsync(datagram, Volatile.Read(ref _latchedRemoteEndPoint) ?? _options.RemoteEndPoint, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -171,11 +176,15 @@ internal sealed class RtpSession : IRtpSession
             try
             {
                 var result = await _udp.ReceiveAsync(cancellationToken).ConfigureAwait(false);
-                ProcessDatagram(result.Buffer);
+                ProcessDatagram(result.Buffer, result.RemoteEndPoint);
             }
             catch (OperationCanceledException)
             {
                 break;
+            }
+            catch (ObjectDisposedException)
+            {
+                break; // Socket disposed during shutdown.
             }
             catch (SocketException ex) when (!cancellationToken.IsCancellationRequested)
             {
@@ -186,7 +195,7 @@ internal sealed class RtpSession : IRtpSession
         _logger.LogDebug("RTP receive loop stopped on {LocalEndPoint}", _options.LocalEndPoint);
     }
 
-    private void ProcessDatagram(byte[] datagram)
+    private void ProcessDatagram(byte[] datagram, IPEndPoint? source)
     {
         if (LooksLikeRtcpDatagram(datagram))
         {
@@ -210,6 +219,14 @@ internal sealed class RtpSession : IRtpSession
         {
             _logger.LogDebug("Dropping malformed RTP datagram: {Message}", ex.Message);
             return;
+        }
+
+        // Symmetric RTP: latch onto the real source of the first valid RTP packet so
+        // outbound media follows the NAT-translated path the peer actually uses.
+        if (source is not null && !source.Equals(Volatile.Read(ref _latchedRemoteEndPoint)))
+        {
+            Volatile.Write(ref _latchedRemoteEndPoint, source);
+            _logger.LogDebug("RTP symmetric latch: sending media to observed source {Source}.", source);
         }
 
         // SSRC collision detection (RFC 3550 §8.2)
@@ -334,7 +351,7 @@ internal sealed class RtpSession : IRtpSession
         };
 
         var datagram = _codec.Encode(packet);
-        await _udp.SendAsync(datagram, _options.RemoteEndPoint, cancellationToken).ConfigureAwait(false);
+        await _udp.SendAsync(datagram, Volatile.Read(ref _latchedRemoteEndPoint) ?? _options.RemoteEndPoint, cancellationToken).ConfigureAwait(false);
 
         Interlocked.Increment(ref _packetsSent);
         Interlocked.Add(ref _octetsSent, payload.Length);

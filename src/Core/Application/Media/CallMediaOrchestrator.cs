@@ -24,18 +24,31 @@ internal sealed class CallMediaOrchestrator : IDisposable
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<CallMediaOrchestrator> _logger;
     private readonly ConcurrentDictionary<CallId, ActiveMediaEntry> _active = new();
+    private readonly ConcurrentDictionary<CallId, MediaActivity> _activity = new();
+    private readonly MediaSupervisionOptions _supervision;
     private bool _disposed;
+
+    /// <summary>Mutable per-call inbound-activity tracker for media-timeout hangup.</summary>
+    private sealed class MediaActivity
+    {
+        public required ICall Call { get; init; }
+        public long LastReceived;
+        public DateTimeOffset LastActivityUtc;
+        public int HungUp;
+    }
 
     internal CallMediaOrchestrator(
         ICallMediaSessionFactory sessionFactory,
         ILoggerFactory loggerFactory,
         IRtcpPacketCodec rtcpPacketCodec,
-        ICallIceAgent? iceAgent = null)
+        ICallIceAgent? iceAgent = null,
+        MediaSupervisionOptions? supervision = null)
     {
         _sessionFactory = sessionFactory ?? throw new ArgumentNullException(nameof(sessionFactory));
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
         _rtcpPacketCodec = rtcpPacketCodec ?? throw new ArgumentNullException(nameof(rtcpPacketCodec));
         _iceAgent = iceAgent;
+        _supervision = supervision ?? MediaSupervisionOptions.Default;
         _logger = _loggerFactory
             .CreateLogger<CallMediaOrchestrator>();
     }
@@ -61,7 +74,52 @@ internal sealed class CallMediaOrchestrator : IDisposable
     internal void OnCallStateChanged(object? sender, CallStateChangedEventArgs e)
     {
         if (e.NewState == CallState.Terminated)
+        {
+            _activity.TryRemove(e.Call.CallId, out _);
             _ = TeardownMediaAsync(e.Call.CallId);
+        }
+    }
+
+    /// <summary>
+    /// Hangs up a connected call whose inbound RTP has gone silent past
+    /// <see cref="MediaSupervisionOptions.InboundMediaTimeout"/> — a NAT-safe fallback when a
+    /// far-end BYE never reaches our in-dialog Contact. Disabled when the timeout is
+    /// non-positive; on-hold calls are exempt unless explicitly configured. Fires at most
+    /// once per call.
+    /// </summary>
+    private void CheckInboundMediaActivity(CallId callId, CallMediaRuntimeMetrics metrics)
+    {
+        var timeout = _supervision.InboundMediaTimeout;
+        if (timeout <= TimeSpan.Zero)
+            return;
+
+        if (!_activity.TryGetValue(callId, out var activity))
+            return;
+
+        if (metrics.PacketsReceived > activity.LastReceived)
+        {
+            activity.LastReceived = metrics.PacketsReceived;
+            activity.LastActivityUtc = DateTimeOffset.UtcNow;
+            return;
+        }
+
+        // A held call legitimately carries no inbound RTP; only supervise it when configured.
+        var supervisedState = activity.Call.State is CallState.Connected
+            || (_supervision.HangupHeldCallOnSilence && activity.Call.State is CallState.OnHold);
+
+        // No new inbound RTP: only act once media was flowing and the call is still supervised.
+        if (activity.LastReceived == 0
+            || DateTimeOffset.UtcNow - activity.LastActivityUtc < timeout
+            || !supervisedState)
+            return;
+
+        if (Interlocked.Exchange(ref activity.HungUp, 1) != 0)
+            return;
+
+        _logger.LogInformation(
+            "Call {CallId}: no inbound RTP for {Timeout}s — hanging up (far-end likely gone, BYE not received).",
+            callId, timeout.TotalSeconds);
+        _ = activity.Call.HangupAsync();
     }
 
     // ──────────────────────────────────────────────────────────────────────────
@@ -127,6 +185,7 @@ internal sealed class CallMediaOrchestrator : IDisposable
             metricsHandler,
             qualityHandler);
         _active[call.CallId] = entry;
+        _activity[call.CallId] = new MediaActivity { Call = call, LastActivityUtc = DateTimeOffset.UtcNow };
 
         _ = StartSessionAsync(call.CallId, entry);
     }
@@ -147,6 +206,7 @@ internal sealed class CallMediaOrchestrator : IDisposable
 
     private async Task TeardownMediaAsync(CallId callId)
     {
+        _activity.TryRemove(callId, out _);
         if (!_active.TryRemove(callId, out var entry)) return;
 
         try
@@ -197,6 +257,8 @@ internal sealed class CallMediaOrchestrator : IDisposable
 
     private void OnRuntimeMetricsUpdated(CallId callId, CallMediaRuntimeMetrics metrics)
     {
+        CheckInboundMediaActivity(callId, metrics);
+
         _logger.LogDebug(
             "Media metrics update for call {CallId}: recv={Recv} queued={Queued} delivered={Delivered} conceal={Conceal} late={Late} overflow={Overflow} duplicate={Duplicate} unrecoverable={Unrecoverable} jitterMs={JitterMs:F2} delayMs={DelayMs:F2} rttMs={RttMs:F2} buffered={Buffered}.",
             callId,

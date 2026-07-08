@@ -177,7 +177,10 @@ internal sealed class SipRegistrationService : ISipRegistrationService
                 var contactUri = SipSignalingFormat.BuildContactUri(
                     request.Username,
                     advertisedLocalEndPoint,
-                    routeCandidate.Transport);
+                    routeCandidate.Transport,
+                    forceSecureScheme: false,
+                    advertisedHost: request.PublicHost,
+                    advertisedPort: request.PublicPort);
                 var headers = BuildRegisterHeaders(
                     mode,
                     advertisedLocalEndPoint,
@@ -191,7 +194,9 @@ internal sealed class SipRegistrationService : ISipRegistrationService
                     effectiveExpiresSeconds,
                     request.UserAgent,
                     request.InstanceId,
-                    traceId);
+                    traceId,
+                    request.PublicHost,
+                    request.PublicPort);
 
                 if (!string.IsNullOrWhiteSpace(authorizationHeader)
                     && !string.IsNullOrWhiteSpace(authorizationHeaderName))
@@ -240,7 +245,8 @@ internal sealed class SipRegistrationService : ISipRegistrationService
 
                 if (SipProtocol.IsSuccess(response.StatusCode))
                 {
-                    var effectiveExpires = TryGetEffectiveExpires(response, effectiveExpiresSeconds);
+                    var bindings = ParseRegisteredBindings(response);
+                    var effectiveExpires = TryGetEffectiveExpires(response, bindings, contactUri, effectiveExpiresSeconds);
                     _logger.LogDebug(
                         "SIP REGISTER succeeded for {User}@{Domain} with {Status}.",
                         request.Username,
@@ -258,6 +264,9 @@ internal sealed class SipRegistrationService : ISipRegistrationService
                         }
                     });
 
+                    var (observedHost, observedPort) =
+                        SipProtocol.ExtractViaReceivedRport(response.Header("Via"));
+
                     return new SipRegistrationResult
                     {
                         CallId = callId,
@@ -267,7 +276,9 @@ internal sealed class SipRegistrationService : ISipRegistrationService
                         Authenticated = authAttempted,
                         NextCSeq = cseq + 1,
                         ServiceRoute = ExtractServiceRoute(response),
-                        RegisteredBindings = ParseRegisteredBindings(response)
+                        RegisteredBindings = bindings,
+                        ObservedPublicHost = observedHost,
+                        ObservedPublicPort = observedPort
                     };
                 }
 
@@ -468,11 +479,13 @@ internal sealed class SipRegistrationService : ISipRegistrationService
         int expiresSeconds,
         string userAgent,
         string? instanceId,
-        string traceId)
+        string traceId,
+        string? publicHost = null,
+        int? publicPort = null)
     {
         var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            ["Via"] = SipSignalingFormat.BuildVia(localEndPoint, branch, transport),
+            ["Via"] = SipSignalingFormat.BuildVia(localEndPoint, branch, transport, publicHost, publicPort),
             ["Max-Forwards"] = "70",
             ["From"] = fromHeader,
             ["To"] = toHeader,
@@ -550,7 +563,7 @@ internal sealed class SipRegistrationService : ISipRegistrationService
     /// <summary>
     /// Parses the Contact headers in the 200 OK into a list of active bindings.
     /// </summary>
-    private static IReadOnlyList<SipRegistrationBinding> ParseRegisteredBindings(SipResponse response)
+    internal static IReadOnlyList<SipRegistrationBinding> ParseRegisteredBindings(SipResponse response)
     {
         var bindings = new List<SipRegistrationBinding>();
         foreach (var contactRow in response.HeaderValues("Contact"))
@@ -645,22 +658,57 @@ internal sealed class SipRegistrationService : ISipRegistrationService
     }
 
     /// <summary>
-    /// Extracts effective expires value from REGISTER response headers.
+    /// Determines the effective registration lifetime that drives the refresh timer.
     /// </summary>
-    private static int TryGetEffectiveExpires(SipResponse response, int fallback)
+    /// <remarks>
+    /// Registrars echo <em>all</em> current bindings of the address-of-record in the 200 OK,
+    /// each carrying its own <c>expires</c> parameter as the <em>remaining</em> lifetime that
+    /// counts down between polls. Reading the first <c>expires=</c> in the raw Contact header
+    /// therefore latches onto an arbitrary (possibly stale) binding and yields an erratic,
+    /// shrinking value — which collapses the refresh interval and causes REGISTER churn behind
+    /// NAT (RFC 3261 §10.3). Selection order: (1) the top-level <c>Expires</c> header when the
+    /// registrar sends one; (2) the binding whose Contact URI matches ours; (3) the longest of
+    /// the remaining bindings; (4) the requested fallback.
+    /// </remarks>
+    internal static int TryGetEffectiveExpires(
+        SipResponse response,
+        IReadOnlyList<SipRegistrationBinding> bindings,
+        string ownContactUri,
+        int fallback)
     {
         if (int.TryParse(response.Header("Expires"), out var expires))
             return Math.Max(0, expires);
 
-        var contactHeader = response.Header("Contact");
-        if (string.IsNullOrWhiteSpace(contactHeader))
-            return fallback;
-        var markerIndex = contactHeader.IndexOf("expires=", StringComparison.OrdinalIgnoreCase);
-        if (markerIndex < 0) return fallback;
-        var tail = contactHeader[(markerIndex + 8)..];
-        var separatorIndex = tail.IndexOfAny([',', ';']);
-        var value = separatorIndex >= 0 ? tail[..separatorIndex] : tail;
-        return int.TryParse(value.Trim(), out var parsed) ? Math.Max(0, parsed) : fallback;
+        var ownCore = NormalizeContactCore(ownContactUri);
+        var ownBinding = bindings.FirstOrDefault(
+            b => b.ExpiresSeconds >= 0 && NormalizeContactCore(b.ContactUri) == ownCore);
+        if (ownBinding is not null)
+            return ownBinding.ExpiresSeconds;
+
+        var longest = -1;
+        foreach (var binding in bindings)
+        {
+            if (binding.ExpiresSeconds > longest)
+                longest = binding.ExpiresSeconds;
+        }
+
+        return longest >= 0 ? longest : fallback;
+    }
+
+    /// <summary>
+    /// Reduces a Contact URI to its scheme/user/host/port core (drops uri-parameters and
+    /// header-parameters) for order- and parameter-insensitive binding comparison.
+    /// </summary>
+    private static string NormalizeContactCore(string? contactUri)
+    {
+        if (string.IsNullOrWhiteSpace(contactUri))
+            return string.Empty;
+
+        var core = SipProtocol.ExtractUriFromNameAddr(contactUri);
+        var separatorIndex = core.IndexOf(';');
+        if (separatorIndex >= 0)
+            core = core[..separatorIndex];
+        return core.Trim().ToLowerInvariant();
     }
 
     /// <summary>

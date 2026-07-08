@@ -51,4 +51,17 @@ public sealed class SdkConfiguration
     /// default set (G722, PCMA, PCMU) is used. <see langword="null"/> keeps defaults.
     /// </summary>
     public IReadOnlyList<string>? PreferredAudioCodecs { get; init; }
+
+    /// <summary>
+    /// Hang up a connected call whose inbound RTP has been silent this long — a NAT-safe
+    /// fallback for when a far-end BYE never reaches our in-dialog Contact and the media just
+    /// stops. <see cref="TimeSpan.Zero"/> disables the check. Default: 15 seconds.
+    /// </summary>
+    public TimeSpan InboundMediaTimeout { get; init; } = TimeSpan.FromSeconds(15);
+
+    /// <summary>
+    /// Whether the inbound-media timeout also applies to on-hold calls (which legitimately
+    /// carry no inbound RTP). Default: <see langword="false"/> (held calls are not torn down).
+    /// </summary>
+    public bool HangupHeldCallOnMediaSilence { get; init; }
 }

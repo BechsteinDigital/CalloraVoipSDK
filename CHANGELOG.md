@@ -6,6 +6,43 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-07-08
+
+Inbound calls over a public SIP trunk (sipgate SIPconnect) behind NAT, without STUN —
+verified end-to-end by a real call and packet capture: stable registration, symmetric-RTP
+media, and in-dialog ACK/BYE traversal with a clean dialog teardown.
+
+### Added
+- SIP-trunk inbound over NAT: symmetric RTP (comedia) so media flows without STUN or ICE,
+  a NAT-public contact learned from the registrar's `received=`/`rport=` (RFC 3261 §18.2.1 /
+  RFC 3581), and inbound line matching by registrar peer or registered domain (not just the
+  exact username) for trunk DIDs.
+- Configuration surfaces (all with backward-compatible defaults):
+  - `SipAccount.PublicSipHost` / `PublicSipPort` — manual public contact override.
+  - `SipAccount.InboundNumbers` — DID whitelist for multi-line disambiguation.
+  - `SipAccount.AcceptTrunkInbound` (default `true`) — opt out to a strict 1:1 username match.
+  - `ReregisterOptions.RefreshRatio` / `MinRefreshInterval` / `MaxCorrectiveReregistrations`.
+  - `SdkConfiguration.InboundMediaTimeout` (`0` disables) / `HangupHeldCallOnMediaSilence`.
+- Media-inactivity timeout: a connected call whose inbound RTP goes silent is torn down as a
+  NAT-safe fallback for a far-end BYE that never reaches our in-dialog Contact.
+
+### Fixed
+- Responses now echo the request's `Record-Route` header fields in order (RFC 3261 §12.1.1).
+  Without this the peer's route set was empty and sent the ACK to our 2xx (and any BYE)
+  straight to our Contact from an un-primed far-end node, which a restricted NAT drops —
+  the confirmed root cause of ACK/BYE never arriving over the trunk.
+- Registration refresh no longer churns: the effective lifetime is taken from our own binding
+  (RFC 3261 §10.3) instead of the first `expires=` in a multi-binding Contact header, which
+  counted down between polls and collapsed the refresh interval.
+- ICE candidates are only advertised when the remote offer includes ICE (RFC 8445); an
+  unsolicited ICE description made non-ICE peers send STUN to the RTP port and blocked media.
+
+### Changed
+- The NAT-learned public contact is published via a volatile immutable record (thread-safe
+  cross-thread reads), corrective re-registrations are bounded per cycle to prevent a
+  re-register storm on pathological NATs, and trusted-registrar DNS is resolved off the
+  inbound-INVITE path.
+
 ## [3.1.2] - 2026-07-08
 
 First real-world verification of the ICE gathering path (STUN against a public server
