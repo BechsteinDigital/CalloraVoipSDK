@@ -40,8 +40,9 @@ internal static class SipWireTraceLogger
     {
         if (!logger.IsEnabled(LogLevel.Trace)) return;
         logger.LogTrace(
-            "SIP {Status} {Reason} sent to {Remote} on {Transport} (CSeq: {CSeq}).{Body}",
-            statusCode, reasonPhrase, remote, transport, HeaderOrNull(headers, "CSeq"), FormatBody(body));
+            "SIP {Status} {Reason} sent to {Remote} on {Transport} (CSeq: {CSeq}, Contact: {Contact}).{Body}",
+            statusCode, reasonPhrase, remote, transport,
+            HeaderOrNull(headers, "CSeq"), HeaderOrNull(headers, "Contact"), FormatBody(body));
     }
 
     private static string? HeaderOrNull(IReadOnlyDictionary<string, string> headers, string name) =>
