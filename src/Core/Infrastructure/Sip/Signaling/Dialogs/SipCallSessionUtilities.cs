@@ -36,16 +36,14 @@ internal static class SipCallSessionUtilities
 
     public static bool ShouldUseReliableProvisional(SipRequest invite)
     {
+        // RFC 3262 §3: reliable provisionals are mandatory only when the INVITE REQUIRES
+        // 100rel. With merely "Supported: 100rel" they are optional — and answering with
+        // Require: 100rel then blocks the final 200 OK behind PRACK retransmit timeouts
+        // when the caller (e.g. Fritz!Box) never sends PRACK: the phone keeps ringing
+        // although the callee accepted. So opt in only on an explicit Require.
         var require = invite.Header("Require");
-        if (!string.IsNullOrWhiteSpace(require)
-            && ProtocolCommonUtilities.ContainsToken(require, "100rel"))
-        {
-            return true;
-        }
-
-        var supported = invite.Header("Supported");
-        return !string.IsNullOrWhiteSpace(supported)
-            && ProtocolCommonUtilities.ContainsToken(supported, "100rel");
+        return !string.IsNullOrWhiteSpace(require)
+            && ProtocolCommonUtilities.ContainsToken(require, "100rel");
     }
 
     public static async Task<bool> SendReliableProvisionalAndWaitForPrackAsync(

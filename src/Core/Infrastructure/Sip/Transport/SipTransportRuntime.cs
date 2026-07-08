@@ -200,10 +200,10 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
             bytes     = _wireCodec.SerializeRequest(method, requestUri, headers, body);
             _logger.LogDebug(
                 "SIP {Method} message ({Size} bytes) exceeds UDP MTU threshold; escalated to TCP.",
-                method,
-                bytes.Length);
+                method, bytes.Length);
         }
 
+        SipWireTraceLogger.RequestSent(_logger, method, headers, body, remoteEndPoint, transport);
         await SendPayloadAsync(remoteEndPoint, bytes, transport, ct).ConfigureAwait(false);
     }
 
@@ -239,6 +239,7 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
         SipTransportProtocol transport,
         CancellationToken ct = default)
     {
+        SipWireTraceLogger.ResponseSent(_logger, statusCode, reasonPhrase, headers, body, remoteEndPoint, transport);
         var bytes = _wireCodec.SerializeResponse(statusCode, reasonPhrase, headers, body);
         await SendPayloadAsync(remoteEndPoint, bytes, transport, ct).ConfigureAwait(false);
     }
@@ -287,9 +288,7 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
             _logger.LogWarning(
                 ex,
                 "SIP route resolution failed for {Host}:{Port} ({Transport}); falling back to direct host lookup.",
-                host,
-                port,
-                transport);
+                host, port, transport);
             var effectivePort = port > 0
                 ? port
                 : transport switch
@@ -620,8 +619,7 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
                         _logger.LogDebug(
                             ex,
                             "SIP {Transport} send to {Remote} failed; retrying on new connection (RFC §18.4).",
-                            transport,
-                            targetEndPoint);
+                            transport, targetEndPoint);
                         stale.Dispose();
                     }
 
@@ -763,12 +761,14 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
         {
             if (_wireCodec.TryParseRequest(payload.Span, out var request) && request is not null)
             {
+                SipWireTraceLogger.RequestReceived(_logger, request, remoteEndPoint, transport);
                 DispatchRequest(remoteEndPoint, request);
                 return Task.CompletedTask;
             }
 
             if (_wireCodec.TryParseResponse(payload.Span, out var response) && response is not null)
             {
+                SipWireTraceLogger.ResponseReceived(_logger, response, remoteEndPoint, transport);
                 DispatchResponse(remoteEndPoint, response);
                 return Task.CompletedTask;
             }

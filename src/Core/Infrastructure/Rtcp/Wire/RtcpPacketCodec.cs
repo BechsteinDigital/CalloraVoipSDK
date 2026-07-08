@@ -65,16 +65,20 @@ internal sealed class RtcpPacketCodec : IRtcpPacketCodec
             // Body starts after the 4-byte common header
             var body = raw[4..bodyEnd];
 
-            RtcpPacket packet = pt switch
+            // RFC 3550 §6.1: unrecognized packet types (e.g. RTCP-XR, type 207, RFC 3611)
+            // are skipped via the length field — throwing here would discard the whole
+            // compound datagram including the SR/RR it starts with.
+            RtcpPacket? packet = pt switch
             {
                 RtcpPacketType.SenderReport   => DecodeSr(body, count),
                 RtcpPacketType.ReceiverReport => DecodeRr(body, count),
                 RtcpPacketType.Sdes           => DecodeSdes(body, count),
                 RtcpPacketType.Bye            => DecodeBye(body, count),
-                _ => throw new NotSupportedException($"Unsupported RTCP packet type: {(byte)pt}."),
+                _ => null,
             };
 
-            packets.Add(packet);
+            if (packet is not null)
+                packets.Add(packet);
             offset += packetLen;
         }
 
