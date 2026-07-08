@@ -298,8 +298,7 @@ internal sealed class SipLineChannel : ILineChannel
             _globalSrtpPolicy,
             policySource: "global",
             _iceAgent,
-            _preferredCodecNames,
-            publicHost);
+            _preferredCodecNames);
         channel.AttachSession(args.Session);
 
         try
