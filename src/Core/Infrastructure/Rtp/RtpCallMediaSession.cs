@@ -8,6 +8,8 @@ using CalloraVoipSdk.Core.Infrastructure.Rtp.JitterBuffer;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Session;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Wire;
+using CalloraVoipSdk.Core.Infrastructure.Srtp.Context;
+using CalloraVoipSdk.Core.Infrastructure.Srtp.Crypto;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
 
@@ -115,13 +117,16 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
         _jitterBuffer = new global::CalloraVoipSdk.Core.Infrastructure.Rtp.JitterBuffer.JitterBuffer(effectiveJitterBufferOptions);
         _jitterBuffer.UpdateRoundTripTime(DefaultRoundTripTimeHintMs);
 
+        var (outboundSrtp, inboundSrtp) = TryCreateSrtpContexts(parameters, _logger);
         var options = new RtpSessionOptions
         {
             LocalEndPoint    = parameters.LocalEndPoint,
             RemoteEndPoint   = parameters.RemoteEndPoint,
             PayloadType      = (byte)parameters.PayloadType,
             ClockRate        = _clockRate,
-            SamplesPerPacket = parameters.SamplesPerPacket
+            SamplesPerPacket = parameters.SamplesPerPacket,
+            OutboundSrtp     = outboundSrtp,
+            InboundSrtp      = inboundSrtp
         };
 
         var logger = loggerFactory.CreateLogger<RtpSession>();
@@ -543,6 +548,47 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
             estimatedJitterMs: _jitterBuffer.EstimatedJitterMs,
             adaptiveDelayMs: _jitterBuffer.CurrentDelayMs,
             estimatedRoundTripTimeMs: _jitterBuffer.EstimatedRoundTripTimeMs);
+
+    /// <summary>
+    /// Builds the SRTP context pair from negotiated SDES key material (RFC 4568/3711):
+    /// outbound protects with our answer key, inbound unprotects with the peer's key.
+    /// Returns <c>(null, null)</c> when the call is plain RTP. A negotiated-SRTP call with
+    /// unparsable key material throws — failing open would silently send plaintext audio.
+    /// </summary>
+    private static (ISrtpContext? Outbound, ISrtpContext? Inbound) TryCreateSrtpContexts(
+        CallMediaParameters parameters,
+        ILogger logger)
+    {
+        if (parameters.SrtpSuite is null
+            || parameters.SrtpLocalKeyParams is null
+            || parameters.SrtpRemoteKeyParams is null)
+        {
+            return (null, null);
+        }
+
+        var suite = SrtpCryptoSuiteNames.TryParse(parameters.SrtpSuite)
+            ?? throw new InvalidOperationException(
+                $"Negotiated SRTP suite '{parameters.SrtpSuite}' is not supported by the media layer.");
+
+        SrtpKeyMaterial localKeys;
+        SrtpKeyMaterial remoteKeys;
+        try
+        {
+            localKeys = SrtpKeyMaterial.ParseInline(parameters.SrtpLocalKeyParams, suite);
+            remoteKeys = SrtpKeyMaterial.ParseInline(parameters.SrtpRemoteKeyParams, suite);
+        }
+        catch (FormatException ex)
+        {
+            // Fail closed: an SRTP-negotiated call must never fall back to plaintext.
+            throw new InvalidOperationException(
+                "Negotiated SRTP key material is invalid; refusing to start unencrypted media.", ex);
+        }
+
+        logger.LogInformation(
+            "SRTP enabled for media session (suite {Suite}); RTCP remains unprotected (SRTCP not implemented).",
+            parameters.SrtpSuite);
+        return (new SrtpContext(localKeys), new SrtpContext(remoteKeys));
+    }
 
     private static TimeSpan ResolvePlayoutInterval(CallMediaParameters parameters, TimeSpan? configuredInterval)
     {

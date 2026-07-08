@@ -128,10 +128,30 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             group = remoteOffer.Group;
         }
 
-        // --- SDES crypto (RFC 4568): mirror first offered suite ---
+        // --- SDES crypto (RFC 4568): answer the first supported suite with our OWN key ---
+        // (§5.1.3 — echoing the offerer's key would put the same keystream on both
+        // directions; the peer would also fail to decrypt our stream.)
         IReadOnlyList<SdpCryptoAttribute> crypto = [];
+        SdpCryptoAttribute? localCrypto = null;
+        SdpCryptoAttribute? remoteCrypto = null;
         if (offeredAudio.Crypto.Count > 0)
-            crypto = [offeredAudio.Crypto[0]];
+        {
+            var sdes = SdesCryptoSelector.SelectAnswer(offeredAudio.Crypto);
+            if (sdes is not null)
+            {
+                localCrypto = sdes.LocalAnswer;
+                remoteCrypto = sdes.RemoteOffer;
+                crypto = [localCrypto];
+            }
+        }
+
+        // RFC 3264 §5.1: the answer keeps the offered profile. An SDES-secured profile
+        // without a negotiated key cannot be answered (keyless SAVP) and silently
+        // downgrading to plain RTP is not allowed — reject instead. DTLS-keyed profiles
+        // (UDP/TLS/…) are unaffected; a plain AVP offer carrying an unsupported a=crypto
+        // falls back to an unencrypted answer, which stays legal for AVP.
+        if (localCrypto is null && IsSdesSecuredProfile(offeredAudio.Profile))
+            return new SdpOfferAnswerResult { Success = false };
 
         // --- DTLS (RFC 5763): resolve fingerprint and setup role ---
         SdpFingerprint? fingerprint = null;
@@ -197,7 +217,8 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             RtcpMuxNegotiated = rtcpMux,
             RemoteFingerprint = remoteFp,
             RemoteDtlsSetup = remoteSetup,
-            NegotiatedCrypto = crypto.Count > 0 ? crypto[0] : null
+            NegotiatedCrypto = remoteCrypto,
+            LocalCrypto = localCrypto
         };
     }
 
@@ -411,4 +432,12 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             "RTP/SAVP" => "RTP/SAVP",
             _ => offeredProfile
         };
+
+    /// <summary>
+    /// Returns true for profiles that are keyed via SDES <c>a=crypto</c> (RFC 4568) —
+    /// i.e. secure RTP without a DTLS transport. These cannot be answered keyless.
+    /// </summary>
+    private static bool IsSdesSecuredProfile(string offeredProfile) =>
+        offeredProfile.Equals("RTP/SAVP", StringComparison.OrdinalIgnoreCase)
+        || offeredProfile.Equals("RTP/SAVPF", StringComparison.OrdinalIgnoreCase);
 }

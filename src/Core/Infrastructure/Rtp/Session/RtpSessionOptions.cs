@@ -1,4 +1,5 @@
 using System.Net;
+using CalloraVoipSdk.Core.Infrastructure.Srtp.Context;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Rtp.Session;
 
@@ -36,4 +37,18 @@ internal sealed class RtpSessionOptions
     /// at session start (RFC 3550 §5.1).
     /// </summary>
     public uint? Ssrc { get; init; }
+
+    /// <summary>
+    /// SRTP context protecting outgoing RTP packets with our own negotiated key
+    /// (RFC 3711). <see langword="null"/> sends plain RTP. RTCP is not protected
+    /// (SRTCP is not implemented).
+    /// </summary>
+    public ISrtpContext? OutboundSrtp { get; init; }
+
+    /// <summary>
+    /// SRTP context unprotecting incoming RTP packets with the peer's negotiated key
+    /// (RFC 3711). <see langword="null"/> expects plain RTP; packets failing
+    /// authentication or replay checks are dropped.
+    /// </summary>
+    public ISrtpContext? InboundSrtp { get; init; }
 }

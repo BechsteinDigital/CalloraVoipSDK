@@ -45,8 +45,16 @@ internal sealed class SdpOfferAnswerResult
     public string? RemoteDtlsSetup { get; init; }
 
     /// <summary>
-    /// First SDES crypto suite negotiated from the remote offer (RFC 4568).
+    /// The remote offer's SDES crypto line that was negotiated (RFC 4568) — carries the
+    /// peer's master key, i.e. the key material for decrypting the inbound direction.
     /// <see langword="null"/> when SDES was not offered or when DTLS is used instead.
     /// </summary>
     public SdpCryptoAttribute? NegotiatedCrypto { get; init; }
+
+    /// <summary>
+    /// Our own SDES crypto line placed in the answer (RFC 4568 §5.1.3) — carries the
+    /// locally generated master key, i.e. the key material for encrypting the outbound
+    /// direction. <see langword="null"/> when SDES was not negotiated.
+    /// </summary>
+    public SdpCryptoAttribute? LocalCrypto { get; init; }
 }

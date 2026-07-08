@@ -1,8 +1,10 @@
 using System.Net;
 using System.Net.Sockets;
+using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Wire;
+using CalloraVoipSdk.Core.Infrastructure.Srtp.Context;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Rtp.Session;
 
@@ -27,6 +29,10 @@ internal sealed class RtpSession : IRtpSession
     // arrives, remember its actual source and send back there instead of the SDP-advertised
     // address. Lets media flow through NAT without STUN — the peer's SBC latches likewise.
     private IPEndPoint? _latchedRemoteEndPoint;
+
+    // Serializes SRTP protection: the context derives the rollover counter from the
+    // packet sequence, so out-of-order protection of concurrent sends would corrupt it.
+    private readonly object _srtpProtectSync = new();
 
     private ushort _sequenceNumber;
     private uint _timestamp;
@@ -210,6 +216,32 @@ internal sealed class RtpSession : IRtpSession
             return;
         }
 
+        // SRTP (RFC 3711): authenticate and decrypt before any RTP interpretation.
+        // A packet failing the auth tag or replay check is dropped here — it never
+        // reaches the codec, the jitter buffer, or the symmetric-RTP latch.
+        if (_options.InboundSrtp is { } inboundSrtp)
+        {
+            try
+            {
+                datagram = inboundSrtp.Unprotect(datagram);
+            }
+            catch (SrtpAuthenticationException)
+            {
+                _logger.LogDebug("Dropping SRTP packet failing authentication from {Source}.", source);
+                return;
+            }
+            catch (SrtpReplayException)
+            {
+                _logger.LogDebug("Dropping replayed SRTP packet from {Source}.", source);
+                return;
+            }
+            catch (CryptographicException ex)
+            {
+                _logger.LogDebug("Dropping undecryptable SRTP packet from {Source}: {Message}", source, ex.Message);
+                return;
+            }
+        }
+
         RtpPacket packet;
         try
         {
@@ -351,6 +383,16 @@ internal sealed class RtpSession : IRtpSession
         };
 
         var datagram = _codec.Encode(packet);
+
+        // SRTP (RFC 3711): protect the full RTP packet with our negotiated key. The
+        // context tracks the rollover counter from sequence numbers, so concurrent
+        // sends must serialize protection.
+        if (_options.OutboundSrtp is { } outboundSrtp)
+        {
+            lock (_srtpProtectSync)
+                datagram = outboundSrtp.Protect(datagram);
+        }
+
         await _udp.SendAsync(datagram, Volatile.Read(ref _latchedRemoteEndPoint) ?? _options.RemoteEndPoint, cancellationToken).ConfigureAwait(false);
 
         Interlocked.Increment(ref _packetsSent);
