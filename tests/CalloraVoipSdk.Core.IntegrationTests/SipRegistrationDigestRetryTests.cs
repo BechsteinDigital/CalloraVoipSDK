@@ -93,4 +93,82 @@ public sealed class SipRegistrationDigestRetryTests
         var expected = HashHexLower($"{ha1}:{Nonce}:{nc}:{cnonce}:auth:{ha2}", md5);
         Assert.Equal(expected, Param(authorization, "response"));
     }
+
+    [Fact]
+    public async Task Register_stale_nonce_retries_with_the_fresh_nonce_and_succeeds()
+    {
+        const string FreshNonce = "fresh456nonce";
+        var transport = new CapturingSipTransportRuntime
+        {
+            // Unauthenticated → challenge (nonce1); authenticated with nonce1 → 401 stale=true
+            // (fresh nonce); authenticated with the fresh nonce → 200.
+            ResponseFactory = req =>
+            {
+                if (!req.Headers.TryGetValue("Authorization", out var auth))
+                    return Echo(req, 401, "Unauthorized",
+                        ("WWW-Authenticate", $"Digest realm=\"{Realm}\", nonce=\"{Nonce}\", qop=\"auth\""));
+
+                return Param(auth, "nonce") == Nonce
+                    ? Echo(req, 401, "Unauthorized",
+                        ("WWW-Authenticate", $"Digest realm=\"{Realm}\", nonce=\"{FreshNonce}\", qop=\"auth\", stale=true"))
+                    : Echo(req, 200, "OK");
+            },
+        };
+        var service = new SipRegistrationService(
+            transport, new SipDigestAuthentication(), NullLoggerFactory.Instance);
+
+        var request = new SipRegistrationRequest
+        {
+            Username = "bob",
+            Password = "zanzibar",
+            Domain = Realm,
+            Port = 5060,
+            Timeout = TimeSpan.FromSeconds(2),
+        };
+
+        var result = await service.RegisterAsync(request);
+
+        Assert.Equal(200, result.StatusCode);
+        Assert.True(result.Authenticated);
+
+        // Three REGISTERs: challenged, stale-rejected, then accepted with the fresh nonce.
+        var registers = transport.SnapshotRequests().Where(r => r.Method == "REGISTER").ToList();
+        Assert.Equal(3, registers.Count);
+        // The stale retry reused the credentials (no re-prompt) with the server's fresh nonce.
+        Assert.Equal(FreshNonce, Param(registers[2].Headers["Authorization"], "nonce"));
+        Assert.Equal("bob", Param(registers[2].Headers["Authorization"], "username"));
+    }
+
+    [Fact]
+    public async Task Register_repeated_stale_nonce_gives_up_without_looping()
+    {
+        var transport = new CapturingSipTransportRuntime
+        {
+            // A misbehaving registrar answers stale=true to every authenticated REGISTER: the
+            // client must stop after a bounded number of retries rather than loop forever.
+            ResponseFactory = req => req.Headers.ContainsKey("Authorization")
+                ? Echo(req, 401, "Unauthorized",
+                    ("WWW-Authenticate", $"Digest realm=\"{Realm}\", nonce=\"{Nonce}\", qop=\"auth\", stale=true"))
+                : Echo(req, 401, "Unauthorized",
+                    ("WWW-Authenticate", $"Digest realm=\"{Realm}\", nonce=\"{Nonce}\", qop=\"auth\"")),
+        };
+        var service = new SipRegistrationService(
+            transport, new SipDigestAuthentication(), NullLoggerFactory.Instance);
+
+        var request = new SipRegistrationRequest
+        {
+            Username = "bob",
+            Password = "zanzibar",
+            Domain = Realm,
+            Port = 5060,
+            Timeout = TimeSpan.FromSeconds(2),
+        };
+
+        // It ultimately fails (never accepted) rather than looping forever.
+        await Assert.ThrowsAsync<SipRegistrationFailedException>(() => service.RegisterAsync(request));
+
+        // Bounded: unauthenticated attempt + one auth retry + at most the stale-retry cap.
+        var registers = transport.SnapshotRequests().Where(r => r.Method == "REGISTER").ToList();
+        Assert.True(registers.Count <= 4, $"expected a bounded REGISTER count, got {registers.Count}");
+    }
 }
