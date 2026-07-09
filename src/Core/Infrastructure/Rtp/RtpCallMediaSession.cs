@@ -175,9 +175,18 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
 
         // ICE on the media 5-tuple (RFC 8445 §7.3 inbound checks + RFC 7675 consent): the attachment
         // answers inbound checks and runs consent freshness on this same socket.
-        _iceMedia = new IceMediaAttachment(parameters, _rtp.SendRawAsync, loggerFactory);
+        _iceMedia = new IceMediaAttachment(parameters, _rtp.SendRawAsync, loggerFactory, OnMediaConsentLost);
         if (_iceMedia.IsActive)
             _rtp.StunPacketReceived += _iceMedia.OnStunPacketReceived;
+    }
+
+    // RFC 7675 §5.1: on ICE consent loss the pair is dead — cease media transmission on it. The
+    // socket stays open (ICE restart could revive the path); surfacing the loss to the application
+    // for terminate / ICE-restart is left to a later step.
+    private void OnMediaConsentLost()
+    {
+        _logger.LogWarning("Ceasing media transmission for the call after ICE consent loss (RFC 7675 §5.1).");
+        _rtp.StopTransmission();
     }
 
     /// <inheritdoc />
