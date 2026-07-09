@@ -129,6 +129,53 @@ public sealed class QosMetricsTests
         Assert.Empty(session.RoundTripHints);
     }
 
+    // Standalone XR (PT=207) with one VoIP Metrics block: MOS-LQ ×10 = 43, MOS-CQ ×10 = 41.
+    private static byte[] BuildXrWithVoipMetrics(uint sourceSsrc)
+    {
+        var packet = new byte[44];
+        packet[0] = 0x80;                                            // V=2
+        packet[1] = 207;                                            // PT = XR
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16BigEndian(packet.AsSpan(2), 10);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(packet.AsSpan(4), 0xAABBCCDDu);
+        packet[8] = 7;                                               // BT = VoIP Metrics
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16BigEndian(packet.AsSpan(10), 8);
+        var c = packet.AsSpan(12);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(c, sourceSsrc);
+        c[22] = 43;                                                 // MOS-LQ ×10
+        c[23] = 41;                                                 // MOS-CQ ×10
+        return packet;
+    }
+
+    [Fact]
+    public void Extended_report_voip_metrics_surface_remote_mos_in_the_snapshot()
+    {
+        const uint sourceSsrc = 0x11223344u;
+        var session = new RecordingMediaSession(localSsrc: sourceSsrc);
+        var monitor = new CallRtcpQualityMonitor(
+            session, Parameters(), NullLoggerFactory.Instance, new RtcpPacketCodec());
+
+        monitor.ProcessInboundDatagramForTest(BuildXrWithVoipMetrics(sourceSsrc), T0);
+
+        var snapshot = monitor.GetLatestSnapshot();
+        Assert.Equal(4.3, snapshot.RemoteMosListeningQuality!.Value, 3);
+        Assert.Equal(4.1, snapshot.RemoteMosConversationalQuality!.Value, 3);
+    }
+
+    [Fact]
+    public void Extended_report_for_a_different_ssrc_does_not_set_mos()
+    {
+        var session = new RecordingMediaSession(localSsrc: 0x99999999u);
+        var monitor = new CallRtcpQualityMonitor(
+            session, Parameters(), NullLoggerFactory.Instance, new RtcpPacketCodec());
+
+        // The VoIP Metrics block reports on a different SSRC than ours → not our stream.
+        monitor.ProcessInboundDatagramForTest(BuildXrWithVoipMetrics(0x11223344u), T0);
+
+        var snapshot = monitor.GetLatestSnapshot();
+        Assert.Null(snapshot.RemoteMosListeningQuality);
+        Assert.Null(snapshot.RemoteMosConversationalQuality);
+    }
+
     private sealed class RecordingMediaSession : ICallMediaSession
     {
         private readonly uint _localSsrc;
