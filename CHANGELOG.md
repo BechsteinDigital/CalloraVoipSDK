@@ -13,6 +13,14 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
   `using CalloraVoipSdk.Core.Application.Calls;` with `using CalloraVoipSdk.Core.Domain.Calls;`
   (or fully qualify). This change requires the next release to be a major version.
 
+### Changed
+- `SipAccount.Password` is now optional (was required). SIP authentication is challenge-driven
+  (RFC 3261 §22), so a password is only needed to answer a `401`/`407`. Registration against a
+  registrar that does not challenge now succeeds without one (e.g. IP-authenticated trunks);
+  if a challenge arrives and no password is configured, registration fails with a clear,
+  specific error instead of a generic rejection. Non-breaking: existing code that sets a
+  password is unaffected.
+
 ## [3.2.0] - 2026-07-08
 
 Inbound calls over a public SIP trunk (sipgate SIPconnect) behind NAT, without STUN —
