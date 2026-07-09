@@ -1,5 +1,6 @@
 namespace CalloraVoipSdk.Core.Security;
 
+/// <summary>Controls whether media (RTP) is protected with SRTP for a call.</summary>
 public enum SrtpPolicy
 {
     /// <summary>No SRTP. Media is unencrypted.</summary>

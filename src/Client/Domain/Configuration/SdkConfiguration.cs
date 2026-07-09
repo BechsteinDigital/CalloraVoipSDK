@@ -5,10 +5,19 @@ using CalloraVoipSdk.Core.Security;
 
 namespace CalloraVoipSdk;
 
+/// <summary>
+/// Top-level SDK configuration: identity, transport security, logging, media/codec behavior, and
+/// call-lifecycle timeouts. Supplied once when constructing or registering the SDK.
+/// </summary>
 public sealed class SdkConfiguration
 {
+    /// <summary>Value sent in the SIP <c>User-Agent</c> header; defaults to <c>CalloraVoipSdk/1.0</c>.</summary>
     public string         UserAgent              { get; init; } = "CalloraVoipSdk/1.0";
+
+    /// <summary>TLS settings for secure SIP transport; <see langword="null"/> uses the transport defaults.</summary>
     public TlsConfiguration? Tls                { get; init; }
+
+    /// <summary>Logger factory the SDK logs through; <see langword="null"/> disables SDK logging.</summary>
     public ILoggerFactory? LoggerFactory         { get; init; }
 
     /// <summary>
@@ -17,6 +26,7 @@ public sealed class SdkConfiguration
     /// </summary>
     [Obsolete("Use AddCallora(...)/CalloraBuilder overrides. SdkConfiguration.Services will be removed after v1.0.", false)]
     public IServiceProvider? Services            { get; init; }
+    /// <summary>Default media-encryption policy for calls; defaults to <see cref="SrtpPolicy.Optional"/>. Overridable per call via <c>DialOptions.UseSrtp</c>.</summary>
     public SrtpPolicy     SrtpPolicy             { get; init; } = SrtpPolicy.Optional;
 
     /// <summary>

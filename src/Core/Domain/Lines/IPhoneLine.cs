@@ -14,8 +14,13 @@ namespace CalloraVoipSdk.Core.Domain.Lines;
 /// </remarks>
 public interface IPhoneLine
 {
+    /// <summary>Stable identifier of this line within the SDK.</summary>
     LineId     LineId   { get; }
+
+    /// <summary>The SIP account this line registers and calls with.</summary>
     SipAccount Account  { get; }
+
+    /// <summary>Current registration state; changes are signalled by <see cref="StateChanged"/>.</summary>
     LineState  State    { get; }
 
     // ── Events ────────────────────────────────────────────────────────────────
@@ -42,6 +47,21 @@ public interface IPhoneLine
     event EventHandler<LineReconnectFailedEventArgs>? LineReconnectFailed;
 
     // ── Actions ───────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Places an outbound call from this line to <paramref name="targetUri"/> and returns the new call
+    /// already in <see cref="CallState.Dialing"/>. Track progress via the returned call's
+    /// <see cref="ICall.StateChanged"/> event.
+    /// </summary>
+    /// <param name="targetUri">Destination SIP URI or number to dial.</param>
+    /// <param name="options">Per-call options; <see langword="null"/> uses <see cref="DialOptions.Default"/>.</param>
+    /// <param name="ct">Cancels the dial attempt.</param>
+    /// <returns>The newly created outbound call.</returns>
     Task<ICall> DialAsync(string targetUri, DialOptions? options = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// Unregisters this line (sends REGISTER with Expires: 0) and stops automatic re-registration.
+    /// </summary>
+    /// <param name="ct">Cancels the unregister request.</param>
     Task UnregisterAsync(CancellationToken ct = default);
 }

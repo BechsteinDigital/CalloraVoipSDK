@@ -4,6 +4,10 @@ using CalloraVoipSdk.Core.Domain.Events;
 
 namespace CalloraVoipSdk.Core.Application.Calls;
 
+/// <summary>
+/// Registry of the SDK's live calls. Exposes the active-call collection, lookup, and
+/// add/remove/state-change notifications. Instances are created by the SDK, not by consumers.
+/// </summary>
 public sealed class CallManager : ICallRegistry
 {
     private readonly ConcurrentDictionary<CallId, Call> _calls = new();
@@ -16,13 +20,22 @@ public sealed class CallManager : ICallRegistry
     {
     }
 
+    /// <summary>Raised when a new call is registered.</summary>
     public event EventHandler<CallActivityEventArgs>?    CallAdded;
+
+    /// <summary>Raised when a call is removed after reaching <see cref="CallState.Terminated"/>.</summary>
     public event EventHandler<CallActivityEventArgs>?    CallRemoved;
+
+    /// <summary>Raised whenever any registered call changes state; aggregates every call's state changes.</summary>
     public event EventHandler<CallStateChangedEventArgs>? CallStateChanged;
 
+    /// <summary>All calls not yet in <see cref="CallState.Terminated"/>, as a snapshot.</summary>
     public IReadOnlyCollection<ICall> Active =>
         _calls.Values.Where(c => c.State != CallState.Terminated).ToList<ICall>();
 
+    /// <summary>Looks up a registered call by id.</summary>
+    /// <param name="id">The call identifier.</param>
+    /// <returns>The call, or <see langword="null"/> if no call with that id is registered.</returns>
     public ICall? Find(CallId id) =>
         _calls.TryGetValue(id, out var c) ? c : null;
 

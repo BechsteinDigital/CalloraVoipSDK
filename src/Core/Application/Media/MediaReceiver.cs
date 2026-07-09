@@ -4,6 +4,11 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CalloraVoipSdk.Core.Application.Media;
 
+/// <summary>
+/// Surfaces a call's inbound (decoded) audio frames to the application via the
+/// <see cref="FrameReceived"/> event. Attach to a call to start receiving; a faulting subscriber is
+/// isolated so it neither stops other subscribers nor the RTP callback.
+/// </summary>
 public sealed class MediaReceiver : IMediaReceiver
 {
     private readonly object _sync = new();
@@ -17,8 +22,16 @@ public sealed class MediaReceiver : IMediaReceiver
         _logger = logger ?? NullLogger<MediaReceiver>.Instance;
     }
 
+    /// <summary>
+    /// Raised for each inbound audio frame on the attached call. Fires on the RTP receive thread, so
+    /// keep handlers fast and thread-safe; exceptions thrown by a handler are caught and logged.
+    /// </summary>
     public event EventHandler<MediaFrameReceivedEventArgs>? FrameReceived;
 
+    /// <summary>Attaches this receiver to <paramref name="call"/>; replaces and detaches any previous attachment.</summary>
+    /// <param name="call">The call to receive inbound audio from. Must be a call created by this SDK.</param>
+    /// <exception cref="ArgumentException"><paramref name="call"/> was not created by this SDK.</exception>
+    /// <exception cref="ObjectDisposedException">The receiver has been disposed.</exception>
     public void AttachToCall(ICall call)
     {
         if (call is not Call sdkCall)
@@ -55,6 +68,7 @@ public sealed class MediaReceiver : IMediaReceiver
         sdkCall.RemoveAudioFrameListener(listener);
     }
 
+    /// <summary>Detaches from the current call; <see cref="FrameReceived"/> stops firing until re-attached.</summary>
     public void Detach()
     {
         Call? call;
@@ -93,6 +107,7 @@ public sealed class MediaReceiver : IMediaReceiver
         }
     }
 
+    /// <summary>Detaches and disposes the receiver; <see cref="FrameReceived"/> will no longer fire.</summary>
     public void Dispose()
     {
         Call? call;
