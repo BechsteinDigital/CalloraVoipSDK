@@ -110,7 +110,10 @@ internal sealed class SipCallSessionTransactionService
         }
         catch (Exception ex)
         {
-            _context.Logger.LogDebug(
+            // A failed fork ACK leaves the branch's 2xx retransmitting until it times out; a
+            // failed fork BYE leaves a dangling call leg on the non-selected UAS. Both are
+            // operationally significant, so surface them at Warning rather than hiding at Debug.
+            _context.Logger.LogWarning(
                 ex,
                 "Failed handling forked INVITE success response on {CallId}.",
                 _context.CallId);
