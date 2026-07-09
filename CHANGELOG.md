@@ -6,6 +6,37 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
 
 ## [Unreleased]
 
+## [4.1.0] - 2026-07-09
+
+Substantial ICE (RFC 8445) and consent-freshness (RFC 7675) work: bidirectional connectivity
+checks on the shared media socket, built on the 4.0.0 candidate-gathering and check-list
+foundation. ICE stays opt-in and all changes are additive — no breaking changes.
+
+### Added
+- **Inbound ICE connectivity checks** (RFC 8445 §7.3): incoming STUN Binding requests on the
+  media 5-tuple are authenticated (MESSAGE-INTEGRITY), role conflicts resolved (§7.3.1.1),
+  USE-CANDIDATE nomination honoured (§7.3.1.5), and answered with a verifiable Success or 487
+  response — demultiplexed from RTP on the shared media socket (RFC 7983).
+- **ICE role derivation and shared tie-breaker**: the controlling role is derived from the SDP
+  offer/answer direction (offerer = controlling, RFC 8445 §5.1.1) rather than a fixed default, and
+  the 64-bit tie-breaker (§5.2) is derived so both directions of an agent resolve a role conflict
+  identically.
+- **Consent freshness** (RFC 7675): periodic STUN consent checks on the nominated pair over the
+  media socket with transaction matching; on consent loss the agent ceases media transmission
+  (§5.1) while keeping the socket open for a possible ICE restart.
+- **Triggered connectivity checks** (RFC 8445 §7.3.1.4): a confirming check is sent back to the
+  peer-reflexive source of an accepted inbound check (§7.3.1.3).
+
+### Changed
+- `CallMediaParameters` gains an additive `IceControlling` flag (default preserves prior
+  behaviour) carrying the derived ICE role from signalling into the media layer.
+
+### Notes
+- ICE remains opt-in. Remaining optional follow-ups (not required for the above to function):
+  surfacing consent loss to the application for a terminate / ICE-restart decision, re-nomination
+  onto a validated peer-reflexive path (media already adapts via symmetric RTP), and delayed-offer
+  role edge cases (self-correcting via role-conflict resolution).
+
 ## [4.0.0] - 2026-07-09
 
 SRTP-secured media and Opus, plus a round of protocol-correctness fixes and hardening on top
