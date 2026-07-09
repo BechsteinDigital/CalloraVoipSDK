@@ -26,7 +26,10 @@ internal sealed class CallMediaOrchestrator : IDisposable
     private readonly ConcurrentDictionary<CallId, ActiveMediaEntry> _active = new();
     private readonly ConcurrentDictionary<CallId, MediaActivity> _activity = new();
     private readonly MediaSupervisionOptions _supervision;
-    private bool _disposed;
+
+    // Read on the background ICE-setup task as well as the SIP/dispose threads — volatile
+    // so the background task observes disposal promptly.
+    private volatile bool _disposed;
 
     internal CallMediaOrchestrator(
         ICallMediaSessionFactory sessionFactory,
@@ -123,7 +126,35 @@ internal sealed class CallMediaOrchestrator : IDisposable
         CallMediaParameters parameters)
     {
         if (_disposed) return;
-        var effectiveParameters = ResolveIceCandidatePair(call.CallId, parameters);
+
+        // ICE candidate selection is async and may run STUN connectivity checks; doing it
+        // inline would block the SIP signaling thread that raised this event. Non-ICE calls
+        // resolve instantly, so they stay fully synchronous (unchanged ordering); ICE calls
+        // complete media setup on a background task once the pair is selected.
+        if (_iceAgent is null || !parameters.IceEnabled)
+        {
+            SetUpMediaSession(call, channel, parameters);
+            return;
+        }
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var effective = await ResolveIceCandidatePairAsync(call.CallId, parameters).ConfigureAwait(false);
+                if (_disposed) return;
+                SetUpMediaSession(call, channel, effective);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Media session setup failed after ICE selection for call {CallId}.", call.CallId);
+            }
+        });
+    }
+
+    private void SetUpMediaSession(ICall call, ICallChannel channel, CallMediaParameters effectiveParameters)
+    {
+        if (_disposed) return;
 
         _logger.LogDebug(
             "Media negotiated for call {CallId}: local={Local} remote={Remote} PT={PT}",
@@ -298,18 +329,16 @@ internal sealed class CallMediaOrchestrator : IDisposable
         entry.Channel.SetDtmfSendDelegate(null);
     }
 
-    private CallMediaParameters ResolveIceCandidatePair(CallId callId, CallMediaParameters parameters)
+    private async Task<CallMediaParameters> ResolveIceCandidatePairAsync(CallId callId, CallMediaParameters parameters)
     {
         if (_iceAgent is null || !parameters.IceEnabled)
             return parameters;
 
         try
         {
-            var selection = _iceAgent
+            var selection = await _iceAgent
                 .SelectCandidatePairAsync(callId, parameters, CancellationToken.None)
-                .ConfigureAwait(false)
-                .GetAwaiter()
-                .GetResult();
+                .ConfigureAwait(false);
 
             _logger.LogInformation(
                 "ICE selection for call {CallId}: state={State} selected={Selected} reason={ReasonCode}.",

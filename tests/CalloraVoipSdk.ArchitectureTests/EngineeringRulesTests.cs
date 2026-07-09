@@ -189,12 +189,11 @@ public sealed class EngineeringRulesTests
 
     private static readonly string[] SyncOverAsyncBaseline =
     [
-        // Ist-Bestand 2026-07-08. Der eigentliche Audit-Befund ist CallMediaOrchestrator
-        // (ICE-Selektion blockt den SIP-Signaling-Thread — echter Fehler, zuerst beheben).
+        // Ist-Bestand 2026-07-08. B.4: CallMediaOrchestrator behoben — ICE-Selektion laeuft
+        // jetzt auf einem Background-Task statt den SIP-Signaling-Thread zu blockieren.
         // Die uebrigen sind Dispose-/Transport-Pfade, in denen sync-over-async oft
         // legitim ist (IDisposable erlaubt kein await) — pro Eintrag durch Auditor/Reviewer
-        // zu bewerten. Ziel: Liste schrumpft, CallMediaOrchestrator zuerst.
-        "src/Core/Application/Media/CallMediaOrchestrator.cs",
+        // zu bewerten.
         "src/Core/Application/Media/MediaConnection.cs",
         "src/Core/Infrastructure/Media/Mp3TranscodingWriter.cs",
         "src/Core/Infrastructure/Sip/Transport/SipStreamConnection.cs",
