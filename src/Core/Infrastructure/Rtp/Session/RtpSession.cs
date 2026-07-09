@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Buffers.Binary;
 using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
@@ -57,6 +58,15 @@ internal sealed class RtpSession : IRtpSession
     /// in RTCP-MUX mode (RFC 5761).
     /// </summary>
     internal event Action<byte[]>? ControlPacketReceived;
+
+    /// <summary>
+    /// Raised when an inbound datagram on the media socket is classified as STUN
+    /// (RFC 7983 / RFC 5764 §5.1.2 demux: first byte 0–3 plus the STUN magic cookie).
+    /// Carries an independent copy of the datagram and the sender's transport address so the
+    /// ICE layer can authenticate the connectivity check and send a response on this same
+    /// socket (RFC 8445 §7.3). STUN datagrams are not passed to the RTP/RTCP paths.
+    /// </summary>
+    internal event Action<byte[], IPEndPoint>? StunPacketReceived;
 
     public RtpSession(RtpSessionOptions options, IRtpPacketCodec codec, ILogger<RtpSession> logger)
     {
@@ -162,6 +172,21 @@ internal sealed class RtpSession : IRtpSession
     }
 
     /// <summary>
+    /// Sends a raw datagram to an explicit destination on the media socket, without RTP framing
+    /// or SRTP protection. Used by the ICE layer to send STUN connectivity-check responses and
+    /// checks to the peer on the same 5-tuple as media (RFC 8445 §7.3). Unlike media/RTCP sends
+    /// this targets the caller-supplied address, not the symmetric-RTP latch.
+    /// </summary>
+    internal async ValueTask SendRawAsync(
+        ReadOnlyMemory<byte> datagram,
+        IPEndPoint destination,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(destination);
+        await _udp.SendAsync(datagram, destination, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// Returns an immutable sender-side RTP snapshot for RTCP SR generation.
     /// </summary>
     internal RtpSenderStatisticsSnapshot GetSenderStatisticsSnapshot()
@@ -226,6 +251,24 @@ internal sealed class RtpSession : IRtpSession
 
     private void ProcessDatagram(ReadOnlySpan<byte> datagram, IPEndPoint? source)
     {
+        // RFC 7983 demux: STUN connectivity checks share the media 5-tuple with RTP/RTCP.
+        // Route them out before any RTP/RTCP interpretation; the ICE layer owns the response.
+        if (source is not null && LooksLikeStunDatagram(datagram))
+        {
+            // The receive buffer is reused for the next datagram; the ICE handler may
+            // authenticate or respond asynchronously, so hand it an independent copy.
+            var stunDatagram = datagram.ToArray();
+            try
+            {
+                StunPacketReceived?.Invoke(stunDatagram, source);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unhandled exception in STUN datagram handler.");
+            }
+            return;
+        }
+
         if (LooksLikeRtcpDatagram(datagram))
         {
             // The receive buffer is reused for the next datagram; RTCP handlers may parse
@@ -353,6 +396,18 @@ internal sealed class RtpSession : IRtpSession
         _loopCts?.Dispose();
         _udp.Dispose();
         ControlPacketReceived = null;
+        StunPacketReceived = null;
+    }
+
+    // RFC 7983 / RFC 5764 §5.1.2 demux: a STUN packet's first byte is in 0..3, disjoint from
+    // RTP/RTCP (128..191). The 32-bit magic cookie (RFC 5389 §6) at offset 4 confirms it and
+    // rejects any stray low-byte datagram that is not STUN.
+    private static bool LooksLikeStunDatagram(ReadOnlySpan<byte> datagram)
+    {
+        if (datagram.Length < 8 || datagram[0] > 3)
+            return false;
+
+        return BinaryPrimitives.ReadUInt32BigEndian(datagram[4..8]) == 0x2112A442u;
     }
 
     private static bool LooksLikeRtcpDatagram(ReadOnlySpan<byte> datagram)
