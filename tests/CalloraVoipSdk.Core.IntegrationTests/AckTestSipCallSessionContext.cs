@@ -14,9 +14,10 @@ internal sealed class AckTestSipCallSessionContext : ISipCallSessionContext
 {
     private int _nextLocalCSeq = 7;
 
-    public AckTestSipCallSessionContext(ISipTransportRuntime transport)
+    public AckTestSipCallSessionContext(ISipTransportRuntime transport, ILogger? logger = null)
     {
         Transport = transport;
+        Logger = logger ?? NullLogger.Instance;
     }
 
     public ISipTransportRuntime Transport { get; }
@@ -31,7 +32,7 @@ internal sealed class AckTestSipCallSessionContext : ISipCallSessionContext
 
     public ISipDigestAuthenticator DigestAuthenticator { get; } = new NoopSipDigestAuthenticator();
 
-    public ILogger Logger { get; } = NullLogger.Instance;
+    public ILogger Logger { get; }
 
     public ISipServerTransactionEngine ServerTransactions { get; } = new NoopSipServerTransactionEngine();
 

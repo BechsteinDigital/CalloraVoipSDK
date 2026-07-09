@@ -1,11 +1,45 @@
 using System.Net;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Signaling;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Wire;
+using Microsoft.Extensions.Logging;
 
 namespace CalloraVoipSdk.Core.IntegrationTests;
 
 public sealed class SipInviteSuccessAckTests
 {
+    [Fact]
+    public async Task ForkedInvite_ack_send_failure_is_logged_at_warning()
+    {
+        var logger = new CapturingLogger();
+        // Fail the fork ACK send so the fire-and-forget fork handler hits its catch block.
+        var transport = new CapturingSipTransportRuntime { ThrowOnSendMethod = "ACK" };
+        var context = new AckTestSipCallSessionContext(transport, logger)
+        {
+            ActiveInviteCSeq = 7,
+            ActiveInviteBranch = null,
+            RemoteTag = "remote-tag"
+        };
+        var service = new SipCallSessionTransactionService(
+            context,
+            new SipCallSessionHeaderService(context));
+        var response = CreateInviteSuccessResponse(
+            context.CallId,
+            inviteCseq: context.ActiveInviteCSeq,
+            remoteTag: context.RemoteTag);
+
+        service.HandleInboundResponse(context.RemoteEndPoint, response);
+
+        // Fork handling is fire-and-forget; poll until the failure is recorded.
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(2);
+        while (DateTime.UtcNow < deadline && !logger.Entries.Any(e => e.Level == LogLevel.Warning))
+            await Task.Delay(20);
+
+        var warning = Assert.Single(logger.Entries.Where(e => e.Level == LogLevel.Warning));
+        Assert.Contains("forked INVITE", warning.Message, StringComparison.OrdinalIgnoreCase);
+        // A fork-handling failure must not be logged at the near-invisible Debug level.
+        Assert.DoesNotContain(logger.Entries, e => e.Level == LogLevel.Debug && e.Message.Contains("forked INVITE", StringComparison.OrdinalIgnoreCase));
+    }
+
     [Fact]
     public async Task HandleInboundResponse_RetransmittedSelectedInviteSuccess_SendsAck()
     {
