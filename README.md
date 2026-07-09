@@ -386,10 +386,18 @@ The SDK core stays open and free; plugins are licensed separately. Contact
 - Keep event handlers short and non-blocking under load
 - Choose audio providers explicitly via platform-specific packages
 - Treat infrastructure details as non-public integration surface
+- ICE is opt-in and experimental (`IceConfiguration.Enabled` defaults to `false`); the
+  production-proven NAT path is symmetric RTP (comedia), which needs no ICE or STUN. See the
+  Roadmap for the ICE state-machine gaps before enabling it in production.
 
 ## Roadmap
 
-- ICE state machine completion for full NAT traversal (STUN/TURN transport is in place)
+- Full ICE (RFC 8445): the current agent is experimental and unproven in production. STUN/TURN
+  transport is in place, but it lacks role negotiation (controlling/controlled, tie-breaker),
+  the check-list state machine (Frozen/Waiting/Triggered, foundation freezing, Ta pacing),
+  regular/aggressive nomination with `USE-CANDIDATE`, the RTCP component, TCP candidates,
+  peer-reflexive learning, ICE restart, and consent freshness (RFC 7675). Real trunk calls run
+  over symmetric RTP (comedia) instead.
 - Commercial plugin line-up (private feed, licensed): Callora.Realtime, WebSocket
   streaming, Privacy/Risk/Intelligence — in development
 - CI/CD hardening: soak, interop and chaos gates
