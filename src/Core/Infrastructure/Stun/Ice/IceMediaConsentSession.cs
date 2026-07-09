@@ -98,20 +98,29 @@ internal sealed class IceMediaConsentSession : IAsyncDisposable
         _registry.TryComplete(datagram.Slice(8, 12));
     }
 
-    private async Task<bool> SendConsentCheckAsync(CancellationToken ct)
+    private Task<bool> SendConsentCheckAsync(CancellationToken ct) => SendCheckAsync(_remoteEndPoint, ct);
+
+    /// <summary>
+    /// Sends one connectivity check to <paramref name="target"/> and returns <see langword="true"/>
+    /// when a matching response arrives within the check timeout. Shared by consent checks (to the
+    /// nominated remote) and triggered checks (back to the source of an inbound check,
+    /// RFC 8445 §7.3.1.4). Registers the transaction before sending so a fast response is not missed.
+    /// </summary>
+    /// <param name="target">The address to send the check to.</param>
+    /// <param name="ct">Cancellation token.</param>
+    internal async Task<bool> SendCheckAsync(IPEndPoint target, CancellationToken ct)
     {
         var (datagram, transactionId) = IceConsentCheckBuilder.Build(
             _codec, _localUfrag, _remoteUfrag, _remotePassword, _priority, _controlling, _tieBreaker);
 
-        // Register before sending so a fast response is never missed.
         var pending = _registry.AwaitResponseAsync(transactionId, _checkTimeout, ct);
         try
         {
-            await _sendRaw(datagram, _remoteEndPoint, ct).ConfigureAwait(false);
+            await _sendRaw(datagram, target, ct).ConfigureAwait(false);
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
-            _logger.LogDebug(ex, "Failed to send ICE consent check to {Remote}.", _remoteEndPoint);
+            _logger.LogDebug(ex, "Failed to send ICE check to {Target}.", target);
             return false;
         }
 
