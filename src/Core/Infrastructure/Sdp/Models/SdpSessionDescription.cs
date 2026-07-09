@@ -9,6 +9,15 @@ internal sealed class SdpSessionDescription
     /// <summary>Session origin host address (<c>o=</c> address field).</summary>
     public required string OriginAddress { get; init; }
 
+    /// <summary>Origin session id (<c>o=</c> sess-id, RFC 4566 §5.2). Stable per session.</summary>
+    public long SessionId { get; init; }
+
+    /// <summary>
+    /// Origin session version (<c>o=</c> sess-version, RFC 4566 §5.2). Incremented whenever the
+    /// session description is modified so the peer detects the change (RFC 3264 §5).
+    /// </summary>
+    public long SessionVersion { get; init; }
+
     /// <summary>Session-level connection host address (<c>c=</c>).</summary>
     public required string ConnectionAddress { get; init; }
 

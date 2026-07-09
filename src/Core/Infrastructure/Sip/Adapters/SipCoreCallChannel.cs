@@ -54,6 +54,13 @@ internal sealed class SipCoreCallChannel : ICallChannel
     // negotiated). Written on the answer path before the session establishes, read by the
     // media-parameter publication which may run on the signaling receive thread.
     private volatile string? _localAnswerSdp;
+
+    // RFC 4566 §5.2 origin identity. Each channel (call leg) gets a unique, stable session id;
+    // the version is incremented on every locally built SDP so peers detect media changes.
+    private static long _sessionIdSeed = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+    private readonly long _sdpSessionId = Interlocked.Increment(ref _sessionIdSeed);
+    private long _sdpSessionVersion;
+
     private int _disposed;
 
     /// <inheritdoc />
@@ -101,7 +108,7 @@ internal sealed class SipCoreCallChannel : ICallChannel
     {
         ArgumentNullException.ThrowIfNull(localMediaEndPoint);
         await EnsureLocalIceDescriptionAsync(localMediaEndPoint, ct).ConfigureAwait(false);
-        return _sdpNegotiator.BuildDefaultSdp(localMediaEndPoint, hold, BuildSdpOptions());
+        return _sdpNegotiator.BuildDefaultSdp(localMediaEndPoint, hold, BuildLocalSdpOptions());
     }
 
     /// <summary>
@@ -175,7 +182,7 @@ internal sealed class SipCoreCallChannel : ICallChannel
                 $"Inbound offer violates SRTP policy '{_appliedSrtpPolicy}' ({inboundOfferReasonCode}).");
         }
 
-        var localSdpOptions = BuildSdpOptions();
+        var localSdpOptions = BuildLocalSdpOptions();
         var answerSdp = string.IsNullOrWhiteSpace(session.RemoteSdp)
             ? _sdpNegotiator.BuildDefaultSdp(localMediaEndPoint, hold: false, localSdpOptions)
             : _sdpNegotiator.TryBuildNegotiatedAnswer(
@@ -225,7 +232,7 @@ internal sealed class SipCoreCallChannel : ICallChannel
         var localIp = ResolveAdvertisedMediaAddress(session);
         var localEndPoint = new IPEndPoint(localIp, _localMediaPort);
         await EnsureLocalIceDescriptionAsync(localEndPoint, CancellationToken.None).ConfigureAwait(false);
-        var holdSdp = _sdpNegotiator.BuildDefaultSdp(localEndPoint, hold: true, BuildSdpOptions());
+        var holdSdp = _sdpNegotiator.BuildDefaultSdp(localEndPoint, hold: true, BuildLocalSdpOptions());
         await session.HoldAsync(holdSdp).ConfigureAwait(false);
     }
 
@@ -236,7 +243,7 @@ internal sealed class SipCoreCallChannel : ICallChannel
         var localIp = ResolveAdvertisedMediaAddress(session);
         var localEndPoint = new IPEndPoint(localIp, _localMediaPort);
         await EnsureLocalIceDescriptionAsync(localEndPoint, CancellationToken.None).ConfigureAwait(false);
-        var unholdSdp = _sdpNegotiator.BuildDefaultSdp(localEndPoint, hold: false, BuildSdpOptions());
+        var unholdSdp = _sdpNegotiator.BuildDefaultSdp(localEndPoint, hold: false, BuildLocalSdpOptions());
         await session.UnholdAsync(unholdSdp).ConfigureAwait(false);
     }
 
@@ -286,6 +293,25 @@ internal sealed class SipCoreCallChannel : ICallChannel
                     Candidates = _localIceDescription.Candidates
                 },
             PreferredCodecNames = _preferredCodecNames
+        };
+    }
+
+    /// <summary>
+    /// SDP options for a locally originated description (offer/answer/hold/unhold). Carries
+    /// the stable per-leg origin session id and a session version incremented on every call —
+    /// each represents a media change the peer must detect (RFC 4566 §5.2 / RFC 3264 §5).
+    /// Retransmissions reuse the already-built SDP string and never call this, so the version
+    /// stays put when nothing changed.
+    /// </summary>
+    private SdpMediaNegotiationOptions BuildLocalSdpOptions()
+    {
+        var baseOptions = BuildSdpOptions();
+        return new SdpMediaNegotiationOptions
+        {
+            Ice = baseOptions?.Ice,
+            PreferredCodecNames = baseOptions?.PreferredCodecNames ?? _preferredCodecNames,
+            SessionId = _sdpSessionId,
+            SessionVersion = Interlocked.Increment(ref _sdpSessionVersion)
         };
     }
 

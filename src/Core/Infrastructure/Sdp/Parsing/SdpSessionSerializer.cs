@@ -21,7 +21,7 @@ internal sealed class SdpSessionSerializer : ISdpSessionSerializer
 
         // --- Session header ---
         sb.AppendLine("v=0");
-        sb.AppendLine($"o=- 0 0 IN {GetNetType(session.OriginAddress)} {session.OriginAddress}");
+        sb.AppendLine($"o=- {session.SessionId} {session.SessionVersion} IN {GetNetType(session.OriginAddress)} {session.OriginAddress}");
         sb.AppendLine("s=CalloraVoipSdk");
         sb.AppendLine($"c=IN {GetNetType(session.ConnectionAddress)} {session.ConnectionAddress}");
         sb.AppendLine("t=0 0");

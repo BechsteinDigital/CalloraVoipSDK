@@ -66,7 +66,9 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             ConnectionAddress = host,
             SessionDirection = direction,
             Group = group,
-            Media = [media]
+            Media = [media],
+            SessionId = options?.SessionId ?? 0,
+            SessionVersion = options?.SessionVersion ?? 0
         };
     }
 
@@ -94,7 +96,7 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             return new SdpOfferAnswerResult
             {
                 Success = true,
-                Answer = BuildDisabledAnswer(remoteOffer, localEndPoint),
+                Answer = BuildDisabledAnswer(remoteOffer, localEndPoint, localOptions),
                 NegotiatedCodecs = []
             };
         }
@@ -210,7 +212,9 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             ConnectionAddress = host,
             SessionDirection = answerDirection,
             Group = group,
-            Media = [answerMedia]
+            Media = [answerMedia],
+            SessionId = localOptions?.SessionId ?? 0,
+            SessionVersion = localOptions?.SessionVersion ?? 0
         };
 
         return new SdpOfferAnswerResult
@@ -340,7 +344,8 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
 
     private static SdpSessionDescription BuildDisabledAnswer(
         SdpSessionDescription remoteOffer,
-        IPEndPoint localEndPoint)
+        IPEndPoint localEndPoint,
+        SdpMediaOptions? options)
     {
         var host = LocalEndPointHostResolver.ResolveHost(localEndPoint);
         var disabledMedia = remoteOffer.Media.Select(m => new SdpMediaDescription
@@ -357,7 +362,9 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             OriginAddress = host,
             ConnectionAddress = host,
             SessionDirection = SdpMediaDirection.Inactive,
-            Media = disabledMedia
+            Media = disabledMedia,
+            SessionId = options?.SessionId ?? 0,
+            SessionVersion = options?.SessionVersion ?? 0
         };
     }
 

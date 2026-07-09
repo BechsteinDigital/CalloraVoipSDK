@@ -409,10 +409,16 @@ internal static class SdpUtilities
 
         var ice = options.Ice;
         if (ice is null)
-            return new SdpMediaOptions();
+            return new SdpMediaOptions
+            {
+                SessionId = options.SessionId,
+                SessionVersion = options.SessionVersion
+            };
 
         return new SdpMediaOptions
         {
+            SessionId = options.SessionId,
+            SessionVersion = options.SessionVersion,
             Ice = new SdpIceParameters
             {
                 Ufrag = ice.Ufrag,

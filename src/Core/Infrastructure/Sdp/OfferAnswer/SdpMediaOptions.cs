@@ -56,4 +56,10 @@ internal sealed class SdpMediaOptions
 
     /// <summary>Whether to add BUNDLE grouping and <c>a=mid:audio</c> (RFC 5888).</summary>
     public bool Bundle { get; init; }
+
+    /// <summary>Origin session id for the built SDP (<c>o=</c> sess-id, RFC 4566 §5.2).</summary>
+    public long SessionId { get; init; }
+
+    /// <summary>Origin session version for the built SDP (<c>o=</c> sess-version, RFC 4566 §5.2).</summary>
+    public long SessionVersion { get; init; }
 }

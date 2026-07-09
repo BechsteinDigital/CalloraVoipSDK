@@ -46,4 +46,17 @@ public sealed class SdpMediaNegotiationOptions
     /// matches, the SDK default codec set is used. <see langword="null"/> keeps defaults.
     /// </summary>
     public IReadOnlyList<string>? PreferredCodecNames { get; init; }
+
+    /// <summary>
+    /// Origin session id (<c>o=</c> sess-id, RFC 4566 §5.2) for locally built SDP. Stable
+    /// across a call leg. <c>0</c> keeps the legacy constant.
+    /// </summary>
+    public long SessionId { get; init; }
+
+    /// <summary>
+    /// Origin session version (<c>o=</c> sess-version, RFC 4566 §5.2) for locally built SDP.
+    /// The caller increments it on every media change (offer/answer/hold/unhold/re-INVITE) so
+    /// the peer detects the modification (RFC 3264 §5). <c>0</c> keeps the legacy constant.
+    /// </summary>
+    public long SessionVersion { get; init; }
 }
