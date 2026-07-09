@@ -79,7 +79,7 @@ internal static class SdpUtilities
             localEndPoint,
             ResolveLocalCodecs(options),
             direction,
-            ConvertOptions(options));
+            ConvertOptions(options, forOffer: true));
         return Serializer.Serialize(offer);
     }
 
@@ -402,23 +402,30 @@ internal static class SdpUtilities
         return normalized.Contains("0-16", StringComparison.Ordinal);
     }
 
-    private static SdpMediaOptions? ConvertOptions(SdpMediaNegotiationOptions? options)
+    private static SdpMediaOptions? ConvertOptions(SdpMediaNegotiationOptions? options, bool forOffer = false)
     {
         if (options is null)
             return null;
+
+        // SDES crypto is only ever generated for a locally originated offer; answers key
+        // themselves via the offered crypto and must not inject a fresh line here.
+        IReadOnlyList<SdpCryptoAttribute> crypto =
+            forOffer && options.OfferSrtpCrypto ? [SdesCryptoSelector.BuildDefaultOffer()] : [];
 
         var ice = options.Ice;
         if (ice is null)
             return new SdpMediaOptions
             {
                 SessionId = options.SessionId,
-                SessionVersion = options.SessionVersion
+                SessionVersion = options.SessionVersion,
+                Crypto = crypto
             };
 
         return new SdpMediaOptions
         {
             SessionId = options.SessionId,
             SessionVersion = options.SessionVersion,
+            Crypto = crypto,
             Ice = new SdpIceParameters
             {
                 Ufrag = ice.Ufrag,

@@ -11,6 +11,12 @@ internal static class SrtpCryptoSuiteNames
     public const int SaltLength = 14;
 
     /// <summary>
+    /// Mandatory-to-implement default suite token (RFC 4568 §6.2) offered when a locally
+    /// originated SDES offer needs a single unambiguous crypto line.
+    /// </summary>
+    public const string DefaultSuiteName = "AES_CM_128_HMAC_SHA1_80";
+
+    /// <summary>
     /// Parses a suite token (case-sensitive per RFC 4568 grammar) to the implemented suite.
     /// Returns <see langword="null"/> for unknown/unsupported suites.
     /// </summary>

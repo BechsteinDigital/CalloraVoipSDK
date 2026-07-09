@@ -27,9 +27,15 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
         var fmtp = BuildFmtpForCodecs(codecs);
         var dtls = options?.Dtls;
         var ice = options?.Ice;
+        var crypto = options?.Crypto ?? [];
 
-        // RFC 5763: use UDP/TLS/RTP/SAVPF when DTLS parameters are provided.
-        var profile = dtls is not null ? "UDP/TLS/RTP/SAVPF" : "RTP/AVP";
+        // Profile selection: DTLS wins (RFC 5763, UDP/TLS/RTP/SAVPF); otherwise SDES
+        // a=crypto lines key an RTP/SAVP profile (RFC 4568); otherwise plain RTP/AVP.
+        var profile = dtls is not null
+            ? "UDP/TLS/RTP/SAVPF"
+            : crypto.Count > 0
+                ? "RTP/SAVP"
+                : "RTP/AVP";
 
         // BUNDLE: session-level group + media-level mid
         string? group = null;
@@ -49,6 +55,7 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             Codecs = codecs,
             Fmtp = fmtp,
             Mid = mid,
+            Crypto = crypto,
             RtcpMux = options?.RtcpMux == true,
             IceUfrag = ice?.Ufrag,
             IcePwd = ice?.Pwd,

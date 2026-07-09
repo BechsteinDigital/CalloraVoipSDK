@@ -59,6 +59,12 @@ internal sealed class SipCoreCallChannel : ICallChannel
     // media-parameter publication which may run on the signaling receive thread.
     private volatile string? _localAnswerSdp;
 
+    // The serialized offer SDP we sent (outbound leg). Carries our own SDES crypto line
+    // (the outbound encrypt key) when the SRTP policy makes us offer it; the peer's 200 OK
+    // answer carries their key (inbound decrypt). Retained so media-parameter publication
+    // recovers our key the same way the answer path does.
+    private volatile string? _localOfferSdp;
+
     // RFC 4566 §5.2 origin identity. Each channel (call leg) gets a unique, stable session id;
     // the version is incremented on every locally built SDP so peers detect media changes.
     private static long _sessionIdSeed = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
@@ -113,7 +119,15 @@ internal sealed class SipCoreCallChannel : ICallChannel
         ArgumentNullException.ThrowIfNull(localMediaEndPoint);
         _iceControlling = true; // we send the offer → controlling (RFC 8445 §5.1.1)
         await EnsureLocalIceDescriptionAsync(localMediaEndPoint, ct).ConfigureAwait(false);
-        return _sdpNegotiator.BuildDefaultSdp(localMediaEndPoint, hold, BuildLocalSdpOptions());
+
+        // Offer SDES SRTP unless policy forbids it (Disabled). Retain the exact string we
+        // send: its a=crypto line is the outbound encrypt key the media layer recovers.
+        var offerSdp = _sdpNegotiator.BuildDefaultSdp(
+            localMediaEndPoint,
+            hold,
+            BuildLocalSdpOptions(offerSrtpCrypto: _appliedSrtpPolicy != SrtpPolicy.Disabled));
+        _localOfferSdp = offerSdp;
+        return offerSdp;
     }
 
     /// <summary>
@@ -309,13 +323,14 @@ internal sealed class SipCoreCallChannel : ICallChannel
     /// Retransmissions reuse the already-built SDP string and never call this, so the version
     /// stays put when nothing changed.
     /// </summary>
-    private SdpMediaNegotiationOptions BuildLocalSdpOptions()
+    private SdpMediaNegotiationOptions BuildLocalSdpOptions(bool offerSrtpCrypto = false)
     {
         var baseOptions = BuildSdpOptions();
         return new SdpMediaNegotiationOptions
         {
             Ice = baseOptions?.Ice,
             PreferredCodecNames = baseOptions?.PreferredCodecNames ?? _preferredCodecNames,
+            OfferSrtpCrypto = offerSrtpCrypto,
             SessionId = _sdpSessionId,
             SessionVersion = Interlocked.Increment(ref _sdpSessionVersion)
         };
@@ -705,11 +720,12 @@ internal sealed class SipCoreCallChannel : ICallChannel
         string remoteSdp)
     {
         // Recover SDES key material from the SDP that actually went over the wire:
-        // the peer's SDP carries their key (inbound decrypt), our answer carries the
-        // key we generated (outbound encrypt). Encryption only engages when both are
-        // present and agree on the suite — never half-encrypted.
+        // the peer's SDP carries their key (inbound decrypt), our own local description
+        // carries the key we generated (outbound encrypt) — the answer we sent on the
+        // inbound leg, or the offer we sent on the outbound leg. Encryption only engages
+        // when both are present and agree on the suite — never half-encrypted.
         var remoteCrypto = SdpUtilities.TryExtractAudioCrypto(remoteSdp);
-        var localCrypto = SdpUtilities.TryExtractAudioCrypto(_localAnswerSdp);
+        var localCrypto = SdpUtilities.TryExtractAudioCrypto(_localAnswerSdp ?? _localOfferSdp);
         var sdesUsable = remoteCrypto is not null
             && localCrypto is not null
             && string.Equals(remoteCrypto.CryptoSuite, localCrypto.CryptoSuite, StringComparison.Ordinal);

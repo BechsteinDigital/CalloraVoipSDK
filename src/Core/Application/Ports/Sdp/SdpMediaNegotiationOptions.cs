@@ -39,6 +39,14 @@ public sealed class SdpMediaNegotiationOptions
     public SdpIceNegotiationOptions? Ice { get; init; }
 
     /// <summary>
+    /// When <see langword="true"/>, a locally built offer advertises SDES SRTP (RFC 4568):
+    /// one <c>a=crypto</c> line with freshly generated key material plus the <c>RTP/SAVP</c>
+    /// profile. Ignored on the answer path, which keys via the offered crypto.
+    /// <see langword="false"/> keeps a plain <c>RTP/AVP</c> offer.
+    /// </summary>
+    public bool OfferSrtpCrypto { get; init; }
+
+    /// <summary>
     /// Ordered audio codec preference by SDP encoding name (e.g. "PCMU", "PCMA", "G722").
     /// When set, local offers and answers only include the listed codecs (plus DTMF
     /// telephone-event) in this order, and the primary codec for RTP sessions is chosen
