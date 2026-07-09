@@ -138,6 +138,54 @@ public sealed class SrtpHardeningTests
         Assert.Equal(new byte[] { 0x77 }, payload);
     }
 
+    [Fact]
+    public async Task Receive_loop_survives_short_srtp_packets()
+    {
+        var keyA = InlineKey(31);
+        var portB = FreeUdpPort();
+        var codec = new RtpPacketCodec();
+        using var inbound = new SrtpContext(SrtpKeyMaterial.ParseInline(keyA, SrtpCryptoSuite.AesCm128HmacSha1_80));
+
+        await using var receiver = new RtpSession(
+            new RtpSessionOptions
+            {
+                LocalEndPoint = new IPEndPoint(IPAddress.Loopback, portB),
+                RemoteEndPoint = new IPEndPoint(IPAddress.Loopback, FreeUdpPort()),
+                PayloadType = 0,
+                ClockRate = 8000,
+                SamplesPerPacket = 160,
+                InboundSrtp = inbound
+            },
+            codec, NullLogger<RtpSession>.Instance);
+
+        var delivered = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
+        receiver.PacketReceived += (_, p) => delivered.TrySetResult(p.Payload.ToArray());
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await receiver.StartAsync(cts.Token);
+
+        // A short RTP-demuxed datagram (V=2, PT=0, shorter than 12 + auth-tag) makes
+        // Unprotect throw ArgumentException. Before the fix that escaped and killed the loop.
+        var runt = new byte[] { 0x80, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+        using var attacker = new UdpClient();
+        await attacker.SendAsync(runt, runt.Length, new IPEndPoint(IPAddress.Loopback, portB));
+        await Task.Delay(100, cts.Token);
+
+        using var sender = new SrtpContext(SrtpKeyMaterial.ParseInline(keyA, SrtpCryptoSuite.AesCm128HmacSha1_80));
+        var valid = sender.Protect(codec.Encode(new RtpPacket
+        {
+            PayloadType = 0,
+            SequenceNumber = 3,
+            Timestamp = 480,
+            Ssrc = 0xBEEF,
+            Payload = new byte[] { 0x2A }
+        }));
+        await attacker.SendAsync(valid, valid.Length, new IPEndPoint(IPAddress.Loopback, portB));
+
+        var payload = await delivered.Task.WaitAsync(TimeSpan.FromSeconds(3), cts.Token);
+        Assert.Equal(new byte[] { 0x2A }, payload);
+    }
+
     // ── Key zeroing on dispose (K2) ─────────────────────────────────────────────
 
     [Fact]

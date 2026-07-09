@@ -354,8 +354,11 @@ internal sealed class RtpSession : IRtpSession
                 _logger.LogDebug("Dropping replayed SRTP packet from {Source}.", source);
                 return;
             }
-            catch (CryptographicException ex)
+            catch (Exception ex) when (ex is ArgumentException or CryptographicException)
             {
+                // A too-short or malformed RTP-looking datagram (it passed the STUN/RTCP demux
+                // but is shorter than 12 + auth-tag, or has a malformed header) must be a clean
+                // drop — an uncaught throw here would terminate the whole receive loop (DoS).
                 _logger.LogDebug("Dropping undecryptable SRTP packet from {Source}: {Message}", source, ex.Message);
                 return;
             }
