@@ -46,7 +46,7 @@ and intelligent decision logic.
 
 | Capability | Status |
 |-----------|--------|
-| ICE (NAT traversal; STUN/TURN transport in place) | 🔧 In progress |
+| ICE for NAT traversal (RFC 8445/7675: role + tie-breaker, check-list FSM, nomination, inbound/triggered checks, consent freshness, restart) — opt-in, unproven in production | 🔧 In progress |
 | Backend/API for signed plugin marketplace + tenant entitlements | 📋 Roadmap |
 
 ## SDK Structure
