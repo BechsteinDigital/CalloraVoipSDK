@@ -39,11 +39,15 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
     private readonly IceMediaAttachment _iceMedia;
     private readonly IJitterBuffer _jitterBuffer;
 
-    // SRTP contexts created (and thus owned) by this session; internal for test evidence.
+    // SRTP/SRTCP contexts created (and thus owned) by this session; internal for test evidence.
     internal ISrtpContext? OutboundSrtpContext => _outboundSrtp;
     internal ISrtpContext? InboundSrtpContext => _inboundSrtp;
     private readonly ISrtpContext? _outboundSrtp;
     private readonly ISrtpContext? _inboundSrtp;
+    internal ISrtcpContext? OutboundSrtcpContext => _outboundSrtcp;
+    internal ISrtcpContext? InboundSrtcpContext => _inboundSrtcp;
+    private readonly ISrtcpContext? _outboundSrtcp;
+    private readonly ISrtcpContext? _inboundSrtcp;
 
     // Wire<->tap audio transcoder; null means the consumer receives the raw wire payload
     // (passthrough — the default and the case when wire already equals the tap codec).
@@ -154,9 +158,10 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
                 _logger)
             : null;
 
-        // This session creates the SRTP contexts and therefore owns their disposal
+        // This session creates the SRTP/SRTCP contexts and therefore owns their disposal
         // (key zeroing) — RtpSession only borrows them via options.
-        (_outboundSrtp, _inboundSrtp) = TryCreateSrtpContexts(parameters, _logger);
+        (_outboundSrtp, _inboundSrtp, _outboundSrtcp, _inboundSrtcp) =
+            TryCreateMediaCryptoContexts(parameters, _logger);
         var options = new RtpSessionOptions
         {
             LocalEndPoint    = parameters.LocalEndPoint,
@@ -165,7 +170,9 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
             ClockRate        = _clockRate,
             SamplesPerPacket = parameters.SamplesPerPacket,
             OutboundSrtp     = _outboundSrtp,
-            InboundSrtp      = _inboundSrtp
+            InboundSrtp      = _inboundSrtp,
+            OutboundSrtcp    = _outboundSrtcp,
+            InboundSrtcp     = _inboundSrtcp
         };
 
         var logger = loggerFactory.CreateLogger<RtpSession>();
@@ -417,6 +424,8 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
         // Zero the SRTP session keys once the RTP session (their only borrower) is down.
         _outboundSrtp?.Dispose();
         _inboundSrtp?.Dispose();
+        _outboundSrtcp?.Dispose();
+        _inboundSrtcp?.Dispose();
     }
 
     private int ResolveOutboundPayloadType(int framePayloadType)
@@ -663,20 +672,20 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
             estimatedRoundTripTimeMs: _jitterBuffer.EstimatedRoundTripTimeMs);
 
     /// <summary>
-    /// Builds the SRTP context pair from negotiated SDES key material (RFC 4568/3711):
-    /// outbound protects with our answer key, inbound unprotects with the peer's key.
-    /// Returns <c>(null, null)</c> when the call is plain RTP. A negotiated-SRTP call with
-    /// unparsable key material throws — failing open would silently send plaintext audio.
+    /// Builds the SRTP and SRTCP context pairs from negotiated SDES key material
+    /// (RFC 4568/3711): outbound protects with our own key, inbound unprotects with the
+    /// peer's key. SRTP and SRTCP derive independent session keys from the same master key
+    /// (RFC 3711 §4.3.2). Returns all-<c>null</c> when the call is plain RTP. A negotiated-SRTP
+    /// call with unparsable key material throws — failing open would silently send plaintext.
     /// </summary>
-    private static (ISrtpContext? Outbound, ISrtpContext? Inbound) TryCreateSrtpContexts(
-        CallMediaParameters parameters,
-        ILogger logger)
+    private static (ISrtpContext? OutRtp, ISrtpContext? InRtp, ISrtcpContext? OutRtcp, ISrtcpContext? InRtcp)
+        TryCreateMediaCryptoContexts(CallMediaParameters parameters, ILogger logger)
     {
         if (parameters.SrtpSuite is null
             || parameters.SrtpLocalKeyParams is null
             || parameters.SrtpRemoteKeyParams is null)
         {
-            return (null, null);
+            return (null, null, null, null);
         }
 
         var suite = SrtpCryptoSuiteNames.TryParse(parameters.SrtpSuite)
@@ -698,9 +707,10 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
         }
 
         logger.LogInformation(
-            "SRTP enabled for media session (suite {Suite}); RTCP remains unprotected (SRTCP not implemented).",
+            "SRTP and SRTCP enabled for media session (suite {Suite}).",
             parameters.SrtpSuite);
-        return (new SrtpContext(localKeys), new SrtpContext(remoteKeys));
+        return (new SrtpContext(localKeys), new SrtpContext(remoteKeys),
+                new SrtcpContext(localKeys), new SrtcpContext(remoteKeys));
     }
 
     private static TimeSpan ResolvePlayoutInterval(CallMediaParameters parameters, TimeSpan? configuredInterval)
