@@ -1,0 +1,265 @@
+using System.Buffers.Binary;
+using System.Security.Cryptography;
+using CalloraVoipSdk.Core.Infrastructure.Srtp.Crypto;
+
+namespace CalloraVoipSdk.Core.Infrastructure.Srtp.Context;
+
+/// <summary>
+/// SRTCP context for one direction (RFC 3711 §3.4). Encrypts the RTCP payload (everything
+/// after the 8-byte header) with AES-CM keyed by the SRTCP session keys (KDF labels 3/4/5),
+/// appends the 32-bit <c>E</c>-flag/SRTCP-index word and an HMAC-SHA1 auth tag over the
+/// encrypted packet including that word. The 31-bit SRTCP index is carried explicitly, so —
+/// unlike SRTP — no rollover counter feeds the IV or the authentication.
+/// </summary>
+internal sealed class SrtcpContext : ISrtcpContext
+{
+    // First 8 bytes of every RTCP packet (V/P/RC, PT, length, SSRC) stay in the clear.
+    private const int RtcpHeaderLength = 8;
+    private const int SrtcpIndexLength = 4;
+    private const int AuthTagFullLength = 20;
+    private const int AesCmBlockLength = 16;
+    private const int MaxAesCmKeystreamBytes = 1 << 20;
+    private const uint EncryptionFlag = 0x8000_0000;
+    private const uint SrtcpIndexMask = 0x7FFF_FFFF;
+    private const int ReplayWindowSize = 64;
+
+    private readonly SrtpSessionKeys _keys;
+    private readonly int _authTagLength;
+
+    // Sender-side SRTCP index (31-bit), pre-incremented per packet (RFC 3711 §3.4).
+    private uint _sendIndex;
+
+    // Receiver replay window: 64-bit bitmap, high bit = newest (RFC 3711 §3.3.2 applied to
+    // the explicit SRTCP index).
+    private uint _replayWindowIndex;
+    private ulong _replayWindowBitmap;
+
+    // Serializes mutable state (sender index, replay window) and key usage so the context is
+    // thread-safe on its own.
+    private readonly object _sync = new();
+    private bool _disposed;
+
+    public SrtcpContext(SrtpKeyMaterial material)
+    {
+        ArgumentNullException.ThrowIfNull(material);
+        _keys = SrtpKeyDerivation.DeriveRtcp(material);
+        _authTagLength = material.Suite is SrtpCryptoSuite.AesCm128HmacSha1_32
+                                        or SrtpCryptoSuite.AesCm256HmacSha1_32
+            ? 4 : 10;
+    }
+
+    /// <summary>Derived SRTCP session keys — internal test seam for dispose/zeroing evidence.</summary>
+    internal SrtpSessionKeys SessionKeys => _keys;
+
+    /// <inheritdoc />
+    public byte[] ProtectRtcp(ReadOnlySpan<byte> rtcpPacket)
+    {
+        if (rtcpPacket.Length < RtcpHeaderLength)
+            throw new ArgumentException("RTCP packet too short (minimum 8 bytes).", nameof(rtcpPacket));
+
+        lock (_sync)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
+            var index = (_sendIndex + 1) & SrtcpIndexMask;
+            var ssrc = BinaryPrimitives.ReadUInt32BigEndian(rtcpPacket[4..]);
+            var encryptedLen = rtcpPacket.Length - RtcpHeaderLength;
+
+            // Layout: [clear header + encrypted payload][E|index (4)][auth tag].
+            var result = GC.AllocateUninitializedArray<byte>(
+                rtcpPacket.Length + SrtcpIndexLength + _authTagLength);
+            rtcpPacket.CopyTo(result);
+
+            if (encryptedLen > 0)
+            {
+                Span<byte> iv = stackalloc byte[16];
+                BuildIv(ssrc, index, iv);
+                AesCmXor(_keys.CipherKey, iv, result.AsSpan(RtcpHeaderLength, encryptedLen));
+            }
+
+            // E-flag = 1 (payload encrypted) plus the 31-bit index.
+            BinaryPrimitives.WriteUInt32BigEndian(
+                result.AsSpan(rtcpPacket.Length, SrtcpIndexLength), index | EncryptionFlag);
+
+            // Auth tag over the encrypted packet including the E|index word (RFC 3711 §3.4).
+            var authedLen = rtcpPacket.Length + SrtcpIndexLength;
+            Span<byte> tag = stackalloc byte[AuthTagFullLength];
+            ComputeAuthTag(result.AsSpan(0, authedLen), tag);
+            tag[.._authTagLength].CopyTo(result.AsSpan(authedLen, _authTagLength));
+
+            _sendIndex = index;
+            return result;
+        }
+    }
+
+    /// <inheritdoc />
+    public byte[] UnprotectRtcp(ReadOnlySpan<byte> srtcpPacket)
+    {
+        if (srtcpPacket.Length < RtcpHeaderLength + SrtcpIndexLength + _authTagLength)
+            throw new ArgumentException("SRTCP packet too short.", nameof(srtcpPacket));
+
+        lock (_sync)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
+            var authedLen = srtcpPacket.Length - _authTagLength;
+            var authedSpan = srtcpPacket[..authedLen];
+            var receivedTag = srtcpPacket[authedLen..];
+
+            // 1. Verify auth tag before decryption (RFC 3711 §3.3 — verify-then-decrypt).
+            Span<byte> expectedTag = stackalloc byte[AuthTagFullLength];
+            ComputeAuthTag(authedSpan, expectedTag);
+            if (!CryptographicOperations.FixedTimeEquals(receivedTag, expectedTag[.._authTagLength]))
+                throw new SrtpAuthenticationException("SRTCP authentication tag mismatch.");
+
+            var indexWord = BinaryPrimitives.ReadUInt32BigEndian(authedSpan[(authedLen - SrtcpIndexLength)..]);
+            var encrypted = (indexWord & EncryptionFlag) != 0;
+            var index = indexWord & SrtcpIndexMask;
+
+            // 2. Replay check on the explicit SRTCP index (RFC 3711 §3.3.2).
+            CheckReplay(index);
+
+            var rtcpLen = authedLen - SrtcpIndexLength;
+            var output = GC.AllocateUninitializedArray<byte>(rtcpLen);
+            authedSpan[..rtcpLen].CopyTo(output);
+
+            // 3. Decrypt the payload when the E-flag is set.
+            var encryptedLen = rtcpLen - RtcpHeaderLength;
+            if (encrypted && encryptedLen > 0)
+            {
+                var ssrc = BinaryPrimitives.ReadUInt32BigEndian(output.AsSpan(4));
+                Span<byte> iv = stackalloc byte[16];
+                BuildIv(ssrc, index, iv);
+                AesCmXor(_keys.CipherKey, iv, output.AsSpan(RtcpHeaderLength, encryptedLen));
+            }
+
+            // 4. Update replay window.
+            UpdateReplayWindow(index);
+            return output;
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // AES-CM (RFC 3711 §4.1) — mirrored from SrtpContext to keep the running SRTP path
+    // untouched; consolidation into a shared primitive is follow-up work.
+    // -------------------------------------------------------------------------
+
+    private static void AesCmXor(byte[] key, ReadOnlySpan<byte> iv, Span<byte> data)
+    {
+        if (data.Length > MaxAesCmKeystreamBytes)
+            throw new CryptographicException("SRTCP AES-CM payload exceeds the RFC3711 2^16-block keystream limit.");
+
+        using var aes  = Aes.Create();
+        aes.Key        = key;
+        aes.Mode       = CipherMode.ECB;
+        aes.Padding    = PaddingMode.None;
+        using var enc = aes.CreateEncryptor();
+
+        var block = new byte[16];
+        var counterIv = new byte[16];
+        iv.CopyTo(counterIv);
+        var offset = 0;
+        var counter = 0;
+
+        while (offset < data.Length)
+        {
+            counterIv[14] = (byte)(counter >> 8);
+            counterIv[15] = (byte)counter;
+
+            enc.TransformBlock(counterIv, 0, AesCmBlockLength, block, 0);
+
+            var chunk = Math.Min(AesCmBlockLength, data.Length - offset);
+            for (var i = 0; i < chunk; i++)
+                data[offset + i] ^= block[i];
+
+            offset += chunk;
+            counter++;
+        }
+    }
+
+    // IV = (salt XOR (SSRC * 2^64) XOR (index * 2^16)) as 128-bit big-endian (RFC 3711 §4.1).
+    // For SRTCP the 31-bit SRTCP index takes the place of the SRTP packet index.
+    private void BuildIv(uint ssrc, uint index, Span<byte> iv)
+    {
+        iv.Clear();
+        _keys.Salt.CopyTo(iv);
+
+        iv[4] ^= (byte)(ssrc >> 24);
+        iv[5] ^= (byte)(ssrc >> 16);
+        iv[6] ^= (byte)(ssrc >>  8);
+        iv[7] ^= (byte) ssrc;
+
+        // index occupies bits 16..63; a 31-bit value only reaches bytes 10..13.
+        iv[10] ^= (byte)(index >> 24);
+        iv[11] ^= (byte)(index >> 16);
+        iv[12] ^= (byte)(index >>  8);
+        iv[13] ^= (byte) index;
+    }
+
+    // -------------------------------------------------------------------------
+    // Authentication (RFC 3711 §4.2) — HMAC-SHA1 over the encrypted packet + E|index.
+    // No ROC: the SRTCP index is already part of the authenticated data.
+    // -------------------------------------------------------------------------
+
+    private void ComputeAuthTag(ReadOnlySpan<byte> data, Span<byte> destination)
+    {
+        using var hmac = IncrementalHash.CreateHMAC(HashAlgorithmName.SHA1, _keys.AuthKey);
+        hmac.AppendData(data);
+
+        if (!hmac.TryGetHashAndReset(destination, out var bytesWritten)
+            || bytesWritten != AuthTagFullLength)
+        {
+            throw new CryptographicException("Failed to compute SRTCP HMAC-SHA1 authentication tag.");
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Replay protection (RFC 3711 §3.3.2) on the explicit SRTCP index.
+    // -------------------------------------------------------------------------
+
+    private void CheckReplay(uint index)
+    {
+        if (index > _replayWindowIndex)
+            return;
+
+        var diff = _replayWindowIndex - index;
+        if (diff >= ReplayWindowSize)
+            throw new SrtpReplayException($"SRTCP index {index} is outside the replay window.");
+
+        if ((_replayWindowBitmap & (1UL << (int)diff)) != 0)
+            throw new SrtpReplayException($"SRTCP index {index} has already been received (replay).");
+    }
+
+    private void UpdateReplayWindow(uint index)
+    {
+        if (index > _replayWindowIndex)
+        {
+            var shift = index - _replayWindowIndex;
+            _replayWindowBitmap = shift >= ReplayWindowSize
+                ? 0
+                : _replayWindowBitmap << (int)shift;
+            _replayWindowBitmap |= 1;
+            _replayWindowIndex   = index;
+        }
+        else
+        {
+            var diff = _replayWindowIndex - index;
+            _replayWindowBitmap |= 1UL << (int)diff;
+        }
+    }
+
+    /// <summary>
+    /// Zeroes the derived SRTCP session keys (RFC 3711 §9.4 hygiene) and rejects further use.
+    /// Idempotent.
+    /// </summary>
+    public void Dispose()
+    {
+        lock (_sync)
+        {
+            if (_disposed)
+                return;
+            _disposed = true;
+            _keys.Zero();
+        }
+    }
+}

@@ -9,16 +9,33 @@ namespace CalloraVoipSdk.Core.Infrastructure.Srtp.Crypto;
 /// </summary>
 internal static class SrtpKeyDerivation
 {
-    // Label constants (RFC 3711 §4.3.1)
+    // Label constants (RFC 3711 §4.3.1). SRTP uses 0/1/2, SRTCP uses 3/4/5 — deriving
+    // SRTCP keys from the same master key with distinct labels keeps the two keystreams
+    // independent (RFC 3711 §4.3.2).
     private const byte LabelCipherKey = 0x00;
-    private const byte LabelSalt      = 0x02;
     private const byte LabelAuthKey   = 0x01;
+    private const byte LabelSalt      = 0x02;
+    private const byte LabelRtcpCipherKey = 0x03;
+    private const byte LabelRtcpAuthKey   = 0x04;
+    private const byte LabelRtcpSalt      = 0x05;
 
     /// <summary>
-    /// Derives all session keys for the given master key material.
+    /// Derives the SRTP session keys for the given master key material.
     /// Key derivation rate r = 0 (default — keys derived once per session).
     /// </summary>
-    public static SrtpSessionKeys Derive(SrtpKeyMaterial material)
+    public static SrtpSessionKeys Derive(SrtpKeyMaterial material) =>
+        Derive(material, LabelCipherKey, LabelAuthKey, LabelSalt);
+
+    /// <summary>
+    /// Derives the SRTCP session keys (RFC 3711 §4.3.2, labels 3/4/5) from the same master
+    /// key material as <see cref="Derive(SrtpKeyMaterial)"/>, yielding an independent
+    /// keystream for RTCP.
+    /// </summary>
+    public static SrtpSessionKeys DeriveRtcp(SrtpKeyMaterial material) =>
+        Derive(material, LabelRtcpCipherKey, LabelRtcpAuthKey, LabelRtcpSalt);
+
+    private static SrtpSessionKeys Derive(
+        SrtpKeyMaterial material, byte cipherLabel, byte authLabel, byte saltLabel)
     {
         ArgumentNullException.ThrowIfNull(material);
 
@@ -27,9 +44,9 @@ internal static class SrtpKeyDerivation
 
         return new SrtpSessionKeys
         {
-            CipherKey = DeriveKey(material, LabelCipherKey, keyLength),
-            Salt      = DeriveKey(material, LabelSalt,      14),
-            AuthKey   = DeriveKey(material, LabelAuthKey,   authLength),
+            CipherKey = DeriveKey(material, cipherLabel, keyLength),
+            Salt      = DeriveKey(material, saltLabel,   14),
+            AuthKey   = DeriveKey(material, authLabel,   authLength),
         };
     }
 
