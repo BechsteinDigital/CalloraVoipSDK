@@ -64,11 +64,20 @@ internal static class SdesCryptoSelector
     /// material we retain as the outbound encrypt key. A single offered suite keeps the
     /// later offer/answer key match unambiguous (the peer answers with the same suite).
     /// </summary>
-    public static SdpCryptoAttribute BuildDefaultOffer() => new()
+    public static SdpCryptoAttribute BuildDefaultOffer() =>
+        BuildOffer(GenerateInlineKeyParams(SrtpCryptoSuite.AesCm128HmacSha1_80));
+
+    /// <summary>
+    /// Builds an offer crypto line reusing an already-issued inline key (RFC 4568 §5.1.1).
+    /// Used on a re-offer (hold/unhold) of an SRTP call so the offered key stays identical
+    /// to the running media context — the peer keeps decrypting without a rekey. Same tag
+    /// and default suite as <see cref="BuildDefaultOffer"/>.
+    /// </summary>
+    public static SdpCryptoAttribute BuildOffer(string keyParams) => new()
     {
         Tag = 1,
         CryptoSuite = SrtpCryptoSuiteNames.DefaultSuiteName,
-        KeyParams = GenerateInlineKeyParams(SrtpCryptoSuite.AesCm128HmacSha1_80)
+        KeyParams = keyParams
     };
 
     /// <summary>

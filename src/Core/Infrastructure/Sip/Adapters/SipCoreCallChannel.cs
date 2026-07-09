@@ -65,6 +65,12 @@ internal sealed class SipCoreCallChannel : ICallChannel
     // recovers our key the same way the answer path does.
     private volatile string? _localOfferSdp;
 
+    // The outbound encrypt key of the running SRTP media context (null when the call is
+    // plain RTP). A hold/unhold re-offer reuses it so the offered a=crypto stays identical
+    // to the live context — the peer keeps decrypting without a rekey. Set once media
+    // parameters publish; read on the signaling thread that issues hold/unhold.
+    private volatile string? _activeLocalSrtpKeyParams;
+
     // RFC 4566 §5.2 origin identity. Each channel (call leg) gets a unique, stable session id;
     // the version is incremented on every locally built SDP so peers detect media changes.
     private static long _sessionIdSeed = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
@@ -168,7 +174,7 @@ internal sealed class SipCoreCallChannel : ICallChannel
             }
         }
 
-        var state = MapState(session.State);
+        var state = SipCallChannelConversions.MapState(session.State);
         if (state is not null)
             NotifyState(state.Value);
     }
@@ -252,7 +258,7 @@ internal sealed class SipCoreCallChannel : ICallChannel
         var localIp = ResolveAdvertisedMediaAddress(session);
         var localEndPoint = new IPEndPoint(localIp, _localMediaPort);
         await EnsureLocalIceDescriptionAsync(localEndPoint, CancellationToken.None).ConfigureAwait(false);
-        var holdSdp = _sdpNegotiator.BuildDefaultSdp(localEndPoint, hold: true, BuildLocalSdpOptions());
+        var holdSdp = _sdpNegotiator.BuildDefaultSdp(localEndPoint, hold: true, BuildReofferSdpOptions());
         await session.HoldAsync(holdSdp).ConfigureAwait(false);
     }
 
@@ -263,8 +269,19 @@ internal sealed class SipCoreCallChannel : ICallChannel
         var localIp = ResolveAdvertisedMediaAddress(session);
         var localEndPoint = new IPEndPoint(localIp, _localMediaPort);
         await EnsureLocalIceDescriptionAsync(localEndPoint, CancellationToken.None).ConfigureAwait(false);
-        var unholdSdp = _sdpNegotiator.BuildDefaultSdp(localEndPoint, hold: false, BuildLocalSdpOptions());
+        var unholdSdp = _sdpNegotiator.BuildDefaultSdp(localEndPoint, hold: false, BuildReofferSdpOptions());
         await session.UnholdAsync(unholdSdp).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// SDP options for a hold/unhold re-offer. Keeps SDES SRTP alive on a running secure
+    /// call by re-advertising the live outbound key (no rekey, no downgrade to plain RTP);
+    /// a plain call re-offers plain RTP unchanged.
+    /// </summary>
+    private SdpMediaNegotiationOptions BuildReofferSdpOptions()
+    {
+        var srtpKey = _activeLocalSrtpKeyParams;
+        return BuildLocalSdpOptions(offerSrtpCrypto: srtpKey is not null, offerSrtpKeyParams: srtpKey);
     }
 
     /// <summary>
@@ -323,7 +340,9 @@ internal sealed class SipCoreCallChannel : ICallChannel
     /// Retransmissions reuse the already-built SDP string and never call this, so the version
     /// stays put when nothing changed.
     /// </summary>
-    private SdpMediaNegotiationOptions BuildLocalSdpOptions(bool offerSrtpCrypto = false)
+    private SdpMediaNegotiationOptions BuildLocalSdpOptions(
+        bool offerSrtpCrypto = false,
+        string? offerSrtpKeyParams = null)
     {
         var baseOptions = BuildSdpOptions();
         return new SdpMediaNegotiationOptions
@@ -331,6 +350,7 @@ internal sealed class SipCoreCallChannel : ICallChannel
             Ice = baseOptions?.Ice,
             PreferredCodecNames = baseOptions?.PreferredCodecNames ?? _preferredCodecNames,
             OfferSrtpCrypto = offerSrtpCrypto,
+            OfferSrtpKeyParams = offerSrtpKeyParams,
             SessionId = _sdpSessionId,
             SessionVersion = Interlocked.Increment(ref _sdpSessionVersion)
         };
@@ -379,7 +399,7 @@ internal sealed class SipCoreCallChannel : ICallChannel
         }
 
         var session = EnsureSession();
-        var symbol = ToDtmfSymbol(dtmfCode);
+        var symbol = SipCallChannelConversions.ToDtmfSymbol(dtmfCode);
         var body = $"Signal={symbol}\r\nDuration={durationMs}\r\n";
         await session.SendInfoAsync("application/dtmf-relay", body).ConfigureAwait(false);
     }
@@ -592,6 +612,10 @@ internal sealed class SipCoreCallChannel : ICallChannel
         reasonCode = SrtpPolicyEvaluator.ResolveReasonCode(_appliedSrtpPolicy, withIceMetadata.IsSrtpNegotiated);
         var violatesPolicy = SrtpPolicyEvaluator.IsPolicyViolation(_appliedSrtpPolicy, withIceMetadata.IsSrtpNegotiated);
         var enrichedParameters = EnrichWithSrtpMetadata(withIceMetadata, reasonCode, remoteSdp);
+
+        // Remember the live outbound encrypt key so a later hold/unhold re-offers the same
+        // key (keeps SRTP without rekeying); null when the call resolved to plain RTP.
+        _activeLocalSrtpKeyParams = enrichedParameters.SrtpLocalKeyParams;
         PublishSrtpDecision(
             session,
             enrichedParameters.IsSrtpNegotiated,
@@ -650,7 +674,7 @@ internal sealed class SipCoreCallChannel : ICallChannel
             }
         }
 
-        var state = MapState(e.NewState);
+        var state = SipCallChannelConversions.MapState(e.NewState);
         if (state is null) return;
         NotifyState(state.Value);
     }
@@ -951,26 +975,4 @@ internal sealed class SipCoreCallChannel : ICallChannel
             throw new InvalidOperationException("SIP call session has not been attached yet.");
         return session;
     }
-
-    private static CallState? MapState(SipDialogState state) => state switch
-    {
-        SipDialogState.Inviting     => CallState.Dialing,
-        SipDialogState.Ringing      => CallState.Ringing,
-        SipDialogState.Established  => CallState.Connected,
-        SipDialogState.OnHold       => CallState.OnHold,
-        SipDialogState.Terminated   => CallState.Terminated,
-        _                           => null
-    };
-
-    private static char ToDtmfSymbol(byte toneCode) => toneCode switch
-    {
-        <= 9 => (char)('0' + toneCode),
-        10   => '*',
-        11   => '#',
-        12   => 'A',
-        13   => 'B',
-        14   => 'C',
-        15   => 'D',
-        _    => throw new ArgumentOutOfRangeException(nameof(toneCode))
-    };
 }
