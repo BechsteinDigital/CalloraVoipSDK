@@ -45,6 +45,10 @@ internal sealed class JitterBuffer : IJitterBuffer
     private uint   _lastTransitTs; // RTP timestamp of previous packet (adjusted for transit)
     private bool   _transitSet;
 
+    // Raw RTP timestamp of the previous packet, to detect a stalled timestamp (Δts==0).
+    private uint   _lastRawRtpTs;
+    private bool   _lastRawRtpTsSet;
+
     // Extended seq tracking for signed-wrap expansion.
     private ushort _lastSeq;
 
@@ -115,6 +119,20 @@ internal sealed class JitterBuffer : IJitterBuffer
 
             // Duplicate check
             if (extSeq <= _lastDelivered || _buffer.ContainsKey(extSeq))
+                return JitterBufferAddResult.Duplicate;
+
+            // Stalled RTP timestamp (Δts==0): comfort noise (PT 13) or any audio-PT packet
+            // repeating the same ts. (RFC 4733 telephone-events are demuxed before the buffer,
+            // so they never reach here.) RFC 3550's jitter estimate and the timestamp-derived
+            // playout schedule both assume the ts advances with media time — a stalled ts injects
+            // the wall-clock inter-arrival gap as fake jitter and drops the repeats as "late",
+            // ratcheting the adaptive delay up mid-call. These packets are playout-redundant, so
+            // treat them as duplicates (no jitter/delay change, no late drop). Genuine audio never
+            // repeats a timestamp.
+            var stalledTimestamp = _lastRawRtpTsSet && packet.Timestamp == _lastRawRtpTs;
+            _lastRawRtpTs = packet.Timestamp;
+            _lastRawRtpTsSet = true;
+            if (stalledTimestamp)
                 return JitterBufferAddResult.Duplicate;
 
             // Update jitter estimate (RFC 3550 §6.4.1)
