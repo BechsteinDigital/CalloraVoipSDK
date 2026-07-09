@@ -1,16 +1,20 @@
 using CalloraVoipSdk.Core.Domain.Calls;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CalloraVoipSdk.Core.Application.Media;
 
 public sealed class MediaReceiver : IMediaReceiver
 {
     private readonly object _sync = new();
+    private readonly ILogger _logger;
     private Call? _call;
     private Action<CallAudioFrame>? _listener;
     private bool _disposed;
 
-    internal MediaReceiver()
+    internal MediaReceiver(ILogger<MediaReceiver>? logger = null)
     {
+        _logger = logger ?? NullLogger<MediaReceiver>.Instance;
     }
 
     public event EventHandler<MediaFrameReceivedEventArgs>? FrameReceived;
@@ -81,9 +85,10 @@ public sealed class MediaReceiver : IMediaReceiver
             {
                 handler(this, args);
             }
-            catch
+            catch (Exception ex)
             {
-                // Isolate receiver subscribers from RTP callback thread.
+                // Isolate one subscriber's fault from the others and the RTP callback thread.
+                _logger.LogDebug(ex, "Media frame subscriber threw; continuing with the remaining subscribers.");
             }
         }
     }

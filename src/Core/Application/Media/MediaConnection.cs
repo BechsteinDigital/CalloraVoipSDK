@@ -1,4 +1,6 @@
 using System.Threading.Channels;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CalloraVoipSdk.Core.Application.Media;
 
@@ -12,6 +14,7 @@ internal sealed class MediaConnection : IDisposable
     private readonly Channel<MediaFrame> _queue;
     private readonly CancellationTokenSource _shutdownCts = new();
     private readonly Task _pumpTask;
+    private readonly ILogger _logger;
     private int _disposed;
 
     /// <summary>
@@ -20,10 +23,12 @@ internal sealed class MediaConnection : IDisposable
     internal MediaConnection(
         IMediaReceiver receiver,
         IMediaSender sender,
-        int queueCapacity)
+        int queueCapacity,
+        ILogger? logger = null)
     {
         _receiver = receiver ?? throw new ArgumentNullException(nameof(receiver));
         _sender = sender ?? throw new ArgumentNullException(nameof(sender));
+        _logger = logger ?? NullLogger.Instance;
 
         _queue = Channel.CreateBounded<MediaFrame>(new BoundedChannelOptions(Math.Max(1, queueCapacity))
         {
@@ -59,8 +64,14 @@ internal sealed class MediaConnection : IDisposable
                     await ForwardAsync(frame).ConfigureAwait(false);
             }
         }
-        catch (OperationCanceledException) when (_shutdownCts.IsCancellationRequested) { }
-        catch (ChannelClosedException) { }
+        catch (OperationCanceledException) when (_shutdownCts.IsCancellationRequested)
+        {
+            _logger.LogTrace("Media forwarding pump cancelled during shutdown.");
+        }
+        catch (ChannelClosedException)
+        {
+            _logger.LogTrace("Media forwarding queue closed; pump stopping.");
+        }
     }
 
     /// <summary>
@@ -72,18 +83,22 @@ internal sealed class MediaConnection : IDisposable
         {
             await _sender.SendAsync(frame, _shutdownCts.Token).ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (_shutdownCts.IsCancellationRequested) { }
-        catch (ObjectDisposedException)
+        catch (OperationCanceledException) when (_shutdownCts.IsCancellationRequested)
         {
-            // Link is shutting down; ignore.
+            _logger.LogTrace("Media frame forwarding cancelled during shutdown.");
         }
-        catch (InvalidOperationException)
+        catch (ObjectDisposedException ex)
         {
-            // Sender is detached; ignore.
+            _logger.LogTrace(ex, "Media frame dropped: link is shutting down.");
         }
-        catch
+        catch (InvalidOperationException ex)
         {
-            // Isolate media forwarding faults from RTP/callback threads.
+            _logger.LogTrace(ex, "Media frame dropped: sender is detached.");
+        }
+        catch (Exception ex)
+        {
+            // Isolate media forwarding faults from the RTP/callback threads.
+            _logger.LogDebug(ex, "Media frame forwarding to the sender failed; dropping the frame.");
         }
     }
 
@@ -101,9 +116,9 @@ internal sealed class MediaConnection : IDisposable
         {
             _pumpTask.GetAwaiter().GetResult();
         }
-        catch
+        catch (Exception ex)
         {
-            // Best effort shutdown.
+            _logger.LogTrace(ex, "Media forwarding pump faulted during shutdown drain.");
         }
         _shutdownCts.Dispose();
     }

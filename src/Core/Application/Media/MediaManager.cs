@@ -43,7 +43,7 @@ public sealed class MediaManager
     /// <summary>
     /// Creates a detached media receiver.
     /// </summary>
-    public IMediaReceiver CreateReceiver() => new MediaReceiver();
+    public IMediaReceiver CreateReceiver() => new MediaReceiver(_loggerFactory.CreateLogger<MediaReceiver>());
 
     /// <summary>
     /// Creates a detached media sender.
@@ -53,7 +53,7 @@ public sealed class MediaManager
     /// <summary>
     /// Creates a connector for one-way or two-way media links.
     /// </summary>
-    public MediaConnector CreateConnector() => new();
+    public MediaConnector CreateConnector() => new(_loggerFactory);
 
     /// <summary>
     /// Starts recording on one active call.
