@@ -16,10 +16,10 @@ public sealed class EngineeringRulesTests
 
     private static readonly string[] LayeringBaseline =
     [
-        // Audit-Finding K4: DialOptions (Application) wird aus Domain referenziert.
-        "src/Core/Domain/Calls/ICall.cs",
-        "src/Core/Domain/Lines/ILineChannel.cs",
-        "src/Core/Domain/Lines/IPhoneLine.cs",
+        // K4 (DialOptions) behoben: DialOptions ist jetzt ein Domain-Typ (Core.Domain.Calls).
+        // PhoneLine bleibt: es referenziert zusaetzlich CallManager (Application) — ein
+        // separater, groesserer Domain->Application-Leak (PhoneLine orchestriert Calls).
+        // Eigene Folgearbeit (PhoneLine nach Application oder CallManager-Abstraktion).
         "src/Core/Domain/Lines/PhoneLine.cs",
     ];
 

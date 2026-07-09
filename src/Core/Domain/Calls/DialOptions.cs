@@ -1,5 +1,9 @@
-namespace CalloraVoipSdk.Core.Application.Calls;
+namespace CalloraVoipSdk.Core.Domain.Calls;
 
+/// <summary>
+/// Per-call dialing options — a pure Domain value object supplied to
+/// <see cref="Lines.IPhoneLine.DialAsync"/>.
+/// </summary>
 public sealed class DialOptions
 {
     public static readonly DialOptions Default = new();
@@ -16,7 +20,7 @@ public sealed class DialOptions
     /// <summary>
     /// Per-call SRTP override:
     /// <list type="bullet">
-    /// <item><description><c>null</c> keeps <see cref="Sdk.SdkConfiguration.SrtpPolicy"/>.</description></item>
+    /// <item><description><c>null</c> keeps the SDK-configured SRTP policy.</description></item>
     /// <item><description><c>true</c> enforces <c>Required</c>.</description></item>
     /// <item><description><c>false</c> enforces <c>Disabled</c>.</description></item>
     /// </list>

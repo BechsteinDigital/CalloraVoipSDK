@@ -6,6 +6,13 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
 
 ## [Unreleased]
 
+### Changed (BREAKING)
+- `DialOptions` moved from `CalloraVoipSdk.Core.Application.Calls` to
+  `CalloraVoipSdk.Core.Domain.Calls` so the Domain no longer depends on the Application
+  layer. It is a Domain value object with no behavior change. Migration: replace
+  `using CalloraVoipSdk.Core.Application.Calls;` with `using CalloraVoipSdk.Core.Domain.Calls;`
+  (or fully qualify). This change requires the next release to be a major version.
+
 ## [3.2.0] - 2026-07-08
 
 Inbound calls over a public SIP trunk (sipgate SIPconnect) behind NAT, without STUN —
