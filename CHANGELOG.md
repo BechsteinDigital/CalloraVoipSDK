@@ -6,6 +6,34 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
 
 ## [Unreleased]
 
+## [4.3.0] - 2026-07-09
+
+SDES/SRTP hardening across the whole media lifecycle — the SDK now offers SRTP itself, protects
+RTCP, and rekeys on re-INVITE — plus two remotely triggerable receive-loop DoS fixes surfaced by
+review. All additive — no breaking changes.
+
+### Added
+- **Offer SDES SRTP as the caller** (RFC 4568): outbound calls now advertise `RTP/SAVP` with an
+  `a=crypto` line and engage SRTP end-to-end, instead of only answering SRTP on inbound calls.
+  Gated by the SRTP policy (offered unless `Disabled`); a single suite (`AES_CM_128_HMAC_SHA1_80`)
+  keeps the offer/answer key match unambiguous.
+- **SRTCP** (RFC 3711 §3.4): a negotiated SRTP call now encrypts and authenticates its RTCP, not
+  just its RTP. RTCP was previously sent in the clear even under SRTP. SRTCP derives its own session
+  keys (KDF labels 3/4/5) independent of the RTP keystream.
+- **SRTP rekey on re-INVITE** (RFC 3264 §8): a re-INVITE whose negotiated media changes (a fresh
+  peer or local SDES key, endpoint, or codec) re-keys the running media session — both for our own
+  hold/unhold and for an inbound re-INVITE. A re-INVITE that changes nothing does not churn media.
+
+### Fixed
+- **Hold/unhold no longer downgrades SRTP** to plain RTP: a re-INVITE on a running secure call
+  re-advertises the live key (`RTP/SAVP` + `a=crypto`) instead of falling back to `RTP/AVP`.
+
+### Security
+- **Receive-loop DoS on malformed short packets**: a short RTP- or RTCP-looking datagram (below the
+  SRTP/SRTCP minimum length) threw an uncaught `ArgumentException` that permanently terminated the
+  media receive loop — a remotely triggerable denial of service of all inbound media. Both the RTP
+  and the (new) SRTCP receive paths now drop such packets cleanly.
+
 ## [4.2.0] - 2026-07-09
 
 Protocol-correctness fixes (including two real bugs surfaced while adding test coverage) and
