@@ -112,12 +112,15 @@ public sealed class VoipClient : IVoipClient
     public TelemetryManager TelemetryManager { get; }
 
     /// <summary>
-    /// Raised when a new inbound call arrives on any registered line.
+    /// Raised when a new inbound call arrives on any registered line. Fires on the SDK's SIP
+    /// signaling thread; the handler must not block or throw (see <see cref="ICall"/> remarks for
+    /// the full event-threading contract).
     /// </summary>
     public event EventHandler<IncomingCallEventArgs>? IncomingCall;
 
     /// <summary>
-    /// Raised when any active call changes state.
+    /// Raised when any active call changes state. Fires on the SDK's SIP signaling thread; the
+    /// handler must not block or throw (see <see cref="ICall"/> remarks).
     /// </summary>
     public event EventHandler<CallStateChangedEventArgs>? CallStateChanged;
 
