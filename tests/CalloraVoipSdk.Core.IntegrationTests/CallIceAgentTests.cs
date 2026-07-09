@@ -161,6 +161,43 @@ public sealed class CallIceAgentTests
     }
 
     [Fact]
+    public async Task Controlling_agent_nominates_selected_pair_with_use_candidate()
+    {
+        // RFC 8445 §8.1.1: after an ordinary check validates the pair, the controlling agent
+        // re-checks it with USE-CANDIDATE to nominate it.
+        var probe = new FakeStunProbe { ConnectivityResults = { [_ => true] = true } };
+        var agent = Agent(Config(retries: 0), probe);
+        var remote = new IPEndPoint(IPAddress.Parse("192.0.2.30"), 41000);
+
+        var result = await agent.SelectCandidatePairAsync(
+            CallId.New(),
+            Parameters([Candidate("host", LocalRtp)], [Candidate("host", remote)]));
+
+        Assert.True(result.HasSelectedPair);
+        Assert.True(result.Nominated);
+        // Ordinary check (no USE-CANDIDATE), then the nomination re-check (USE-CANDIDATE).
+        Assert.Equal(new[] { false, true }, probe.UseCandidateHistory);
+    }
+
+    [Fact]
+    public async Task Pair_stays_selected_but_unnominated_when_nomination_check_fails()
+    {
+        // The ordinary check validates the pair; the nomination re-check fails. The reachable
+        // pair is still selected (Connected), only not marked nominated.
+        var probe = new FakeStunProbe { ConnectivityResults = { [_ => true] = true }, FailNomination = true };
+        var agent = Agent(Config(retries: 0), probe);
+        var remote = new IPEndPoint(IPAddress.Parse("192.0.2.30"), 41000);
+
+        var result = await agent.SelectCandidatePairAsync(
+            CallId.New(),
+            Parameters([Candidate("host", LocalRtp)], [Candidate("host", remote)]));
+
+        Assert.True(result.HasSelectedPair);
+        Assert.False(result.Nominated);
+        Assert.Equal(CallIceNegotiationState.Connected, result.State);
+    }
+
+    [Fact]
     public async Task Relay_pair_wins_when_direct_paths_fail()
     {
         // Only checks towards the TURN-relayed remote candidate succeed.
@@ -197,7 +234,8 @@ public sealed class CallIceAgentTests
             Parameters([Candidate("host", LocalRtp)], [Candidate("host", remote)]));
 
         Assert.True(result.HasSelectedPair);
-        Assert.Equal(2, probe.ConnectivityAttempts);
+        // 2 ordinary-check attempts (fail, then succeed) + 1 nomination check on the valid pair.
+        Assert.Equal(3, probe.ConnectivityAttempts);
     }
 
     [Fact]
@@ -345,11 +383,14 @@ public sealed class CallIceAgentTests
         public IPEndPoint? ReflexiveEndPoint { get; init; }
         public Dictionary<Func<IPEndPoint, bool>, bool> ConnectivityResults { get; } = [];
         public int SucceedOnAttempt { get; init; }
+        public bool FailNomination { get; init; }
         public int ConnectivityAttempts;
         public System.Net.Sockets.Socket? ObservedSharedSocket;
         public uint LastPriority;
         public bool LastIsControlling;
         public ulong LastTieBreaker;
+        public bool LastUseCandidate;
+        public List<bool> UseCandidateHistory { get; } = [];
 
         public Task<IPEndPoint?> TryGetServerReflexiveEndPointAsync(
             IPEndPoint localEndPoint, IceServerConfiguration server,
@@ -363,12 +404,17 @@ public sealed class CallIceAgentTests
             IPEndPoint localEndPoint, IPEndPoint remoteEndPoint,
             string localIceUfrag, string remoteIceUfrag, string remoteIcePassword,
             uint localCandidatePriority, bool isControlling, ulong tieBreaker,
-            TimeSpan timeout, CancellationToken ct = default)
+            bool useCandidate, TimeSpan timeout, CancellationToken ct = default)
         {
             var attempt = Interlocked.Increment(ref ConnectivityAttempts);
             LastPriority = localCandidatePriority;
             LastIsControlling = isControlling;
             LastTieBreaker = tieBreaker;
+            LastUseCandidate = useCandidate;
+            UseCandidateHistory.Add(useCandidate);
+
+            if (useCandidate && FailNomination)
+                return Task.FromResult(false);
 
             if (SucceedOnAttempt > 0)
                 return Task.FromResult(attempt >= SucceedOnAttempt);

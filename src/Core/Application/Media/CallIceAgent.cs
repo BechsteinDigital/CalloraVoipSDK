@@ -252,7 +252,7 @@ internal sealed class CallIceAgent : ICallIceAgent
         var isControlling = role == IceRole.Controlling;
         var selectedPair = await IceConnectivityScheduler.RunAsync(
                 checkList,
-                (pair, token) => CheckPairAsync(callId, parameters, pair, isControlling, timeout, retries, token),
+                (pair, token) => CheckPairAsync(callId, parameters, pair, isControlling, useCandidate: false, timeout, retries, token),
                 ct)
             .ConfigureAwait(false);
 
@@ -263,10 +263,36 @@ internal sealed class CallIceAgent : ICallIceAgent
                 IPAddress.Parse(selectedPair.Remote.Address),
                 selectedPair.Remote.Port);
 
+            // Regular nomination (RFC 8445 §8.1.1): the controlling agent re-checks the selected
+            // valid pair with USE-CANDIDATE to nominate it. The pair stays usable even if the
+            // nomination check is not confirmed — it already passed an ordinary check.
+            if (isControlling)
+            {
+                _logger.LogDebug(
+                    "ICE state={State}: nominating pair for call {CallId}: local={LocalCandidateType} {LocalEndPoint}, remote={RemoteCandidateType} {RemoteEndPoint}.",
+                    CallIceNegotiationState.Nominating,
+                    callId,
+                    selectedPair.Local.Type,
+                    localProbeEndPoint,
+                    selectedPair.Remote.Type,
+                    remoteEndPoint);
+
+                selectedPair.Nominated = await CheckPairAsync(
+                        callId, parameters, selectedPair, isControlling, useCandidate: true, timeout, retries, ct)
+                    .ConfigureAwait(false);
+
+                if (!selectedPair.Nominated)
+                    _logger.LogWarning(
+                        "ICE state={State}: nomination check for call {CallId} was not confirmed; using the valid pair unnominated.",
+                        CallIceNegotiationState.Nominating,
+                        callId);
+            }
+
             _logger.LogInformation(
-                "ICE state={State}: selected valid pair for call {CallId}: local={LocalCandidateType} {LocalEndPoint}, remote={RemoteCandidateType} {RemoteEndPoint}.",
+                "ICE state={State}: selected pair for call {CallId} (nominated={Nominated}): local={LocalCandidateType} {LocalEndPoint}, remote={RemoteCandidateType} {RemoteEndPoint}.",
                 CallIceNegotiationState.Connected,
                 callId,
+                selectedPair.Nominated,
                 selectedPair.Local.Type,
                 localProbeEndPoint,
                 selectedPair.Remote.Type,
@@ -276,6 +302,7 @@ internal sealed class CallIceAgent : ICallIceAgent
             {
                 State = CallIceNegotiationState.Connected,
                 HasSelectedPair = true,
+                Nominated = selectedPair.Nominated,
                 LocalEndPoint = localProbeEndPoint,
                 RemoteEndPoint = remoteEndPoint,
                 LocalCandidate = selectedPair.Local,
@@ -302,15 +329,16 @@ internal sealed class CallIceAgent : ICallIceAgent
 
     /// <summary>
     /// Runs one connectivity check for <paramref name="pair"/>, carrying the PRIORITY and role
-    /// attributes and retrying up to <paramref name="retries"/> additional times before reporting
-    /// failure. Resolves the local probe source and remote target endpoints from the pair's
-    /// candidates.
+    /// attributes (and USE-CANDIDATE when <paramref name="useCandidate"/> nominates the pair) and
+    /// retrying up to <paramref name="retries"/> additional times before reporting failure.
+    /// Resolves the local probe source and remote target endpoints from the pair's candidates.
     /// </summary>
     private async Task<bool> CheckPairAsync(
         CallId callId,
         CallMediaParameters parameters,
         IceCandidatePair pair,
         bool isControlling,
+        bool useCandidate,
         TimeSpan timeout,
         int retries,
         CancellationToken ct)
@@ -340,6 +368,7 @@ internal sealed class CallIceAgent : ICallIceAgent
                     priority,
                     isControlling,
                     _tieBreaker,
+                    useCandidate,
                     timeout,
                     ct)
                 .ConfigureAwait(false);
@@ -497,6 +526,7 @@ internal sealed class CallIceAgent : ICallIceAgent
         {
             ["state"] = result.State.ToString(),
             ["selected_pair"] = result.HasSelectedPair ? "true" : "false",
+            ["nominated"] = result.Nominated ? "true" : "false",
             ["reason_code"] = result.ReasonCode,
             ["local_candidate_count"] = localCandidateCount.ToString(),
             ["remote_candidate_count"] = remoteCandidateCount.ToString()

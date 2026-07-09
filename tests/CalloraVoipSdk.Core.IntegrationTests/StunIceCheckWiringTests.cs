@@ -31,7 +31,7 @@ public sealed class StunIceCheckWiringTests
             Local, Remote,
             localIceUfrag: "localU", remoteIceUfrag: "remoteU", remoteIcePassword: "pw",
             localCandidatePriority: 987654u, isControlling: true, tieBreaker: 0xABCDEF0123456789,
-            timeout: TimeSpan.FromMilliseconds(50));
+            useCandidate: false, timeout: TimeSpan.FromMilliseconds(50));
 
         Assert.True(ok);
         var attrs = client.LastAdditionalAttributes;
@@ -44,7 +44,40 @@ public sealed class StunIceCheckWiringTests
         Assert.Equal(0xABCDEF0123456789, controlling.TieBreaker);
 
         Assert.Empty(attrs.OfType<IceControlledAttribute>());
-        Assert.Empty(attrs.OfType<UseCandidateAttribute>()); // no nomination in this package
+        Assert.Empty(attrs.OfType<UseCandidateAttribute>()); // ordinary check does not nominate
+    }
+
+    [Fact]
+    public async Task Controlling_nomination_check_forwards_use_candidate()
+    {
+        var client = new RecordingStunClient();
+        var probe = new StunIceProbe(client, NullLoggerFactory.Instance);
+
+        await probe.TryCheckConnectivityAsync(
+            Local, Remote,
+            localIceUfrag: "localU", remoteIceUfrag: "remoteU", remoteIcePassword: "pw",
+            localCandidatePriority: 5u, isControlling: true, tieBreaker: 7,
+            useCandidate: true, timeout: TimeSpan.FromMilliseconds(50));
+
+        var attrs = client.LastAdditionalAttributes;
+        Assert.NotNull(attrs);
+        Assert.Single(attrs!.OfType<UseCandidateAttribute>());
+        Assert.Single(attrs.OfType<IceControllingAttribute>());
+    }
+
+    [Fact]
+    public async Task Controlled_agent_never_sends_use_candidate()
+    {
+        var client = new RecordingStunClient();
+        var probe = new StunIceProbe(client, NullLoggerFactory.Instance);
+
+        await probe.TryCheckConnectivityAsync(
+            Local, Remote,
+            localIceUfrag: "localU", remoteIceUfrag: "remoteU", remoteIcePassword: "pw",
+            localCandidatePriority: 1u, isControlling: false, tieBreaker: 1,
+            useCandidate: true, timeout: TimeSpan.FromMilliseconds(50));
+
+        Assert.Empty(client.LastAdditionalAttributes!.OfType<UseCandidateAttribute>());
     }
 
     [Fact]
@@ -57,7 +90,7 @@ public sealed class StunIceCheckWiringTests
             Local, Remote,
             localIceUfrag: "localU", remoteIceUfrag: "remoteU", remoteIcePassword: "pw",
             localCandidatePriority: 1u, isControlling: false, tieBreaker: 42,
-            timeout: TimeSpan.FromMilliseconds(50));
+            useCandidate: false, timeout: TimeSpan.FromMilliseconds(50));
 
         var attrs = client.LastAdditionalAttributes;
         Assert.NotNull(attrs);
@@ -86,6 +119,35 @@ public sealed class StunIceCheckWiringTests
         var client = new StunClient(codec, NullLogger<StunClient>.Instance);
         IReadOnlyList<StunAttribute> iceAttributes = StunIceCheckAttributes.Build(
             priority: 1234u, isControlling: true, tieBreaker: 99, useCandidate: false);
+
+        var result = await client.QueryBindingAsync(
+            server.LocalEndPoint,
+            sharedUdpSocket: mediaSocket,
+            additionalAttributes: iceAttributes);
+
+        Assert.Equal(mediaEndPoint, result.MappedEndPoint);
+    }
+
+    [Fact]
+    public async Task Nomination_binding_request_with_use_candidate_succeeds_over_loopback()
+    {
+        // End-to-end integrity for the nomination check: USE-CANDIDATE (a zero-length attribute)
+        // survives the real encode path + MESSAGE-INTEGRITY and a real STUN server answers.
+        var codec = new StunMessageCodec();
+        await using var server = new StunServer(
+            new IPEndPoint(IPAddress.Loopback, 0),
+            codec,
+            responseIntegrityKey: null,
+            NullLogger<StunServer>.Instance);
+        server.Start(new StunBindingRequestHandler(codec, NullLogger<StunBindingRequestHandler>.Instance));
+
+        using var mediaSocket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+        mediaSocket.Bind(new IPEndPoint(IPAddress.Loopback, 0));
+        var mediaEndPoint = (IPEndPoint)mediaSocket.LocalEndPoint!;
+
+        var client = new StunClient(codec, NullLogger<StunClient>.Instance);
+        IReadOnlyList<StunAttribute> iceAttributes = StunIceCheckAttributes.Build(
+            priority: 1234u, isControlling: true, tieBreaker: 99, useCandidate: true);
 
         var result = await client.QueryBindingAsync(
             server.LocalEndPoint,

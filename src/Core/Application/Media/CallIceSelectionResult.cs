@@ -19,6 +19,12 @@ internal sealed class CallIceSelectionResult
     public bool HasSelectedPair { get; init; }
 
     /// <summary>
+    /// True when the selected pair was confirmed by a USE-CANDIDATE nomination check
+    /// (RFC 8445 §8.1.1). False for an unnominated but reachable pair.
+    /// </summary>
+    public bool Nominated { get; init; }
+
+    /// <summary>
     /// Selected local RTP endpoint when <see cref="HasSelectedPair"/> is true.
     /// </summary>
     public IPEndPoint? LocalEndPoint { get; init; }
