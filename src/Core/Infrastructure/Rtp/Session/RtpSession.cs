@@ -175,6 +175,11 @@ internal sealed class RtpSession : IRtpSession
         if (Volatile.Read(ref _transmissionStopped) != 0)
             return;
 
+        // SRTCP (RFC 3711 §3.4): encrypt + authenticate the RTCP datagram before it leaves
+        // the socket when a context is negotiated; otherwise send plain RTCP.
+        if (_options.OutboundSrtcp is { } outboundSrtcp)
+            datagram = outboundSrtcp.ProtectRtcp(datagram.Span);
+
         await _udp.SendAsync(datagram, Volatile.Read(ref _latchedRemoteEndPoint) ?? _options.RemoteEndPoint, cancellationToken).ConfigureAwait(false);
     }
 
@@ -285,9 +290,40 @@ internal sealed class RtpSession : IRtpSession
 
         if (LooksLikeRtcpDatagram(datagram))
         {
-            // The receive buffer is reused for the next datagram; RTCP handlers may parse
-            // or queue asynchronously, so hand them an independent copy.
-            var rtcpDatagram = datagram.ToArray();
+            // SRTCP (RFC 3711 §3.4): authenticate + decrypt before dispatch when a context is
+            // negotiated. UnprotectRtcp returns a fresh array; on plain RTCP we copy, since the
+            // receive buffer is reused and RTCP handlers may parse/queue asynchronously.
+            byte[] rtcpDatagram;
+            if (_options.InboundSrtcp is { } inboundSrtcp)
+            {
+                try
+                {
+                    rtcpDatagram = inboundSrtcp.UnprotectRtcp(datagram);
+                }
+                catch (SrtpAuthenticationException)
+                {
+                    _logger.LogDebug("Dropping SRTCP packet failing authentication from {Source}.", source);
+                    return;
+                }
+                catch (SrtpReplayException)
+                {
+                    _logger.LogDebug("Dropping replayed SRTCP packet from {Source}.", source);
+                    return;
+                }
+                catch (Exception ex) when (ex is ArgumentException or CryptographicException)
+                {
+                    // A too-short or otherwise malformed RTCP-looking datagram (it passed the
+                    // version/PT demux but not the SRTCP length/parse) must be a clean drop —
+                    // an uncaught throw here would terminate the whole receive loop (DoS).
+                    _logger.LogDebug("Dropping malformed SRTCP packet from {Source}: {Message}", source, ex.Message);
+                    return;
+                }
+            }
+            else
+            {
+                rtcpDatagram = datagram.ToArray();
+            }
+
             try
             {
                 ControlPacketReceived?.Invoke(rtcpDatagram);

@@ -40,8 +40,7 @@ internal sealed class RtpSessionOptions
 
     /// <summary>
     /// SRTP context protecting outgoing RTP packets with our own negotiated key
-    /// (RFC 3711). <see langword="null"/> sends plain RTP. RTCP is not protected
-    /// (SRTCP is not implemented).
+    /// (RFC 3711). <see langword="null"/> sends plain RTP.
     /// </summary>
     public ISrtpContext? OutboundSrtp { get; init; }
 
@@ -51,4 +50,17 @@ internal sealed class RtpSessionOptions
     /// authentication or replay checks are dropped.
     /// </summary>
     public ISrtpContext? InboundSrtp { get; init; }
+
+    /// <summary>
+    /// SRTCP context protecting outgoing RTCP packets (RFC 3711 §3.4) with our own
+    /// negotiated key. <see langword="null"/> sends plain RTCP.
+    /// </summary>
+    public ISrtcpContext? OutboundSrtcp { get; init; }
+
+    /// <summary>
+    /// SRTCP context unprotecting incoming RTCP packets (RFC 3711 §3.4) with the peer's
+    /// negotiated key. <see langword="null"/> expects plain RTCP; packets failing
+    /// authentication or replay checks are dropped.
+    /// </summary>
+    public ISrtcpContext? InboundSrtcp { get; init; }
 }
