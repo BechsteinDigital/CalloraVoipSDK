@@ -6,12 +6,30 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-07-09
+
+SRTP-secured media and Opus, plus a round of protocol-correctness fixes and hardening on top
+of the 3.2.0 NAT trunk work. One breaking change (the `DialOptions` namespace move) makes this
+a major release; everything else is source-compatible for consumers that already set a password.
+
+### Added
+- **Opus codec** (RFC 7587) via the managed Concentus library — opt-in through
+  `PreferredCodecNames = ["opus"]`, with a mirrored dynamic payload type, 48 kHz RTP clock, and
+  a wire↔µ-law bridge transcoder. The default codec set is unchanged when Opus is not requested.
+- **SRTP/SDES secured media** (RFC 4568 / RFC 3711): crypto-suite negotiation that answers with
+  its own key, an encrypted RTP media path (AES-CM + HMAC-SHA1 auth tag), and tamper rejection.
+- **RTCP-XR decoding** (RFC 3611): inbound Extended Reports are now parsed instead of skipped —
+  the VoIP Metrics block (§4.7: loss/discard, burst/gap, RTT, MOS-LQ/CQ, jitter buffer) is
+  surfaced as `RtcpExtendedReport`.
+- **SDP `o=` session versioning** (RFC 4566 §5.2 / RFC 3264 §5): the origin line carries a stable
+  session id and an incrementing version across offer/answer, hold and un-hold.
+
 ### Changed (BREAKING)
 - `DialOptions` moved from `CalloraVoipSdk.Core.Application.Calls` to
   `CalloraVoipSdk.Core.Domain.Calls` so the Domain no longer depends on the Application
   layer. It is a Domain value object with no behavior change. Migration: replace
   `using CalloraVoipSdk.Core.Application.Calls;` with `using CalloraVoipSdk.Core.Domain.Calls;`
-  (or fully qualify). This change requires the next release to be a major version.
+  (or fully qualify).
 
 ### Changed
 - `SipAccount.Password` is now optional (was required). SIP authentication is challenge-driven
@@ -20,6 +38,26 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
   if a challenge arrives and no password is configured, registration fails with a clear,
   specific error instead of a generic rejection. Non-breaking: existing code that sets a
   password is unaffected.
+- The jitter buffer now seeds its RTT estimate to 100 ms (was 0) so the adaptive playout floor
+  has a budget before the first RTCP report; the first real RTCP RTT still replaces the seed
+  outright, keeping convergence fast.
+
+### Fixed
+- A retransmitted out-of-dialog INVITE that carries the same top-Via branch is now treated as a
+  retransmission rather than answered `482 Loop Detected` (RFC 3261 §8.2.2.2 / §17.2.3): only a
+  differing branch on the same Call-ID/From-tag/CSeq is a merged request.
+- Forked-INVITE handling failures (fork ACK/BYE) are logged at Warning instead of Debug, so a
+  dangling forked leg is visible.
+
+### Security
+- SRTP context hardening: RTP header-length bounds checks (malformed packets are rejected, not
+  mis-parsed), key material zeroed on dispose (RFC 3711 §9.4), and thread-safe protect/unprotect.
+
+### Internal
+- DDD layer hygiene (the Domain no longer references Application/Infrastructure), hot-path
+  allocation reductions on the RTP receive and SIP stream-framing paths, ICE candidate selection
+  moved off the SIP signaling thread, and a substantially expanded protocol regression suite
+  (real Digest authenticator known-answers, dialog route set, RFC 4028 session timers, RTCP-XR).
 
 ## [3.2.0] - 2026-07-08
 

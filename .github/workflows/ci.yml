@@ -37,6 +37,9 @@ jobs:
       - name: Build
         run: dotnet build CalloraVoipSdk.sln --configuration Release --no-restore -p:CodeAnalysisTreatWarningsAsErrors=true
 
+      - name: Architecture gates (ENGINEERING_RULES)
+        run: dotnet test tests/CalloraVoipSdk.ArchitectureTests/CalloraVoipSdk.ArchitectureTests.csproj --configuration Release --no-build --nologo --verbosity minimal
+
       - name: Test + Coverage (Non-Core)
         run: dotnet test CalloraVoipSdk.sln --configuration Release --no-build --filter "FullyQualifiedName!~CalloraVoipSdk.Core.Tests" --collect:"XPlat Code Coverage" --results-directory ./TestResults --nologo --verbosity minimal
 
