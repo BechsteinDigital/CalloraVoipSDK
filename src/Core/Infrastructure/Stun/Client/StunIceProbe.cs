@@ -74,6 +74,7 @@ internal sealed class StunIceProbe : IIceStunProbe
         uint localCandidatePriority,
         bool isControlling,
         ulong tieBreaker,
+        bool useCandidate,
         TimeSpan timeout,
         CancellationToken ct = default)
     {
@@ -96,13 +97,13 @@ internal sealed class StunIceProbe : IIceStunProbe
                 Password = remoteIcePassword
             };
 
-            // RFC 8445 §7.2.2 check attributes. USE-CANDIDATE (regular nomination) is a later
-            // package; the controlled agent never nominates either.
+            // RFC 8445 §7.2.2 check attributes; USE-CANDIDATE is added only for a controlling
+            // agent's nomination check (§8.1.1). Build ignores it for a controlled agent.
             var iceAttributes = StunIceCheckAttributes.Build(
                 priority: localCandidatePriority,
                 isControlling: isControlling,
                 tieBreaker: tieBreaker,
-                useCandidate: false);
+                useCandidate: useCandidate);
 
             _ = await _stunClient.QueryBindingAsync(
                     remoteEndPoint,
