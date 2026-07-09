@@ -52,6 +52,14 @@ internal interface ISipCallSession : IDisposable
     string? RemoteSdp { get; }
 
     /// <summary>
+    /// The most recent local SDP the session put on the wire (the answer we sent on an inbound
+    /// leg / re-INVITE, or an offer). Used by the media adapter to recover our own SDES key on a
+    /// re-INVITE rekey. Defaults to <see langword="null"/> so existing implementations keep
+    /// compiling and the adapter falls back to the SDP it built itself.
+    /// </summary>
+    string? LocalSdp => null;
+
+    /// <summary>
     /// Local signaling transport endpoint. Used to derive the local IP address for media.
     /// </summary>
     IPEndPoint LocalSignalingEndPoint { get; }

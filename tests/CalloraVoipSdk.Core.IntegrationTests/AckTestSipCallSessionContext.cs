@@ -146,6 +146,10 @@ internal sealed class AckTestSipCallSessionContext : ISipCallSessionContext
     {
     }
 
+    public void SetLocalSdp(string? sdp)
+    {
+    }
+
     public bool TryAcknowledgeReliableProvisional(
         string? rackHeader,
         out int rejectionStatusCode,

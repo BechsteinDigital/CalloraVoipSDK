@@ -683,8 +683,11 @@ internal sealed class SipCoreCallChannel : ICallChannel
 
         var withIceMetadata = CallMediaParametersIceEnricher.Enrich(parameters, _localIceDescription, _iceControlling);
         var reasonCode = SrtpPolicyEvaluator.ResolveReasonCode(_appliedSrtpPolicy, withIceMetadata.IsSrtpNegotiated);
+        // On an inbound re-INVITE the session carries the fresh answer we sent (new local key);
+        // on the outbound leg it is null and we fall back to our retained answer/offer.
         var enriched = CallMediaParametersSrtpEnricher.Enrich(
-            withIceMetadata, reasonCode, remoteSdp, _localAnswerSdp ?? _localOfferSdp, _appliedSrtpPolicy);
+            withIceMetadata, reasonCode, remoteSdp,
+            session.LocalSdp ?? _localAnswerSdp ?? _localOfferSdp, _appliedSrtpPolicy);
 
         if (string.Equals(RekeySignature(enriched), _lastPublishedSignature, StringComparison.Ordinal))
             return; // unchanged — retransmission or a re-INVITE that did not touch media

@@ -252,6 +252,12 @@ internal interface ISipCallSessionContext
     void SetRemoteSdp(string? sdp);
 
     /// <summary>
+    /// Stores the local SDP body last put on the wire (an answer we sent on a re-INVITE, or an
+    /// offer), so the media adapter can recover our own SDES key on a rekey.
+    /// </summary>
+    void SetLocalSdp(string? sdp);
+
+    /// <summary>
     /// Validates and acknowledges PRACK RAck correlation for reliable provisional responses.
     /// </summary>
     bool TryAcknowledgeReliableProvisional(

@@ -54,6 +54,7 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
     internal string? _activeInviteBranch;
     private string? _remoteAssertedIdentity;
     private string? _remoteSdp;
+    private string? _localSdp;
     internal readonly SipSessionSdpProvider _sdpProvider;
     private SipDialogState _state;
     private SipDialogTerminationReason? _lastTerminationReason;
@@ -181,6 +182,11 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
     public string? RemoteSdp
     {
         get { lock (_sync) return _remoteSdp; }
+    }
+    /// <inheritdoc />
+    public string? LocalSdp
+    {
+        get { lock (_sync) return _localSdp; }
     }
     /// <inheritdoc />
     public System.Net.IPEndPoint LocalSignalingEndPoint =>
@@ -967,6 +973,10 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
     internal void SetRemoteSdp(string? sdp)
     {
         lock (_sync) { _remoteSdp = sdp; }
+    }
+    internal void SetLocalSdp(string? sdp)
+    {
+        lock (_sync) { _localSdp = sdp; }
     }
     internal bool TryAcknowledgeReliableProvisional(
         string? rackHeader,

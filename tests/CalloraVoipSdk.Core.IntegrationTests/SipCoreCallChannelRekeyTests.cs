@@ -153,12 +153,40 @@ public sealed class SipCoreCallChannelRekeyTests
         Assert.True(fires[0].IsSrtpNegotiated);
     }
 
-    // Session whose state transition can be raised and whose remote SDP can be swapped.
+    [Fact]
+    public async Task Inbound_reinvite_rekeys_both_directions_via_session_local_sdp()
+    {
+        var peerKey1 = InlineKey(70);
+        var (channel, session, fires) = await EstablishSrtpAsync($"1 {Suite} {peerKey1}");
+        using var _ = channel;
+
+        Assert.Single(fires);
+        var initialLocalKey = fires[0].SrtpLocalKeyParams;
+
+        // Simulate an inbound re-INVITE: the inbound service recorded a fresh peer offer and the
+        // fresh answer we sent (new local key) on the session before raising Established.
+        var newLocalKey = InlineKey(150);
+        var peerKey2 = InlineKey(200);
+        session.SetLocalSdp(PeerAnswer(channel.LocalMediaPort, "RTP/SAVP", $"1 {Suite} {newLocalKey}"));
+        session.SetRemoteSdp(PeerAnswer(channel.LocalMediaPort, "RTP/SAVP", $"1 {Suite} {peerKey2}"));
+        session.RaiseStateChanged(SipDialogState.Established);
+
+        Assert.Equal(2, fires.Count);
+        // Full rekey: our own key comes from the session's local SDP, peer's from its new offer.
+        Assert.Equal(newLocalKey, fires[1].SrtpLocalKeyParams);
+        Assert.Equal(peerKey2, fires[1].SrtpRemoteKeyParams);
+        Assert.NotEqual(initialLocalKey, fires[1].SrtpLocalKeyParams);
+    }
+
+    // Session whose state transition can be raised and whose remote/local SDP can be swapped.
     private sealed class RekeyableSession(string remoteSdp) : ISipCallSession
     {
         private string _remoteSdp = remoteSdp;
+        private string? _localSdp;
 
         public void SetRemoteSdp(string sdp) => _remoteSdp = sdp;
+        public void SetLocalSdp(string sdp) => _localSdp = sdp;
+        public string? LocalSdp => _localSdp;
 
         public void RaiseStateChanged(SipDialogState newState) =>
             StateChanged?.Invoke(this, new SipDialogStateChangedEventArgs(State, newState, null));
