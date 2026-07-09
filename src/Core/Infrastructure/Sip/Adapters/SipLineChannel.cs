@@ -51,9 +51,6 @@ internal sealed class SipLineChannel : ILineChannel
     // record behind a volatile reference so readers never see a torn host/port pair.
     private volatile LearnedPublicContact? _learnedPublicContact;
 
-    /// <summary>Immutable NAT-learned public signaling address.</summary>
-    private sealed record LearnedPublicContact(string Host, int? Port);
-
     /// <summary>
     /// Creates a SIP line channel and wires registration and inbound signaling handlers.
     /// </summary>
