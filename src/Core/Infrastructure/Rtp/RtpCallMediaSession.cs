@@ -11,6 +11,7 @@ using CalloraVoipSdk.Core.Infrastructure.Rtp.Session;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Wire;
 using CalloraVoipSdk.Core.Infrastructure.Srtp.Context;
 using CalloraVoipSdk.Core.Infrastructure.Srtp.Crypto;
+using CalloraVoipSdk.Core.Infrastructure.Stun.Ice;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
 
@@ -32,6 +33,10 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
     private const int TelephoneEventPayloadLength = 4;
 
     private readonly RtpSession _rtp;
+
+    // Answers inbound ICE connectivity checks demuxed off the media socket (RFC 8445 §7.3).
+    // Null when ICE was not negotiated for this leg.
+    private readonly IceInboundStunHandler? _iceInbound;
     private readonly IJitterBuffer _jitterBuffer;
 
     // SRTP contexts created (and thus owned) by this session; internal for test evidence.
@@ -167,6 +172,15 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
         _rtp = new RtpSession(options, new RtpPacketCodec(), logger);
         _rtp.PacketReceived += OnPacketReceived;
         _rtp.ControlPacketReceived += OnControlPacketReceived;
+
+        // ICE connectivity checks (RFC 8445 §7.3) arrive on the media 5-tuple; when ICE is
+        // negotiated, answer them on this same socket via the STUN demux seam.
+        _iceInbound = parameters.IceEnabled
+            ? IceInboundStunHandlerFactory.Create(
+                parameters.LocalIceUfrag, parameters.LocalIcePwd, _rtp.SendRawAsync, loggerFactory)
+            : null;
+        if (_iceInbound is not null)
+            _rtp.StunPacketReceived += _iceInbound.OnStunPacketReceived;
     }
 
     /// <inheritdoc />
@@ -368,6 +382,8 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
 
         _rtp.PacketReceived -= OnPacketReceived;
         _rtp.ControlPacketReceived -= OnControlPacketReceived;
+        if (_iceInbound is not null)
+            _rtp.StunPacketReceived -= _iceInbound.OnStunPacketReceived;
         _cts.Cancel();
 
         var playoutLoop = _playoutLoop;
