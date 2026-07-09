@@ -4,7 +4,14 @@ public sealed class SipAccount
 {
     public string        DisplayName      { get; init; } = string.Empty;
     public required string Username       { get; init; }
-    public required string Password       { get; init; }
+
+    /// <summary>
+    /// SIP account password. Optional: it is only needed when the registrar challenges the
+    /// registration (401/407). Leave it empty for accounts that do not authenticate — for
+    /// example an IP-authenticated trunk, or a registrar that does not challenge. If a
+    /// challenge does arrive and no password is set, registration fails with a clear error.
+    /// </summary>
+    public string        Password         { get; init; } = string.Empty;
     public required string SipServer      { get; init; }
     public SipTransport  Transport        { get; init; } = SipTransport.Udp;
     public int           Port             { get; init; } = 0; // 0 = default per transport

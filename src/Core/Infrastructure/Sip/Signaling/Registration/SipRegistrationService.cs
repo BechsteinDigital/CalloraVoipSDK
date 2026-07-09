@@ -323,6 +323,19 @@ internal sealed class SipRegistrationService : ISipRegistrationService
 
                 if (!authAttempted && response.StatusCode is 401 or 407)
                 {
+                    // Challenge-driven password requirement (RFC 3261 §22): the registrar
+                    // demands authentication but no password is configured, so the challenge
+                    // cannot be answered. Fail with a clear, specific error instead of retrying
+                    // a doomed digest or returning a bare 401.
+                    if (string.IsNullOrWhiteSpace(request.Password))
+                    {
+                        throw new InvalidOperationException(
+                            $"Registrar for {request.Username}@{request.Domain} returned " +
+                            $"{response.StatusCode} requiring authentication, but no password is " +
+                            "configured for this account. A password is required only when the " +
+                            "registrar challenges the registration.");
+                    }
+
                     if (SipDigestChallengeSelector.TrySelect(
                             response,
                             out var challengeHeader,
@@ -729,8 +742,10 @@ internal sealed class SipRegistrationService : ISipRegistrationService
         ArgumentNullException.ThrowIfNull(request);
         if (string.IsNullOrWhiteSpace(request.Username))
             throw new ArgumentException("Username is required.", nameof(request));
-        if (string.IsNullOrWhiteSpace(request.Password))
-            throw new ArgumentException("Password is required.", nameof(request));
+        // Password is intentionally not required here: SIP authentication is challenge-driven
+        // (RFC 3261 §22), so a password is only needed to answer a 401/407. Registration
+        // against a registrar that does not challenge succeeds without one; an unanswerable
+        // challenge is rejected with a clear error inside ExecuteRegisterAsync.
         if (string.IsNullOrWhiteSpace(request.Domain))
             throw new ArgumentException("Domain is required.", nameof(request));
         if (request.Port is < 1 or > 65535)
