@@ -48,6 +48,13 @@ internal sealed class SdpMediaOptions
     /// <summary>DTLS-SRTP parameters; null = plain RTP or SDES.</summary>
     public SdpDtlsParameters? Dtls { get; init; }
 
+    /// <summary>
+    /// SDES crypto lines to advertise in an offer (RFC 4568). Empty = plain RTP/AVP;
+    /// a non-empty list makes the offer emit one <c>a=crypto</c> per entry and the
+    /// <c>RTP/SAVP</c> profile. Ignored on the answer path (answers key via the offer).
+    /// </summary>
+    public IReadOnlyList<SdpCryptoAttribute> Crypto { get; init; } = [];
+
     /// <summary>ICE credentials and candidates; null = no ICE.</summary>
     public SdpIceParameters? Ice { get; init; }
 

@@ -59,6 +59,19 @@ internal static class SdesCryptoSelector
         SrtpCryptoSuiteNames.TryParse(suiteName);
 
     /// <summary>
+    /// Builds the local crypto line for an SDES offer (RFC 4568 §5.1.1): tag 1, the
+    /// mandatory-to-implement <c>AES_CM_128_HMAC_SHA1_80</c> suite, and fresh inline key
+    /// material we retain as the outbound encrypt key. A single offered suite keeps the
+    /// later offer/answer key match unambiguous (the peer answers with the same suite).
+    /// </summary>
+    public static SdpCryptoAttribute BuildDefaultOffer() => new()
+    {
+        Tag = 1,
+        CryptoSuite = SrtpCryptoSuiteNames.DefaultSuiteName,
+        KeyParams = GenerateInlineKeyParams(SrtpCryptoSuite.AesCm128HmacSha1_80)
+    };
+
+    /// <summary>
     /// Generates fresh master key + salt for one suite as an SDES inline key param
     /// (RFC 4568 §6.1): base64(key || salt), 16+14 bytes for AES-128 suites and
     /// 32+14 bytes for AES-256 suites (RFC 3711 §3.2.1 / RFC 6188).
