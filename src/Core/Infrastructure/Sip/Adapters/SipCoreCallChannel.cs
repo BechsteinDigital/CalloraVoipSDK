@@ -25,6 +25,7 @@ internal sealed class SipCoreCallChannel : ICallChannel
     private readonly ISdpNegotiator _sdpNegotiator;
     private readonly ICallIceAgent? _iceAgent;
     private readonly ISipTelemetrySink _telemetry;
+    private readonly SipCallChannelSrtpTelemetry _srtpTelemetry;
     private readonly SrtpPolicy _appliedSrtpPolicy;
     private readonly string _srtpPolicySource;
     private readonly IReadOnlyList<string>? _preferredCodecNames;
@@ -71,6 +72,12 @@ internal sealed class SipCoreCallChannel : ICallChannel
     // parameters publish; read on the signaling thread that issues hold/unhold.
     private volatile string? _activeLocalSrtpKeyParams;
 
+    // Signature of the last published media parameters (SRTP keys + remote endpoint + codec).
+    // A re-INVITE whose negotiated media differs from this re-publishes MediaParametersNegotiated
+    // (rekey → the orchestrator rebuilds the media session); an identical one (a retransmission)
+    // does not, so media never churns without an actual change. Written on the signaling thread.
+    private volatile string? _lastPublishedSignature;
+
     // RFC 4566 §5.2 origin identity. Each channel (call leg) gets a unique, stable session id;
     // the version is incremented on every locally built SDP so peers detect media changes.
     private static long _sessionIdSeed = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
@@ -106,6 +113,7 @@ internal sealed class SipCoreCallChannel : ICallChannel
         _telemetry = telemetry ?? throw new ArgumentNullException(nameof(telemetry));
         _appliedSrtpPolicy = appliedSrtpPolicy;
         _srtpPolicySource = string.IsNullOrWhiteSpace(policySource) ? "unknown" : policySource;
+        _srtpTelemetry = new SipCallChannelSrtpTelemetry(_telemetry, appliedSrtpPolicy, _srtpPolicySource);
         _preferredCodecNames = preferredCodecNames;
 
         // Bind on any address, port 0 → OS assigns a free port.
@@ -159,7 +167,7 @@ internal sealed class SipCoreCallChannel : ICallChannel
             _session.TransferRequested += HandleSessionTransferRequested;
         }
 
-        PublishSrtpPolicyApplied(session);
+        _srtpTelemetry.PublishPolicyApplied(session);
 
         // For outbound calls the session is already Established here.
         // Fire MediaParametersNegotiated FIRST so Call.MediaParameters is populated
@@ -586,7 +594,7 @@ internal sealed class SipCoreCallChannel : ICallChannel
         {
             _logger.LogWarning("No remote SDP available for call {CallId}; RTP will not start.", session.CallId);
             reasonCode = SrtpDecisionReasonCodes.MediaParametersUnavailable;
-            PublishSrtpDecision(session, isSrtpNegotiated: false, profile: string.Empty, reasonCode, violatesPolicy: _appliedSrtpPolicy == SrtpPolicy.Required);
+            _srtpTelemetry.PublishDecision(session, isSrtpNegotiated: false, profile: string.Empty, reasonCode, violatesPolicy: _appliedSrtpPolicy == SrtpPolicy.Required);
             return _appliedSrtpPolicy == SrtpPolicy.Required
                 ? MediaPublicationResult.PolicyViolation
                 : MediaPublicationResult.Skipped;
@@ -602,7 +610,7 @@ internal sealed class SipCoreCallChannel : ICallChannel
         {
             _logger.LogWarning("Failed to parse remote SDP for call {CallId}; RTP will not start.", session.CallId);
             reasonCode = SrtpDecisionReasonCodes.MediaParametersUnavailable;
-            PublishSrtpDecision(session, isSrtpNegotiated: false, profile: string.Empty, reasonCode, violatesPolicy: _appliedSrtpPolicy == SrtpPolicy.Required);
+            _srtpTelemetry.PublishDecision(session, isSrtpNegotiated: false, profile: string.Empty, reasonCode, violatesPolicy: _appliedSrtpPolicy == SrtpPolicy.Required);
             return _appliedSrtpPolicy == SrtpPolicy.Required
                 ? MediaPublicationResult.PolicyViolation
                 : MediaPublicationResult.Skipped;
@@ -611,12 +619,13 @@ internal sealed class SipCoreCallChannel : ICallChannel
         var withIceMetadata = CallMediaParametersIceEnricher.Enrich(parameters, _localIceDescription, _iceControlling);
         reasonCode = SrtpPolicyEvaluator.ResolveReasonCode(_appliedSrtpPolicy, withIceMetadata.IsSrtpNegotiated);
         var violatesPolicy = SrtpPolicyEvaluator.IsPolicyViolation(_appliedSrtpPolicy, withIceMetadata.IsSrtpNegotiated);
-        var enrichedParameters = EnrichWithSrtpMetadata(withIceMetadata, reasonCode, remoteSdp);
+        var enrichedParameters = CallMediaParametersSrtpEnricher.Enrich(
+            withIceMetadata, reasonCode, remoteSdp, _localAnswerSdp ?? _localOfferSdp, _appliedSrtpPolicy);
 
         // Remember the live outbound encrypt key so a later hold/unhold re-offers the same
         // key (keeps SRTP without rekeying); null when the call resolved to plain RTP.
         _activeLocalSrtpKeyParams = enrichedParameters.SrtpLocalKeyParams;
-        PublishSrtpDecision(
+        _srtpTelemetry.PublishDecision(
             session,
             enrichedParameters.IsSrtpNegotiated,
             enrichedParameters.MediaProfile,
@@ -649,9 +658,54 @@ internal sealed class SipCoreCallChannel : ICallChannel
             _logger.LogTrace(ex, "Port-reservation socket already disposed when releasing for RtpSession.");
         }
 
+        _lastPublishedSignature = RekeySignature(enrichedParameters);
         MediaParametersNegotiated?.Invoke(this, enrichedParameters);
         return MediaPublicationResult.Published;
     }
+
+    /// <summary>
+    /// Re-publishes media parameters when an established call's re-INVITE changes the negotiated
+    /// media (RFC 3264 §8: new SDES key, remote endpoint, or codec). Additive to the initial
+    /// <see cref="TryPublishMediaParameters"/>: it runs only after the first publish and only on a
+    /// real change (a retransmission with an identical signature is ignored), so the orchestrator
+    /// rebuilds the media session with the new keys only when something actually changed.
+    /// </summary>
+    private void TryRepublishMediaParametersOnRekey(ISipCallSession session)
+    {
+        var remoteSdp = session.RemoteSdp;
+        if (string.IsNullOrWhiteSpace(remoteSdp))
+            return;
+
+        var localEndPoint = new IPEndPoint(ResolveAdvertisedMediaAddress(session), _localMediaPort);
+        var parameters = _sdpNegotiator.TryParseMediaParameters(remoteSdp, localEndPoint, BuildSdpOptions());
+        if (parameters is null)
+            return;
+
+        var withIceMetadata = CallMediaParametersIceEnricher.Enrich(parameters, _localIceDescription, _iceControlling);
+        var reasonCode = SrtpPolicyEvaluator.ResolveReasonCode(_appliedSrtpPolicy, withIceMetadata.IsSrtpNegotiated);
+        var enriched = CallMediaParametersSrtpEnricher.Enrich(
+            withIceMetadata, reasonCode, remoteSdp, _localAnswerSdp ?? _localOfferSdp, _appliedSrtpPolicy);
+
+        if (string.Equals(RekeySignature(enriched), _lastPublishedSignature, StringComparison.Ordinal))
+            return; // unchanged — retransmission or a re-INVITE that did not touch media
+
+        var violatesPolicy = SrtpPolicyEvaluator.IsPolicyViolation(_appliedSrtpPolicy, withIceMetadata.IsSrtpNegotiated);
+        _srtpTelemetry.PublishDecision(session, enriched.IsSrtpNegotiated, enriched.MediaProfile, reasonCode, violatesPolicy);
+        if (violatesPolicy)
+        {
+            _ = TerminateForSrtpPolicyViolationAsync(session, reasonCode);
+            return;
+        }
+
+        _activeLocalSrtpKeyParams = enriched.SrtpLocalKeyParams;
+        _lastPublishedSignature = RekeySignature(enriched);
+        _logger.LogDebug("Re-publishing media parameters on re-INVITE rekey for call {CallId}.", session.CallId);
+        MediaParametersNegotiated?.Invoke(this, enriched);
+    }
+
+    /// <summary>Signature of the media-relevant parameters; equal signature = same media.</summary>
+    private static string RekeySignature(CallMediaParameters p) =>
+        $"{p.RemoteEndPoint}|{p.PayloadType}|{p.CodecName}|{p.SrtpSuite}|{p.SrtpLocalKeyParams}|{p.SrtpRemoteKeyParams}";
 
     // ── Session event handlers ────────────────────────────────────────────────
 
@@ -666,11 +720,20 @@ internal sealed class SipCoreCallChannel : ICallChannel
         // before Connected so call.MediaParameters is populated for app callbacks.
         if (e.NewState == SipDialogState.Established && sender is ISipCallSession s)
         {
-            var result = TryPublishMediaParameters(s, out var reasonCode);
-            if (result == MediaPublicationResult.PolicyViolation)
+            if (Volatile.Read(ref _mediaParametersFired) == 0)
             {
-                _ = TerminateForSrtpPolicyViolationAsync(s, reasonCode);
-                return;
+                var result = TryPublishMediaParameters(s, out var reasonCode);
+                if (result == MediaPublicationResult.PolicyViolation)
+                {
+                    _ = TerminateForSrtpPolicyViolationAsync(s, reasonCode);
+                    return;
+                }
+            }
+            else
+            {
+                // Already established once — a further Established transition is a re-INVITE
+                // (e.g. unhold with a fresh peer key); rekey only when the media actually changed.
+                TryRepublishMediaParametersOnRekey(s);
             }
         }
 
@@ -736,58 +799,6 @@ internal sealed class SipCoreCallChannel : ICallChannel
     }
 
     /// <summary>
-    /// Clones media parameters and stamps SRTP policy metadata for public consumption.
-    /// </summary>
-    private CallMediaParameters EnrichWithSrtpMetadata(
-        CallMediaParameters parameters,
-        string reasonCode,
-        string remoteSdp)
-    {
-        // Recover SDES key material from the SDP that actually went over the wire:
-        // the peer's SDP carries their key (inbound decrypt), our own local description
-        // carries the key we generated (outbound encrypt) — the answer we sent on the
-        // inbound leg, or the offer we sent on the outbound leg. Encryption only engages
-        // when both are present and agree on the suite — never half-encrypted.
-        var remoteCrypto = SdpUtilities.TryExtractAudioCrypto(remoteSdp);
-        var localCrypto = SdpUtilities.TryExtractAudioCrypto(_localAnswerSdp ?? _localOfferSdp);
-        var sdesUsable = remoteCrypto is not null
-            && localCrypto is not null
-            && string.Equals(remoteCrypto.CryptoSuite, localCrypto.CryptoSuite, StringComparison.Ordinal);
-
-        return new()
-        {
-            LocalEndPoint = parameters.LocalEndPoint,
-            RemoteEndPoint = parameters.RemoteEndPoint,
-            RtcpMux = parameters.RtcpMux,
-            LocalRtcpEndPoint = parameters.LocalRtcpEndPoint,
-            RemoteRtcpEndPoint = parameters.RemoteRtcpEndPoint,
-            PayloadType = parameters.PayloadType,
-            CodecName = parameters.CodecName,
-            PayloadTypeCodecMap = parameters.PayloadTypeCodecMap,
-            TelephoneEventPayloadType = parameters.TelephoneEventPayloadType,
-            ClockRate = parameters.ClockRate,
-            SamplesPerPacket = parameters.SamplesPerPacket,
-            MediaProfile = parameters.MediaProfile,
-            IsSrtpNegotiated = parameters.IsSrtpNegotiated,
-            IceEnabled = parameters.IceEnabled,
-            LocalIceUfrag = parameters.LocalIceUfrag,
-            LocalIcePwd = parameters.LocalIcePwd,
-            LocalIceOptions = parameters.LocalIceOptions,
-            LocalIceCandidates = parameters.LocalIceCandidates,
-            RemoteIceUfrag = parameters.RemoteIceUfrag,
-            RemoteIcePwd = parameters.RemoteIcePwd,
-            RemoteIceOptions = parameters.RemoteIceOptions,
-            RemoteIceCandidates = parameters.RemoteIceCandidates,
-            RemoteIceEndOfCandidates = parameters.RemoteIceEndOfCandidates,
-            AppliedSrtpPolicy = _appliedSrtpPolicy,
-            SrtpDecisionReasonCode = reasonCode,
-            SrtpSuite = sdesUsable ? remoteCrypto!.CryptoSuite : null,
-            SrtpLocalKeyParams = sdesUsable ? localCrypto!.KeyParams : null,
-            SrtpRemoteKeyParams = sdesUsable ? remoteCrypto!.KeyParams : null
-        };
-    }
-
-    /// <summary>
     /// Validates inbound offer security against the applied SRTP policy before sending 200 OK.
     /// </summary>
     private bool ValidateInboundOfferAgainstPolicy(string? remoteSdp, out string reasonCode)
@@ -824,7 +835,7 @@ internal sealed class SipCoreCallChannel : ICallChannel
             session.RemoteSdp,
             out var isSrtpSignaled,
             out var profile);
-        PublishSrtpDecision(
+        _srtpTelemetry.PublishDecision(
             session,
             inspected && isSrtpSignaled,
             inspected ? profile : string.Empty,
@@ -870,51 +881,6 @@ internal sealed class SipCoreCallChannel : ICallChannel
         }
 
         NotifyState(CallState.Terminated);
-    }
-
-    /// <summary>
-    /// Emits one telemetry event indicating the resolved SRTP policy for this dialog.
-    /// </summary>
-    private void PublishSrtpPolicyApplied(ISipCallSession session)
-    {
-        _telemetry.PublishEvent(new SipEventRecord
-        {
-            EventType = "sip.media.srtp.policy.applied",
-            CallId = session.CallId,
-            CorrelationId = $"{session.CallId}:SRTP:POLICY",
-            Attributes = new Dictionary<string, string>
-            {
-                ["policy"] = _appliedSrtpPolicy.ToString(),
-                ["policy_source"] = _srtpPolicySource
-            }
-        });
-    }
-
-    /// <summary>
-    /// Emits one telemetry decision record for SRTP negotiation outcome.
-    /// </summary>
-    private void PublishSrtpDecision(
-        ISipCallSession session,
-        bool isSrtpNegotiated,
-        string profile,
-        string reasonCode,
-        bool violatesPolicy)
-    {
-        _telemetry.PublishEvent(new SipEventRecord
-        {
-            EventType = "sip.media.srtp.decision",
-            CallId = session.CallId,
-            CorrelationId = $"{session.CallId}:SRTP:DECISION",
-            Attributes = new Dictionary<string, string>
-            {
-                ["policy"] = _appliedSrtpPolicy.ToString(),
-                ["policy_source"] = _srtpPolicySource,
-                ["negotiated"] = isSrtpNegotiated ? "true" : "false",
-                ["violates_policy"] = violatesPolicy ? "true" : "false",
-                ["reason_code"] = reasonCode,
-                ["media_profile"] = profile
-            }
-        });
     }
 
     // ── Dispose ───────────────────────────────────────────────────────────────
