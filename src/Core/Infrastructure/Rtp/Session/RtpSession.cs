@@ -45,6 +45,10 @@ internal sealed class RtpSession : IRtpSession
     private int _lastSentTimestamp;
     private int _hasSentPackets;
 
+    // Set once ICE consent is lost (RFC 7675 §5.1): media/RTCP transmission ceases while the socket
+    // stays open (the receive loop and STUN send path keep working for a possible ICE restart).
+    private int _transmissionStopped;
+
     private const int ReceiveBufferSize = 8192;
 
     /// <inheritdoc />
@@ -168,8 +172,18 @@ internal sealed class RtpSession : IRtpSession
         ReadOnlyMemory<byte> datagram,
         CancellationToken cancellationToken)
     {
+        if (Volatile.Read(ref _transmissionStopped) != 0)
+            return;
+
         await _udp.SendAsync(datagram, Volatile.Read(ref _latchedRemoteEndPoint) ?? _options.RemoteEndPoint, cancellationToken).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// Ceases media and RTCP transmission on this session (RFC 7675 §5.1) after ICE consent is lost.
+    /// Idempotent. The socket, receive loop and STUN send path stay open so a possible ICE restart
+    /// can re-probe the peer.
+    /// </summary>
+    internal void StopTransmission() => Volatile.Write(ref _transmissionStopped, 1);
 
     /// <summary>
     /// Sends a raw datagram to an explicit destination on the media socket, without RTP framing
@@ -442,6 +456,10 @@ internal sealed class RtpSession : IRtpSession
         bool advanceTimestamp,
         CancellationToken cancellationToken)
     {
+        // RFC 7675 §5.1: once ICE consent is lost, stop transmitting media on this pair.
+        if (Volatile.Read(ref _transmissionStopped) != 0)
+            return;
+
         ushort sequenceNumber;
         uint timestamp;
 

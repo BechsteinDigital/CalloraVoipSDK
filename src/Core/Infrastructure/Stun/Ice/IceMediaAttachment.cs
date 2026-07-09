@@ -20,6 +20,7 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
     private readonly IceMediaConsentSession? _consent;
     private readonly IPEndPoint _nominatedRemote;
     private readonly ConcurrentDictionary<IPEndPoint, byte> _triggeredSources = new();
+    private readonly Action? _onConsentLost;
     private readonly ILogger<IceMediaAttachment> _logger;
 
     /// <summary>
@@ -30,13 +31,15 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
     public IceMediaAttachment(
         CallMediaParameters parameters,
         Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask> sendRaw,
-        ILoggerFactory loggerFactory)
+        ILoggerFactory loggerFactory,
+        Action? onConsentLost = null)
     {
         ArgumentNullException.ThrowIfNull(parameters);
         ArgumentNullException.ThrowIfNull(sendRaw);
         ArgumentNullException.ThrowIfNull(loggerFactory);
 
         _logger = loggerFactory.CreateLogger<IceMediaAttachment>();
+        _onConsentLost = onConsentLost;
         _nominatedRemote = parameters.RemoteEndPoint;
         _inbound = parameters.IceEnabled
             ? IceInboundStunHandlerFactory.Create(
@@ -101,7 +104,11 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
     }
 
     private void OnConsentLost()
-        => _logger.LogWarning("ICE consent lost (RFC 7675): no consent check answered within the consent lifetime.");
+    {
+        _logger.LogWarning("ICE consent lost (RFC 7675): no consent check answered within the consent lifetime.");
+        try { _onConsentLost?.Invoke(); }
+        catch (Exception ex) { _logger.LogError(ex, "Unhandled exception in ICE consent-lost handler."); }
+    }
 
     /// <inheritdoc />
     public ValueTask DisposeAsync()
