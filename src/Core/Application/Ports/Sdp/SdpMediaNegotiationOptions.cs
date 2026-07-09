@@ -47,6 +47,15 @@ public sealed class SdpMediaNegotiationOptions
     public bool OfferSrtpCrypto { get; init; }
 
     /// <summary>
+    /// Inline key params (<c>inline:…</c>) to reuse in the offered <c>a=crypto</c> line
+    /// instead of generating fresh material. Set on a hold/unhold re-offer of an SRTP call
+    /// so the offered key matches the running media context (no rekey). Only honoured when
+    /// <see cref="OfferSrtpCrypto"/> is <see langword="true"/>; <see langword="null"/>
+    /// generates a fresh key (initial offer).
+    /// </summary>
+    public string? OfferSrtpKeyParams { get; init; }
+
+    /// <summary>
     /// Ordered audio codec preference by SDP encoding name (e.g. "PCMU", "PCMA", "G722").
     /// When set, local offers and answers only include the listed codecs (plus DTMF
     /// telephone-event) in this order, and the primary codec for RTP sessions is chosen

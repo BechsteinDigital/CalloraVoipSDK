@@ -408,9 +408,15 @@ internal static class SdpUtilities
             return null;
 
         // SDES crypto is only ever generated for a locally originated offer; answers key
-        // themselves via the offered crypto and must not inject a fresh line here.
+        // themselves via the offered crypto and must not inject a fresh line here. A
+        // re-offer (hold/unhold) of a running SRTP call passes OfferSrtpKeyParams to reuse
+        // the live key instead of rekeying.
         IReadOnlyList<SdpCryptoAttribute> crypto =
-            forOffer && options.OfferSrtpCrypto ? [SdesCryptoSelector.BuildDefaultOffer()] : [];
+            forOffer && options.OfferSrtpCrypto
+                ? [options.OfferSrtpKeyParams is { } key
+                    ? SdesCryptoSelector.BuildOffer(key)
+                    : SdesCryptoSelector.BuildDefaultOffer()]
+                : [];
 
         var ice = options.Ice;
         if (ice is null)
