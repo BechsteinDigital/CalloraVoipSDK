@@ -490,7 +490,20 @@ internal sealed class Call : ICall, IDisposable
     public void Dispose()
     {
         lock (_sync) { if (_disposed) return; _disposed = true; }
-        if (State != CallState.Terminated) _channel.HangupAsync().ConfigureAwait(false);
+        if (State != CallState.Terminated)
+        {
+            // Best-effort BYE on dispose. Dispose is synchronous so we cannot await; observe the
+            // task's fault via a continuation instead of letting a failed hangup vanish as an
+            // unobserved task exception — a BYE failure during teardown must at least be logged.
+            _ = _channel.HangupAsync().ContinueWith(
+                t => _logger.LogWarning(
+                    t.Exception,
+                    "Best-effort hangup (BYE) on dispose of call {CallId} failed.",
+                    CallId),
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted,
+                TaskScheduler.Default);
+        }
         _channel.Dispose();
     }
 }
