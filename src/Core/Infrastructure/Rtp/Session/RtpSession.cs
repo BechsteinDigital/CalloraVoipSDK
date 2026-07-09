@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
@@ -37,6 +38,7 @@ internal sealed class RtpSession : IRtpSession
     private ushort _sequenceNumber;
     private uint _timestamp;
     private Task? _receiveLoop;
+    private CancellationTokenSource? _loopCts;
     private long _packetsSent;
     private long _octetsSent;
     private int _lastSentTimestamp;
@@ -83,7 +85,12 @@ internal sealed class RtpSession : IRtpSession
     /// <inheritdoc />
     public Task StartAsync(CancellationToken cancellationToken = default)
     {
-        _receiveLoop = RunReceiveLoopAsync(cancellationToken);
+        // Link the caller token with an internal source so DisposeAsync can stop the receive
+        // loop by cancellation before the socket is disposed — cancelling the pending
+        // Socket.ReceiveFromAsync yields a clean OperationCanceledException, whereas disposing
+        // the socket underneath a pending Memory-based receive can surface as a raw fault.
+        _loopCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _receiveLoop = RunReceiveLoopAsync(_loopCts.Token);
         return Task.CompletedTask;
     }
 
@@ -177,37 +184,56 @@ internal sealed class RtpSession : IRtpSession
     {
         _logger.LogDebug("RTP receive loop started on {LocalEndPoint}", _options.LocalEndPoint);
 
-        while (!cancellationToken.IsCancellationRequested)
+        // One pooled receive buffer for the whole loop. The loop is single-threaded and
+        // ProcessDatagram copies every byte it retains (the codec copies the payload, SRTP
+        // returns a fresh array, the RTCP path clones before dispatch) before the next
+        // receive overwrites the buffer — so a single reused buffer is safe and removes the
+        // per-datagram byte[] that UdpClient.ReceiveAsync allocated on every packet.
+        var buffer = ArrayPool<byte>.Shared.Rent(ReceiveBufferSize);
+        var remoteTemplate = new IPEndPoint(IPAddress.Any, 0);
+        try
         {
-            try
+            while (!cancellationToken.IsCancellationRequested)
             {
-                var result = await _udp.ReceiveAsync(cancellationToken).ConfigureAwait(false);
-                ProcessDatagram(result.Buffer, result.RemoteEndPoint);
+                try
+                {
+                    var result = await _udp.Client
+                        .ReceiveFromAsync(buffer, SocketFlags.None, remoteTemplate, cancellationToken)
+                        .ConfigureAwait(false);
+                    ProcessDatagram(buffer.AsSpan(0, result.ReceivedBytes), (IPEndPoint)result.RemoteEndPoint);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                catch (ObjectDisposedException)
+                {
+                    break; // Socket disposed during shutdown.
+                }
+                catch (SocketException ex) when (!cancellationToken.IsCancellationRequested)
+                {
+                    _logger.LogWarning(ex, "RTP socket error on {LocalEndPoint}", _options.LocalEndPoint);
+                }
             }
-            catch (OperationCanceledException)
-            {
-                break;
-            }
-            catch (ObjectDisposedException)
-            {
-                break; // Socket disposed during shutdown.
-            }
-            catch (SocketException ex) when (!cancellationToken.IsCancellationRequested)
-            {
-                _logger.LogWarning(ex, "RTP socket error on {LocalEndPoint}", _options.LocalEndPoint);
-            }
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
         }
 
         _logger.LogDebug("RTP receive loop stopped on {LocalEndPoint}", _options.LocalEndPoint);
     }
 
-    private void ProcessDatagram(byte[] datagram, IPEndPoint? source)
+    private void ProcessDatagram(ReadOnlySpan<byte> datagram, IPEndPoint? source)
     {
         if (LooksLikeRtcpDatagram(datagram))
         {
+            // The receive buffer is reused for the next datagram; RTCP handlers may parse
+            // or queue asynchronously, so hand them an independent copy.
+            var rtcpDatagram = datagram.ToArray();
             try
             {
-                ControlPacketReceived?.Invoke(datagram);
+                ControlPacketReceived?.Invoke(rtcpDatagram);
             }
             catch (Exception ex)
             {
@@ -315,13 +341,17 @@ internal sealed class RtpSession : IRtpSession
 
     public async ValueTask DisposeAsync()
     {
-        _udp.Dispose();
+        // Stop the receive loop by cancellation first, then dispose the socket only after the
+        // loop has drained — avoids disposing the socket underneath a pending receive.
+        _loopCts?.Cancel();
         if (_receiveLoop is not null)
         {
             try { await _receiveLoop.ConfigureAwait(false); }
             catch (OperationCanceledException) { }
         }
 
+        _loopCts?.Dispose();
+        _udp.Dispose();
         ControlPacketReceived = null;
     }
 
