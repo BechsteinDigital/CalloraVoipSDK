@@ -80,6 +80,10 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
     private uint _packetsReceivedForRtcp;
     private uint _priorExpectedForFraction;
     private uint _priorReceivedForFraction;
+    // RFC 4733 inbound DTMF reassembly state. Touched only by HandleInboundTelephoneEvent,
+    // which runs solely on the single RTP receive loop (RtpSession fires PacketReceived
+    // sequentially) — no other thread reads or writes it, so no synchronization is needed.
+    // Keep it that way: any new reader from another thread must add explicit synchronization.
     private bool _hasPendingDtmfEvent;
     private uint _pendingDtmfSsrc;
     private uint _pendingDtmfTimestamp;

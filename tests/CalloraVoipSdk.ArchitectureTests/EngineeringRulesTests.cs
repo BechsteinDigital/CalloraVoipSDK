@@ -140,11 +140,9 @@ public sealed class EngineeringRulesTests
         // Shutdown-/Fallback-Catches. Ziel: Liste schrumpft; die echten Verstoesse
         // aus dem Audit zuerst (MediaConnection, MediaReceiver, SipCoreCallChannel).
         // Ein Catch mit Logging faellt automatisch aus der Liste und muss dann hier raus.
-        // B.3: SipCoreCallChannel entschaerft (2 Kommentar-nur-Catches loggen jetzt).
-        // Folgearbeit: MediaConnection/MediaReceiver haben keinen Logger -> Injektion noetig.
+        // B.3/B.4-Findings: SipCoreCallChannel, MediaConnection und MediaReceiver entschaerft
+        // (Logger injiziert, alle Catches loggen jetzt). Rest = legitime Shutdown-/Fallback-Catches.
         "src/Core/Application/Media/CallRtcpQualityMonitor.cs",
-        "src/Core/Application/Media/MediaConnection.cs",
-        "src/Core/Application/Media/MediaReceiver.cs",
         "src/Core/Infrastructure/Common/Network/LocalEndPointAdvertisementResolver.cs",
         "src/Core/Infrastructure/Media/Mp3AudioFileCodec.cs",
         "src/Core/Infrastructure/Rtp/RtpCallMediaSession.cs",
