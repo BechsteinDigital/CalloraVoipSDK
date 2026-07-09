@@ -616,9 +616,10 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
             case JitterBufferAddResult.Late:
                 Interlocked.Increment(ref _packetsDroppedLate);
                 _logger.LogDebug(
-                    "RTP packet dropped as late in jitter buffer: seq={Seq}, ts={Timestamp}, ssrc={Ssrc:X8}.",
+                    "RTP packet dropped as late in jitter buffer: seq={Seq}, ts={Timestamp}, pt={PayloadType}, ssrc={Ssrc:X8}.",
                     packet.SequenceNumber,
                     packet.Timestamp,
+                    packet.PayloadType,
                     packet.Ssrc);
                 break;
 
