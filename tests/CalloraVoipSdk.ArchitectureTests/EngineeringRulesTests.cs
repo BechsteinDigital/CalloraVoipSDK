@@ -57,21 +57,10 @@ public sealed class EngineeringRulesTests
     // ist daher nicht die Regel. Architektonisch relevant ist nur: eine Datei unter
     // Infrastructure/ darf keinen Application.- oder Domain.-Namespace tragen (und umgekehrt).
 
-    private static readonly string[] LayerSegmentBaseline =
-    [
-        // Audit-Finding K3: RTCP-Dateien unter Infrastructure/ deklarieren Application.Media.Rtcp.*
-        "src/Core/Infrastructure/Rtcp/Packets/RtcpByePacket.cs",
-        "src/Core/Infrastructure/Rtcp/Packets/RtcpPacket.cs",
-        "src/Core/Infrastructure/Rtcp/Packets/RtcpPacketType.cs",
-        "src/Core/Infrastructure/Rtcp/Packets/RtcpReceiverReport.cs",
-        "src/Core/Infrastructure/Rtcp/Packets/RtcpReportBlock.cs",
-        "src/Core/Infrastructure/Rtcp/Packets/RtcpSdesChunk.cs",
-        "src/Core/Infrastructure/Rtcp/Packets/RtcpSdesItem.cs",
-        "src/Core/Infrastructure/Rtcp/Packets/RtcpSdesItemType.cs",
-        "src/Core/Infrastructure/Rtcp/Packets/RtcpSdesPacket.cs",
-        "src/Core/Infrastructure/Rtcp/Packets/RtcpSenderReport.cs",
-        "src/Core/Infrastructure/Rtcp/Wire/IRtcpPacketCodec.cs",
-    ];
+    // K3 behoben (B.3): die Application.Media.Rtcp.*-Dateien liegen jetzt unter
+    // src/Core/Application/Media/Rtcp/ (Namespace unveraendert). Nur die echte Impl
+    // RtcpPacketCodec.cs (Infrastructure.Rtcp.Wire) bleibt in Infrastructure/.
+    private static readonly string[] LayerSegmentBaseline = [];
 
     [Fact]
     public void Schicht_Segment_des_Namespace_passt_zur_Ordner_Schicht()
@@ -125,12 +114,9 @@ public sealed class EngineeringRulesTests
 
     // --- Regel: keine verschachtelten Typen (private/protected class|interface|record in Typen) ---
 
-    private static readonly string[] NestedTypeBaseline =
-    [
-        // Audit-Finding: MediaActivity als private nested class.
-        "src/Core/Application/Media/CallMediaOrchestrator.cs",
-        "src/Core/Infrastructure/Sip/Adapters/SipLineChannel.cs",
-    ];
+    // B.3 behoben: MediaActivity und LearnedPublicContact sind jetzt Top-Level-internal-Typen
+    // (eigene Dateien im jeweiligen Namespace).
+    private static readonly string[] NestedTypeBaseline = [];
 
     [Fact]
     public void Keine_privaten_verschachtelten_Typen()
@@ -154,6 +140,8 @@ public sealed class EngineeringRulesTests
         // Shutdown-/Fallback-Catches. Ziel: Liste schrumpft; die echten Verstoesse
         // aus dem Audit zuerst (MediaConnection, MediaReceiver, SipCoreCallChannel).
         // Ein Catch mit Logging faellt automatisch aus der Liste und muss dann hier raus.
+        // B.3: SipCoreCallChannel entschaerft (2 Kommentar-nur-Catches loggen jetzt).
+        // Folgearbeit: MediaConnection/MediaReceiver haben keinen Logger -> Injektion noetig.
         "src/Core/Application/Media/CallRtcpQualityMonitor.cs",
         "src/Core/Application/Media/MediaConnection.cs",
         "src/Core/Application/Media/MediaReceiver.cs",
@@ -161,7 +149,6 @@ public sealed class EngineeringRulesTests
         "src/Core/Infrastructure/Media/Mp3AudioFileCodec.cs",
         "src/Core/Infrastructure/Rtp/RtpCallMediaSession.cs",
         "src/Core/Infrastructure/Rtp/Session/RtpSession.cs",
-        "src/Core/Infrastructure/Sip/Adapters/SipCoreCallChannel.cs",
         "src/Core/Infrastructure/Sip/Signaling/Contracts/SipSubscriptionHandle.cs",
         "src/Core/Infrastructure/Sip/Signaling/Dialogs/SipCallSession.cs",
         "src/Core/Infrastructure/Sip/Signaling/Dialogs/SipCallSessionUtilities.cs",

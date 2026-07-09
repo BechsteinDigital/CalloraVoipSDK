@@ -28,15 +28,6 @@ internal sealed class CallMediaOrchestrator : IDisposable
     private readonly MediaSupervisionOptions _supervision;
     private bool _disposed;
 
-    /// <summary>Mutable per-call inbound-activity tracker for media-timeout hangup.</summary>
-    private sealed class MediaActivity
-    {
-        public required ICall Call { get; init; }
-        public long LastReceived;
-        public DateTimeOffset LastActivityUtc;
-        public int HungUp;
-    }
-
     internal CallMediaOrchestrator(
         ICallMediaSessionFactory sessionFactory,
         ILoggerFactory loggerFactory,

@@ -423,7 +423,11 @@ internal sealed class SipCoreCallChannel : ICallChannel
         foreach (var listener in listeners)
         {
             try { listener(frame); }
-            catch { /* isolate per-listener exceptions */ }
+            catch (Exception ex)
+            {
+                // Isolate one listener's fault from the others and the RTP/callback thread.
+                _logger.LogDebug(ex, "Audio frame listener threw; continuing with the remaining listeners.");
+            }
         }
     }
 
@@ -565,7 +569,14 @@ internal sealed class SipCoreCallChannel : ICallChannel
 
         // Release the port-reservation socket so RtpSession can bind the same port.
         // UdpClient.Dispose is idempotent; Dispose() below will safely call it again.
-        try { _localMediaSocket.Dispose(); } catch { /* already disposed */ }
+        try
+        {
+            _localMediaSocket.Dispose();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogTrace(ex, "Port-reservation socket already disposed when releasing for RtpSession.");
+        }
 
         MediaParametersNegotiated?.Invoke(this, enrichedParameters);
         return MediaPublicationResult.Published;
