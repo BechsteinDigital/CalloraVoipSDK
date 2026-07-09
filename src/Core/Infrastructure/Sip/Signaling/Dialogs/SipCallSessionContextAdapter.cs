@@ -144,6 +144,8 @@ internal sealed class SipCallSessionContextAdapter : ISipCallSessionContext
 
     public void SetRemoteSdp(string? sdp) => _session.SetRemoteSdp(sdp);
 
+    public void SetLocalSdp(string? sdp) => _session.SetLocalSdp(sdp);
+
     public bool TryAcknowledgeReliableProvisional(
         string? rackHeader,
         out int rejectionStatusCode,

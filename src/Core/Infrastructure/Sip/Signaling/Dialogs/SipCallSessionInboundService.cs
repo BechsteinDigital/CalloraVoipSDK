@@ -282,6 +282,14 @@ internal sealed class SipCallSessionInboundService
                     ? inviteSessionExpires
                     : null,
                 localIsRequester: false);
+            if (!string.IsNullOrWhiteSpace(request.Body))
+            {
+                // Renegotiating re-INVITE (RFC 3264 §8): record the peer's new offer and the
+                // answer we sent so the media adapter can rekey. Set before TransitionTo raises
+                // the Established event the adapter reacts to.
+                _context.SetRemoteSdp(request.Body);
+                _context.SetLocalSdp(responseBody);
+            }
             var isRemoteHold = _context.SdpProvider.IsRemoteHold(request.Body);
             _context.TransitionTo(isRemoteHold ? SipDialogState.OnHold : SipDialogState.Established);
             _context.NotifyRemoteHoldChanged(isRemoteHold);
@@ -725,6 +733,10 @@ internal sealed class SipCallSessionInboundService
             localIsRequester: false);
         if (includeSdp)
         {
+            // Renegotiating in-dialog request (RFC 3264 §8): record peer offer + our answer for
+            // the media adapter's rekey, before the state transition raises its event.
+            _context.SetRemoteSdp(request.Body);
+            _context.SetLocalSdp(body);
             var isRemoteHold = _context.SdpProvider.IsRemoteHold(request.Body);
             _context.TransitionTo(isRemoteHold ? SipDialogState.OnHold : SipDialogState.Established);
             _context.NotifyRemoteHoldChanged(isRemoteHold);
