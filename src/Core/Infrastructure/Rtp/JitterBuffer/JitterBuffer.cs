@@ -50,6 +50,9 @@ internal sealed class JitterBuffer : IJitterBuffer
 
     private double _currentDelayMs;
     private double _estimatedRoundTripTimeMs;
+    // The seed above is a startup hint; the first real RTCP RTT sample must replace it
+    // outright (fast lock), and only later samples are EWMA-smoothed.
+    private bool   _hasRealRoundTripSample;
 
     // -------------------------------------------------------------------------
     // Constructor
@@ -151,9 +154,18 @@ internal sealed class JitterBuffer : IJitterBuffer
             var clampedRtt   = ClampRoundTrip(roundTripTimeMs);
             var smoothing    = Clamp01(_options.RoundTripTimeSmoothingFactor);
 
-            _estimatedRoundTripTimeMs = _estimatedRoundTripTimeMs <= 0
-                ? clampedRtt
-                : (_estimatedRoundTripTimeMs + ((clampedRtt - _estimatedRoundTripTimeMs) * smoothing));
+            // First real sample locks the estimate (replacing the startup seed); later samples
+            // are EWMA-smoothed. Using the seed sign as the "no sample yet" proxy would break
+            // now that the seed is non-zero, so track it explicitly.
+            if (!_hasRealRoundTripSample)
+            {
+                _estimatedRoundTripTimeMs = clampedRtt;
+                _hasRealRoundTripSample = true;
+            }
+            else
+            {
+                _estimatedRoundTripTimeMs += (clampedRtt - _estimatedRoundTripTimeMs) * smoothing;
+            }
 
             var floor = ComputeAdaptiveDelayFloorMs();
             if (_currentDelayMs < floor)
