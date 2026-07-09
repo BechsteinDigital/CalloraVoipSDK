@@ -107,9 +107,13 @@ internal sealed class SipLineChannel : ILineChannel
         _onReconnectFailed = onReconnectFailed;
         onStateChange(LineState.Registering);
 
-        // Reset binding state for a fresh registration session.
-        _registrationCallId = null;
-        _registrationNextCSeq = 1;
+        // Reset binding state for a fresh registration session (under _sync so a concurrent
+        // StopRegistration snapshot never reads a torn/stale binding identity).
+        lock (_sync)
+        {
+            _registrationCallId = null;
+            _registrationNextCSeq = 1;
+        }
 
         var nextCts = new CancellationTokenSource();
         CancellationTokenSource? previousCts;
@@ -141,10 +145,16 @@ internal sealed class SipLineChannel : ILineChannel
     public void StopRegistration()
     {
         CancellationTokenSource? registrationCts;
+        string? registrationCallId;
+        int registrationCSeq;
         lock (_sync)
         {
             registrationCts = _registrationCts;
             _registrationCts = null;
+            // Snapshot the live binding identity for the unregister (RFC 3261 §10.2.2 removal
+            // reuses the registration's Call-ID + next CSeq).
+            registrationCallId = _registrationCallId;
+            registrationCSeq = _registrationNextCSeq;
         }
 
         if (registrationCts is not null)
@@ -160,7 +170,7 @@ internal sealed class SipLineChannel : ILineChannel
             }
         }
 
-        _ = UnregisterAsyncSafe();
+        _ = UnregisterAsyncSafe(registrationCallId, registrationCSeq);
         _onState?.Invoke(LineState.Unregistered);
     }
 
@@ -336,14 +346,26 @@ internal sealed class SipLineChannel : ILineChannel
                 try
                 {
                     // RFC 3261 §10.2.4: pass persisted Call-ID and CSeq for binding refresh.
-                    var request = CreateRegistrationRequest(_registrationCallId, _registrationNextCSeq);
+                    // Snapshot/persist the binding identity under _sync so a concurrent
+                    // StopRegistration reads a consistent Call-ID+CSeq for the unregister.
+                    string? bindingCallId;
+                    int bindingCSeq;
+                    lock (_sync)
+                    {
+                        bindingCallId = _registrationCallId;
+                        bindingCSeq = _registrationNextCSeq;
+                    }
+                    var request = CreateRegistrationRequest(bindingCallId, bindingCSeq);
                     var result = await _registrationService.RegisterAsync(request, ct).ConfigureAwait(false);
                     if (ct.IsCancellationRequested)
                         return;
 
                     // Persist Call-ID and next CSeq for the next refresh cycle.
-                    _registrationCallId = result.CallId;
-                    _registrationNextCSeq = result.NextCSeq;
+                    lock (_sync)
+                    {
+                        _registrationCallId = result.CallId;
+                        _registrationNextCSeq = result.NextCSeq;
+                    }
 
                     // NAT: adopt the public address the registrar reflected. When it changes
                     // the learned state (fresh discovery or IP change), re-register once
@@ -481,13 +503,16 @@ internal sealed class SipLineChannel : ILineChannel
     /// <summary>
     /// Performs unREGISTER as best-effort cleanup and isolates failures.
     /// </summary>
-    private async Task UnregisterAsyncSafe()
+    private async Task UnregisterAsyncSafe(string? registrationCallId, int registrationCSeq)
     {
         try
         {
-            // Use a fresh Call-ID for the unregister — it removes the specific binding
-            // and is not a refresh of the existing registration.
-            await _registrationService.UnregisterAsync(CreateRegistrationRequest(), CancellationToken.None)
+            // Remove the binding by re-using the registration's own Call-ID and next CSeq
+            // (RFC 3261 §10.2.2; Expires:0 is applied by UnregisterAsync). A fresh Call-ID + CSeq 1
+            // is not recognised by registrars as removing the existing binding, which then lingers
+            // until expiry — leaving a second, dead binding that forks inbound INVITEs into the void.
+            await _registrationService
+                .UnregisterAsync(CreateRegistrationRequest(registrationCallId, registrationCSeq), CancellationToken.None)
                 .ConfigureAwait(false);
         }
         catch (Exception ex)
