@@ -34,6 +34,8 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
     private double? _remoteReportJitterMs;
     private double? _remoteReportLossPercent;
     private double? _roundTripTimeMs;
+    private double? _remoteMosLq;
+    private double? _remoteMosCq;
     private long _rtcpPacketsSent;
     private long _rtcpPacketsReceived;
     private CallQualitySnapshot _latestSnapshot;
@@ -403,6 +405,10 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
                 case RtcpReceiverReport receiverReport:
                     HandleReceiverReport(receiverReport, rtpSnapshot.LocalSsrc, capturedAtUtc);
                     break;
+
+                case RtcpExtendedReport extendedReport:
+                    HandleExtendedReport(extendedReport, rtpSnapshot.LocalSsrc);
+                    break;
             }
         }
 
@@ -422,6 +428,25 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
 
     private void HandleReceiverReport(RtcpReceiverReport receiverReport, uint localSsrc, DateTimeOffset capturedAtUtc)
         => UpdateRemoteQualityMetrics(receiverReport.ReportBlocks, localSsrc, capturedAtUtc);
+
+    private void HandleExtendedReport(RtcpExtendedReport report, uint localSsrc)
+    {
+        // The peer's VoIP Metrics block reports on the stream it received from us, so it is keyed by
+        // our SSRC (RFC 3611 §4.7). Surface the peer's listening/conversational MOS scores.
+        var metrics = report.VoipMetrics.FirstOrDefault(b => b.SourceSsrc == localSsrc);
+        if (metrics is null)
+            return;
+
+        lock (_sync)
+        {
+            _remoteMosLq = MosFromByte(metrics.MosLq);
+            _remoteMosCq = MosFromByte(metrics.MosCq);
+        }
+    }
+
+    // RFC 3611 §4.7: MOS is carried as the score ×10 (valid 10–50); 0 and 127 mean unavailable.
+    private static double? MosFromByte(byte mosTimesTen)
+        => mosTimesTen is 0 or 127 ? null : mosTimesTen / 10.0;
 
     private void UpdateRemoteQualityMetrics(
         IReadOnlyList<RtcpReportBlock> blocks,
@@ -498,11 +523,15 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
         double? remoteJitterMs;
         double? remoteLossPercent;
         double? roundTripTimeMs;
+        double? remoteMosLq;
+        double? remoteMosCq;
         lock (_sync)
         {
             remoteJitterMs = _remoteReportJitterMs;
             remoteLossPercent = _remoteReportLossPercent;
             roundTripTimeMs = _roundTripTimeMs;
+            remoteMosLq = _remoteMosLq;
+            remoteMosCq = _remoteMosCq;
         }
 
         return new CallQualitySnapshot(
@@ -515,7 +544,9 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
             RemoteReportPacketLossPercent: remoteLossPercent,
             RoundTripTimeMs: roundTripTimeMs,
             RtcpPacketsSent: Interlocked.Read(ref _rtcpPacketsSent),
-            RtcpPacketsReceived: Interlocked.Read(ref _rtcpPacketsReceived));
+            RtcpPacketsReceived: Interlocked.Read(ref _rtcpPacketsReceived),
+            RemoteMosListeningQuality: remoteMosLq,
+            RemoteMosConversationalQuality: remoteMosCq);
     }
 
     private static IPEndPoint ResolveLocalRtcpEndPoint(CallMediaParameters mediaParameters)
