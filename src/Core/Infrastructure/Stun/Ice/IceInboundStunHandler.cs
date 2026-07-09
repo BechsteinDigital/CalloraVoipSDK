@@ -75,6 +75,13 @@ internal sealed class IceInboundStunHandler
     public event Action? PairNominated;
 
     /// <summary>
+    /// Raised with the sender's address when an inbound check is authenticated and accepted, so the
+    /// transport can trigger a connectivity check back to confirm the pair bidirectionally
+    /// (RFC 8445 §7.3.1.4). Fires on the transport receive-loop thread.
+    /// </summary>
+    public event Action<IPEndPoint>? CheckAccepted;
+
+    /// <summary>
     /// Handles one STUN datagram demuxed off the media transport. Matches the transport's
     /// <c>StunPacketReceived(byte[], IPEndPoint)</c> hook signature. Runs synchronously (does not
     /// block the receive loop); the response is sent fire-and-forget on the same socket.
@@ -99,6 +106,12 @@ internal sealed class IceInboundStunHandler
         {
             try { PairNominated?.Invoke(); }
             catch (Exception ex) { _logger.LogError(ex, "Unhandled exception in ICE PairNominated handler."); }
+        }
+
+        if (result.Accepted)
+        {
+            try { CheckAccepted?.Invoke(source); }
+            catch (Exception ex) { _logger.LogError(ex, "Unhandled exception in ICE CheckAccepted handler."); }
         }
 
         if (result.ResponseBytes is { } response)

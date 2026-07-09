@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Collections.Concurrent;
 using System.Net;
 using Microsoft.Extensions.Logging;
 using CalloraVoipSdk.Core.Domain.Calls;
@@ -17,6 +18,8 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
 {
     private readonly IceInboundStunHandler? _inbound;
     private readonly IceMediaConsentSession? _consent;
+    private readonly IPEndPoint _nominatedRemote;
+    private readonly ConcurrentDictionary<IPEndPoint, byte> _triggeredSources = new();
     private readonly ILogger<IceMediaAttachment> _logger;
 
     /// <summary>
@@ -34,11 +37,42 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(loggerFactory);
 
         _logger = loggerFactory.CreateLogger<IceMediaAttachment>();
+        _nominatedRemote = parameters.RemoteEndPoint;
         _inbound = parameters.IceEnabled
             ? IceInboundStunHandlerFactory.Create(
                 parameters.LocalIceUfrag, parameters.LocalIcePwd, parameters.IceControlling, sendRaw, loggerFactory)
             : null;
         _consent = IceMediaConsentSessionFactory.TryCreate(parameters, sendRaw, OnConsentLost, loggerFactory);
+
+        if (_inbound is not null)
+            _inbound.CheckAccepted += OnInboundCheckAccepted;
+    }
+
+    // RFC 8445 §7.3.1.4: a valid inbound check from a source other than the nominated remote reveals
+    // a peer-reflexive path; trigger one confirming connectivity check back to it (learn-once per
+    // source). The nominated remote is already validated continuously by consent freshness.
+    private void OnInboundCheckAccepted(IPEndPoint source)
+    {
+        if (_consent is null || source.Equals(_nominatedRemote))
+            return;
+        if (!_triggeredSources.TryAdd(source, 0))
+            return;
+
+        _logger.LogDebug("ICE triggered check to peer-reflexive source {Source} (RFC 8445 §7.3.1.4).", source);
+        _ = SendTriggeredCheckAsync(source);
+    }
+
+    private async Task SendTriggeredCheckAsync(IPEndPoint source)
+    {
+        try
+        {
+            var confirmed = await _consent!.SendCheckAsync(source, CancellationToken.None).ConfigureAwait(false);
+            _logger.LogDebug("ICE triggered check to {Source} {Result}.", source, confirmed ? "confirmed" : "unanswered");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "ICE triggered check to {Source} failed.", source);
+        }
     }
 
     /// <summary>True when either ICE responsibility is active and the attachment should receive STUN.</summary>
