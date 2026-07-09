@@ -6,6 +6,32 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
 
 ## [Unreleased]
 
+## [4.2.0] - 2026-07-09
+
+Protocol-correctness fixes (including two real bugs surfaced while adding test coverage) and
+peer call-quality reporting. All additive — no breaking changes.
+
+### Added
+- **Peer MOS in the quality snapshot** (RFC 3611 §4.7): RTCP-XR VoIP Metrics are now consumed, so
+  `CallQualitySnapshot` carries the peer-reported listening- and conversational-quality MOS
+  (`RemoteMosListeningQuality` / `RemoteMosConversationalQuality`, null when unavailable). The
+  decoder already parsed XR; the quality monitor previously ignored it.
+
+### Fixed
+- **Expires precedence and responses** (RFC 3261 §10.2.1.1 / §10.3): the `Expires` header is no
+  longer stripped from responses, and registration-lifetime selection now gives the Contact
+  `expires` parameter precedence over the top-level `Expires` header. SUBSCRIBE lifetime now
+  honours the 200 OK `Expires`.
+- **Unbounded stale-nonce retry** (RFC 2617): a registrar answering `stale=true` repeatedly could
+  spin the client into an endless REGISTER loop; stale retries are now bounded.
+- **SHA-512-256 digest** (RFC 7616): it was advertised but never worked (.NET has no SHA-512/256
+  primitive, so it always failed at the hash step) — it is no longer advertised, so a challenge for
+  it is cleanly rejected instead of silently failing.
+
+### Changed
+- Digest authentication gained known-answer coverage for the MD5-sess and SHA-256-sess session
+  variants (RFC 7616 §3.4.2). No behaviour change.
+
 ## [4.1.0] - 2026-07-09
 
 Substantial ICE (RFC 8445) and consent-freshness (RFC 7675) work: bidirectional connectivity
