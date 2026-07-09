@@ -34,10 +34,19 @@ namespace CalloraVoipSdk.Core.Domain.Calls;
 /// </remarks>
 public interface ICall
 {
+    /// <summary>Stable identifier of this call within the SDK.</summary>
     CallId        CallId      { get; }
+
+    /// <summary>Current lifecycle state; changes are signalled by <see cref="StateChanged"/>.</summary>
     CallState     State       { get; }
+
+    /// <summary>Whether the call was placed locally (<see cref="CallDirection.Outbound"/>) or received (<see cref="CallDirection.Inbound"/>).</summary>
     CallDirection Direction   { get; }
+
+    /// <summary>The remote party's SIP URI or address-of-record.</summary>
     string        RemoteParty { get; }
+
+    /// <summary>UTC timestamp of when this call object was created (dial or inbound INVITE).</summary>
     DateTimeOffset StartedAt  { get; }
 
     /// <summary>The phone line this call belongs to.</summary>

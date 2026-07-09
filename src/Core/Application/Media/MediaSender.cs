@@ -5,6 +5,11 @@ using CalloraVoipSdk.Core.Domain.Calls;
 
 namespace CalloraVoipSdk.Core.Application.Media;
 
+/// <summary>
+/// Feeds application-supplied audio frames into a call's outbound RTP stream. Attach to a call,
+/// then push frames with <see cref="SendAsync"/>. Frames sent while the call is not connected/on-hold
+/// are silently dropped rather than throwing.
+/// </summary>
 public sealed class MediaSender : IMediaSender
 {
     private readonly object _sync = new();
@@ -17,6 +22,10 @@ public sealed class MediaSender : IMediaSender
         _logger = logger ?? NullLogger<MediaSender>.Instance;
     }
 
+    /// <summary>Attaches this sender to <paramref name="call"/>; replaces any previous attachment.</summary>
+    /// <param name="call">The call to send outbound audio to. Must be a call created by this SDK.</param>
+    /// <exception cref="ArgumentException"><paramref name="call"/> was not created by this SDK.</exception>
+    /// <exception cref="ObjectDisposedException">The sender has been disposed.</exception>
     public void AttachToCall(ICall call)
     {
         if (call is not Call sdkCall)
@@ -29,11 +38,20 @@ public sealed class MediaSender : IMediaSender
         }
     }
 
+    /// <summary>Detaches from the current call; subsequent <see cref="SendAsync"/> calls will fail until re-attached.</summary>
     public void Detach()
     {
         lock (_sync) _call = null;
     }
 
+    /// <summary>
+    /// Sends one audio frame to the attached call. Frames are dropped without error when the call is
+    /// not in <see cref="CallState.Connected"/> or <see cref="CallState.OnHold"/>.
+    /// </summary>
+    /// <param name="frame">The audio frame (payload, payload type, and duration) to send.</param>
+    /// <param name="ct">Cancels the send.</param>
+    /// <exception cref="InvalidOperationException">No call is attached.</exception>
+    /// <exception cref="ObjectDisposedException">The sender has been disposed.</exception>
     public Task SendAsync(MediaFrame frame, CancellationToken ct = default)
     {
         Call? call;
@@ -69,6 +87,7 @@ public sealed class MediaSender : IMediaSender
         }
     }
 
+    /// <summary>Detaches and disposes the sender; further sends throw <see cref="ObjectDisposedException"/>.</summary>
     public void Dispose()
     {
         lock (_sync)

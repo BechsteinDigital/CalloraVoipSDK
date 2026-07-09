@@ -6,6 +6,7 @@ namespace CalloraVoipSdk.Core.Domain.Calls;
 /// </summary>
 public sealed class DialOptions
 {
+    /// <summary>Shared instance carrying the default options (30 s ring timeout, no overrides).</summary>
     public static readonly DialOptions Default = new();
 
     /// <summary>How long to ring before automatically cancelling. Default: 30 s.</summary>
