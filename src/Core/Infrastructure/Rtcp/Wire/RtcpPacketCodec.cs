@@ -65,15 +65,16 @@ internal sealed class RtcpPacketCodec : IRtcpPacketCodec
             // Body starts after the 4-byte common header
             var body = raw[4..bodyEnd];
 
-            // RFC 3550 §6.1: unrecognized packet types (e.g. RTCP-XR, type 207, RFC 3611)
-            // are skipped via the length field — throwing here would discard the whole
-            // compound datagram including the SR/RR it starts with.
+            // RFC 3550 §6.1: still-unrecognized packet types are skipped via the length field —
+            // throwing here would discard the whole compound datagram including the SR/RR it
+            // starts with.
             RtcpPacket? packet = pt switch
             {
                 RtcpPacketType.SenderReport   => DecodeSr(body, count),
                 RtcpPacketType.ReceiverReport => DecodeRr(body, count),
                 RtcpPacketType.Sdes           => DecodeSdes(body, count),
                 RtcpPacketType.Bye            => DecodeBye(body, count),
+                RtcpPacketType.ExtendedReport => DecodeXr(body),
                 _ => null,
             };
 
@@ -226,6 +227,61 @@ internal sealed class RtcpPacketCodec : IRtcpPacketCodec
 
         return new RtcpByePacket { Sources = sources, Reason = reason };
     }
+
+    // RFC 3611 §2: XR body = SSRC(4) followed by typed report blocks. Each block is
+    // BT(1) + type-specific(1) + block-length(2, in 32-bit words of block content) + content.
+    // Unknown block types are skipped via block-length; VoIP Metrics blocks (BT=7, §4.7) are
+    // parsed. Malformed block lengths stop parsing rather than throwing, so a bad XR block does
+    // not discard the surrounding compound packet.
+    private static RtcpExtendedReport DecodeXr(ReadOnlySpan<byte> body)
+    {
+        if (body.Length < 4)
+            throw new ArgumentException("XR body too short for SSRC.");
+
+        var ssrc = BinaryPrimitives.ReadUInt32BigEndian(body);
+        var metrics = new List<RtcpVoipMetricsBlock>();
+
+        var offset = 4;
+        while (offset + 4 <= body.Length)
+        {
+            var blockType    = body[offset];
+            var blockWords   = BinaryPrimitives.ReadUInt16BigEndian(body[(offset + 2)..]);
+            var contentBytes = blockWords * 4;
+            var contentStart = offset + 4;
+            if (contentStart + contentBytes > body.Length)
+                break; // truncated / inconsistent block length
+
+            if (blockType == VoipMetricsBlockType && contentBytes >= VoipMetricsContentBytes)
+                metrics.Add(DecodeVoipMetrics(body.Slice(contentStart, VoipMetricsContentBytes)));
+
+            offset = contentStart + contentBytes;
+        }
+
+        return new RtcpExtendedReport { Ssrc = ssrc, VoipMetrics = metrics };
+    }
+
+    private const byte VoipMetricsBlockType = 7;
+    private const int VoipMetricsContentBytes = 32;
+
+    private static RtcpVoipMetricsBlock DecodeVoipMetrics(ReadOnlySpan<byte> c) => new()
+    {
+        SourceSsrc                = BinaryPrimitives.ReadUInt32BigEndian(c),
+        LossRate                  = c[4],
+        DiscardRate               = c[5],
+        BurstDensity              = c[6],
+        GapDensity                = c[7],
+        BurstDurationMs           = BinaryPrimitives.ReadUInt16BigEndian(c[8..]),
+        GapDurationMs             = BinaryPrimitives.ReadUInt16BigEndian(c[10..]),
+        RoundTripDelayMs          = BinaryPrimitives.ReadUInt16BigEndian(c[12..]),
+        EndSystemDelayMs          = BinaryPrimitives.ReadUInt16BigEndian(c[14..]),
+        RFactor                   = c[20],
+        ExternalRFactor           = c[21],
+        MosLq                     = c[22],
+        MosCq                     = c[23],
+        JitterBufferNominalMs     = BinaryPrimitives.ReadUInt16BigEndian(c[26..]),
+        JitterBufferMaximumMs     = BinaryPrimitives.ReadUInt16BigEndian(c[28..]),
+        JitterBufferAbsoluteMaxMs = BinaryPrimitives.ReadUInt16BigEndian(c[30..]),
+    };
 
     // -------------------------------------------------------------------------
     // Encode

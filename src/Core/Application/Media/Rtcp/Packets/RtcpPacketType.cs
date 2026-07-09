@@ -10,4 +10,7 @@ internal enum RtcpPacketType : byte
     Sdes           = 202,
     Bye            = 203,
     App            = 204,
+
+    /// <summary>Extended Report (XR, PT=207) — RFC 3611.</summary>
+    ExtendedReport = 207,
 }
