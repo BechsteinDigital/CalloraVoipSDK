@@ -4,6 +4,7 @@
 [![NuGet Version](https://img.shields.io/nuget/v/CalloraVoipSdk.Core)](https://www.nuget.org/packages/CalloraVoipSdk.Core)
 [![NuGet Downloads](https://img.shields.io/nuget/dt/CalloraVoipSdk.Core)](https://www.nuget.org/packages/CalloraVoipSdk.Core)
 ![Coverage](https://img.shields.io/badge/coverage-cobertura%20artifact-blue)
+[![Docs](https://img.shields.io/badge/docs-github%20pages-blue)](https://bechsteindigital.github.io/CalloraVoipSDK/)
 
 ![C#](https://img.shields.io/badge/c%23-%23239120.svg?style=for-the-badge&logo=csharp&logoColor=white)
 ![.Net](https://img.shields.io/badge/.NET-5C2D91?style=for-the-badge&logo=.net&logoColor=white)
@@ -12,6 +13,8 @@ Commercial-grade .NET VoIP SDK for SIP signaling, RTP media, PBX integrations an
 
 CalloraVoipSdk is a .NET VoIP SDK (net8.0 / net9.0 / net10.0) for building softphones, PBX integrations, contact-center workflows and voice automation systems.  
 It exposes a stable, developer-friendly API through `VoipClient` while keeping transport, media and device internals behind a clean facade — and opens up through a module registry for building products like AI voice agents on top.
+
+📖 **Documentation:** [bechsteindigital.github.io/CalloraVoipSDK](https://bechsteindigital.github.io/CalloraVoipSDK/)
 
 ## Why CalloraVoipSdk
 

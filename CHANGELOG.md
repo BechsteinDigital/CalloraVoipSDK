@@ -6,6 +6,16 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
 
 ## [Unreleased]
 
+## [4.3.2] - 2026-07-09
+
+Documentation-only release — no code changes versus 4.3.1. Cut as a tag so the corrected
+documentation portal is published to GitHub Pages.
+
+### Documentation
+- Corrected the ICE status row on the documentation portal to the released state (opt-in,
+  unproven in production) instead of the outdated "STUN/TURN transport in place" wording.
+- Added the GitHub Pages documentation link (badge + reference) to the README.
+
 ## [4.3.1] - 2026-07-09
 
 Bug fixes from live calls and review, plus consumer-facing API documentation. No breaking changes.

@@ -5,6 +5,10 @@ The authoritative changelog lives in the repository:
 
 ## Release highlights
 
+### 4.3.2 — 2026-07-09
+- Documentation-only release (no code changes vs 4.3.1): corrected the ICE status row to the
+  released state and added the GitHub Pages documentation link to the README
+
 ### 4.3.1 — 2026-07-09
 - Fixed the RFC 3550 jitter estimator derailing on a stalled RTP timestamp (comfort noise /
   audio-payload repeats) — no more mid-call latency spike from false late-drops
