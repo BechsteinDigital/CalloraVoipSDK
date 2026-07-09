@@ -122,6 +122,22 @@ public sealed class CallIceAgentTests
         Assert.Null(await agent.BuildLocalDescriptionAsync(LocalRtp));
     }
 
+    [Fact]
+    public async Task Restart_gathering_produces_fresh_ice_credentials()
+    {
+        // RFC 8445 §9.1.1.1: an ICE restart uses new ufrag/pwd. Re-gathering yields fresh creds,
+        // so the peer detects the restart (see IceRestartDetector).
+        var agent = Agent(Config(), new FakeStunProbe { ReflexiveEndPoint = Srflx });
+
+        var first = await agent.BuildLocalDescriptionAsync(LocalRtp);
+        var second = await agent.BuildLocalDescriptionAsync(LocalRtp);
+
+        Assert.NotNull(first);
+        Assert.NotNull(second);
+        Assert.NotEqual(first!.Ufrag, second!.Ufrag);
+        Assert.NotEqual(first.Pwd, second.Pwd);
+    }
+
     // --- Selection: success paths ---
 
     [Fact]
