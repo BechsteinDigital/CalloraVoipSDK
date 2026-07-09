@@ -5,6 +5,34 @@ The authoritative changelog lives in the repository:
 
 ## Release highlights
 
+### 4.3.1 — 2026-07-09
+- Fixed the RFC 3550 jitter estimator derailing on a stalled RTP timestamp (comfort noise /
+  audio-payload repeats) — no more mid-call latency spike from false late-drops
+- Registration removal (unregister) now reuses the registration's Call-ID + CSeq (RFC 3261
+  §10.2.2), so a binding is actually cleared instead of lingering after stop/restart
+- Documented the event threading contract and the `ICall` error contract; filled public XML-doc gaps
+
+### 4.3.0 — 2026-07-09
+- SRTP as the offerer (SDES, RFC 4568): outbound calls now advertise `RTP/SAVP` + `a=crypto`
+- SRTCP (RFC 3711 §3.4): a negotiated SRTP call now encrypts and authenticates RTCP too
+- SRTP re-keying on re-INVITE (RFC 3264 §8), and hold/unhold keeps SRTP alive
+- Two remotely triggerable receive-loop DoS fixes on malformed short RTP/RTCP packets
+
+### 4.2.0 — 2026-07-09
+- Protocol-correctness fixes: `Expires` precedence/responses (RFC 3261 §10.2.1.1/§10.3),
+  bounded stale-nonce retry (RFC 2617), dropped the non-functional SHA-512-256 digest advert
+- Peer MOS in `CallQualitySnapshot` from RTCP-XR VoIP Metrics (RFC 3611 §4.7)
+
+### 4.1.0 — 2026-07-09
+- Bidirectional ICE (RFC 8445 / RFC 7675): inbound connectivity checks, role derivation +
+  tie-breaker sharing, consent freshness with media cease, triggered checks — opt-in and still
+  marked experimental/unproven in production
+
+### 4.0.0 — 2026-07-09
+- SRTP/SDES media (offer/answer keying, media path, hardening), Opus codec (opt-in),
+  RTCP-XR decoding, SDP `o=` session versioning
+- **Breaking:** `DialOptions` moved to the domain layer
+
 ### 3.1.1 — 2026-07-08
 - RFC 3550 jitter estimator fixed (arrival-time overflow made jitter converge to the
   frame interval); RTT measured from RTCP LSR/DLSR now feeds the adaptive jitter buffer

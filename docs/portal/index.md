@@ -21,7 +21,7 @@ and intelligent decision logic.
 
 ## Current Status
 
-**Available on [nuget.org](https://www.nuget.org/packages/CalloraVoipSdk) — current release: v3.1.1.**
+**Available on [nuget.org](https://www.nuget.org/packages/CalloraVoipSdk) — current release: v4.3.1.**
 
 **What works today:**
 
@@ -29,7 +29,8 @@ and intelligent decision logic.
 |-----------|--------|
 | SIP Register / Dial / Accept / Hangup | ✅ Production-ready |
 | Hold / Unhold / Blind + Attended Transfer | ✅ Production-ready |
-| RTP/SRTP media transport | ✅ Production-ready |
+| RTP media transport | ✅ Production-ready |
+| SRTP + SRTCP media encryption (SDES, offer & answer; RFC 4568 / RFC 3711) | ✅ Production-ready |
 | Adaptive jitter buffer | ✅ Production-ready |
 | Media cross-connect / bridge | ✅ Production-ready |
 | Per-call media tap (frame receivers/senders for bots and streaming) | ✅ Production-ready |

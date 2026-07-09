@@ -41,6 +41,9 @@ Available in the repository today:
 - Advanced call control: DTMF, blind transfer, attended transfer
 - In-dialog operations: `INFO`, `OPTIONS`, `SUBSCRIBE`, `NOTIFY`
 - Media stack: RTP sessions, sender, receiver, `MediaConnector`, cross-connect
+- Media encryption: SRTP via SDES (RFC 4568) as both caller and callee, encrypted/authenticated
+  RTCP via SRTCP (RFC 3711 §3.4), a configurable per-call policy
+  (`SdkConfiguration.SrtpPolicy`: Disabled / Optional / Required), and re-keying on re-INVITE
 - Per-call media tap: attach frame receivers/senders to any call for bots, bridging
   and streaming scenarios (`client.Media.CreateReceiver()/CreateSender()`)
 - Module registry (`client.Modules`) as the extension point for separately shipped
@@ -101,7 +104,7 @@ This keeps the external API compact and stable while allowing internal evolution
 
 CalloraVoipSdk follows Semantic Versioning (`MAJOR.MINOR.PATCH`).
 
-- Current public release line: `3.x` (see [releases](https://github.com/BechsteinDigital/CalloraVoipSDK/releases))
+- Current public release line: `4.x` (see [releases](https://github.com/BechsteinDigital/CalloraVoipSDK/releases))
 - Public API removals only happen in MAJOR releases; deprecations are introduced
   through `[Obsolete(...)]` before removal
 - Consumer-relevant changes are documented in [`CHANGELOG.md`](CHANGELOG.md)
@@ -386,18 +389,18 @@ The SDK core stays open and free; plugins are licensed separately. Contact
 - Keep event handlers short and non-blocking under load
 - Choose audio providers explicitly via platform-specific packages
 - Treat infrastructure details as non-public integration surface
-- ICE is opt-in and experimental (`IceConfiguration.Enabled` defaults to `false`); the
-  production-proven NAT path is symmetric RTP (comedia), which needs no ICE or STUN. See the
-  Roadmap for the ICE state-machine gaps before enabling it in production.
+- ICE (RFC 8445 / RFC 7675) is opt-in (`IceConfiguration.Enabled` defaults to `false`) and, while
+  largely implemented, remains unproven in production — validate it for your trunk before enabling
+  it. The production-proven NAT path is symmetric RTP (comedia), which needs no ICE or STUN.
 
 ## Roadmap
 
-- Full ICE (RFC 8445): the current agent is experimental and unproven in production. STUN/TURN
-  transport is in place, but it lacks role negotiation (controlling/controlled, tie-breaker),
-  the check-list state machine (Frozen/Waiting/Triggered, foundation freezing, Ta pacing),
-  regular/aggressive nomination with `USE-CANDIDATE`, the RTCP component, TCP candidates,
-  peer-reflexive learning, ICE restart, and consent freshness (RFC 7675). Real trunk calls run
-  over symmetric RTP (comedia) instead.
+- Full ICE (RFC 8445 / RFC 7675): the agent now implements role derivation + tie-breaker,
+  the check-list state machine, regular nomination with `USE-CANDIDATE`, inbound connectivity
+  and triggered checks, ICE restart detection, and consent freshness with media cease — but it
+  remains **opt-in and unproven in production** (no live trunk validation yet). Remaining gaps:
+  TCP candidates, and surfacing consent loss to the application for a restart/terminate decision.
+  Real trunk calls run over symmetric RTP (comedia), which needs no ICE or STUN.
 - Commercial plugin line-up (private feed, licensed): Callora.Realtime, WebSocket
   streaming, Privacy/Risk/Intelligence — in development
 - CI/CD hardening: soak, interop and chaos gates

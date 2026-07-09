@@ -6,6 +6,29 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
 
 ## [Unreleased]
 
+## [4.3.1] - 2026-07-09
+
+Bug fixes from live calls and review, plus consumer-facing API documentation. No breaking changes.
+
+### Fixed
+- **Jitter estimator on a stalled RTP timestamp**: a burst of packets repeating the same RTP
+  timestamp (comfort noise, or an audio-payload repeat) spiked the RFC 3550 §6.4.1 jitter estimate
+  and ratcheted the adaptive playout delay to its cap mid-call via false late-drops. Such repeats
+  are now treated as playout-redundant, so the estimator and delay stay stable.
+- **Registration removal on stop/dispose** (RFC 3261 §10.2.2): the unregister used a fresh Call-ID
+  and CSeq 1, which registrars did not recognise as removing the binding — the old binding lingered
+  until expiry and could fork inbound calls into a dead second binding. It now reuses the
+  registration's Call-ID and next CSeq (binding identity written under the same lock the unregister
+  snapshot reads).
+- **Best-effort hangup on `Call.Dispose`**: a faulted BYE during teardown was dropped as an
+  unobserved task exception; it is now observed and logged.
+
+### Documentation
+- Documented the **event threading contract** on `ICall`/`IPhoneLine`/`VoipClient` (which thread
+  each event fires on; handlers must not block or throw), the **`ICall` error contract** (which
+  methods throw vs. return `CallActionResult`), and filled XML-doc gaps across the public consumer
+  types.
+
 ## [4.3.0] - 2026-07-09
 
 SDES/SRTP hardening across the whole media lifecycle — the SDK now offers SRTP itself, protects
