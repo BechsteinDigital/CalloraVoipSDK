@@ -1,4 +1,3 @@
-using CalloraVoipSdk.Core.Application.Calls;
 using CalloraVoipSdk.Core.Domain.Calls;
 using CalloraVoipSdk.Core.Domain.Events;
 

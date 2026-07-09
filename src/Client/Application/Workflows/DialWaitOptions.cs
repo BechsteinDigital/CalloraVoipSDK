@@ -1,4 +1,4 @@
-using CalloraVoipSdk.Core.Application.Calls;
+using CalloraVoipSdk.Core.Domain.Calls;
 
 namespace CalloraVoipSdk;
 
