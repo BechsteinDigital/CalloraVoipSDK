@@ -689,15 +689,19 @@ internal sealed class SipRegistrationService : ISipRegistrationService
         string ownContactUri,
         int fallback)
     {
-        if (int.TryParse(response.Header("Expires"), out var expires))
-            return Math.Max(0, expires);
-
+        // RFC 3261 §10.2.1.1: the "expires" parameter of our own Contact binding takes precedence
+        // over the top-level Expires header, so resolve our binding first.
         var ownCore = NormalizeContactCore(ownContactUri);
         var ownBinding = bindings.FirstOrDefault(
             b => b.ExpiresSeconds >= 0 && NormalizeContactCore(b.ContactUri) == ownCore);
         if (ownBinding is not null)
             return ownBinding.ExpiresSeconds;
 
+        // No per-Contact grant for us: the top-level Expires header applies to all contacts (§10.3).
+        if (int.TryParse(response.Header("Expires"), out var expires))
+            return Math.Max(0, expires);
+
+        // Otherwise the longest remaining binding, else the requested fallback.
         var longest = -1;
         foreach (var binding in bindings)
         {
