@@ -19,11 +19,16 @@ internal static class IceInboundStunHandlerFactory
     /// </summary>
     /// <param name="localUfrag">Local ICE username fragment from the negotiated media parameters.</param>
     /// <param name="localPassword">Local ICE password from the negotiated media parameters.</param>
+    /// <param name="controlling">
+    /// Whether this agent holds the controlling role (RFC 8445 §5.1.1), derived from the offer/answer
+    /// direction.
+    /// </param>
     /// <param name="sendRaw">The media socket's raw-send delegate (e.g. <c>RtpSession.SendRawAsync</c>).</param>
     /// <param name="loggerFactory">Logger factory.</param>
     public static IceInboundStunHandler? Create(
         string? localUfrag,
         string? localPassword,
+        bool controlling,
         Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask> sendRaw,
         ILoggerFactory loggerFactory)
     {
@@ -35,17 +40,16 @@ internal static class IceInboundStunHandlerFactory
 
         var processor = new IceInboundCheckProcessor(new IceInboundBindingResponder(new StunMessageCodec()));
 
-        // The handler starts controlling with a fresh tie-breaker. Sharing role and tie-breaker
-        // with the outbound CallIceAgent — so a role conflict resolves identically in both
-        // directions — is a follow-up; the common offerer=controlling / answerer=controlled case
-        // has no conflict, and inbound checks are still authenticated and answered correctly.
+        // Role from the offer/answer direction (RFC 8445 §5.1.1); tie-breaker derived from the local
+        // password so it matches the outbound CallIceAgent and a role conflict (§7.3.1.1) resolves
+        // identically in both directions.
         return new IceInboundStunHandler(
             processor,
             sendRaw,
             localUfrag,
             localPassword,
-            IceTieBreaker.Generate(),
-            IceRole.Controlling,
+            IceTieBreaker.Derive(localPassword),
+            controlling ? IceRole.Controlling : IceRole.Controlled,
             loggerFactory);
     }
 }

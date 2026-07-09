@@ -46,6 +46,10 @@ internal sealed class SipCoreCallChannel : ICallChannel
     private Func<CallAudioFrame, CancellationToken, Task>? _audioSendDelegate;
     private Func<byte, int, CancellationToken, Task>? _dtmfSendDelegate;
     private CallIceLocalDescription? _localIceDescription;
+
+    // ICE role for this leg (RFC 8445 §5.1.1): controlling when we send the SDP offer, controlled
+    // when we answer. Set by the offer/answer entry points before media parameters are published.
+    private volatile bool _iceControlling = true;
     private IPAddress? _advertisedMediaAddress;
     private ISipCallSession? _session;
     private int _mediaParametersFired;
@@ -107,6 +111,7 @@ internal sealed class SipCoreCallChannel : ICallChannel
         CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(localMediaEndPoint);
+        _iceControlling = true; // we send the offer → controlling (RFC 8445 §5.1.1)
         await EnsureLocalIceDescriptionAsync(localMediaEndPoint, ct).ConfigureAwait(false);
         return _sdpNegotiator.BuildDefaultSdp(localMediaEndPoint, hold, BuildLocalSdpOptions());
     }
@@ -158,6 +163,7 @@ internal sealed class SipCoreCallChannel : ICallChannel
     public async Task AnswerAsync(CancellationToken ct)
     {
         var session = EnsureSession();
+        _iceControlling = false; // we answer the peer's offer → controlled (RFC 8445 §5.1.1)
 
         // Route-local address for the SDP/bind. NAT reachability is handled by symmetric
         // RTP (the peer's SBC latches to our real source), so the connection line does not
@@ -567,7 +573,7 @@ internal sealed class SipCoreCallChannel : ICallChannel
                 : MediaPublicationResult.Skipped;
         }
 
-        var withIceMetadata = EnrichWithIceMetadata(parameters);
+        var withIceMetadata = CallMediaParametersIceEnricher.Enrich(parameters, _localIceDescription, _iceControlling);
         reasonCode = SrtpPolicyEvaluator.ResolveReasonCode(_appliedSrtpPolicy, withIceMetadata.IsSrtpNegotiated);
         var violatesPolicy = SrtpPolicyEvaluator.IsPolicyViolation(_appliedSrtpPolicy, withIceMetadata.IsSrtpNegotiated);
         var enrichedParameters = EnrichWithSrtpMetadata(withIceMetadata, reasonCode, remoteSdp);
@@ -688,48 +694,6 @@ internal sealed class SipCoreCallChannel : ICallChannel
         Func<string, string, bool>? handler;
         lock (_callbackSync) handler = _onTransfer;
         return handler?.Invoke(referTo, referredBy) ?? false;
-    }
-
-    /// <summary>
-    /// Clones parsed remote media parameters and merges the local ICE description
-    /// generated for this channel.
-    /// </summary>
-    private CallMediaParameters EnrichWithIceMetadata(CallMediaParameters parameters)
-    {
-        if (_localIceDescription is null)
-            return parameters;
-
-        var iceEnabled = parameters.IceEnabled
-                         || !string.IsNullOrWhiteSpace(parameters.RemoteIceUfrag)
-                         || !string.IsNullOrWhiteSpace(parameters.RemoteIcePwd)
-                         || parameters.RemoteIceCandidates.Count > 0;
-
-        return new CallMediaParameters
-        {
-            LocalEndPoint = parameters.LocalEndPoint,
-            RemoteEndPoint = parameters.RemoteEndPoint,
-            RtcpMux = parameters.RtcpMux,
-            LocalRtcpEndPoint = parameters.LocalRtcpEndPoint,
-            RemoteRtcpEndPoint = parameters.RemoteRtcpEndPoint,
-            PayloadType = parameters.PayloadType,
-            CodecName = parameters.CodecName,
-            PayloadTypeCodecMap = parameters.PayloadTypeCodecMap,
-            TelephoneEventPayloadType = parameters.TelephoneEventPayloadType,
-            ClockRate = parameters.ClockRate,
-            SamplesPerPacket = parameters.SamplesPerPacket,
-            MediaProfile = parameters.MediaProfile,
-            IsSrtpNegotiated = parameters.IsSrtpNegotiated,
-            IceEnabled = iceEnabled,
-            LocalIceUfrag = _localIceDescription.Ufrag,
-            LocalIcePwd = _localIceDescription.Pwd,
-            LocalIceOptions = _localIceDescription.Options,
-            LocalIceCandidates = _localIceDescription.Candidates,
-            RemoteIceUfrag = parameters.RemoteIceUfrag,
-            RemoteIcePwd = parameters.RemoteIcePwd,
-            RemoteIceOptions = parameters.RemoteIceOptions,
-            RemoteIceCandidates = parameters.RemoteIceCandidates,
-            RemoteIceEndOfCandidates = parameters.RemoteIceEndOfCandidates
-        };
     }
 
     /// <summary>

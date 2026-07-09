@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using CalloraVoipSdk.Core.Application.Media.Ice;
 using CalloraVoipSdk.Core.Domain.Calls;
 using CalloraVoipSdk.Core.Infrastructure.Rtp;
 using CalloraVoipSdk.Core.Infrastructure.Stun.Attributes;
@@ -55,9 +56,16 @@ public sealed class RtpCallMediaSessionIceInboundTests
     {
         Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask> send = (_, _, _) => ValueTask.CompletedTask;
 
-        Assert.Null(IceInboundStunHandlerFactory.Create(null, null, send, NullLoggerFactory.Instance));
-        Assert.Null(IceInboundStunHandlerFactory.Create(LocalUfrag, "   ", send, NullLoggerFactory.Instance));
-        Assert.NotNull(IceInboundStunHandlerFactory.Create(LocalUfrag, LocalPassword, send, NullLoggerFactory.Instance));
+        Assert.Null(IceInboundStunHandlerFactory.Create(null, null, controlling: true, send, NullLoggerFactory.Instance));
+        Assert.Null(IceInboundStunHandlerFactory.Create(LocalUfrag, "   ", controlling: true, send, NullLoggerFactory.Instance));
+
+        // Role reflects the offer/answer direction (RFC 8445 §5.1.1).
+        var controlling = IceInboundStunHandlerFactory.Create(LocalUfrag, LocalPassword, controlling: true, send, NullLoggerFactory.Instance);
+        Assert.NotNull(controlling);
+        Assert.Equal(IceRole.Controlling, controlling!.Role);
+
+        var controlled = IceInboundStunHandlerFactory.Create(LocalUfrag, LocalPassword, controlling: false, send, NullLoggerFactory.Instance);
+        Assert.Equal(IceRole.Controlled, controlled!.Role);
     }
 
     [Fact]
