@@ -71,6 +71,9 @@ internal sealed class StunIceProbe : IIceStunProbe
         string localIceUfrag,
         string remoteIceUfrag,
         string remoteIcePassword,
+        uint localCandidatePriority,
+        bool isControlling,
+        ulong tieBreaker,
         TimeSpan timeout,
         CancellationToken ct = default)
     {
@@ -93,11 +96,20 @@ internal sealed class StunIceProbe : IIceStunProbe
                 Password = remoteIcePassword
             };
 
+            // RFC 8445 §7.2.2 check attributes. USE-CANDIDATE (regular nomination) is a later
+            // package; the controlled agent never nominates either.
+            var iceAttributes = StunIceCheckAttributes.Build(
+                priority: localCandidatePriority,
+                isControlling: isControlling,
+                tieBreaker: tieBreaker,
+                useCandidate: false);
+
             _ = await _stunClient.QueryBindingAsync(
                     remoteEndPoint,
                     credentials: credentials,
                     transport: StunTransport.Udp,
                     localEndPoint: localEndPoint,
+                    additionalAttributes: iceAttributes,
                     ct: linked.Token)
                 .ConfigureAwait(false);
             return true;

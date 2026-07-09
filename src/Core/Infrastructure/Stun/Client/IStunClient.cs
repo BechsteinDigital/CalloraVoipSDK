@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Security;
+using CalloraVoipSdk.Core.Infrastructure.Stun.Attributes;
 using CalloraVoipSdk.Core.Infrastructure.Stun.Auth;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Stun.Client;
@@ -47,6 +48,11 @@ internal interface IStunClient
     /// media port during ICE gathering) — binding a second socket to that port fails with
     /// "address already in use". The socket is neither connected nor disposed. UDP only.
     /// </param>
+    /// <param name="additionalAttributes">
+    /// Optional attributes inserted into the request before MESSAGE-INTEGRITY (and thus covered
+    /// by it). Used by ICE connectivity checks to carry PRIORITY and ICE-CONTROLLING /
+    /// ICE-CONTROLLED (RFC 8445 §7.2.2). Not forwarded across a 300 Try Alternate redirect.
+    /// </param>
     /// <param name="ct">Cancellation token to abort all retry attempts immediately.</param>
     /// <returns>The resolved public endpoint.</returns>
     /// <exception cref="StunException">
@@ -60,5 +66,6 @@ internal interface IStunClient
         RemoteCertificateValidationCallback? tlsRemoteCertificateValidationCallback = null,
         IPEndPoint?       localEndPoint = null,
         System.Net.Sockets.Socket? sharedUdpSocket = null,
+        IReadOnlyList<StunAttribute>? additionalAttributes = null,
         CancellationToken ct          = default);
 }

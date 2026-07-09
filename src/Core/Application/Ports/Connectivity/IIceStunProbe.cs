@@ -21,14 +21,23 @@ internal interface IIceStunProbe
         CancellationToken ct = default);
 
     /// <summary>
-    /// Executes one ICE connectivity check toward <paramref name="remoteEndPoint"/>.
+    /// Executes one ICE connectivity check toward <paramref name="remoteEndPoint"/>, carrying the
+    /// RFC 8445 §7.2.2 check attributes: PRIORITY (<paramref name="localCandidatePriority"/>) and
+    /// the role attribute (ICE-CONTROLLING when <paramref name="isControlling"/>, else
+    /// ICE-CONTROLLED) with <paramref name="tieBreaker"/>.
     /// </summary>
+    /// <param name="localCandidatePriority">Priority carried in the PRIORITY attribute.</param>
+    /// <param name="isControlling">Whether this agent currently holds the controlling role.</param>
+    /// <param name="tieBreaker">This agent's 64-bit ICE tie-breaker.</param>
     Task<bool> TryCheckConnectivityAsync(
         IPEndPoint localEndPoint,
         IPEndPoint remoteEndPoint,
         string localIceUfrag,
         string remoteIceUfrag,
         string remoteIcePassword,
+        uint localCandidatePriority,
+        bool isControlling,
+        ulong tieBreaker,
         TimeSpan timeout,
         CancellationToken ct = default);
 }

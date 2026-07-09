@@ -142,6 +142,25 @@ public sealed class CallIceAgentTests
     }
 
     [Fact]
+    public async Task Connectivity_check_carries_local_priority_and_controlling_role()
+    {
+        // RFC 8445 §7.2.2 wiring: the agent hands PRIORITY (the local candidate priority),
+        // the controlling role (I3 default) and a generated tie-breaker to the probe.
+        var probe = new FakeStunProbe { ConnectivityResults = { [_ => true] = true } };
+        var agent = Agent(Config(), probe);
+        var remote = new IPEndPoint(IPAddress.Parse("192.0.2.30"), 41000);
+
+        var result = await agent.SelectCandidatePairAsync(
+            CallId.New(),
+            Parameters([Candidate("host", LocalRtp, priority: 123456)], [Candidate("host", remote, priority: 200)]));
+
+        Assert.True(result.HasSelectedPair);
+        Assert.Equal(123456u, probe.LastPriority);
+        Assert.True(probe.LastIsControlling);
+        Assert.NotEqual(0ul, probe.LastTieBreaker);
+    }
+
+    [Fact]
     public async Task Relay_pair_wins_when_direct_paths_fail()
     {
         // Only checks towards the TURN-relayed remote candidate succeed.
@@ -300,6 +319,25 @@ public sealed class CallIceAgentTests
         Assert.Equal(CallIceNegotiationState.Failed, result.State);
     }
 
+    [Fact]
+    public async Task Address_family_mismatch_yields_no_candidate_pairs()
+    {
+        // Both sides advertise a usable UDP RTP candidate, but they cannot be paired
+        // (RFC 8445 §6.1.2.2: pairing requires the same address family). The check list
+        // is empty and selection reports the dedicated reason without running any check.
+        var agent = Agent(Config(), new FakeStunProbe());
+        var localV4 = Candidate("host", LocalRtp);
+        var remoteV6 = Candidate("host", new IPEndPoint(IPAddress.Parse("2001:db8::20"), 41000));
+
+        var result = await agent.SelectCandidatePairAsync(
+            CallId.New(),
+            Parameters([localV4], [remoteV6]));
+
+        Assert.False(result.HasSelectedPair);
+        Assert.Equal(CallIceNegotiationState.Failed, result.State);
+        Assert.Equal("ice_no_candidate_pairs", result.ReasonCode);
+    }
+
     // --- Fakes ---
 
     private sealed class FakeStunProbe : IIceStunProbe
@@ -309,6 +347,9 @@ public sealed class CallIceAgentTests
         public int SucceedOnAttempt { get; init; }
         public int ConnectivityAttempts;
         public System.Net.Sockets.Socket? ObservedSharedSocket;
+        public uint LastPriority;
+        public bool LastIsControlling;
+        public ulong LastTieBreaker;
 
         public Task<IPEndPoint?> TryGetServerReflexiveEndPointAsync(
             IPEndPoint localEndPoint, IceServerConfiguration server,
@@ -321,9 +362,14 @@ public sealed class CallIceAgentTests
         public Task<bool> TryCheckConnectivityAsync(
             IPEndPoint localEndPoint, IPEndPoint remoteEndPoint,
             string localIceUfrag, string remoteIceUfrag, string remoteIcePassword,
+            uint localCandidatePriority, bool isControlling, ulong tieBreaker,
             TimeSpan timeout, CancellationToken ct = default)
         {
             var attempt = Interlocked.Increment(ref ConnectivityAttempts);
+            LastPriority = localCandidatePriority;
+            LastIsControlling = isControlling;
+            LastTieBreaker = tieBreaker;
+
             if (SucceedOnAttempt > 0)
                 return Task.FromResult(attempt >= SucceedOnAttempt);
 
