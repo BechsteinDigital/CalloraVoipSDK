@@ -20,17 +20,24 @@ internal sealed class OpusPayloadCodec
     public const int SamplesPerDefaultFrame = 960;
 
     // 120 ms at 48 kHz — the maximum Opus frame duration a single packet may carry.
+    // Sized for the highest sample rate; used verbatim as the decode buffer at any rate.
     private const int MaxDecodedSamples = 5_760;
     private const int MaxEncodedBytes = 1_275;
 
     private readonly IOpusEncoder _encoder;
     private readonly IOpusDecoder _decoder;
 
-    /// <summary>Creates one codec instance for one media stream.</summary>
-    public OpusPayloadCodec()
+    /// <summary>
+    /// Creates one codec instance for one media stream. The PCM sample rate is configurable:
+    /// the default 48 kHz matches the Opus RTP clock for the file/media path, while the bridge
+    /// transcoder requests 8 kHz so Opus decodes/encodes directly at telephony rate without a
+    /// separate resampler (Concentus resamples internally). The RTP timestamp clock stays
+    /// 48 kHz regardless — that is handled by the RTP session, not the codec.
+    /// </summary>
+    public OpusPayloadCodec(int sampleRate = RtpClockRate)
     {
-        _encoder = OpusCodecFactory.CreateEncoder(RtpClockRate, 1, OpusApplication.OPUS_APPLICATION_VOIP);
-        _decoder = OpusCodecFactory.CreateDecoder(RtpClockRate, 1);
+        _encoder = OpusCodecFactory.CreateEncoder(sampleRate, 1, OpusApplication.OPUS_APPLICATION_VOIP);
+        _decoder = OpusCodecFactory.CreateDecoder(sampleRate, 1);
     }
 
     /// <summary>

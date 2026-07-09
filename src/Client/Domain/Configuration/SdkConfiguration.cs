@@ -56,6 +56,14 @@ public sealed class SdkConfiguration
     public IReadOnlyList<string>? PreferredAudioCodecs { get; init; }
 
     /// <summary>
+    /// Audio format delivered to and expected from the media consumer (bridge/tap). When set
+    /// to <see cref="BridgeAudioFormat.Pcmu"/>, the SDK transcodes between the negotiated wire
+    /// codec (e.g. Opus) and G.711 µ-law so a µ-law-only consumer works over any negotiated
+    /// codec. Default <see cref="BridgeAudioFormat.Passthrough"/> delivers the raw wire payload.
+    /// </summary>
+    public BridgeAudioFormat BridgeAudioFormat { get; init; } = BridgeAudioFormat.Passthrough;
+
+    /// <summary>
     /// Hang up a connected call whose inbound RTP has been silent this long — a NAT-safe
     /// fallback for when a far-end BYE never reaches our in-dialog Contact and the media just
     /// stops. <see cref="TimeSpan.Zero"/> disables the check. Default: 15 seconds.

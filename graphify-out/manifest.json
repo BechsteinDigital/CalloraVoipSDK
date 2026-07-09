@@ -1,0 +1,2817 @@
+{
+  ".config/dotnet-tools.json": {
+    "mtime": 1776374106.2628233,
+    "ast_hash": "0cfa24020e9df831de203c756ec743b6",
+    "semantic_hash": "0cfa24020e9df831de203c756ec743b6"
+  },
+  "CalloraVoipSdk.sln": {
+    "mtime": 1783544035.0625634,
+    "ast_hash": "1ad9c334fcab94ad62ef0ab2c348cfa8",
+    "semantic_hash": "1ad9c334fcab94ad62ef0ab2c348cfa8"
+  },
+  "docfx.json": {
+    "mtime": 1776374106.3288238,
+    "ast_hash": "172befbf85b96298a1bec4ee388e6205",
+    "semantic_hash": "172befbf85b96298a1bec4ee388e6205"
+  },
+  "global.json": {
+    "mtime": 1779878542.1874635,
+    "ast_hash": "c0b280d944ccffb8c72cb50d5a42deb3",
+    "semantic_hash": "c0b280d944ccffb8c72cb50d5a42deb3"
+  },
+  "perf/CalloraVoipSdk.Conferencing.Performance/BenchmarkResult.cs": {
+    "mtime": 1776374106.338824,
+    "ast_hash": "91b129d4a26159f02253de7025ce4f06",
+    "semantic_hash": "91b129d4a26159f02253de7025ce4f06"
+  },
+  "perf/CalloraVoipSdk.Conferencing.Performance/BenchmarkSnapshot.cs": {
+    "mtime": 1776374106.338824,
+    "ast_hash": "b8a17a2b454e89f8843de89ec90c4191",
+    "semantic_hash": "b8a17a2b454e89f8843de89ec90c4191"
+  },
+  "perf/CalloraVoipSdk.Conferencing.Performance/CalloraVoipSdk.Conferencing.Performance.csproj": {
+    "mtime": 1779887929.8889365,
+    "ast_hash": "cb1f616e34218dfc8f7d84c861387fd5",
+    "semantic_hash": "cb1f616e34218dfc8f7d84c861387fd5"
+  },
+  "perf/CalloraVoipSdk.Conferencing.Performance/CliOptions.cs": {
+    "mtime": 1776374106.338824,
+    "ast_hash": "37d1ebd86492dffccfbca9b92765edce",
+    "semantic_hash": "37d1ebd86492dffccfbca9b92765edce"
+  },
+  "perf/CalloraVoipSdk.Conferencing.Performance/Program.cs": {
+    "mtime": 1776374106.338824,
+    "ast_hash": "aa6e5aca697884c7f35092d07ac602aa",
+    "semantic_hash": "aa6e5aca697884c7f35092d07ac602aa"
+  },
+  "perf/CalloraVoipSdk.Core.Performance/BenchmarkResult.cs": {
+    "mtime": 1776374106.338824,
+    "ast_hash": "8f6ba6aee889b876c4d3e33a36de1e13",
+    "semantic_hash": "8f6ba6aee889b876c4d3e33a36de1e13"
+  },
+  "perf/CalloraVoipSdk.Core.Performance/BenchmarkSnapshot.cs": {
+    "mtime": 1776374106.338824,
+    "ast_hash": "36de3daa0cd38d6221647f2901344809",
+    "semantic_hash": "36de3daa0cd38d6221647f2901344809"
+  },
+  "perf/CalloraVoipSdk.Core.Performance/CalloraVoipSdk.Core.Performance.csproj": {
+    "mtime": 1779887929.5679338,
+    "ast_hash": "f8b99300ff9c1ab65488c563bbd2119c",
+    "semantic_hash": "f8b99300ff9c1ab65488c563bbd2119c"
+  },
+  "perf/CalloraVoipSdk.Core.Performance/CliOptions.cs": {
+    "mtime": 1776374106.338824,
+    "ast_hash": "c74215493fcfd340efc1fb05024672b5",
+    "semantic_hash": "c74215493fcfd340efc1fb05024672b5"
+  },
+  "perf/CalloraVoipSdk.Core.Performance/Program.cs": {
+    "mtime": 1776374106.338824,
+    "ast_hash": "40c9ee27e24977f7f4812331a65f9974",
+    "semantic_hash": "40c9ee27e24977f7f4812331a65f9974"
+  },
+  "perf/CalloraVoipSdk.Media.Performance/CalloraVoipSdk.Media.Performance.csproj": {
+    "mtime": 1779887929.7269351,
+    "ast_hash": "09eafdc20416d6d4f08c3237b09aa9c8",
+    "semantic_hash": "09eafdc20416d6d4f08c3237b09aa9c8"
+  },
+  "perf/CalloraVoipSdk.Media.Performance/Program.cs": {
+    "mtime": 1776374106.338824,
+    "ast_hash": "b13a02346db9247ba578494362ed52a7",
+    "semantic_hash": "b13a02346db9247ba578494362ed52a7"
+  },
+  "perf/baselines/core-performance-baseline.json": {
+    "mtime": 1776374106.338824,
+    "ast_hash": "e3a83a72edb1b5b4ec4e38b565d090d3",
+    "semantic_hash": "e3a83a72edb1b5b4ec4e38b565d090d3"
+  },
+  "src/Audio/Abstractions/CalloraVoipSdk.Audio.Abstractions.csproj": {
+    "mtime": 1779887928.4999254,
+    "ast_hash": "0326937446d0660d0e71e877f19c6124",
+    "semantic_hash": "0326937446d0660d0e71e877f19c6124"
+  },
+  "src/Audio/Abstractions/Domain/Devices/IAudioDeviceProvider.cs": {
+    "mtime": 1776373441.0399249,
+    "ast_hash": "ec2a6100e027acccf49f2f88ebedf90c",
+    "semantic_hash": "ec2a6100e027acccf49f2f88ebedf90c"
+  },
+  "src/Audio/Headless/CalloraVoipSdk.Audio.Headless.csproj": {
+    "mtime": 1779887928.6490626,
+    "ast_hash": "8d32f5c99987faf3d41d015073c6db9b",
+    "semantic_hash": "8d32f5c99987faf3d41d015073c6db9b"
+  },
+  "src/Audio/Headless/Infrastructure/HeadlessAudioDevice.cs": {
+    "mtime": 1776373441.0399249,
+    "ast_hash": "94a1ba76396148bdf801b19a861ec50f",
+    "semantic_hash": "94a1ba76396148bdf801b19a861ec50f"
+  },
+  "src/Audio/Linux/CalloraVoipSdk.Audio.Linux.csproj": {
+    "mtime": 1779887928.7989278,
+    "ast_hash": "ba5e250e6675359010cfd2db2539b3b6",
+    "semantic_hash": "ba5e250e6675359010cfd2db2539b3b6"
+  },
+  "src/Audio/Linux/Infrastructure/AudioDeviceOptions.cs": {
+    "mtime": 1776373441.0399249,
+    "ast_hash": "7cf95eec211322a0ba21e178fab58e22",
+    "semantic_hash": "7cf95eec211322a0ba21e178fab58e22"
+  },
+  "src/Audio/Linux/Infrastructure/LinuxAudioDevice.cs": {
+    "mtime": 1776373441.0399249,
+    "ast_hash": "7d42ba5f7f27183ab19cee5553625428",
+    "semantic_hash": "7d42ba5f7f27183ab19cee5553625428"
+  },
+  "src/Audio/Windows/CalloraVoipSdk.Audio.Windows.csproj": {
+    "mtime": 1779887928.950929,
+    "ast_hash": "bbd7561203875d3aab144e13e779514f",
+    "semantic_hash": "bbd7561203875d3aab144e13e779514f"
+  },
+  "src/Audio/Windows/Infrastructure/AudioDeviceOptions.cs": {
+    "mtime": 1776373441.0399249,
+    "ast_hash": "f93b4f5829ef2081e802067b1714dec6",
+    "semantic_hash": "f93b4f5829ef2081e802067b1714dec6"
+  },
+  "src/Audio/Windows/Infrastructure/WindowsAudioDevice.cs": {
+    "mtime": 1776373441.0399249,
+    "ast_hash": "af719d954e33575ee9a0ae68379e5f4f",
+    "semantic_hash": "af719d954e33575ee9a0ae68379e5f4f"
+  },
+  "src/CalloraVoipSdk/CalloraVoipSdk.csproj": {
+    "mtime": 1779887928.351257,
+    "ast_hash": "9207dfa3e97de19054b4b120440cdb4a",
+    "semantic_hash": "9207dfa3e97de19054b4b120440cdb4a"
+  },
+  "src/Client/Application/Facades/IVoipClient.cs": {
+    "mtime": 1783423007.4934492,
+    "ast_hash": "ef2ea24b096407231603d9dbf4cbf2ad",
+    "semantic_hash": "ef2ea24b096407231603d9dbf4cbf2ad"
+  },
+  "src/Client/Application/Facades/IncomingCallSubscription.cs": {
+    "mtime": 1776373441.0399249,
+    "ast_hash": "759bcc2b8d4bb8a24870930a4b6c8758",
+    "semantic_hash": "759bcc2b8d4bb8a24870930a4b6c8758"
+  },
+  "src/Client/Application/Facades/VoipClient.cs": {
+    "mtime": 1783579463.6668806,
+    "ast_hash": "ad2950b39dcf8596c724e7ecfb2f0bf3",
+    "semantic_hash": ""
+  },
+  "src/Client/Application/Facades/VoipClientInitializationException.cs": {
+    "mtime": 1776373441.0399249,
+    "ast_hash": "610df33dd7e74a5653439fc6683b10ec",
+    "semantic_hash": "610df33dd7e74a5653439fc6683b10ec"
+  },
+  "src/Client/Application/Managers/DeviceManager.cs": {
+    "mtime": 1776373441.0399249,
+    "ast_hash": "9e2d76131a6b731c32c3f744700cfc30",
+    "semantic_hash": "9e2d76131a6b731c32c3f744700cfc30"
+  },
+  "src/Client/Application/Managers/ModuleManager.cs": {
+    "mtime": 1783420176.689392,
+    "ast_hash": "dfb74d54e383949fcc7fef7c3d87aaca",
+    "semantic_hash": "dfb74d54e383949fcc7fef7c3d87aaca"
+  },
+  "src/Client/Application/Managers/ModuleRegistry.cs": {
+    "mtime": 1783423007.4934492,
+    "ast_hash": "e876e7971e13ccff514fccb387288d20",
+    "semantic_hash": "e876e7971e13ccff514fccb387288d20"
+  },
+  "src/Client/Application/Managers/PolicyManager.cs": {
+    "mtime": 1776373441.0399249,
+    "ast_hash": "b41d4eb2b6cd5618f7b0ab52e3bdc1f1",
+    "semantic_hash": "b41d4eb2b6cd5618f7b0ab52e3bdc1f1"
+  },
+  "src/Client/Application/Managers/QualityManager.cs": {
+    "mtime": 1776373441.0399249,
+    "ast_hash": "6ebc205496b26f7ade093e91d73f71ec",
+    "semantic_hash": "6ebc205496b26f7ade093e91d73f71ec"
+  },
+  "src/Client/Application/Managers/QualitySubscription.cs": {
+    "mtime": 1776373441.0399249,
+    "ast_hash": "b64ff8690a53ddd0161378e21aee0862",
+    "semantic_hash": "b64ff8690a53ddd0161378e21aee0862"
+  },
+  "src/Client/Application/Managers/SessionManager.cs": {
+    "mtime": 1783423007.4934492,
+    "ast_hash": "b6511d10e9ba1b1af5c4a277cfcb8492",
+    "semantic_hash": "b6511d10e9ba1b1af5c4a277cfcb8492"
+  },
+  "src/Client/Application/Managers/TelemetryManager.cs": {
+    "mtime": 1776373441.0399249,
+    "ast_hash": "96df3ca796f63dd6b5a44dc4613bc71d",
+    "semantic_hash": "96df3ca796f63dd6b5a44dc4613bc71d"
+  },
+  "src/Client/Application/Modules/IPlaybackModule.cs": {
+    "mtime": 1776373441.0399249,
+    "ast_hash": "8548dfd1885c639528f1a7c2b0a1f5d1",
+    "semantic_hash": "8548dfd1885c639528f1a7c2b0a1f5d1"
+  },
+  "src/Client/Application/Modules/IRecordingModule.cs": {
+    "mtime": 1783415311.915073,
+    "ast_hash": "3d351721efe77d9c6ae49bd16c1f812b",
+    "semantic_hash": "3d351721efe77d9c6ae49bd16c1f812b"
+  },
+  "src/Client/Application/Modules/IVoipClientModule.cs": {
+    "mtime": 1783423007.4934492,
+    "ast_hash": "b6bbcb42b55652c4106dcb096bfdc2cc",
+    "semantic_hash": "b6bbcb42b55652c4106dcb096bfdc2cc"
+  },
+  "src/Client/Application/Modules/ModuleContracts.cs": {
+    "mtime": 1783423007.4934492,
+    "ast_hash": "a124be43ecc081f889f1e91e8aa6df98",
+    "semantic_hash": "a124be43ecc081f889f1e91e8aa6df98"
+  },
+  "src/Client/Application/Workflows/ConnectOptions.cs": {
+    "mtime": 1776373441.0399249,
+    "ast_hash": "5ef855e95f71c1132b475d5a44d69ddb",
+    "semantic_hash": "5ef855e95f71c1132b475d5a44d69ddb"
+  },
+  "src/Client/Application/Workflows/ConnectResult.cs": {
+    "mtime": 1776373441.0399249,
+    "ast_hash": "709d4ac4c477b80481fc7739683b0922",
+    "semantic_hash": "709d4ac4c477b80481fc7739683b0922"
+  },
+  "src/Client/Application/Workflows/ConnectStatus.cs": {
+    "mtime": 1776373441.0399249,
+    "ast_hash": "ef3a3808a511a5962862553e8519b3df",
+    "semantic_hash": "ef3a3808a511a5962862553e8519b3df"
+  },
+  "src/Client/Application/Workflows/DialResult.cs": {
+    "mtime": 1776373441.0399249,
+    "ast_hash": "12960abd93bc593d6b87443a3ffccc54",
+    "semantic_hash": "12960abd93bc593d6b87443a3ffccc54"
+  },
+  "src/Client/Application/Workflows/DialStatus.cs": {
+    "mtime": 1776373441.0408463,
+    "ast_hash": "693d28eceea4f43b01fcfb4475aabc61",
+    "semantic_hash": "693d28eceea4f43b01fcfb4475aabc61"
+  },
+  "src/Client/Application/Workflows/DialWaitOptions.cs": {
+    "mtime": 1776373441.0408463,
+    "ast_hash": "f37ed0c15533a599f5740f47d38bec83",
+    "semantic_hash": "f37ed0c15533a599f5740f47d38bec83"
+  },
+  "src/Client/CalloraVoipSdk.Client.csproj": {
+    "mtime": 1783415311.915073,
+    "ast_hash": "d1f92421f582586b85f033b3ae001094",
+    "semantic_hash": "d1f92421f582586b85f033b3ae001094"
+  },
+  "src/Client/Domain/Configuration/SdkConfiguration.cs": {
+    "mtime": 1783579405.4013622,
+    "ast_hash": "98042ed76cddfd8e7737f30884d55b8c",
+    "semantic_hash": ""
+  },
+  "src/Client/Domain/Configuration/SdkOptions.cs": {
+    "mtime": 1783509868.5865114,
+    "ast_hash": "31dc43ded1f906b67167462b20859b36",
+    "semantic_hash": "31dc43ded1f906b67167462b20859b36"
+  },
+  "src/Client/Infrastructure/DependencyInjection/SdkOptionsValidator.cs": {
+    "mtime": 1776373441.0408463,
+    "ast_hash": "845368e1eca9da4a92bb8bc1fc91036f",
+    "semantic_hash": "845368e1eca9da4a92bb8bc1fc91036f"
+  },
+  "src/Client/Infrastructure/DependencyInjection/ServiceCollectionExtensions.cs": {
+    "mtime": 1783509868.5865114,
+    "ast_hash": "944923058c12a9790a86accfbbea6e22",
+    "semantic_hash": "944923058c12a9790a86accfbbea6e22"
+  },
+  "src/Client/Infrastructure/DependencyInjection/VoipSdkBuilder.cs": {
+    "mtime": 1776373441.0408463,
+    "ast_hash": "7b288ff87f6db851fb2fa0fda0ff4cf4",
+    "semantic_hash": "7b288ff87f6db851fb2fa0fda0ff4cf4"
+  },
+  "src/Client/Infrastructure/DependencyInjection/VoipSdkHostedService.cs": {
+    "mtime": 1776373441.0408463,
+    "ast_hash": "bdafa0c4aeb41bb0ef84452bdd635df8",
+    "semantic_hash": "bdafa0c4aeb41bb0ef84452bdd635df8"
+  },
+  "src/Client/Infrastructure/Modules/ModuleAdapters.cs": {
+    "mtime": 1783420176.689392,
+    "ast_hash": "9917127838b078a3f7c8acef447debae",
+    "semantic_hash": "9917127838b078a3f7c8acef447debae"
+  },
+  "src/Core/Application/Calls/CallManager.cs": {
+    "mtime": 1776373441.0408463,
+    "ast_hash": "901ad164cb02175e9ebaf92cd4f74bd2",
+    "semantic_hash": "901ad164cb02175e9ebaf92cd4f74bd2"
+  },
+  "src/Core/Application/Calls/DialOptions.cs": {
+    "mtime": 1776373441.0408463,
+    "ast_hash": "245ce639cbee5aec94a8208c8c218744",
+    "semantic_hash": "245ce639cbee5aec94a8208c8c218744"
+  },
+  "src/Core/Application/Calls/SrtpPolicyEvaluator.cs": {
+    "mtime": 1776373441.0408463,
+    "ast_hash": "f481d2f56cebab147dc56c95697847bb",
+    "semantic_hash": "f481d2f56cebab147dc56c95697847bb"
+  },
+  "src/Core/Application/Convenience/DefaultAudioCallAttachment.cs": {
+    "mtime": 1776373441.0408463,
+    "ast_hash": "e5565aa7cc18d5ffa1592ca3a9fe61e0",
+    "semantic_hash": "e5565aa7cc18d5ffa1592ca3a9fe61e0"
+  },
+  "src/Core/Application/Convenience/SdkConvenienceOrchestrator.cs": {
+    "mtime": 1776373441.0408463,
+    "ast_hash": "cb79c002c75ce7b018df615226036e83",
+    "semantic_hash": "cb79c002c75ce7b018df615226036e83"
+  },
+  "src/Core/Application/Lines/PhoneLineManager.cs": {
+    "mtime": 1776373441.0408463,
+    "ast_hash": "ab095939ad34b84345b529996250ea09",
+    "semantic_hash": "ab095939ad34b84345b529996250ea09"
+  },
+  "src/Core/Application/Media/ActiveMediaEntry.cs": {
+    "mtime": 1776373441.0408463,
+    "ast_hash": "f76241d301881681ffc18bdee40c1dd5",
+    "semantic_hash": "f76241d301881681ffc18bdee40c1dd5"
+  },
+  "src/Core/Application/Media/AudioFileFormat.cs": {
+    "mtime": 1776373441.0408463,
+    "ast_hash": "0d4b33b53f5edf28853cadff647559c6",
+    "semantic_hash": "0d4b33b53f5edf28853cadff647559c6"
+  },
+  "src/Core/Application/Media/CallIceAgent.cs": {
+    "mtime": 1783525171.7289166,
+    "ast_hash": "0569c110e941d7bf72fced99b5ad88bd",
+    "semantic_hash": "0569c110e941d7bf72fced99b5ad88bd"
+  },
+  "src/Core/Application/Media/CallIceLocalDescription.cs": {
+    "mtime": 1776373441.0408463,
+    "ast_hash": "23adcb6947a0936ddcf0892a37c37c56",
+    "semantic_hash": "23adcb6947a0936ddcf0892a37c37c56"
+  },
+  "src/Core/Application/Media/CallIceNegotiationState.cs": {
+    "mtime": 1776373441.0408463,
+    "ast_hash": "0a0fd62e0ec559d77e151d70711030c7",
+    "semantic_hash": "0a0fd62e0ec559d77e151d70711030c7"
+  },
+  "src/Core/Application/Media/CallIceSelectionResult.cs": {
+    "mtime": 1776373441.0408463,
+    "ast_hash": "9e6472db2a045f31ea95adcb11a71627",
+    "semantic_hash": "9e6472db2a045f31ea95adcb11a71627"
+  },
+  "src/Core/Application/Media/CallMediaOrchestrator.cs": {
+    "mtime": 1783539143.6064544,
+    "ast_hash": "8aa4d520b23030b391777ba0523cb69c",
+    "semantic_hash": "8aa4d520b23030b391777ba0523cb69c"
+  },
+  "src/Core/Application/Media/CallMediaRtpSnapshot.cs": {
+    "mtime": 1776373441.0408463,
+    "ast_hash": "e54fb87ad7e6d5e1429d5d00cbd484a0",
+    "semantic_hash": "e54fb87ad7e6d5e1429d5d00cbd484a0"
+  },
+  "src/Core/Application/Media/CallMediaRuntimeMetrics.cs": {
+    "mtime": 1776373441.0408463,
+    "ast_hash": "b5cc3145f02a6db67be7edde553b4110",
+    "semantic_hash": "b5cc3145f02a6db67be7edde553b4110"
+  },
+  "src/Core/Application/Media/CallRtcpQualityMonitor.cs": {
+    "mtime": 1783515497.4877734,
+    "ast_hash": "b8a2ac233ecf50fc8e84a67eb267b8ca",
+    "semantic_hash": "b8a2ac233ecf50fc8e84a67eb267b8ca"
+  },
+  "src/Core/Application/Media/CompositeDisposable.cs": {
+    "mtime": 1783415311.915631,
+    "ast_hash": "cdddfd564e785b93f4370bf50f4be7ea",
+    "semantic_hash": "cdddfd564e785b93f4370bf50f4be7ea"
+  },
+  "src/Core/Application/Media/EmptyAudioFileCodecRegistry.cs": {
+    "mtime": 1776373441.0418463,
+    "ast_hash": "f85bbd2a13237f8f67893b90223bf8b8",
+    "semantic_hash": "f85bbd2a13237f8f67893b90223bf8b8"
+  },
+  "src/Core/Application/Media/ICallIceAgent.cs": {
+    "mtime": 1783525171.7289166,
+    "ast_hash": "6c6b9684450ddcacc27f82bfc688f684",
+    "semantic_hash": "6c6b9684450ddcacc27f82bfc688f684"
+  },
+  "src/Core/Application/Media/ICallMediaSession.cs": {
+    "mtime": 1776373441.0418463,
+    "ast_hash": "bb24b03f08dc70962b0438f7fd195ce3",
+    "semantic_hash": "bb24b03f08dc70962b0438f7fd195ce3"
+  },
+  "src/Core/Application/Media/ICallMediaSessionFactory.cs": {
+    "mtime": 1776373441.0418463,
+    "ast_hash": "9229a2bcba87512b0d7856aff3a58d16",
+    "semantic_hash": "9229a2bcba87512b0d7856aff3a58d16"
+  },
+  "src/Core/Application/Media/IMediaReceiver.cs": {
+    "mtime": 1783427634.9766173,
+    "ast_hash": "60eed4810a62555c20425b847ee0e315",
+    "semantic_hash": "60eed4810a62555c20425b847ee0e315"
+  },
+  "src/Core/Application/Media/IMediaSender.cs": {
+    "mtime": 1783427634.9766173,
+    "ast_hash": "2d8831b49373a9c1458185898ec1149a",
+    "semantic_hash": "2d8831b49373a9c1458185898ec1149a"
+  },
+  "src/Core/Application/Media/IMixedMediaBus.cs": {
+    "mtime": 1776373441.0418463,
+    "ast_hash": "b979484c2d8b7325d2dc78a0dbf00a2c",
+    "semantic_hash": "b979484c2d8b7325d2dc78a0dbf00a2c"
+  },
+  "src/Core/Application/Media/IPlaybackSession.cs": {
+    "mtime": 1776373441.0418463,
+    "ast_hash": "107e08121c9c3b589fe08b730f21ce17",
+    "semantic_hash": "107e08121c9c3b589fe08b730f21ce17"
+  },
+  "src/Core/Application/Media/IRecordingEncryptionProvider.cs": {
+    "mtime": 1783415311.915631,
+    "ast_hash": "c24c2932159a2a8f4ce5d447cf38d1e1",
+    "semantic_hash": "c24c2932159a2a8f4ce5d447cf38d1e1"
+  },
+  "src/Core/Application/Media/IRecordingSession.cs": {
+    "mtime": 1776373441.0418463,
+    "ast_hash": "bf7520a5877ce1dd78bf6508cec1c4d1",
+    "semantic_hash": "bf7520a5877ce1dd78bf6508cec1c4d1"
+  },
+  "src/Core/Application/Media/MediaConnection.cs": {
+    "mtime": 1783415311.915631,
+    "ast_hash": "0c17616a2cd97301a1eeb509ff80c383",
+    "semantic_hash": "0c17616a2cd97301a1eeb509ff80c383"
+  },
+  "src/Core/Application/Media/MediaConnector.cs": {
+    "mtime": 1776373441.0418463,
+    "ast_hash": "89b0ac00b62a0e986522bfc693e5d570",
+    "semantic_hash": "89b0ac00b62a0e986522bfc693e5d570"
+  },
+  "src/Core/Application/Media/MediaFrame.cs": {
+    "mtime": 1783427634.9766173,
+    "ast_hash": "4f904f4279594896c5ecef5383bf0ada",
+    "semantic_hash": "4f904f4279594896c5ecef5383bf0ada"
+  },
+  "src/Core/Application/Media/MediaFrameReceivedEventArgs.cs": {
+    "mtime": 1783427634.9766173,
+    "ast_hash": "40a258275d001bbc3920687929dc0b10",
+    "semantic_hash": "40a258275d001bbc3920687929dc0b10"
+  },
+  "src/Core/Application/Media/MediaManager.cs": {
+    "mtime": 1776373441.0418463,
+    "ast_hash": "a8a1ce330d428978ec1357c587890c98",
+    "semantic_hash": "a8a1ce330d428978ec1357c587890c98"
+  },
+  "src/Core/Application/Media/MediaReceiver.cs": {
+    "mtime": 1776373441.0418463,
+    "ast_hash": "f9982e09f6e2bb465858ae2afa339837",
+    "semantic_hash": "f9982e09f6e2bb465858ae2afa339837"
+  },
+  "src/Core/Application/Media/MediaSender.cs": {
+    "mtime": 1776373441.0418463,
+    "ast_hash": "d433bbd0afa0e6ddb2094de3c4616154",
+    "semantic_hash": "d433bbd0afa0e6ddb2094de3c4616154"
+  },
+  "src/Core/Application/Media/MediaSessionErrorEventArgs.cs": {
+    "mtime": 1776373441.0418463,
+    "ast_hash": "d5c29795822dbe0e5008eb3dbd2e3306",
+    "semantic_hash": "d5c29795822dbe0e5008eb3dbd2e3306"
+  },
+  "src/Core/Application/Media/MediaSessionState.cs": {
+    "mtime": 1776373441.0418463,
+    "ast_hash": "4d073a36cc2d6b5d99fbd7a6441be89b",
+    "semantic_hash": "4d073a36cc2d6b5d99fbd7a6441be89b"
+  },
+  "src/Core/Application/Media/MediaSessionStateChangedEventArgs.cs": {
+    "mtime": 1776373441.0418463,
+    "ast_hash": "cecf3aa45d82e43f23bfa2b15d9a89f1",
+    "semantic_hash": "cecf3aa45d82e43f23bfa2b15d9a89f1"
+  },
+  "src/Core/Application/Media/MediaSupervisionOptions.cs": {
+    "mtime": 1783539143.6064544,
+    "ast_hash": "904c14efee95a57a5ddc9ca76981ffc6",
+    "semantic_hash": "904c14efee95a57a5ddc9ca76981ffc6"
+  },
+  "src/Core/Application/Media/OrderedCandidatePair.cs": {
+    "mtime": 1776373441.0418463,
+    "ast_hash": "9a8565f93b62e1c4356e2c6325aa9470",
+    "semantic_hash": "9a8565f93b62e1c4356e2c6325aa9470"
+  },
+  "src/Core/Application/Media/PlaybackOptions.cs": {
+    "mtime": 1776373441.0418463,
+    "ast_hash": "0acce98d5e1594f1fd34f24714f48577",
+    "semantic_hash": "0acce98d5e1594f1fd34f24714f48577"
+  },
+  "src/Core/Application/Media/PlaybackRequest.cs": {
+    "mtime": 1776373441.0418463,
+    "ast_hash": "67b9b54e7bbd5f479ac8f249c63af412",
+    "semantic_hash": "67b9b54e7bbd5f479ac8f249c63af412"
+  },
+  "src/Core/Application/Media/RecordingOptions.cs": {
+    "mtime": 1776373441.0418463,
+    "ast_hash": "e20f3ce53568abcb952ebabbd1526912",
+    "semantic_hash": "e20f3ce53568abcb952ebabbd1526912"
+  },
+  "src/Core/Application/Media/Sessions/AudioPayloadTranscoder.cs": {
+    "mtime": 1783578577.6161711,
+    "ast_hash": "46fcf8837c44e8d79fb2b14e9abcc581",
+    "semantic_hash": "46fcf8837c44e8d79fb2b14e9abcc581"
+  },
+  "src/Core/Application/Media/Sessions/AudioPayloadTranscodingPlan.cs": {
+    "mtime": 1776373441.0418463,
+    "ast_hash": "4c0fd10a35699daa4c9349c7d287b0da",
+    "semantic_hash": "4c0fd10a35699daa4c9349c7d287b0da"
+  },
+  "src/Core/Application/Media/Sessions/CallPlaybackFrameSink.cs": {
+    "mtime": 1776373441.0428462,
+    "ast_hash": "defe8bf307c67d2f0f69058f04b40743",
+    "semantic_hash": "defe8bf307c67d2f0f69058f04b40743"
+  },
+  "src/Core/Application/Media/Sessions/CallRecordingFrameSource.cs": {
+    "mtime": 1776373441.0428462,
+    "ast_hash": "fb0b0398c002866293957dc4b2382f47",
+    "semantic_hash": "fb0b0398c002866293957dc4b2382f47"
+  },
+  "src/Core/Application/Media/Sessions/ConferencePlaybackFrameSink.cs": {
+    "mtime": 1776373441.0428462,
+    "ast_hash": "32072a3b9862c374e5707eb691789bee",
+    "semantic_hash": "32072a3b9862c374e5707eb691789bee"
+  },
+  "src/Core/Application/Media/Sessions/ConferenceRecordingFrameSource.cs": {
+    "mtime": 1776373441.0428462,
+    "ast_hash": "5b34feb3e352e943b75c93119e7dac3f",
+    "semantic_hash": "5b34feb3e352e943b75c93119e7dac3f"
+  },
+  "src/Core/Application/Media/Sessions/IPlaybackFrameSink.cs": {
+    "mtime": 1776373441.0428462,
+    "ast_hash": "adf83eabb177f0a8eb20b978612af398",
+    "semantic_hash": "adf83eabb177f0a8eb20b978612af398"
+  },
+  "src/Core/Application/Media/Sessions/IRecordingFrameSource.cs": {
+    "mtime": 1776373441.0428462,
+    "ast_hash": "7d96fd4ba98eb9d1e1453354a47c0e51",
+    "semantic_hash": "7d96fd4ba98eb9d1e1453354a47c0e51"
+  },
+  "src/Core/Application/Media/Sessions/OpusPayloadCodec.cs": {
+    "mtime": 1783579164.95021,
+    "ast_hash": "8f578f06cf19cb1681a0f17c19218550",
+    "semantic_hash": ""
+  },
+  "src/Core/Application/Media/Sessions/PayloadCodecKind.cs": {
+    "mtime": 1783578577.6161711,
+    "ast_hash": "247489f5b6f63ecf500cfd8227bb3a61",
+    "semantic_hash": "247489f5b6f63ecf500cfd8227bb3a61"
+  },
+  "src/Core/Application/Media/Sessions/PcmG711Codec.cs": {
+    "mtime": 1776373441.0428462,
+    "ast_hash": "1767f33cfdc0f8a3f753f6b5939cab14",
+    "semantic_hash": "1767f33cfdc0f8a3f753f6b5939cab14"
+  },
+  "src/Core/Application/Media/Sessions/PcmG722Codec.cs": {
+    "mtime": 1776373441.0428462,
+    "ast_hash": "9060eddf6e42dab224f74784830c3331",
+    "semantic_hash": "9060eddf6e42dab224f74784830c3331"
+  },
+  "src/Core/Application/Media/Sessions/PlaybackSession.cs": {
+    "mtime": 1776373441.0428462,
+    "ast_hash": "4716ff462a3cef2cadf36b306dae653e",
+    "semantic_hash": "4716ff462a3cef2cadf36b306dae653e"
+  },
+  "src/Core/Application/Media/Sessions/RecordingFileNamingStrategy.cs": {
+    "mtime": 1776373441.0428462,
+    "ast_hash": "1ededf42ab95f1729460031738f00304",
+    "semantic_hash": "1ededf42ab95f1729460031738f00304"
+  },
+  "src/Core/Application/Media/Sessions/RecordingSession.cs": {
+    "mtime": 1776373441.0428462,
+    "ast_hash": "9ae8adc53983c9837af7abf77465fce3",
+    "semantic_hash": "9ae8adc53983c9837af7abf77465fce3"
+  },
+  "src/Core/Application/Ports/Audio/AudioConnectionParameters.cs": {
+    "mtime": 1776373441.0428462,
+    "ast_hash": "456ba911f833e9e37abfafb74b6b7265",
+    "semantic_hash": "456ba911f833e9e37abfafb74b6b7265"
+  },
+  "src/Core/Application/Ports/Audio/AudioDeviceDescriptor.cs": {
+    "mtime": 1776373441.0428462,
+    "ast_hash": "bf75abbd9d139c46ec188f59165dc76d",
+    "semantic_hash": "bf75abbd9d139c46ec188f59165dc76d"
+  },
+  "src/Core/Application/Ports/Audio/AudioDeviceFormat.cs": {
+    "mtime": 1776373441.0428462,
+    "ast_hash": "f11729cfa7b35630a5408198e8f1352c",
+    "semantic_hash": "f11729cfa7b35630a5408198e8f1352c"
+  },
+  "src/Core/Application/Ports/Audio/AudioDeviceRuntimeSnapshot.cs": {
+    "mtime": 1776373441.0428462,
+    "ast_hash": "30c6a604a9af9a2d225d0681f274657e",
+    "semantic_hash": "30c6a604a9af9a2d225d0681f274657e"
+  },
+  "src/Core/Application/Ports/Audio/IAudioDevice.cs": {
+    "mtime": 1776373441.0428462,
+    "ast_hash": "81e8436e6f8ed060535bda4ad6d3d1bd",
+    "semantic_hash": "81e8436e6f8ed060535bda4ad6d3d1bd"
+  },
+  "src/Core/Application/Ports/Audio/IAudioDeviceRuntimeControl.cs": {
+    "mtime": 1776373441.0428462,
+    "ast_hash": "a0ae388bf6d2ce3306962763afcffde0",
+    "semantic_hash": "a0ae388bf6d2ce3306962763afcffde0"
+  },
+  "src/Core/Application/Ports/Connectivity/IIceStunProbe.cs": {
+    "mtime": 1783525171.7289166,
+    "ast_hash": "f333b5de8b8e2645af261518ffb2c583",
+    "semantic_hash": "f333b5de8b8e2645af261518ffb2c583"
+  },
+  "src/Core/Application/Ports/Connectivity/IIceTelemetrySink.cs": {
+    "mtime": 1776373441.0428462,
+    "ast_hash": "52f0ca3c8dabe703518a6b5a0e42a394",
+    "semantic_hash": "52f0ca3c8dabe703518a6b5a0e42a394"
+  },
+  "src/Core/Application/Ports/Connectivity/IIceTurnRelayAllocator.cs": {
+    "mtime": 1776373441.0428462,
+    "ast_hash": "bfd4ef8acc7fa594058c70f8d6b3ec76",
+    "semantic_hash": "bfd4ef8acc7fa594058c70f8d6b3ec76"
+  },
+  "src/Core/Application/Ports/Connectivity/IceRelayAllocation.cs": {
+    "mtime": 1776373441.0428462,
+    "ast_hash": "e8068cefe387249b15f66938405206b9",
+    "semantic_hash": "e8068cefe387249b15f66938405206b9"
+  },
+  "src/Core/Application/Ports/Connectivity/IceTelemetryEvent.cs": {
+    "mtime": 1776373441.0428462,
+    "ast_hash": "bd3aafd520d36afb6bc75706c535e3f1",
+    "semantic_hash": "bd3aafd520d36afb6bc75706c535e3f1"
+  },
+  "src/Core/Application/Ports/Media/AudioFileCodecContext.cs": {
+    "mtime": 1776373441.0428462,
+    "ast_hash": "be7aaef97c889a0a4a36a788beb11688",
+    "semantic_hash": "be7aaef97c889a0a4a36a788beb11688"
+  },
+  "src/Core/Application/Ports/Media/AudioFileFrame.cs": {
+    "mtime": 1776373441.0428462,
+    "ast_hash": "e480643ee22ca082f714634ab91b851c",
+    "semantic_hash": "e480643ee22ca082f714634ab91b851c"
+  },
+  "src/Core/Application/Ports/Media/IAudioFileCodec.cs": {
+    "mtime": 1776373441.0428462,
+    "ast_hash": "3ebd3c796a0f5137c86031be53b792e2",
+    "semantic_hash": "3ebd3c796a0f5137c86031be53b792e2"
+  },
+  "src/Core/Application/Ports/Media/IAudioFileCodecRegistry.cs": {
+    "mtime": 1776373441.0428462,
+    "ast_hash": "f81198a52d4760045ff27e5724b7ec60",
+    "semantic_hash": "f81198a52d4760045ff27e5724b7ec60"
+  },
+  "src/Core/Application/Ports/Media/IAudioFileReader.cs": {
+    "mtime": 1776373441.0428462,
+    "ast_hash": "590c3a08f45a2c0144a68f312b714baf",
+    "semantic_hash": "590c3a08f45a2c0144a68f312b714baf"
+  },
+  "src/Core/Application/Ports/Media/IAudioFileWriter.cs": {
+    "mtime": 1776373441.0428462,
+    "ast_hash": "10d89e23f9abbd087f12858182159e89",
+    "semantic_hash": "10d89e23f9abbd087f12858182159e89"
+  },
+  "src/Core/Application/Ports/Sdp/ISdpNegotiator.cs": {
+    "mtime": 1783509868.5865114,
+    "ast_hash": "41d19a09edc64b6d89af31010a7afe80",
+    "semantic_hash": "41d19a09edc64b6d89af31010a7afe80"
+  },
+  "src/Core/Application/Ports/Sdp/SdpMediaNegotiationOptions.cs": {
+    "mtime": 1783509868.5865114,
+    "ast_hash": "135f244cc85b8ca62b9488da37d75bc2",
+    "semantic_hash": "135f244cc85b8ca62b9488da37d75bc2"
+  },
+  "src/Core/CalloraVoipSdk.Core.csproj": {
+    "mtime": 1783578577.6161711,
+    "ast_hash": "556baf60e429e48960ae7ff22ec53abe",
+    "semantic_hash": "556baf60e429e48960ae7ff22ec53abe"
+  },
+  "src/Core/Domain/Calls/Call.cs": {
+    "mtime": 1776373441.0438464,
+    "ast_hash": "68a8b5bfec8820420314a1fa2dde6067",
+    "semantic_hash": "68a8b5bfec8820420314a1fa2dde6067"
+  },
+  "src/Core/Domain/Calls/CallActionResult.cs": {
+    "mtime": 1776373441.0438464,
+    "ast_hash": "7c7b0d4fb9b9d56258a87d9e86673ad6",
+    "semantic_hash": "7c7b0d4fb9b9d56258a87d9e86673ad6"
+  },
+  "src/Core/Domain/Calls/CallActionStatus.cs": {
+    "mtime": 1776373441.0438464,
+    "ast_hash": "6883fb1aa0fd40e9beb1d38aa75ac53d",
+    "semantic_hash": "6883fb1aa0fd40e9beb1d38aa75ac53d"
+  },
+  "src/Core/Domain/Calls/CallAudioFrame.cs": {
+    "mtime": 1776373441.0438464,
+    "ast_hash": "81776aa6bb5ac8b86ce4e99552f96e86",
+    "semantic_hash": "81776aa6bb5ac8b86ce4e99552f96e86"
+  },
+  "src/Core/Domain/Calls/CallChannelCallbacks.cs": {
+    "mtime": 1776373441.0438464,
+    "ast_hash": "febf077a3fa4a911a8c6ccbc55e3c9d7",
+    "semantic_hash": "febf077a3fa4a911a8c6ccbc55e3c9d7"
+  },
+  "src/Core/Domain/Calls/CallDirection.cs": {
+    "mtime": 1776373441.0438464,
+    "ast_hash": "c11807fef99c3144b50e5eee2f3a4244",
+    "semantic_hash": "c11807fef99c3144b50e5eee2f3a4244"
+  },
+  "src/Core/Domain/Calls/CallIceCandidate.cs": {
+    "mtime": 1776373441.0438464,
+    "ast_hash": "1bc22d3e20e8c5b609256a353558ffa5",
+    "semantic_hash": "1bc22d3e20e8c5b609256a353558ffa5"
+  },
+  "src/Core/Domain/Calls/CallId.cs": {
+    "mtime": 1776373441.0438464,
+    "ast_hash": "bbcbb8639f13d4ac59cb9e05140e6686",
+    "semantic_hash": "bbcbb8639f13d4ac59cb9e05140e6686"
+  },
+  "src/Core/Domain/Calls/CallMediaParameters.cs": {
+    "mtime": 1783542614.0244658,
+    "ast_hash": "f9188346100bf63d6e5fc268ef1bbcaf",
+    "semantic_hash": "f9188346100bf63d6e5fc268ef1bbcaf"
+  },
+  "src/Core/Domain/Calls/CallQualitySnapshot.cs": {
+    "mtime": 1776373441.0438464,
+    "ast_hash": "e4ee26b652a70397737bda9027e1d975",
+    "semantic_hash": "e4ee26b652a70397737bda9027e1d975"
+  },
+  "src/Core/Domain/Calls/CallState.cs": {
+    "mtime": 1776373441.0438464,
+    "ast_hash": "d642f297ccbe5d5669151944620cd5af",
+    "semantic_hash": "d642f297ccbe5d5669151944620cd5af"
+  },
+  "src/Core/Domain/Calls/CallStateRules.cs": {
+    "mtime": 1776373441.0438464,
+    "ast_hash": "91b152387d4cc373959368c4aad35656",
+    "semantic_hash": "91b152387d4cc373959368c4aad35656"
+  },
+  "src/Core/Domain/Calls/DtmfTone.cs": {
+    "mtime": 1776373441.0438464,
+    "ast_hash": "06e55d063ff72b6ed0e4c10f1d1770e8",
+    "semantic_hash": "06e55d063ff72b6ed0e4c10f1d1770e8"
+  },
+  "src/Core/Domain/Calls/ICall.cs": {
+    "mtime": 1776373441.0438464,
+    "ast_hash": "8e90b6a76ed0d8d08c1c619ab5bab6e1",
+    "semantic_hash": "8e90b6a76ed0d8d08c1c619ab5bab6e1"
+  },
+  "src/Core/Domain/Calls/ICallChannel.cs": {
+    "mtime": 1776373441.0438464,
+    "ast_hash": "1df1928da93389325fdf0650d50e7e2f",
+    "semantic_hash": "1df1928da93389325fdf0650d50e7e2f"
+  },
+  "src/Core/Domain/Events/CallActivityEventArgs.cs": {
+    "mtime": 1776373441.0438464,
+    "ast_hash": "0addd1f97259d69579a1bbc1fe334cc5",
+    "semantic_hash": "0addd1f97259d69579a1bbc1fe334cc5"
+  },
+  "src/Core/Domain/Events/CallErrorEventArgs.cs": {
+    "mtime": 1776373441.0438464,
+    "ast_hash": "202c32b611b4d304433f843f536d5557",
+    "semantic_hash": "202c32b611b4d304433f843f536d5557"
+  },
+  "src/Core/Domain/Events/CallQualitySnapshotChangedEventArgs.cs": {
+    "mtime": 1776373441.0438464,
+    "ast_hash": "869a5e0bd90ba3ce591069881745e35f",
+    "semantic_hash": "869a5e0bd90ba3ce591069881745e35f"
+  },
+  "src/Core/Domain/Events/CallStateChangedEventArgs.cs": {
+    "mtime": 1776373441.0438464,
+    "ast_hash": "430e68b6d03334ad4801114dbd2904b6",
+    "semantic_hash": "430e68b6d03334ad4801114dbd2904b6"
+  },
+  "src/Core/Domain/Events/DtmfReceivedEventArgs.cs": {
+    "mtime": 1776373441.0438464,
+    "ast_hash": "184f0fdc6a95610e0f99c09f1c36246a",
+    "semantic_hash": "184f0fdc6a95610e0f99c09f1c36246a"
+  },
+  "src/Core/Domain/Events/HoldStateChangedEventArgs.cs": {
+    "mtime": 1776373441.0438464,
+    "ast_hash": "ac554fe293f18e77435cd3717c3f9fce",
+    "semantic_hash": "ac554fe293f18e77435cd3717c3f9fce"
+  },
+  "src/Core/Domain/Events/IncomingCallEventArgs.cs": {
+    "mtime": 1776373441.0438464,
+    "ast_hash": "a406dfe860b647919d0ff677518f360b",
+    "semantic_hash": "a406dfe860b647919d0ff677518f360b"
+  },
+  "src/Core/Domain/Events/LineReconnectFailedEventArgs.cs": {
+    "mtime": 1776373441.0438464,
+    "ast_hash": "27582103f9791edc7f564dcad9bbdbbd",
+    "semantic_hash": "27582103f9791edc7f564dcad9bbdbbd"
+  },
+  "src/Core/Domain/Events/LineReconnectingEventArgs.cs": {
+    "mtime": 1776373441.0438464,
+    "ast_hash": "dca7744af1335fd7afc3bfac4471d8ee",
+    "semantic_hash": "dca7744af1335fd7afc3bfac4471d8ee"
+  },
+  "src/Core/Domain/Events/LineStateChangedEventArgs.cs": {
+    "mtime": 1776373441.0438464,
+    "ast_hash": "4c35818b5b2071d5eb49174d43ac1f5a",
+    "semantic_hash": "4c35818b5b2071d5eb49174d43ac1f5a"
+  },
+  "src/Core/Domain/Events/TransferRequestedEventArgs.cs": {
+    "mtime": 1776373441.0438464,
+    "ast_hash": "bdec6e91a0092c7b63a5421b82f12c04",
+    "semantic_hash": "bdec6e91a0092c7b63a5421b82f12c04"
+  },
+  "src/Core/Domain/Lines/ILineChannel.cs": {
+    "mtime": 1776373441.0448463,
+    "ast_hash": "de9c0d74dbed1b545d32d26e49874396",
+    "semantic_hash": "de9c0d74dbed1b545d32d26e49874396"
+  },
+  "src/Core/Domain/Lines/IPhoneLine.cs": {
+    "mtime": 1776373441.0448463,
+    "ast_hash": "b38b2c639f0eef8a9a26ff0c103b74e6",
+    "semantic_hash": "b38b2c639f0eef8a9a26ff0c103b74e6"
+  },
+  "src/Core/Domain/Lines/LineId.cs": {
+    "mtime": 1776373441.0448463,
+    "ast_hash": "77cee7d4e2693ccb5317e08bb35710b7",
+    "semantic_hash": "77cee7d4e2693ccb5317e08bb35710b7"
+  },
+  "src/Core/Domain/Lines/LineState.cs": {
+    "mtime": 1776373441.0448463,
+    "ast_hash": "3d57dc9e1e68dd8f5958cb7f29db23ac",
+    "semantic_hash": "3d57dc9e1e68dd8f5958cb7f29db23ac"
+  },
+  "src/Core/Domain/Lines/PhoneLine.cs": {
+    "mtime": 1776373441.0448463,
+    "ast_hash": "0b933e4360f36777ec8d3e5c287f93bd",
+    "semantic_hash": "0b933e4360f36777ec8d3e5c287f93bd"
+  },
+  "src/Core/Domain/Lines/ReregisterFailReason.cs": {
+    "mtime": 1776373441.0448463,
+    "ast_hash": "e19de5d3e28a1d0572fb92809a7f832a",
+    "semantic_hash": "e19de5d3e28a1d0572fb92809a7f832a"
+  },
+  "src/Core/Domain/Lines/ReregisterOptions.cs": {
+    "mtime": 1783539143.6064544,
+    "ast_hash": "4db15019a6afe0f6138cb1726cd0b27b",
+    "semantic_hash": "4db15019a6afe0f6138cb1726cd0b27b"
+  },
+  "src/Core/Domain/Lines/SipAccount.cs": {
+    "mtime": 1783539143.6074543,
+    "ast_hash": "4708591e0c7a85871fda16488ce9bd15",
+    "semantic_hash": "4708591e0c7a85871fda16488ce9bd15"
+  },
+  "src/Core/Domain/Lines/SipAddress.cs": {
+    "mtime": 1776373441.0448463,
+    "ast_hash": "f7a61464e65e8f1ea2600aed4c0018cd",
+    "semantic_hash": "f7a61464e65e8f1ea2600aed4c0018cd"
+  },
+  "src/Core/Domain/Lines/SipCredentials.cs": {
+    "mtime": 1776373441.0448463,
+    "ast_hash": "a3ad4ae633b4cdeef27861d42b9cfd7a",
+    "semantic_hash": "a3ad4ae633b4cdeef27861d42b9cfd7a"
+  },
+  "src/Core/Domain/Lines/SipTransport.cs": {
+    "mtime": 1776373441.0448463,
+    "ast_hash": "0bb2cc2473a9d5a375441ca4acfc033b",
+    "semantic_hash": "0bb2cc2473a9d5a375441ca4acfc033b"
+  },
+  "src/Core/Domain/Security/SrtpDecisionReasonCodes.cs": {
+    "mtime": 1776373441.0448463,
+    "ast_hash": "0e4583b2eaa12d5c6655273835dcf361",
+    "semantic_hash": "0e4583b2eaa12d5c6655273835dcf361"
+  },
+  "src/Core/Domain/Security/SrtpPolicy.cs": {
+    "mtime": 1776373441.0448463,
+    "ast_hash": "a6c3f966f08ab018a27a87115d07194b",
+    "semantic_hash": "a6c3f966f08ab018a27a87115d07194b"
+  },
+  "src/Core/Infrastructure/Audio/PlatformAudioDeviceFactory.cs": {
+    "mtime": 1776373441.0448463,
+    "ast_hash": "92b38b613504fd4cd99df62f33008d45",
+    "semantic_hash": "92b38b613504fd4cd99df62f33008d45"
+  },
+  "src/Core/Infrastructure/Audio/SilenceAudioDevice.cs": {
+    "mtime": 1776373441.0448463,
+    "ast_hash": "fca68816042c88fc15c70ae43c63966b",
+    "semantic_hash": "fca68816042c88fc15c70ae43c63966b"
+  },
+  "src/Core/Infrastructure/Common/Collections/BoundedRingBuffer.cs": {
+    "mtime": 1776373441.0448463,
+    "ast_hash": "d6180b987424d240891577efc1700bcf",
+    "semantic_hash": "d6180b987424d240891577efc1700bcf"
+  },
+  "src/Core/Infrastructure/Common/Disposal/AsyncDisposeAction.cs": {
+    "mtime": 1776373441.0448463,
+    "ast_hash": "e426089fe8f68d2c0099f2e599599789",
+    "semantic_hash": "e426089fe8f68d2c0099f2e599599789"
+  },
+  "src/Core/Infrastructure/Common/Disposal/DisposeAction.cs": {
+    "mtime": 1776373441.0448463,
+    "ast_hash": "cae71732c82e77b62ed774ae63947338",
+    "semantic_hash": "cae71732c82e77b62ed774ae63947338"
+  },
+  "src/Core/Infrastructure/Common/Network/LocalEndPointAdvertisementResolver.cs": {
+    "mtime": 1776432960.7250783,
+    "ast_hash": "7da7471eb942e49c66ebb6bda144fed4",
+    "semantic_hash": "7da7471eb942e49c66ebb6bda144fed4"
+  },
+  "src/Core/Infrastructure/Common/Network/LocalEndPointHostResolver.cs": {
+    "mtime": 1776373441.0448463,
+    "ast_hash": "9dca9683e9d4e9d10a2ba14dd4f3786b",
+    "semantic_hash": "9dca9683e9d4e9d10a2ba14dd4f3786b"
+  },
+  "src/Core/Infrastructure/Common/Network/RemoteEndPointResolver.cs": {
+    "mtime": 1776373441.0448463,
+    "ast_hash": "e378f7e5f5b30a6d13b912eafccf8c3a",
+    "semantic_hash": "e378f7e5f5b30a6d13b912eafccf8c3a"
+  },
+  "src/Core/Infrastructure/Common/Protocols/ProtocolCommonUtilities.cs": {
+    "mtime": 1776373441.0448463,
+    "ast_hash": "d83f7e04eb87c29eea9eeb7e187f44c8",
+    "semantic_hash": "d83f7e04eb87c29eea9eeb7e187f44c8"
+  },
+  "src/Core/Infrastructure/Common/Timing/IScheduledActionScheduler.cs": {
+    "mtime": 1776373441.0448463,
+    "ast_hash": "264336fa492c1f1e32d1fff0f7d64a20",
+    "semantic_hash": "264336fa492c1f1e32d1fff0f7d64a20"
+  },
+  "src/Core/Infrastructure/Common/Timing/ScheduledActionEntry.cs": {
+    "mtime": 1776373441.0448463,
+    "ast_hash": "c04e57765d8ff52c0c574eb1da699c09",
+    "semantic_hash": "c04e57765d8ff52c0c574eb1da699c09"
+  },
+  "src/Core/Infrastructure/Common/Timing/ScheduledActionHandle.cs": {
+    "mtime": 1776373441.0448463,
+    "ast_hash": "59f9c242d1a8b35f2080e78e6076f461",
+    "semantic_hash": "59f9c242d1a8b35f2080e78e6076f461"
+  },
+  "src/Core/Infrastructure/Common/Timing/ScheduledActionScheduler.cs": {
+    "mtime": 1776373441.0448463,
+    "ast_hash": "3d3b2310d06a1fd25906eee93ced779d",
+    "semantic_hash": "3d3b2310d06a1fd25906eee93ced779d"
+  },
+  "src/Core/Infrastructure/Media/AesGcmRecordingEncryptionProvider.cs": {
+    "mtime": 1783415311.915631,
+    "ast_hash": "4c2bce6a3a574f8b47dda2fd4bb4bb01",
+    "semantic_hash": "4c2bce6a3a574f8b47dda2fd4bb4bb01"
+  },
+  "src/Core/Infrastructure/Media/AudioFileCodecRegistry.cs": {
+    "mtime": 1776373441.0448463,
+    "ast_hash": "a89d7f07f0366db8291c431eacfaf14d",
+    "semantic_hash": "a89d7f07f0366db8291c431eacfaf14d"
+  },
+  "src/Core/Infrastructure/Media/FfmpegProcessRunner.cs": {
+    "mtime": 1776373441.0458462,
+    "ast_hash": "eaabe47e4e43733bc9d2dccd8a360003",
+    "semantic_hash": "eaabe47e4e43733bc9d2dccd8a360003"
+  },
+  "src/Core/Infrastructure/Media/Mp3AudioFileCodec.cs": {
+    "mtime": 1776373441.0458462,
+    "ast_hash": "9ecf919cb12995bc5081f4e11abbefc1",
+    "semantic_hash": "9ecf919cb12995bc5081f4e11abbefc1"
+  },
+  "src/Core/Infrastructure/Media/Mp3FrameHeader.cs": {
+    "mtime": 1776373441.0458462,
+    "ast_hash": "13630e2aba4d35fad426ee33994066d0",
+    "semantic_hash": "13630e2aba4d35fad426ee33994066d0"
+  },
+  "src/Core/Infrastructure/Media/Mp3FrameParser.cs": {
+    "mtime": 1776373441.0458462,
+    "ast_hash": "a2401f703f19229e698662de9c489da6",
+    "semantic_hash": "a2401f703f19229e698662de9c489da6"
+  },
+  "src/Core/Infrastructure/Media/Mp3PassthroughReader.cs": {
+    "mtime": 1776373441.0458462,
+    "ast_hash": "a59c556883c6da96de02fd75fcf530d4",
+    "semantic_hash": "a59c556883c6da96de02fd75fcf530d4"
+  },
+  "src/Core/Infrastructure/Media/Mp3PassthroughWriter.cs": {
+    "mtime": 1776373441.0458462,
+    "ast_hash": "a9b12fa24daf17084049c3ab7e0d8971",
+    "semantic_hash": "a9b12fa24daf17084049c3ab7e0d8971"
+  },
+  "src/Core/Infrastructure/Media/Mp3TranscodingReader.cs": {
+    "mtime": 1776373441.0458462,
+    "ast_hash": "25cb1508a12b61868397034b977d2e3a",
+    "semantic_hash": "25cb1508a12b61868397034b977d2e3a"
+  },
+  "src/Core/Infrastructure/Media/Mp3TranscodingWriter.cs": {
+    "mtime": 1776373441.0458462,
+    "ast_hash": "235f2ab008eb49ab344fedf4de3a4ddc",
+    "semantic_hash": "235f2ab008eb49ab344fedf4de3a4ddc"
+  },
+  "src/Core/Infrastructure/Media/WavAudioFileCodec.cs": {
+    "mtime": 1776373441.0458462,
+    "ast_hash": "544878fedb732207e6a933b8e5b1bc33",
+    "semantic_hash": "544878fedb732207e6a933b8e5b1bc33"
+  },
+  "src/Core/Infrastructure/Media/WavAudioFileReader.cs": {
+    "mtime": 1776373441.0458462,
+    "ast_hash": "a59c35335a9d441a877fab7210fd4188",
+    "semantic_hash": "a59c35335a9d441a877fab7210fd4188"
+  },
+  "src/Core/Infrastructure/Media/WavAudioFileWriter.cs": {
+    "mtime": 1776373441.0458462,
+    "ast_hash": "83dcfff7d95e6860d38bf6b6f217a12b",
+    "semantic_hash": "83dcfff7d95e6860d38bf6b6f217a12b"
+  },
+  "src/Core/Infrastructure/Rtcp/Packets/RtcpByePacket.cs": {
+    "mtime": 1776373441.0458462,
+    "ast_hash": "538b0ab4f0b10a14c41811406fcb2ba8",
+    "semantic_hash": "538b0ab4f0b10a14c41811406fcb2ba8"
+  },
+  "src/Core/Infrastructure/Rtcp/Packets/RtcpPacket.cs": {
+    "mtime": 1776373441.0458462,
+    "ast_hash": "c94a39e7608d898dcbffb7bf0a0052b9",
+    "semantic_hash": "c94a39e7608d898dcbffb7bf0a0052b9"
+  },
+  "src/Core/Infrastructure/Rtcp/Packets/RtcpPacketType.cs": {
+    "mtime": 1776373441.0458462,
+    "ast_hash": "87db68eefbe01214b60d303e5c2d2848",
+    "semantic_hash": "87db68eefbe01214b60d303e5c2d2848"
+  },
+  "src/Core/Infrastructure/Rtcp/Packets/RtcpReceiverReport.cs": {
+    "mtime": 1776373441.0458462,
+    "ast_hash": "2a116c0ec81f0d77ccc7d356883394a7",
+    "semantic_hash": "2a116c0ec81f0d77ccc7d356883394a7"
+  },
+  "src/Core/Infrastructure/Rtcp/Packets/RtcpReportBlock.cs": {
+    "mtime": 1776373441.0458462,
+    "ast_hash": "12451f6290e8e14e1a38e0bd83a33249",
+    "semantic_hash": "12451f6290e8e14e1a38e0bd83a33249"
+  },
+  "src/Core/Infrastructure/Rtcp/Packets/RtcpSdesChunk.cs": {
+    "mtime": 1776373441.0458462,
+    "ast_hash": "7f95a1180d7ace75cc963c72f3b5f034",
+    "semantic_hash": "7f95a1180d7ace75cc963c72f3b5f034"
+  },
+  "src/Core/Infrastructure/Rtcp/Packets/RtcpSdesItem.cs": {
+    "mtime": 1776373441.0458462,
+    "ast_hash": "3cfa1f866089d1afe38d16e1bb8c29e8",
+    "semantic_hash": "3cfa1f866089d1afe38d16e1bb8c29e8"
+  },
+  "src/Core/Infrastructure/Rtcp/Packets/RtcpSdesItemType.cs": {
+    "mtime": 1776373441.0458462,
+    "ast_hash": "4d7b7f54af689f8787e9d11d9a550d1b",
+    "semantic_hash": "4d7b7f54af689f8787e9d11d9a550d1b"
+  },
+  "src/Core/Infrastructure/Rtcp/Packets/RtcpSdesPacket.cs": {
+    "mtime": 1776373441.0458462,
+    "ast_hash": "bec9f693ee54dcd009dfb5baca12d524",
+    "semantic_hash": "bec9f693ee54dcd009dfb5baca12d524"
+  },
+  "src/Core/Infrastructure/Rtcp/Packets/RtcpSenderReport.cs": {
+    "mtime": 1776373441.0458462,
+    "ast_hash": "df7f6142e990ffdfddf50e880b8d7eda",
+    "semantic_hash": "df7f6142e990ffdfddf50e880b8d7eda"
+  },
+  "src/Core/Infrastructure/Rtcp/Wire/IRtcpPacketCodec.cs": {
+    "mtime": 1776373441.0458462,
+    "ast_hash": "29ddf91701ccf08efbf17a85e004973a",
+    "semantic_hash": "29ddf91701ccf08efbf17a85e004973a"
+  },
+  "src/Core/Infrastructure/Rtcp/Wire/RtcpPacketCodec.cs": {
+    "mtime": 1783509868.5865114,
+    "ast_hash": "3155bb5e5b634a2a196914554208786e",
+    "semantic_hash": "3155bb5e5b634a2a196914554208786e"
+  },
+  "src/Core/Infrastructure/Rtp/JitterBuffer/IJitterBuffer.cs": {
+    "mtime": 1776373441.0458462,
+    "ast_hash": "c223c720a75b6ba475cde1f35b2c4756",
+    "semantic_hash": "c223c720a75b6ba475cde1f35b2c4756"
+  },
+  "src/Core/Infrastructure/Rtp/JitterBuffer/JitterBuffer.cs": {
+    "mtime": 1783515497.4877734,
+    "ast_hash": "c3bb970f84d8d40f6b3963d4e3201a5f",
+    "semantic_hash": "c3bb970f84d8d40f6b3963d4e3201a5f"
+  },
+  "src/Core/Infrastructure/Rtp/JitterBuffer/JitterBufferAddResult.cs": {
+    "mtime": 1776373441.0458462,
+    "ast_hash": "5fdf16a2d46547f984304b481379dc3c",
+    "semantic_hash": "5fdf16a2d46547f984304b481379dc3c"
+  },
+  "src/Core/Infrastructure/Rtp/JitterBuffer/JitterBufferOptions.cs": {
+    "mtime": 1776373441.0458462,
+    "ast_hash": "8ef43681b7457ea625c108c168e5c9f3",
+    "semantic_hash": "8ef43681b7457ea625c108c168e5c9f3"
+  },
+  "src/Core/Infrastructure/Rtp/Packets/RtpExtension.cs": {
+    "mtime": 1776373441.0458462,
+    "ast_hash": "68dd081f48c2cf738833a82de2918c3b",
+    "semantic_hash": "68dd081f48c2cf738833a82de2918c3b"
+  },
+  "src/Core/Infrastructure/Rtp/Packets/RtpPacket.cs": {
+    "mtime": 1776373441.0458462,
+    "ast_hash": "5b7b87dd863be94a42d77fc24172328f",
+    "semantic_hash": "5b7b87dd863be94a42d77fc24172328f"
+  },
+  "src/Core/Infrastructure/Rtp/Profile/RtpAvpProfile.cs": {
+    "mtime": 1776373441.0458462,
+    "ast_hash": "fc8f6afacbd06ab512371170311d7edf",
+    "semantic_hash": "fc8f6afacbd06ab512371170311d7edf"
+  },
+  "src/Core/Infrastructure/Rtp/RtpCallMediaSession.cs": {
+    "mtime": 1783579489.783113,
+    "ast_hash": "d2179f1e95dc28fbeb17fe7e20dc6bec",
+    "semantic_hash": ""
+  },
+  "src/Core/Infrastructure/Rtp/RtpCallMediaSessionFactory.cs": {
+    "mtime": 1783579378.296121,
+    "ast_hash": "de800fe0bfcba7679c7dea15fdc57cd3",
+    "semantic_hash": ""
+  },
+  "src/Core/Infrastructure/Rtp/Session/IRtpSession.cs": {
+    "mtime": 1776373441.0468464,
+    "ast_hash": "f6fc157882b02ea5126014b92382123c",
+    "semantic_hash": "f6fc157882b02ea5126014b92382123c"
+  },
+  "src/Core/Infrastructure/Rtp/Session/RtpSenderStatisticsSnapshot.cs": {
+    "mtime": 1776373441.0468464,
+    "ast_hash": "ab6c009f903a3bc664a4af3e093a0b66",
+    "semantic_hash": "ab6c009f903a3bc664a4af3e093a0b66"
+  },
+  "src/Core/Infrastructure/Rtp/Session/RtpSequenceResult.cs": {
+    "mtime": 1776373441.0468464,
+    "ast_hash": "26715ae0614cab8a25fbe85db575147c",
+    "semantic_hash": "26715ae0614cab8a25fbe85db575147c"
+  },
+  "src/Core/Infrastructure/Rtp/Session/RtpSequenceValidator.cs": {
+    "mtime": 1776373441.0468464,
+    "ast_hash": "cb2aa5d093cf2c5977f10a9ff3531199",
+    "semantic_hash": "cb2aa5d093cf2c5977f10a9ff3531199"
+  },
+  "src/Core/Infrastructure/Rtp/Session/RtpSession.cs": {
+    "mtime": 1783542614.0244658,
+    "ast_hash": "87b3f4f61f6770b6817a9a95c1b824b8",
+    "semantic_hash": "87b3f4f61f6770b6817a9a95c1b824b8"
+  },
+  "src/Core/Infrastructure/Rtp/Session/RtpSessionOptions.cs": {
+    "mtime": 1783542614.0244658,
+    "ast_hash": "20f08acb289710c6805650ecf1b01990",
+    "semantic_hash": "20f08acb289710c6805650ecf1b01990"
+  },
+  "src/Core/Infrastructure/Rtp/Wire/IRtpPacketCodec.cs": {
+    "mtime": 1776373441.0468464,
+    "ast_hash": "75b6ed4274f8dcd887098637351e79e6",
+    "semantic_hash": "75b6ed4274f8dcd887098637351e79e6"
+  },
+  "src/Core/Infrastructure/Rtp/Wire/RtpPacketCodec.cs": {
+    "mtime": 1776373441.0468464,
+    "ast_hash": "58472aa8f3b09eeac59fcc7a8555e921",
+    "semantic_hash": "58472aa8f3b09eeac59fcc7a8555e921"
+  },
+  "src/Core/Infrastructure/Sdp/Models/SdpCodecDefinition.cs": {
+    "mtime": 1776373441.0468464,
+    "ast_hash": "c7273bba10f6185bcacb4121e5a2210a",
+    "semantic_hash": "c7273bba10f6185bcacb4121e5a2210a"
+  },
+  "src/Core/Infrastructure/Sdp/Models/SdpCryptoAttribute.cs": {
+    "mtime": 1776373441.0468464,
+    "ast_hash": "7f94ab2f3bcd96576d40fa952dc9b7c4",
+    "semantic_hash": "7f94ab2f3bcd96576d40fa952dc9b7c4"
+  },
+  "src/Core/Infrastructure/Sdp/Models/SdpFingerprint.cs": {
+    "mtime": 1776373441.0468464,
+    "ast_hash": "df493a6df2c20f83751c3966dcaefa6d",
+    "semantic_hash": "df493a6df2c20f83751c3966dcaefa6d"
+  },
+  "src/Core/Infrastructure/Sdp/Models/SdpFmtpAttribute.cs": {
+    "mtime": 1776373441.0468464,
+    "ast_hash": "bb1c3609364323aafa475dd0458b2d6b",
+    "semantic_hash": "bb1c3609364323aafa475dd0458b2d6b"
+  },
+  "src/Core/Infrastructure/Sdp/Models/SdpIceCandidate.cs": {
+    "mtime": 1776373441.0468464,
+    "ast_hash": "659c17a098807bad66a01d7c6a180d48",
+    "semantic_hash": "659c17a098807bad66a01d7c6a180d48"
+  },
+  "src/Core/Infrastructure/Sdp/Models/SdpMediaDescription.cs": {
+    "mtime": 1776373441.0468464,
+    "ast_hash": "d98610671167f48ced1a1a1a3f11c291",
+    "semantic_hash": "d98610671167f48ced1a1a1a3f11c291"
+  },
+  "src/Core/Infrastructure/Sdp/Models/SdpMediaDirection.cs": {
+    "mtime": 1776373441.0468464,
+    "ast_hash": "cccaca9d90d78f49b40afb0abaa42251",
+    "semantic_hash": "cccaca9d90d78f49b40afb0abaa42251"
+  },
+  "src/Core/Infrastructure/Sdp/Models/SdpSessionDescription.cs": {
+    "mtime": 1776373441.0468464,
+    "ast_hash": "fc92dd6c90cd32cf059e152b08d85d97",
+    "semantic_hash": "fc92dd6c90cd32cf059e152b08d85d97"
+  },
+  "src/Core/Infrastructure/Sdp/OfferAnswer/ISdpOfferAnswerNegotiator.cs": {
+    "mtime": 1776373441.0468464,
+    "ast_hash": "d65ae2931bde29be5bf439b490a5bb34",
+    "semantic_hash": "d65ae2931bde29be5bf439b490a5bb34"
+  },
+  "src/Core/Infrastructure/Sdp/OfferAnswer/SdesCryptoSelector.cs": {
+    "mtime": 1783542614.0244658,
+    "ast_hash": "ddefce894735805c613be32741817257",
+    "semantic_hash": "ddefce894735805c613be32741817257"
+  },
+  "src/Core/Infrastructure/Sdp/OfferAnswer/SdpMediaOptions.cs": {
+    "mtime": 1783415311.916631,
+    "ast_hash": "c1ece082a31b7fbe6040d1799dc541b0",
+    "semantic_hash": "c1ece082a31b7fbe6040d1799dc541b0"
+  },
+  "src/Core/Infrastructure/Sdp/OfferAnswer/SdpOfferAnswerNegotiator.cs": {
+    "mtime": 1783578577.6161711,
+    "ast_hash": "2eb551bf32501d86f08330324f960a64",
+    "semantic_hash": "2eb551bf32501d86f08330324f960a64"
+  },
+  "src/Core/Infrastructure/Sdp/OfferAnswer/SdpOfferAnswerResult.cs": {
+    "mtime": 1783542614.0244658,
+    "ast_hash": "8a700378720252b52a4ff3c25ca44448",
+    "semantic_hash": "8a700378720252b52a4ff3c25ca44448"
+  },
+  "src/Core/Infrastructure/Sdp/Parsing/ISdpSessionParser.cs": {
+    "mtime": 1776373441.0468464,
+    "ast_hash": "5d3ecf92a1cd65b3070551d8c066e1c2",
+    "semantic_hash": "5d3ecf92a1cd65b3070551d8c066e1c2"
+  },
+  "src/Core/Infrastructure/Sdp/Parsing/ISdpSessionSerializer.cs": {
+    "mtime": 1776373441.0478463,
+    "ast_hash": "244a65f51734d2ed2162c3c65929bb93",
+    "semantic_hash": "244a65f51734d2ed2162c3c65929bb93"
+  },
+  "src/Core/Infrastructure/Sdp/Parsing/MediaBuilder.cs": {
+    "mtime": 1776373441.0478463,
+    "ast_hash": "6abe5e30210bdb83b84a8ed79fbcfc0f",
+    "semantic_hash": "6abe5e30210bdb83b84a8ed79fbcfc0f"
+  },
+  "src/Core/Infrastructure/Sdp/Parsing/SdpSessionParser.cs": {
+    "mtime": 1783415311.916631,
+    "ast_hash": "7016da79deb199f86d5997c4f3422f14",
+    "semantic_hash": "7016da79deb199f86d5997c4f3422f14"
+  },
+  "src/Core/Infrastructure/Sdp/Parsing/SdpSessionSerializer.cs": {
+    "mtime": 1776373441.0478463,
+    "ast_hash": "c60393a888bbf55c2e9cb5f84c729825",
+    "semantic_hash": "c60393a888bbf55c2e9cb5f84c729825"
+  },
+  "src/Core/Infrastructure/Sdp/SdpNegotiator.cs": {
+    "mtime": 1783509868.5865114,
+    "ast_hash": "83c2981f813b52a925d1fb917c5e2002",
+    "semantic_hash": "83c2981f813b52a925d1fb917c5e2002"
+  },
+  "src/Core/Infrastructure/Sdp/SdpSecurityInspector.cs": {
+    "mtime": 1776373441.0478463,
+    "ast_hash": "d734c9f3f303f5799a252b2faef9caa3",
+    "semantic_hash": "d734c9f3f303f5799a252b2faef9caa3"
+  },
+  "src/Core/Infrastructure/Sdp/SdpUtilities.cs": {
+    "mtime": 1783578577.6161711,
+    "ast_hash": "8490d6ed2776a87431286ee268b74384",
+    "semantic_hash": "8490d6ed2776a87431286ee268b74384"
+  },
+  "src/Core/Infrastructure/Security/SipDomainCertificateValidator.cs": {
+    "mtime": 1783415311.916631,
+    "ast_hash": "1f2d3b4053352f9b6e71b5ac180e5abb",
+    "semantic_hash": "1f2d3b4053352f9b6e71b5ac180e5abb"
+  },
+  "src/Core/Infrastructure/Security/TlsConfiguration.cs": {
+    "mtime": 1779878374.3900256,
+    "ast_hash": "90ae0897f0737b596690599e2b52d5cb",
+    "semantic_hash": "90ae0897f0737b596690599e2b52d5cb"
+  },
+  "src/Core/Infrastructure/Sip/Adapters/AdvertisedMediaAddressResolver.cs": {
+    "mtime": 1783509868.5865114,
+    "ast_hash": "b41d11dc218934ea29910d65dc5731c4",
+    "semantic_hash": "b41d11dc218934ea29910d65dc5731c4"
+  },
+  "src/Core/Infrastructure/Sip/Adapters/NatPublicContactState.cs": {
+    "mtime": 1783539143.6074543,
+    "ast_hash": "3dece3a368b92b380c11730d345c16c8",
+    "semantic_hash": "3dece3a368b92b380c11730d345c16c8"
+  },
+  "src/Core/Infrastructure/Sip/Adapters/SipCoreCallChannel.cs": {
+    "mtime": 1783542614.0254657,
+    "ast_hash": "bebcadfd17a1d60a7a8ccc41a2528e62",
+    "semantic_hash": "bebcadfd17a1d60a7a8ccc41a2528e62"
+  },
+  "src/Core/Infrastructure/Sip/Adapters/SipLineChannel.cs": {
+    "mtime": 1783539143.6074543,
+    "ast_hash": "c93bbc1b3334e267c997850a9ac5c21b",
+    "semantic_hash": "c93bbc1b3334e267c997850a9ac5c21b"
+  },
+  "src/Core/Infrastructure/Sip/Adapters/TrunkInboundMatcher.cs": {
+    "mtime": 1783539143.6074543,
+    "ast_hash": "c7670080ea5904e1ce9fe63121d30881",
+    "semantic_hash": "c7670080ea5904e1ce9fe63121d30881"
+  },
+  "src/Core/Infrastructure/Sip/Authentication/ISipDigestAuthenticator.cs": {
+    "mtime": 1776373441.0478463,
+    "ast_hash": "0e80ba178aa56e0867a3ae538062cf1f",
+    "semantic_hash": "0e80ba178aa56e0867a3ae538062cf1f"
+  },
+  "src/Core/Infrastructure/Sip/Authentication/SipDigestAuthentication.cs": {
+    "mtime": 1776373441.0478463,
+    "ast_hash": "586dc7f931a996afa6d8f7024ac06d56",
+    "semantic_hash": "586dc7f931a996afa6d8f7024ac06d56"
+  },
+  "src/Core/Infrastructure/Sip/Authentication/SipDigestChallengeSelector.cs": {
+    "mtime": 1776373441.0478463,
+    "ast_hash": "3a87912e9d53222693febd6fb556c069",
+    "semantic_hash": "3a87912e9d53222693febd6fb556c069"
+  },
+  "src/Core/Infrastructure/Sip/Observability/ISipTelemetrySink.cs": {
+    "mtime": 1776373441.0478463,
+    "ast_hash": "591abe56812ce13d8c4c782e6d9cb574",
+    "semantic_hash": "591abe56812ce13d8c4c782e6d9cb574"
+  },
+  "src/Core/Infrastructure/Sip/Observability/InMemorySipTelemetrySink.cs": {
+    "mtime": 1776373441.0478463,
+    "ast_hash": "b1c5771b2eaf0cdcd0b40550846c6c49",
+    "semantic_hash": "b1c5771b2eaf0cdcd0b40550846c6c49"
+  },
+  "src/Core/Infrastructure/Sip/Observability/NullSipTelemetrySink.cs": {
+    "mtime": 1776373441.0478463,
+    "ast_hash": "32bf011f24260f85701276b56cf0b195",
+    "semantic_hash": "32bf011f24260f85701276b56cf0b195"
+  },
+  "src/Core/Infrastructure/Sip/Observability/SipCdrRecord.cs": {
+    "mtime": 1776373441.0478463,
+    "ast_hash": "b369b68159be0a2104e044b82c6960c0",
+    "semantic_hash": "b369b68159be0a2104e044b82c6960c0"
+  },
+  "src/Core/Infrastructure/Sip/Observability/SipEventRecord.cs": {
+    "mtime": 1776373441.0478463,
+    "ast_hash": "a59e324b626796f3244b0304b14a36aa",
+    "semantic_hash": "a59e324b626796f3244b0304b14a36aa"
+  },
+  "src/Core/Infrastructure/Sip/Observability/SipIceTelemetrySink.cs": {
+    "mtime": 1776373441.0478463,
+    "ast_hash": "d7dd8895d88d848b9592e9895a2e14b6",
+    "semantic_hash": "d7dd8895d88d848b9592e9895a2e14b6"
+  },
+  "src/Core/Infrastructure/Sip/Observability/SipMetricRecord.cs": {
+    "mtime": 1776373441.0478463,
+    "ast_hash": "b3d2aa84c0debf6f59626702a6fe48af",
+    "semantic_hash": "b3d2aa84c0debf6f59626702a6fe48af"
+  },
+  "src/Core/Infrastructure/Sip/Routing/ISipRouteResolver.cs": {
+    "mtime": 1776373441.0478463,
+    "ast_hash": "a157beefd6613d09106aa9ac0e8e23b5",
+    "semantic_hash": "a157beefd6613d09106aa9ac0e8e23b5"
+  },
+  "src/Core/Infrastructure/Sip/Routing/SipDnsRouteResolver.cs": {
+    "mtime": 1776373441.0478463,
+    "ast_hash": "afa9797dbe9048552bc2ee1b518ca05c",
+    "semantic_hash": "afa9797dbe9048552bc2ee1b518ca05c"
+  },
+  "src/Core/Infrastructure/Sip/Routing/SipRouteCandidate.cs": {
+    "mtime": 1776373441.0478463,
+    "ast_hash": "a8cdbc76b50bf6cc500ac8aff4e10171",
+    "semantic_hash": "a8cdbc76b50bf6cc500ac8aff4e10171"
+  },
+  "src/Core/Infrastructure/Sip/Routing/SipRouteResolutionRequest.cs": {
+    "mtime": 1776373441.0478463,
+    "ast_hash": "7cc6f14fe59b4a2da4358e575b0df92d",
+    "semantic_hash": "7cc6f14fe59b4a2da4358e575b0df92d"
+  },
+  "src/Core/Infrastructure/Sip/Routing/SipRouteResolutionResult.cs": {
+    "mtime": 1776373441.0488465,
+    "ast_hash": "21be1c904920f22cb227ae59dd53790d",
+    "semantic_hash": "21be1c904920f22cb227ae59dd53790d"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Contracts/ISipCallSession.cs": {
+    "mtime": 1783539143.6074543,
+    "ast_hash": "de8bd25f51ad2ee2ba91af32cc72033b",
+    "semantic_hash": "de8bd25f51ad2ee2ba91af32cc72033b"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Contracts/ISipCallSessionContext.cs": {
+    "mtime": 1783539143.6074543,
+    "ast_hash": "f63a829de4655c156015c3fa5ffdc3fb",
+    "semantic_hash": "f63a829de4655c156015c3fa5ffdc3fb"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Contracts/ISipCallSignalingService.cs": {
+    "mtime": 1776373441.0488465,
+    "ast_hash": "9c5ba709e687c6da1ea2f1c79ec3353f",
+    "semantic_hash": "9c5ba709e687c6da1ea2f1c79ec3353f"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Contracts/ISipIdentityTrustPolicy.cs": {
+    "mtime": 1776373441.0488465,
+    "ast_hash": "162cf20331cb133bb883ffaeed7c11ca",
+    "semantic_hash": "162cf20331cb133bb883ffaeed7c11ca"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Contracts/ISipRegistrationService.cs": {
+    "mtime": 1776373441.0488465,
+    "ast_hash": "dfffce11286766abf295f545235b135f",
+    "semantic_hash": "dfffce11286766abf295f545235b135f"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Contracts/ISipUasUserIdentityPolicy.cs": {
+    "mtime": 1776373441.0488465,
+    "ast_hash": "d40077075c2d216cc82e9150b92ce369",
+    "semantic_hash": "d40077075c2d216cc82e9150b92ce369"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Contracts/SipCallSessionConfiguration.cs": {
+    "mtime": 1776373441.0488465,
+    "ast_hash": "71c2e8debc45009e6b23f2b316805e1e",
+    "semantic_hash": "71c2e8debc45009e6b23f2b316805e1e"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Contracts/SipCallSessionDependencies.cs": {
+    "mtime": 1776373441.0488465,
+    "ast_hash": "f31dff820e7702c32da85a22b5c70260",
+    "semantic_hash": "f31dff820e7702c32da85a22b5c70260"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Contracts/SipInviteRequest.cs": {
+    "mtime": 1776373441.0488465,
+    "ast_hash": "a149b2e4615ef72de5e38b20a6070525",
+    "semantic_hash": "a149b2e4615ef72de5e38b20a6070525"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Contracts/SipRegistrationRequest.cs": {
+    "mtime": 1783539143.6074543,
+    "ast_hash": "74059622d3781c1231eb27604539139f",
+    "semantic_hash": "74059622d3781c1231eb27604539139f"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Contracts/SipRegistrationResult.cs": {
+    "mtime": 1783539143.6074543,
+    "ast_hash": "2d7de7a7be45bf6a787a023977ca8294",
+    "semantic_hash": "2d7de7a7be45bf6a787a023977ca8294"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Contracts/SipSessionSdpProvider.cs": {
+    "mtime": 1776373441.0488465,
+    "ast_hash": "dd5a6c87e7489f88a7247fdfcfc72f1b",
+    "semantic_hash": "dd5a6c87e7489f88a7247fdfcfc72f1b"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Contracts/SipSubscribeRequest.cs": {
+    "mtime": 1776373441.0488465,
+    "ast_hash": "25b60b7ba08d783f1d2b728fdf7b9548",
+    "semantic_hash": "25b60b7ba08d783f1d2b728fdf7b9548"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Contracts/SipSubscriptionHandle.cs": {
+    "mtime": 1776373441.0488465,
+    "ast_hash": "d91e836013e20c41389b8cc863885deb",
+    "semantic_hash": "d91e836013e20c41389b8cc863885deb"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Dialogs/SipCallSession.cs": {
+    "mtime": 1783539143.6074543,
+    "ast_hash": "3802c39a4a71beb54ca54691f93d66b1",
+    "semantic_hash": "3802c39a4a71beb54ca54691f93d66b1"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Dialogs/SipCallSessionContextAdapter.cs": {
+    "mtime": 1783539143.6074543,
+    "ast_hash": "eecde4bf5cc26f61e488125fe52c0f16",
+    "semantic_hash": "eecde4bf5cc26f61e488125fe52c0f16"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Dialogs/SipCallSessionHeaderService.cs": {
+    "mtime": 1783539143.6074543,
+    "ast_hash": "53b2ac265fc308a5060b3ae5fa0182f9",
+    "semantic_hash": "53b2ac265fc308a5060b3ae5fa0182f9"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Dialogs/SipCallSessionInboundService.cs": {
+    "mtime": 1776373441.0488465,
+    "ast_hash": "32ddf4ac24fbb43dd82dcf60c76aeeb0",
+    "semantic_hash": "32ddf4ac24fbb43dd82dcf60c76aeeb0"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Dialogs/SipCallSessionInitialization.cs": {
+    "mtime": 1776373441.0488465,
+    "ast_hash": "c0732c0be0b981eadce3c4b9b1058a0d",
+    "semantic_hash": "c0732c0be0b981eadce3c4b9b1058a0d"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Dialogs/SipCallSessionTransactionService.cs": {
+    "mtime": 1779893550.6199083,
+    "ast_hash": "d3a5156e6e2adf864c1a9ffb7b986c69",
+    "semantic_hash": "d3a5156e6e2adf864c1a9ffb7b986c69"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Dialogs/SipCallSessionTransactionUtilities.cs": {
+    "mtime": 1776373441.0488465,
+    "ast_hash": "bfb9eca9a08db70cb257f80cf402ec46",
+    "semantic_hash": "bfb9eca9a08db70cb257f80cf402ec46"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Dialogs/SipCallSessionUtilities.cs": {
+    "mtime": 1783509868.5875113,
+    "ast_hash": "42dab9867157c771a1869401c1b7f15e",
+    "semantic_hash": "42dab9867157c771a1869401c1b7f15e"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Dialogs/SipDialogManager.cs": {
+    "mtime": 1776373441.0498464,
+    "ast_hash": "dc642132bd4c86540b05de261e09a628",
+    "semantic_hash": "dc642132bd4c86540b05de261e09a628"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Dialogs/SipDialogPath.cs": {
+    "mtime": 1776373441.0498464,
+    "ast_hash": "f2eb7234a1179af666df2d6b8d5ab67b",
+    "semantic_hash": "f2eb7234a1179af666df2d6b8d5ab67b"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Dialogs/SipDialogState.cs": {
+    "mtime": 1776373441.0498464,
+    "ast_hash": "197a3ace2013c902522de4ffbc5f6844",
+    "semantic_hash": "197a3ace2013c902522de4ffbc5f6844"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Dialogs/SipFinalResponseException.cs": {
+    "mtime": 1776373441.0498464,
+    "ast_hash": "cef308b0bb848e40e4ea7434c0299401",
+    "semantic_hash": "cef308b0bb848e40e4ea7434c0299401"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Dialogs/SipInboundSessionContext.cs": {
+    "mtime": 1776373441.0498464,
+    "ast_hash": "5a1dc6f620a74594be6f6f8c5494e4f4",
+    "semantic_hash": "5a1dc6f620a74594be6f6f8c5494e4f4"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Dialogs/SipResponseEnvelope.cs": {
+    "mtime": 1776373441.0498464,
+    "ast_hash": "7e61852353e8893f14ab52f6c62a8410",
+    "semantic_hash": "7e61852353e8893f14ab52f6c62a8410"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Events/SipDialogStateChangedEventArgs.cs": {
+    "mtime": 1776373441.0498464,
+    "ast_hash": "e04e7f30a719a9f86928ae0f426502bb",
+    "semantic_hash": "e04e7f30a719a9f86928ae0f426502bb"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Events/SipDialogTerminationReason.cs": {
+    "mtime": 1776373441.0498464,
+    "ast_hash": "5f8fa53b445cce133e0a930dc4c7dcd7",
+    "semantic_hash": "5f8fa53b445cce133e0a930dc4c7dcd7"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Events/SipDtmfReceivedEventArgs.cs": {
+    "mtime": 1776373441.0498464,
+    "ast_hash": "a8d5ec8934dda3ab92c48e7c578e8f0c",
+    "semantic_hash": "a8d5ec8934dda3ab92c48e7c578e8f0c"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Events/SipIncomingInviteEventArgs.cs": {
+    "mtime": 1776373441.0498464,
+    "ast_hash": "94acf0f895f9d9afd66a25dcd10da42f",
+    "semantic_hash": "94acf0f895f9d9afd66a25dcd10da42f"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Events/SipNotifyReceivedEventArgs.cs": {
+    "mtime": 1776373441.0498464,
+    "ast_hash": "af271e9adf45b6bca1e207d2c6bcfbff",
+    "semantic_hash": "af271e9adf45b6bca1e207d2c6bcfbff"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Events/SipSubscriptionRequestedEventArgs.cs": {
+    "mtime": 1776373441.0498464,
+    "ast_hash": "55534ec322ac1eee5492d6d18c81d156",
+    "semantic_hash": "55534ec322ac1eee5492d6d18c81d156"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Events/SipTransferRequestedEventArgs.cs": {
+    "mtime": 1776373441.0498464,
+    "ast_hash": "c930f6470bfef408529855df71cf412f",
+    "semantic_hash": "c930f6470bfef408529855df71cf412f"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Formatting/SipContentPolicy.cs": {
+    "mtime": 1776373441.0498464,
+    "ast_hash": "9bb179403e1438c7d3202ba68ff7f99e",
+    "semantic_hash": "9bb179403e1438c7d3202ba68ff7f99e"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Formatting/SipReasonHeader.cs": {
+    "mtime": 1776373441.0498464,
+    "ast_hash": "52d6d6bc646bc6392cb6a5e68bbbe706",
+    "semantic_hash": "52d6d6bc646bc6392cb6a5e68bbbe706"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Formatting/SipReplacesHeaderValue.cs": {
+    "mtime": 1776373441.0498464,
+    "ast_hash": "c6fb9cd5354cf2f576dd125ae2534260",
+    "semantic_hash": "c6fb9cd5354cf2f576dd125ae2534260"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Formatting/SipRequireOptionPolicy.cs": {
+    "mtime": 1776373441.0498464,
+    "ast_hash": "1c3551c9e4e12b308f665a4c76e07823",
+    "semantic_hash": "1c3551c9e4e12b308f665a4c76e07823"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Formatting/SipSessionTimerPolicy.cs": {
+    "mtime": 1776373441.0498464,
+    "ast_hash": "31238b331af8b13fcc012fec97a21494",
+    "semantic_hash": "31238b331af8b13fcc012fec97a21494"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Formatting/SipSignalingFormat.cs": {
+    "mtime": 1783539143.6074543,
+    "ast_hash": "a8757c8c98248c782c99e6d8481a330c",
+    "semantic_hash": "a8757c8c98248c782c99e6d8481a330c"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Identity/AcceptAllSipUasUserIdentityPolicy.cs": {
+    "mtime": 1776373441.0498464,
+    "ast_hash": "b8b8e8fa9897b2fdf7afc6212c101ce7",
+    "semantic_hash": "b8b8e8fa9897b2fdf7afc6212c101ce7"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Identity/DenyAllSipIdentityTrustPolicy.cs": {
+    "mtime": 1776373441.0498464,
+    "ast_hash": "21a0933b872c6db42e26f439e13874aa",
+    "semantic_hash": "21a0933b872c6db42e26f439e13874aa"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Identity/SipAssertedIdentityHeader.cs": {
+    "mtime": 1776373441.0498464,
+    "ast_hash": "9988f8df8e3f8002d9b8511c90f4ddc7",
+    "semantic_hash": "9988f8df8e3f8002d9b8511c90f4ddc7"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Ingress/SipCallSignalingService.cs": {
+    "mtime": 1783415311.916631,
+    "ast_hash": "a2be933df1ee2b6a2e39c76fdd4955b0",
+    "semantic_hash": "a2be933df1ee2b6a2e39c76fdd4955b0"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Ingress/SipCallSignalingSubscriptions.cs": {
+    "mtime": 1776373441.0508463,
+    "ast_hash": "69add0cc1690add058d21070cfaa6caa",
+    "semantic_hash": "69add0cc1690add058d21070cfaa6caa"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Ingress/SipIngressRequestPolicy.cs": {
+    "mtime": 1783415311.917631,
+    "ast_hash": "ef61bc3553501982a2c2cab8b9720a03",
+    "semantic_hash": "ef61bc3553501982a2c2cab8b9720a03"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Ingress/SipInitialRequestRoutingPlanner.cs": {
+    "mtime": 1776373441.0508463,
+    "ast_hash": "3e5a4e9befb8894a93cae972c3e5abda",
+    "semantic_hash": "3e5a4e9befb8894a93cae972c3e5abda"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Ingress/SipMergedInviteTracker.cs": {
+    "mtime": 1776373441.0508463,
+    "ast_hash": "36924bcaa2bf972f269708e96794166f",
+    "semantic_hash": "36924bcaa2bf972f269708e96794166f"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Ingress/SipOutboundInviteRetryPolicy.cs": {
+    "mtime": 1776373441.0508463,
+    "ast_hash": "2bee9e9f6c628965d2f8b8876ca0cdde",
+    "semantic_hash": "2bee9e9f6c628965d2f8b8876ca0cdde"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Ingress/SipOutboundInviteTarget.cs": {
+    "mtime": 1776373441.0508463,
+    "ast_hash": "23c17c303090b24c8afea078480b5e33",
+    "semantic_hash": "23c17c303090b24c8afea078480b5e33"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Ingress/SipOutboundSubscriptionEntry.cs": {
+    "mtime": 1776373441.0508463,
+    "ast_hash": "04f61e5ed1e926dd1bc0d4e82af2c57e",
+    "semantic_hash": "04f61e5ed1e926dd1bc0d4e82af2c57e"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Registration/SipRegistrationFailedException.cs": {
+    "mtime": 1776373441.0508463,
+    "ast_hash": "e83693de4ba254d8e8db466d50639576",
+    "semantic_hash": "e83693de4ba254d8e8db466d50639576"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Registration/SipRegistrationService.cs": {
+    "mtime": 1783539143.6074543,
+    "ast_hash": "6c62e47528856ce2d9f730b3d4fc2a46",
+    "semantic_hash": "6c62e47528856ce2d9f730b3d4fc2a46"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Reliability/SipReliableProvisionalEntry.cs": {
+    "mtime": 1776373441.0508463,
+    "ast_hash": "f21400de6909bddb315cc79c54e1ae37",
+    "semantic_hash": "f21400de6909bddb315cc79c54e1ae37"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Reliability/SipReliableProvisionalManager.cs": {
+    "mtime": 1783415311.917631,
+    "ast_hash": "ac939d373011aaf05cdd92897f2bf6fa",
+    "semantic_hash": "ac939d373011aaf05cdd92897f2bf6fa"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/SessionTimers/SipSessionTimerManager.cs": {
+    "mtime": 1776373441.0508463,
+    "ast_hash": "f5813a195865767eb1a61f55459da483",
+    "semantic_hash": "f5813a195865767eb1a61f55459da483"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Subscriptions/SipSubscriptionIdentifier.cs": {
+    "mtime": 1776373441.0508463,
+    "ast_hash": "ff770694bca480a2c6fc9fc260784c49",
+    "semantic_hash": "ff770694bca480a2c6fc9fc260784c49"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Subscriptions/SipSubscriptionLease.cs": {
+    "mtime": 1776373441.0508463,
+    "ast_hash": "e593021e08fee39f619db4206eac5dfa",
+    "semantic_hash": "e593021e08fee39f619db4206eac5dfa"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Subscriptions/SipSubscriptionLifecycleManager.cs": {
+    "mtime": 1776373441.0508463,
+    "ast_hash": "cc885f732a6390d6da3b6e5be3e4b2c4",
+    "semantic_hash": "cc885f732a6390d6da3b6e5be3e4b2c4"
+  },
+  "src/Core/Infrastructure/Sip/Signaling/Subscriptions/SipSubscriptionLifecycleUpdate.cs": {
+    "mtime": 1776373441.0508463,
+    "ast_hash": "dc5b1af0a814a295a2115d5d253827c6",
+    "semantic_hash": "dc5b1af0a814a295a2115d5d253827c6"
+  },
+  "src/Core/Infrastructure/Sip/Transactions/ISipClientTransactionExecutor.cs": {
+    "mtime": 1776373441.0508463,
+    "ast_hash": "57403bb3eba984948cdc85e3cf116ba7",
+    "semantic_hash": "57403bb3eba984948cdc85e3cf116ba7"
+  },
+  "src/Core/Infrastructure/Sip/Transactions/Server/ISipServerTransactionEngine.cs": {
+    "mtime": 1776373441.0508463,
+    "ast_hash": "b3bcb18dc22ca38e58fa4e2ac7929a83",
+    "semantic_hash": "b3bcb18dc22ca38e58fa4e2ac7929a83"
+  },
+  "src/Core/Infrastructure/Sip/Transactions/Server/SipServerTransactionEngine.cs": {
+    "mtime": 1776373441.0508463,
+    "ast_hash": "59814a76b80fa63e5ece5f4b081b43b8",
+    "semantic_hash": "59814a76b80fa63e5ece5f4b081b43b8"
+  },
+  "src/Core/Infrastructure/Sip/Transactions/Server/SipServerTransactionKey.cs": {
+    "mtime": 1776373441.0508463,
+    "ast_hash": "c10020d3c156d1a21b8da49aa70dd0b0",
+    "semantic_hash": "c10020d3c156d1a21b8da49aa70dd0b0"
+  },
+  "src/Core/Infrastructure/Sip/Transactions/Server/SipServerTransactionRegistration.cs": {
+    "mtime": 1776373441.0508463,
+    "ast_hash": "478fedb79ff3eccf93a8498340b4ef00",
+    "semantic_hash": "478fedb79ff3eccf93a8498340b4ef00"
+  },
+  "src/Core/Infrastructure/Sip/Transactions/Server/SipServerTransactionResponseSnapshot.cs": {
+    "mtime": 1776373441.0508463,
+    "ast_hash": "022bea478b8d9d9555025780d1f57886",
+    "semantic_hash": "022bea478b8d9d9555025780d1f57886"
+  },
+  "src/Core/Infrastructure/Sip/Transactions/Server/SipServerTransactionState.cs": {
+    "mtime": 1776373441.0508463,
+    "ast_hash": "a98632f079518f5732269c44754d32a3",
+    "semantic_hash": "a98632f079518f5732269c44754d32a3"
+  },
+  "src/Core/Infrastructure/Sip/Transactions/SipClientTransactionExecutor.cs": {
+    "mtime": 1776373441.0508463,
+    "ast_hash": "8e0b66c37a6809f337ae66138d785e87",
+    "semantic_hash": "8e0b66c37a6809f337ae66138d785e87"
+  },
+  "src/Core/Infrastructure/Sip/Transactions/SipClientTransactionRequest.cs": {
+    "mtime": 1776373441.0508463,
+    "ast_hash": "92faf149436936daee704843b24618ad",
+    "semantic_hash": "92faf149436936daee704843b24618ad"
+  },
+  "src/Core/Infrastructure/Sip/Transactions/SipClientTransactionResult.cs": {
+    "mtime": 1776373441.0508463,
+    "ast_hash": "4a3a8f97f91eb90f7d43da59f530ef47",
+    "semantic_hash": "4a3a8f97f91eb90f7d43da59f530ef47"
+  },
+  "src/Core/Infrastructure/Sip/Transport/ISipTransportFactory.cs": {
+    "mtime": 1776373441.0518465,
+    "ast_hash": "e5d5cda4d6bc13f229e2e5872f7141c8",
+    "semantic_hash": "e5d5cda4d6bc13f229e2e5872f7141c8"
+  },
+  "src/Core/Infrastructure/Sip/Transport/ISipTransportRuntime.cs": {
+    "mtime": 1776373441.0518465,
+    "ast_hash": "635025fc363f40295199ada4e1b403b3",
+    "semantic_hash": "635025fc363f40295199ada4e1b403b3"
+  },
+  "src/Core/Infrastructure/Sip/Transport/SipStreamConnection.cs": {
+    "mtime": 1783415311.917631,
+    "ast_hash": "c1ffcd46a98092c03f2481bf5649bca0",
+    "semantic_hash": "c1ffcd46a98092c03f2481bf5649bca0"
+  },
+  "src/Core/Infrastructure/Sip/Transport/SipTransportFactory.cs": {
+    "mtime": 1776373441.0518465,
+    "ast_hash": "98ab2fc7c519389acdb2ea3bed109dc5",
+    "semantic_hash": "98ab2fc7c519389acdb2ea3bed109dc5"
+  },
+  "src/Core/Infrastructure/Sip/Transport/SipTransportProtocol.cs": {
+    "mtime": 1776373441.0518465,
+    "ast_hash": "1e5bf9adb5135a2f0b5d22f323378a25",
+    "semantic_hash": "1e5bf9adb5135a2f0b5d22f323378a25"
+  },
+  "src/Core/Infrastructure/Sip/Transport/SipTransportRuntime.cs": {
+    "mtime": 1783509868.5875113,
+    "ast_hash": "fcb5bc1422374fb6163c6032d02c19a3",
+    "semantic_hash": "fcb5bc1422374fb6163c6032d02c19a3"
+  },
+  "src/Core/Infrastructure/Sip/Transport/SipTransportRuntimeUtilities.cs": {
+    "mtime": 1776373441.0518465,
+    "ast_hash": "c5267615d7b10270a986ef9f4cfde975",
+    "semantic_hash": "c5267615d7b10270a986ef9f4cfde975"
+  },
+  "src/Core/Infrastructure/Sip/Transport/SipWebSocketConnection.cs": {
+    "mtime": 1783415311.917631,
+    "ast_hash": "f1ace00071047cd1d2294dc0e834fcb7",
+    "semantic_hash": "f1ace00071047cd1d2294dc0e834fcb7"
+  },
+  "src/Core/Infrastructure/Sip/Transport/SipWireStreamFramer.cs": {
+    "mtime": 1783415311.917631,
+    "ast_hash": "4eba525fea911a44e20f09b7c2432133",
+    "semantic_hash": "4eba525fea911a44e20f09b7c2432133"
+  },
+  "src/Core/Infrastructure/Sip/Transport/SipWireTraceLogger.cs": {
+    "mtime": 1783539143.6074543,
+    "ast_hash": "8d9398b23632998e2f636a22377363ae",
+    "semantic_hash": "8d9398b23632998e2f636a22377363ae"
+  },
+  "src/Core/Infrastructure/Sip/Wire/ISipWireCodec.cs": {
+    "mtime": 1776373441.0518465,
+    "ast_hash": "9f8db1e56056007e2dc99c8a40828543",
+    "semantic_hash": "9f8db1e56056007e2dc99c8a40828543"
+  },
+  "src/Core/Infrastructure/Sip/Wire/SipHeaderNames.cs": {
+    "mtime": 1776373441.0518465,
+    "ast_hash": "7c8270d6e13f58503352d613dd464842",
+    "semantic_hash": "7c8270d6e13f58503352d613dd464842"
+  },
+  "src/Core/Infrastructure/Sip/Wire/SipHeaderRowRules.cs": {
+    "mtime": 1776373441.0518465,
+    "ast_hash": "72cb8968ece1a06121900871ae4d09e7",
+    "semantic_hash": "72cb8968ece1a06121900871ae4d09e7"
+  },
+  "src/Core/Infrastructure/Sip/Wire/SipHeaderValueStorage.cs": {
+    "mtime": 1776373441.0518465,
+    "ast_hash": "89e3f9aa3a18cc53cc221d19fa343ade",
+    "semantic_hash": "89e3f9aa3a18cc53cc221d19fa343ade"
+  },
+  "src/Core/Infrastructure/Sip/Wire/SipProtocol.cs": {
+    "mtime": 1783539143.6074543,
+    "ast_hash": "756537a30435635dc55815e2f828a3c5",
+    "semantic_hash": "756537a30435635dc55815e2f828a3c5"
+  },
+  "src/Core/Infrastructure/Sip/Wire/SipRequest.cs": {
+    "mtime": 1776373441.0518465,
+    "ast_hash": "c7fcc0ac157ce4581a28ffea285b01e3",
+    "semantic_hash": "c7fcc0ac157ce4581a28ffea285b01e3"
+  },
+  "src/Core/Infrastructure/Sip/Wire/SipResponse.cs": {
+    "mtime": 1776373441.0518465,
+    "ast_hash": "eb0bbe5232baa841bae94fd75c6aff59",
+    "semantic_hash": "eb0bbe5232baa841bae94fd75c6aff59"
+  },
+  "src/Core/Infrastructure/Sip/Wire/SipUriComponents.cs": {
+    "mtime": 1776373441.0518465,
+    "ast_hash": "4c58c141848a4a46bee2d0c32427123f",
+    "semantic_hash": "4c58c141848a4a46bee2d0c32427123f"
+  },
+  "src/Core/Infrastructure/Sip/Wire/SipWireProtocol.cs": {
+    "mtime": 1776373441.0518465,
+    "ast_hash": "7025e7f32d0038936e40b13fe798c285",
+    "semantic_hash": "7025e7f32d0038936e40b13fe798c285"
+  },
+  "src/Core/Infrastructure/Srtp/Context/ISrtpContext.cs": {
+    "mtime": 1783543975.5240529,
+    "ast_hash": "4aa11363028916c7023994a45f88a315",
+    "semantic_hash": "4aa11363028916c7023994a45f88a315"
+  },
+  "src/Core/Infrastructure/Srtp/Context/SrtpAuthenticationException.cs": {
+    "mtime": 1776373441.0518465,
+    "ast_hash": "2f6d898d2918bc5d8a9e65339f7d6d56",
+    "semantic_hash": "2f6d898d2918bc5d8a9e65339f7d6d56"
+  },
+  "src/Core/Infrastructure/Srtp/Context/SrtpContext.cs": {
+    "mtime": 1783543975.5240529,
+    "ast_hash": "4805e55c3ecdde591cd00d4460aa2f92",
+    "semantic_hash": "4805e55c3ecdde591cd00d4460aa2f92"
+  },
+  "src/Core/Infrastructure/Srtp/Context/SrtpReplayException.cs": {
+    "mtime": 1776373441.0518465,
+    "ast_hash": "331b2975478130ec59e5a4fe6a5e6a68",
+    "semantic_hash": "331b2975478130ec59e5a4fe6a5e6a68"
+  },
+  "src/Core/Infrastructure/Srtp/Crypto/SrtpCryptoSuite.cs": {
+    "mtime": 1776373441.0518465,
+    "ast_hash": "1496623b7f9ffe3c5aeb881d5c490880",
+    "semantic_hash": "1496623b7f9ffe3c5aeb881d5c490880"
+  },
+  "src/Core/Infrastructure/Srtp/Crypto/SrtpCryptoSuiteNames.cs": {
+    "mtime": 1783542614.0254657,
+    "ast_hash": "2bd2e69e022b07560522ebe1b56423dd",
+    "semantic_hash": "2bd2e69e022b07560522ebe1b56423dd"
+  },
+  "src/Core/Infrastructure/Srtp/Crypto/SrtpKeyDerivation.cs": {
+    "mtime": 1783527037.0283322,
+    "ast_hash": "0ba467b31cab67e0dddb9312785b5731",
+    "semantic_hash": "0ba467b31cab67e0dddb9312785b5731"
+  },
+  "src/Core/Infrastructure/Srtp/Crypto/SrtpKeyMaterial.cs": {
+    "mtime": 1776373441.0518465,
+    "ast_hash": "20636ce5bf5c3b64f775f10bb0915073",
+    "semantic_hash": "20636ce5bf5c3b64f775f10bb0915073"
+  },
+  "src/Core/Infrastructure/Srtp/Crypto/SrtpSessionKeys.cs": {
+    "mtime": 1783543975.5240529,
+    "ast_hash": "448581978dd29872f5352f4bd8ac44b2",
+    "semantic_hash": "448581978dd29872f5352f4bd8ac44b2"
+  },
+  "src/Core/Infrastructure/Stun/Attributes/AccessTokenAttribute.cs": {
+    "mtime": 1776373441.0528464,
+    "ast_hash": "4d039a00e4d66afcfa032de8b9186b53",
+    "semantic_hash": "4d039a00e4d66afcfa032de8b9186b53"
+  },
+  "src/Core/Infrastructure/Stun/Attributes/AlternateServerAttribute.cs": {
+    "mtime": 1776373441.0528464,
+    "ast_hash": "d73360b0f79ebfe5eed3956d7561ecd6",
+    "semantic_hash": "d73360b0f79ebfe5eed3956d7561ecd6"
+  },
+  "src/Core/Infrastructure/Stun/Attributes/ChangeRequestAttribute.cs": {
+    "mtime": 1776373441.0528464,
+    "ast_hash": "0d71120975fcb1d5b9e94262da42af68",
+    "semantic_hash": "0d71120975fcb1d5b9e94262da42af68"
+  },
+  "src/Core/Infrastructure/Stun/Attributes/ErrorCodeAttribute.cs": {
+    "mtime": 1776373441.0528464,
+    "ast_hash": "f57ecc67e644d2c696ed9a4ef6dcca09",
+    "semantic_hash": "f57ecc67e644d2c696ed9a4ef6dcca09"
+  },
+  "src/Core/Infrastructure/Stun/Attributes/FingerprintAttribute.cs": {
+    "mtime": 1776373441.0528464,
+    "ast_hash": "3cc0c4b7526f581540696767a4227ff0",
+    "semantic_hash": "3cc0c4b7526f581540696767a4227ff0"
+  },
+  "src/Core/Infrastructure/Stun/Attributes/IceControlledAttribute.cs": {
+    "mtime": 1776373441.0528464,
+    "ast_hash": "0a09b800143089235b80d900776972f3",
+    "semantic_hash": "0a09b800143089235b80d900776972f3"
+  },
+  "src/Core/Infrastructure/Stun/Attributes/IceControllingAttribute.cs": {
+    "mtime": 1776373441.0528464,
+    "ast_hash": "c06333ec4f94e2cb2c39523b68c3d8c2",
+    "semantic_hash": "c06333ec4f94e2cb2c39523b68c3d8c2"
+  },
+  "src/Core/Infrastructure/Stun/Attributes/MappedAddressAttribute.cs": {
+    "mtime": 1776373441.0528464,
+    "ast_hash": "14dcceb5928fbe367bc214ef9700cf84",
+    "semantic_hash": "14dcceb5928fbe367bc214ef9700cf84"
+  },
+  "src/Core/Infrastructure/Stun/Attributes/MessageIntegrityAttribute.cs": {
+    "mtime": 1776373441.0528464,
+    "ast_hash": "94eefb2ea8aa0238f8ff7c3a66f27baa",
+    "semantic_hash": "94eefb2ea8aa0238f8ff7c3a66f27baa"
+  },
+  "src/Core/Infrastructure/Stun/Attributes/NonceAttribute.cs": {
+    "mtime": 1776373441.0528464,
+    "ast_hash": "d0ce27ddbe0053a180827440bbf3b394",
+    "semantic_hash": "d0ce27ddbe0053a180827440bbf3b394"
+  },
+  "src/Core/Infrastructure/Stun/Attributes/PriorityAttribute.cs": {
+    "mtime": 1776373441.0528464,
+    "ast_hash": "f3df2df1231411f033b1dea74f904a1b",
+    "semantic_hash": "f3df2df1231411f033b1dea74f904a1b"
+  },
+  "src/Core/Infrastructure/Stun/Attributes/RealmAttribute.cs": {
+    "mtime": 1776373441.0528464,
+    "ast_hash": "86bcb4e13b64604505ae9df637f49060",
+    "semantic_hash": "86bcb4e13b64604505ae9df637f49060"
+  },
+  "src/Core/Infrastructure/Stun/Attributes/SoftwareAttribute.cs": {
+    "mtime": 1776373441.0528464,
+    "ast_hash": "0fa47e34c504230868a84ae4a07bb4a5",
+    "semantic_hash": "0fa47e34c504230868a84ae4a07bb4a5"
+  },
+  "src/Core/Infrastructure/Stun/Attributes/StunAttribute.cs": {
+    "mtime": 1776373441.0528464,
+    "ast_hash": "93afef6d604f0556a870b77802ae2927",
+    "semantic_hash": "93afef6d604f0556a870b77802ae2927"
+  },
+  "src/Core/Infrastructure/Stun/Attributes/StunAttributeType.cs": {
+    "mtime": 1776373441.0528464,
+    "ast_hash": "b9cb50dfbd2ac2f698f5c63ab747d410",
+    "semantic_hash": "b9cb50dfbd2ac2f698f5c63ab747d410"
+  },
+  "src/Core/Infrastructure/Stun/Attributes/ThirdPartyAuthorizationAttribute.cs": {
+    "mtime": 1776373441.0528464,
+    "ast_hash": "5ddb7ea2d333d02c6402567553d6ba5f",
+    "semantic_hash": "5ddb7ea2d333d02c6402567553d6ba5f"
+  },
+  "src/Core/Infrastructure/Stun/Attributes/UnknownAttributesAttribute.cs": {
+    "mtime": 1776373441.0528464,
+    "ast_hash": "735d2589ecd5373b6c6072167ee519c4",
+    "semantic_hash": "735d2589ecd5373b6c6072167ee519c4"
+  },
+  "src/Core/Infrastructure/Stun/Attributes/UnknownRawAttribute.cs": {
+    "mtime": 1776373441.0528464,
+    "ast_hash": "045aed53d454e5b3da4ac707d958f83d",
+    "semantic_hash": "045aed53d454e5b3da4ac707d958f83d"
+  },
+  "src/Core/Infrastructure/Stun/Attributes/UseCandidateAttribute.cs": {
+    "mtime": 1776373441.0528464,
+    "ast_hash": "cdb9befcff5c8e6856b269b881c6f2b1",
+    "semantic_hash": "cdb9befcff5c8e6856b269b881c6f2b1"
+  },
+  "src/Core/Infrastructure/Stun/Attributes/UsernameAttribute.cs": {
+    "mtime": 1776373441.0528464,
+    "ast_hash": "7a2e7828003c32179adef5a272aa5e3b",
+    "semantic_hash": "7a2e7828003c32179adef5a272aa5e3b"
+  },
+  "src/Core/Infrastructure/Stun/Attributes/XorMappedAddressAttribute.cs": {
+    "mtime": 1776373441.0528464,
+    "ast_hash": "c2414ce480365fc77e3f57619eb4b8de",
+    "semantic_hash": "c2414ce480365fc77e3f57619eb4b8de"
+  },
+  "src/Core/Infrastructure/Stun/Auth/StunCredentials.cs": {
+    "mtime": 1776373441.0528464,
+    "ast_hash": "24411b66a1841a86c3ae266a19e8440f",
+    "semantic_hash": "24411b66a1841a86c3ae266a19e8440f"
+  },
+  "src/Core/Infrastructure/Stun/Auth/StunKeyDerivation.cs": {
+    "mtime": 1776373441.0528464,
+    "ast_hash": "52e36d7965de6252035759694f328e6f",
+    "semantic_hash": "52e36d7965de6252035759694f328e6f"
+  },
+  "src/Core/Infrastructure/Stun/Client/DnsSrvQuery.cs": {
+    "mtime": 1783415311.917631,
+    "ast_hash": "3a28d2e4a847360676bfc84115e3f794",
+    "semantic_hash": "3a28d2e4a847360676bfc84115e3f794"
+  },
+  "src/Core/Infrastructure/Stun/Client/DnsSrvRecord.cs": {
+    "mtime": 1776373441.0528464,
+    "ast_hash": "8a164860535dd323948f06bc69c63839",
+    "semantic_hash": "8a164860535dd323948f06bc69c63839"
+  },
+  "src/Core/Infrastructure/Stun/Client/IStunClient.cs": {
+    "mtime": 1783525171.7299168,
+    "ast_hash": "bf332b592229f5443e9babd14734961b",
+    "semantic_hash": "bf332b592229f5443e9babd14734961b"
+  },
+  "src/Core/Infrastructure/Stun/Client/IStunServerResolver.cs": {
+    "mtime": 1776373441.0528464,
+    "ast_hash": "20f40f288f281badf0f61200d3041b4e",
+    "semantic_hash": "20f40f288f281badf0f61200d3041b4e"
+  },
+  "src/Core/Infrastructure/Stun/Client/StunBindingResult.cs": {
+    "mtime": 1776373441.0528464,
+    "ast_hash": "c42090a0b9b3320f668dc73362cdfa23",
+    "semantic_hash": "c42090a0b9b3320f668dc73362cdfa23"
+  },
+  "src/Core/Infrastructure/Stun/Client/StunChallengeException.cs": {
+    "mtime": 1776373441.0528464,
+    "ast_hash": "1ab08f325cecdc69f3a1c937647c5ea2",
+    "semantic_hash": "1ab08f325cecdc69f3a1c937647c5ea2"
+  },
+  "src/Core/Infrastructure/Stun/Client/StunClient.cs": {
+    "mtime": 1783525171.7299168,
+    "ast_hash": "b113c1faafcecbd290119d531b554a38",
+    "semantic_hash": "b113c1faafcecbd290119d531b554a38"
+  },
+  "src/Core/Infrastructure/Stun/Client/StunException.cs": {
+    "mtime": 1776373441.0538464,
+    "ast_hash": "3e10c5ecf609e23b753a4c6921cb3e92",
+    "semantic_hash": "3e10c5ecf609e23b753a4c6921cb3e92"
+  },
+  "src/Core/Infrastructure/Stun/Client/StunIceProbe.cs": {
+    "mtime": 1783525171.7299168,
+    "ast_hash": "8f1ac5f933c4969d97eb4f1960e44584",
+    "semantic_hash": "8f1ac5f933c4969d97eb4f1960e44584"
+  },
+  "src/Core/Infrastructure/Stun/Client/StunServerResolver.cs": {
+    "mtime": 1783415311.917631,
+    "ast_hash": "0d18dc368a44fc66fa9ebf6697377559",
+    "semantic_hash": "0d18dc368a44fc66fa9ebf6697377559"
+  },
+  "src/Core/Infrastructure/Stun/Client/StunTransport.cs": {
+    "mtime": 1776373441.0538464,
+    "ast_hash": "a62ee1c5a5292be8493de05ff17d6ff8",
+    "semantic_hash": "a62ee1c5a5292be8493de05ff17d6ff8"
+  },
+  "src/Core/Infrastructure/Stun/Messages/StunMessage.cs": {
+    "mtime": 1776373441.0538464,
+    "ast_hash": "efbe9e63b7db7b45e9cca8e8ff08ec9b",
+    "semantic_hash": "efbe9e63b7db7b45e9cca8e8ff08ec9b"
+  },
+  "src/Core/Infrastructure/Stun/Messages/StunMessageClass.cs": {
+    "mtime": 1776373441.0538464,
+    "ast_hash": "9852a58aeab1ef5c1bd9af8c81e3cc74",
+    "semantic_hash": "9852a58aeab1ef5c1bd9af8c81e3cc74"
+  },
+  "src/Core/Infrastructure/Stun/Messages/StunMessageMethod.cs": {
+    "mtime": 1776373441.0538464,
+    "ast_hash": "21bbdbafaca60427605cc771dab775a7",
+    "semantic_hash": "21bbdbafaca60427605cc771dab775a7"
+  },
+  "src/Core/Infrastructure/Stun/Server/IStunAccessTokenValidator.cs": {
+    "mtime": 1776373441.0538464,
+    "ast_hash": "58eb5c800663b0bd48602e7de92d4ec9",
+    "semantic_hash": "58eb5c800663b0bd48602e7de92d4ec9"
+  },
+  "src/Core/Infrastructure/Stun/Server/IStunCredentialProvider.cs": {
+    "mtime": 1776373441.0538464,
+    "ast_hash": "93258724ee6ef1ca8e73e459e4d34153",
+    "semantic_hash": "93258724ee6ef1ca8e73e459e4d34153"
+  },
+  "src/Core/Infrastructure/Stun/Server/IStunNonceManager.cs": {
+    "mtime": 1776373441.0538464,
+    "ast_hash": "aaec76e08bd476deebad2a7365616762",
+    "semantic_hash": "aaec76e08bd476deebad2a7365616762"
+  },
+  "src/Core/Infrastructure/Stun/Server/IStunRequestHandler.cs": {
+    "mtime": 1776373441.0538464,
+    "ast_hash": "c56453335ce65f718afbed2c09f2a969",
+    "semantic_hash": "c56453335ce65f718afbed2c09f2a969"
+  },
+  "src/Core/Infrastructure/Stun/Server/IStunThirdPartyKeyProvider.cs": {
+    "mtime": 1776373441.0538464,
+    "ast_hash": "c918a11c5859fac7601845c8d6971dbc",
+    "semantic_hash": "c918a11c5859fac7601845c8d6971dbc"
+  },
+  "src/Core/Infrastructure/Stun/Server/InMemoryStunCredentialProvider.cs": {
+    "mtime": 1776373441.0538464,
+    "ast_hash": "c006e107bdd261b3b5c0445d826b7fb4",
+    "semantic_hash": "c006e107bdd261b3b5c0445d826b7fb4"
+  },
+  "src/Core/Infrastructure/Stun/Server/InMemoryStunThirdPartyKeyProvider.cs": {
+    "mtime": 1776373441.0538464,
+    "ast_hash": "694a16a83dee9402a2d7814ce709cfe9",
+    "semantic_hash": "694a16a83dee9402a2d7814ce709cfe9"
+  },
+  "src/Core/Infrastructure/Stun/Server/Rfc7635AccessTokenValidator.cs": {
+    "mtime": 1776373441.0538464,
+    "ast_hash": "b0c63755a6b65bcd5bc590e72c89b4f7",
+    "semantic_hash": "b0c63755a6b65bcd5bc590e72c89b4f7"
+  },
+  "src/Core/Infrastructure/Stun/Server/Rfc7635AccessTokenValidatorOptions.cs": {
+    "mtime": 1776373441.0538464,
+    "ast_hash": "60ea10e0bfb887b36b77816423131c8c",
+    "semantic_hash": "60ea10e0bfb887b36b77816423131c8c"
+  },
+  "src/Core/Infrastructure/Stun/Server/StunBindingRequestHandler.cs": {
+    "mtime": 1776373441.0538464,
+    "ast_hash": "4c9abeea3ef0006b85373abe100adc6f",
+    "semantic_hash": "4c9abeea3ef0006b85373abe100adc6f"
+  },
+  "src/Core/Infrastructure/Stun/Server/StunConnectionCapPolicy.cs": {
+    "mtime": 1776373441.0538464,
+    "ast_hash": "6d42ad82d51c068018c7a3ed5da61b48",
+    "semantic_hash": "6d42ad82d51c068018c7a3ed5da61b48"
+  },
+  "src/Core/Infrastructure/Stun/Server/StunNonceManager.cs": {
+    "mtime": 1776373441.0538464,
+    "ast_hash": "e71296ee087278f889b9294ba0dc6451",
+    "semantic_hash": "e71296ee087278f889b9294ba0dc6451"
+  },
+  "src/Core/Infrastructure/Stun/Server/StunRequestHandlingResult.cs": {
+    "mtime": 1776373441.0538464,
+    "ast_hash": "e7c923f9b7b7fb4519aa6feeace0d766",
+    "semantic_hash": "e7c923f9b7b7fb4519aa6feeace0d766"
+  },
+  "src/Core/Infrastructure/Stun/Server/StunServer.cs": {
+    "mtime": 1776373441.0538464,
+    "ast_hash": "0e77e84be81fe8edebabc14baa6afd63",
+    "semantic_hash": "0e77e84be81fe8edebabc14baa6afd63"
+  },
+  "src/Core/Infrastructure/Stun/Server/StunServerOptions.cs": {
+    "mtime": 1776373441.0538464,
+    "ast_hash": "e8020b38c62bc48e8b2c30bf113ce46f",
+    "semantic_hash": "e8020b38c62bc48e8b2c30bf113ce46f"
+  },
+  "src/Core/Infrastructure/Stun/Server/StunServerTransport.cs": {
+    "mtime": 1776373441.0538464,
+    "ast_hash": "8d6457be669f91da6e36a42a50840f75",
+    "semantic_hash": "8d6457be669f91da6e36a42a50840f75"
+  },
+  "src/Core/Infrastructure/Stun/Server/StunThirdPartyAuthorizationOptions.cs": {
+    "mtime": 1776373441.0538464,
+    "ast_hash": "4db0164e841292ce80b27cd2c01606b9",
+    "semantic_hash": "4db0164e841292ce80b27cd2c01606b9"
+  },
+  "src/Core/Infrastructure/Stun/Server/StunThirdPartyKeyMaterial.cs": {
+    "mtime": 1776373441.0538464,
+    "ast_hash": "96fd23a58a82bfbbc2c4c14df013d579",
+    "semantic_hash": "96fd23a58a82bfbbc2c4c14df013d579"
+  },
+  "src/Core/Infrastructure/Stun/Server/StunThirdPartyTokenEncryptionAlgorithm.cs": {
+    "mtime": 1776373441.0538464,
+    "ast_hash": "9fcfdddd5be688b95482eb937c2dc193",
+    "semantic_hash": "9fcfdddd5be688b95482eb937c2dc193"
+  },
+  "src/Core/Infrastructure/Stun/Wire/IStunMessageCodec.cs": {
+    "mtime": 1776373441.0548465,
+    "ast_hash": "a5bb769aae57c8c985bc3fad344559b0",
+    "semantic_hash": "a5bb769aae57c8c985bc3fad344559b0"
+  },
+  "src/Core/Infrastructure/Stun/Wire/StunMessageCodec.cs": {
+    "mtime": 1783415311.917631,
+    "ast_hash": "d3caa5a188f2319213bb7376d62d04ca",
+    "semantic_hash": "d3caa5a188f2319213bb7376d62d04ca"
+  },
+  "src/Core/Infrastructure/Stun/Wire/StunTcpFramer.cs": {
+    "mtime": 1776373441.0548465,
+    "ast_hash": "7eaa435281e1caad01f56d6cf0d1e688",
+    "semantic_hash": "7eaa435281e1caad01f56d6cf0d1e688"
+  },
+  "src/Core/Infrastructure/Stun/Wire/StunWireConstants.cs": {
+    "mtime": 1776373441.0548465,
+    "ast_hash": "a4199c1f55153c58521d4d2505101dba",
+    "semantic_hash": "a4199c1f55153c58521d4d2505101dba"
+  },
+  "src/Core/Infrastructure/Turn/Attributes/TurnAddressFamily.cs": {
+    "mtime": 1776373441.0548465,
+    "ast_hash": "49054144a9f8038fd1513d35dd5e6bff",
+    "semantic_hash": "49054144a9f8038fd1513d35dd5e6bff"
+  },
+  "src/Core/Infrastructure/Turn/Attributes/TurnChannelNumberAttribute.cs": {
+    "mtime": 1776373441.0548465,
+    "ast_hash": "deb6717f257c833a6394bb2aba590934",
+    "semantic_hash": "deb6717f257c833a6394bb2aba590934"
+  },
+  "src/Core/Infrastructure/Turn/Attributes/TurnConnectionIdAttribute.cs": {
+    "mtime": 1776373441.0548465,
+    "ast_hash": "3f1091d4e552e9435661e73f98073d91",
+    "semantic_hash": "3f1091d4e552e9435661e73f98073d91"
+  },
+  "src/Core/Infrastructure/Turn/Attributes/TurnDataAttribute.cs": {
+    "mtime": 1776373441.0548465,
+    "ast_hash": "a283c54f2e77865a05fd671c3ad836c1",
+    "semantic_hash": "a283c54f2e77865a05fd671c3ad836c1"
+  },
+  "src/Core/Infrastructure/Turn/Attributes/TurnDontFragmentAttribute.cs": {
+    "mtime": 1776373441.0548465,
+    "ast_hash": "f8555d8d2d350b2258e86b6ff3c2d527",
+    "semantic_hash": "f8555d8d2d350b2258e86b6ff3c2d527"
+  },
+  "src/Core/Infrastructure/Turn/Attributes/TurnEvenPortAttribute.cs": {
+    "mtime": 1776373441.0548465,
+    "ast_hash": "ae4e0b718750c3d95455d578fd772e00",
+    "semantic_hash": "ae4e0b718750c3d95455d578fd772e00"
+  },
+  "src/Core/Infrastructure/Turn/Attributes/TurnLifetimeAttribute.cs": {
+    "mtime": 1776373441.0548465,
+    "ast_hash": "9a8e9b4dac9299a7bfc57c4f42de3a5f",
+    "semantic_hash": "9a8e9b4dac9299a7bfc57c4f42de3a5f"
+  },
+  "src/Core/Infrastructure/Turn/Attributes/TurnMobilityTicketAttribute.cs": {
+    "mtime": 1776373441.0548465,
+    "ast_hash": "2d1fe4a97fa12b0dc4dea7906fd0478e",
+    "semantic_hash": "2d1fe4a97fa12b0dc4dea7906fd0478e"
+  },
+  "src/Core/Infrastructure/Turn/Attributes/TurnRequestedAddressFamilyAttribute.cs": {
+    "mtime": 1776373441.0548465,
+    "ast_hash": "817477d9d2924c754b78728d20b6b862",
+    "semantic_hash": "817477d9d2924c754b78728d20b6b862"
+  },
+  "src/Core/Infrastructure/Turn/Attributes/TurnRequestedTransportAttribute.cs": {
+    "mtime": 1776373441.0548465,
+    "ast_hash": "f4b7706ce2d683e3ed93629e3ea034d7",
+    "semantic_hash": "f4b7706ce2d683e3ed93629e3ea034d7"
+  },
+  "src/Core/Infrastructure/Turn/Attributes/TurnRequestedTransportProtocol.cs": {
+    "mtime": 1776373441.0548465,
+    "ast_hash": "13ee2f9424f797a70724bfa300ed6cb8",
+    "semantic_hash": "13ee2f9424f797a70724bfa300ed6cb8"
+  },
+  "src/Core/Infrastructure/Turn/Attributes/TurnReservationTokenAttribute.cs": {
+    "mtime": 1776373441.0548465,
+    "ast_hash": "a3decaf009e03e795ffe5ae3fdabaa6c",
+    "semantic_hash": "a3decaf009e03e795ffe5ae3fdabaa6c"
+  },
+  "src/Core/Infrastructure/Turn/Attributes/TurnXorPeerAddressAttribute.cs": {
+    "mtime": 1776373441.0548465,
+    "ast_hash": "52fdc5bdce1dc56bf73d179a5b4cf697",
+    "semantic_hash": "52fdc5bdce1dc56bf73d179a5b4cf697"
+  },
+  "src/Core/Infrastructure/Turn/Attributes/TurnXorRelayedAddressAttribute.cs": {
+    "mtime": 1776373441.0548465,
+    "ast_hash": "a8c176a1b5f59d0661962dab3db59bdb",
+    "semantic_hash": "a8c176a1b5f59d0661962dab3db59bdb"
+  },
+  "src/Core/Infrastructure/Turn/Client/ITurnClient.cs": {
+    "mtime": 1776373441.0548465,
+    "ast_hash": "c0021c810b29fadf34d810ed9ec0d12f",
+    "semantic_hash": "c0021c810b29fadf34d810ed9ec0d12f"
+  },
+  "src/Core/Infrastructure/Turn/Client/TurnAllocateOptions.cs": {
+    "mtime": 1776373441.0548465,
+    "ast_hash": "b0fde61868653348575ed892bf513901",
+    "semantic_hash": "b0fde61868653348575ed892bf513901"
+  },
+  "src/Core/Infrastructure/Turn/Client/TurnAllocateResult.cs": {
+    "mtime": 1776373441.0548465,
+    "ast_hash": "d5a4dce35a159e1882471c25cd593ebc",
+    "semantic_hash": "d5a4dce35a159e1882471c25cd593ebc"
+  },
+  "src/Core/Infrastructure/Turn/Client/TurnChallengeException.cs": {
+    "mtime": 1776373441.0548465,
+    "ast_hash": "d5498cfaeaa479a13f17064aeffa9047",
+    "semantic_hash": "d5498cfaeaa479a13f17064aeffa9047"
+  },
+  "src/Core/Infrastructure/Turn/Client/TurnClient.cs": {
+    "mtime": 1776373441.0548465,
+    "ast_hash": "1d9e5473bf757739f208c7abdc526bb8",
+    "semantic_hash": "1d9e5473bf757739f208c7abdc526bb8"
+  },
+  "src/Core/Infrastructure/Turn/Client/TurnConnectResult.cs": {
+    "mtime": 1776373441.0548465,
+    "ast_hash": "8c9043be69f94b474dcf3bd7d7fde9b8",
+    "semantic_hash": "8c9043be69f94b474dcf3bd7d7fde9b8"
+  },
+  "src/Core/Infrastructure/Turn/Client/TurnException.cs": {
+    "mtime": 1776373441.0548465,
+    "ast_hash": "0f84c3face20c26fa82ac31dfc9c291d",
+    "semantic_hash": "0f84c3face20c26fa82ac31dfc9c291d"
+  },
+  "src/Core/Infrastructure/Turn/Client/TurnIceRelayAllocator.cs": {
+    "mtime": 1776373441.0548465,
+    "ast_hash": "fb7e44b6f4e936503b408d06b2724519",
+    "semantic_hash": "fb7e44b6f4e936503b408d06b2724519"
+  },
+  "src/Core/Infrastructure/Turn/Client/TurnRefreshResult.cs": {
+    "mtime": 1776373441.0548465,
+    "ast_hash": "a02bb97ca17f976edb55c45ac05fa4df",
+    "semantic_hash": "a02bb97ca17f976edb55c45ac05fa4df"
+  },
+  "src/Core/Infrastructure/Turn/Client/TurnTcpDataConnection.cs": {
+    "mtime": 1776373441.0548465,
+    "ast_hash": "709d434b9bc50d13fb9647865a768f5b",
+    "semantic_hash": "709d434b9bc50d13fb9647865a768f5b"
+  },
+  "src/Core/Infrastructure/Turn/Client/TurnTcpDataConnectionFactory.cs": {
+    "mtime": 1776373441.0558465,
+    "ast_hash": "2d32f8b358aa1ac7241f10955979ccf9",
+    "semantic_hash": "2d32f8b358aa1ac7241f10955979ccf9"
+  },
+  "src/Core/Infrastructure/Turn/Client/TurnTransport.cs": {
+    "mtime": 1776373441.0558465,
+    "ast_hash": "3a5d79ebcf5ad33525dca83028c54b3f",
+    "semantic_hash": "3a5d79ebcf5ad33525dca83028c54b3f"
+  },
+  "src/Core/Infrastructure/Turn/Server/TurnAllocateRequestHandler.cs": {
+    "mtime": 1776373441.0558465,
+    "ast_hash": "6a81f8525c9847257bba5713001ef65c",
+    "semantic_hash": "6a81f8525c9847257bba5713001ef65c"
+  },
+  "src/Core/Infrastructure/Turn/Server/TurnAuthOptions.cs": {
+    "mtime": 1776373441.0558465,
+    "ast_hash": "0591a9dd3aa1307a5d6d44c55a867af9",
+    "semantic_hash": "0591a9dd3aa1307a5d6d44c55a867af9"
+  },
+  "src/Core/Infrastructure/Turn/Server/TurnClientContext.cs": {
+    "mtime": 1776373441.0558465,
+    "ast_hash": "7c68702dd785400c065b30e0b3bdc8ba",
+    "semantic_hash": "7c68702dd785400c065b30e0b3bdc8ba"
+  },
+  "src/Core/Infrastructure/Turn/Server/TurnConnectionCapPolicy.cs": {
+    "mtime": 1776373441.0558465,
+    "ast_hash": "a21d67627ad75e994ab1baa49f8d814d",
+    "semantic_hash": "a21d67627ad75e994ab1baa49f8d814d"
+  },
+  "src/Core/Infrastructure/Turn/Server/TurnMobilityService.cs": {
+    "mtime": 1776373441.0558465,
+    "ast_hash": "436e5426bc0e149205071a4c7f1f7495",
+    "semantic_hash": "436e5426bc0e149205071a4c7f1f7495"
+  },
+  "src/Core/Infrastructure/Turn/Server/TurnMobilityTicketEntry.cs": {
+    "mtime": 1776373441.0558465,
+    "ast_hash": "9308fc3ae5242ad5b5e0269910c0e733",
+    "semantic_hash": "9308fc3ae5242ad5b5e0269910c0e733"
+  },
+  "src/Core/Infrastructure/Turn/Server/TurnMobilityTicketStore.cs": {
+    "mtime": 1776373441.0558465,
+    "ast_hash": "bfc931e6560a0651ddd1679af940e69b",
+    "semantic_hash": "bfc931e6560a0651ddd1679af940e69b"
+  },
+  "src/Core/Infrastructure/Turn/Server/TurnServer.cs": {
+    "mtime": 1776373441.0558465,
+    "ast_hash": "6e00dbdb7986fc404cac83ac5fa3fe19",
+    "semantic_hash": "6e00dbdb7986fc404cac83ac5fa3fe19"
+  },
+  "src/Core/Infrastructure/Turn/Server/TurnServerAllocation.cs": {
+    "mtime": 1776373441.0558465,
+    "ast_hash": "9d2b0177021c8746849cc6d04669b2cf",
+    "semantic_hash": "9d2b0177021c8746849cc6d04669b2cf"
+  },
+  "src/Core/Infrastructure/Turn/Server/TurnServerChannelBinding.cs": {
+    "mtime": 1776373441.0558465,
+    "ast_hash": "19f1e9de85cdcb6721caed89f944a9e9",
+    "semantic_hash": "19f1e9de85cdcb6721caed89f944a9e9"
+  },
+  "src/Core/Infrastructure/Turn/Server/TurnServerOptions.cs": {
+    "mtime": 1776373441.0558465,
+    "ast_hash": "eef8c5029a61bc7cb5f9b75b31298aba",
+    "semantic_hash": "eef8c5029a61bc7cb5f9b75b31298aba"
+  },
+  "src/Core/Infrastructure/Turn/Server/TurnServerPermission.cs": {
+    "mtime": 1776373441.0558465,
+    "ast_hash": "699ade95c25d3854ba7750c9bc44c101",
+    "semantic_hash": "699ade95c25d3854ba7750c9bc44c101"
+  },
+  "src/Core/Infrastructure/Turn/Server/TurnServerRequestAuthenticator.cs": {
+    "mtime": 1776373441.0558465,
+    "ast_hash": "17dfb611b5997d6f3a18ed9ab6b4abc7",
+    "semantic_hash": "17dfb611b5997d6f3a18ed9ab6b4abc7"
+  },
+  "src/Core/Infrastructure/Turn/Server/TurnServerResponseFactory.cs": {
+    "mtime": 1776373441.0558465,
+    "ast_hash": "e2c0f5fb542d51d59d9c8b7461156e44",
+    "semantic_hash": "e2c0f5fb542d51d59d9c8b7461156e44"
+  },
+  "src/Core/Infrastructure/Turn/Server/TurnServerTransport.cs": {
+    "mtime": 1776373441.0558465,
+    "ast_hash": "16b003f78ca46936fd393790c82f6602",
+    "semantic_hash": "16b003f78ca46936fd393790c82f6602"
+  },
+  "src/Core/Infrastructure/Turn/Server/TurnStreamConnection.cs": {
+    "mtime": 1776373441.0558465,
+    "ast_hash": "555bb849e4e039f33bf6a9e196194f5a",
+    "semantic_hash": "555bb849e4e039f33bf6a9e196194f5a"
+  },
+  "src/Core/Infrastructure/Turn/Server/TurnTcpConnectionBroker.cs": {
+    "mtime": 1776373441.0558465,
+    "ast_hash": "c3f129eab8bedd947dafa65ad0fc664e",
+    "semantic_hash": "c3f129eab8bedd947dafa65ad0fc664e"
+  },
+  "src/Core/Infrastructure/Turn/Server/TurnTcpExtensionHandler.cs": {
+    "mtime": 1776373441.0558465,
+    "ast_hash": "dae54fa10e01523ad75dfbae25973981",
+    "semantic_hash": "dae54fa10e01523ad75dfbae25973981"
+  },
+  "src/Core/Infrastructure/Turn/Server/TurnTcpPassiveConnectionService.cs": {
+    "mtime": 1776373441.0558465,
+    "ast_hash": "0e733aaca8938e25af1edd8c2798a42f",
+    "semantic_hash": "0e733aaca8938e25af1edd8c2798a42f"
+  },
+  "src/Core/Infrastructure/Turn/Server/TurnTcpPendingConnection.cs": {
+    "mtime": 1776373441.0558465,
+    "ast_hash": "bde7fce583406e1bbcc7be19f11cbe8c",
+    "semantic_hash": "bde7fce583406e1bbcc7be19f11cbe8c"
+  },
+  "src/Core/Infrastructure/Turn/Wire/TurnAttributeMapper.cs": {
+    "mtime": 1776373441.0558465,
+    "ast_hash": "9fb8869377e16a26db53088f2bc99220",
+    "semantic_hash": "9fb8869377e16a26db53088f2bc99220"
+  },
+  "src/Core/Infrastructure/Turn/Wire/TurnAttributeType.cs": {
+    "mtime": 1776373441.0558465,
+    "ast_hash": "9f381b6f090851d46c7d2325e8af61e1",
+    "semantic_hash": "9f381b6f090851d46c7d2325e8af61e1"
+  },
+  "src/Core/Infrastructure/Turn/Wire/TurnChannelDataCodec.cs": {
+    "mtime": 1776373441.0558465,
+    "ast_hash": "92c1eb4c9e7759b572058d0eb0d9b26b",
+    "semantic_hash": "92c1eb4c9e7759b572058d0eb0d9b26b"
+  },
+  "src/Core/Infrastructure/Turn/Wire/TurnMessageMethod.cs": {
+    "mtime": 1776373441.0558465,
+    "ast_hash": "497da7f1148b92e29e6cfeeed5b82066",
+    "semantic_hash": "497da7f1148b92e29e6cfeeed5b82066"
+  },
+  "src/Core/Infrastructure/Turn/Wire/TurnStreamFrame.cs": {
+    "mtime": 1776373441.0568464,
+    "ast_hash": "4d483fd4839cfb337f0d07b715feb8fd",
+    "semantic_hash": "4d483fd4839cfb337f0d07b715feb8fd"
+  },
+  "src/Core/Infrastructure/Turn/Wire/TurnStreamFramer.cs": {
+    "mtime": 1776373441.0568464,
+    "ast_hash": "5f01fb57a4ce076a28aec4dc66234f00",
+    "semantic_hash": "5f01fb57a4ce076a28aec4dc66234f00"
+  },
+  "src/Core/Infrastructure/Turn/Wire/TurnWireAddressCodec.cs": {
+    "mtime": 1776373441.0568464,
+    "ast_hash": "cc7a1de15f76cdf14a5b1766871de5fd",
+    "semantic_hash": "cc7a1de15f76cdf14a5b1766871de5fd"
+  },
+  "src/Core/Properties/AssemblyInfo.cs": {
+    "mtime": 1779877601.1243649,
+    "ast_hash": "c27d15c6062e01d50471a8c7e5a2bf88",
+    "semantic_hash": "c27d15c6062e01d50471a8c7e5a2bf88"
+  },
+  "src/Core/Sdk/IceConfiguration.cs": {
+    "mtime": 1776373441.0568464,
+    "ast_hash": "ba851e2070e55de71836c3e551f283fd",
+    "semantic_hash": "ba851e2070e55de71836c3e551f283fd"
+  },
+  "src/Core/Sdk/IceOptions.cs": {
+    "mtime": 1776373441.0568464,
+    "ast_hash": "e4b4e0fb08ec5cd2d4e36ccc19ff2c97",
+    "semantic_hash": "e4b4e0fb08ec5cd2d4e36ccc19ff2c97"
+  },
+  "src/Core/Sdk/IceServerConfiguration.cs": {
+    "mtime": 1776373441.0568464,
+    "ast_hash": "dd07e245a7e0856527bbad93de1b356b",
+    "semantic_hash": "dd07e245a7e0856527bbad93de1b356b"
+  },
+  "src/Core/Sdk/IceServerType.cs": {
+    "mtime": 1776373441.0568464,
+    "ast_hash": "240bdb8308f25fa0bbc3eb4b41c650fc",
+    "semantic_hash": "240bdb8308f25fa0bbc3eb4b41c650fc"
+  },
+  "src/Core/Sdk/IceTransport.cs": {
+    "mtime": 1776373441.0568464,
+    "ast_hash": "65a32547962b588374e3ff4666c52051",
+    "semantic_hash": "65a32547962b588374e3ff4666c52051"
+  },
+  "tests/CalloraVoipSdk.ArchitectureTests/CalloraVoipSdk.ArchitectureTests.csproj": {
+    "mtime": 1783578577.6161711,
+    "ast_hash": "84dceb948bfe16db521de6f26ab2cebf",
+    "semantic_hash": "84dceb948bfe16db521de6f26ab2cebf"
+  },
+  "tests/CalloraVoipSdk.ArchitectureTests/EngineeringRulesTests.cs": {
+    "mtime": 1783578577.6161711,
+    "ast_hash": "82bcf6c945dc2333de50c72d45cf0388",
+    "semantic_hash": "82bcf6c945dc2333de50c72d45cf0388"
+  },
+  "tests/CalloraVoipSdk.ArchitectureTests/SourceScan.cs": {
+    "mtime": 1783578577.6161711,
+    "ast_hash": "d36d11ad82c2944e31eb138cf2eac806",
+    "semantic_hash": "d36d11ad82c2944e31eb138cf2eac806"
+  },
+  "tests/CalloraVoipSdk.Audio.Tests/CalloraVoipSdk.Audio.Tests.csproj": {
+    "mtime": 1779887929.1009302,
+    "ast_hash": "80d3ad2255b36066e22b887c73cd4029",
+    "semantic_hash": "80d3ad2255b36066e22b887c73cd4029"
+  },
+  "tests/CalloraVoipSdk.Audio.Tests/GlobalUsings.cs": {
+    "mtime": 1776373441.0568464,
+    "ast_hash": "5a6674b5690f598af47ff55d055e5524",
+    "semantic_hash": "5a6674b5690f598af47ff55d055e5524"
+  },
+  "tests/CalloraVoipSdk.Audio.Tests/SmokeTests.cs": {
+    "mtime": 1776373441.0568464,
+    "ast_hash": "73e70a23dc3b1ba78907d7560cec8e4f",
+    "semantic_hash": "73e70a23dc3b1ba78907d7560cec8e4f"
+  },
+  "tests/CalloraVoipSdk.Client.Tests/CalloraVoipSdk.Client.Tests.csproj": {
+    "mtime": 1783423007.4934492,
+    "ast_hash": "fb306affb598beb9ad61c48d1529ccde",
+    "semantic_hash": "fb306affb598beb9ad61c48d1529ccde"
+  },
+  "tests/CalloraVoipSdk.Client.Tests/ModuleRegistryTests.cs": {
+    "mtime": 1783423007.4934492,
+    "ast_hash": "e97a012e156d021a06c83a716aa02edd",
+    "semantic_hash": "e97a012e156d021a06c83a716aa02edd"
+  },
+  "tests/CalloraVoipSdk.Core.IntegrationTests/AckTestSipCallSessionContext.cs": {
+    "mtime": 1783539143.6074543,
+    "ast_hash": "57d5e55603e313695731bd3fb8cae4ce",
+    "semantic_hash": "57d5e55603e313695731bd3fb8cae4ce"
+  },
+  "tests/CalloraVoipSdk.Core.IntegrationTests/AdvertisedMediaAddressResolverTests.cs": {
+    "mtime": 1783509868.5875113,
+    "ast_hash": "1ee0c7028e7595413b348400323bb96a",
+    "semantic_hash": "1ee0c7028e7595413b348400323bb96a"
+  },
+  "tests/CalloraVoipSdk.Core.IntegrationTests/CallIceAgentTests.cs": {
+    "mtime": 1783525171.7299168,
+    "ast_hash": "7691902cf07a39400c35758172237702",
+    "semantic_hash": "7691902cf07a39400c35758172237702"
+  },
+  "tests/CalloraVoipSdk.Core.IntegrationTests/CallMediaTapContractTests.cs": {
+    "mtime": 1783427634.9766173,
+    "ast_hash": "f953feafa9017c50acd966fd93b2c15f",
+    "semantic_hash": "f953feafa9017c50acd966fd93b2c15f"
+  },
+  "tests/CalloraVoipSdk.Core.IntegrationTests/CalloraVoipSdk.Core.IntegrationTests.csproj": {
+    "mtime": 1783427634.9766173,
+    "ast_hash": "56a79cefd9ea89728603aa2fa0274795",
+    "semantic_hash": "56a79cefd9ea89728603aa2fa0274795"
+  },
+  "tests/CalloraVoipSdk.Core.IntegrationTests/CapturedSipRequest.cs": {
+    "mtime": 1779892603.1672153,
+    "ast_hash": "ba76b1b0363d71eba55e87959f7de2e8",
+    "semantic_hash": "ba76b1b0363d71eba55e87959f7de2e8"
+  },
+  "tests/CalloraVoipSdk.Core.IntegrationTests/CapturingSipTransportRuntime.cs": {
+    "mtime": 1779893438.1839952,
+    "ast_hash": "0b333b29d8e48a1745e85fc7f76d2c15",
+    "semantic_hash": "0b333b29d8e48a1745e85fc7f76d2c15"
+  },
+  "tests/CalloraVoipSdk.Core.IntegrationTests/DelegateDisposable.cs": {
+    "mtime": 1779893036.688734,
+    "ast_hash": "20f945964ddbd65347ee2e87a8271b2f",
+    "semantic_hash": "20f945964ddbd65347ee2e87a8271b2f"
+  },
+  "tests/CalloraVoipSdk.Core.IntegrationTests/GlobalUsings.cs": {
+    "mtime": 1776373441.0568464,
+    "ast_hash": "5a6674b5690f598af47ff55d055e5524",
+    "semantic_hash": "5a6674b5690f598af47ff55d055e5524"
+  },
+  "tests/CalloraVoipSdk.Core.IntegrationTests/NoopDisposable.cs": {
+    "mtime": 1779892603.496218,
+    "ast_hash": "3ddace2047a8a229055bd8d3dd3d8708",
+    "semantic_hash": "3ddace2047a8a229055bd8d3dd3d8708"
+  },
+  "tests/CalloraVoipSdk.Core.IntegrationTests/NoopSipDigestAuthenticator.cs": {
+    "mtime": 1779892603.6642191,
+    "ast_hash": "de21afee7ca56545d2cd97a79028183d",
+    "semantic_hash": "de21afee7ca56545d2cd97a79028183d"
+  },
+  "tests/CalloraVoipSdk.Core.IntegrationTests/NoopSipServerTransactionEngine.cs": {
+    "mtime": 1779892603.8362207,
+    "ast_hash": "4236a0156fffb4a3d5c838db3fbec8f9",
+    "semantic_hash": "4236a0156fffb4a3d5c838db3fbec8f9"
+  },
+  "tests/CalloraVoipSdk.Core.IntegrationTests/OpusCodecTests.cs": {
+    "mtime": 1783578577.6161711,
+    "ast_hash": "eb7209d8537aa6a484908e6e87e150cc",
+    "semantic_hash": "eb7209d8537aa6a484908e6e87e150cc"
+  },
+  "tests/CalloraVoipSdk.Core.IntegrationTests/QosMetricsTests.cs": {
+    "mtime": 1783515497.4877734,
+    "ast_hash": "bbbb34cc6bca3eab9d7405f900f8e37a",
+    "semantic_hash": "bbbb34cc6bca3eab9d7405f900f8e37a"
+  },
+  "tests/CalloraVoipSdk.Core.IntegrationTests/ReliableProvisionalOptInTests.cs": {
+    "mtime": 1783509868.5875113,
+    "ast_hash": "5cc473501f26750b30c94f611b8676aa",
+    "semantic_hash": "5cc473501f26750b30c94f611b8676aa"
+  },
+  "tests/CalloraVoipSdk.Core.IntegrationTests/RtcpCompoundDecodeTests.cs": {
+    "mtime": 1783509868.5875113,
+    "ast_hash": "89fab221547c8e9610744c2b0846acb6",
+    "semantic_hash": "89fab221547c8e9610744c2b0846acb6"
+  },
+  "tests/CalloraVoipSdk.Core.IntegrationTests/RtpSymmetricLatchTests.cs": {
+    "mtime": 1783539143.6084545,
+    "ast_hash": "e5a38c865c5b8b2e2734d595c729c2b7",
+    "semantic_hash": "e5a38c865c5b8b2e2734d595c729c2b7"
+  },
+  "tests/CalloraVoipSdk.Core.IntegrationTests/SdpCodecPreferenceTests.cs": {
+    "mtime": 1783578577.6161711,
+    "ast_hash": "768a704d42769605bfe83a1f2c1e606f",
+    "semantic_hash": "768a704d42769605bfe83a1f2c1e606f"
+  },
+  "tests/CalloraVoipSdk.Core.IntegrationTests/SdpSdesAnswerTests.cs": {
+    "mtime": 1783542614.0254657,
+    "ast_hash": "c07c351a5b7b23963da178ec21d7cf2f",
+    "semantic_hash": "c07c351a5b7b23963da178ec21d7cf2f"
+  },
+  "tests/CalloraVoipSdk.Core.IntegrationTests/SipCancelRaceTests.cs": {
+    "mtime": 1779893438.3369963,
+    "ast_hash": "af41f14cc46b88da422364eaf8f7755c",
+    "semantic_hash": "af41f14cc46b88da422364eaf8f7755c"
+  },
+  "tests/CalloraVoipSdk.Core.IntegrationTests/SipCancelTransactionTests.cs": {
+    "mtime": 1779893036.8667355,
+    "ast_hash": "892c8b195c8178b648db56d704093037",
+    "semantic_hash": "892c8b195c8178b648db56d704093037"
+  },
+  "tests/CalloraVoipSdk.Core.IntegrationTests/SipInDialogPublicContactTests.cs": {
+    "mtime": 1783539143.6084545,
+    "ast_hash": "06019bbf7651fd06ccf33e34487f2684",
+    "semantic_hash": "06019bbf7651fd06ccf33e34487f2684"
+  },
+  "tests/CalloraVoipSdk.Core.IntegrationTests/SipInviteSuccessAckTests.cs": {
+    "mtime": 1779892602.8403766,
+    "ast_hash": "6dfbcf0f61712dda346f7d4427252705",
+    "semantic_hash": "6dfbcf0f61712dda346f7d4427252705"
+  },
+  "tests/CalloraVoipSdk.Core.IntegrationTests/SipPublicContactTests.cs": {
+    "mtime": 1783539143.6084545,
+    "ast_hash": "d6cfc643af01076504c541cf7081d546",
+    "semantic_hash": "d6cfc643af01076504c541cf7081d546"
+  },
+  "tests/CalloraVoipSdk.Core.IntegrationTests/SipRecordRouteResponseTests.cs": {
+    "mtime": 1783539143.6084545,
+    "ast_hash": "59571d9d5b20475708ae916fd5d60817",
+    "semantic_hash": "59571d9d5b20475708ae916fd5d60817"
+  },
+  "tests/CalloraVoipSdk.Core.IntegrationTests/SipRegistrationExpiresTests.cs": {
+    "mtime": 1783539143.6084545,
+    "ast_hash": "da8c1a49bab4eeca00e56658de926e35",
+    "semantic_hash": "da8c1a49bab4eeca00e56658de926e35"
+  },
+  "tests/CalloraVoipSdk.Core.IntegrationTests/SipReliableProvisionalManagerTests.cs": {
+    "mtime": 1783415311.917631,
+    "ast_hash": "b9d2db4f4e505d3a089937b74c91e730",
+    "semantic_hash": "b9d2db4f4e505d3a089937b74c91e730"
+  },
+  "tests/CalloraVoipSdk.Core.IntegrationTests/SipRportContactFlowTests.cs": {
+    "mtime": 1783539143.6084545,
+    "ast_hash": "3b8aba95689960e5f631f97d84172f9d",
+    "semantic_hash": "3b8aba95689960e5f631f97d84172f9d"
+  },
+  "tests/CalloraVoipSdk.Core.IntegrationTests/SipRportContactTests.cs": {
+    "mtime": 1783539143.6084545,
+    "ast_hash": "d3d9c69025d42643fc42581d94e8a574",
+    "semantic_hash": "d3d9c69025d42643fc42581d94e8a574"
+  },
+  "tests/CalloraVoipSdk.Core.IntegrationTests/SmokeTests.cs": {
+    "mtime": 1776373441.0568464,
+    "ast_hash": "3db7c0c5f5fed25fa5f73a6713cb06d6",
+    "semantic_hash": "3db7c0c5f5fed25fa5f73a6713cb06d6"
+  },
+  "tests/CalloraVoipSdk.Core.IntegrationTests/SrtpContextTests.cs": {
+    "mtime": 1783527037.0283322,
+    "ast_hash": "c3df56821573071b676b57d4033a3a6e",
+    "semantic_hash": "c3df56821573071b676b57d4033a3a6e"
+  },
+  "tests/CalloraVoipSdk.Core.IntegrationTests/SrtpHardeningTests.cs": {
+    "mtime": 1783543975.5240529,
+    "ast_hash": "3ae77c7385939e0345d75d67a671e051",
+    "semantic_hash": "3ae77c7385939e0345d75d67a671e051"
+  },
+  "tests/CalloraVoipSdk.Core.IntegrationTests/SrtpMediaPathTests.cs": {
+    "mtime": 1783542614.0254657,
+    "ast_hash": "0b2c84ba75867d6d0ee4218e8794b17c",
+    "semantic_hash": "0b2c84ba75867d6d0ee4218e8794b17c"
+  },
+  "tests/CalloraVoipSdk.Core.IntegrationTests/SrtpSignalingToMediaE2eTests.cs": {
+    "mtime": 1783543272.6550589,
+    "ast_hash": "233bac3560eda1dbc3850aa079f1094c",
+    "semantic_hash": "233bac3560eda1dbc3850aa079f1094c"
+  },
+  "tests/CalloraVoipSdk.Core.IntegrationTests/StunSharedSocketTests.cs": {
+    "mtime": 1783525171.7299168,
+    "ast_hash": "cc1dac1552ec7881f3b0a6af8a39393b",
+    "semantic_hash": "cc1dac1552ec7881f3b0a6af8a39393b"
+  },
+  "tests/CalloraVoipSdk.Core.IntegrationTests/TrunkInboundMatcherTests.cs": {
+    "mtime": 1783539143.6084545,
+    "ast_hash": "2133fe916ba762743d800c621b39a145",
+    "semantic_hash": "2133fe916ba762743d800c621b39a145"
+  },
+  "tests/CalloraVoipSdk.Core.IntegrationTests/VoipClientModuleRegistrationSafetyTests.cs": {
+    "mtime": 1783427634.9766173,
+    "ast_hash": "ae7ebe1a9a1fbeaba2f4ebc9ba08d8a9",
+    "semantic_hash": "ae7ebe1a9a1fbeaba2f4ebc9ba08d8a9"
+  },
+  "tests/CalloraVoipSdk.SoakTests/CalloraVoipSdk.SoakTests.csproj": {
+    "mtime": 1779887929.4079325,
+    "ast_hash": "997fd57602db5b8d66ec20788bcf8c7f",
+    "semantic_hash": "997fd57602db5b8d66ec20788bcf8c7f"
+  },
+  "tests/CalloraVoipSdk.SoakTests/GlobalUsings.cs": {
+    "mtime": 1776373441.0568464,
+    "ast_hash": "5a6674b5690f598af47ff55d055e5524",
+    "semantic_hash": "5a6674b5690f598af47ff55d055e5524"
+  },
+  "tests/CalloraVoipSdk.SoakTests/SmokeTests.cs": {
+    "mtime": 1776373441.0568464,
+    "ast_hash": "ea62871998f0ab8626bdfab0f94a935f",
+    "semantic_hash": "ea62871998f0ab8626bdfab0f94a935f"
+  },
+  ".github/ISSUE_TEMPLATE/bug_report.md": {
+    "mtime": 1779877601.1213648,
+    "ast_hash": "e468801d29e6b66b0d496136e22e8b34",
+    "semantic_hash": "e468801d29e6b66b0d496136e22e8b34"
+  },
+  ".github/ISSUE_TEMPLATE/feature_request.md": {
+    "mtime": 1779877601.1215558,
+    "ast_hash": "174545e1d9daff8020525fdd1e020411",
+    "semantic_hash": "174545e1d9daff8020525fdd1e020411"
+  },
+  ".github/workflows/ci.yml": {
+    "mtime": 1783544235.591283,
+    "ast_hash": "1b7bd8a3cffc417ff1f7cc53a454d1f9",
+    "semantic_hash": "1b7bd8a3cffc417ff1f7cc53a454d1f9"
+  },
+  ".github/workflows/docs.yml": {
+    "mtime": 1783540135.0365973,
+    "ast_hash": "036458b3cb277ce1d389d651dd9d7334",
+    "semantic_hash": "036458b3cb277ce1d389d651dd9d7334"
+  },
+  ".github/workflows/packages.yml": {
+    "mtime": 1783540145.4836814,
+    "ast_hash": "16683daa8534378f148ee2397b9ee2cd",
+    "semantic_hash": "16683daa8534378f148ee2397b9ee2cd"
+  },
+  ".github/workflows/release-docs.yml": {
+    "mtime": 1779887930.3929405,
+    "ast_hash": "35fb51656b584099a79169f4b3bb1a89",
+    "semantic_hash": "35fb51656b584099a79169f4b3bb1a89"
+  },
+  "CHANGELOG.md": {
+    "mtime": 1783539143.6064544,
+    "ast_hash": "cf7a7e9b1e22c4cdc0c11c50f1f56553",
+    "semantic_hash": "cf7a7e9b1e22c4cdc0c11c50f1f56553"
+  },
+  "README.md": {
+    "mtime": 1783522491.0109062,
+    "ast_hash": "3c8bdd22761c5d61e994bc4e284bc2b0",
+    "semantic_hash": "3c8bdd22761c5d61e994bc4e284bc2b0"
+  },
+  "docs/portal/architecture/call-lifecycle.md": {
+    "mtime": 1776374106.336824,
+    "ast_hash": "a1f489fbccb7a84c5d9ee393b0f61ece",
+    "semantic_hash": "a1f489fbccb7a84c5d9ee393b0f61ece"
+  },
+  "docs/portal/architecture/media-pipeline.md": {
+    "mtime": 1776374106.3378239,
+    "ast_hash": "ee118f7fb3c7255780e37374e5160c4f",
+    "semantic_hash": "ee118f7fb3c7255780e37374e5160c4f"
+  },
+  "docs/portal/architecture/overview.md": {
+    "mtime": 1783522491.0109062,
+    "ast_hash": "aef9e5fa42e7050a451ad2c0c3217571",
+    "semantic_hash": "aef9e5fa42e7050a451ad2c0c3217571"
+  },
+  "docs/portal/architecture/toc.yml": {
+    "mtime": 1779877601.1298046,
+    "ast_hash": "5262772d9ab670b67bea7fa727ee4223",
+    "semantic_hash": "5262772d9ab670b67bea7fa727ee4223"
+  },
+  "docs/portal/changelog.md": {
+    "mtime": 1783522491.0109062,
+    "ast_hash": "de237db656f15c20887274aac337b423",
+    "semantic_hash": "de237db656f15c20887274aac337b423"
+  },
+  "docs/portal/examples/demo-walkthrough.md": {
+    "mtime": 1783522491.0109062,
+    "ast_hash": "f14df3d3bb8b49b0a34b56f9e5abdfbb",
+    "semantic_hash": "f14df3d3bb8b49b0a34b56f9e5abdfbb"
+  },
+  "docs/portal/examples/toc.yml": {
+    "mtime": 1776374106.3378239,
+    "ast_hash": "e9f0177f1f917705b485a8ece8ddcabe",
+    "semantic_hash": "e9f0177f1f917705b485a8ece8ddcabe"
+  },
+  "docs/portal/guides/getting-started.md": {
+    "mtime": 1783522491.0109062,
+    "ast_hash": "814c434c1e0963e9884c87c342bc9d00",
+    "semantic_hash": "814c434c1e0963e9884c87c342bc9d00"
+  },
+  "docs/portal/guides/making-calls.md": {
+    "mtime": 1776374106.3378239,
+    "ast_hash": "76dda421c2a906823283f2efc91f1562",
+    "semantic_hash": "76dda421c2a906823283f2efc91f1562"
+  },
+  "docs/portal/guides/media-and-audio.md": {
+    "mtime": 1783522491.0109062,
+    "ast_hash": "b53d174a06751054156c877d99c0dd0d",
+    "semantic_hash": "b53d174a06751054156c877d99c0dd0d"
+  },
+  "docs/portal/guides/toc.yml": {
+    "mtime": 1776374106.3378239,
+    "ast_hash": "48f0e1a0446e3d140a8affd6ef999548",
+    "semantic_hash": "48f0e1a0446e3d140a8affd6ef999548"
+  },
+  "docs/portal/index.md": {
+    "mtime": 1783522491.0109062,
+    "ast_hash": "0c44f3eda847f158d399e8e8cb03cb50",
+    "semantic_hash": "0c44f3eda847f158d399e8e8cb03cb50"
+  },
+  "docs/portal/toc.yml": {
+    "mtime": 1776508576.592872,
+    "ast_hash": "678d9dd2ed5d8f37da19b5f79429360f",
+    "semantic_hash": "678d9dd2ed5d8f37da19b5f79429360f"
+  },
+  "filterConfig.yml": {
+    "mtime": 1776374106.338824,
+    "ast_hash": "bcc59893bb9cbe67578c5502a0b77516",
+    "semantic_hash": "bcc59893bb9cbe67578c5502a0b77516"
+  },
+  "src/Client/Domain/Configuration/BridgeAudioFormat.cs": {
+    "mtime": 1783579390.2432272,
+    "ast_hash": "c53cb52f2c6e88d3dbba59c4f512a892",
+    "semantic_hash": ""
+  },
+  "src/Core/Application/Media/Sessions/BridgeAudioTranscoder.cs": {
+    "mtime": 1783579206.535581,
+    "ast_hash": "1983e95b6ed25fb2454adeadf7723452",
+    "semantic_hash": ""
+  },
+  "tests/CalloraVoipSdk.Core.IntegrationTests/BridgeAudioTranscodingTests.cs": {
+    "mtime": 1783579593.928052,
+    "ast_hash": "43e27eec13cb8c6312f1e8f33099de49",
+    "semantic_hash": ""
+  }
+}

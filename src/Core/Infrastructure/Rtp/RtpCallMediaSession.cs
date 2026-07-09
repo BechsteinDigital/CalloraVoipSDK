@@ -3,6 +3,7 @@ using System.Buffers.Binary;
 using System.Collections.ObjectModel;
 using System.Runtime.InteropServices;
 using CalloraVoipSdk.Core.Application.Media;
+using CalloraVoipSdk.Core.Application.Media.Sessions;
 using CalloraVoipSdk.Core.Domain.Calls;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.JitterBuffer;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
@@ -38,6 +39,12 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
     internal ISrtpContext? InboundSrtpContext => _inboundSrtp;
     private readonly ISrtpContext? _outboundSrtp;
     private readonly ISrtpContext? _inboundSrtp;
+
+    // Wire<->tap audio transcoder; null means the consumer receives the raw wire payload
+    // (passthrough — the default and the case when wire already equals the tap codec).
+    private readonly BridgeAudioTranscoder? _bridgeTranscoder;
+    internal bool BridgeTranscodingActive => _bridgeTranscoder is not null;
+
     private readonly ILogger<RtpCallMediaSession> _logger;
     private readonly CancellationTokenSource _cts = new();
     private readonly object _rtcpStatsSync = new();
@@ -93,8 +100,12 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
     /// <inheritdoc />
     public event Action<byte[]>? RtcpMuxDatagramReceived;
 
-    internal RtpCallMediaSession(CallMediaParameters parameters, ILoggerFactory loggerFactory)
-        : this(parameters, loggerFactory, jitterBufferOptions: null, playoutInterval: null, metricsPublishInterval: null)
+    internal RtpCallMediaSession(
+        CallMediaParameters parameters,
+        ILoggerFactory loggerFactory,
+        PayloadCodecKind? bridgeTapCodec = null)
+        : this(parameters, loggerFactory, jitterBufferOptions: null, playoutInterval: null,
+            metricsPublishInterval: null, bridgeTapCodec: bridgeTapCodec)
     {
     }
 
@@ -103,7 +114,8 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
         ILoggerFactory loggerFactory,
         JitterBufferOptions? jitterBufferOptions,
         TimeSpan? playoutInterval,
-        TimeSpan? metricsPublishInterval)
+        TimeSpan? metricsPublishInterval,
+        PayloadCodecKind? bridgeTapCodec = null)
     {
         ArgumentNullException.ThrowIfNull(parameters);
         ArgumentNullException.ThrowIfNull(loggerFactory);
@@ -122,6 +134,16 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
         };
         _jitterBuffer = new global::CalloraVoipSdk.Core.Infrastructure.Rtp.JitterBuffer.JitterBuffer(effectiveJitterBufferOptions);
         _jitterBuffer.UpdateRoundTripTime(DefaultRoundTripTimeHintMs);
+
+        // Bridge transcoding: when a fixed tap codec is requested and the negotiated wire
+        // codec differs, transcode audio frames between wire and tap so a single-codec
+        // consumer (e.g. the µ-law-only OpenAI bridge) works over any negotiated codec.
+        _bridgeTranscoder = bridgeTapCodec == PayloadCodecKind.Pcmu
+            ? BridgeAudioTranscoder.CreateForPcmuTap(
+                AudioPayloadTranscoder.ResolveCodecKind(ResolveWireCodecName(parameters), parameters.PayloadType),
+                (byte)parameters.PayloadType,
+                _logger)
+            : null;
 
         // This session creates the SRTP contexts and therefore owns their disposal
         // (key zeroing) — RtpSession only borrows them via options.
@@ -157,6 +179,18 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
     /// <inheritdoc />
     public async Task SendFrameAsync(CallAudioFrame frame, CancellationToken ct = default)
     {
+        // Bridge transcoding: the consumer hands us tap-codec (µ-law) audio; encode it to
+        // the negotiated wire codec and always send under the wire payload type.
+        if (_bridgeTranscoder is { } transcoder)
+        {
+            await _rtp.SendAsync(
+                transcoder.TapToWire(frame.Payload),
+                payloadTypeOverride: transcoder.WirePayloadType,
+                cancellationToken: ct)
+                .ConfigureAwait(false);
+            return;
+        }
+
         var outboundPayloadType = ResolveOutboundPayloadType(frame.PayloadType);
         await _rtp.SendAsync(
             frame.Payload,
@@ -478,8 +512,47 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
         return payload.ToArray();
     }
 
+    private static string ResolveWireCodecName(CallMediaParameters parameters)
+    {
+        if (!string.IsNullOrWhiteSpace(parameters.CodecName))
+            return parameters.CodecName.Trim();
+
+        return parameters.PayloadTypeCodecMap is not null
+               && parameters.PayloadTypeCodecMap.TryGetValue(parameters.PayloadType, out var mapped)
+               && !string.IsNullOrWhiteSpace(mapped)
+            ? mapped.Trim()
+            : string.Empty;
+    }
+
+    // µ-law digital silence is 0xFF; used as a safe inbound fallback on transcode failure.
+    private static byte[] MuLawSilence(int wirePayloadLength)
+    {
+        var samples = wirePayloadLength > 0 ? 160 : 0; // one 20 ms G.711 frame
+        var silence = new byte[samples];
+        Array.Fill(silence, (byte)0xFF);
+        return silence;
+    }
+
     private void DispatchFrame(byte[] payload, byte payloadType)
     {
+        // Bridge transcoding: convert the wire payload to the tap codec (µ-law) so a
+        // single-codec consumer receives a codec it understands. A decode failure yields
+        // µ-law silence rather than tearing down the playout loop.
+        if (_bridgeTranscoder is { } transcoder)
+        {
+            try
+            {
+                payload = transcoder.WireToTap(payload);
+                payloadType = transcoder.TapPayloadType;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Bridge wire->tap transcode failed; delivering silence.");
+                payload = MuLawSilence(payload.Length);
+                payloadType = transcoder.TapPayloadType;
+            }
+        }
+
         var frame = new CallAudioFrame(
             payload,
             payloadType,
