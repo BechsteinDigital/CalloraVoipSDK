@@ -42,7 +42,8 @@ internal static class SipHeaderRowRules
     {
         "Authorization",
         "Call-Info",
-        "Expires",
+        // Expires is valid in responses (REGISTER 200 OK top-level, RFC 3261 §10.3;
+        // SUBSCRIBE 200 OK, RFC 6665) — it must survive response parsing.
         "In-Reply-To",
         "Max-Forwards",
         "Organization",

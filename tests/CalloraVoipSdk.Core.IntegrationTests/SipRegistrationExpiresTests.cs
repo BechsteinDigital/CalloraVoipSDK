@@ -39,15 +39,36 @@ public sealed class SipRegistrationExpiresTests
     [Fact]
     public void OwnBinding_selected_evenWhenTopLevelExpiresPresent()
     {
-        // Tripwire: the response model currently classifies "Expires" as request-only
-        // (SipHeaderRowRules.RequestOnlyHeaderNames), so a top-level Expires header on a
-        // 200 OK is not surfaced and selection resolves via our Contact binding. If that
-        // classification is ever corrected, this expectation flips to 600 — see FOLLOW-UP.
+        // RFC 3261 §10.2.1.1: our Contact binding's expires parameter (30) takes precedence over
+        // the top-level Expires header (600) — even though the Expires header is now surfaced on
+        // responses (no longer stripped as request-only).
         var response = ResponseWith(
             $"<{OwnContact}>;expires=30, <sip:3089553t3@1.2.3.4:5060>;expires=6",
             expiresHeader: "600");
 
         Assert.Equal(30, SelectExpires(response));
+    }
+
+    [Fact]
+    public void TopLevelExpires_usedWhenNoOwnBindingMatches()
+    {
+        // The registrar granted the lifetime via the top-level Expires header (RFC 3261 §10.3)
+        // rather than a per-Contact expires for our binding — that value must now be honoured.
+        var response = ResponseWith(contact: null, expiresHeader: "1800");
+
+        Assert.Equal(1800, SelectExpires(response));
+    }
+
+    [Fact]
+    public void OwnContactExpires_beatsTopLevelAndOtherBindings_perRfc10211()
+    {
+        // Non-own binding first (900), our binding (45), plus a top-level Expires (600): our
+        // Contact expires wins over both.
+        var response = ResponseWith(
+            $"<sip:3089553t3@1.2.3.4:5060>;expires=900, <{OwnContact}>;expires=45",
+            expiresHeader: "600");
+
+        Assert.Equal(45, SelectExpires(response));
     }
 
     [Fact]
