@@ -44,11 +44,14 @@ public sealed class SdkConfiguration
     public bool EnableAutomaticAudioDeviceSelection { get; init; } = true;
 
     /// <summary>
-    /// Ordered audio codec preference by SDP encoding name ("PCMU", "PCMA", "G722").
-    /// When set, SDP offers and answers only include the listed codecs (plus DTMF
-    /// telephone-event) in this order, and RTP sessions use this preference to pick the
-    /// primary codec. Unsupported names are ignored; when nothing matches, the SDK
-    /// default set (G722, PCMA, PCMU) is used. <see langword="null"/> keeps defaults.
+    /// Ordered audio codec preference by SDP encoding name ("PCMU", "PCMA", "G722",
+    /// "opus"). When set, SDP offers and answers only include the listed codecs (plus
+    /// DTMF telephone-event) in this order, and RTP sessions use this preference to pick
+    /// the primary codec. Opus (RFC 7587, 48 kHz) is opt-in: it is only offered/answered
+    /// when listed here. Unknown names are ignored; when nothing matches, the SDK default
+    /// set (G722, PCMA, PCMU) is used. When a listed codec is known but the peer does not
+    /// offer it, negotiation fails rather than producing an audio-less answer.
+    /// <see langword="null"/> keeps defaults.
     /// </summary>
     public IReadOnlyList<string>? PreferredAudioCodecs { get; init; }
 
