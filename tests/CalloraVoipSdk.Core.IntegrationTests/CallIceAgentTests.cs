@@ -1,5 +1,6 @@
 using System.Net;
 using CalloraVoipSdk.Core.Application.Media;
+using CalloraVoipSdk.Core.Application.Media.Ice;
 using CalloraVoipSdk.Core.Application.Ports.Connectivity;
 using CalloraVoipSdk.Core.Domain.Calls;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -52,7 +53,8 @@ public sealed class CallIceAgentTests
 
     private static CallMediaParameters Parameters(
         IReadOnlyList<CallIceCandidate> local,
-        IReadOnlyList<CallIceCandidate> remote) => new()
+        IReadOnlyList<CallIceCandidate> remote,
+        bool controlling = true) => new()
     {
         LocalEndPoint = LocalRtp,
         RemoteEndPoint = new IPEndPoint(IPAddress.Parse("192.0.2.20"), 42000),
@@ -61,6 +63,7 @@ public sealed class CallIceAgentTests
         SamplesPerPacket = 160,
         PayloadTypeCodecMap = new Dictionary<int, string> { [0] = "PCMU" },
         IceEnabled = true,
+        IceControlling = controlling,
         LocalIceUfrag = "localU",
         LocalIcePwd = "localP",
         RemoteIceUfrag = "remoteU",
@@ -160,8 +163,9 @@ public sealed class CallIceAgentTests
     [Fact]
     public async Task Connectivity_check_carries_local_priority_and_controlling_role()
     {
-        // RFC 8445 §7.2.2 wiring: the agent hands PRIORITY (the local candidate priority),
-        // the controlling role (I3 default) and a generated tie-breaker to the probe.
+        // RFC 8445 §7.2.2 wiring: the agent hands PRIORITY (the local candidate priority), the
+        // role derived from IceControlling, and a tie-breaker derived from the local ICE password
+        // (so the inbound handler computes the same value) to the probe.
         var probe = new FakeStunProbe { ConnectivityResults = { [_ => true] = true } };
         var agent = Agent(Config(), probe);
         var remote = new IPEndPoint(IPAddress.Parse("192.0.2.30"), 41000);
@@ -173,7 +177,25 @@ public sealed class CallIceAgentTests
         Assert.True(result.HasSelectedPair);
         Assert.Equal(123456u, probe.LastPriority);
         Assert.True(probe.LastIsControlling);
-        Assert.NotEqual(0ul, probe.LastTieBreaker);
+        Assert.Equal(IceTieBreaker.Derive("localP"), probe.LastTieBreaker);
+    }
+
+    [Fact]
+    public async Task Connectivity_check_uses_controlled_role_when_not_controlling()
+    {
+        // RFC 8445 §5.1.1: the answerer is controlled. When IceControlling is false the check
+        // must carry ICE-CONTROLLED, not ICE-CONTROLLING.
+        var probe = new FakeStunProbe { ConnectivityResults = { [_ => true] = true } };
+        var agent = Agent(Config(), probe);
+        var remote = new IPEndPoint(IPAddress.Parse("192.0.2.30"), 41000);
+
+        var result = await agent.SelectCandidatePairAsync(
+            CallId.New(),
+            Parameters([Candidate("host", LocalRtp)], [Candidate("host", remote)], controlling: false));
+
+        Assert.True(result.HasSelectedPair);
+        Assert.False(probe.LastIsControlling);
+        Assert.Equal(IceTieBreaker.Derive("localP"), probe.LastTieBreaker);
     }
 
     [Fact]

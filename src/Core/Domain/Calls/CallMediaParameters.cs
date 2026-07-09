@@ -67,6 +67,13 @@ public sealed class CallMediaParameters
     public bool IceEnabled { get; init; }
 
     /// <summary>
+    /// True when this agent holds the ICE controlling role (RFC 8445 §5.1.1): the SDP offerer is
+    /// controlling, the answerer controlled. Defaults to controlling to preserve the outbound-offer
+    /// case; the infrastructure adapter sets it from the actual offer/answer direction.
+    /// </summary>
+    public bool IceControlling { get; init; } = true;
+
+    /// <summary>
     /// Local ICE username fragment used for connectivity checks.
     /// </summary>
     public string? LocalIceUfrag { get; init; }

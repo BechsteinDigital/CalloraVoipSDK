@@ -177,7 +177,8 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
         // negotiated, answer them on this same socket via the STUN demux seam.
         _iceInbound = parameters.IceEnabled
             ? IceInboundStunHandlerFactory.Create(
-                parameters.LocalIceUfrag, parameters.LocalIcePwd, _rtp.SendRawAsync, loggerFactory)
+                parameters.LocalIceUfrag, parameters.LocalIcePwd, parameters.IceControlling,
+                _rtp.SendRawAsync, loggerFactory)
             : null;
         if (_iceInbound is not null)
             _rtp.StunPacketReceived += _iceInbound.OnStunPacketReceived;

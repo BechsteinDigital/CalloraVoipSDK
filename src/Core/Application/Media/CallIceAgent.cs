@@ -21,10 +21,6 @@ internal sealed class CallIceAgent : ICallIceAgent
     private readonly IIceTelemetrySink? _telemetry;
     private readonly ILogger<CallIceAgent> _logger;
 
-    // RFC 8445 §5.2: the tie-breaker is chosen once per agent and carried in the
-    // ICE-CONTROLLING / ICE-CONTROLLED attribute of every connectivity check.
-    private readonly ulong _tieBreaker = IceTieBreaker.Generate();
-
     /// <summary>
     /// Creates an ICE agent with runtime configuration and the STUN probe port.
     /// </summary>
@@ -215,11 +211,10 @@ internal sealed class CallIceAgent : ICallIceAgent
             return candidatesMissing;
         }
 
-        // I3: the local agent defaults to the controlling role. Deriving the role from the SDP
-        // offer/answer direction (offerer = controlling) and resolving inbound role conflicts
-        // (RFC 8445 §7.3.1.1) is a later package; the pair-priority formula (§6.1.2.3) still
-        // needs a role, and the controlling assignment matches the common outbound-INVITE case.
-        const IceRole role = IceRole.Controlling;
+        // RFC 8445 §5.1.1: the SDP offerer is controlling, the answerer controlled. The role is
+        // derived by the infrastructure adapter from the offer/answer direction and carried here;
+        // it feeds both the pair-priority formula (§6.1.2.3) and the role attribute on each check.
+        var role = parameters.IceControlling ? IceRole.Controlling : IceRole.Controlled;
 
         var checkList = IceCheckList.Create(localCandidates, remoteCandidates, role);
         if (checkList.Count == 0)
@@ -355,6 +350,11 @@ internal sealed class CallIceAgent : ICallIceAgent
         // package), so the approximation is harmless here.
         var priority = (uint)Math.Clamp(pair.Local.Priority, 0L, uint.MaxValue);
 
+        // RFC 8445 §5.2 tie-breaker, derived deterministically from the local ICE password so the
+        // inbound handler (which shares no state with this agent) computes the same value and a
+        // role conflict resolves identically in both directions.
+        var tieBreaker = IceTieBreaker.Derive(parameters.LocalIcePwd ?? string.Empty);
+
         for (var attempt = 0; attempt <= retries; attempt++)
         {
             ct.ThrowIfCancellationRequested();
@@ -367,7 +367,7 @@ internal sealed class CallIceAgent : ICallIceAgent
                     parameters.RemoteIcePwd!,
                     priority,
                     isControlling,
-                    _tieBreaker,
+                    tieBreaker,
                     useCandidate,
                     timeout,
                     ct)
