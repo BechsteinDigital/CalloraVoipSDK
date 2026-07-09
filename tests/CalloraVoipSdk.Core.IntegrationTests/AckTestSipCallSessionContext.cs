@@ -44,7 +44,7 @@ internal sealed class AckTestSipCallSessionContext : ISipCallSessionContext
 
     public string RemoteRequestUri { get; } = "sip:bob@example.test";
 
-    public IReadOnlyList<string> RouteSet { get; } = Array.Empty<string>();
+    public IReadOnlyList<string> RouteSet { get; init; } = Array.Empty<string>();
 
     public bool IsInbound => false;
 
