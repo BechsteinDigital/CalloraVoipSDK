@@ -21,10 +21,13 @@ internal sealed class JitterBufferOptions
     public int ClockRate { get; init; } = 8000;
 
     /// <summary>
-    /// Initial RTT hint in milliseconds used by adaptive delay control until
-    /// a better estimate is provided (for example by RTCP in later iterations).
+    /// Initial RTT hint in milliseconds used by adaptive delay control until the first real
+    /// RTCP RTT sample arrives — that first sample replaces this seed rather than smoothing
+    /// from it, so convergence stays fast. Seeded to 100 ms (a conservative WAN round trip) so
+    /// the delay floor has an RTT budget during the first RTCP interval instead of zero, which
+    /// avoids early-call underruns before the first Sender/Receiver Report.
     /// </summary>
-    public double InitialRoundTripTimeMs { get; init; }
+    public double InitialRoundTripTimeMs { get; init; } = 100;
 
     /// <summary>
     /// EWMA smoothing factor for RTT updates in the range [0, 1].
