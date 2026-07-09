@@ -135,6 +135,10 @@ internal sealed class SipRegistrationService : ISipRegistrationService
             : 0;
         var reducedBodyRetryUsed = false;
         var schemeDowngradeRetryUsed = false;
+        // Bound stale-nonce retries: one fresh nonce should suffice; a registrar that keeps
+        // answering stale=true must not spin this into an unbounded REGISTER loop.
+        var staleRetries = 0;
+        const int maxStaleRetries = 2;
         string? authorizationHeader = null;
         string? authorizationHeaderName = null;
         Exception? lastTransportFailure = null;
@@ -372,7 +376,8 @@ internal sealed class SipRegistrationService : ISipRegistrationService
 
                 if (authAttempted && response.StatusCode is 401 or 407)
                 {
-                    if (SipDigestChallengeSelector.TrySelect(
+                    if (staleRetries < maxStaleRetries
+                        && SipDigestChallengeSelector.TrySelect(
                             response,
                             out var challengeHeader,
                             out var nextAuthorizationHeaderName)
@@ -387,6 +392,7 @@ internal sealed class SipRegistrationService : ISipRegistrationService
                             out var generatedAuthorization))
                     {
                         cseq++;
+                        staleRetries++;
                         authorizationHeader = generatedAuthorization;
                         authorizationHeaderName = nextAuthorizationHeaderName;
                         _telemetry.PublishMetric(new SipMetricRecord
