@@ -5,6 +5,7 @@ using CalloraVoipSdk.Core.Application.Calls;
 using CalloraVoipSdk.Core.Application.Convenience;
 using CalloraVoipSdk.Core.Application.Lines;
 using CalloraVoipSdk.Core.Application.Media;
+using CalloraVoipSdk.Core.Application.Media.Sessions;
 using CalloraVoipSdk.Core.Application.Ports.Audio;
 using CalloraVoipSdk.Core.Application.Ports.Connectivity;
 using CalloraVoipSdk.Core.Application.Ports.Media;
@@ -258,8 +259,11 @@ public sealed class VoipClient : IVoipClient
         PolicyManager = new PolicyManager(config.SrtpPolicy);
 
         // Application media orchestrator: creates and manages RTP sessions per call.
+        var bridgeTapCodec = config.BridgeAudioFormat == BridgeAudioFormat.Pcmu
+            ? PayloadCodecKind.Pcmu
+            : (PayloadCodecKind?)null;
         var mediaSessionFactory = ResolveService<ICallMediaSessionFactory>(services)
-            ?? new RtpCallMediaSessionFactory(logFactory);
+            ?? new RtpCallMediaSessionFactory(logFactory, bridgeTapCodec);
         var rtcpPacketCodec = ResolveService<IRtcpPacketCodec>(services)
             ?? new RtcpPacketCodec();
         var mediaSupervision = new MediaSupervisionOptions
