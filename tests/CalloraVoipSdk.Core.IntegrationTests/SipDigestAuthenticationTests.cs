@@ -34,6 +34,18 @@ public sealed class SipDigestAuthenticationTests
         return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 
+    private static string HashHexLower(string input, string algorithm)
+    {
+        var bytes = Encoding.UTF8.GetBytes(input);
+        byte[] hash = algorithm switch
+        {
+            "MD5" => MD5.HashData(bytes),
+            "SHA-256" => SHA256.HashData(bytes),
+            _ => throw new ArgumentException($"Unsupported algorithm {algorithm}", nameof(algorithm)),
+        };
+        return Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
     [Fact]
     public void No_qop_md5_response_matches_the_reference_digest()
     {
@@ -97,6 +109,49 @@ public sealed class SipDigestAuthenticationTests
     }
 
     [Fact]
+    public void Qop_auth_md5_sess_folds_nonce_and_cnonce_into_ha1()
+    {
+        var auth = new SipDigestAuthentication();
+        var challenge = $"Digest realm=\"{Realm}\", nonce=\"{Nonce}\", qop=\"auth\", algorithm=MD5-sess";
+
+        var ok = auth.TryCreateAuthorizationHeader(
+            challenge, Username, Password, Method, Uri, nonceCount: 1, out var header);
+
+        Assert.True(ok);
+        Assert.Equal("MD5-sess", Param(header, "algorithm"));
+        AssertSessResponse(header, "MD5");
+    }
+
+    [Fact]
+    public void Qop_auth_sha256_sess_folds_nonce_and_cnonce_into_ha1()
+    {
+        var auth = new SipDigestAuthentication();
+        var challenge = $"Digest realm=\"{Realm}\", nonce=\"{Nonce}\", qop=\"auth\", algorithm=SHA-256-sess";
+
+        var ok = auth.TryCreateAuthorizationHeader(
+            challenge, Username, Password, Method, Uri, nonceCount: 1, out var header);
+
+        Assert.True(ok);
+        Assert.Equal("SHA-256-sess", Param(header, "algorithm"));
+        AssertSessResponse(header, "SHA-256");
+    }
+
+    // RFC 7616 §3.4.2 session variant: HA1 = H(H(user:realm:pass):nonce:cnonce), recomputed here
+    // with the cnonce the authenticator emitted, against a qop=auth response.
+    private static void AssertSessResponse(string header, string hashAlgorithm)
+    {
+        var cnonce = Param(header, "cnonce");
+        Assert.False(string.IsNullOrWhiteSpace(cnonce));
+        Assert.Equal("00000001", Param(header, "nc"));
+
+        var ha1Base = HashHexLower($"{Username}:{Realm}:{Password}", hashAlgorithm);
+        var ha1 = HashHexLower($"{ha1Base}:{Nonce}:{cnonce}", hashAlgorithm);
+        var ha2 = HashHexLower($"{Method}:{Uri}", hashAlgorithm);
+        var expected = HashHexLower($"{ha1}:{Nonce}:00000001:{cnonce}:auth:{ha2}", hashAlgorithm);
+        Assert.Equal(expected, Param(header, "response"));
+    }
+
+    [Fact]
     public void Opaque_is_echoed_when_the_challenge_carries_it()
     {
         var auth = new SipDigestAuthentication();
@@ -116,6 +171,7 @@ public sealed class SipDigestAuthenticationTests
     [InlineData("Digest nonce=\"abc\"")]                              // missing realm
     [InlineData("Digest realm=\"biloxi.com\"")]                      // missing nonce
     [InlineData("Digest realm=\"biloxi.com\", nonce=\"abc\", algorithm=MD6")] // unsupported algorithm
+    [InlineData("Digest realm=\"biloxi.com\", nonce=\"abc\", algorithm=SHA-512-256")] // .NET has no SHA-512/256
     public void Unusable_challenges_are_rejected(string? challenge)
     {
         var auth = new SipDigestAuthentication();

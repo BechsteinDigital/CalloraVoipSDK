@@ -138,15 +138,10 @@ internal sealed class SipDigestAuthentication : ISipDigestAuthenticator
                 baseAlgorithm = "SHA-256";
                 useSessionAlgorithm = true;
                 return true;
-            case "SHA-512-256":
-            case "SHA-512/256":
-                baseAlgorithm = "SHA-512-256";
-                return true;
-            case "SHA-512-256-SESS":
-            case "SHA-512/256-SESS":
-                baseAlgorithm = "SHA-512-256";
-                useSessionAlgorithm = true;
-                return true;
+            // SHA-512-256 (RFC 7616) is intentionally not advertised: .NET's managed crypto has no
+            // SHA-512/256 primitive (unlike the OpenSSL CLI), so it cannot be computed here.
+            // Reporting it unsupported (false) is honest, rather than resolving it and then failing
+            // at the hash step. Registrars that require it are extremely rare in practice.
             default:
                 return false;
         }
