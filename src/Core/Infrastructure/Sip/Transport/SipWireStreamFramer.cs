@@ -17,8 +17,7 @@ internal sealed class SipWireStreamFramer
     /// </summary>
     public void Append(ReadOnlySpan<byte> bytes)
     {
-        for (var i = 0; i < bytes.Length; i++)
-            _buffer.Add(bytes[i]);
+        _buffer.AddRange(bytes);
     }
 
     /// <summary>
@@ -50,10 +49,13 @@ internal sealed class SipWireStreamFramer
 
         var headerLength = headerEndIndex + 4;
         var headerText = Encoding.UTF8.GetString(bufferSpan[..headerEndIndex]);
-        if (HasChunkedTransferEncoding(headerText))
+        // Split the header into lines once and reuse for both header checks — the two
+        // parsers previously each re-split the same header text, doubling the allocation.
+        var headerLines = headerText.Split("\r\n", StringSplitOptions.None);
+        if (HasChunkedTransferEncoding(headerLines))
             throw new InvalidOperationException("SIP stream message MUST NOT use Transfer-Encoding: chunked.");
 
-        if (!TryParseContentLength(headerText, out var hasContentLength, out var contentLength))
+        if (!TryParseContentLength(headerLines, out var hasContentLength, out var contentLength))
             throw new InvalidOperationException("SIP stream message has invalid Content-Length header.");
         if (!hasContentLength)
             throw new InvalidOperationException("SIP stream message over stream transport must include Content-Length.");
@@ -114,11 +116,10 @@ internal sealed class SipWireStreamFramer
     /// Parses Content-Length (or compact l) from SIP header text.
     /// Returns false when values are malformed or conflicting.
     /// </summary>
-    private static bool TryParseContentLength(string headerText, out bool hasContentLength, out int contentLength)
+    private static bool TryParseContentLength(string[] lines, out bool hasContentLength, out int contentLength)
     {
         hasContentLength = false;
         contentLength = 0;
-        var lines = headerText.Split("\r\n", StringSplitOptions.None);
         int? parsed = null;
 
         foreach (var rawLine in lines)
@@ -159,9 +160,8 @@ internal sealed class SipWireStreamFramer
     /// <summary>
     /// Returns true when Transfer-Encoding contains chunked token.
     /// </summary>
-    private static bool HasChunkedTransferEncoding(string headerText)
+    private static bool HasChunkedTransferEncoding(string[] lines)
     {
-        var lines = headerText.Split("\r\n", StringSplitOptions.None);
         foreach (var rawLine in lines)
         {
             if (string.IsNullOrWhiteSpace(rawLine))
