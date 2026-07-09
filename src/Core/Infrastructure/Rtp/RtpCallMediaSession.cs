@@ -34,9 +34,9 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
 
     private readonly RtpSession _rtp;
 
-    // Answers inbound ICE connectivity checks demuxed off the media socket (RFC 8445 §7.3).
-    // Null when ICE was not negotiated for this leg.
-    private readonly IceInboundStunHandler? _iceInbound;
+    // ICE on the media socket: answers inbound connectivity checks (RFC 8445 §7.3) and runs
+    // RFC 7675 consent freshness. Inactive (routes nothing) when ICE was not negotiated.
+    private readonly IceMediaAttachment _iceMedia;
     private readonly IJitterBuffer _jitterBuffer;
 
     // SRTP contexts created (and thus owned) by this session; internal for test evidence.
@@ -173,15 +173,11 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
         _rtp.PacketReceived += OnPacketReceived;
         _rtp.ControlPacketReceived += OnControlPacketReceived;
 
-        // ICE connectivity checks (RFC 8445 §7.3) arrive on the media 5-tuple; when ICE is
-        // negotiated, answer them on this same socket via the STUN demux seam.
-        _iceInbound = parameters.IceEnabled
-            ? IceInboundStunHandlerFactory.Create(
-                parameters.LocalIceUfrag, parameters.LocalIcePwd, parameters.IceControlling,
-                _rtp.SendRawAsync, loggerFactory)
-            : null;
-        if (_iceInbound is not null)
-            _rtp.StunPacketReceived += _iceInbound.OnStunPacketReceived;
+        // ICE on the media 5-tuple (RFC 8445 §7.3 inbound checks + RFC 7675 consent): the attachment
+        // answers inbound checks and runs consent freshness on this same socket.
+        _iceMedia = new IceMediaAttachment(parameters, _rtp.SendRawAsync, loggerFactory);
+        if (_iceMedia.IsActive)
+            _rtp.StunPacketReceived += _iceMedia.OnStunPacketReceived;
     }
 
     /// <inheritdoc />
@@ -191,6 +187,7 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
         _nextMetricsPublishAtUtc = DateTimeOffset.UtcNow.Add(_metricsPublishInterval);
 
         _ = _rtp.StartAsync(_cts.Token);
+        _iceMedia.Start();
         _playoutLoop = RunPlayoutLoopAsync(_cts.Token);
         return Task.CompletedTask;
     }
@@ -383,8 +380,9 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
 
         _rtp.PacketReceived -= OnPacketReceived;
         _rtp.ControlPacketReceived -= OnControlPacketReceived;
-        if (_iceInbound is not null)
-            _rtp.StunPacketReceived -= _iceInbound.OnStunPacketReceived;
+        if (_iceMedia.IsActive)
+            _rtp.StunPacketReceived -= _iceMedia.OnStunPacketReceived;
+        await _iceMedia.DisposeAsync().ConfigureAwait(false);
         _cts.Cancel();
 
         var playoutLoop = _playoutLoop;
