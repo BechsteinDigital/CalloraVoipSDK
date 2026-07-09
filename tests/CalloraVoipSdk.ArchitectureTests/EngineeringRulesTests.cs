@@ -14,14 +14,10 @@ public sealed class EngineeringRulesTests
 {
     // --- Regel: DDD-Schichtung — Domain haengt von niemandem, Application nicht von Infrastructure/Client ---
 
-    private static readonly string[] LayeringBaseline =
-    [
-        // K4 (DialOptions) behoben: DialOptions ist jetzt ein Domain-Typ (Core.Domain.Calls).
-        // PhoneLine bleibt: es referenziert zusaetzlich CallManager (Application) — ein
-        // separater, groesserer Domain->Application-Leak (PhoneLine orchestriert Calls).
-        // Eigene Folgearbeit (PhoneLine nach Application oder CallManager-Abstraktion).
-        "src/Core/Domain/Lines/PhoneLine.cs",
-    ];
+    // K4 vollstaendig behoben: DialOptions ist Domain (Core.Domain.Calls); PhoneLine haengt
+    // nur noch an der Domain-Abstraktion ICallRegistry (von CallManager implementiert) statt
+    // am Application-CallManager. Kein Domain->Application/Infrastructure-Leak mehr.
+    private static readonly string[] LayeringBaseline = [];
 
     [Fact]
     public void Domain_und_Application_halten_die_Schichtrichtung_ein()

@@ -4,9 +4,13 @@ using CalloraVoipSdk.Core.Domain.Events;
 
 namespace CalloraVoipSdk.Core.Application.Calls;
 
-public sealed class CallManager
+public sealed class CallManager : ICallRegistry
 {
     private readonly ConcurrentDictionary<CallId, Call> _calls = new();
+
+    // Explicit implementation keeps Register internal on the public CallManager surface
+    // while satisfying the Domain-facing ICallRegistry abstraction.
+    void ICallRegistry.Register(Call call) => Register(call);
 
     internal CallManager()
     {

@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Logging;
-using CalloraVoipSdk.Core.Application.Calls;
 using CalloraVoipSdk.Core.Domain.Calls;
 using CalloraVoipSdk.Core.Domain.Events;
 
@@ -8,15 +7,15 @@ namespace CalloraVoipSdk.Core.Domain.Lines;
 internal sealed class PhoneLine : IPhoneLine, IDisposable
 {
     private readonly ILineChannel                      _channel;
-    private readonly CallManager                       _callManager;
+    private readonly ICallRegistry                     _callRegistry;
     private readonly ILoggerFactory                    _loggerFactory;
     private readonly int                               _maxCalls;
     private readonly ILogger<PhoneLine>                _logger;
     private readonly Action<ICall, ICallChannel>?      _onCallCreated;
     private readonly object                            _sync    = new();
 
-    // Per-line active call counter — the global CallManager.Active includes calls from
-    // all lines, so we track our own count to enforce per-line limits correctly.
+    // Per-line active call counter — the registry's Active includes calls from all lines,
+    // so we track our own count to enforce per-line limits correctly.
     private int                          _activeLineCallCount;
 
     private LineState                    _state   = LineState.Unregistered;
@@ -34,14 +33,14 @@ internal sealed class PhoneLine : IPhoneLine, IDisposable
     internal PhoneLine(
         SipAccount                    account,
         ILineChannel                  channel,
-        CallManager                   callManager,
+        ICallRegistry                 callRegistry,
         int                           maxCalls,
         ILoggerFactory                loggerFactory,
         Action<ICall, ICallChannel>?  onCallCreated = null)
     {
         Account         = account;
         _channel        = channel;
-        _callManager    = callManager;
+        _callRegistry   = callRegistry;
         _maxCalls       = maxCalls;
         _loggerFactory  = loggerFactory;
         _onCallCreated  = onCallCreated;
@@ -79,7 +78,7 @@ internal sealed class PhoneLine : IPhoneLine, IDisposable
 
         var channel = _channel.PrepareOutboundChannel(options);
         var call = CreateCall(CallId.New(), CallDirection.Outbound, targetUri, channel);
-        _callManager.Register(call);
+        _callRegistry.Register(call);
         call.TransitionTo(CallState.Dialing);
 
         try
@@ -114,7 +113,7 @@ internal sealed class PhoneLine : IPhoneLine, IDisposable
 
         var call = CreateCall(CallId.New(), CallDirection.Inbound, remoteParty, channel);
         call.TransitionTo(CallState.Ringing);
-        _callManager.Register(call);
+        _callRegistry.Register(call);
         IncomingCall?.Invoke(this, new IncomingCallEventArgs(call));
     }
 
@@ -157,7 +156,7 @@ internal sealed class PhoneLine : IPhoneLine, IDisposable
         lock (_sync) { if (_disposed) return; _disposed = true; }
 
         // Only hang up calls that belong to this line.
-        foreach (var call in _callManager.Active.Where(c => ReferenceEquals(c.Line, this)))
+        foreach (var call in _callRegistry.Active.Where(c => ReferenceEquals(c.Line, this)))
             call.HangupAsync().ConfigureAwait(false);
 
         _channel.Dispose();
