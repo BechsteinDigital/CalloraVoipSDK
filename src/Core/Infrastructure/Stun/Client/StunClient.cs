@@ -60,6 +60,7 @@ internal sealed class StunClient : IStunClient
         RemoteCertificateValidationCallback? tlsRemoteCertificateValidationCallback = null,
         IPEndPoint? localEndPoint = null,
         Socket? sharedUdpSocket = null,
+        IReadOnlyList<StunAttribute>? additionalAttributes = null,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(serverEndPoint);
@@ -72,6 +73,7 @@ internal sealed class StunClient : IStunClient
             tlsRemoteCertificateValidationCallback: tlsRemoteCertificateValidationCallback,
             localEndPoint: localEndPoint,
             sharedUdpSocket: sharedUdpSocket,
+            additionalAttributes: additionalAttributes,
             ct: ct);
     }
 
@@ -90,6 +92,7 @@ internal sealed class StunClient : IStunClient
         RemoteCertificateValidationCallback? tlsRemoteCertificateValidationCallback,
         IPEndPoint? localEndPoint,
         Socket? sharedUdpSocket,
+        IReadOnlyList<StunAttribute>? additionalAttributes,
         CancellationToken ct)
     {
         if (credentials is null || !credentials.IsLongTerm)
@@ -103,6 +106,7 @@ internal sealed class StunClient : IStunClient
                     tlsRemoteCertificateValidationCallback,
                     localEndPoint,
                     sharedUdpSocket,
+                    additionalAttributes,
                     ct)
                 .ConfigureAwait(false);
         }
@@ -119,6 +123,7 @@ internal sealed class StunClient : IStunClient
                     tlsRemoteCertificateValidationCallback,
                     localEndPoint,
                     sharedUdpSocket,
+                    additionalAttributes,
                     ct)
                 .ConfigureAwait(false);
         }
@@ -144,6 +149,7 @@ internal sealed class StunClient : IStunClient
                     tlsRemoteCertificateValidationCallback,
                     localEndPoint,
                     sharedUdpSocket,
+                    additionalAttributes,
                     ct)
                 .ConfigureAwait(false);
         }
@@ -163,6 +169,7 @@ internal sealed class StunClient : IStunClient
                 tlsRemoteCertificateValidationCallback,
                 localEndPoint,
                 sharedUdpSocket,
+                additionalAttributes,
                 ct)
             .ConfigureAwait(false);
     }
@@ -178,14 +185,15 @@ internal sealed class StunClient : IStunClient
         RemoteCertificateValidationCallback? tlsRemoteCertificateValidationCallback,
         IPEndPoint? localEndPoint,
         Socket? sharedUdpSocket,
+        IReadOnlyList<StunAttribute>? additionalAttributes,
         CancellationToken ct)
         => transport switch
         {
-            StunTransport.Udp => QueryCoreUdpAsync(server, credentialsToSend, allowRedirect, localEndPoint, sharedUdpSocket, ct),
+            StunTransport.Udp => QueryCoreUdpAsync(server, credentialsToSend, allowRedirect, localEndPoint, sharedUdpSocket, additionalAttributes, ct),
             StunTransport.Tcp => QueryCoreStreamAsync(
-                server, credentialsToSend, transport, allowRedirect, tlsTargetHost, tlsRemoteCertificateValidationCallback, localEndPoint, sharedUdpSocket, ct),
+                server, credentialsToSend, transport, allowRedirect, tlsTargetHost, tlsRemoteCertificateValidationCallback, localEndPoint, sharedUdpSocket, additionalAttributes, ct),
             StunTransport.Tls => QueryCoreStreamAsync(
-                server, credentialsToSend, transport, allowRedirect, tlsTargetHost, tlsRemoteCertificateValidationCallback, localEndPoint, sharedUdpSocket, ct),
+                server, credentialsToSend, transport, allowRedirect, tlsTargetHost, tlsRemoteCertificateValidationCallback, localEndPoint, sharedUdpSocket, additionalAttributes, ct),
             _ => throw new ArgumentOutOfRangeException(nameof(transport), transport, "Unsupported STUN transport.")
         };
 
@@ -195,9 +203,10 @@ internal sealed class StunClient : IStunClient
         bool allowRedirect,
         IPEndPoint? localEndPoint,
         Socket? sharedUdpSocket,
+        IReadOnlyList<StunAttribute>? additionalAttributes,
         CancellationToken ct)
     {
-        var request = BuildRequest(credentialsToSend);
+        var request = BuildRequest(credentialsToSend, additionalAttributes);
         var requestBytes = EncodeRequest(request, credentialsToSend);
 
         _logger.LogDebug(
@@ -274,9 +283,10 @@ internal sealed class StunClient : IStunClient
         RemoteCertificateValidationCallback? tlsRemoteCertificateValidationCallback,
         IPEndPoint? localEndPoint,
         Socket? sharedUdpSocket,
+        IReadOnlyList<StunAttribute>? additionalAttributes,
         CancellationToken ct)
     {
-        var request = BuildRequest(credentialsToSend);
+        var request = BuildRequest(credentialsToSend, additionalAttributes);
         var requestBytes = EncodeRequest(request, credentialsToSend);
 
         _logger.LogDebug(
@@ -363,27 +373,39 @@ internal sealed class StunClient : IStunClient
             .ConfigureAwait(false);
     }
 
-    /// <summary>Builds a Binding Request, prepending credential attributes when present.</summary>
-    private static StunMessage BuildRequest(StunCredentials? credentials)
+    /// <summary>
+    /// Builds a Binding Request, inserting the optional additional attributes and the credential
+    /// attributes ahead of MESSAGE-INTEGRITY. Additional attributes are covered by
+    /// MESSAGE-INTEGRITY only when credentials are present (ICE checks always send credentials).
+    /// </summary>
+    private static StunMessage BuildRequest(
+        StunCredentials? credentials,
+        IReadOnlyList<StunAttribute>? additionalAttributes = null)
     {
         var request = StunMessage.CreateBindingRequest();
 
-        if (credentials is null)
+        var hasAdditional = additionalAttributes is { Count: > 0 };
+        if (credentials is null && !hasAdditional)
             return request;
 
-        // Credential attributes must precede MESSAGE-INTEGRITY.
-        // Order: USERNAME (always), then REALM + NONCE for long-term (RFC 5389 §10.1, §10.2.2).
-        var attrs = new List<StunAttribute>
-        {
-            new UsernameAttribute { Value = credentials.Username }
-        };
+        // Attributes covered by MESSAGE-INTEGRITY must precede it. ICE check attributes
+        // (PRIORITY, ICE-CONTROLLING/CONTROLLED; RFC 8445 §7.2.2) go first, then the credential
+        // attributes: USERNAME (always), then REALM + NONCE for long-term (RFC 5389 §10.1, §10.2.2).
+        var attrs = new List<StunAttribute>();
 
-        if (credentials.IsLongTerm)
+        if (hasAdditional)
+            attrs.AddRange(additionalAttributes!);
+
+        if (credentials is not null)
         {
-            if (credentials.Realm is not null)
-                attrs.Add(new RealmAttribute { Value = credentials.Realm });
-            if (credentials.Nonce is not null)
-                attrs.Add(new NonceAttribute { Value = credentials.Nonce });
+            attrs.Add(new UsernameAttribute { Value = credentials.Username });
+            if (credentials.IsLongTerm)
+            {
+                if (credentials.Realm is not null)
+                    attrs.Add(new RealmAttribute { Value = credentials.Realm });
+                if (credentials.Nonce is not null)
+                    attrs.Add(new NonceAttribute { Value = credentials.Nonce });
+            }
         }
 
         attrs.AddRange(request.Attributes);
@@ -578,6 +600,7 @@ internal sealed class StunClient : IStunClient
                             tlsRemoteCertificateValidationCallback: tlsRemoteCertificateValidationCallback,
                             localEndPoint: localEndPoint,
                             sharedUdpSocket: sharedUdpSocket,
+                            additionalAttributes: null,
                             ct: ct)
                         .ConfigureAwait(false);
                 }

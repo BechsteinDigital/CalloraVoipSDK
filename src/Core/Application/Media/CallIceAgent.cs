@@ -1,6 +1,7 @@
 using System.Net;
 using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
+using CalloraVoipSdk.Core.Application.Media.Ice;
 using CalloraVoipSdk.Core.Application.Ports.Connectivity;
 using CalloraVoipSdk.Core.Domain.Calls;
 using CalloraVoipSdk;
@@ -19,6 +20,10 @@ internal sealed class CallIceAgent : ICallIceAgent
     private readonly IIceTurnRelayAllocator? _turnRelayAllocator;
     private readonly IIceTelemetrySink? _telemetry;
     private readonly ILogger<CallIceAgent> _logger;
+
+    // RFC 8445 §5.2: the tie-breaker is chosen once per agent and carried in the
+    // ICE-CONTROLLING / ICE-CONTROLLED attribute of every connectivity check.
+    private readonly ulong _tieBreaker = IceTieBreaker.Generate();
 
     /// <summary>
     /// Creates an ICE agent with runtime configuration and the STUN probe port.
@@ -210,70 +215,75 @@ internal sealed class CallIceAgent : ICallIceAgent
             return candidatesMissing;
         }
 
+        // I3: the local agent defaults to the controlling role. Deriving the role from the SDP
+        // offer/answer direction (offerer = controlling) and resolving inbound role conflicts
+        // (RFC 8445 §7.3.1.1) is a later package; the pair-priority formula (§6.1.2.3) still
+        // needs a role, and the controlling assignment matches the common outbound-INVITE case.
+        const IceRole role = IceRole.Controlling;
+
+        var checkList = IceCheckList.Create(localCandidates, remoteCandidates, role);
+        if (checkList.Count == 0)
+        {
+            _logger.LogWarning(
+                "ICE state={State}: local/remote candidates for call {CallId} could not be paired "
+                + "(transport or address-family mismatch).",
+                CallIceNegotiationState.Failed,
+                callId);
+            var unpairable = new CallIceSelectionResult
+            {
+                State = CallIceNegotiationState.Failed,
+                ReasonCode = "ice_no_candidate_pairs"
+            };
+            PublishSelectionEvent(callId, unpairable, localCandidates.Length, remoteCandidates.Length);
+            return unpairable;
+        }
+
         _logger.LogDebug(
             "ICE state={State}: running connectivity checks for call {CallId} with {PairCount} pairs.",
             CallIceNegotiationState.Checking,
             callId,
-            localCandidates.Length * remoteCandidates.Length);
+            checkList.Count);
 
-        var orderedPairs = BuildCandidatePairs(parameters.LocalEndPoint, localCandidates, remoteCandidates);
         var retries = Math.Max(0, _configuration.ConnectivityCheckRetries);
         var timeout = _configuration.ConnectivityCheckTimeout <= TimeSpan.Zero
             ? TimeSpan.FromSeconds(2)
             : _configuration.ConnectivityCheckTimeout;
 
-        foreach (var pair in orderedPairs)
+        var isControlling = role == IceRole.Controlling;
+        var selectedPair = await IceConnectivityScheduler.RunAsync(
+                checkList,
+                (pair, token) => CheckPairAsync(callId, parameters, pair, isControlling, timeout, retries, token),
+                ct)
+            .ConfigureAwait(false);
+
+        if (selectedPair is not null)
         {
-            for (var attempt = 0; attempt <= retries; attempt++)
+            var localProbeEndPoint = ResolveLocalProbeEndPoint(parameters.LocalEndPoint, selectedPair.Local);
+            var remoteEndPoint = new IPEndPoint(
+                IPAddress.Parse(selectedPair.Remote.Address),
+                selectedPair.Remote.Port);
+
+            _logger.LogInformation(
+                "ICE state={State}: selected valid pair for call {CallId}: local={LocalCandidateType} {LocalEndPoint}, remote={RemoteCandidateType} {RemoteEndPoint}.",
+                CallIceNegotiationState.Connected,
+                callId,
+                selectedPair.Local.Type,
+                localProbeEndPoint,
+                selectedPair.Remote.Type,
+                remoteEndPoint);
+
+            var selected = new CallIceSelectionResult
             {
-                ct.ThrowIfCancellationRequested();
-
-                var ok = await _stunProbe.TryCheckConnectivityAsync(
-                        pair.LocalProbeEndPoint,
-                        pair.RemoteEndPoint,
-                        parameters.LocalIceUfrag!,
-                        parameters.RemoteIceUfrag!,
-                        parameters.RemoteIcePwd!,
-                        timeout,
-                        ct)
-                    .ConfigureAwait(false);
-
-                if (!ok)
-                {
-                    _logger.LogDebug(
-                        "ICE check failed for call {CallId} pair {LocalType}/{RemoteType} {Local}->{Remote} attempt {Attempt}/{Attempts}.",
-                        callId,
-                        pair.LocalCandidate.Type,
-                        pair.RemoteCandidate.Type,
-                        pair.LocalProbeEndPoint,
-                        pair.RemoteEndPoint,
-                        attempt + 1,
-                        retries + 1);
-                    continue;
-                }
-
-                _logger.LogInformation(
-                    "ICE state={State}: nominated pair for call {CallId}: local={LocalCandidateType} {LocalEndPoint}, remote={RemoteCandidateType} {RemoteEndPoint}.",
-                    CallIceNegotiationState.Nominating,
-                    callId,
-                    pair.LocalCandidate.Type,
-                    pair.LocalProbeEndPoint,
-                    pair.RemoteCandidate.Type,
-                    pair.RemoteEndPoint);
-
-                var selected = new CallIceSelectionResult
-                {
-                    State = CallIceNegotiationState.Connected,
-                    HasSelectedPair = true,
-                    LocalEndPoint = pair.LocalProbeEndPoint,
-                    RemoteEndPoint = pair.RemoteEndPoint,
-                    LocalCandidate = pair.LocalCandidate,
-                    RemoteCandidate = pair.RemoteCandidate,
-                    ReasonCode = "ice_checks_succeeded"
-                };
-                PublishSelectionEvent(callId, selected, localCandidates.Length, remoteCandidates.Length);
-                return selected;
-            }
+                State = CallIceNegotiationState.Connected,
+                HasSelectedPair = true,
+                LocalEndPoint = localProbeEndPoint,
+                RemoteEndPoint = remoteEndPoint,
+                LocalCandidate = selectedPair.Local,
+                RemoteCandidate = selectedPair.Remote,
+                ReasonCode = "ice_checks_succeeded"
+            };
+            PublishSelectionEvent(callId, selected, localCandidates.Length, remoteCandidates.Length);
+            return selected;
         }
 
         _logger.LogWarning(
@@ -288,6 +298,67 @@ internal sealed class CallIceAgent : ICallIceAgent
         };
         PublishSelectionEvent(callId, failed, localCandidates.Length, remoteCandidates.Length);
         return failed;
+    }
+
+    /// <summary>
+    /// Runs one connectivity check for <paramref name="pair"/>, carrying the PRIORITY and role
+    /// attributes and retrying up to <paramref name="retries"/> additional times before reporting
+    /// failure. Resolves the local probe source and remote target endpoints from the pair's
+    /// candidates.
+    /// </summary>
+    private async Task<bool> CheckPairAsync(
+        CallId callId,
+        CallMediaParameters parameters,
+        IceCandidatePair pair,
+        bool isControlling,
+        TimeSpan timeout,
+        int retries,
+        CancellationToken ct)
+    {
+        if (!IPAddress.TryParse(pair.Remote.Address, out var remoteAddress) || pair.Remote.Port <= 0)
+            return false;
+
+        var localProbeEndPoint = ResolveLocalProbeEndPoint(parameters.LocalEndPoint, pair.Local);
+        var remoteEndPoint = new IPEndPoint(remoteAddress, pair.Remote.Port);
+
+        // PRIORITY carried in the check (RFC 8445 §7.2.2). Simplification: the candidate's own
+        // priority is sent; strictly it should be the priority the peer would assign a
+        // peer-reflexive candidate learned from this check — unobservable until prflx (a later
+        // package), so the approximation is harmless here.
+        var priority = (uint)Math.Clamp(pair.Local.Priority, 0L, uint.MaxValue);
+
+        for (var attempt = 0; attempt <= retries; attempt++)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            var ok = await _stunProbe.TryCheckConnectivityAsync(
+                    localProbeEndPoint,
+                    remoteEndPoint,
+                    parameters.LocalIceUfrag!,
+                    parameters.RemoteIceUfrag!,
+                    parameters.RemoteIcePwd!,
+                    priority,
+                    isControlling,
+                    _tieBreaker,
+                    timeout,
+                    ct)
+                .ConfigureAwait(false);
+
+            if (ok)
+                return true;
+
+            _logger.LogDebug(
+                "ICE check failed for call {CallId} pair {LocalType}/{RemoteType} {Local}->{Remote} attempt {Attempt}/{Attempts}.",
+                callId,
+                pair.Local.Type,
+                pair.Remote.Type,
+                localProbeEndPoint,
+                remoteEndPoint,
+                attempt + 1,
+                retries + 1);
+        }
+
+        return false;
     }
 
     private static CallIceCandidate BuildHostCandidate(IPEndPoint localEndPoint)
@@ -370,37 +441,6 @@ internal sealed class CallIceAgent : ICallIceAgent
            && candidate.Port > 0
            && candidate.Transport.Equals("UDP", StringComparison.OrdinalIgnoreCase);
 
-    private static IReadOnlyList<OrderedCandidatePair> BuildCandidatePairs(
-        IPEndPoint negotiatedLocalEndPoint,
-        IReadOnlyList<CallIceCandidate> localCandidates,
-        IReadOnlyList<CallIceCandidate> remoteCandidates)
-    {
-        var pairs = new List<OrderedCandidatePair>(localCandidates.Count * remoteCandidates.Count);
-        foreach (var localCandidate in localCandidates)
-        {
-            var localProbeEndPoint = ResolveLocalProbeEndPoint(negotiatedLocalEndPoint, localCandidate);
-
-            foreach (var remoteCandidate in remoteCandidates)
-            {
-                if (!IPAddress.TryParse(remoteCandidate.Address, out var remoteAddress)
-                    || remoteCandidate.Port <= 0)
-                    continue;
-
-                var remoteEndPoint = new IPEndPoint(remoteAddress, remoteCandidate.Port);
-                pairs.Add(new OrderedCandidatePair(
-                    localCandidate,
-                    remoteCandidate,
-                    localProbeEndPoint,
-                    remoteEndPoint,
-                    ComputePairPriority(localCandidate.Priority, remoteCandidate.Priority)));
-            }
-        }
-
-        return pairs
-            .OrderByDescending(static p => p.PairPriority)
-            .ToArray();
-    }
-
     private static IPEndPoint ResolveLocalProbeEndPoint(
         IPEndPoint negotiatedLocalEndPoint,
         CallIceCandidate localCandidate)
@@ -423,16 +463,6 @@ internal sealed class CallIceAgent : ICallIceAgent
             return new IPEndPoint(negotiatedLocalEndPoint.Address, localCandidate.Port);
 
         return negotiatedLocalEndPoint;
-    }
-
-    private static ulong ComputePairPriority(long localPriority, long remotePriority)
-    {
-        var local = (ulong)Math.Max(0, localPriority);
-        var remote = (ulong)Math.Max(0, remotePriority);
-        var min = Math.Min(local, remote);
-        var max = Math.Max(local, remote);
-        var tieBreaker = local > remote ? 1UL : 0UL;
-        return (min << 32) + (max << 1) + tieBreaker;
     }
 
     private void PublishGatheringEvent(
