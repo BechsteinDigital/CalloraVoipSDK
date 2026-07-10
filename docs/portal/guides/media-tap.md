@@ -5,6 +5,10 @@ A **media tap** attaches your code to a call's audio — pulling decoded frames 
 bots, transcription, and streaming to an AI backend, and it is the contract the
 [commercial modules](../commercial/index.md) build on.
 
+> **Runnable example:** [CustomAudio](https://github.com/BechsteinDigital/CalloraVoipSDK/tree/main/examples/CalloraVoipSdk.Sample.CustomAudio)
+> attaches a receiver for inbound frame stats and a sender that injects a generated PCMU
+> tone — no audio hardware.
+
 ## Receive call audio
 
 ```csharp

@@ -3,6 +3,9 @@
 Register a line, place a call, attach the default audio device, hang up. Every step
 below maps to a real `VoipClient` method.
 
+> **Runnable example:** [BasicCalling](https://github.com/BechsteinDigital/CalloraVoipSDK/tree/main/examples/CalloraVoipSdk.Sample.BasicCalling)
+> — an interactive console softphone (dial, answer, hang up).
+
 ```csharp
 using CalloraVoipSdk.Client;
 

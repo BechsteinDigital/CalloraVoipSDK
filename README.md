@@ -15,6 +15,7 @@ CalloraVoipSdk is a .NET VoIP SDK (net8.0 / net9.0 / net10.0) for building softp
 It exposes a stable, developer-friendly API through `VoipClient` while keeping transport, media and device internals behind a clean facade — and opens up through a module registry for building products like AI voice agents on top.
 
 📖 **Documentation:** [bechsteindigital.github.io/CalloraVoipSDK](https://bechsteindigital.github.io/CalloraVoipSDK/)
+🧪 **Examples:** [`examples/`](examples) — runnable console samples (BasicCalling, Dialer, Transfer, CustomAudio)
 
 ## Why CalloraVoipSdk
 

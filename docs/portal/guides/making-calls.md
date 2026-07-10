@@ -3,6 +3,10 @@
 This guide covers outbound calling beyond the [minimal example](../getting-started/outbound-call.md):
 non-blocking dial, following call state, DTMF and transfers.
 
+> **Runnable examples:** [Dialer](https://github.com/BechsteinDigital/CalloraVoipSDK/tree/main/examples/CalloraVoipSdk.Sample.Dialer)
+> (campaign dialing) and [Transfer](https://github.com/BechsteinDigital/CalloraVoipSDK/tree/main/examples/CalloraVoipSdk.Sample.Transfer)
+> (blind + attended transfer).
+
 ## Blocking vs. non-blocking dial
 
 **Blocking** — wait until the callee answers:
