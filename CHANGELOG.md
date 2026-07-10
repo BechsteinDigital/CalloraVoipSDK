@@ -6,6 +6,21 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
 
 ## [Unreleased]
 
+## [4.3.3] - 2026-07-10
+
+Documentation-only release — no code changes versus 4.3.2. Cut as a tag so the
+restructured documentation portal is published to GitHub Pages.
+
+### Documentation
+- Restructured the documentation portal around a 7-section information architecture:
+  Overview · Getting Started · Core Concepts · Guides · Interop · Production ·
+  Commercial Modules (Architecture kept as a supplementary deep-dive section).
+- Concept and guide pages grounded in the verified public API surface.
+- Interop matrix states verification status honestly: only FRITZ!Box is marked verified
+  (real interop test); sipgate/Asterisk/FreeSWITCH/3CX are configuration guidance, not
+  yet formally verified.
+- Commercial-module pages clearly marked "in development — not yet available".
+
 ## [4.3.2] - 2026-07-09
 
 Documentation-only release — no code changes versus 4.3.1. Cut as a tag so the corrected

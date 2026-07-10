@@ -5,6 +5,12 @@ The authoritative changelog lives in the repository:
 
 ## Release highlights
 
+### 4.3.3 — 2026-07-10
+- Documentation-only release (no code changes vs 4.3.2): restructured the portal around a
+  7-section information architecture (Overview · Getting Started · Core Concepts · Guides ·
+  Interop · Production · Commercial Modules), with an honest interop verification status
+  and commercial modules marked as in development
+
 ### 4.3.2 — 2026-07-09
 - Documentation-only release (no code changes vs 4.3.1): corrected the ICE status row to the
   released state and added the GitHub Pages documentation link to the README
