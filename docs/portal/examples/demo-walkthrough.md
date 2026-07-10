@@ -2,7 +2,7 @@
 
 This walkthrough builds an interactive console app that demonstrates the full call
 lifecycle against a real SIP server. Create a new console project, add the
-[NuGet packages](../guides/getting-started.md#installation), and follow the sections
+[NuGet packages](../getting-started/install.md), and follow the sections
 below — together they form a complete `Program.cs`.
 
 ```bash

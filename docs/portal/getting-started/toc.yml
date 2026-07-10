@@ -1,0 +1,6 @@
+- name: Install from NuGet
+  href: install.md
+- name: Minimal outbound call
+  href: outbound-call.md
+- name: Minimal inbound call
+  href: inbound-call.md

@@ -1,93 +1,65 @@
-# Making Calls
+# Making calls
 
-## Outbound Call (Convenience)
+This guide covers outbound calling beyond the [minimal example](../getting-started/outbound-call.md):
+non-blocking dial, following call state, DTMF and transfers.
+
+## Blocking vs. non-blocking dial
+
+**Blocking** — wait until the callee answers:
 
 ```csharp
-using CalloraVoipSdk.Core.Domain.Calls;
-
-var dialResult = await client.DialAndWaitUntilConnectedAsync(
-    line,
-    "sip:1002@pbx.example.com",
-    new DialWaitOptions
-    {
-        ConnectTimeout = TimeSpan.FromSeconds(30),
-        HangupOnTimeout = true,
-        HangupOnCancellation = true
-    });
-
-if (!dialResult.IsSuccess || dialResult.Call is null)
-    throw new InvalidOperationException($"Dial failed: {dialResult.Status}");
-
-var call = dialResult.Call;
+var dial = await client.DialAndWaitUntilConnectedAsync(line, "sip:1002@pbx.example.com");
+if (dial.IsSuccess) await client.AttachDefaultAudioAsync(dial.Call!);
 ```
 
-## Outbound Call (Advanced Event-Driven Flow)
+**Non-blocking** — get the call immediately and follow its state:
 
 ```csharp
-var call = await line.DialAsync("sip:1002@pbx.example.com");
+ICall call = await line.DialAsync("sip:1002@pbx.example.com");
 call.StateChanged += (_, e) =>
-    Console.WriteLine($"Call: {e.OldState} → {e.NewState}");
-```
-
-## Inbound Call
-
-```csharp
-using var incomingSubscription = client.OnIncomingCall(async call =>
 {
-    Console.WriteLine($"Inbound from: {call.RemoteParty}");
-
-    // Reject busy
-    if (IsAgentBusy())
-    {
-        await call.RejectAsync(486, "Busy Here");
-        return;
-    }
-
-    // Redirect to queue
-    if (ShouldForwardToQueue(call))
-    {
-        await call.RedirectAsync(["sip:queue@pbx.example.com"], statusCode: 302);
-        return;
-    }
-
-    await call.AcceptAsync();
-});
+    // marshal off the signaling thread — see the events contract
+    Console.WriteLine($"call {call} -> {e.State}");
+};
 ```
 
-## Call Control
+## DTMF
 
 ```csharp
-// DTMF
-await call.SendDtmfAsync(new DtmfTone('5'));
-
-// Hold / Unhold
-await call.HoldAsync();
-await call.UnholdAsync();
-
-// Blind Transfer
-await call.BlindTransferAsync("sip:supervisor@pbx.example.com");
-
-// Attended Transfer (both calls must be connected)
-await call.AttendedTransferAsync(consultCall);
-
-// Hangup
-await call.HangupAsync();
+await call.SendDtmfAsync(DtmfTone.One);
+await call.SendDtmfAsync(DtmfTone.Hash);
 ```
 
-## Call States
+DTMF is sent as RFC 4733 telephone-events. Inbound DTMF surfaces via
+`DtmfReceived` — note it can arrive on the SIP-INFO **or** the media thread
+(see [Events](../concepts/events.md)).
 
-| State | Meaning |
-|-------|---------|
-| `Dialing` | INVITE sent, awaiting provisional response |
-| `Ringing` | 180 Ringing received |
-| `Connected` | 200 OK + ACK complete — media active |
-| `OnHold` | re-INVITE hold completed |
-| `Transferring` | Transfer in progress |
-| `Terminated` | Dialog closed |
+## Hold / unhold
 
-> Only invoke call actions in the appropriate state.
-> Calling `HoldAsync()` on a `Terminated` call throws `InvalidOperationException`.
+```csharp
+await call.HoldAsync();     // re-INVITE sendonly
+await call.UnholdAsync();   // re-INVITE sendrecv
+```
 
-## Next Step
+Hold/unhold on an SRTP call keeps the media secured and rekeys as needed.
 
-→ [Media & Audio](media-and-audio.md)
+## Transfer
+
+```csharp
+// Blind: hand the call off, no consultation.
+await call.BlindTransferAsync("sip:1003@pbx.example.com");
+
+// Attended: consult first on a second call, then connect the two.
+ICall consult = await line.DialAsync("sip:1003@pbx.example.com");
+// …speak to 1003…
+bool ok = await call.AttendedTransferAsync(consult);
+```
+
+Inbound transfer requests (REFER from the peer) arrive as `TransferRequested`, handled
+synchronously so you can accept or reject inline.
+
+## Error handling
+
+`AcceptAsync`/`HangupAsync`/`HoldAsync`/`UnholdAsync`/`SendDtmfAsync`/transfer throw
+`InvalidOperationException` if called in the wrong state. The `Send*`/`Reject`/`Redirect`
+family returns `CallActionResult`. Full rule: [error contract](../production/threading.md#error-contract).

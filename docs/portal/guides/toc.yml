@@ -1,6 +1,18 @@
-- name: Getting Started
-  href: getting-started.md
-- name: Making Calls
+- name: Making calls
   href: making-calls.md
-- name: Media & Audio
-  href: media-and-audio.md
+- name: Handling inbound calls
+  href: inbound-calls.md
+- name: Audio devices
+  href: audio-devices.md
+- name: Media tap
+  href: media-tap.md
+- name: Bridge two calls
+  href: bridge-calls.md
+- name: Recording / playback
+  href: recording-playback.md
+- name: NAT and SIP trunks
+  href: nat-and-trunks.md
+- name: SRTP / SRTCP
+  href: srtp-srtcp.md
+- name: RTCP quality metrics
+  href: rtcp-quality-metrics.md

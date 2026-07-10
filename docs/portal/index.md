@@ -100,4 +100,4 @@ await client.AttachDefaultAudioAsync(dialResult.Call);
 await dialResult.Call.HangupAsync();
 ```
 
-[→ Getting Started Guide](guides/getting-started.md)
+[→ Getting Started](getting-started/install.md) · [Core Concepts](concepts/voipclient.md) · [Guides](guides/making-calls.md) · [Interop](interop/matrix.md) · [Production](production/lifecycle-dispose.md)

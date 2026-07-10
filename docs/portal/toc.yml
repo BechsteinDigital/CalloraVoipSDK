@@ -1,11 +1,27 @@
+- name: Overview
+  href: index.md
 - name: Getting Started
+  href: getting-started/
+  homepage: getting-started/install.md
+- name: Core Concepts
+  href: concepts/
+  homepage: concepts/voipclient.md
+- name: Guides
   href: guides/
-  homepage: guides/getting-started.md
+  homepage: guides/making-calls.md
+- name: Interop
+  href: interop/
+  homepage: interop/matrix.md
+- name: Production
+  href: production/
+  homepage: production/lifecycle-dispose.md
+- name: Commercial Modules
+  href: commercial/
+  homepage: commercial/index.md
 - name: Architecture
   href: architecture/
   homepage: architecture/overview.md
-- name: Examples
-  href: examples/
-  homepage: examples/demo-walkthrough.md
 - name: API Reference
   href: _api/
+- name: Changelog
+  href: changelog.md
