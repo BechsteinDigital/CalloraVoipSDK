@@ -3,10 +3,11 @@ using CalloraVoipSdk.Core.Domain.Calls;
 using CalloraVoipSdk.Core.Domain.Lines;
 using CalloraVoipSdk;
 
-// ── Logging ───────────────────────────────────────────────────────────────────
+// ── Logging (leise; -v/--verbose für SDK-Debug/Trace) ────────────────────────
+var verbose = args.Any(a => a is "-v" or "--verbose");
 using var loggerFactory = LoggerFactory.Create(b => b
     .AddConsole()
-    .SetMinimumLevel(LogLevel.Debug));
+    .SetMinimumLevel(verbose ? LogLevel.Debug : LogLevel.Warning));
 
 // ── SIP-Zugangsdaten abfragen ─────────────────────────────────────────────────
 Console.WriteLine("=== CalloraVoipSdk Demo ===");

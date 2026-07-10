@@ -47,6 +47,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CalloraVoipSdk.Sample.Diale
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CalloraVoipSdk.Sample.Transfer", "examples\CalloraVoipSdk.Sample.Transfer\CalloraVoipSdk.Sample.Transfer.csproj", "{AC4EE6AB-AA0B-4191-9DD8-D5E42A11B5C9}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CalloraVoipSdk.Sample.Switchboard", "examples\CalloraVoipSdk.Sample.Switchboard\CalloraVoipSdk.Sample.Switchboard.csproj", "{E97B5841-9CF0-4432-B797-B9E6F71A2FA8}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -261,6 +263,18 @@ Global
 		{AC4EE6AB-AA0B-4191-9DD8-D5E42A11B5C9}.Release|x64.Build.0 = Release|Any CPU
 		{AC4EE6AB-AA0B-4191-9DD8-D5E42A11B5C9}.Release|x86.ActiveCfg = Release|Any CPU
 		{AC4EE6AB-AA0B-4191-9DD8-D5E42A11B5C9}.Release|x86.Build.0 = Release|Any CPU
+		{E97B5841-9CF0-4432-B797-B9E6F71A2FA8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E97B5841-9CF0-4432-B797-B9E6F71A2FA8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E97B5841-9CF0-4432-B797-B9E6F71A2FA8}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{E97B5841-9CF0-4432-B797-B9E6F71A2FA8}.Debug|x64.Build.0 = Debug|Any CPU
+		{E97B5841-9CF0-4432-B797-B9E6F71A2FA8}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{E97B5841-9CF0-4432-B797-B9E6F71A2FA8}.Debug|x86.Build.0 = Debug|Any CPU
+		{E97B5841-9CF0-4432-B797-B9E6F71A2FA8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E97B5841-9CF0-4432-B797-B9E6F71A2FA8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E97B5841-9CF0-4432-B797-B9E6F71A2FA8}.Release|x64.ActiveCfg = Release|Any CPU
+		{E97B5841-9CF0-4432-B797-B9E6F71A2FA8}.Release|x64.Build.0 = Release|Any CPU
+		{E97B5841-9CF0-4432-B797-B9E6F71A2FA8}.Release|x86.ActiveCfg = Release|Any CPU
+		{E97B5841-9CF0-4432-B797-B9E6F71A2FA8}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -284,5 +298,6 @@ Global
 		{3C0D627D-DB1C-409F-BC2E-66EA6BFFA77B} = {B36A84DF-456D-A817-6EDD-3EC3E7F6E11F}
 		{921A20B2-C33F-4DBD-B6ED-D3F8FA0CAC56} = {B36A84DF-456D-A817-6EDD-3EC3E7F6E11F}
 		{AC4EE6AB-AA0B-4191-9DD8-D5E42A11B5C9} = {B36A84DF-456D-A817-6EDD-3EC3E7F6E11F}
+		{E97B5841-9CF0-4432-B797-B9E6F71A2FA8} = {B36A84DF-456D-A817-6EDD-3EC3E7F6E11F}
 	EndGlobalSection
 EndGlobal

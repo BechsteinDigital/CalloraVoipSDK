@@ -9,19 +9,27 @@ via `ProjectReference` and is part of `CalloraVoipSdk.sln`.
 | [Dialer](CalloraVoipSdk.Sample.Dialer) | Sequential campaign dialing over a list of targets | [Making calls](../docs/portal/guides/making-calls.md) |
 | [Transfer](CalloraVoipSdk.Sample.Transfer) | Blind and attended transfer | [Making calls](../docs/portal/guides/making-calls.md) |
 | [CustomAudio](CalloraVoipSdk.Sample.CustomAudio) | Media tap: receive frame stats + inject a generated PCMU tone (no audio hardware) | [Media tap](../docs/portal/guides/media-tap.md) |
+| [Switchboard](CalloraVoipSdk.Sample.Switchboard) | Multiple concurrent inbound/outbound calls; connect two of them via attended transfer **or** a MediaConnector bridge | [Making calls](../docs/portal/guides/making-calls.md) · [Bridge](../docs/portal/guides/bridge-calls.md) |
 
 ## Run
 
+The samples multi-target `net8.0;net9.0;net10.0`. With `dotnet run` you must pass the
+framework you have installed via `-f`:
+
 ```bash
-dotnet run --project examples/CalloraVoipSdk.Sample.BasicCalling
+dotnet run --project examples/CalloraVoipSdk.Sample.BasicCalling -f net9.0
+dotnet run --project examples/CalloraVoipSdk.Sample.Switchboard   -f net9.0
 # samples with arguments:
-dotnet run --project examples/CalloraVoipSdk.Sample.Dialer -- <server> <user> <password> <target1> [target2 ...]
-dotnet run --project examples/CalloraVoipSdk.Sample.Transfer -- <server> <user> <password> [target-A]
-dotnet run --project examples/CalloraVoipSdk.Sample.CustomAudio -- <server> <user> <password> <target>
+dotnet run -f net9.0 --project examples/CalloraVoipSdk.Sample.Dialer     -- <server> <user> <password> <target1> [target2 ...]
+dotnet run -f net9.0 --project examples/CalloraVoipSdk.Sample.Transfer   -- <server> <user> <password> [target-A]
+dotnet run -f net9.0 --project examples/CalloraVoipSdk.Sample.CustomAudio -- <server> <user> <password> <target>
 ```
 
-All samples target `net8.0` and use a real SIP server/PBX — point them at your own
-extension or trunk credentials.
+The interactive samples (BasicCalling, Switchboard) default to **quiet logging**; pass
+`-v` / `--verbose` to enable the SDK's debug/trace logs.
+
+All samples use a real SIP server/PBX — point them at your own extension or trunk
+credentials.
 
 ## Commercial examples
 
