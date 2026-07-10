@@ -16,6 +16,11 @@ using CalloraVoipSdk;
 //   • b <a> <b>  Bridge via MediaConnector — das SDK bleibt im Medienpfad und
 //                kreuzverbindet die Audioströme von A und B.
 //
+// Lokales Audio (Mikro/Lautsprecher) ist ein EINZELner Fokus: 'f <n>' legt das
+// Standard-Audiogerät auf genau ein Gespräch (das SDK löst dabei das Audio der
+// anderen Gespräche automatisch). Ohne 'f' läuft kein lokales Audio — die
+// Vermittlung braucht das für Transfer/Bridge auch nicht.
+//
 // Standardmäßig leises Logging; -v/--verbose schaltet SDK-Debug-/Trace-Logs ein.
 //
 // Aufruf:
@@ -89,7 +94,8 @@ line.IncomingCall += (_, e) =>
 
 PrintHelp();
 
-// ── Eingabeschleife ───────────────────────────────────────────────────────────
+// ── Eingabeschleife: liest immer weiter; Befehle laufen off-thread, damit eine
+//    langsame Operation die Konsole nie einfriert. ─────────────────────────────
 while (true)
 {
     var input = Console.ReadLine()?.Trim();
@@ -102,6 +108,30 @@ while (true)
         continue;
     }
 
+    _ = Task.Run(() => ExecuteAsync(input));
+}
+
+// ── Aufräumen ─────────────────────────────────────────────────────────────────
+lock (bridgeSync)
+{
+    foreach (var br in bridges)
+        DisposeAll(br.Resources);
+    bridges.Clear();
+}
+
+foreach (var entry in calls.ToArray())
+{
+    try { await entry.Value.HangupAsync(); }
+    catch { /* best effort */ }
+}
+
+await line.UnregisterAsync();
+Console.WriteLine("[Line] Abgemeldet.");
+return 0;
+
+// ── Befehlsausführung (läuft auf einem Thread-Pool-Thread) ───────────────────
+async Task ExecuteAsync(string input)
+{
     var tok = input.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
     var cmd = tok[0].ToLowerInvariant();
 
@@ -127,6 +157,10 @@ while (true)
             await HangupCallAsync(hId, hCall);
             break;
 
+        case "f" when tok.Length >= 2 && TryResolve(tok[1], out var fId, out var fCall):
+            await FocusAudioAsync(fId, fCall);
+            break;
+
         case "t" when tok.Length >= 3
                       && TryResolve(tok[1], out var tA, out var tCallA)
                       && TryResolve(tok[2], out var tB, out var tCallB):
@@ -146,25 +180,9 @@ while (true)
     }
 }
 
-// ── Aufräumen ─────────────────────────────────────────────────────────────────
-lock (bridgeSync)
-{
-    foreach (var br in bridges)
-        DisposeAll(br.Resources);
-    bridges.Clear();
-}
-
-foreach (var entry in calls.ToArray())
-{
-    try { await entry.Value.HangupAsync(); }
-    catch { /* best effort */ }
-}
-
-await line.UnregisterAsync();
-Console.WriteLine("[Line] Abgemeldet.");
-return 0;
-
 // ── Registrierung + Zustandsverfolgung ───────────────────────────────────────
+// Der StateChanged-Handler läuft auf dem Signaling-Thread: hier NICHTS blockieren
+// und kein Audiogerät öffnen — nur Buchhaltung und Konsolenausgabe.
 int Register(ICall call)
 {
     var id = Interlocked.Increment(ref nextId);
@@ -175,8 +193,7 @@ int Register(ICall call)
         switch (e.NewState)
         {
             case CallState.Connected:
-                _ = TryAttachAudioAsync(id, call);
-                Console.WriteLine($"[{id}] verbunden ({call.RemoteParty})");
+                Console.WriteLine($"[{id}] verbunden ({call.RemoteParty}) — 'f {id}' für Audio, 't'/'b' zum Verbinden");
                 break;
 
             case CallState.Terminated:
@@ -209,7 +226,7 @@ async Task AcceptCallAsync(int id, ICall call)
     try
     {
         await call.AcceptAsync();
-        Console.WriteLine($"[{id}] nehme an ...");
+        Console.WriteLine($"[{id}] angenommen.");
     }
     catch (Exception ex)
     {
@@ -236,6 +253,21 @@ async Task HangupCallAsync(int id, ICall call)
     }
 }
 
+// Lokales Audio (Mikro/Lautsprecher) auf genau EIN Gespräch legen. Das SDK löst
+// dabei automatisch das Standard-Audio anderer Gespräche (Single-Focus-Gerät).
+async Task FocusAudioAsync(int id, ICall call)
+{
+    try
+    {
+        await client.AttachDefaultAudioAsync(call);
+        Console.WriteLine($"[{id}] Audio-Fokus aktiv — anderes Call-Audio wurde gelöst.");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[{id}] Audio-Fokus fehlgeschlagen: {ex.Message}");
+    }
+}
+
 // Weg 1: Attended-Transfer — die PBX verbindet A und B; das SDK tritt aus dem Ruf aus.
 async Task AttendedAsync(int idA, ICall a, int idB, ICall b)
 {
@@ -249,8 +281,8 @@ async Task AttendedAsync(int idA, ICall a, int idB, ICall b)
     {
         var ok = await a.AttendedTransferAsync(b);
         Console.WriteLine(ok
-            ? $"[{idA}] ⇄ [{idB}] Attended-Transfer erfolgreich — beide verbunden (SDK tritt aus)."
-            : $"[{idA}] ⇄ [{idB}] Attended-Transfer abgelehnt.");
+            ? $"[{idA}] <-> [{idB}] Attended-Transfer erfolgreich — beide verbunden (SDK tritt aus)."
+            : $"[{idA}] <-> [{idB}] Attended-Transfer abgelehnt.");
     }
     catch (Exception ex)
     {
@@ -259,7 +291,7 @@ async Task AttendedAsync(int idA, ICall a, int idB, ICall b)
 }
 
 // Weg 2: MediaConnector-Bridge — das SDK bleibt im Medienpfad und kreuzverbindet die
-// Audioströme. Der Operator löst dazu sein Standard-Audio von beiden Beinen.
+// Audioströme. Lokales Standard-Audio wird von beiden Beinen gelöst.
 async Task BridgeAsync(int idA, ICall a, int idB, ICall b)
 {
     if (idA == idB)
@@ -293,7 +325,7 @@ async Task BridgeAsync(int idA, ICall a, int idB, ICall b)
     lock (bridgeSync)
         bridges.Add(new Bridge(idA, idB, resources));
 
-    Console.WriteLine($"[{idA}] ⇄ [{idB}] gebrückt (MediaConnector) — beide sprechen; Operator ist aus dem Medienpfad.");
+    Console.WriteLine($"[{idA}] <-> [{idB}] gebrückt (MediaConnector) — beide sprechen; Operator ist aus dem Medienpfad.");
 }
 
 void TeardownBridgesFor(int id)
@@ -309,7 +341,7 @@ void TeardownBridgesFor(int id)
     foreach (var br in affected)
     {
         DisposeAll(br.Resources);
-        Console.WriteLine($"[{br.A}] ⇄ [{br.B}] Bridge aufgelöst.");
+        Console.WriteLine($"[{br.A}] <-> [{br.B}] Bridge aufgelöst.");
     }
 }
 
@@ -320,13 +352,6 @@ static void DisposeAll(IEnumerable<IDisposable> resources)
         try { d.Dispose(); }
         catch { /* best effort */ }
     }
-}
-
-async Task TryAttachAudioAsync(int id, ICall call)
-{
-    // Hinweis: mehrere gleichzeitig verbundene Gespräche teilen sich das Standard-Audiogerät.
-    try { await client.AttachDefaultAudioAsync(call); }
-    catch (Exception ex) { Console.WriteLine($"[{id}] Audio-Attach fehlgeschlagen: {ex.Message}"); }
 }
 
 bool TryResolve(string? arg, out int id, out ICall call)
@@ -363,7 +388,7 @@ void ListCalls()
     lock (bridgeSync)
         active = bridges.ToArray();
     foreach (var br in active)
-        Console.WriteLine($"  Bridge: [{br.A}] ⇄ [{br.B}]");
+        Console.WriteLine($"  Bridge: [{br.A}] <-> [{br.B}]");
 }
 
 void PrintHelp()
@@ -371,8 +396,9 @@ void PrintHelp()
     Console.WriteLine();
     Console.WriteLine("  d <uri>   = wählen (outbound)      a <n>     = annehmen");
     Console.WriteLine("  r <n>     = ablehnen               h <n>     = auflegen");
+    Console.WriteLine("  f <n>     = lokales Audio-Fokus    l         = Liste");
     Console.WriteLine("  t <a> <b> = Attended-Transfer      b <a> <b> = Bridge (MediaConnector)");
-    Console.WriteLine("  l = Liste                          q = beenden");
+    Console.WriteLine("  q         = beenden");
     Console.WriteLine("  (t: PBX verbindet, SDK tritt aus  ·  b: SDK bleibt im Medienpfad)");
     Console.WriteLine();
 }

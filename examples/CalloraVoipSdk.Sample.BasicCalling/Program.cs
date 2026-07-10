@@ -88,7 +88,8 @@ client.Calls.CallAdded += (_, e) =>
         if (se.NewState == CallState.Connected)
         {
             activeCall = e.Call;
-            _ = TryAttachDefaultAudioAsync(e.Call);
+            // Audiogerät nicht auf dem Signaling-Thread öffnen (StateChanged läuft dort).
+            _ = Task.Run(() => TryAttachDefaultAudioAsync(e.Call));
             PrintHelp();
         }
 
