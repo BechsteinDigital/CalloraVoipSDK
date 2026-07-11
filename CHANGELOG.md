@@ -6,6 +6,12 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
 
 ## [Unreleased]
 
+### Fixed
+- **Native Opus in the platform audio devices**: the Linux and Windows backends now decode and
+  encode Opus (RFC 7587) natively at 48 kHz. Previously a call that negotiated Opus was silently
+  mis-decoded as G.722 through `AttachDefaultAudioAsync` (unintelligible audio); Opus stays opt-in
+  via `PreferredAudioCodecs`.
+
 ## [4.4.0] - 2026-07-11
 
 Additive public-API capabilities closing developer-experience gaps from the `IVoipClient`

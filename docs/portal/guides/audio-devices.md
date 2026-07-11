@@ -53,12 +53,12 @@ construction:
 ```csharp
 new SdkConfiguration
 {
-    PreferredAudioCodecs = new[] { "PCMU", "PCMA", "G722" }
+    PreferredAudioCodecs = new[] { "OPUS", "G722", "PCMU", "PCMA" }
 };
 ```
 
-> **Codec support:** the platform audio backends (`Audio.Linux` / `Audio.Windows`) decode
-> and encode **PCMU, PCMA and G.722** only. **Opus is not yet transcoded by the device
-> backends** — a call that negotiates Opus will not play correctly through the default audio
-> device. For Opus, drive the call through a [media tap](media-tap.md) with your own Opus
-> codec instead of `AttachDefaultAudioAsync`.
+> **Codec support:** the platform audio backends (`Audio.Linux` / `Audio.Windows`) decode and
+> encode **PCMU, PCMA, G.722 and Opus** (RFC 7587, natively at 48 kHz). A call that negotiates any
+> of these plays through `AttachDefaultAudioAsync` without extra work. Opus is opt-in — list
+> `"OPUS"` in `PreferredAudioCodecs` (or it is dropped from the offer). For other/custom codecs,
+> drive the call through a [media tap](media-tap.md) with your own codec instead.

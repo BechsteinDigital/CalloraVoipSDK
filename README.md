@@ -66,6 +66,7 @@ Available in the repository today:
   round-trip time from SR/RR (LSR/DLSR); RFC 3611 XR-tolerant compound decoding
 - Linux audio devices via `CalloraVoipSdk.Audio.Linux`
 - Windows audio devices via `CalloraVoipSdk.Audio.Windows`
+- Device codec support: PCMU, PCMA, G.722 and native Opus (RFC 7587, 48 kHz)
 - Runtime device controls:
   - device hot-switch
   - input/output mute
