@@ -40,4 +40,14 @@ public class SipTlsTargetHostTests
 
         Assert.Equal("203.0.113.5", target);
     }
+
+    [Fact]
+    public void Wss_target_uri_uses_domain_host_for_sni()
+    {
+        var uri = SipTransportRuntimeUtilities.BuildWebSocketTargetUri("sip.example.com", 443, SipTransportProtocol.Wss);
+
+        Assert.Equal("wss", uri.Scheme);
+        Assert.Equal("sip.example.com", uri.Host); // domain -> correct SNI + certificate validation
+        Assert.Equal(443, uri.Port);
+    }
 }

@@ -723,7 +723,12 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
                     ValidateTlsServerCertificate(sender, certificate, chain, errors);
             }
 
-            var targetUri = SipTransportRuntimeUtilities.BuildWebSocketTargetUri(remoteEndPoint, transport);
+            // WSS: use the resolved SIP domain as the URI host so TLS SNI + certificate validation
+            // run against the domain, not the IP. WS stays on the IP (no TLS involved).
+            var wsHost = transport == SipTransportProtocol.Wss
+                ? SipTransportRuntimeUtilities.SelectTlsTargetHost(_endpointTlsHosts, key, remoteEndPoint.Address)
+                : remoteEndPoint.Address.ToString();
+            var targetUri = SipTransportRuntimeUtilities.BuildWebSocketTargetUri(wsHost, remoteEndPoint.Port, transport);
             await socket.ConnectAsync(targetUri, ct).ConfigureAwait(false);
             var created = new SipWebSocketConnection(
                 transport,

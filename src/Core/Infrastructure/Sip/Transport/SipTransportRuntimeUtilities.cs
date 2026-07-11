@@ -18,11 +18,12 @@ internal static class SipTransportRuntimeUtilities
         return port;
     }
 
-    public static Uri BuildWebSocketTargetUri(IPEndPoint remoteEndPoint, SipTransportProtocol transport)
+    public static Uri BuildWebSocketTargetUri(string host, int port, SipTransportProtocol transport)
     {
-        remoteEndPoint = NormalizeWildcardEndPoint(remoteEndPoint);
+        // For WSS the host should be the SIP domain so the ClientWebSocket TLS handshake presents
+        // the correct SNI and validates the certificate against the domain, not the resolved IP.
         var scheme = transport == SipTransportProtocol.Wss ? "wss" : "ws";
-        var builder = new UriBuilder(scheme, remoteEndPoint.Address.ToString(), remoteEndPoint.Port, "/");
+        var builder = new UriBuilder(scheme, host, port, "/");
         return builder.Uri;
     }
 
