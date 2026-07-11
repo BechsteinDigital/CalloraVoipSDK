@@ -49,5 +49,67 @@ internal static class SipWireTraceLogger
         headers.TryGetValue(name, out var value) ? value : null;
 
     private static string FormatBody(string? body) =>
-        string.IsNullOrWhiteSpace(body) ? string.Empty : $"\n{body.TrimEnd()}";
+        string.IsNullOrWhiteSpace(body) ? string.Empty : $"\n{RedactSensitiveSdp(body.TrimEnd())}";
+
+    /// <summary>
+    /// Redacts secrets that SDP carries in the clear — SDES SRTP keys
+    /// (<c>a=crypto ... inline:</c>) and ICE passwords (<c>a=ice-pwd:</c>) — so Trace wire logs
+    /// (often shipped to central log systems) cannot leak key material. Non-secret lines
+    /// (suite name, ICE ufrag, codecs) are preserved for diagnostics.
+    /// </summary>
+    internal static string RedactSensitiveSdp(string body)
+    {
+        if (body.IndexOf("inline:", StringComparison.OrdinalIgnoreCase) < 0
+            && body.IndexOf("a=ice-pwd:", StringComparison.OrdinalIgnoreCase) < 0)
+        {
+            return body;
+        }
+
+        var lines = body.Split('\n');
+        for (var i = 0; i < lines.Length; i++)
+        {
+            var trimmed = lines[i].TrimStart();
+            if (trimmed.StartsWith("a=crypto:", StringComparison.OrdinalIgnoreCase))
+                lines[i] = RedactInlineKeys(lines[i]);
+            else if (trimmed.StartsWith("a=ice-pwd:", StringComparison.OrdinalIgnoreCase))
+                lines[i] = RedactAfterPrefix(lines[i], "a=ice-pwd:");
+        }
+
+        return string.Join('\n', lines);
+    }
+
+    private static string RedactInlineKeys(string line)
+    {
+        // a=crypto:<tag> <suite> inline:<key-params> [inline:<key-params> ...] [session-params]
+        var result = new System.Text.StringBuilder(line.Length);
+        var index = 0;
+        while (index < line.Length)
+        {
+            var inlineIndex = line.IndexOf("inline:", index, StringComparison.OrdinalIgnoreCase);
+            if (inlineIndex < 0)
+            {
+                result.Append(line, index, line.Length - index);
+                break;
+            }
+
+            var keyStart = inlineIndex + "inline:".Length;
+            var keyEnd = keyStart;
+            while (keyEnd < line.Length && !char.IsWhiteSpace(line[keyEnd]))
+                keyEnd++;
+
+            result.Append(line, index, keyStart - index);
+            result.Append("<redacted>");
+            index = keyEnd;
+        }
+
+        return result.ToString();
+    }
+
+    private static string RedactAfterPrefix(string line, string prefix)
+    {
+        var prefixIndex = line.IndexOf(prefix, StringComparison.OrdinalIgnoreCase);
+        return prefixIndex < 0
+            ? line
+            : string.Concat(line.AsSpan(0, prefixIndex + prefix.Length), "<redacted>");
+    }
 }
