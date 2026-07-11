@@ -22,6 +22,7 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
     private readonly SemaphoreSlim _operationGate = new(1, 1);
     private readonly SipCallSessionHeaderService _headerService;
     private readonly SipCallSessionTransactionService _transactionService;
+    private readonly SipCallSessionEventDispatcher _eventDispatcher;
     private readonly SipCallSessionInboundService _inboundService;
     private readonly SipCallSessionContextAdapter _context;
     private readonly SipReliableProvisionalManager _reliableProvisionalManager;
@@ -127,6 +128,7 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
         _serverTransactions = dependencies.ServerTransactions;
         _identityTrustPolicy = dependencies.IdentityTrustPolicy;
         _logger = dependencies.Logger;
+        _eventDispatcher = new SipCallSessionEventDispatcher(_logger);
         _sdpProvider = dependencies.SdpProvider;
         _context = new SipCallSessionContextAdapter(this);
         _headerService = new SipCallSessionHeaderService(_context);
@@ -772,72 +774,25 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
     /// Raises DTMF event with parser-decoded tone metadata.
     /// </summary>
     internal void RaiseDtmfReceived(byte toneCode, int durationMilliseconds)
-    {
-        try
-        {
-            DtmfReceived?.Invoke(this, new SipDtmfReceivedEventArgs(toneCode, durationMilliseconds));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "SIP session {CallId}: DTMF callback failed.", CallId);
-        }
-    }
+        => _eventDispatcher.RaiseDtmf(DtmfReceived, this, toneCode, durationMilliseconds, CallId);
+
     /// <summary>
     /// Raises transfer-request event and returns caller acceptance.
     /// </summary>
     internal bool RaiseTransferRequested(string referTo, string referredBy)
-    {
-        if (TransferRequested is null)
-            return false;
-        var args = new SipTransferRequestedEventArgs(referTo, referredBy);
-        try
-        {
-            TransferRequested?.Invoke(this, args);
-            return args.Accept;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "SIP session {CallId}: transfer callback failed.", CallId);
-            return false;
-        }
-    }
+        => _eventDispatcher.RaiseTransferRequested(TransferRequested, this, referTo, referredBy, CallId);
+
     /// <summary>
     /// Raises subscription-request event and returns caller acceptance.
     /// </summary>
     internal bool RaiseSubscriptionRequested(string eventType, int expiresSeconds, string? acceptHeader)
-    {
-        // Default to acceptance when no app callback is registered so SUBSCRIBE lifecycle
-        // remains RFC-friendly and deterministic in headless/SDK-only integrations.
-        if (SubscriptionRequested is null)
-            return true;
-        var args = new SipSubscriptionRequestedEventArgs(eventType, expiresSeconds, acceptHeader);
-        try
-        {
-            SubscriptionRequested?.Invoke(this, args);
-            return args.Accept;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "SIP session {CallId}: subscription callback failed.", CallId);
-            return false;
-        }
-    }
+        => _eventDispatcher.RaiseSubscriptionRequested(SubscriptionRequested, this, eventType, expiresSeconds, acceptHeader, CallId);
+
     /// <summary>
     /// Raises inbound NOTIFY event to application.
     /// </summary>
     internal void RaiseNotifyReceived(string eventType, string subscriptionState, bool isTerminated, string? contentType, string? body)
-    {
-        try
-        {
-            NotifyReceived?.Invoke(
-                this,
-                new SipNotifyReceivedEventArgs(eventType, subscriptionState, isTerminated, contentType, body));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "SIP session {CallId}: NOTIFY callback failed.", CallId);
-        }
-    }
+        => _eventDispatcher.RaiseNotifyReceived(NotifyReceived, this, eventType, subscriptionState, isTerminated, contentType, body, CallId);
     /// <summary>
     /// Applies negotiated session timer values when Session-Expires is available.
     /// </summary>
