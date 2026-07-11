@@ -6,6 +6,30 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
 
 ## [Unreleased]
 
+## [4.4.0] - 2026-07-11
+
+Additive public-API capabilities closing developer-experience gaps from the `IVoipClient`
+reachability analysis. No breaking changes.
+
+### Added
+- **Default SIP transport selection (CORE-016)**: `SdkConfiguration.DefaultTransport` /
+  `SdkOptions.DefaultTransport` / `CalloraBuilder.WithTransport` with a public `SipTransport`
+  enum (Udp/Tcp/Tls/Ws/Wss). Default stays UDP; lets TCP/TLS-only enterprise proxies pick the
+  outbound transport instead of relying on a `sips:`/`;transport=` target URI.
+- **Opt-in public media address (CORE-017)**: `SipAccount.PublicMediaHost` forces the SDP media
+  connection line (`c=`) for CGNAT / static 1:1 NAT. Default (unset) keeps the auto-resolved,
+  symmetric-RTP-friendly address unchanged.
+- **ICE observability on `ICall` (CORE-018)**: `ICall.IceSnapshot` (`CallIceSnapshot`) exposes the
+  final ICE state and selected local/remote candidate pair (RFC 8445) after selection.
+- **Custom outbound headers + remote identity (CORE-019)**: `DialOptions.CustomHeaders` are now
+  applied to the INVITE (protected headers and header-injection attempts are refused);
+  `ICall.RemoteAssertedIdentity` (P-Asserted-Identity, RFC 3325) and `ICall.Diversion` (RFC 5806)
+  surface read-only on inbound calls.
+- **SRTP suite / SRTCP status (CORE-023)**: `CallMediaParameters.SrtpSuite` is now public and a new
+  `IsSrtcpEncrypted` flag reports SRTCP protection (RFC 3711 §3.4); key material stays internal.
+- **Raw RTP statistics (CORE-024)**: `ICall.RtpStatistics` (`CallRtpStatistics`) exposes raw
+  RFC 3550 counters (SSRC, packet/octet counts, cumulative/fraction loss, interarrival jitter).
+
 ## [4.3.5] - 2026-07-10
 
 Security and robustness fixes surfaced by an adversarial production-readiness review, plus

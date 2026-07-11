@@ -5,6 +5,15 @@ The authoritative changelog lives in the repository:
 
 ## Release highlights
 
+### 4.4.0 — 2026-07-11
+- Additive public-API capabilities (no breaking changes) closing developer-experience gaps:
+  consumer-selectable default SIP transport (`SdkConfiguration.DefaultTransport`, UDP/TCP/TLS/WS/WSS);
+  an opt-in public media address (`SipAccount.PublicMediaHost`) for CGNAT / static 1:1 NAT;
+  ICE observability (`ICall.IceSnapshot`) and raw RTP statistics (`ICall.RtpStatistics`) on the call;
+  custom outbound INVITE headers (`DialOptions.CustomHeaders`, injection-guarded) plus read-only
+  remote identity (`ICall.RemoteAssertedIdentity`, `ICall.Diversion`); and the negotiated SRTP suite
+  name with an SRTCP-encrypted flag on `CallMediaParameters`
+
 ### 4.3.5 — 2026-07-10
 - Security/robustness fixes from a production-readiness review: stream-framer memory-DoS limits,
   SIP-over-WebSocket `sip` subprotocol (RFC 7118), TLS/WSS SNI + certificate validation against the
