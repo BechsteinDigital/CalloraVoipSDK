@@ -9,8 +9,29 @@ namespace CalloraVoipSdk.Core.Infrastructure.Sip.Transport;
 /// </summary>
 internal sealed class SipWireStreamFramer
 {
+    // Hard framing limits: a header or body far beyond these indicates abuse or a stuck stream,
+    // so the connection is torn down instead of buffering unbounded memory. The 64-KB SIP message
+    // parser limit only applies AFTER framing, so the framer must bound the buffer itself.
+    internal const int DefaultMaxHeaderBytes = 64 * 1024;
+    internal const int DefaultMaxBodyBytes = 256 * 1024;
+
+    private readonly int _maxHeaderBytes;
+    private readonly int _maxBodyBytes;
     private readonly List<byte> _buffer = [];
     private bool _consumedKeepalivePing;
+
+    /// <summary>
+    /// Creates a stream framer with hard limits on header and body size. A message exceeding a
+    /// limit makes <see cref="TryReadFrame"/> throw, so the transport can close the connection
+    /// instead of buffering unbounded memory.
+    /// </summary>
+    public SipWireStreamFramer(
+        int maxHeaderBytes = DefaultMaxHeaderBytes,
+        int maxBodyBytes = DefaultMaxBodyBytes)
+    {
+        _maxHeaderBytes = maxHeaderBytes;
+        _maxBodyBytes = maxBodyBytes;
+    }
 
     /// <summary>
     /// Appends newly received bytes to the internal framing buffer.
@@ -45,9 +66,20 @@ internal sealed class SipWireStreamFramer
         var bufferSpan = CollectionsMarshal.AsSpan(_buffer);
         var headerEndIndex = IndexOfHeaderTerminator(bufferSpan);
         if (headerEndIndex < 0)
+        {
+            // Bound an unterminated header: never buffer past the header limit while still
+            // searching for the CRLFCRLF terminator (guards a never-completing header).
+            if (_buffer.Count > _maxHeaderBytes)
+                throw new InvalidOperationException(
+                    $"SIP stream header exceeds the {_maxHeaderBytes}-byte limit without a CRLFCRLF terminator.");
             return false;
+        }
 
         var headerLength = headerEndIndex + 4;
+        if (headerLength > _maxHeaderBytes)
+            throw new InvalidOperationException(
+                $"SIP stream header ({headerLength} bytes) exceeds the {_maxHeaderBytes}-byte limit.");
+
         var headerText = Encoding.UTF8.GetString(bufferSpan[..headerEndIndex]);
         // Split the header into lines once and reuse for both header checks — the two
         // parsers previously each re-split the same header text, doubling the allocation.
@@ -59,6 +91,9 @@ internal sealed class SipWireStreamFramer
             throw new InvalidOperationException("SIP stream message has invalid Content-Length header.");
         if (!hasContentLength)
             throw new InvalidOperationException("SIP stream message over stream transport must include Content-Length.");
+        if (contentLength > _maxBodyBytes)
+            throw new InvalidOperationException(
+                $"SIP stream Content-Length {contentLength} exceeds the {_maxBodyBytes}-byte limit.");
 
         var totalLength = headerLength + contentLength;
         if (bufferSpan.Length < totalLength)

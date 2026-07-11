@@ -50,6 +50,32 @@ public sealed class SipWireStreamFramerTests
     }
 
     [Fact]
+    public void Rejects_body_exceeding_the_content_length_limit()
+    {
+        // Declared Content-Length far above the body limit must be rejected on the header alone,
+        // before the (never-arriving) body is buffered — otherwise memory grows unbounded.
+        var framer = new SipWireStreamFramer(maxBodyBytes: 16);
+        var message = Message(
+            "MESSAGE sip:bob@example.org SIP/2.0\n" +
+            "Content-Length: 1000000\n",
+            new string('x', 32));
+
+        framer.Append(message);
+
+        Assert.Throws<InvalidOperationException>(() => framer.TryReadFrame(out _));
+    }
+
+    [Fact]
+    public void Rejects_unterminated_header_exceeding_the_limit()
+    {
+        // A header that never terminates with CRLFCRLF must not buffer past the header limit.
+        var framer = new SipWireStreamFramer(maxHeaderBytes: 128);
+        framer.Append(Encoding.UTF8.GetBytes(new string('A', 200)));
+
+        Assert.Throws<InvalidOperationException>(() => framer.TryReadFrame(out _));
+    }
+
+    [Fact]
     public void Rejects_chunked_transfer_encoding()
     {
         var framer = new SipWireStreamFramer();
