@@ -161,6 +161,10 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
     /// <inheritdoc />
     public string RemoteUri { get; }
     /// <inheritdoc />
+    public string? LocalTag { get { lock (_sync) return _localTag; } }
+    /// <inheritdoc />
+    public string? RemoteTag { get { lock (_sync) return _remoteTag; } }
+    /// <inheritdoc />
     public bool IsInbound => _isInbound;
     /// <inheritdoc />
     public string? RemoteAssertedIdentity
@@ -293,7 +297,7 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
                 TransitionTo(SipDialogState.Terminated);
                 return;
             }
-            if (ShouldUseReliableProvisional(_initialInvite))
+            if (SipCallSessionUtilities.ShouldUseReliableProvisional(_initialInvite))
             {
                 var prackAcknowledged = await SendReliableProvisionalAndWaitForPrackAsync(
                         _initialInvite,
@@ -369,7 +373,7 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
             if (_initialInvite is null || string.IsNullOrWhiteSpace(_localTag))
                 throw new InvalidOperationException("Inbound INVITE context is missing.");
             var phrase = string.IsNullOrWhiteSpace(reasonPhrase)
-                ? ResolveDefaultReasonPhrase(statusCode)
+                ? SipCallSessionUtilities.ResolveDefaultReasonPhrase(statusCode)
                 : reasonPhrase;
             var rejectHeaders = _headerService.CreateResponseHeadersFromRequest(
                 _initialInvite, _localTag, includeContentType: false);
@@ -573,7 +577,7 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
         CancellationToken ct = default)
     {
         ThrowIfDisposed();
-        if (!IsValidDtmfDigit(digit))
+        if (!SipCallSessionUtilities.IsValidDtmfDigit(digit))
             throw new ArgumentException($"Invalid DTMF digit '{digit}'. Valid digits: 0-9, *, #, A-D.", nameof(digit));
         if (durationMs < 40)
             throw new ArgumentOutOfRangeException(nameof(durationMs), durationMs, "DTMF duration must be at least 40 ms.");
@@ -724,17 +728,8 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
     internal bool MatchesReplacesTarget(SipReplacesHeaderValue replaces)
     {
         ArgumentNullException.ThrowIfNull(replaces);
-        if (!replaces.CallId.Equals(CallId, StringComparison.Ordinal))
-            return false;
         lock (_sync)
-        {
-            if (string.IsNullOrWhiteSpace(_localTag) || string.IsNullOrWhiteSpace(_remoteTag))
-                return false;
-            return (_localTag.Equals(replaces.ToTag, StringComparison.Ordinal)
-                    && _remoteTag.Equals(replaces.FromTag, StringComparison.Ordinal))
-                || (_localTag.Equals(replaces.FromTag, StringComparison.Ordinal)
-                    && _remoteTag.Equals(replaces.ToTag, StringComparison.Ordinal));
-        }
+            return replaces.MatchesDialog(CallId, _localTag, _remoteTag);
     }
     /// <summary>
     /// Increments and returns next local CSeq value.
@@ -887,8 +882,6 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
                 _logger,
                 ct)
             .ConfigureAwait(false);
-    private static bool ShouldUseReliableProvisional(SipRequest invite) =>
-        SipCallSessionUtilities.ShouldUseReliableProvisional(invite);
     private async Task<bool> SendReliableProvisionalAndWaitForPrackAsync(
         SipRequest invite,
         string localTag,
@@ -916,16 +909,6 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
         if (Volatile.Read(ref _disposed) != 0)
             throw new ObjectDisposedException(nameof(SipCallSession));
     }
-    /// <summary>
-    /// Returns true when the character is a valid DTMF digit (0–9, *, #, A–D).
-    /// </summary>
-    private static bool IsValidDtmfDigit(char c) =>
-        SipCallSessionUtilities.IsValidDtmfDigit(c);
-    /// <summary>
-    /// Returns the standard SIP reason phrase for common 4xx–6xx status codes.
-    /// </summary>
-    private static string ResolveDefaultReasonPhrase(int statusCode) =>
-        SipCallSessionUtilities.ResolveDefaultReasonPhrase(statusCode);
     /// <summary>
     /// Releases operation semaphore safely when disposal races with in-flight operations.
     /// </summary>

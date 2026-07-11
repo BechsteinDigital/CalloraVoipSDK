@@ -102,4 +102,46 @@ internal sealed class SipReplacesHeaderValue
         parsedValue = new SipReplacesHeaderValue(callId, toTag, fromTag, earlyOnly);
         return true;
     }
+
+    /// <summary>
+    /// Formats this value as a SIP <c>Replaces</c> header value (RFC 3891):
+    /// <c>call-id;to-tag=...;from-tag=...</c> (plus <c>;early-only</c> when set).
+    /// </summary>
+    public string ToHeaderValue()
+    {
+        var value = $"{CallId};to-tag={ToTag};from-tag={FromTag}";
+        return EarlyOnly ? value + ";early-only" : value;
+    }
+
+    /// <summary>
+    /// Builds a <c>Refer-To</c> value that carries this <c>Replaces</c> as a URI-escaped embedded
+    /// header, for RFC 5589 attended transfer: <c>&lt;target-uri?Replaces=...&gt;</c>. The target
+    /// must be a bare addr-spec (for example <c>sip:bob@example.com</c>).
+    /// </summary>
+    public string BuildReferToUri(string targetAddrSpec)
+    {
+        if (string.IsNullOrWhiteSpace(targetAddrSpec))
+            throw new ArgumentException("Target addr-spec is required.", nameof(targetAddrSpec));
+
+        var escaped = Uri.EscapeDataString(ToHeaderValue());
+        return $"<{targetAddrSpec}?Replaces={escaped}>";
+    }
+
+    /// <summary>
+    /// Returns true when this <c>Replaces</c> identifies the dialog with the given Call-ID and
+    /// tags. Matches in either tag orientation (RFC 3891 §3): the caller supplies its own local and
+    /// remote tags, compared against <see cref="ToTag"/>/<see cref="FromTag"/>.
+    /// </summary>
+    public bool MatchesDialog(string callId, string? localTag, string? remoteTag)
+    {
+        if (!CallId.Equals(callId, StringComparison.Ordinal)
+            || string.IsNullOrWhiteSpace(localTag)
+            || string.IsNullOrWhiteSpace(remoteTag))
+        {
+            return false;
+        }
+
+        return (localTag.Equals(ToTag, StringComparison.Ordinal) && remoteTag.Equals(FromTag, StringComparison.Ordinal))
+            || (localTag.Equals(FromTag, StringComparison.Ordinal) && remoteTag.Equals(ToTag, StringComparison.Ordinal));
+    }
 }

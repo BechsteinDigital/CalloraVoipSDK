@@ -479,7 +479,18 @@ internal sealed class SipCoreCallChannel : ICallChannel
             return Task.FromResult(false);
 
         var targetSession = sipTarget.EnsureSession();
-        return session.SendReferAsync(targetSession.RemoteUri, referredBy: session.LocalUri, ct: ct);
+
+        // RFC 5589 attended transfer: REFER the transferee to the consultation target, carrying an
+        // RFC 3891 Replaces that identifies the established consultation dialog. Falls back to a
+        // plain REFER to the target URI when the consultation dialog has no tags yet.
+        var referTo = AttendedTransferReferTo.Build(
+            targetSession.CallId,
+            targetSession.LocalTag,
+            targetSession.RemoteTag,
+            targetSession.RemoteUri)
+            ?? targetSession.RemoteUri;
+
+        return session.SendReferAsync(referTo, referredBy: session.LocalUri, ct: ct);
     }
 
     /// <inheritdoc />

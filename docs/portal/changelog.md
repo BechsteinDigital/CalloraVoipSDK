@@ -5,6 +5,11 @@ The authoritative changelog lives in the repository:
 
 ## Release highlights
 
+### 4.3.4 — 2026-07-10
+- Attended transfer now sends REFER with an RFC 3891 `Replaces` (RFC 5589), so REFER/Replaces-capable
+  PBXs (Asterisk / FreeSWITCH / 3CX) actually join the two calls; endpoints without REFER transfer
+  (e.g. a FRITZ!Box on PSTN legs) still need a media bridge
+
 ### 4.3.3 — 2026-07-10
 - Documentation-only release (no code changes vs 4.3.2): restructured the portal around a
   7-section information architecture (Overview · Getting Started · Core Concepts · Guides ·

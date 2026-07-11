@@ -52,6 +52,20 @@ internal interface ISipCallSession : IDisposable
     string? RemoteSdp { get; }
 
     /// <summary>
+    /// Local dialog tag (the tag this UA contributed: From-tag on an outbound leg, To-tag on an
+    /// inbound leg). Used to build an RFC 3891 <c>Replaces</c> for attended transfer. Defaults to
+    /// <see langword="null"/> so existing implementations keep compiling.
+    /// </summary>
+    string? LocalTag => null;
+
+    /// <summary>
+    /// Remote dialog tag (the far end's tag). <see langword="null"/> until the dialog is
+    /// established. Used to build an RFC 3891 <c>Replaces</c> for attended transfer. Defaults to
+    /// <see langword="null"/> so existing implementations keep compiling.
+    /// </summary>
+    string? RemoteTag => null;
+
+    /// <summary>
     /// The most recent local SDP the session put on the wire (the answer we sent on an inbound
     /// leg / re-INVITE, or an offer). Used by the media adapter to recover our own SDES key on a
     /// re-INVITE rekey. Defaults to <see langword="null"/> so existing implementations keep

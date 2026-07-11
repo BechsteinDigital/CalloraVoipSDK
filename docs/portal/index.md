@@ -21,7 +21,7 @@ and intelligent decision logic.
 
 ## Current Status
 
-**Available on [nuget.org](https://www.nuget.org/packages/CalloraVoipSdk) — current release: v4.3.3.**
+**Available on [nuget.org](https://www.nuget.org/packages/CalloraVoipSdk) — current release: v4.3.4.**
 
 **What works today:**
 

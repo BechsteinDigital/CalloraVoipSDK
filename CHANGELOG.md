@@ -6,6 +6,20 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
 
 ## [Unreleased]
 
+## [4.3.4] - 2026-07-10
+
+Attended transfer is now RFC 5589 (REFER carrying an RFC 3891 `Replaces`). No breaking
+changes — the public `ICall.AttendedTransferAsync` signature is unchanged.
+
+### Fixed
+- **Attended transfer now sends REFER with a `Replaces`** (RFC 5589 / RFC 3891): the REFER's
+  `Refer-To` targets the consultation party and embeds a URI-escaped `Replaces` identifying the
+  consultation dialog (`to-tag` = the target's tag, `from-tag` = ours). REFER/Replaces-capable
+  PBXs (e.g. Asterisk, FreeSWITCH, 3CX) can now actually join the two dialogs. Previously a plain
+  REFER without `Replaces` was sent, which such PBXs could not complete. It falls back to a plain
+  REFER when the consultation dialog has no tags yet. Endpoints without any REFER-transfer support
+  (e.g. a FRITZ!Box on PSTN legs) still reject the REFER — bridge the media instead.
+
 ## [4.3.3] - 2026-07-10
 
 Documentation-only release — no code changes versus 4.3.2. Cut as a tag so the

@@ -59,6 +59,11 @@ ICall consult = await line.DialAsync("sip:1003@pbx.example.com");
 bool ok = await call.AttendedTransferAsync(consult);
 ```
 
+Attended transfer uses REFER with a `Replaces` (RFC 5589). It needs a PBX that supports
+REFER-based transfer (e.g. Asterisk, FreeSWITCH, 3CX). Endpoints that don't — such as a
+FRITZ!Box on PSTN legs — reject the REFER; bridge the media there instead (see
+[Bridge two calls](bridge-calls.md)).
+
 Inbound transfer requests (REFER from the peer) arrive as `TransferRequested`, handled
 synchronously so you can accept or reject inline.
 
