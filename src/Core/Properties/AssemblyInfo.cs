@@ -7,3 +7,5 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("CalloraVoipSdk.Performance")]
 [assembly: InternalsVisibleTo("CalloraVoipSdk.Core.Performance")]
 [assembly: InternalsVisibleTo("CalloraVoipSdk.Client")]
+[assembly: InternalsVisibleTo("CalloraVoipSdk.Audio.Linux")]
+[assembly: InternalsVisibleTo("CalloraVoipSdk.Audio.Windows")]

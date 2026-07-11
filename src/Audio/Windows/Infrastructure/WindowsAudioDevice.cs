@@ -5,13 +5,14 @@ using NAudio.Codecs;
 using NAudio.Wave;
 using CalloraVoipSdk.Audio.Abstractions.Domain.Devices;
 using CalloraVoipSdk.Core.Application.Media;
+using CalloraVoipSdk.Core.Application.Media.Sessions;
 using CalloraVoipSdk.Core.Application.Ports.Audio;
 
 namespace CalloraVoipSdk.Audio.Windows;
 
 /// <summary>
 /// Windows audio device using NAudio WaveIn/WaveOut.
-/// Supports G.711 (PCMU/PCMA) and G.722 (wideband, 16 kHz).
+/// Supports G.711 (PCMU/PCMA), G.722 (wideband, 16 kHz) and Opus (RFC 7587, 48 kHz).
 /// Provides runtime controls for device switching, mute, volume, and format updates.
 /// </summary>
 public sealed class WindowsAudioDevice : IAudioDeviceProvider, IAudioDeviceRuntimeControl, IDisposable
@@ -48,6 +49,7 @@ public sealed class WindowsAudioDevice : IAudioDeviceProvider, IAudioDeviceRunti
 
     private G722CodecState? _g722DecodeState;
     private G722CodecState? _g722EncodeState;
+    private OpusDeviceCodec? _opusCodec;
 
     /// <summary>
     /// Creates a Windows audio device with optional startup options.
@@ -104,6 +106,7 @@ public sealed class WindowsAudioDevice : IAudioDeviceProvider, IAudioDeviceRunti
 
             _g722DecodeState = new G722CodecState(64000, G722Flags.None);
             _g722EncodeState = new G722CodecState(64000, G722Flags.None);
+            _opusCodec = _activeCodec == ActiveCodec.Opus ? new OpusDeviceCodec() : null;
 
             _receiver.FrameReceived += OnFrameReceived;
 
@@ -425,6 +428,22 @@ public sealed class WindowsAudioDevice : IAudioDeviceProvider, IAudioDeviceRunti
             adjustedCapture,
             deviceSampleRate,
             outboundSampleRate);
+
+        if (outboundCodec == ActiveCodec.Opus)
+        {
+            // Opus needs whole 20 ms frames; the codec buffers partial captures and emits 0..n packets.
+            foreach (var opusPayload in _opusCodec?.Encode(outboundPcm) ?? [])
+            {
+                var opusFrame = new MediaFrame(
+                    opusPayload,
+                    PayloadType: outboundPayloadType,
+                    DurationRtpUnits: (uint)OpusDeviceCodec.FrameSamples);
+                _ = localSender.SendAsync(opusFrame, CancellationToken.None);
+            }
+
+            return;
+        }
+
         var encoded = Encode(outboundPcm, outboundCodec);
 
         var rtpClockRate = outboundCodec == ActiveCodec.G722 ? 8000d : outboundSampleRate;
@@ -520,6 +539,7 @@ public sealed class WindowsAudioDevice : IAudioDeviceProvider, IAudioDeviceRunti
 
         _g722DecodeState = null;
         _g722EncodeState = null;
+        _opusCodec = null;
         _payloadType = 0;
         _payloadTypeCodecMap = EmptyPayloadTypeCodecMap;
         _activeCodec = ActiveCodec.Pcmu;
@@ -646,18 +666,24 @@ public sealed class WindowsAudioDevice : IAudioDeviceProvider, IAudioDeviceRunti
             "G722" or "G.722" => ActiveCodec.G722,
             "PCMA" or "A-LAW" or "A_LAW" => ActiveCodec.Pcma,
             "PCMU" or "MU-LAW" or "MU_LAW" => ActiveCodec.Pcmu,
+            "OPUS" => ActiveCodec.Opus,
             _ => null
         };
     }
 
-    private static int GetCodecSampleRate(ActiveCodec codec) =>
-        codec == ActiveCodec.G722 ? 16_000 : 8_000;
+    private static int GetCodecSampleRate(ActiveCodec codec) => codec switch
+    {
+        ActiveCodec.Opus => OpusPayloadCodec.RtpClockRate, // 48 kHz
+        ActiveCodec.G722 => 16_000,
+        _ => 8_000
+    };
 
     private byte[] Decode(byte[] payload, ActiveCodec codec)
     {
         return codec switch
         {
             ActiveCodec.G722 => DecodeG722(payload),
+            ActiveCodec.Opus => _opusCodec?.Decode(payload) ?? Array.Empty<byte>(),
             ActiveCodec.Pcma => DecodeG711(payload, payloadType: 8),
             _ => DecodeG711(payload, payloadType: 0)
         };
@@ -796,6 +822,7 @@ public sealed class WindowsAudioDevice : IAudioDeviceProvider, IAudioDeviceRunti
     {
         Pcmu,
         Pcma,
-        G722
+        G722,
+        Opus
     }
 }

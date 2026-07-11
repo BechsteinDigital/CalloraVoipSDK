@@ -6,13 +6,14 @@ using NAudio.Codecs;
 using PortAudioSharp;
 using CalloraVoipSdk.Audio.Abstractions.Domain.Devices;
 using CalloraVoipSdk.Core.Application.Media;
+using CalloraVoipSdk.Core.Application.Media.Sessions;
 using CalloraVoipSdk.Core.Application.Ports.Audio;
 
 namespace CalloraVoipSdk.Audio.Linux;
 
 /// <summary>
 /// Linux audio device using PortAudio (ALSA / PulseAudio).
-/// Supports G.711 (PCMU/PCMA) and G.722 (wideband, 16 kHz).
+/// Supports G.711 (PCMU/PCMA), G.722 (wideband, 16 kHz) and Opus (RFC 7587, 48 kHz).
 /// Provides runtime controls for hot-switch, mute, volume, and format updates.
 /// </summary>
 public sealed class LinuxAudioDevice : IAudioDeviceProvider, IAudioDeviceRuntimeControl, IDisposable
@@ -50,6 +51,7 @@ public sealed class LinuxAudioDevice : IAudioDeviceProvider, IAudioDeviceRuntime
 
     private G722CodecState? _g722DecodeState;
     private G722CodecState? _g722EncodeState;
+    private OpusDeviceCodec? _opusCodec;
 
     /// <summary>
     /// Creates a Linux audio device with optional startup options.
@@ -107,6 +109,7 @@ public sealed class LinuxAudioDevice : IAudioDeviceProvider, IAudioDeviceRuntime
 
             _g722DecodeState = new G722CodecState(64000, G722Flags.None);
             _g722EncodeState = new G722CodecState(64000, G722Flags.None);
+            _opusCodec = _activeCodec == ActiveCodec.Opus ? new OpusDeviceCodec() : null;
 
             _receiver.FrameReceived += OnFrameReceived;
 
@@ -472,6 +475,21 @@ public sealed class LinuxAudioDevice : IAudioDeviceProvider, IAudioDeviceRuntime
             captureSampleRate,
             outboundSampleRate);
 
+        if (outboundCodec == ActiveCodec.Opus)
+        {
+            // Opus needs whole 20 ms frames; the codec buffers partial captures and emits 0..n packets.
+            foreach (var opusPayload in _opusCodec?.Encode(outboundPcm) ?? [])
+            {
+                var opusFrame = new MediaFrame(
+                    opusPayload,
+                    PayloadType: outboundPayloadType,
+                    DurationRtpUnits: (uint)OpusDeviceCodec.FrameSamples);
+                _ = localSender.SendAsync(opusFrame, CancellationToken.None);
+            }
+
+            return StreamCallbackResult.Continue;
+        }
+
         var encoded = Encode(outboundPcm, outboundCodec);
 
         var rtpClockRate = outboundCodec == ActiveCodec.G722 ? 8000d : outboundSampleRate;
@@ -585,6 +603,7 @@ public sealed class LinuxAudioDevice : IAudioDeviceProvider, IAudioDeviceRuntime
 
         _g722DecodeState = null;
         _g722EncodeState = null;
+        _opusCodec = null;
         _outboundPayloadType = 0;
         _payloadTypeCodecMap = EmptyPayloadTypeCodecMap;
         _activeCodec = ActiveCodec.Pcmu;
@@ -774,20 +793,26 @@ public sealed class LinuxAudioDevice : IAudioDeviceProvider, IAudioDeviceRuntime
             "G722" or "G.722" => ActiveCodec.G722,
             "PCMA" or "A-LAW" or "A_LAW" => ActiveCodec.Pcma,
             "PCMU" or "MU-LAW" or "MU_LAW" => ActiveCodec.Pcmu,
+            "OPUS" => ActiveCodec.Opus,
             _ => null
         };
     }
 
-    private static int GetCodecSampleRate(ActiveCodec codec) =>
-        codec == ActiveCodec.G722 ? 16_000 : 8_000;
+    private static int GetCodecSampleRate(ActiveCodec codec) => codec switch
+    {
+        ActiveCodec.Opus => OpusPayloadCodec.RtpClockRate, // 48 kHz
+        ActiveCodec.G722 => 16_000,
+        _ => 8_000
+    };
 
     private byte[] Decode(byte[] payload, ActiveCodec codec)
     {
         return codec switch
         {
             ActiveCodec.G722 => DecodeG722(payload),
-            ActiveCodec.Pcma => DecodeG711(payload, payloadType: 8),
-            _ => DecodeG711(payload, payloadType: 0)
+            ActiveCodec.Opus => _opusCodec?.Decode(payload) ?? Array.Empty<byte>(),
+            ActiveCodec.Pcma => LinuxG711Codec.Decode(payload, payloadType: 8),
+            _ => LinuxG711Codec.Decode(payload, payloadType: 0)
         };
     }
 
@@ -796,8 +821,8 @@ public sealed class LinuxAudioDevice : IAudioDeviceProvider, IAudioDeviceRuntime
         return codec switch
         {
             ActiveCodec.G722 => EncodeG722(pcm),
-            ActiveCodec.Pcma => EncodeG711(pcm, payloadType: 8),
-            _ => EncodeG711(pcm, payloadType: 0)
+            ActiveCodec.Pcma => LinuxG711Codec.Encode(pcm, payloadType: 8),
+            _ => LinuxG711Codec.Encode(pcm, payloadType: 0)
         };
     }
 
@@ -829,103 +854,6 @@ public sealed class LinuxAudioDevice : IAudioDeviceProvider, IAudioDeviceRuntime
         Buffer.BlockCopy(samples, 0, pcm, 0, pcm.Length);
         return pcm;
     }
-
-    private static byte[] EncodeG711(byte[] pcm, int payloadType)
-    {
-        var sampleCount = pcm.Length / 2;
-        var encoded = new byte[sampleCount];
-        for (var i = 0; i < sampleCount; i++)
-        {
-            var sample = (short)(pcm[i * 2] | (pcm[i * 2 + 1] << 8));
-            encoded[i] = payloadType == 0 ? MuLawEncode(sample) : ALawEncode(sample);
-        }
-
-        return encoded;
-    }
-
-    private static byte[] DecodeG711(byte[] payload, int payloadType)
-    {
-        var pcm = new byte[payload.Length * 2];
-        for (var i = 0; i < payload.Length; i++)
-        {
-            var sample = payloadType == 0 ? MuLawDecode(payload[i]) : ALawDecode(payload[i]);
-            pcm[i * 2] = (byte)(sample & 0xFF);
-            pcm[i * 2 + 1] = (byte)(sample >> 8);
-        }
-
-        return pcm;
-    }
-
-    private static byte MuLawEncode(short pcm)
-    {
-        const int Bias = 0x84;
-        const int Clip = 32635;
-
-        var sign = (pcm >> 8) & 0x80;
-        if (sign != 0)
-            pcm = (short)-pcm;
-        if (pcm > Clip)
-            pcm = Clip;
-
-        pcm += Bias;
-        var exp = MuExp[(pcm >> 7) & 0xFF];
-        var mant = (pcm >> (exp + 3)) & 0x0F;
-        return (byte)(~(sign | (exp << 4) | mant));
-    }
-
-    private static short MuLawDecode(byte mu)
-    {
-        mu = (byte)~mu;
-        var sign = mu & 0x80;
-        var exp = (mu >> 4) & 7;
-        var mant = mu & 0x0F;
-        var value = ((mant << 3) + 0x84) << exp;
-        return (short)(sign != 0 ? -(value - 0x84) : value - 0x84);
-    }
-
-    private static byte ALawEncode(short pcm)
-    {
-        var sign = (pcm & 0x8000) != 0 ? 0 : 0x80;
-        if (sign == 0)
-            pcm = (short)-pcm;
-        if (pcm > 32767)
-            pcm = 32767;
-
-        var exp = 7;
-        for (var mask = 0x4000; (pcm & mask) == 0 && exp > 0; exp--, mask >>= 1)
-        {
-        }
-
-        var mant = exp == 0 ? pcm >> 1 : (pcm >> (exp + 3)) & 0x0F;
-        return (byte)((sign | (exp << 4) | mant) ^ 0x55);
-    }
-
-    private static short ALawDecode(byte a)
-    {
-        a ^= 0x55;
-        var sign = a & 0x80;
-        var exp = (a >> 4) & 7;
-        var mant = a & 0x0F;
-
-        var value = exp == 0
-            ? (mant << 1) | 1
-            : ((mant | 0x10) << 1 | 1) << (exp - 1);
-
-        value <<= 3;
-        return (short)(sign != 0 ? value : -value);
-    }
-
-    private static readonly int[] MuExp =
-    [
-        0,0,1,1,2,2,2,2,3,3,3,3,3,3,3,3,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,
-        5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,
-        6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,
-        6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,
-        7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
-        7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
-        7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
-        7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7
-    ];
 
     private static byte[] ConvertPcmSampleRate(byte[] pcm, int sourceSampleRate, int targetSampleRate)
     {
@@ -991,6 +919,7 @@ public sealed class LinuxAudioDevice : IAudioDeviceProvider, IAudioDeviceRuntime
     {
         Pcmu,
         Pcma,
-        G722
+        G722,
+        Opus
     }
 }
