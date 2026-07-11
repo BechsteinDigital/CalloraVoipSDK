@@ -44,23 +44,28 @@ jobs:
       - name: Restore
         run: dotnet restore CalloraVoipSdk.sln
 
+      - name: Build and test (release gate)
+        run: |
+          dotnet build CalloraVoipSdk.sln -c Release --no-restore
+          dotnet test CalloraVoipSdk.sln -c Release --no-build --nologo
+
       - name: Pack CalloraVoipSdk.Core
-        run: dotnet pack src/Core/CalloraVoipSdk.Core.csproj -c Release --no-restore -o artifacts/nuget /p:PackageVersion=${{ steps.version.outputs.version }}
+        run: dotnet pack src/Core/CalloraVoipSdk.Core.csproj -c Release --no-restore -o artifacts/nuget /p:Version=${{ steps.version.outputs.version }}
 
       - name: Pack CalloraVoipSdk
-        run: dotnet pack src/CalloraVoipSdk/CalloraVoipSdk.csproj -c Release --no-restore -o artifacts/nuget /p:PackageVersion=${{ steps.version.outputs.version }}
+        run: dotnet pack src/CalloraVoipSdk/CalloraVoipSdk.csproj -c Release --no-restore -o artifacts/nuget /p:Version=${{ steps.version.outputs.version }}
 
       - name: Pack CalloraVoipSdk.Client
-        run: dotnet pack src/Client/CalloraVoipSdk.Client.csproj -c Release --no-restore -o artifacts/nuget /p:PackageVersion=${{ steps.version.outputs.version }}
+        run: dotnet pack src/Client/CalloraVoipSdk.Client.csproj -c Release --no-restore -o artifacts/nuget /p:Version=${{ steps.version.outputs.version }}
 
       - name: Pack CalloraVoipSdk.Audio.Abstractions
-        run: dotnet pack src/Audio/Abstractions/CalloraVoipSdk.Audio.Abstractions.csproj -c Release --no-restore -o artifacts/nuget /p:PackageVersion=${{ steps.version.outputs.version }}
+        run: dotnet pack src/Audio/Abstractions/CalloraVoipSdk.Audio.Abstractions.csproj -c Release --no-restore -o artifacts/nuget /p:Version=${{ steps.version.outputs.version }}
 
       - name: Pack CalloraVoipSdk.Audio.Windows
-        run: dotnet pack src/Audio/Windows/CalloraVoipSdk.Audio.Windows.csproj -c Release --no-restore -o artifacts/nuget /p:PackageVersion=${{ steps.version.outputs.version }}
+        run: dotnet pack src/Audio/Windows/CalloraVoipSdk.Audio.Windows.csproj -c Release --no-restore -o artifacts/nuget /p:Version=${{ steps.version.outputs.version }}
 
       - name: Pack CalloraVoipSdk.Audio.Linux
-        run: dotnet pack src/Audio/Linux/CalloraVoipSdk.Audio.Linux.csproj -c Release --no-restore -o artifacts/nuget /p:PackageVersion=${{ steps.version.outputs.version }}
+        run: dotnet pack src/Audio/Linux/CalloraVoipSdk.Audio.Linux.csproj -c Release --no-restore -o artifacts/nuget /p:Version=${{ steps.version.outputs.version }}
 
       - name: Upload package artifacts
         uses: actions/upload-artifact@v4

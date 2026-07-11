@@ -1,6 +1,9 @@
 <Project>
   <PropertyGroup>
-    <VersionPrefix>0.9.0</VersionPrefix>
+    <!-- Fallback for local/dev builds; released packages get the version from the git tag via the
+         release workflow (/p:Version=X.Y.Z), which drives PackageVersion, AssemblyVersion,
+         FileVersion and InformationalVersion together. -->
+    <VersionPrefix>4.3.4</VersionPrefix>
     <Version Condition="'$(Version)' == ''">$(VersionPrefix)</Version>
     <Authors>Bechstein Digital</Authors>
     <Company>Bechstein Digital</Company>
