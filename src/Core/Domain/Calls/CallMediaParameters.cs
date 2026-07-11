@@ -139,13 +139,24 @@ public sealed class CallMediaParameters
     /// </summary>
     public string SrtpDecisionReasonCode { get; init; } = SrtpDecisionReasonCodes.NotEvaluated;
 
+    /// <summary>
+    /// Negotiated SDES crypto-suite token (for example <c>AES_CM_128_HMAC_SHA1_80</c>) when SRTP
+    /// media encryption engaged for this leg; <see langword="null"/> for plain RTP. Exposed read-only
+    /// for audit/compliance; the value is stamped by the media-negotiation layer.
+    /// </summary>
+    public string? SrtpSuite { get; internal init; }
+
+    /// <summary>
+    /// True when RTCP for this leg is encrypted and authenticated as SRTCP (RFC 3711 §3.4). SRTCP
+    /// protection engages together with SRTP media whenever SDES key material was negotiated for
+    /// both directions; <see langword="false"/> for plain RTP/RTCP.
+    /// </summary>
+    public bool IsSrtcpEncrypted { get; internal init; }
+
     // ── SDES key material (RFC 4568) — internal media-layer contract ─────────
     // Kept as plain SDP value strings so the domain stays free of crypto types;
     // the RTP media session parses them into SRTP contexts. Both directions must
     // be present for encryption to engage; null means plain RTP.
-
-    /// <summary>Negotiated SDES suite token (e.g. <c>AES_CM_128_HMAC_SHA1_80</c>).</summary>
-    internal string? SrtpSuite { get; init; }
 
     /// <summary>Our answer's inline key params — encrypts the outbound direction.</summary>
     internal string? SrtpLocalKeyParams { get; init; }

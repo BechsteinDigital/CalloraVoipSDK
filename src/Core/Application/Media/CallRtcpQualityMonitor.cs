@@ -39,6 +39,8 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
     private long _rtcpPacketsSent;
     private long _rtcpPacketsReceived;
     private CallQualitySnapshot _latestSnapshot;
+    private CallMediaRtpSnapshot _latestRtpSnapshot;
+    private bool _hasRtpSnapshot;
     private DateTimeOffset? _lastLocalSrSentAtUtc;
     private uint _lastLocalSrMiddle32;
     private DateTimeOffset? _lastRemoteSrReceivedAtUtc;
@@ -123,6 +125,18 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
         lock (_sync)
         {
             return _latestSnapshot;
+        }
+    }
+
+    /// <summary>
+    /// Returns the most recently captured raw RTP snapshot, or <see langword="null"/> before the
+    /// first RTCP reporting interval has produced counters.
+    /// </summary>
+    internal CallMediaRtpSnapshot? GetLatestRtpSnapshot()
+    {
+        lock (_sync)
+        {
+            return _hasRtpSnapshot ? _latestRtpSnapshot : null;
         }
     }
 
@@ -503,6 +517,8 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
         lock (_sync)
         {
             _latestSnapshot = snapshot;
+            _latestRtpSnapshot = rtpSnapshot;
+            _hasRtpSnapshot = true;
         }
 
         try

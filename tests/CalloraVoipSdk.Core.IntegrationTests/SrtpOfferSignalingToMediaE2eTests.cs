@@ -115,6 +115,8 @@ public sealed class SrtpOfferSignalingToMediaE2eTests
 
         Assert.True(parameters.IsSrtpNegotiated);
         Assert.Equal(Suite, parameters.SrtpSuite);
+        // SRTCP is protected together with SRTP once both SDES keys are present (RFC 3711 §3.4).
+        Assert.True(parameters.IsSrtcpEncrypted);
         // Our offer key is the outbound encrypt key; the peer's answer key decrypts inbound.
         Assert.Equal(offerKey, parameters.SrtpLocalKeyParams);
         Assert.Equal(peerKey, parameters.SrtpRemoteKeyParams);
@@ -132,6 +134,7 @@ public sealed class SrtpOfferSignalingToMediaE2eTests
 
         Assert.False(parameters.IsSrtpNegotiated);
         Assert.Null(parameters.SrtpSuite);
+        Assert.False(parameters.IsSrtcpEncrypted);
         Assert.Null(parameters.SrtpLocalKeyParams);
         Assert.Null(parameters.SrtpRemoteKeyParams);
     }

@@ -61,6 +61,7 @@ internal static class CallMediaParametersSrtpEnricher
             AppliedSrtpPolicy = appliedPolicy,
             SrtpDecisionReasonCode = reasonCode,
             SrtpSuite = sdesUsable ? remoteCrypto!.CryptoSuite : null,
+            IsSrtcpEncrypted = sdesUsable,
             SrtpLocalKeyParams = sdesUsable ? localCrypto!.KeyParams : null,
             SrtpRemoteKeyParams = sdesUsable ? remoteCrypto!.KeyParams : null
         };

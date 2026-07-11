@@ -141,7 +141,7 @@ internal sealed class CallMediaOrchestrator : IDisposable
         {
             try
             {
-                var effective = await ResolveIceCandidatePairAsync(call.CallId, parameters).ConfigureAwait(false);
+                var effective = await ResolveIceCandidatePairAsync(call, parameters).ConfigureAwait(false);
                 if (_disposed) return;
                 SetUpMediaSession(call, channel, effective);
             }
@@ -182,7 +182,7 @@ internal sealed class CallMediaOrchestrator : IDisposable
         Action<CallMediaRuntimeMetrics> metricsHandler = metrics =>
             OnRuntimeMetricsUpdated(call.CallId, metrics);
         Action<CallQualitySnapshot> qualityHandler = snapshot =>
-            OnQualitySnapshotUpdated(call, snapshot);
+            OnQualitySnapshotUpdated(call, snapshot, qualityMonitor);
 
         // Wire RTP inbound → call channel listeners (e.g. MediaReceiver)
         session.FrameReceived += inboundHandler;
@@ -298,12 +298,19 @@ internal sealed class CallMediaOrchestrator : IDisposable
             metrics.BufferedPackets);
     }
 
-    private void OnQualitySnapshotUpdated(ICall call, CallQualitySnapshot snapshot)
+    private void OnQualitySnapshotUpdated(
+        ICall call,
+        CallQualitySnapshot snapshot,
+        CallRtcpQualityMonitor monitor)
     {
         if (call is not Domain.Calls.Call sdkCall)
             return;
 
         sdkCall.SetQualitySnapshot(snapshot);
+
+        var rtpSnapshot = monitor.GetLatestRtpSnapshot();
+        if (rtpSnapshot is not null)
+            sdkCall.SetRtpStatistics(CallRtpStatisticsFactory.From(rtpSnapshot.Value));
 
         _logger.LogDebug(
             "Call quality update for call {CallId}: active={Active} mux={Mux} localJitterMs={LocalJitterMs:F2} localLossPct={LocalLossPct:F2} remoteJitterMs={RemoteJitterMs:F2} remoteLossPct={RemoteLossPct:F2} rttMs={RttMs:F2} rtcpSent={RtcpSent} rtcpRecv={RtcpRecv}.",
@@ -329,16 +336,20 @@ internal sealed class CallMediaOrchestrator : IDisposable
         entry.Channel.SetDtmfSendDelegate(null);
     }
 
-    private async Task<CallMediaParameters> ResolveIceCandidatePairAsync(CallId callId, CallMediaParameters parameters)
+    private async Task<CallMediaParameters> ResolveIceCandidatePairAsync(ICall call, CallMediaParameters parameters)
     {
         if (_iceAgent is null || !parameters.IceEnabled)
             return parameters;
 
+        var callId = call.CallId;
         try
         {
             var selection = await _iceAgent
                 .SelectCandidatePairAsync(callId, parameters, CancellationToken.None)
                 .ConfigureAwait(false);
+
+            // Surface the ICE outcome (state + selected pair) read-only on the call.
+            (call as Domain.Calls.Call)?.SetIceSnapshot(CallIceSnapshotFactory.From(selection));
 
             _logger.LogInformation(
                 "ICE selection for call {CallId}: state={State} selected={Selected} reason={ReasonCode}.",
@@ -393,6 +404,14 @@ internal sealed class CallMediaOrchestrator : IDisposable
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "ICE selection failed for call {CallId}; using negotiated SDP endpoints.", callId);
+            (call as Domain.Calls.Call)?.SetIceSnapshot(new CallIceSnapshot(
+                CallIceState.Failed,
+                HasSelectedPair: false,
+                Nominated: false,
+                LocalCandidate: null,
+                RemoteCandidate: null,
+                SelectedLocalEndPoint: null,
+                SelectedRemoteEndPoint: null));
             return parameters;
         }
     }

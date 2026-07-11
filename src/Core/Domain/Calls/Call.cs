@@ -16,6 +16,8 @@ internal sealed class Call : ICall, IDisposable
     // volatile: allows lock-free reads in State property; writes are always under _sync.
     private volatile int           _stateInt = (int)CallState.Idle;
     private CallQualitySnapshot    _qualitySnapshot = CallQualitySnapshot.CreateEmpty(DateTimeOffset.UtcNow);
+    private CallRtpStatistics?     _rtpStatistics;
+    private CallIceSnapshot?       _iceSnapshot;
     private bool                   _disposed;
 
     /// <inheritdoc />
@@ -41,6 +43,12 @@ internal sealed class Call : ICall, IDisposable
 
     /// <inheritdoc />
     public CallQualitySnapshot QualitySnapshot { get { lock (_sync) return _qualitySnapshot; } }
+
+    /// <inheritdoc />
+    public CallRtpStatistics? RtpStatistics { get { lock (_sync) return _rtpStatistics; } }
+
+    /// <inheritdoc />
+    public CallIceSnapshot? IceSnapshot { get { lock (_sync) return _iceSnapshot; } }
 
     // ── Events ────────────────────────────────────────────────────────────────
     /// <inheritdoc />
@@ -482,6 +490,24 @@ internal sealed class Call : ICall, IDisposable
             snapshotChangedHandler = QualitySnapshotChanged; // snapshot before releasing lock
         }
         snapshotChangedHandler?.Invoke(this, new CallQualitySnapshotChangedEventArgs(snapshot, this));
+    }
+
+    /// <summary>
+    /// Updates the latest raw RTP statistics for this leg. Called by application media
+    /// orchestration alongside each quality recomputation.
+    /// </summary>
+    internal void SetRtpStatistics(CallRtpStatistics statistics)
+    {
+        lock (_sync) _rtpStatistics = statistics;
+    }
+
+    /// <summary>
+    /// Sets the ICE connectivity snapshot for this leg once candidate-pair selection completes.
+    /// Called by the application media orchestrator; only invoked for ICE-enabled legs.
+    /// </summary>
+    internal void SetIceSnapshot(CallIceSnapshot snapshot)
+    {
+        lock (_sync) _iceSnapshot = snapshot;
     }
 
     /// <summary>

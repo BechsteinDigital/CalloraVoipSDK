@@ -64,6 +64,21 @@ public interface ICall
     /// </summary>
     CallQualitySnapshot QualitySnapshot { get; }
 
+    /// <summary>
+    /// Latest raw RTP transport statistics (SSRC identifiers, packet/octet counters, RFC 3550
+    /// loss and jitter counters) for this leg, or <see langword="null"/> until the first RTCP
+    /// reporting interval has produced counters. Complements <see cref="QualitySnapshot"/> with the
+    /// underlying uninterpreted counters for diagnostics and billing.
+    /// </summary>
+    CallRtpStatistics? RtpStatistics { get; }
+
+    /// <summary>
+    /// Read-only ICE (RFC 8445) connectivity snapshot for this leg once candidate-pair selection
+    /// completes, or <see langword="null"/> for calls where ICE was not negotiated. Reports the
+    /// final ICE state and the selected local/remote candidate pair.
+    /// </summary>
+    CallIceSnapshot? IceSnapshot { get; }
+
     // ── Events ────────────────────────────────────────────────────────────────
 
     /// <summary>
