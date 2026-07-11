@@ -93,8 +93,8 @@ public sealed class EngineeringRulesTests
 
     private static readonly string[] FileLengthBaseline =
     [
-        // SipCallSession.cs was reduced to the 1000-line cap (attended-transfer work) and left the baseline.
-        "src/Core/Infrastructure/Sip/Signaling/Dialogs/SipCallSessionTransactionService.cs",
+        // Empty: the two former 1000+-line dialog files were split into collaborators
+        // (e.g. SipForkedInviteHandler) and no longer exceed the cap.
     ];
 
     [Fact]
