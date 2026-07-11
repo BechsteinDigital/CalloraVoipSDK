@@ -494,7 +494,15 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
                 return;
             }
 
-            var wsContext = await context.AcceptWebSocketAsync(subProtocol: null).WaitAsync(ct).ConfigureAwait(false);
+            // RFC 7118: accept the "sip" subprotocol when the client offers it. RFC 6455 requires
+            // the server to echo only a subprotocol the client actually requested.
+            var offeredSubProtocols = context.Request.Headers["Sec-WebSocket-Protocol"];
+            var acceptedSubProtocol =
+                offeredSubProtocols is not null
+                && Array.Exists(offeredSubProtocols.Split(','), p => p.Trim().Equals("sip", StringComparison.OrdinalIgnoreCase))
+                    ? "sip"
+                    : null;
+            var wsContext = await context.AcceptWebSocketAsync(acceptedSubProtocol).WaitAsync(ct).ConfigureAwait(false);
             var remoteEndPoint = context.Request.RemoteEndPoint ?? new IPEndPoint(IPAddress.Loopback, 0);
             var id = Interlocked.Increment(ref _inboundWebSocketConnectionId);
             var connection = new SipWebSocketConnection(
@@ -721,6 +729,7 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
                 return existing;
 
             var socket = new ClientWebSocket();
+            socket.Options.AddSubProtocol("sip"); // RFC 7118: SIP-over-WebSocket subprotocol
             socket.Options.KeepAliveInterval = TimeSpan.FromSeconds(30);
             if (transport == SipTransportProtocol.Wss)
             {
