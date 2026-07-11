@@ -52,6 +52,7 @@ internal sealed class SipCoreCallChannel : ICallChannel
     // when we answer. Set by the offer/answer entry points before media parameters are published.
     private volatile bool _iceControlling = true;
     private IPAddress? _advertisedMediaAddress;
+    private readonly IPAddress? _configuredPublicMediaAddress;
     private ISipCallSession? _session;
     private int _mediaParametersFired;
 
@@ -105,7 +106,8 @@ internal sealed class SipCoreCallChannel : ICallChannel
         SrtpPolicy appliedSrtpPolicy,
         string policySource,
         ICallIceAgent? iceAgent = null,
-        IReadOnlyList<string>? preferredCodecNames = null)
+        IReadOnlyList<string>? preferredCodecNames = null,
+        IPAddress? advertisedPublicMediaAddress = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _sdpNegotiator = sdpNegotiator ?? throw new ArgumentNullException(nameof(sdpNegotiator));
@@ -115,6 +117,7 @@ internal sealed class SipCoreCallChannel : ICallChannel
         _srtpPolicySource = string.IsNullOrWhiteSpace(policySource) ? "unknown" : policySource;
         _srtpTelemetry = new SipCallChannelSrtpTelemetry(_telemetry, appliedSrtpPolicy, _srtpPolicySource);
         _preferredCodecNames = preferredCodecNames;
+        _configuredPublicMediaAddress = advertisedPublicMediaAddress;
 
         // Bind on any address, port 0 → OS assigns a free port.
         _localMediaSocket = new UdpClient(new IPEndPoint(IPAddress.Any, 0));
@@ -383,10 +386,13 @@ internal sealed class SipCoreCallChannel : ICallChannel
     /// See <see cref="AdvertisedMediaAddressResolver"/> for the decision rules.
     /// </summary>
     private IPAddress ResolveAdvertisedMediaAddress(ISipCallSession session) =>
-        _advertisedMediaAddress ??= AdvertisedMediaAddressResolver.Resolve(
+        // Opt-in override wins: an operator behind CGNAT / static 1:1 NAT can force the public
+        // media IP. Default (null) keeps the auto-resolved, symmetric-RTP-friendly address.
+        _configuredPublicMediaAddress
+        ?? (_advertisedMediaAddress ??= AdvertisedMediaAddressResolver.Resolve(
             session,
             AdvertisedMediaAddressResolver.ProbeRoute,
-            _logger);
+            _logger));
 
     /// <summary>Returns true when the remote SDP offer signals ICE (a=ice-ufrag).</summary>
     private static bool RemoteOfferHasIce(string? remoteSdp) =>

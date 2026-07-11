@@ -50,6 +50,16 @@ public sealed class SipAccount
     public int?          PublicSipPort    { get; init; }
 
     /// <summary>
+    /// Optional public IP address to force into the SDP media connection line (<c>c=</c>) and RTP
+    /// bind for calls on this line. By default the media address is auto-resolved from the OS
+    /// routing table and NAT is handled by symmetric RTP; set this only behind CGNAT / a static
+    /// 1:1 NAT with port preservation where the peer does not latch to the source address.
+    /// Must be an IP literal; non-IP values are ignored. <see langword="null"/> keeps the
+    /// auto-resolved media address (default, unchanged behavior).
+    /// </summary>
+    public string?       PublicMediaHost  { get; init; }
+
+    /// <summary>
     /// Optional inbound number (DID) whitelist for SIP trunks. When set, the line only
     /// accepts inbound INVITEs whose called number (To user-part on the registered domain)
     /// is in this list — useful to disambiguate multiple lines on the same provider domain.

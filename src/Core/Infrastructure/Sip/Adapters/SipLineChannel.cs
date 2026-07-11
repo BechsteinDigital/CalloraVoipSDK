@@ -195,7 +195,8 @@ internal sealed class SipLineChannel : ILineChannel
             resolvedPolicy.Policy,
             resolvedPolicy.Source,
             _iceAgent,
-            _preferredCodecNames);
+            _preferredCodecNames,
+            PublicMediaAddress);
     }
 
     /// <summary>
@@ -214,7 +215,8 @@ internal sealed class SipLineChannel : ILineChannel
 
         // Resolve the local IP toward the SIP server so the SDP offer
         // advertises the correct address for RTP (not the loopback or 0.0.0.0).
-        var localIp = ResolveLocalIp(_account.SipServer, _account.EffectivePort);
+        // An explicit public media override (CGNAT / static 1:1 NAT) wins when configured.
+        var localIp = PublicMediaAddress ?? ResolveLocalIp(_account.SipServer, _account.EffectivePort);
         var localMediaEndPoint = new IPEndPoint(localIp, sipChannel.LocalMediaPort);
 
         // Build the SDP offer with the actual local media endpoint.
@@ -313,7 +315,8 @@ internal sealed class SipLineChannel : ILineChannel
             _globalSrtpPolicy,
             policySource: "global",
             _iceAgent,
-            _preferredCodecNames);
+            _preferredCodecNames,
+            PublicMediaAddress);
         channel.AttachSession(args.Session);
 
         try
@@ -594,6 +597,17 @@ internal sealed class SipLineChannel : ILineChannel
         };
 
     private bool HasManualPublicOverride => !string.IsNullOrWhiteSpace(_account.PublicSipHost);
+
+    /// <summary>
+    /// Configured public media IP override (<see cref="SipAccount.PublicMediaHost"/>) parsed to an
+    /// <see cref="IPAddress"/>, or <see langword="null"/> when unset or not an IP literal. When set,
+    /// it forces the SDP media connection address for calls on this line.
+    /// </summary>
+    private IPAddress? PublicMediaAddress =>
+        !string.IsNullOrWhiteSpace(_account.PublicMediaHost)
+            && IPAddress.TryParse(_account.PublicMediaHost, out var ip)
+            ? ip
+            : null;
 
     /// <summary>
     /// Maps domain SIP transport choice to infrastructure transport protocol.
