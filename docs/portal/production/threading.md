@@ -1,7 +1,12 @@
 # Threading
 
-The SDK is thread-safe by design: you may call its methods from any thread. The two
-things you must respect are the **event threading contract** and the **error contract**.
+The SDK protects its internal state and is safe to call from multiple threads for
+**distinct** calls and lines. Two limits apply today (hardening tracked): concurrent
+operations on the **same** call are not fully serialized — two simultaneous
+`HangupAsync`/`HoldAsync`/`AcceptAsync` can both act on the same state — and the per-line
+concurrent-call limit is checked and incremented non-atomically, so a burst of concurrent
+dials can momentarily exceed it. Serialize your own actions on a single `ICall`. Beyond
+that, respect the **event threading contract** and the **error contract** below.
 
 ## Event threading contract
 

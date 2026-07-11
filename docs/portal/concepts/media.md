@@ -6,12 +6,12 @@ The media layer moves audio between calls, devices and your code. `client.Media`
 ## Primitives
 
 ```csharp
-IMediaReceiver receiver = client.Media.CreateReceiver();  // pull decoded frames out
+IMediaReceiver receiver = client.Media.CreateReceiver();  // pull encoded frames out
 IMediaSender   sender   = client.Media.CreateSender();    // push frames into a call
 MediaConnector connector = client.Media.CreateConnector(); // bridge two calls
 ```
 
-- **`IMediaReceiver`** — receives decoded `MediaFrame`s from a call (for transcription,
+- **`IMediaReceiver`** — receives encoded `MediaFrame`s (payload in the negotiated codec) from a call (for transcription,
   streaming to an AI backend, custom mixing).
 - **`IMediaSender`** — `SendAsync(MediaFrame)` injects audio into a call (TTS, prompts,
   synthesized speech).
@@ -50,4 +50,5 @@ operate on a bridge. Details: [Recording/playback](../guides/recording-playback.
 
 Codec preference is set once via `SdkConfiguration.PreferredAudioCodecs`; SRTP/SRTCP is
 negotiated automatically per `SrtpPolicy`. Neither changes the media-primitive API — you
-work with decoded frames regardless of the wire format.
+work with `MediaFrame`s whose payload is encoded in the negotiated codec (decode/encode it
+yourself); SRTP/SRTCP and transport stay transparent.

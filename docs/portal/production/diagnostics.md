@@ -15,6 +15,10 @@ new SdkConfiguration { LoggerFactory = loggerFactory };  // factory configured a
 The trace shows REGISTER/INVITE/200/ACK/BYE and, crucially, the `c=`/`m=`/`a=` SDP lines
 you need to diagnose media problems (advertised address, negotiated codec, `a=crypto`).
 
+> **Secrets are redacted:** SDES SRTP keys (`a=crypto ... inline:`) and ICE passwords
+> (`a=ice-pwd:`) are masked as `<redacted>` in the trace, so wire logs are safe to ship to a
+> central log system. The crypto suite name and codecs stay visible for diagnostics.
+
 ## Quality metrics
 
 Subscribe to `QualitySnapshotChanged` (or poll `client.QualityManager`) to watch measured

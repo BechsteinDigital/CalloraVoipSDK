@@ -53,8 +53,12 @@ construction:
 ```csharp
 new SdkConfiguration
 {
-    PreferredAudioCodecs = new[] { "opus", "PCMU", "PCMA" }
+    PreferredAudioCodecs = new[] { "PCMU", "PCMA", "G722" }
 };
 ```
 
-Device I/O always works on decoded PCM frames, independent of the negotiated codec.
+> **Codec support:** the platform audio backends (`Audio.Linux` / `Audio.Windows`) decode
+> and encode **PCMU, PCMA and G.722** only. **Opus is not yet transcoded by the device
+> backends** — a call that negotiates Opus will not play correctly through the default audio
+> device. For Opus, drive the call through a [media tap](media-tap.md) with your own Opus
+> codec instead of `AttachDefaultAudioAsync`.

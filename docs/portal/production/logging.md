@@ -22,10 +22,11 @@ Without a factory the SDK runs silently (no logging).
 | `Warning` | Recoverable issues: retries, best-effort teardown failures, fallbacks |
 | `Error` | Failures in critical paths |
 | `Debug` | Detailed state transitions |
-| `Trace` | Full SIP wire trace **including SDP bodies** (see [Diagnostics](diagnostics.md)) |
+| `Trace` | Full SIP wire trace **including SDP bodies**, with SDES keys and ICE passwords redacted (see [Diagnostics](diagnostics.md)) |
 
 `Trace` is verbose and prints signaling payloads — enable it for a targeted diagnosis,
-not in steady-state production.
+not in steady-state production. SDES SRTP keys and ICE passwords are masked, but other
+bodies are printed verbatim, so still treat trace logs as sensitive.
 
 ## What the SDK guarantees
 
