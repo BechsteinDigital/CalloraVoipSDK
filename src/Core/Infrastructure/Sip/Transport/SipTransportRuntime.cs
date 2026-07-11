@@ -36,6 +36,9 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
     private readonly ConcurrentDictionary<int, Action<IPEndPoint, SipRequest>> _requestHandlers = new();
     private readonly ConcurrentDictionary<int, Action<IPEndPoint, SipResponse>> _responseHandlers = new();
     private readonly ConcurrentDictionary<string, SipTransportProtocol> _endpointTransportHints = new();
+    // Maps a resolved endpoint (transport+addr:port key) to the SIP domain it was resolved from, so
+    // outbound TLS uses the domain for SNI and certificate name validation, not the literal IP.
+    private readonly ConcurrentDictionary<string, string> _endpointTlsHosts = new();
     private readonly ConcurrentDictionary<string, SipStreamConnection> _outboundStreamConnections = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<int, SipStreamConnection> _inboundStreamConnections = new();
     private readonly ConcurrentDictionary<string, SipWebSocketConnection> _outboundWebSocketConnections = new(StringComparer.Ordinal);
@@ -277,8 +280,10 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
             foreach (var candidate in resolution.Candidates)
             {
                 var endpointKey = SipTransportRuntimeUtilities.BuildEndpointKey(null, candidate.EndPoint);
+                var transportEndpointKey = SipTransportRuntimeUtilities.BuildEndpointKey(candidate.Transport, candidate.EndPoint);
                 _endpointTransportHints[endpointKey] = candidate.Transport;
-                _endpointTransportHints[SipTransportRuntimeUtilities.BuildEndpointKey(candidate.Transport, candidate.EndPoint)] = candidate.Transport;
+                _endpointTransportHints[transportEndpointKey] = candidate.Transport;
+                _endpointTlsHosts[transportEndpointKey] = host;
             }
 
             return resolution.Candidates;
@@ -299,6 +304,7 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
                     _ => 5060
                 };
             var endpoint = await RemoteEndPointResolver.ResolveAsync(host, effectivePort, ct).ConfigureAwait(false);
+            _endpointTlsHosts[SipTransportRuntimeUtilities.BuildEndpointKey(transport, endpoint)] = host;
             return
             [
                 new SipRouteCandidate
@@ -668,20 +674,9 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
             Stream stream = client.GetStream();
             if (transport == SipTransportProtocol.Tls)
             {
-                var sslStream = new SslStream(
-                    stream,
-                    leaveInnerStreamOpen: false,
-                    userCertificateValidationCallback: ValidateTlsServerCertificate);
-                await sslStream.AuthenticateAsClientAsync(
-                        new SslClientAuthenticationOptions
-                        {
-                            TargetHost = remoteEndPoint.Address.ToString(),
-                            EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
-                            CertificateRevocationCheckMode = X509RevocationMode.NoCheck
-                        },
-                        ct)
-                    .ConfigureAwait(false);
-                stream = sslStream;
+                var targetHost = SipTransportRuntimeUtilities.SelectTlsTargetHost(_endpointTlsHosts, key, remoteEndPoint.Address);
+                stream = await SipTransportRuntimeUtilities.AuthenticateOutboundTlsAsync(
+                    stream, targetHost, ValidateTlsServerCertificate, ct).ConfigureAwait(false);
             }
 
             var created = new SipStreamConnection(

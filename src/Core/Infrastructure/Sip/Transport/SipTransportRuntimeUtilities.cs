@@ -1,5 +1,8 @@
 using System.Net;
+using System.Net.Security;
 using System.Net.Sockets;
+using System.Security.Authentication;
+using System.Security.Cryptography.X509Certificates;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Wire;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Sip.Transport;
@@ -61,6 +64,44 @@ internal static class SipTransportRuntimeUtilities
             ["Via"] = updatedVia
         };
         return copy;
+    }
+
+    /// <summary>
+    /// Picks the TLS target host for an outbound stream connection: the SIP domain recorded for the
+    /// endpoint during route resolution (used for SNI and certificate name validation), falling back
+    /// to the literal IP address only when no host was resolved (e.g. a call placed directly to an IP).
+    /// </summary>
+    public static string SelectTlsTargetHost(
+        IReadOnlyDictionary<string, string> endpointTlsHosts,
+        string endpointKey,
+        IPAddress fallbackAddress)
+    {
+        return endpointTlsHosts.TryGetValue(endpointKey, out var host) && !string.IsNullOrWhiteSpace(host)
+            ? host
+            : fallbackAddress.ToString();
+    }
+
+    /// <summary>
+    /// Authenticates an outbound TLS client stream, using <paramref name="targetHost"/> for SNI and
+    /// certificate name validation (the SIP domain, not the resolved IP address).
+    /// </summary>
+    public static async Task<SslStream> AuthenticateOutboundTlsAsync(
+        Stream innerStream,
+        string targetHost,
+        RemoteCertificateValidationCallback validateCertificate,
+        CancellationToken ct)
+    {
+        var sslStream = new SslStream(innerStream, leaveInnerStreamOpen: false, validateCertificate);
+        await sslStream.AuthenticateAsClientAsync(
+                new SslClientAuthenticationOptions
+                {
+                    TargetHost = targetHost,
+                    EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
+                    CertificateRevocationCheckMode = X509RevocationMode.NoCheck
+                },
+                ct)
+            .ConfigureAwait(false);
+        return sslStream;
     }
 
     /// <summary>
