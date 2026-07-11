@@ -62,4 +62,17 @@ internal static class SipTransportRuntimeUtilities
         };
         return copy;
     }
+
+    /// <summary>
+    /// Returns "sip" when the WebSocket upgrade request offers the SIP subprotocol (RFC 7118),
+    /// otherwise null. RFC 6455 requires the server to echo only a subprotocol the client offered.
+    /// </summary>
+    public static string? SelectOfferedSipSubProtocol(HttpListenerRequest request)
+    {
+        var offered = request.Headers["Sec-WebSocket-Protocol"];
+        return offered is not null
+            && Array.Exists(offered.Split(','), p => p.Trim().Equals("sip", StringComparison.OrdinalIgnoreCase))
+                ? "sip"
+                : null;
+    }
 }
