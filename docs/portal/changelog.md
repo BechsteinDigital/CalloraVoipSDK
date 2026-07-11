@@ -5,6 +5,13 @@ The authoritative changelog lives in the repository:
 
 ## Release highlights
 
+### 4.3.5 — 2026-07-10
+- Security/robustness fixes from a production-readiness review: stream-framer memory-DoS limits,
+  SIP-over-WebSocket `sip` subprotocol (RFC 7118), TLS/WSS SNI + certificate validation against the
+  SIP domain (not the IP), and redaction of SRTP keys / ICE passwords in trace logs
+- Versioning now flows from the git tag into the assemblies; the release pipeline runs tests before
+  publishing; corrected several documentation overclaims (Opus/device, thread-safety, MediaFrame)
+
 ### 4.3.4 — 2026-07-10
 - Attended transfer now sends REFER with an RFC 3891 `Replaces` (RFC 5589), so REFER/Replaces-capable
   PBXs (Asterisk / FreeSWITCH / 3CX) actually join the two calls; endpoints without REFER transfer

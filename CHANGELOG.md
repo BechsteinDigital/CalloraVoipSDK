@@ -6,6 +6,35 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
 
 ## [Unreleased]
 
+## [4.3.5] - 2026-07-10
+
+Security and robustness fixes surfaced by an adversarial production-readiness review, plus
+internal decomposition. No public API or breaking changes.
+
+### Fixed
+- **Stream framer memory-exhaustion DoS**: TCP/TLS/WS framing now enforces hard header/body
+  limits instead of buffering an unbounded `Content-Length` or never-terminating header.
+- **SIP-over-WebSocket handshake (RFC 7118)**: the client offers, and the server echoes, the
+  `sip` subprotocol, so strict/WebRTC-adjacent SIP-WS servers no longer fail at the handshake.
+- **TLS/WSS certificate validation**: outbound TLS and WSS now present the SIP **domain** for
+  SNI and certificate name validation instead of the resolved IP, so standard certificates
+  validate without `AcceptUntrustedCertificates`.
+- **Trace log secret leak**: SDES SRTP keys (`a=crypto ... inline:`) and ICE passwords
+  (`a=ice-pwd:`) are redacted in wire-trace logs by default.
+
+### Changed
+- **Versioning**: released assemblies now carry the git-tag version across PackageVersion,
+  AssemblyVersion, FileVersion and InformationalVersion (previously stuck at the 0.9.0 fallback).
+- **Release pipeline**: the package workflow runs the full test suite before packing/publishing.
+- **Docs**: corrected overclaims — platform audio backends decode PCMU/PCMA/G.722 only (Opus is
+  not transcoded by the device), thread-safety is qualified, `MediaFrame` carries encoded (not
+  PCM) payload, and trace redaction is documented.
+
+### Internal
+- Decomposed three ~1000-line signaling/transport files into injected collaborators
+  (`SipForkedInviteHandler`, `SipOutboundConnectionPool`, `SipCallSessionEventDispatcher`) with
+  no behaviour change.
+
 ## [4.3.4] - 2026-07-10
 
 Attended transfer is now RFC 5589 (REFER carrying an RFC 3891 `Replaces`). No breaking
