@@ -38,6 +38,20 @@ internal interface ICallChannel : IDisposable
     void AddAudioFrameListener(Action<CallAudioFrame> onFrame);
     void RemoveAudioFrameListener(Action<CallAudioFrame> onFrame);
 
+    // ── Remote identity (inbound) ─────────────────────────────────────────────
+
+    /// <summary>
+    /// Peer-asserted identity URI (P-Asserted-Identity, RFC 3325) from the inbound INVITE when the
+    /// peer is trusted; <see langword="null"/> otherwise. Default implementation returns null.
+    /// </summary>
+    string? RemoteAssertedIdentity => null;
+
+    /// <summary>
+    /// First Diversion header URI (RFC 5806) from the inbound INVITE, or <see langword="null"/>.
+    /// Default implementation returns null.
+    /// </summary>
+    string? Diversion => null;
+
     // ── Media negotiation ─────────────────────────────────────────────────────
 
     /// <summary>

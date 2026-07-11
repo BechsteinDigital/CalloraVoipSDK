@@ -237,7 +237,8 @@ internal sealed class SipLineChannel : ILineChannel
             UserAgent        = _userAgent,
             Transport        = MapTransport(_account.Transport),
             SessionDescription = sdpOffer,
-            PreloadedRouteSet  = BuildRouteSet(options.OutboundProxy ?? _account.OutboundProxy)
+            PreloadedRouteSet  = BuildRouteSet(options.OutboundProxy ?? _account.OutboundProxy),
+            CustomHeaders      = options.CustomHeaders
         };
 
         var session = await _callSignalingService.InviteAsync(inviteRequest, ct).ConfigureAwait(false);

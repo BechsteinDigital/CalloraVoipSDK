@@ -93,4 +93,10 @@ internal sealed class SipCallSessionConfiguration
     /// SIP transport protocol used for dialog signaling.
     /// </summary>
     public SipTransportProtocol SignalingTransport { get; init; } = SipTransportProtocol.Udp;
+
+    /// <summary>
+    /// Optional extra SIP headers applied to the outbound initial INVITE. Protected headers are
+    /// ignored by the header builder. <see langword="null"/> for inbound dialogs.
+    /// </summary>
+    public IReadOnlyDictionary<string, string>? CustomHeaders { get; init; }
 }

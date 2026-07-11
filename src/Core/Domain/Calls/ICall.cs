@@ -79,6 +79,20 @@ public interface ICall
     /// </summary>
     CallIceSnapshot? IceSnapshot { get; }
 
+    /// <summary>
+    /// Peer-asserted caller identity (P-Asserted-Identity, RFC 3325) parsed from an inbound INVITE
+    /// when the sending peer is trusted, for trunk/PBX routing; <see langword="null"/> for outbound
+    /// calls, untrusted peers, or when the header is absent.
+    /// </summary>
+    string? RemoteAssertedIdentity { get; }
+
+    /// <summary>
+    /// First <c>Diversion</c> URI (RFC 5806) from an inbound INVITE describing where the call was
+    /// diverted from; <see langword="null"/> for outbound calls or when no Diversion header is present.
+    /// Informational routing history, surfaced as-received.
+    /// </summary>
+    string? Diversion { get; }
+
     // ── Events ────────────────────────────────────────────────────────────────
 
     /// <summary>

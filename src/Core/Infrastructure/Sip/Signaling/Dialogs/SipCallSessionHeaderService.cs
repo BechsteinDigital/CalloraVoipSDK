@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Wire;
 using CalloraVoipSdk.Core.Infrastructure.Common.Network;
 
@@ -8,6 +9,17 @@ namespace CalloraVoipSdk.Core.Infrastructure.Sip.Signaling;
 /// </summary>
 internal sealed class SipCallSessionHeaderService
 {
+    // Dialog/transport headers the SDK owns; consumer custom headers may never override these.
+    private static readonly HashSet<string> ProtectedHeaderNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Via", "Max-Forwards", "From", "To", "Call-ID", "CSeq", "Contact", "Route", "Record-Route",
+        "Supported", "Require", "Proxy-Require", "User-Agent", "Server", "Date", "Accept",
+        "Content-Type", "Content-Length", "Content-Disposition",
+        "Authorization", "Proxy-Authorization", "WWW-Authenticate", "Proxy-Authenticate",
+        "P-Preferred-Identity", "P-Asserted-Identity", "Privacy", "Referred-By",
+        "X-CalloraVoipSdk-Trace-Id"
+    };
+
     private readonly ISipCallSessionContext _context;
 
     /// <summary>
@@ -105,6 +117,12 @@ internal sealed class SipCallSessionHeaderService
             headers["Referred-By"] = _context.ReferredBy!;
         }
 
+        if (method.Equals("INVITE", StringComparison.Ordinal)
+            && _context.CustomHeaders is { Count: > 0 } customHeaders)
+        {
+            ApplyCustomHeaders(headers, customHeaders);
+        }
+
         if (includeContentType)
         {
             headers["Content-Type"] = "application/sdp";
@@ -112,6 +130,64 @@ internal sealed class SipCallSessionHeaderService
         }
 
         return headers;
+    }
+
+    /// <summary>
+    /// Adds consumer-supplied custom headers to an outbound INVITE, skipping any protected
+    /// dialog/transport header and any name/value that would enable header injection.
+    /// </summary>
+    private void ApplyCustomHeaders(
+        Dictionary<string, string> headers,
+        IReadOnlyDictionary<string, string> customHeaders)
+    {
+        foreach (var (rawName, rawValue) in customHeaders)
+        {
+            var name = rawName?.Trim() ?? string.Empty;
+            var value = rawValue ?? string.Empty;
+
+            if (name.Length == 0)
+                continue;
+
+            if (ProtectedHeaderNames.Contains(name))
+            {
+                _context.Logger.LogWarning(
+                    "Ignoring custom SIP header '{Header}': protected dialog/transport headers cannot be overridden.",
+                    name);
+                continue;
+            }
+
+            if (!IsValidHeaderName(name) || !IsValidHeaderValue(value))
+            {
+                _context.Logger.LogWarning(
+                    "Ignoring custom SIP header '{Header}': invalid characters (header-injection guard).",
+                    name);
+                continue;
+            }
+
+            headers[name] = value;
+        }
+    }
+
+    private static bool IsValidHeaderName(string name)
+    {
+        foreach (var c in name)
+        {
+            if (c == ':' || char.IsWhiteSpace(c) || char.IsControl(c))
+                return false;
+        }
+
+        return true;
+    }
+
+    private static bool IsValidHeaderValue(string value)
+    {
+        foreach (var c in value)
+        {
+            if (c is '\r' or '\n' || (char.IsControl(c) && c != '\t'))
+                return false;
+        }
+
+        return true;
     }
 
     /// <summary>

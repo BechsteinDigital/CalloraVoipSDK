@@ -68,6 +68,8 @@ internal sealed class AckTestSipCallSessionContext : ISipCallSessionContext
 
     public string? ReferredBy => null;
 
+    public IReadOnlyDictionary<string, string>? CustomHeaders { get; init; }
+
     public SipTransportProtocol SignalingTransport { get; } = SipTransportProtocol.Udp;
 
     public TimeSpan Timeout { get; } = TimeSpan.FromSeconds(1);

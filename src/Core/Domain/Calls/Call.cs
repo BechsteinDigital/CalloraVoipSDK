@@ -50,6 +50,12 @@ internal sealed class Call : ICall, IDisposable
     /// <inheritdoc />
     public CallIceSnapshot? IceSnapshot { get { lock (_sync) return _iceSnapshot; } }
 
+    /// <inheritdoc />
+    public string? RemoteAssertedIdentity => _channel.RemoteAssertedIdentity;
+
+    /// <inheritdoc />
+    public string? Diversion => _channel.Diversion;
+
     // ── Events ────────────────────────────────────────────────────────────────
     /// <inheritdoc />
     public event EventHandler<CallStateChangedEventArgs>?  StateChanged;

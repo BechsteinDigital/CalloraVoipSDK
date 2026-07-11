@@ -120,6 +120,12 @@ internal interface ISipCallSessionContext
     string? ReferredBy { get; }
 
     /// <summary>
+    /// Optional consumer-supplied extra headers added to the outbound initial INVITE. Protected
+    /// dialog/transport headers are ignored by the header builder. <see langword="null"/> for inbound.
+    /// </summary>
+    IReadOnlyDictionary<string, string>? CustomHeaders { get; }
+
+    /// <summary>
     /// SIP transport protocol used for this dialog.
     /// </summary>
     SipTransportProtocol SignalingTransport { get; }

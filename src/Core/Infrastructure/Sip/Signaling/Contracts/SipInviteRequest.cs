@@ -99,4 +99,11 @@ internal sealed class SipInviteRequest
     /// </summary>
     public Infrastructure.Sip.Transport.SipTransportProtocol Transport { get; init; } =
         Infrastructure.Sip.Transport.SipTransportProtocol.Udp;
+
+    /// <summary>
+    /// Optional extra SIP headers to add to the outbound INVITE. Protected dialog/transport headers
+    /// (Via, From, To, Call-ID, CSeq, Contact, Content-*, Route, authorization, ...) cannot be
+    /// overridden and are ignored if present here.
+    /// </summary>
+    public IReadOnlyDictionary<string, string>? CustomHeaders { get; init; }
 }

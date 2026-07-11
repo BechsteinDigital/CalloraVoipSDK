@@ -317,4 +317,15 @@ internal static class SipCallSessionUtilities
                 callId);
         }
     }
+
+    /// <summary>
+    /// Extracts the first URI from a <c>Diversion</c> header value (RFC 5806), stripping the
+    /// name-addr angle brackets and any header parameters (reason, counter, ...). Returns
+    /// <see langword="null"/> when the header is absent or unparsable. Diversion is informational
+    /// routing history and is surfaced as-received (no trust gating).
+    /// </summary>
+    public static string? ParseDiversionUri(string? diversionHeader)
+        => SipAssertedIdentityHeader.TryParseFirstIdentityUri(diversionHeader, out var uri)
+            ? uri
+            : null;
 }

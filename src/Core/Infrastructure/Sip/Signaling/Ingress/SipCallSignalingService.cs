@@ -191,7 +191,8 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
                     Timeout = request.Timeout,
                     RemoteEndPoint = routeCandidate.EndPoint,
                     SignalingTransport = routeCandidate.Transport,
-                    ReferredBy = request.ReferredBy
+                    ReferredBy = request.ReferredBy,
+                    CustomHeaders = request.CustomHeaders
                 };
 
                 var session = SipCallSession.CreateOutbound(

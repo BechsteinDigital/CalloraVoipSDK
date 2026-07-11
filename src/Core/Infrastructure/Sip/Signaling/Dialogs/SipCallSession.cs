@@ -35,6 +35,7 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
     internal readonly string? _requireHeader;
     internal readonly string? _proxyRequireHeader;
     internal readonly string? _referredBy;
+    internal readonly IReadOnlyDictionary<string, string>? _customHeaders;
     internal readonly string _authUsername;
     internal readonly string? _authPassword;
     internal readonly string _userAgent;
@@ -54,6 +55,7 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
     internal int _activeInviteCSeq;
     internal string? _activeInviteBranch;
     private string? _remoteAssertedIdentity;
+    private readonly string? _diversion;
     private string? _remoteSdp;
     private string? _localSdp;
     internal readonly SipSessionSdpProvider _sdpProvider;
@@ -109,6 +111,7 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
         _requireHeader = configuration.RequireHeader;
         _proxyRequireHeader = configuration.ProxyRequireHeader;
         _referredBy = configuration.ReferredBy;
+        _customHeaders = configuration.CustomHeaders;
         _authUsername = configuration.AuthUsername;
         _authPassword = configuration.AuthPassword;
         _userAgent = configuration.UserAgent;
@@ -148,6 +151,7 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
             ApplyRemoteAssertedIdentity(
                 _initialInvite.Header("P-Asserted-Identity"),
                 configuration.RemoteEndPoint);
+            _diversion = SipCallSessionUtilities.ParseDiversionUri(_initialInvite.Header("Diversion"));
             var initialRemoteCSeq = SipProtocol.ExtractCSeqNumber(_initialInvite.Header("CSeq"));
             if (initialRemoteCSeq > 0)
             {
@@ -176,6 +180,8 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
             lock (_sync) return _remoteAssertedIdentity;
         }
     }
+    /// <inheritdoc />
+    public string? Diversion => _diversion;
     /// <inheritdoc />
     public SipDialogState State
     {

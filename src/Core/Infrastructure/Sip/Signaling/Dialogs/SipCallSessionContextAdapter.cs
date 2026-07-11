@@ -54,6 +54,8 @@ internal sealed class SipCallSessionContextAdapter : ISipCallSessionContext
 
     public string? ReferredBy => _session._referredBy;
 
+    public IReadOnlyDictionary<string, string>? CustomHeaders => _session._customHeaders;
+
     public SipTransportProtocol SignalingTransport => _session._signalingTransport;
 
     public TimeSpan Timeout => _session._timeout;

@@ -44,6 +44,13 @@ internal interface ISipCallSession : IDisposable
     string? RemoteAssertedIdentity { get; }
 
     /// <summary>
+    /// First <c>Diversion</c> header URI (RFC 5806) from the inbound INVITE, or
+    /// <see langword="null"/> when absent. Informational routing history; surfaced as-received.
+    /// Defaults to <see langword="null"/> so existing implementations keep compiling.
+    /// </summary>
+    string? Diversion => null;
+
+    /// <summary>
     /// Remote SDP body received from the far end.
     /// For inbound sessions: the SDP from the initial INVITE body.
     /// For outbound sessions: the SDP from the 200 OK answer.
