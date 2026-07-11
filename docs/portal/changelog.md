@@ -5,6 +5,11 @@ The authoritative changelog lives in the repository:
 
 ## Release highlights
 
+### 4.4.1 — 2026-07-11
+- Native Opus (RFC 7587) in the Linux and Windows audio devices: negotiated Opus now decodes/encodes
+  at 48 kHz through `AttachDefaultAudioAsync` instead of being mis-decoded as G.722. Opus stays
+  opt-in via `PreferredAudioCodecs`
+
 ### 4.4.0 — 2026-07-11
 - Additive public-API capabilities (no breaking changes) closing developer-experience gaps:
   consumer-selectable default SIP transport (`SdkConfiguration.DefaultTransport`, UDP/TCP/TLS/WS/WSS);

@@ -6,6 +6,8 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
 
 ## [Unreleased]
 
+## [4.4.1] - 2026-07-11
+
 ### Fixed
 - **Native Opus in the platform audio devices**: the Linux and Windows backends now decode and
   encode Opus (RFC 7587) natively at 48 kHz. Previously a call that negotiated Opus was silently
