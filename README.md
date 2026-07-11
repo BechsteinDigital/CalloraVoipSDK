@@ -47,7 +47,16 @@ Available in the repository today:
 - Media stack: RTP sessions, sender, receiver, `MediaConnector`, cross-connect
 - Media encryption: SRTP via SDES (RFC 4568) as both caller and callee, encrypted/authenticated
   RTCP via SRTCP (RFC 3711 §3.4), a configurable per-call policy
-  (`SdkConfiguration.SrtpPolicy`: Disabled / Optional / Required), and re-keying on re-INVITE
+  (`SdkConfiguration.SrtpPolicy`: Disabled / Optional / Required), re-keying on re-INVITE, and the
+  negotiated suite name / SRTCP status readable on `ICall.MediaParameters`
+- Transport selection: choose the default outbound SIP transport
+  (`SdkConfiguration.DefaultTransport`: UDP / TCP / TLS / WS / WSS; default UDP)
+- Custom outbound headers (`DialOptions.CustomHeaders`, injection-guarded) and read-only remote
+  identity on inbound calls (`ICall.RemoteAssertedIdentity` / `ICall.Diversion`)
+- Per-call observability: ICE state + selected candidate pair (`ICall.IceSnapshot`) and raw
+  RFC 3550 RTP counters (`ICall.RtpStatistics`)
+- NAT/trunk controls: public signaling contact (`SipAccount.PublicSipHost`) and an opt-in public
+  media address for CGNAT / static 1:1 NAT (`SipAccount.PublicMediaHost`)
 - Per-call media tap: attach frame receivers/senders to any call for bots, bridging
   and streaming scenarios (`client.Media.CreateReceiver()/CreateSender()`)
 - Module registry (`client.Modules`) as the extension point for separately shipped
@@ -402,7 +411,8 @@ The SDK core stays open and free; plugins are licensed separately. Contact
 - Full ICE (RFC 8445 / RFC 7675): the agent now implements role derivation + tie-breaker,
   the check-list state machine, regular nomination with `USE-CANDIDATE`, inbound connectivity
   and triggered checks, ICE restart detection, and consent freshness with media cease — but it
-  remains **opt-in and unproven in production** (no live trunk validation yet). Remaining gaps:
+  remains **opt-in and unproven in production** (no live trunk validation yet). The final ICE
+  state and selected candidate pair are now observable via `ICall.IceSnapshot`. Remaining gaps:
   TCP candidates, and surfacing consent loss to the application for a restart/terminate decision.
   Real trunk calls run over symmetric RTP (comedia), which needs no ICE or STUN.
 - Commercial plugin line-up (private feed, licensed): Callora.Realtime, WebSocket

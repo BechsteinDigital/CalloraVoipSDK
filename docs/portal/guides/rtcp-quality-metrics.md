@@ -29,6 +29,20 @@ call.QualitySnapshotChanged += (_, e) =>
 RTT feeds the adaptive jitter buffer, so the playout delay tracks real network
 conditions.
 
+## Raw RTP counters
+
+Where the quality snapshot gives derived values (ms / %), `call.RtpStatistics` exposes the
+underlying RFC 3550 counters for diagnostics and billing — SSRC identifiers, packet/octet
+counts, cumulative and fraction loss, and interarrival jitter in RTP units. It is `null`
+until the first RTCP reporting interval has produced counters.
+
+```csharp
+var rtp = call.RtpStatistics;
+if (rtp is { } s)
+    logger.LogInformation("ssrc={Ssrc} sent={Sent} recv={Recv} lost={Lost}",
+        s.LocalSsrc, s.PacketsSent, s.PacketsReceived, s.CumulativePacketsLost);
+```
+
 ## Compound-packet tolerance
 
 RTCP compound decoding tolerates unknown packet types (e.g. RFC 3611 XR blocks from peers

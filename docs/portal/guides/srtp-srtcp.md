@@ -39,10 +39,18 @@ ICall call = await line.DialAsync(
 
 ## Verifying
 
-Check the negotiated state on the call's quality/telemetry surface and via the
-[SIP wire trace](../production/diagnostics.md) — the `a=crypto` line in the SDP shows the
-selected suite. With `Required`, a peer that cannot do SRTP yields a failed call rather
-than a silent downgrade.
+The negotiated crypto is readable on the call once connected — no wire trace required:
+
+```csharp
+var media = call.MediaParameters;
+bool    encrypted = media?.IsSrtpNegotiated ?? false;
+string? suite     = media?.SrtpSuite;                 // e.g. "AES_CM_128_HMAC_SHA1_80", null = plain RTP
+bool    srtcp     = media?.IsSrtcpEncrypted ?? false; // RTCP protected too (RFC 3711 §3.4)
+```
+
+The key material itself stays internal. You can still confirm the `a=crypto` line via the
+[SIP wire trace](../production/diagnostics.md). With `Required`, a peer that cannot do SRTP
+yields a failed call rather than a silent downgrade.
 
 ## Limitations
 
