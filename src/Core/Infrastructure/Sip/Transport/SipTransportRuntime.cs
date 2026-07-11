@@ -39,12 +39,9 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
     // Maps a resolved endpoint (transport+addr:port key) to the SIP domain it was resolved from, so
     // outbound TLS uses the domain for SNI and certificate name validation, not the literal IP.
     private readonly ConcurrentDictionary<string, string> _endpointTlsHosts = new();
-    private readonly ConcurrentDictionary<string, SipStreamConnection> _outboundStreamConnections = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<int, SipStreamConnection> _inboundStreamConnections = new();
-    private readonly ConcurrentDictionary<string, SipWebSocketConnection> _outboundWebSocketConnections = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<int, SipWebSocketConnection> _inboundWebSocketConnections = new();
-    private readonly SemaphoreSlim _outboundConnectionGate = new(1, 1);
-    private readonly SemaphoreSlim _outboundWebSocketConnectionGate = new(1, 1);
+    private readonly SipOutboundConnectionPool _outboundPool;
     private readonly Task _udpReceiveLoop;
     private readonly Task _tcpAcceptLoop;
     private readonly Task _tlsAcceptLoop;
@@ -92,6 +89,8 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
         _tlsConfiguration = tlsConfiguration;
         _tlsCertificate = tlsConfiguration?.GetCertificate();
         _defaultTransport = defaultTransport;
+        _outboundPool = new SipOutboundConnectionPool(
+            _logger, _endpointTlsHosts, ValidateTlsServerCertificate, HandleInboundPayloadAsync);
 
         _udp = new UdpClient(new IPEndPoint(IPAddress.Any, 0));
 
@@ -608,141 +607,16 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
 
             case SipTransportProtocol.Tcp:
             case SipTransportProtocol.Tls:
-            {
-                var connection = await GetOrCreateOutboundStreamConnectionAsync(targetEndPoint, transport, ct)
-                    .ConfigureAwait(false);
-                try
-                {
-                    await connection.SendAsync(payload, ct).ConfigureAwait(false);
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    // RFC 3261 §18.4: remove the stale connection and retry once on a fresh one.
-                    var staleKey = SipTransportRuntimeUtilities.BuildEndpointKey(transport, targetEndPoint);
-                    if (_outboundStreamConnections.TryRemove(staleKey, out var stale))
-                    {
-                        _logger.LogDebug(
-                            ex,
-                            "SIP {Transport} send to {Remote} failed; retrying on new connection (RFC §18.4).",
-                            transport, targetEndPoint);
-                        stale.Dispose();
-                    }
-
-                    var fresh = await GetOrCreateOutboundStreamConnectionAsync(targetEndPoint, transport, ct)
-                        .ConfigureAwait(false);
-                    await fresh.SendAsync(payload, ct).ConfigureAwait(false);
-                }
-
+                await _outboundPool.SendStreamAsync(targetEndPoint, payload, transport, ct).ConfigureAwait(false);
                 break;
-            }
 
             case SipTransportProtocol.Ws:
             case SipTransportProtocol.Wss:
-            {
-                var connection = await GetOrCreateOutboundWebSocketConnectionAsync(targetEndPoint, transport, ct)
-                    .ConfigureAwait(false);
-                await connection.SendAsync(payload, ct).ConfigureAwait(false);
+                await _outboundPool.SendWebSocketAsync(targetEndPoint, payload, transport, ct).ConfigureAwait(false);
                 break;
-            }
 
             default:
                 throw new ArgumentOutOfRangeException(nameof(transport), transport, "Unknown SIP transport.");
-        }
-    }
-
-    /// <summary>
-    /// Gets or creates one reusable outbound stream connection.
-    /// </summary>
-    private async Task<SipStreamConnection> GetOrCreateOutboundStreamConnectionAsync(
-        IPEndPoint remoteEndPoint,
-        SipTransportProtocol transport,
-        CancellationToken ct)
-    {
-        remoteEndPoint = SipTransportRuntimeUtilities.NormalizeWildcardEndPoint(remoteEndPoint);
-        var key = SipTransportRuntimeUtilities.BuildEndpointKey(transport, remoteEndPoint);
-        if (_outboundStreamConnections.TryGetValue(key, out var existing))
-            return existing;
-
-        await _outboundConnectionGate.WaitAsync(ct).ConfigureAwait(false);
-        try
-        {
-            if (_outboundStreamConnections.TryGetValue(key, out existing))
-                return existing;
-
-            var client = new TcpClient(remoteEndPoint.AddressFamily);
-            await client.ConnectAsync(remoteEndPoint, ct).ConfigureAwait(false);
-            Stream stream = client.GetStream();
-            if (transport == SipTransportProtocol.Tls)
-            {
-                var targetHost = SipTransportRuntimeUtilities.SelectTlsTargetHost(_endpointTlsHosts, key, remoteEndPoint.Address);
-                stream = await SipTransportRuntimeUtilities.AuthenticateOutboundTlsAsync(
-                    stream, targetHost, ValidateTlsServerCertificate, ct).ConfigureAwait(false);
-            }
-
-            var created = new SipStreamConnection(
-                transport,
-                client,
-                stream,
-                _logger,
-                HandleInboundPayloadAsync,
-                onClosed: () => _outboundStreamConnections.TryRemove(key, out _));
-            _outboundStreamConnections[key] = created;
-            return created;
-        }
-        finally
-        {
-            _outboundConnectionGate.Release();
-        }
-    }
-
-    /// <summary>
-    /// Gets or creates one reusable outbound WS/WSS connection.
-    /// </summary>
-    private async Task<SipWebSocketConnection> GetOrCreateOutboundWebSocketConnectionAsync(
-        IPEndPoint remoteEndPoint,
-        SipTransportProtocol transport,
-        CancellationToken ct)
-    {
-        remoteEndPoint = SipTransportRuntimeUtilities.NormalizeWildcardEndPoint(remoteEndPoint);
-        var key = SipTransportRuntimeUtilities.BuildEndpointKey(transport, remoteEndPoint);
-        if (_outboundWebSocketConnections.TryGetValue(key, out var existing))
-            return existing;
-
-        await _outboundWebSocketConnectionGate.WaitAsync(ct).ConfigureAwait(false);
-        try
-        {
-            if (_outboundWebSocketConnections.TryGetValue(key, out existing))
-                return existing;
-
-            var socket = new ClientWebSocket();
-            socket.Options.AddSubProtocol("sip"); // RFC 7118: SIP-over-WebSocket subprotocol
-            socket.Options.KeepAliveInterval = TimeSpan.FromSeconds(30);
-            if (transport == SipTransportProtocol.Wss)
-            {
-                socket.Options.RemoteCertificateValidationCallback = (sender, certificate, chain, errors) =>
-                    ValidateTlsServerCertificate(sender, certificate, chain, errors);
-            }
-
-            // WSS: use the resolved SIP domain as the URI host so TLS SNI + certificate validation
-            // run against the domain, not the IP. WS stays on the IP (no TLS involved).
-            var wsHost = transport == SipTransportProtocol.Wss
-                ? SipTransportRuntimeUtilities.SelectTlsTargetHost(_endpointTlsHosts, key, remoteEndPoint.Address)
-                : remoteEndPoint.Address.ToString();
-            var targetUri = SipTransportRuntimeUtilities.BuildWebSocketTargetUri(wsHost, remoteEndPoint.Port, transport);
-            await socket.ConnectAsync(targetUri, ct).ConfigureAwait(false);
-            var created = new SipWebSocketConnection(
-                transport,
-                socket,
-                remoteEndPoint,
-                _logger,
-                HandleInboundPayloadAsync,
-                onClosed: () => _outboundWebSocketConnections.TryRemove(key, out _));
-            _outboundWebSocketConnections[key] = created;
-            return created;
-        }
-        finally
-        {
-            _outboundWebSocketConnectionGate.Release();
         }
     }
 
@@ -977,24 +851,19 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
             _logger.LogDebug(ex, "SIP transport loops finished with exceptions during disposal.");
         }
 
-        foreach (var connection in _outboundStreamConnections.Values)
-            connection.Dispose();
+        _outboundPool.Dispose();
+
         foreach (var connection in _inboundStreamConnections.Values)
-            connection.Dispose();
-        foreach (var connection in _outboundWebSocketConnections.Values)
             connection.Dispose();
         foreach (var connection in _inboundWebSocketConnections.Values)
             connection.Dispose();
 
-        _outboundStreamConnections.Clear();
         _inboundStreamConnections.Clear();
-        _outboundWebSocketConnections.Clear();
         _inboundWebSocketConnections.Clear();
         _endpointTransportHints.Clear();
+        _endpointTlsHosts.Clear();
         _requestHandlers.Clear();
         _responseHandlers.Clear();
-        _outboundConnectionGate.Dispose();
-        _outboundWebSocketConnectionGate.Dispose();
         _stop.Dispose();
     }
 }
