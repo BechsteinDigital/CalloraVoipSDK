@@ -2,8 +2,7 @@ name: Release Documentation
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -50,14 +49,17 @@ jobs:
           dotnet build src/Core/CalloraVoipSdk.Core.csproj --no-restore -c Release
           dotnet build src/Client/CalloraVoipSdk.Client.csproj --no-restore -c Release
 
-      - name: Extract version from tag or fallback
+      - name: Extract version from tag or Directory.Build.props
         id: version
         shell: bash
         run: |
           if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
             RAW_VERSION="${GITHUB_REF_NAME}"
           else
-            RAW_VERSION="dev"
+            # Commit-level docs build (push to main / manual dispatch): the version is the
+            # source-of-truth VersionPrefix so the site still shows the real release, not "dev".
+            PROPS_VERSION="$(grep -oPm1 '(?<=<VersionPrefix>)[^<]+' src/Directory.Build.props || true)"
+            RAW_VERSION="v${PROPS_VERSION:-dev}"
           fi
           VERSION="${RAW_VERSION#v}"
           echo "raw=${RAW_VERSION}" >> "$GITHUB_OUTPUT"
