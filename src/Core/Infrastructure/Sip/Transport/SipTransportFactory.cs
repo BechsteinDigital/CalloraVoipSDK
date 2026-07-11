@@ -10,7 +10,10 @@ namespace CalloraVoipSdk.Core.Infrastructure.Sip.Transport;
 internal sealed class SipTransportFactory : ISipTransportFactory
 {
     /// <inheritdoc />
-    public ISipTransportRuntime Create(TlsConfiguration? tls, ILoggerFactory loggerFactory)
+    public ISipTransportRuntime Create(
+        TlsConfiguration? tls,
+        ILoggerFactory loggerFactory,
+        SipTransportProtocol defaultTransport = SipTransportProtocol.Udp)
     {
         ArgumentNullException.ThrowIfNull(loggerFactory);
         var logger = loggerFactory.CreateLogger<SipTransportFactory>();
@@ -24,7 +27,7 @@ internal sealed class SipTransportFactory : ISipTransportFactory
             loggerFactory,
             new SipWireProtocol(),
             tls,
-            SipTransportProtocol.Udp,
+            defaultTransport,
             routeResolver: null);
     }
 }

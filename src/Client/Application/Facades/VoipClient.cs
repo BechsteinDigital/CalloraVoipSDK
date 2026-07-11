@@ -165,7 +165,8 @@ public sealed class VoipClient : IVoipClient
             ?? new SipTransportFactory();
         try
         {
-            _transportRuntime = transportFactory.Create(config.Tls, logFactory);
+            _transportRuntime = transportFactory.Create(
+                config.Tls, logFactory, MapTransport(config.DefaultTransport));
         }
         catch (Exception ex) when (IsTransportInitializationFailure(ex))
         {
@@ -607,6 +608,16 @@ public sealed class VoipClient : IVoipClient
 
     private static bool IsTransportInitializationFailure(Exception ex) =>
         ex is SocketException or UnauthorizedAccessException;
+
+    private static SipTransportProtocol MapTransport(SipTransport transport) => transport switch
+    {
+        SipTransport.Udp => SipTransportProtocol.Udp,
+        SipTransport.Tcp => SipTransportProtocol.Tcp,
+        SipTransport.Tls => SipTransportProtocol.Tls,
+        SipTransport.Ws => SipTransportProtocol.Ws,
+        SipTransport.Wss => SipTransportProtocol.Wss,
+        _ => SipTransportProtocol.Udp
+    };
 
     private IAudioDeviceRuntimeControl GetAudioDeviceRuntimeControl()
     {

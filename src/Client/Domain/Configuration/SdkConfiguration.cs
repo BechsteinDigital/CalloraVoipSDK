@@ -17,6 +17,14 @@ public sealed class SdkConfiguration
     /// <summary>TLS settings for secure SIP transport; <see langword="null"/> uses the transport defaults.</summary>
     public TlsConfiguration? Tls                { get; init; }
 
+    /// <summary>
+    /// Default SIP signaling transport for outbound requests and the advertised local contact when
+    /// a target URI does not force one. Defaults to <see cref="SipTransport.Udp"/>, preserving the
+    /// prior behavior; set to <see cref="SipTransport.Tcp"/>/<see cref="SipTransport.Tls"/>/etc. for
+    /// TCP- or TLS-only enterprise proxies.
+    /// </summary>
+    public SipTransport   DefaultTransport       { get; init; } = SipTransport.Udp;
+
     /// <summary>Logger factory the SDK logs through; <see langword="null"/> disables SDK logging.</summary>
     public ILoggerFactory? LoggerFactory         { get; init; }
 

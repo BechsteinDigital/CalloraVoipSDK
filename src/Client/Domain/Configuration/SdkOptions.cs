@@ -15,6 +15,12 @@ public sealed class SdkOptions
     /// <summary>Optional TLS runtime settings.</summary>
     public TlsConfiguration? Tls { get; set; }
 
+    /// <summary>
+    /// Default SIP signaling transport for outbound requests. Defaults to
+    /// <see cref="SipTransport.Udp"/>. See <see cref="SdkConfiguration.DefaultTransport"/>.
+    /// </summary>
+    public SipTransport DefaultTransport { get; set; } = SipTransport.Udp;
+
     /// <summary>SRTP negotiation policy.</summary>
     public SrtpPolicy SrtpPolicy { get; set; } = SrtpPolicy.Optional;
 

@@ -43,4 +43,14 @@ public sealed class CalloraBuilder
         _services.PostConfigure<SdkOptions>(options => configure(options.Ice));
         return this;
     }
+
+    /// <summary>
+    /// Sets the default SIP signaling transport for outbound requests
+    /// (see <see cref="SdkConfiguration.DefaultTransport"/>).
+    /// </summary>
+    public CalloraBuilder WithTransport(SipTransport transport)
+    {
+        _services.PostConfigure<SdkOptions>(options => options.DefaultTransport = transport);
+        return this;
+    }
 }

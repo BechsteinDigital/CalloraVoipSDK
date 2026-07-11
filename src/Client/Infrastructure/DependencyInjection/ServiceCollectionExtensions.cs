@@ -35,6 +35,7 @@ public static class ServiceCollectionExtensions
             {
                 UserAgent = options.UserAgent,
                 Tls = options.Tls,
+                DefaultTransport = options.DefaultTransport,
                 LoggerFactory = loggerFactory,
                 SrtpPolicy = options.SrtpPolicy,
                 Ice = options.Ice.ToConfiguration(),
