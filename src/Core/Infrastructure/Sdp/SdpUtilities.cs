@@ -231,7 +231,8 @@ internal static class SdpUtilities
             var iceEnabled = !string.IsNullOrWhiteSpace(remoteIceUfrag)
                              && !string.IsNullOrWhiteSpace(remoteIcePwd)
                              && remoteIceCandidates.Count > 0;
-            var video = TryResolveVideoParameters(parsed, remoteIp, localEndPoint, localOptions);
+            var video = TryResolveVideoParameters(
+                parsed, remoteIp, localEndPoint, localOptions, remoteIceUfrag, remoteIcePwd);
 
             return new CallMediaParameters
             {
@@ -475,7 +476,9 @@ internal static class SdpUtilities
         SdpSessionDescription parsed,
         IPAddress remoteIp,
         IPEndPoint localEndPoint,
-        SdpMediaNegotiationOptions? localOptions)
+        SdpMediaNegotiationOptions? localOptions,
+        string? sharedRemoteIceUfrag,
+        string? sharedRemoteIcePwd)
     {
         if (localOptions?.Video is not { } videoOptions)
             return null;
@@ -538,6 +541,12 @@ internal static class SdpUtilities
                      && string.Equals(f.Parameter, "pli", StringComparison.OrdinalIgnoreCase)),
             LocalEndPoint = new IPEndPoint(localEndPoint.Address, videoOptions.Port),
             RemoteEndPoint = new IPEndPoint(remoteIp, video.Port),
+            // ICE credentials for the video 5-tuple: the video m-line's own ufrag/pwd when it
+            // carries them (RFC 8839 §5.3), otherwise the session-shared credentials the audio
+            // m-line resolved — this SDK shares one ufrag/pwd across m-lines (no BUNDLE). The
+            // local credentials and the enabled/role flags are stamped later by the ICE enricher.
+            RemoteIceUfrag = video.IceUfrag ?? sharedRemoteIceUfrag,
+            RemoteIcePwd = video.IcePwd ?? sharedRemoteIcePwd,
         };
     }
 

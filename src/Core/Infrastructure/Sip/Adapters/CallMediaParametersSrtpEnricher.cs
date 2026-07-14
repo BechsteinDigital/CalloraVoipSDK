@@ -78,6 +78,9 @@ internal static class CallMediaParametersSrtpEnricher
     /// the original video parameters unchanged (a keyed video leg without usable keys stays
     /// fail-closed-silent). <see langword="null"/> passes through for an audio-only leg.
     /// </summary>
+    // INVARIANT: the ICE enricher runs before this one (see SipCoreCallChannel: Ice → Srtp → Dtls),
+    // so an incoming `video` already carries its ICE credentials/role. Both branches below must
+    // therefore preserve them — the early return does so implicitly, the SDES rebuild explicitly.
     private static CallVideoParameters? EnrichVideo(CallVideoParameters? video, string remoteSdp, string? localSdp)
     {
         if (video is null)
@@ -104,7 +107,15 @@ internal static class CallMediaParametersSrtpEnricher
             RemoteEndPoint = video.RemoteEndPoint,
             SrtpSuite = remoteCrypto!.CryptoSuite,
             SrtpLocalKeyParams = localCrypto!.KeyParams,
-            SrtpRemoteKeyParams = remoteCrypto.KeyParams
+            SrtpRemoteKeyParams = remoteCrypto.KeyParams,
+            // Carry the ICE parameters the ICE enricher already stamped — the video stream needs
+            // them to attach ICE to its 5-tuple, and the SDES rebuild must not drop them.
+            IceEnabled = video.IceEnabled,
+            IceControlling = video.IceControlling,
+            LocalIceUfrag = video.LocalIceUfrag,
+            LocalIcePwd = video.LocalIcePwd,
+            RemoteIceUfrag = video.RemoteIceUfrag,
+            RemoteIcePwd = video.RemoteIcePwd
         };
     }
 }

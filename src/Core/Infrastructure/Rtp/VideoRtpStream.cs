@@ -7,6 +7,7 @@ using CalloraVoipSdk.Core.Infrastructure.Rtp.Retransmission;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Session;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Wire;
 using CalloraVoipSdk.Core.Infrastructure.Srtp.Context;
+using CalloraVoipSdk.Core.Infrastructure.Stun.Ice;
 using Microsoft.Extensions.Logging;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
@@ -40,6 +41,11 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
 
     private readonly RtpSession _rtp;
     private readonly DtlsMediaAttachment? _dtlsMedia;
+
+    // ICE on the video 5-tuple (RFC 8445 §7.3 inbound checks + RFC 7675 consent): answers inbound
+    // connectivity checks and runs consent freshness on the video socket with the session-shared
+    // credentials. Inactive (a no-op) when ICE was not negotiated for the leg.
+    private readonly IceMediaAttachment _iceMedia;
     private readonly IVideoPacketiser _packetiser;
     private readonly IVideoDepacketiser _depacketiser;
     private readonly SemaphoreSlim _sendSync = new(1, 1);
@@ -179,6 +185,23 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
             onSecondaryContextsReady: _retransmitBuffer is null ? null : _rtp.InstallSecondarySecurityContexts);
         if (_dtlsMedia is not null)
             _rtp.DtlsPacketReceived += _dtlsMedia.OnDtlsPacketReceived;
+
+        // ICE on the video 5-tuple: the video stream runs its own consent loop and inbound-check
+        // responder on this socket, keyed from the session-shared ufrag/pwd (no BUNDLE — same
+        // credentials as audio, distinct 5-tuple). Inactive when ICE was not negotiated.
+        _iceMedia = new IceMediaAttachment(
+            IceMediaParameters.FromVideo(video), _rtp.SendRawAsync, loggerFactory, OnMediaConsentLost);
+        if (_iceMedia.IsActive)
+            _rtp.StunPacketReceived += _iceMedia.OnStunPacketReceived;
+    }
+
+    // RFC 7675 §5.1: consent expired on the video 5-tuple — cease transmitting video. The socket
+    // stays open (an ICE restart could revive the path); surfacing the loss for terminate/restart
+    // is left to a later step, mirroring the audio path.
+    private void OnMediaConsentLost()
+    {
+        _logger.LogWarning("Ceasing video transmission after ICE consent loss (RFC 7675 §5.1).");
+        _rtp.StopTransmission();
     }
 
     // Answers an inbound NACK (RFC 4585) by resending the requested packets on the RTX repair
@@ -254,6 +277,7 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
     public void Start(CancellationToken cancellationToken)
     {
         _ = _rtp.StartAsync(cancellationToken);
+        _iceMedia.Start();
         _dtlsMedia?.Start(cancellationToken);
     }
 
@@ -378,6 +402,9 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
             _rtp.PacketSent -= _retransmitBuffer.Store;
         if (_reorderBuffer is not null)
             _rtp.SecondaryPacketReceived -= OnRtxPacketReceived;
+        if (_iceMedia.IsActive)
+            _rtp.StunPacketReceived -= _iceMedia.OnStunPacketReceived;
+        await _iceMedia.DisposeAsync().ConfigureAwait(false);
         if (_dtlsMedia is not null)
         {
             _rtp.StopTransmission();

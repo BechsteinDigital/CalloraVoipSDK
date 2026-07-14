@@ -1,7 +1,6 @@
 using System.Net;
 using Microsoft.Extensions.Logging;
 using CalloraVoipSdk.Core.Application.Media.Ice;
-using CalloraVoipSdk.Core.Domain.Calls;
 using CalloraVoipSdk.Core.Infrastructure.Stun.Wire;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Stun.Ice;
@@ -22,12 +21,12 @@ internal static class IceMediaConsentSessionFactory
     /// Creates the consent session, or <see langword="null"/> when consent checks cannot run for the
     /// given parameters.
     /// </summary>
-    /// <param name="parameters">The negotiated media parameters (post ICE selection).</param>
+    /// <param name="parameters">The ICE view of the media 5-tuple (post ICE selection).</param>
     /// <param name="sendRaw">The media socket's raw-send delegate.</param>
     /// <param name="onConsentLost">Invoked once when consent expires.</param>
     /// <param name="loggerFactory">Logger factory.</param>
     public static IceMediaConsentSession? TryCreate(
-        CallMediaParameters parameters,
+        IceMediaParameters parameters,
         Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask> sendRaw,
         Action onConsentLost,
         ILoggerFactory loggerFactory)
