@@ -123,10 +123,11 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
 
         EnsureDependencies(parameters, handshaker, certificate);
 
+        // Non-null after EnsureDependencies; the flow analysis cannot see through the call.
         var expected = new DtlsFingerprint
         {
-            Algorithm = parameters.DtlsRemoteFingerprintAlgorithm,
-            Value = parameters.DtlsRemoteFingerprintValue,
+            Algorithm = parameters.DtlsRemoteFingerprintAlgorithm!,
+            Value = parameters.DtlsRemoteFingerprintValue!,
         };
 
         return new DtlsMediaAttachment(

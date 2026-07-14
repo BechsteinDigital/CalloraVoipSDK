@@ -29,6 +29,20 @@ public sealed class SdpIceNegotiationOptions
 }
 
 /// <summary>
+/// Local DTLS-SRTP identity for SDP offer/answer generation (RFC 5763 / RFC 8122):
+/// the certificate fingerprint signaled via <c>a=fingerprint</c>. Kept as plain strings
+/// so the application port stays free of crypto types.
+/// </summary>
+public sealed class SdpDtlsNegotiationOptions
+{
+    /// <summary>Fingerprint hash function token, e.g. <c>sha-256</c>.</summary>
+    public required string FingerprintAlgorithm { get; init; }
+
+    /// <summary>Colon-delimited hex fingerprint of the local DTLS certificate.</summary>
+    public required string FingerprintValue { get; init; }
+}
+
+/// <summary>
 /// Optional runtime parameters that influence SDP negotiation output.
 /// </summary>
 public sealed class SdpMediaNegotiationOptions
@@ -37,6 +51,23 @@ public sealed class SdpMediaNegotiationOptions
     /// ICE settings to include in local SDP.
     /// </summary>
     public SdpIceNegotiationOptions? Ice { get; init; }
+
+    /// <summary>
+    /// Local DTLS identity. Required for answering a DTLS-SRTP offer (the answer carries
+    /// our fingerprint and the resolved <c>a=setup</c> role, RFC 5763 §5) and for offering
+    /// DTLS-SRTP when <see cref="OfferDtlsSrtp"/> is set. <see langword="null"/> disables
+    /// DTLS signaling entirely.
+    /// </summary>
+    public SdpDtlsNegotiationOptions? Dtls { get; init; }
+
+    /// <summary>
+    /// When <see langword="true"/>, a locally built offer advertises DTLS-SRTP keying
+    /// (RFC 5763): <c>UDP/TLS/RTP/SAVPF</c> profile, <c>a=fingerprint</c>, and
+    /// <c>a=setup:actpass</c> — and suppresses SDES <c>a=crypto</c> lines (the keying
+    /// methods are mutually exclusive per offer). Ignored on the answer path, which keys
+    /// according to what the peer offered. Requires <see cref="Dtls"/>.
+    /// </summary>
+    public bool OfferDtlsSrtp { get; init; }
 
     /// <summary>
     /// When <see langword="true"/>, a locally built offer advertises SDES SRTP (RFC 4568):
