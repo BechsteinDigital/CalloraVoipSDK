@@ -27,6 +27,12 @@ public sealed class CallVideoParameters
     /// </summary>
     public string? FormatParameters { get; init; }
 
+    /// <summary>
+    /// Negotiated RTX repair payload type for retransmission (RFC 4588 §8.1);
+    /// <see langword="null"/> when RTX was not negotiated for this stream.
+    /// </summary>
+    public int? RtxPayloadType { get; init; }
+
     /// <summary>Local UDP endpoint to bind the video RTP socket to.</summary>
     public required IPEndPoint LocalEndPoint { get; init; }
 

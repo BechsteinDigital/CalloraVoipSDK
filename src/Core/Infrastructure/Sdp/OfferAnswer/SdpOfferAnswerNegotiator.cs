@@ -76,14 +76,17 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
         if (offerVideo)
         {
             var video = options!.Video!;
+            // RTX repair streams (RFC 4588 §8.1): one rtx payload type per video codec,
+            // appended to the m-line with an apt fmtp binding it to the original.
+            var (rtxCodecs, rtxFmtp) = VideoCodecCatalog.BuildRtx(video.Codecs);
             mediaLines.Add(new SdpMediaDescription
             {
                 MediaType = "video",
                 Port = video.Port,
                 Profile = profile,
                 Direction = direction,
-                Codecs = video.Codecs,
-                Fmtp = VideoCodecCatalog.BuildFmtp(video.Codecs),
+                Codecs = [.. video.Codecs, .. rtxCodecs],
+                Fmtp = [.. VideoCodecCatalog.BuildFmtp(video.Codecs), .. rtxFmtp],
                 RtcpFeedback = VideoCodecCatalog.StandardFeedback,
                 Mid = options.Bundle == true ? "video" : null,
                 RtcpMux = options.RtcpMux == true,
@@ -466,14 +469,20 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             return null;
 
         var acceptedPts = new HashSet<int>(negotiated.Select(c => c.PayloadType));
+
+        // RTX (RFC 4588 §8.1): echo the repair codecs the peer offered for codecs we
+        // accepted, so both sides agree on the rtx payload numbering.
+        var (rtxCodecs, rtxFmtp) = VideoCodecCatalog.NegotiateRtx(offered, acceptedPts);
+        var carriedFmtp = offered.Fmtp.Where(f => acceptedPts.Contains(f.PayloadType));
+
         return new SdpMediaDescription
         {
             MediaType = "video",
             Port = video.Port,
             Profile = ResolveAnswerProfile(offered.Profile),
-            Codecs = negotiated,
+            Codecs = [.. negotiated, .. rtxCodecs],
             Direction = ResolveAnswerDirection(offered.Direction, answerDirection),
-            Fmtp = offered.Fmtp.Where(f => acceptedPts.Contains(f.PayloadType)).ToArray(),
+            Fmtp = [.. carriedFmtp, .. rtxFmtp],
             RtcpFeedback = VideoCodecCatalog.NegotiateFeedback(offered.RtcpFeedback),
             Mid = offered.Mid,
             RtcpMux = offered.RtcpMux,
