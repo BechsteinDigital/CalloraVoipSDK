@@ -56,12 +56,18 @@ internal sealed partial class SipCoreCallChannel
     }
 
     /// <summary>
-    /// Video negotiation parameters when video is enabled: the reserved local video port
-    /// and the configured codec preference. <see langword="null"/> keeps the leg audio-only.
+    /// Video negotiation parameters when video is enabled: the reserved local video port, the
+    /// configured codec preference, and the live video SDES key so a re-offer re-advertises it
+    /// (no rekey). <see langword="null"/> keeps the leg audio-only.
     /// </summary>
     private SdpVideoNegotiationOptions? BuildVideoOptions() =>
         _videoEnabled
-            ? new SdpVideoNegotiationOptions { Port = _localVideoPort, PreferredCodecNames = _videoCodecNames }
+            ? new SdpVideoNegotiationOptions
+            {
+                Port = _localVideoPort,
+                PreferredCodecNames = _videoCodecNames,
+                OfferSrtpKeyParams = _activeLocalVideoSrtpKeyParams,
+            }
             : null;
 
     /// <summary>

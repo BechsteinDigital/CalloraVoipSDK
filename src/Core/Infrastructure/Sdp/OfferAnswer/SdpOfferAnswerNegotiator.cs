@@ -37,10 +37,10 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
                 ? "RTP/SAVP"
                 : "RTP/AVP";
 
-        // Video (WebRTC phase 2): a second m-line when requested. SDES keying is
-        // per-m-line and the video key handling is not wired yet — an SDES-keyed offer
-        // stays audio-only (fail closed) until the video media layer lands.
-        var offerVideo = options?.Video is not null && crypto.Count == 0;
+        // Video (WebRTC phase 2): a second m-line when requested. SDES keying is per-m-line
+        // (RFC 4568): the video m-line carries its own a=crypto (options.Video.Crypto), keyed
+        // independently of audio, on the same secure profile.
+        var offerVideo = options?.Video is not null;
 
         // BUNDLE: session-level group + media-level mid
         string? group = null;
@@ -90,6 +90,7 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
                 RtcpFeedback = VideoCodecCatalog.StandardFeedback,
                 Mid = options.Bundle == true ? "video" : null,
                 RtcpMux = options.RtcpMux == true,
+                Crypto = video.Crypto,
                 Fingerprint = dtls is not null
                     ? new SdpFingerprint { Algorithm = dtls.Algorithm, Value = dtls.Fingerprint }
                     : null,

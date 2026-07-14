@@ -50,6 +50,12 @@ internal sealed class SdpVideoMediaOptions
 
     /// <summary>Video codec capabilities (e.g. VP8/H264 at 90 kHz).</summary>
     public required IReadOnlyList<SdpCodecDefinition> Codecs { get; init; }
+
+    /// <summary>
+    /// Per-m-line SDES crypto lines for the video stream (RFC 4568), independent of audio's;
+    /// empty for a plain or DTLS-keyed offer.
+    /// </summary>
+    public IReadOnlyList<SdpCryptoAttribute> Crypto { get; init; } = [];
 }
 
 /// <summary>

@@ -38,8 +38,7 @@ public sealed class VideoChannelActivationTests
     [Fact]
     public async Task Video_enabled_channel_offers_m_video_on_the_outbound_path()
     {
-        // A non-SDES policy: an SDES a=crypto offer suppresses video (SDES-keyed video is
-        // not wired), so outbound video needs either a plain (Disabled) or DTLS offer.
+        // A Disabled SRTP policy offers plain RTP: the video m-line is a plain (unkeyed) offer.
         using var channel = CreateChannel(enableVideo: true, policy: SrtpPolicy.Disabled);
         var offer = await channel.BuildOfferSdpAsync(
             new IPEndPoint(IPAddress.Loopback, channel.LocalMediaPort), hold: false, CancellationToken.None);
@@ -52,16 +51,19 @@ public sealed class VideoChannelActivationTests
     }
 
     [Fact]
-    public async Task Sdes_offer_suppresses_video_on_the_outbound_path()
+    public async Task Sdes_offer_carries_video_with_its_own_crypto_on_the_outbound_path()
     {
-        // Documents the interaction: EnableVideo + a SDES-offering policy stays audio-only
-        // outbound (SDES-keyed video fail-closed).
+        // EnableVideo + a SDES-offering policy now offers video too: a per-m-line a=crypto on the
+        // secure video profile (RFC 4568), keyed independently of audio.
         using var channel = CreateChannel(enableVideo: true, policy: SrtpPolicy.Optional);
         var offer = await channel.BuildOfferSdpAsync(
             new IPEndPoint(IPAddress.Loopback, channel.LocalMediaPort), hold: false, CancellationToken.None);
 
         Assert.Contains("a=crypto:", offer, StringComparison.Ordinal);
-        Assert.DoesNotContain("m=video", offer, StringComparison.Ordinal);
+        Assert.Contains("m=video ", offer, StringComparison.Ordinal);
+        Assert.DoesNotContain("m=video 0 ", offer, StringComparison.Ordinal);
+        var videoSection = offer[offer.IndexOf("m=video", StringComparison.Ordinal)..];
+        Assert.Contains("a=crypto:", videoSection, StringComparison.Ordinal);
     }
 
     [Fact]

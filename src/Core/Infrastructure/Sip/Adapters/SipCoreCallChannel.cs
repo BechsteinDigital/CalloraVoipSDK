@@ -82,6 +82,11 @@ internal sealed partial class SipCoreCallChannel : ICallChannel
     // parameters publish; read on the signaling thread that issues hold/unhold.
     private volatile string? _activeLocalSrtpKeyParams;
 
+    // The live outbound SDES key for the video m-line (RFC 4568 per-m-line), re-advertised on a
+    // hold/unhold re-offer so the running SRTP video stream is not rekeyed; null when the call
+    // has no SDES-keyed video. Independent of the audio key above.
+    private volatile string? _activeLocalVideoSrtpKeyParams;
+
     // DTLS-SRTP signaling (RFC 5763): local identity (fingerprint) plus whether locally
     // originated offers advertise DTLS keying. _dtlsActiveOnCall latches once a leg
     // negotiated DTLS so hold/unhold re-offers keep signaling it.
@@ -647,6 +652,7 @@ internal sealed partial class SipCoreCallChannel : ICallChannel
         // key (keeps SRTP without rekeying); null when the call resolved to plain RTP.
         // A DTLS-keyed leg latches instead so re-offers keep signaling DTLS.
         _activeLocalSrtpKeyParams = enrichedParameters.SrtpLocalKeyParams;
+        _activeLocalVideoSrtpKeyParams = enrichedParameters.Video?.SrtpLocalKeyParams;
         _dtlsActiveOnCall = enrichedParameters.IsDtlsNegotiated;
         _srtpTelemetry.PublishDecision(
             session,
@@ -734,6 +740,7 @@ internal sealed partial class SipCoreCallChannel : ICallChannel
         }
 
         _activeLocalSrtpKeyParams = enriched.SrtpLocalKeyParams;
+        _activeLocalVideoSrtpKeyParams = enriched.Video?.SrtpLocalKeyParams;
         _dtlsActiveOnCall = enriched.IsDtlsNegotiated;
         _lastPublishedSignature = RekeySignature(enriched);
         _logger.LogDebug("Re-publishing media parameters on re-INVITE rekey for call {CallId}.", session.CallId);

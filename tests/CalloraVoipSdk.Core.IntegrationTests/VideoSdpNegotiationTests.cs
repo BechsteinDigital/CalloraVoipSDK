@@ -36,15 +36,45 @@ public sealed class VideoSdpNegotiationTests
     }
 
     [Fact]
-    public void Sdes_offer_stays_audio_only_despite_video_options()
+    public void Sdes_offer_carries_video_with_its_own_crypto()
     {
-        // Per-m-line SDES video keys are not wired yet — fail closed, no video m-line.
+        // Per-m-line SDES (RFC 4568): the video m-line is offered on the secure profile with its
+        // own a=crypto, independent of audio's.
         var offer = SdpUtilities.BuildDefaultSdp(LocalAudio, hold: false,
             new SdpMediaNegotiationOptions { Video = VideoOptions(), OfferSrtpCrypto = true });
 
-        Assert.Contains("a=crypto:", offer, StringComparison.Ordinal);
-        Assert.DoesNotContain("m=video", offer, StringComparison.Ordinal);
+        Assert.Contains("m=video 41002 RTP/SAVP", offer, StringComparison.Ordinal);
+        var audioSection = offer[offer.IndexOf("m=audio", StringComparison.Ordinal)..offer.IndexOf("m=video", StringComparison.Ordinal)];
+        var videoSection = offer[offer.IndexOf("m=video", StringComparison.Ordinal)..];
+        Assert.Contains("a=crypto:", audioSection, StringComparison.Ordinal);
+        Assert.Contains("a=crypto:", videoSection, StringComparison.Ordinal);
+        // Audio and video key independently (different inline material).
+        Assert.NotEqual(CryptoLine(audioSection), CryptoLine(videoSection));
     }
+
+    [Fact]
+    public void Sdes_video_re_offer_reuses_the_retained_video_key()
+    {
+        var first = SdpUtilities.BuildDefaultSdp(LocalAudio, hold: false,
+            new SdpMediaNegotiationOptions { Video = VideoOptions(), OfferSrtpCrypto = true });
+        var firstVideoKey = CryptoKeyParams(first[first.IndexOf("m=video", StringComparison.Ordinal)..]);
+
+        // A re-offer that passes the live video key re-advertises it verbatim (no rekey).
+        var reoffer = SdpUtilities.BuildDefaultSdp(LocalAudio, hold: false, new SdpMediaNegotiationOptions
+        {
+            Video = new SdpVideoNegotiationOptions { Port = 41002, OfferSrtpKeyParams = firstVideoKey },
+            OfferSrtpCrypto = true,
+        });
+
+        Assert.Equal(firstVideoKey, CryptoKeyParams(reoffer[reoffer.IndexOf("m=video", StringComparison.Ordinal)..]));
+    }
+
+    private static string CryptoLine(string section) =>
+        section.Split("\r\n").First(l => l.StartsWith("a=crypto:", StringComparison.Ordinal));
+
+    // The inline key material (3rd token) of the a=crypto line: "a=crypto:<tag> <suite> <keyParams>".
+    private static string CryptoKeyParams(string section) =>
+        CryptoLine(section).Split(' ')[2];
 
     [Fact]
     public void Offer_without_video_options_stays_audio_only()
