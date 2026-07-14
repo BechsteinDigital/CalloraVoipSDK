@@ -8,9 +8,9 @@ using CalloraVoipSdk.Core.Domain.Calls;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.JitterBuffer;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Session;
+using CalloraVoipSdk.Core.Infrastructure.Dtls;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Wire;
 using CalloraVoipSdk.Core.Infrastructure.Srtp.Context;
-using CalloraVoipSdk.Core.Infrastructure.Srtp.Crypto;
 using CalloraVoipSdk.Core.Infrastructure.Stun.Ice;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
@@ -37,6 +37,7 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
     // ICE on the media socket: answers inbound connectivity checks (RFC 8445 §7.3) and runs
     // RFC 7675 consent freshness. Inactive (routes nothing) when ICE was not negotiated.
     private readonly IceMediaAttachment _iceMedia;
+    private readonly DtlsMediaAttachment? _dtlsMedia;
     private readonly IJitterBuffer _jitterBuffer;
 
     // SRTP/SRTCP contexts created (and thus owned) by this session; internal for test evidence.
@@ -116,9 +117,12 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
     internal RtpCallMediaSession(
         CallMediaParameters parameters,
         ILoggerFactory loggerFactory,
-        PayloadCodecKind? bridgeTapCodec = null)
+        PayloadCodecKind? bridgeTapCodec = null,
+        IDtlsSrtpHandshaker? dtlsHandshaker = null,
+        DtlsCertificate? dtlsCertificate = null)
         : this(parameters, loggerFactory, jitterBufferOptions: null, playoutInterval: null,
-            metricsPublishInterval: null, bridgeTapCodec: bridgeTapCodec)
+            metricsPublishInterval: null, bridgeTapCodec: bridgeTapCodec,
+            dtlsHandshaker: dtlsHandshaker, dtlsCertificate: dtlsCertificate)
     {
     }
 
@@ -128,10 +132,17 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
         JitterBufferOptions? jitterBufferOptions,
         TimeSpan? playoutInterval,
         TimeSpan? metricsPublishInterval,
-        PayloadCodecKind? bridgeTapCodec = null)
+        PayloadCodecKind? bridgeTapCodec = null,
+        IDtlsSrtpHandshaker? dtlsHandshaker = null,
+        DtlsCertificate? dtlsCertificate = null)
     {
         ArgumentNullException.ThrowIfNull(parameters);
         ArgumentNullException.ThrowIfNull(loggerFactory);
+
+        // Fail closed before any resource is allocated: a DTLS-negotiated leg with missing
+        // dependencies must not bind a socket or create contexts it would then leak.
+        DtlsMediaAttachment.EnsureDependencies(parameters, dtlsHandshaker, dtlsCertificate);
+
         _logger = loggerFactory.CreateLogger<RtpCallMediaSession>();
         _negotiatedPayloadType = parameters.PayloadType;
         _payloadTypeCodecMap = parameters.PayloadTypeCodecMap ?? EmptyPayloadTypeCodecMap;
@@ -158,10 +169,12 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
                 _logger)
             : null;
 
-        // This session creates the SRTP/SRTCP contexts and therefore owns their disposal
-        // (key zeroing) — RtpSession only borrows them via options.
+        // This session creates the SDES SRTP/SRTCP contexts and therefore owns their disposal
+        // (key zeroing) — RtpSession only borrows them via options. DTLS-keyed legs start with
+        // no contexts and RequireEncryptedMedia keeps the session fail-closed until the DTLS
+        // attachment installs the post-handshake contexts (which the attachment owns).
         (_outboundSrtp, _inboundSrtp, _outboundSrtcp, _inboundSrtcp) =
-            TryCreateMediaCryptoContexts(parameters, _logger);
+            SdesMediaCryptoContextFactory.TryCreate(parameters, _logger);
         var options = new RtpSessionOptions
         {
             LocalEndPoint    = parameters.LocalEndPoint,
@@ -172,7 +185,8 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
             OutboundSrtp     = _outboundSrtp,
             InboundSrtp      = _inboundSrtp,
             OutboundSrtcp    = _outboundSrtcp,
-            InboundSrtcp     = _inboundSrtcp
+            InboundSrtcp     = _inboundSrtcp,
+            RequireEncryptedMedia = parameters.IsDtlsNegotiated
         };
 
         var logger = loggerFactory.CreateLogger<RtpSession>();
@@ -185,6 +199,15 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
         _iceMedia = new IceMediaAttachment(parameters, _rtp.SendRawAsync, loggerFactory, OnMediaConsentLost);
         if (_iceMedia.IsActive)
             _rtp.StunPacketReceived += _iceMedia.OnStunPacketReceived;
+
+        // DTLS-SRTP keying (RFC 5763): the attachment runs the handshake over this same
+        // socket and installs the derived contexts; on failure media stays fail-closed and
+        // transmission ceases. Throws when DTLS was negotiated but dependencies are missing.
+        _dtlsMedia = DtlsMediaAttachment.TryCreate(
+            parameters, dtlsHandshaker, dtlsCertificate, _rtp.SendRawAsync,
+            _rtp.InstallSecurityContexts, _rtp.StopTransmission, loggerFactory);
+        if (_dtlsMedia is not null)
+            _rtp.DtlsPacketReceived += _dtlsMedia.OnDtlsPacketReceived;
     }
 
     // RFC 7675 §5.1: on ICE consent loss the pair is dead — cease media transmission on it. The
@@ -204,6 +227,7 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
 
         _ = _rtp.StartAsync(_cts.Token);
         _iceMedia.Start();
+        _dtlsMedia?.Start(_cts.Token);
         _playoutLoop = RunPlayoutLoopAsync(_cts.Token);
         return Task.CompletedTask;
     }
@@ -399,6 +423,17 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
         if (_iceMedia.IsActive)
             _rtp.StunPacketReceived -= _iceMedia.OnStunPacketReceived;
         await _iceMedia.DisposeAsync().ConfigureAwait(false);
+        if (_dtlsMedia is not null)
+        {
+            // Ordering: stop media/RTCP transmission first so no send can hit a security
+            // context the attachment is about to dispose; the attachment then sends
+            // close_notify while the socket send path is still up (before _rtp disposal).
+            // A receive racing the context disposal is a clean drop (the unprotect paths
+            // treat ObjectDisposedException as such).
+            _rtp.StopTransmission();
+            _rtp.DtlsPacketReceived -= _dtlsMedia.OnDtlsPacketReceived;
+            await _dtlsMedia.DisposeAsync().ConfigureAwait(false);
+        }
         _cts.Cancel();
 
         var playoutLoop = _playoutLoop;
@@ -672,47 +707,6 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
             adaptiveDelayMs: _jitterBuffer.CurrentDelayMs,
             estimatedRoundTripTimeMs: _jitterBuffer.EstimatedRoundTripTimeMs);
 
-    /// <summary>
-    /// Builds the SRTP and SRTCP context pairs from negotiated SDES key material
-    /// (RFC 4568/3711): outbound protects with our own key, inbound unprotects with the
-    /// peer's key. SRTP and SRTCP derive independent session keys from the same master key
-    /// (RFC 3711 §4.3.2). Returns all-<c>null</c> when the call is plain RTP. A negotiated-SRTP
-    /// call with unparsable key material throws — failing open would silently send plaintext.
-    /// </summary>
-    private static (ISrtpContext? OutRtp, ISrtpContext? InRtp, ISrtcpContext? OutRtcp, ISrtcpContext? InRtcp)
-        TryCreateMediaCryptoContexts(CallMediaParameters parameters, ILogger logger)
-    {
-        if (parameters.SrtpSuite is null
-            || parameters.SrtpLocalKeyParams is null
-            || parameters.SrtpRemoteKeyParams is null)
-        {
-            return (null, null, null, null);
-        }
-
-        var suite = SrtpCryptoSuiteNames.TryParse(parameters.SrtpSuite)
-            ?? throw new InvalidOperationException(
-                $"Negotiated SRTP suite '{parameters.SrtpSuite}' is not supported by the media layer.");
-
-        SrtpKeyMaterial localKeys;
-        SrtpKeyMaterial remoteKeys;
-        try
-        {
-            localKeys = SrtpKeyMaterial.ParseInline(parameters.SrtpLocalKeyParams, suite);
-            remoteKeys = SrtpKeyMaterial.ParseInline(parameters.SrtpRemoteKeyParams, suite);
-        }
-        catch (FormatException ex)
-        {
-            // Fail closed: an SRTP-negotiated call must never fall back to plaintext.
-            throw new InvalidOperationException(
-                "Negotiated SRTP key material is invalid; refusing to start unencrypted media.", ex);
-        }
-
-        logger.LogInformation(
-            "SRTP and SRTCP enabled for media session (suite {Suite}).",
-            parameters.SrtpSuite);
-        return (new SrtpContext(localKeys), new SrtpContext(remoteKeys),
-                new SrtcpContext(localKeys), new SrtcpContext(remoteKeys));
-    }
 
     private static TimeSpan ResolvePlayoutInterval(CallMediaParameters parameters, TimeSpan? configuredInterval)
     {

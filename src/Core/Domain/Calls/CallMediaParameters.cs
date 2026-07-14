@@ -163,4 +163,27 @@ public sealed class CallMediaParameters
 
     /// <summary>The peer's inline key params — decrypts the inbound direction.</summary>
     internal string? SrtpRemoteKeyParams { get; init; }
+
+    // ── DTLS-SRTP keying (RFC 5763/5764) — internal media-layer contract ─────
+    // Kept as plain strings so the domain stays free of crypto types; the RTP media
+    // session runs the DTLS handshake and derives the SRTP contexts from it.
+
+    /// <summary>
+    /// True when offer/answer negotiated DTLS-SRTP keying for this leg (RFC 5763):
+    /// the media layer must complete a DTLS handshake before any media flows and stays
+    /// fail-closed until then. Mutually exclusive with SDES key material.
+    /// </summary>
+    public bool IsDtlsNegotiated { get; internal init; }
+
+    /// <summary>
+    /// True when this endpoint takes the DTLS client role, i.e. the negotiated SDP
+    /// <c>a=setup</c> resolved to <c>active</c> locally (RFC 5763 §5 / RFC 4145).
+    /// </summary>
+    internal bool DtlsIsClient { get; init; }
+
+    /// <summary>Peer fingerprint hash function from SDP <c>a=fingerprint</c> (RFC 8122), e.g. <c>sha-256</c>.</summary>
+    internal string? DtlsRemoteFingerprintAlgorithm { get; init; }
+
+    /// <summary>Peer fingerprint digest from SDP <c>a=fingerprint</c> (colon-delimited hex).</summary>
+    internal string? DtlsRemoteFingerprintValue { get; init; }
 }

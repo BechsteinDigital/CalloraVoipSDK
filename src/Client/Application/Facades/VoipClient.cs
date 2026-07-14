@@ -15,6 +15,7 @@ using CalloraVoipSdk.Core.Domain.Calls;
 using CalloraVoipSdk.Core.Domain.Events;
 using CalloraVoipSdk.Core.Domain.Lines;
 using CalloraVoipSdk.Core.Infrastructure.Audio;
+using CalloraVoipSdk.Core.Infrastructure.Dtls;
 using CalloraVoipSdk.Core.Infrastructure.Media;
 using CalloraVoipSdk.Core.Infrastructure.Rtp;
 using CalloraVoipSdk.Core.Infrastructure.Rtcp.Wire;
@@ -266,8 +267,15 @@ public sealed class VoipClient : IVoipClient
         var bridgeTapCodec = config.BridgeAudioFormat == BridgeAudioFormat.Pcmu
             ? PayloadCodecKind.Pcmu
             : (PayloadCodecKind?)null;
+        // DTLS-SRTP identity (RFC 5763): one ephemeral certificate per client instance.
+        // The handshaker keys DTLS-negotiated call legs; SDP fingerprint signaling that
+        // makes legs DTLS-negotiated is wired in the follow-up signaling package.
+        var dtlsHandshaker = ResolveService<IDtlsSrtpHandshaker>(services)
+            ?? new DtlsSrtpHandshaker(logFactory.CreateLogger<DtlsSrtpHandshaker>());
+        var dtlsCertificate = ResolveService<DtlsCertificate>(services)
+            ?? DtlsCertificate.GenerateEcdsaP256();
         var mediaSessionFactory = ResolveService<ICallMediaSessionFactory>(services)
-            ?? new RtpCallMediaSessionFactory(logFactory, bridgeTapCodec);
+            ?? new RtpCallMediaSessionFactory(logFactory, bridgeTapCodec, dtlsHandshaker, dtlsCertificate);
         var rtcpPacketCodec = ResolveService<IRtcpPacketCodec>(services)
             ?? new RtcpPacketCodec();
         var mediaSupervision = new MediaSupervisionOptions
