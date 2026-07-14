@@ -75,6 +75,9 @@ internal sealed class RtcpPacketCodec : IRtcpPacketCodec
                 RtcpPacketType.Sdes           => DecodeSdes(body, count),
                 RtcpPacketType.Bye            => DecodeBye(body, count),
                 RtcpPacketType.ExtendedReport => DecodeXr(body),
+                // Feedback (RFC 4585/5104): the low 5 header bits carry the FMT, not an RC.
+                RtcpPacketType.TransportFeedback or RtcpPacketType.PayloadFeedback
+                    => RtcpFeedbackCodec.Decode(pt, count, body),
                 _ => null,
             };
 
@@ -310,7 +313,8 @@ internal sealed class RtcpPacketCodec : IRtcpPacketCodec
         RtcpReceiverReport rr   => EncodeRr(rr),
         RtcpSdesPacket     sdes => EncodeSdes(sdes),
         RtcpByePacket      bye  => EncodeBye(bye),
-        _ => throw new NotSupportedException($"Cannot encode RTCP packet type {packet.Type}."),
+        _ => RtcpFeedbackCodec.Encode(packet)
+             ?? throw new NotSupportedException($"Cannot encode RTCP packet type {packet.Type}."),
     };
 
     // -------------------------------------------------------------------------
