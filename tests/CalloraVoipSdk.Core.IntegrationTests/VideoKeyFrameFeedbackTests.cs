@@ -6,14 +6,17 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace CalloraVoipSdk.Core.IntegrationTests;
 
 /// <summary>
-/// Video keyframe feedback (WebRTC phase 3 slice 2, RFC 4585/5104): an inbound PLI/FIR
-/// surfaces a keyframe request; a detected loss sends a throttled PLI to the peer.
-/// Exercised directly against the collaborator so the logic is deterministic (no sockets).
+/// Video RTCP feedback (WebRTC phase 3, RFC 4585/5104): an inbound PLI/FIR surfaces a
+/// keyframe request; detected loss reports the missing packets as a Generic NACK and a
+/// throttled PLI — each gated on the peer's advertised feedback. Exercised against the
+/// collaborator directly so the logic is deterministic (no sockets).
 /// </summary>
 public sealed class VideoKeyFrameFeedbackTests
 {
     private const uint LocalSsrc = 0xABCDEF01;
     private static readonly RtcpPacketCodec Codec = new();
+
+    // ── Inbound keyframe requests ─────────────────────────────────────────────────
 
     [Fact]
     public void Inbound_pli_raises_a_keyframe_request()
@@ -60,47 +63,87 @@ public sealed class VideoKeyFrameFeedbackTests
         var requested = 0;
         var feedback = CreateFeedback(onKeyFrameRequested: () => requested++, out _);
 
-        // Truncated RTCP (2 bytes) — must neither throw nor raise a request.
         feedback.OnControlDatagram([0x81, 206]);
 
         Assert.Equal(0, requested);
     }
 
+    // ── Loss → NACK / PLI, gated on advertised feedback ──────────────────────────
+
     [Fact]
-    public void Detected_loss_sends_one_pli_targeting_the_remote_source()
+    public void Loss_sends_a_nack_naming_the_missing_sequence_numbers()
     {
-        var feedback = CreateFeedback(onKeyFrameRequested: () => { }, out var sent);
+        var feedback = CreateFeedback(() => { }, out var sent, supportsNack: true, supportsPli: false);
         const uint remoteSsrc = 0x22334455;
 
-        feedback.RequestRemoteKeyFrame(remoteSsrc);
+        // Missing 101, 102, 104 (gap around a delivered 103) → one entry PID=101, bits 0 and 2.
+        feedback.OnLoss(remoteSsrc, [101, 102, 104]);
 
-        var datagram = Assert.Single(sent);
-        var pli = Assert.IsType<RtcpPictureLossIndication>(Assert.Single(Codec.Decode(datagram)));
-        Assert.Equal(LocalSsrc, pli.SenderSsrc);
-        Assert.Equal(remoteSsrc, pli.MediaSsrc);
+        var nack = Assert.IsType<RtcpGenericNack>(Assert.Single(Codec.Decode(Assert.Single(sent))));
+        Assert.Equal(LocalSsrc, nack.SenderSsrc);
+        Assert.Equal(remoteSsrc, nack.MediaSsrc);
+        Assert.Equal((ushort[])[101, 102, 104], nack.LostSequenceNumbers().ToArray());
     }
 
     [Fact]
-    public void Rapid_loss_is_throttled_to_a_single_pli()
+    public void Loss_without_advertised_nack_sends_no_nack()
     {
-        var feedback = CreateFeedback(onKeyFrameRequested: () => { }, out var sent);
+        var feedback = CreateFeedback(() => { }, out var sent, supportsNack: false, supportsPli: false);
 
-        // Three losses within the 500 ms window collapse to one PLI (baresip-style throttle).
-        feedback.RequestRemoteKeyFrame(0x1);
-        feedback.RequestRemoteKeyFrame(0x1);
-        feedback.RequestRemoteKeyFrame(0x1);
+        feedback.OnLoss(0x1, [10, 11, 12]);
 
-        Assert.Single(sent);
+        Assert.Empty(sent);
+    }
+
+    [Fact]
+    public void Loss_with_advertised_pli_sends_a_throttled_pli()
+    {
+        var feedback = CreateFeedback(() => { }, out var sent, supportsNack: false, supportsPli: true);
+
+        feedback.OnLoss(0x9, [5]);
+        feedback.OnLoss(0x9, [6]); // within the 500 ms window — collapsed
+
+        var pli = Assert.IsType<RtcpPictureLossIndication>(Assert.Single(Codec.Decode(Assert.Single(sent))));
+        Assert.Equal(0x9u, pli.MediaSsrc);
+    }
+
+    [Fact]
+    public void Loss_with_both_advertised_sends_nack_and_pli()
+    {
+        var feedback = CreateFeedback(() => { }, out var sent, supportsNack: true, supportsPli: true);
+
+        feedback.OnLoss(0x7, [200, 201]);
+
+        var kinds = sent.SelectMany(d => Codec.Decode(d)).ToArray();
+        Assert.Contains(kinds, p => p is RtcpGenericNack);
+        Assert.Contains(kinds, p => p is RtcpPictureLossIndication);
+    }
+
+    [Fact]
+    public void Nack_bitmask_spans_more_than_one_entry_for_a_wide_gap()
+    {
+        var feedback = CreateFeedback(() => { }, out var sent, supportsNack: true, supportsPli: false);
+
+        // 20 consecutive missing packets exceed one entry's 17-packet reach → two entries.
+        var missing = Enumerable.Range(1000, 20).Select(i => (ushort)i).ToArray();
+        feedback.OnLoss(0x1, missing);
+
+        var nack = Assert.IsType<RtcpGenericNack>(Assert.Single(Codec.Decode(Assert.Single(sent))));
+        Assert.True(nack.Entries.Count >= 2);
+        Assert.Equal(missing, nack.LostSequenceNumbers().ToArray());
     }
 
     private static VideoKeyFrameFeedback CreateFeedback(
-        Action onKeyFrameRequested, out List<byte[]> sentDatagrams)
+        Action onKeyFrameRequested, out List<byte[]> sentDatagrams,
+        bool supportsNack = false, bool supportsPli = true)
     {
         var sent = new List<byte[]>();
         sentDatagrams = sent;
         return new VideoKeyFrameFeedback(
             Codec,
             LocalSsrc,
+            supportsNack,
+            supportsPli,
             (datagram, _) =>
             {
                 sent.Add(datagram.ToArray());

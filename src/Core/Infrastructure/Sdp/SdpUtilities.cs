@@ -487,6 +487,11 @@ internal static class SdpUtilities
             FormatParameters = video.Fmtp
                 .FirstOrDefault(f => f.PayloadType == match.PayloadType)?.Parameters,
             RtxPayloadType = VideoCodecCatalog.TryFindRtxPayloadType(video, match.PayloadType),
+            RemoteSupportsNack = video.RtcpFeedback.Any(
+                f => f.FeedbackType.Equals("nack", StringComparison.OrdinalIgnoreCase) && f.Parameter is null),
+            RemoteSupportsPli = video.RtcpFeedback.Any(
+                f => f.FeedbackType.Equals("nack", StringComparison.OrdinalIgnoreCase)
+                     && string.Equals(f.Parameter, "pli", StringComparison.OrdinalIgnoreCase)),
             LocalEndPoint = new IPEndPoint(localEndPoint.Address, videoOptions.Port),
             RemoteEndPoint = new IPEndPoint(remoteIp, video.Port),
         };
