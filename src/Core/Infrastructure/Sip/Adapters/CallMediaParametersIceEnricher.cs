@@ -58,7 +58,8 @@ internal static class CallMediaParametersIceEnricher
             RemoteIcePwd = parameters.RemoteIcePwd,
             RemoteIceOptions = parameters.RemoteIceOptions,
             RemoteIceCandidates = parameters.RemoteIceCandidates,
-            RemoteIceEndOfCandidates = parameters.RemoteIceEndOfCandidates
+            RemoteIceEndOfCandidates = parameters.RemoteIceEndOfCandidates,
+            Video = parameters.Video
         };
     }
 }

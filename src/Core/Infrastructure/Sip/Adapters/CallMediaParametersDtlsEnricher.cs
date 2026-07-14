@@ -72,6 +72,7 @@ internal static class CallMediaParametersDtlsEnricher
             IsSrtcpEncrypted = parameters.IsSrtcpEncrypted,
             SrtpLocalKeyParams = parameters.SrtpLocalKeyParams,
             SrtpRemoteKeyParams = parameters.SrtpRemoteKeyParams,
+            Video = parameters.Video,
             IsDtlsNegotiated = true,
             DtlsIsClient = ResolveIsClient(localSetup, remoteSetup),
             DtlsRemoteFingerprintAlgorithm = remoteFingerprint.Algorithm,

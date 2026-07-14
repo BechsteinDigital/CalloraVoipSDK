@@ -37,12 +37,17 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
                 ? "RTP/SAVP"
                 : "RTP/AVP";
 
+        // Video (WebRTC phase 2): a second m-line when requested. SDES keying is
+        // per-m-line and the video key handling is not wired yet — an SDES-keyed offer
+        // stays audio-only (fail closed) until the video media layer lands.
+        var offerVideo = options?.Video is not null && crypto.Count == 0;
+
         // BUNDLE: session-level group + media-level mid
         string? group = null;
         string? mid = null;
         if (options?.Bundle == true)
         {
-            group = "BUNDLE audio";
+            group = offerVideo ? "BUNDLE audio video" : "BUNDLE audio";
             mid = "audio";
         }
 
@@ -67,13 +72,34 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             DtlsSetup = dtls?.Setup
         };
 
+        var mediaLines = new List<SdpMediaDescription> { media };
+        if (offerVideo)
+        {
+            var video = options!.Video!;
+            mediaLines.Add(new SdpMediaDescription
+            {
+                MediaType = "video",
+                Port = video.Port,
+                Profile = profile,
+                Direction = direction,
+                Codecs = video.Codecs,
+                Fmtp = VideoCodecCatalog.BuildFmtp(video.Codecs),
+                Mid = options.Bundle == true ? "video" : null,
+                RtcpMux = options.RtcpMux == true,
+                Fingerprint = dtls is not null
+                    ? new SdpFingerprint { Algorithm = dtls.Algorithm, Value = dtls.Fingerprint }
+                    : null,
+                DtlsSetup = dtls?.Setup
+            });
+        }
+
         return new SdpSessionDescription
         {
             OriginAddress = host,
             ConnectionAddress = host,
             SessionDirection = direction,
             Group = group,
-            Media = [media],
+            Media = mediaLines,
             SessionId = options?.SessionId ?? 0,
             SessionVersion = options?.SessionVersion ?? 0
         };
@@ -219,13 +245,46 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             Candidates = ice?.Candidates ?? []
         };
 
+        // RFC 3264 §6: the answer must carry one m-line per offered m-line, in offer
+        // order. Video is negotiated when enabled; anything else (or unanswerable
+        // video) is declined with a zero-port mirror.
+        var answerLines = new List<SdpMediaDescription>(remoteOffer.Media.Count);
+        var videoAnswered = false;
+        foreach (var offered in remoteOffer.Media)
+        {
+            if (ReferenceEquals(offered, offeredAudio))
+            {
+                answerLines.Add(answerMedia);
+                continue;
+            }
+
+            // Only the first video m-line is negotiated — a second one (screenshare
+            // pattern) would share the single local video port and break demux.
+            var videoAnswer = videoAnswered
+                ? null
+                : TryNegotiateVideoAnswerMedia(offered, remoteOffer, localOptions, answerDirection);
+            videoAnswered |= videoAnswer is not null;
+            answerLines.Add(videoAnswer ?? BuildDisabledMirror(offered));
+        }
+
+        // BUNDLE (RFC 9143 §7.3.3): the answer group lists only accepted mids —
+        // rejected m-lines must leave the group.
+        if (group is not null)
+        {
+            var acceptedMids = answerLines
+                .Where(m => m.Port > 0 && m.Mid is not null)
+                .Select(m => m.Mid)
+                .ToArray();
+            group = acceptedMids.Length > 0 ? "BUNDLE " + string.Join(' ', acceptedMids) : null;
+        }
+
         var answer = new SdpSessionDescription
         {
             OriginAddress = host,
             ConnectionAddress = host,
             SessionDirection = answerDirection,
             Group = group,
-            Media = [answerMedia],
+            Media = answerLines,
             SessionId = localOptions?.SessionId ?? 0,
             SessionVersion = localOptions?.SessionVersion ?? 0
         };
@@ -350,6 +409,118 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
         }
         return result;
     }
+
+    // -------------------------------------------------------------------------
+    // Video answer (WebRTC phase 2)
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Negotiates the answer m-line for one offered video m-line (RFC 3264 §6 + RFC 6184/
+    /// 7741 codecs at 90 kHz). Returns <see langword="null"/> — a zero-port decline —
+    /// when video is not enabled locally, no codec matches, the offer is SDES-keyed
+    /// (per-m-line video keys are not wired yet), or a DTLS-keyed video m-line cannot
+    /// be answered with a fingerprint.
+    /// </summary>
+    private static SdpMediaDescription? TryNegotiateVideoAnswerMedia(
+        SdpMediaDescription offered,
+        SdpSessionDescription remoteOffer,
+        SdpMediaOptions? localOptions,
+        SdpMediaDirection answerDirection)
+    {
+        if (localOptions?.Video is not { } video
+            || !offered.MediaType.Equals("video", StringComparison.OrdinalIgnoreCase)
+            || offered.Disabled
+            || offered.Port <= 0)
+        {
+            return null;
+        }
+
+        // SDES-keyed video is not supported yet — fail closed instead of answering a
+        // keyless secure m-line.
+        var remoteFp = offered.Fingerprint ?? remoteOffer.Fingerprint;
+        if (offered.Crypto.Count > 0 || (IsSdesSecuredProfile(offered.Profile) && remoteFp is null))
+            return null;
+
+        // DTLS-keyed video needs a fingerprinted answer (RFC 5763), same identity as audio.
+        SdpFingerprint? fingerprint = null;
+        string? dtlsSetup = null;
+        if (remoteFp is not null || IsDtlsSecuredProfile(offered.Profile))
+        {
+            if (localOptions.Dtls is null || remoteFp is null)
+                return null;
+
+            fingerprint = new SdpFingerprint
+            {
+                Algorithm = localOptions.Dtls.Algorithm,
+                Value = localOptions.Dtls.Fingerprint
+            };
+            dtlsSetup = ResolveAnswerSetup(offered.DtlsSetup ?? remoteOffer.DtlsSetup);
+        }
+
+        // Name+clock match only — NEVER the static-PT fallback of the audio path:
+        // video PTs are dynamic, a bare PT match would answer a codec the peer never
+        // offered. Payload types mirror the offer (RFC 3264 §6.1).
+        var negotiated = SelectVideoCodecs(offered, video.Codecs);
+        if (negotiated.Count == 0)
+            return null;
+
+        var acceptedPts = new HashSet<int>(negotiated.Select(c => c.PayloadType));
+        return new SdpMediaDescription
+        {
+            MediaType = "video",
+            Port = video.Port,
+            Profile = ResolveAnswerProfile(offered.Profile),
+            Codecs = negotiated,
+            Direction = ResolveAnswerDirection(offered.Direction, answerDirection),
+            Fmtp = offered.Fmtp.Where(f => acceptedPts.Contains(f.PayloadType)).ToArray(),
+            Mid = offered.Mid,
+            RtcpMux = offered.RtcpMux,
+            Fingerprint = fingerprint,
+            DtlsSetup = dtlsSetup
+        };
+    }
+
+    /// <summary>
+    /// Intersects offered video codecs with the local capability set by name and clock
+    /// rate. H.264 additionally requires an explicit <c>packetization-mode=1</c> fmtp —
+    /// the packetisation layer always fragments large NALs as FU-A, which a mode-0-only
+    /// peer (packetization-mode absent or 0, RFC 6184 §8.1) cannot receive.
+    /// </summary>
+    private static IReadOnlyList<SdpCodecDefinition> SelectVideoCodecs(
+        SdpMediaDescription offered,
+        IReadOnlyList<SdpCodecDefinition> localCodecs)
+    {
+        return offered.Codecs.Where(IsAcceptable).ToArray();
+
+        bool IsAcceptable(SdpCodecDefinition candidate)
+        {
+            if (!VideoCodecCatalog.IsSupported(candidate.Name))
+                return false;
+            if (!localCodecs.Any(local =>
+                    local.Name.Equals(candidate.Name, StringComparison.OrdinalIgnoreCase)
+                    && local.ClockRate == candidate.ClockRate))
+            {
+                return false;
+            }
+
+            return !candidate.Name.Equals("H264", StringComparison.OrdinalIgnoreCase)
+                   || VideoCodecCatalog.HasPacketizationMode1(offered.Fmtp, candidate.PayloadType);
+        }
+    }
+
+    /// <summary>
+    /// Declines one offered m-line with the RFC 3264 §6 zero-port mirror (media type,
+    /// profile, and formats preserved so the answer stays structurally valid).
+    /// </summary>
+    private static SdpMediaDescription BuildDisabledMirror(SdpMediaDescription offered) => new()
+    {
+        MediaType = offered.MediaType,
+        Port = 0,
+        Profile = offered.Profile,
+        Codecs = offered.Codecs,
+        Mid = offered.Mid,
+        Direction = SdpMediaDirection.Inactive
+    };
 
     // -------------------------------------------------------------------------
     // Disabled answer (zero-port mirror)

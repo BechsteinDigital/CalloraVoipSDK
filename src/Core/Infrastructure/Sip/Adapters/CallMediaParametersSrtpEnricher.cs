@@ -58,6 +58,7 @@ internal static class CallMediaParametersSrtpEnricher
             RemoteIceOptions = parameters.RemoteIceOptions,
             RemoteIceCandidates = parameters.RemoteIceCandidates,
             RemoteIceEndOfCandidates = parameters.RemoteIceEndOfCandidates,
+            Video = parameters.Video,
             AppliedSrtpPolicy = appliedPolicy,
             SrtpDecisionReasonCode = reasonCode,
             SrtpSuite = sdesUsable ? remoteCrypto!.CryptoSuite : null,
