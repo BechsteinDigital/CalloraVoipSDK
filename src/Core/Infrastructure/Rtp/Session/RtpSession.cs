@@ -36,6 +36,15 @@ internal sealed class RtpSession : IRtpSession
     // packet sequence, so out-of-order protection of concurrent sends would corrupt it.
     private readonly object _srtpProtectSync = new();
 
+    // Security contexts. Fixed from options for SDES/plain calls; the DTLS-SRTP path
+    // installs them once after the handshake via InstallSecurityContexts. Written once
+    // by the handshake thread, read per packet by the receive loop and senders —
+    // reference reads/writes are atomic, Volatile ensures visibility.
+    private ISrtpContext? _outboundSrtp;
+    private ISrtpContext? _inboundSrtp;
+    private ISrtcpContext? _outboundSrtcp;
+    private ISrtcpContext? _inboundSrtcp;
+
     private ushort _sequenceNumber;
     private uint _timestamp;
     private Task? _receiveLoop;
@@ -91,6 +100,11 @@ internal sealed class RtpSession : IRtpSession
         _codec   = codec;
         _logger  = logger;
         _ssrc    = options.Ssrc ?? (uint)Random.Shared.Next();
+
+        _outboundSrtp  = options.OutboundSrtp;
+        _inboundSrtp   = options.InboundSrtp;
+        _outboundSrtcp = options.OutboundSrtcp;
+        _inboundSrtcp  = options.InboundSrtcp;
 
         // Random initial sequence number and timestamp offset (RFC 3550 §5.1)
         _sequenceNumber = (ushort)Random.Shared.Next(ushort.MaxValue);
@@ -186,8 +200,26 @@ internal sealed class RtpSession : IRtpSession
 
         // SRTCP (RFC 3711 §3.4): encrypt + authenticate the RTCP datagram before it leaves
         // the socket when a context is negotiated; otherwise send plain RTCP.
-        if (_options.OutboundSrtcp is { } outboundSrtcp)
-            datagram = outboundSrtcp.ProtectRtcp(datagram.Span);
+        if (Volatile.Read(ref _outboundSrtcp) is { } outboundSrtcp)
+        {
+            try
+            {
+                datagram = outboundSrtcp.ProtectRtcp(datagram.Span);
+            }
+            catch (ObjectDisposedException)
+            {
+                // A send racing session teardown after the context owner zeroed the keys —
+                // suppress the packet; never fall through to a plain-RTCP send.
+                _logger.LogDebug("Suppressing outbound RTCP: SRTCP context disposed during teardown.");
+                return;
+            }
+        }
+        else if (_options.RequireEncryptedMedia)
+        {
+            // Fail closed (DTLS-SRTP before handshake completion): never leak plain RTCP.
+            _logger.LogDebug("Suppressing outbound RTCP: encrypted media required but no SRTCP context installed yet.");
+            return;
+        }
 
         await _udp.SendAsync(datagram, Volatile.Read(ref _latchedRemoteEndPoint) ?? _options.RemoteEndPoint, cancellationToken).ConfigureAwait(false);
     }
@@ -212,6 +244,30 @@ internal sealed class RtpSession : IRtpSession
     {
         ArgumentNullException.ThrowIfNull(destination);
         await _udp.SendAsync(datagram, destination, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Installs the SRTP/SRTCP contexts negotiated after session start (DTLS-SRTP: keys
+    /// exist only once the handshake completed, RFC 5764 §4.2). Intended to be called
+    /// exactly once by the DTLS attachment; together with
+    /// <see cref="RtpSessionOptions.RequireEncryptedMedia"/> the session is fail-closed
+    /// until this point. The caller retains ownership (disposal) of the contexts.
+    /// </summary>
+    internal void InstallSecurityContexts(
+        ISrtpContext outboundSrtp,
+        ISrtpContext inboundSrtp,
+        ISrtcpContext outboundSrtcp,
+        ISrtcpContext inboundSrtcp)
+    {
+        ArgumentNullException.ThrowIfNull(outboundSrtp);
+        ArgumentNullException.ThrowIfNull(inboundSrtp);
+        ArgumentNullException.ThrowIfNull(outboundSrtcp);
+        ArgumentNullException.ThrowIfNull(inboundSrtcp);
+
+        Volatile.Write(ref _outboundSrtp, outboundSrtp);
+        Volatile.Write(ref _inboundSrtp, inboundSrtp);
+        Volatile.Write(ref _outboundSrtcp, outboundSrtcp);
+        Volatile.Write(ref _inboundSrtcp, inboundSrtcp);
     }
 
     /// <summary>
@@ -321,7 +377,15 @@ internal sealed class RtpSession : IRtpSession
             // negotiated. UnprotectRtcp returns a fresh array; on plain RTCP we copy, since the
             // receive buffer is reused and RTCP handlers may parse/queue asynchronously.
             byte[] rtcpDatagram;
-            if (_options.InboundSrtcp is { } inboundSrtcp)
+            if (_options.RequireEncryptedMedia && Volatile.Read(ref _inboundSrtcp) is null)
+            {
+                // Fail closed (DTLS-SRTP before handshake completion): a keyed call must
+                // never interpret unauthenticated RTCP.
+                _logger.LogDebug("Dropping inbound RTCP from {Source}: encrypted media required but no SRTCP context installed yet.", source);
+                return;
+            }
+
+            if (Volatile.Read(ref _inboundSrtcp) is { } inboundSrtcp)
             {
                 try
                 {
@@ -337,11 +401,13 @@ internal sealed class RtpSession : IRtpSession
                     _logger.LogDebug("Dropping replayed SRTCP packet from {Source}.", source);
                     return;
                 }
-                catch (Exception ex) when (ex is ArgumentException or CryptographicException)
+                catch (Exception ex) when (ex is ArgumentException or CryptographicException or ObjectDisposedException)
                 {
                     // A too-short or otherwise malformed RTCP-looking datagram (it passed the
                     // version/PT demux but not the SRTCP length/parse) must be a clean drop —
                     // an uncaught throw here would terminate the whole receive loop (DoS).
+                    // ObjectDisposedException covers a receive racing session teardown while
+                    // the context owner (DTLS attachment) already zeroed the keys.
                     _logger.LogDebug("Dropping malformed SRTCP packet from {Source}: {Message}", source, ex.Message);
                     return;
                 }
@@ -365,7 +431,15 @@ internal sealed class RtpSession : IRtpSession
         // SRTP (RFC 3711): authenticate and decrypt before any RTP interpretation.
         // A packet failing the auth tag or replay check is dropped here — it never
         // reaches the codec, the jitter buffer, or the symmetric-RTP latch.
-        if (_options.InboundSrtp is { } inboundSrtp)
+        if (_options.RequireEncryptedMedia && Volatile.Read(ref _inboundSrtp) is null)
+        {
+            // Fail closed (DTLS-SRTP before handshake completion): a keyed call must never
+            // accept plaintext RTP — it would also poison the symmetric-RTP latch.
+            _logger.LogDebug("Dropping inbound RTP from {Source}: encrypted media required but no SRTP context installed yet.", source);
+            return;
+        }
+
+        if (Volatile.Read(ref _inboundSrtp) is { } inboundSrtp)
         {
             try
             {
@@ -381,11 +455,13 @@ internal sealed class RtpSession : IRtpSession
                 _logger.LogDebug("Dropping replayed SRTP packet from {Source}.", source);
                 return;
             }
-            catch (Exception ex) when (ex is ArgumentException or CryptographicException)
+            catch (Exception ex) when (ex is ArgumentException or CryptographicException or ObjectDisposedException)
             {
                 // A too-short or malformed RTP-looking datagram (it passed the STUN/RTCP demux
                 // but is shorter than 12 + auth-tag, or has a malformed header) must be a clean
                 // drop — an uncaught throw here would terminate the whole receive loop (DoS).
+                // ObjectDisposedException covers a receive racing session teardown while the
+                // context owner (DTLS attachment) already zeroed the keys.
                 _logger.LogDebug("Dropping undecryptable SRTP packet from {Source}: {Message}", source, ex.Message);
                 return;
             }
@@ -562,10 +638,26 @@ internal sealed class RtpSession : IRtpSession
         // SRTP (RFC 3711): protect the full RTP packet with our negotiated key. The
         // context tracks the rollover counter from sequence numbers, so concurrent
         // sends must serialize protection.
-        if (_options.OutboundSrtp is { } outboundSrtp)
+        if (Volatile.Read(ref _outboundSrtp) is { } outboundSrtp)
         {
-            lock (_srtpProtectSync)
-                datagram = outboundSrtp.Protect(datagram);
+            try
+            {
+                lock (_srtpProtectSync)
+                    datagram = outboundSrtp.Protect(datagram);
+            }
+            catch (ObjectDisposedException)
+            {
+                // A send racing session teardown after the context owner zeroed the keys —
+                // suppress the packet; never fall through to an unprotected send.
+                _logger.LogDebug("Suppressing outbound RTP: SRTP context disposed during teardown.");
+                return;
+            }
+        }
+        else if (_options.RequireEncryptedMedia)
+        {
+            // Fail closed (DTLS-SRTP before handshake completion): never leak plain media.
+            _logger.LogDebug("Suppressing outbound RTP: encrypted media required but no SRTP context installed yet.");
+            return;
         }
 
         await _udp.SendAsync(datagram, Volatile.Read(ref _latchedRemoteEndPoint) ?? _options.RemoteEndPoint, cancellationToken).ConfigureAwait(false);

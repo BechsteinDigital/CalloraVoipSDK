@@ -63,4 +63,14 @@ internal sealed class RtpSessionOptions
     /// authentication or replay checks are dropped.
     /// </summary>
     public ISrtcpContext? InboundSrtcp { get; init; }
+
+    /// <summary>
+    /// Fail-closed switch for keyed-but-not-yet-ready media (DTLS-SRTP, RFC 5763 §6.7.1):
+    /// while no security contexts are installed, inbound RTP/RTCP is dropped instead of
+    /// being interpreted as plaintext, and outbound media/RTCP sends are suppressed.
+    /// Contexts arrive later via <see cref="RtpSession.InstallSecurityContexts"/> once the
+    /// DTLS handshake exported keys. <see langword="false"/> keeps the SDES/plain-RTP
+    /// behaviour where null contexts mean unencrypted media.
+    /// </summary>
+    public bool RequireEncryptedMedia { get; init; }
 }
