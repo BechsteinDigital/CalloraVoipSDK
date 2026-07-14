@@ -24,6 +24,7 @@ internal sealed class VideoKeyFrameFeedback
     private readonly bool _remoteSupportsPli;
     private readonly Func<ReadOnlyMemory<byte>, CancellationToken, ValueTask> _sendControl;
     private readonly Action _onKeyFrameRequested;
+    private readonly Action<IReadOnlyList<ushort>> _onRetransmitRequested;
     private readonly ILogger _logger;
     private readonly CancellationToken _lifetime;
 
@@ -36,12 +37,14 @@ internal sealed class VideoKeyFrameFeedback
         bool remoteSupportsPli,
         Func<ReadOnlyMemory<byte>, CancellationToken, ValueTask> sendControl,
         Action onKeyFrameRequested,
+        Action<IReadOnlyList<ushort>> onRetransmitRequested,
         ILogger logger,
         CancellationToken lifetime)
     {
         ArgumentNullException.ThrowIfNull(codec);
         ArgumentNullException.ThrowIfNull(sendControl);
         ArgumentNullException.ThrowIfNull(onKeyFrameRequested);
+        ArgumentNullException.ThrowIfNull(onRetransmitRequested);
         ArgumentNullException.ThrowIfNull(logger);
         _codec = codec;
         _localSsrc = localSsrc;
@@ -49,6 +52,7 @@ internal sealed class VideoKeyFrameFeedback
         _remoteSupportsPli = remoteSupportsPli;
         _sendControl = sendControl;
         _onKeyFrameRequested = onKeyFrameRequested;
+        _onRetransmitRequested = onRetransmitRequested;
         _logger = logger;
         _lifetime = lifetime;
     }
@@ -83,6 +87,22 @@ internal sealed class VideoKeyFrameFeedback
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Unhandled exception in video KeyFrameRequested handler.");
+            }
+        }
+
+        // A Generic NACK names packets the peer lost — hand them to the retransmit path
+        // (RFC 4588 RTX). The consumer resends whatever is still in its send buffer.
+        var lost = packets.OfType<RtcpGenericNack>().SelectMany(n => n.LostSequenceNumbers()).ToArray();
+        if (lost.Length > 0)
+        {
+            _logger.LogDebug("Received a video NACK for {Count} packet(s).", lost.Length);
+            try
+            {
+                _onRetransmitRequested(lost);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unhandled exception in video retransmit handler.");
             }
         }
     }

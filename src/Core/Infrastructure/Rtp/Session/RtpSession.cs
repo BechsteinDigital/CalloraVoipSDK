@@ -108,6 +108,13 @@ internal sealed class RtpSession : IRtpSession
     /// </summary>
     internal event Action<RtpPacket>? SecondaryPacketReceived;
 
+    /// <summary>
+    /// Raised after each primary-stream RTP packet is successfully sent, carrying the packet
+    /// that went out. Lets a retransmit buffer (RFC 4588 RTX) retain it verbatim for a later
+    /// NACK-driven resend. Not raised for RTX resends (<see cref="SendSecondaryAsync"/>).
+    /// </summary>
+    internal event Action<RtpPacket>? PacketSent;
+
     public RtpSession(RtpSessionOptions options, IRtpPacketCodec codec, ILogger<RtpSession> logger)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -707,6 +714,7 @@ internal sealed class RtpSession : IRtpSession
         StunPacketReceived = null;
         DtlsPacketReceived = null;
         SecondaryPacketReceived = null;
+        PacketSent = null;
     }
 
     // RFC 7983 / RFC 5764 §5.1.2 demux: a STUN packet's first byte is in 0..3, disjoint from
@@ -819,5 +827,16 @@ internal sealed class RtpSession : IRtpSession
         Interlocked.Add(ref _octetsSent, payload.Length);
         Volatile.Write(ref _lastSentTimestamp, unchecked((int)timestamp));
         Volatile.Write(ref _hasSentPackets, 1);
+
+        // Notify after a successful send so a retransmit buffer (RFC 4588 RTX) can retain the
+        // exact packet that went out. Fired for primary-stream sends only, not RTX resends.
+        try
+        {
+            PacketSent?.Invoke(packet);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled exception in RTP PacketSent handler.");
+        }
     }
 }

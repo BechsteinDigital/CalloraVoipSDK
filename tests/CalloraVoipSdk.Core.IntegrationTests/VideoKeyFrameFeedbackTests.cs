@@ -133,9 +133,38 @@ public sealed class VideoKeyFrameFeedbackTests
         Assert.Equal(missing, nack.LostSequenceNumbers().ToArray());
     }
 
+    [Fact]
+    public void Inbound_nack_hands_the_lost_sequence_numbers_to_the_retransmit_path()
+    {
+        List<ushort>? requested = null;
+        var feedback = CreateFeedback(() => { }, out _, onRetransmitRequested: seqs => requested = seqs.ToList());
+
+        feedback.OnControlDatagram(Codec.Encode([new RtcpGenericNack
+        {
+            SenderSsrc = 1,
+            MediaSsrc = LocalSsrc,
+            Entries = [new RtcpNackEntry { PacketId = 500, LostPacketBitmask = 0b0000_0000_0000_0101 }],
+        }]));
+
+        Assert.Equal((ushort[])[500, 501, 503], requested?.ToArray());
+    }
+
+    [Fact]
+    public void Inbound_pli_does_not_trigger_the_retransmit_path()
+    {
+        var retransmits = 0;
+        var feedback = CreateFeedback(() => { }, out _, onRetransmitRequested: _ => retransmits++);
+
+        feedback.OnControlDatagram(Codec.Encode(
+            [new RtcpPictureLossIndication { SenderSsrc = 1, MediaSsrc = LocalSsrc }]));
+
+        Assert.Equal(0, retransmits);
+    }
+
     private static VideoKeyFrameFeedback CreateFeedback(
         Action onKeyFrameRequested, out List<byte[]> sentDatagrams,
-        bool supportsNack = false, bool supportsPli = true)
+        bool supportsNack = false, bool supportsPli = true,
+        Action<IReadOnlyList<ushort>>? onRetransmitRequested = null)
     {
         var sent = new List<byte[]>();
         sentDatagrams = sent;
@@ -150,6 +179,7 @@ public sealed class VideoKeyFrameFeedbackTests
                 return ValueTask.CompletedTask;
             },
             onKeyFrameRequested,
+            onRetransmitRequested ?? (_ => { }),
             NullLogger.Instance,
             CancellationToken.None);
     }
