@@ -11,6 +11,12 @@ internal enum RtcpPacketType : byte
     Bye            = 203,
     App            = 204,
 
+    /// <summary>Transport-layer feedback (RTPFB, PT=205) — RFC 4585 §6.2 (Generic NACK).</summary>
+    TransportFeedback = 205,
+
+    /// <summary>Payload-specific feedback (PSFB, PT=206) — RFC 4585 §6.3 (PLI) / RFC 5104 §4.3 (FIR).</summary>
+    PayloadFeedback   = 206,
+
     /// <summary>Extended Report (XR, PT=207) — RFC 3611.</summary>
     ExtendedReport = 207,
 }
