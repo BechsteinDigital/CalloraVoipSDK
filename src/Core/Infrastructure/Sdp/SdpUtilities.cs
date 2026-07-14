@@ -594,6 +594,7 @@ internal static class SdpUtilities
                         : SdesCryptoSelector.BuildDefaultOffer()]
                     : [],
                 Candidates = MapToSdpCandidates(videoOptions.Candidates),
+                HeaderExtensionUris = videoOptions.HeaderExtensionUris,
             }
             : null;
 

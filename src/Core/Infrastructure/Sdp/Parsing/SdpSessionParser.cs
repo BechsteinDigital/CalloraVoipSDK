@@ -167,6 +167,15 @@ internal sealed class SdpSessionParser : ISdpSessionParser
                 break;
             }
 
+            // --- RTP header extension mapping (RFC 8285 §5) ---
+            case "extmap" when current is not null:
+            {
+                var extmap = SdpExtmap.TryParse(attrValue);
+                if (extmap is not null)
+                    current.Extensions.Add(extmap);
+                break;
+            }
+
             // --- ptime / maxptime ---
             case "ptime" when current is not null && int.TryParse(attrValue, out var ptime):
                 current.Ptime = ptime;
