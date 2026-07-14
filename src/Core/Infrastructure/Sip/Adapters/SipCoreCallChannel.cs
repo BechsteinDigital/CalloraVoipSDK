@@ -19,7 +19,7 @@ namespace CalloraVoipSdk.Core.Infrastructure.Sip.Adapters;
 /// Fires <see cref="ICallChannel.MediaParametersNegotiated"/> once the SDP exchange
 /// is complete so the application media orchestrator can set up RTP I/O.
 /// </summary>
-internal sealed class SipCoreCallChannel : ICallChannel
+internal sealed partial class SipCoreCallChannel : ICallChannel
 {
     private readonly ILogger<SipCoreCallChannel> _logger;
     private readonly ISdpNegotiator _sdpNegotiator;
@@ -40,6 +40,14 @@ internal sealed class SipCoreCallChannel : ICallChannel
     // Pre-allocated local UDP socket so the port is known before the SDP offer is built.
     private readonly UdpClient _localMediaSocket;
     private readonly int _localMediaPort;
+
+    // Video (WebRTC phase 2): a second reserved UDP socket/port for the m=video line,
+    // present only when video is enabled. Released before the video RtpSession binds it,
+    // exactly like the audio port-reservation socket.
+    private readonly UdpClient? _localVideoSocket;
+    private readonly int _localVideoPort;
+    private readonly bool _videoEnabled;
+    private readonly IReadOnlyList<string>? _videoCodecNames;
 
     private Action<CallState>? _onStateChange;
     private Action<byte, int>? _onDtmf;
@@ -117,10 +125,14 @@ internal sealed class SipCoreCallChannel : ICallChannel
         IReadOnlyList<string>? preferredCodecNames = null,
         IPAddress? advertisedPublicMediaAddress = null,
         SdpDtlsNegotiationOptions? dtlsOptions = null,
-        bool offerDtlsSrtp = false)
+        bool offerDtlsSrtp = false,
+        bool enableVideo = false,
+        IReadOnlyList<string>? preferredVideoCodecNames = null)
     {
         _dtlsOptions = dtlsOptions;
         _offerDtlsSrtp = offerDtlsSrtp && dtlsOptions is not null;
+        _videoEnabled = enableVideo;
+        _videoCodecNames = preferredVideoCodecNames;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _sdpNegotiator = sdpNegotiator ?? throw new ArgumentNullException(nameof(sdpNegotiator));
         _iceAgent = iceAgent;
@@ -135,6 +147,12 @@ internal sealed class SipCoreCallChannel : ICallChannel
         // Bind on any address, port 0 → OS assigns a free port.
         _localMediaSocket = new UdpClient(new IPEndPoint(IPAddress.Any, 0));
         _localMediaPort = ((IPEndPoint)_localMediaSocket.Client.LocalEndPoint!).Port;
+
+        if (_videoEnabled)
+        {
+            _localVideoSocket = new UdpClient(new IPEndPoint(IPAddress.Any, 0));
+            _localVideoPort = ((IPEndPoint)_localVideoSocket.Client.LocalEndPoint!).Port;
+        }
     }
 
     /// <summary>
@@ -316,26 +334,6 @@ internal sealed class SipCoreCallChannel : ICallChannel
     }
 
     /// <summary>
-    /// SDP options for a hold/unhold re-offer. Keeps SDES SRTP alive on a running secure
-    /// call by re-advertising the live outbound key (no rekey, no downgrade to plain RTP);
-    /// a plain call re-offers plain RTP unchanged.
-    /// </summary>
-    private SdpMediaNegotiationOptions BuildReofferSdpOptions()
-    {
-        // A re-offer conserves the call's established keying, never the initial-offer
-        // preference: a DTLS-keyed call re-offers DTLS (fingerprint + actpass) so the
-        // peer keeps the association; SDES calls re-advertise the live key instead —
-        // forcing DTLS onto an established SDES/plain call would break hold/unhold
-        // against non-DTLS peers.
-        var srtpKey = _activeLocalSrtpKeyParams;
-        var reofferDtls = _dtlsActiveOnCall;
-        return BuildLocalSdpOptions(
-            offerSrtpCrypto: srtpKey is not null && !reofferDtls,
-            offerSrtpKeyParams: srtpKey,
-            offerDtls: reofferDtls);
-    }
-
-    /// <summary>
     /// Ensures local ICE credentials/candidates are prepared before SDP generation.
     /// </summary>
     private async Task EnsureLocalIceDescriptionAsync(IPEndPoint localEndPoint, CancellationToken ct)
@@ -359,57 +357,6 @@ internal sealed class SipCoreCallChannel : ICallChannel
             _logger.LogWarning(ex, "Failed to gather local ICE description for endpoint {LocalEndPoint}.", localEndPoint);
             _localIceDescription = null;
         }
-    }
-
-    /// <summary>
-    /// Creates optional SDP negotiation options from the currently gathered local ICE description.
-    /// </summary>
-    private SdpMediaNegotiationOptions? BuildSdpOptions()
-    {
-        if (_localIceDescription is null && _preferredCodecNames is null)
-            return null;
-
-        return new SdpMediaNegotiationOptions
-        {
-            Ice = _localIceDescription is null
-                ? null
-                : new SdpIceNegotiationOptions
-                {
-                    Ufrag = _localIceDescription.Ufrag,
-                    Pwd = _localIceDescription.Pwd,
-                    Options = _localIceDescription.Options,
-                    Candidates = _localIceDescription.Candidates
-                },
-            PreferredCodecNames = _preferredCodecNames
-        };
-    }
-
-    /// <summary>
-    /// SDP options for a locally originated description (offer/answer/hold/unhold). Carries
-    /// the stable per-leg origin session id and a session version incremented on every call —
-    /// each represents a media change the peer must detect (RFC 4566 §5.2 / RFC 3264 §5).
-    /// Retransmissions reuse the already-built SDP string and never call this, so the version
-    /// stays put when nothing changed.
-    /// </summary>
-    private SdpMediaNegotiationOptions BuildLocalSdpOptions(
-        bool offerSrtpCrypto = false,
-        string? offerSrtpKeyParams = null,
-        bool offerDtls = false)
-    {
-        var baseOptions = BuildSdpOptions();
-        return new SdpMediaNegotiationOptions
-        {
-            Ice = baseOptions?.Ice,
-            PreferredCodecNames = baseOptions?.PreferredCodecNames ?? _preferredCodecNames,
-            OfferSrtpCrypto = offerSrtpCrypto,
-            OfferSrtpKeyParams = offerSrtpKeyParams,
-            // Identity always travels along: the answer path needs it to respond to a
-            // DTLS offer even when we would not offer DTLS ourselves.
-            Dtls = _dtlsOptions,
-            OfferDtlsSrtp = offerDtls,
-            SessionId = _sdpSessionId,
-            SessionVersion = Interlocked.Increment(ref _sdpSessionVersion)
-        };
     }
 
     /// <summary>
@@ -723,11 +670,12 @@ internal sealed class SipCoreCallChannel : ICallChannel
             "Firing MediaParametersNegotiated for call {CallId}: local={Local} remote={Remote} PT={PT}",
             session.CallId, enrichedParameters.LocalEndPoint, enrichedParameters.RemoteEndPoint, enrichedParameters.PayloadType);
 
-        // Release the port-reservation socket so RtpSession can bind the same port.
-        // UdpClient.Dispose is idempotent; Dispose() below will safely call it again.
+        // Release the port-reservation sockets so the audio and video RtpSessions can bind
+        // the same ports. UdpClient.Dispose is idempotent; Dispose() below calls it again.
         try
         {
             _localMediaSocket.Dispose();
+            _localVideoSocket?.Dispose();
         }
         catch (Exception ex)
         {
@@ -952,6 +900,7 @@ internal sealed class SipCoreCallChannel : ICallChannel
         }
 
         _localMediaSocket.Dispose();
+        _localVideoSocket?.Dispose();
 
         lock (_audioSync) _audioListeners.Clear();
         lock (_callbackSync)

@@ -306,7 +306,9 @@ public sealed class VoipClient : IVoipClient
                 logFactory,
                 config.PreferredAudioCodecs,
                 dtlsSignalingOptions,
-                config.OfferDtlsSrtp);
+                config.OfferDtlsSrtp,
+                config.EnableVideo,
+                config.PreferredVideoCodecs);
 
             return new PhoneLine(
                 account,

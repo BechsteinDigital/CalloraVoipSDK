@@ -29,6 +29,8 @@ internal sealed class SipLineChannel : ILineChannel
     private readonly IReadOnlyList<string>? _preferredCodecNames;
     private readonly SdpDtlsNegotiationOptions? _dtlsOptions;
     private readonly bool _offerDtlsSrtp;
+    private readonly bool _enableVideo;
+    private readonly IReadOnlyList<string>? _preferredVideoCodecNames;
     private readonly ILogger<SipLineChannel> _logger;
     private readonly ILogger<SipCoreCallChannel> _callChannelLogger;
     private readonly object _sync = new();
@@ -68,10 +70,14 @@ internal sealed class SipLineChannel : ILineChannel
         ILoggerFactory loggerFactory,
         IReadOnlyList<string>? preferredCodecNames = null,
         SdpDtlsNegotiationOptions? dtlsOptions = null,
-        bool offerDtlsSrtp = false)
+        bool offerDtlsSrtp = false,
+        bool enableVideo = false,
+        IReadOnlyList<string>? preferredVideoCodecNames = null)
     {
         _dtlsOptions = dtlsOptions;
         _offerDtlsSrtp = offerDtlsSrtp && dtlsOptions is not null;
+        _enableVideo = enableVideo;
+        _preferredVideoCodecNames = preferredVideoCodecNames;
         _account = account ?? throw new ArgumentNullException(nameof(account));
         _userAgent = string.IsNullOrWhiteSpace(userAgent) ? "CalloraVoipSdk/1.0" : userAgent;
         _registrationService = registrationService ?? throw new ArgumentNullException(nameof(registrationService));
@@ -204,7 +210,9 @@ internal sealed class SipLineChannel : ILineChannel
             _preferredCodecNames,
             PublicMediaAddress,
             _dtlsOptions,
-            _offerDtlsSrtp);
+            _offerDtlsSrtp,
+            _enableVideo,
+            _preferredVideoCodecNames);
     }
 
     /// <summary>
@@ -326,7 +334,9 @@ internal sealed class SipLineChannel : ILineChannel
             _preferredCodecNames,
             PublicMediaAddress,
             _dtlsOptions,
-            _offerDtlsSrtp);
+            _offerDtlsSrtp,
+            _enableVideo,
+            _preferredVideoCodecNames);
         channel.AttachSession(args.Session);
 
         try
