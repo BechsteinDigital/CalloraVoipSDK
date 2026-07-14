@@ -487,23 +487,30 @@ internal static class SdpUtilities
         if (video is null)
             return null;
 
-        // Fail closed, matching the negotiator: a secure video m-line with no usable keying is
-        // declined. SDES a=crypto with an answerable suite is accepted (the key material is
-        // recovered downstream by the SRTP enricher); a DTLS m-line needs a fingerprint. An
-        // a=crypto whose suite we cannot answer, or a keyless SAVP profile, is keyless → decline.
+        // Fail closed, in sync with the negotiator. SDES a=crypto keys the m-line only on a
+        // non-DTLS profile (a DTLS profile is fingerprint-keyed; any a=crypto on it is ignored,
+        // RFC 5763). Accepted keying: an answerable SDES a=crypto (keys recovered downstream by
+        // the SRTP enricher), or a DTLS fingerprint with a local identity. A DTLS m-line without
+        // a fingerprint/identity, a keyless SAVP profile, or an a=crypto whose suite we cannot
+        // answer is keyless → decline.
         var remoteFp = video.Fingerprint ?? parsed.Fingerprint;
-        var sdesAnswerable = video.Crypto.Any(
-            c => SdesCryptoSelector.TryMapSuite(c.CryptoSuite) is not null
-                 && c.KeyParams.StartsWith("inline:", StringComparison.OrdinalIgnoreCase));
-        if (!sdesAnswerable
-            && (video.Crypto.Count > 0
-                || (SdpSecurityInspector.IsSecureProfile(video.Profile) && remoteFp is null)))
-        {
-            return null;
-        }
+        var sdesAnswerable = !SdpSecurityInspector.IsDtlsProfile(video.Profile)
+            && video.Crypto.Any(
+                c => SdesCryptoSelector.TryMapSuite(c.CryptoSuite) is not null
+                     && c.KeyParams.StartsWith("inline:", StringComparison.OrdinalIgnoreCase));
 
-        if (!sdesAnswerable && remoteFp is not null && localOptions.Dtls is null)
-            return null;
+        if (!sdesAnswerable)
+        {
+            if (SdpSecurityInspector.IsDtlsProfile(video.Profile) || remoteFp is not null)
+            {
+                if (remoteFp is null || localOptions.Dtls is null)
+                    return null; // DTLS keying without a fingerprint or a local identity
+            }
+            else if (SdpSecurityInspector.IsSecureProfile(video.Profile) || video.Crypto.Count > 0)
+            {
+                return null; // keyless SAVP, or an a=crypto we could not answer via SDES
+            }
+        }
 
         var localCodecs = VideoCodecCatalog.Resolve(videoOptions.PreferredCodecNames);
         var match = video.Codecs.FirstOrDefault(offered =>

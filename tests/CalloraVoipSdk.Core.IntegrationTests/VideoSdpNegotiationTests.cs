@@ -143,6 +143,54 @@ public sealed class VideoSdpNegotiationTests
     }
 
     [Fact]
+    public void Dtls_video_offer_with_a_stray_crypto_is_answered_via_dtls_not_sdes()
+    {
+        // RFC 5763: a DTLS profile is fingerprint-keyed; an a=crypto line on it is ignored,
+        // never answered SDES-keyed.
+        var identity = new SdpDtlsNegotiationOptions
+        {
+            FingerprintAlgorithm = "sha-256",
+            FingerprintValue = string.Join(':', Enumerable.Repeat("AB", 32)),
+        };
+        var inlineKey = Convert.ToBase64String(new byte[30]);
+        var offer =
+            "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\ns=peer\r\nc=IN IP4 127.0.0.1\r\nt=0 0\r\n"
+            + $"a=fingerprint:sha-256 {string.Join(':', Enumerable.Repeat("CD", 32))}\r\na=setup:actpass\r\n"
+            + "m=audio 5002 UDP/TLS/RTP/SAVPF 0\r\na=rtpmap:0 PCMU/8000\r\n"
+            + "m=video 5004 UDP/TLS/RTP/SAVPF 96\r\na=rtpmap:96 VP8/90000\r\n"
+            + $"a=crypto:1 AES_CM_128_HMAC_SHA1_80 inline:{inlineKey}\r\n";
+
+        var answer = SdpUtilities.TryBuildNegotiatedAnswer(
+            offer, LocalAudio, hold: false,
+            new SdpMediaNegotiationOptions { Video = VideoOptions(), Dtls = identity });
+
+        Assert.NotNull(answer);
+        Assert.Contains("m=video 41002 UDP/TLS/RTP/SAVPF 96", answer!, StringComparison.Ordinal);
+        var videoSection = answer[answer.IndexOf("m=video", StringComparison.Ordinal)..];
+        Assert.Contains("a=fingerprint:", videoSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("a=crypto:", videoSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Dtls_profile_video_with_crypto_but_no_fingerprint_is_declined()
+    {
+        // Keyless DTLS video (no remote fingerprint) can't be keyed by the stray a=crypto —
+        // decline rather than answer keyless. Audio stays plain so the answer still succeeds.
+        var inlineKey = Convert.ToBase64String(new byte[30]);
+        var offer =
+            "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\ns=peer\r\nc=IN IP4 127.0.0.1\r\nt=0 0\r\n"
+            + "m=audio 5002 RTP/AVP 0\r\na=rtpmap:0 PCMU/8000\r\na=sendrecv\r\n"
+            + "m=video 5004 UDP/TLS/RTP/SAVPF 96\r\na=rtpmap:96 VP8/90000\r\n"
+            + $"a=crypto:1 AES_CM_128_HMAC_SHA1_80 inline:{inlineKey}\r\n";
+
+        var answer = SdpUtilities.TryBuildNegotiatedAnswer(
+            offer, LocalAudio, hold: false, new SdpMediaNegotiationOptions { Video = VideoOptions() });
+
+        Assert.NotNull(answer);
+        Assert.Contains("m=video 0 UDP/TLS/RTP/SAVPF", answer!, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Sdes_video_offer_is_answered_with_its_own_video_crypto()
     {
         var inlineKey = Convert.ToBase64String(new byte[30]);
@@ -265,6 +313,57 @@ public sealed class VideoSdpNegotiationTests
             + "m=audio 5002 RTP/AVP 0\r\na=rtpmap:0 PCMU/8000\r\n"
             + "m=video 5004 RTP/SAVP 96\r\na=rtpmap:96 VP8/90000\r\n"
             + $"a=crypto:1 F8_128_HMAC_SHA1_80 inline:{inlineKey}\r\n"; // real RFC 4568 suite, not implemented
+
+        var parameters = SdpUtilities.TryParseMediaParameters(
+            sdp, LocalAudio, new SdpMediaNegotiationOptions { Video = VideoOptions() });
+
+        Assert.NotNull(parameters);
+        Assert.Null(parameters!.Video);
+    }
+
+    [Fact]
+    public void Media_parameters_resolve_dtls_video_with_stray_crypto_via_dtls()
+    {
+        // A DTLS-profile video m-line carrying a stray a=crypto resolves via DTLS (fingerprint +
+        // local identity), not SDES — in sync with the negotiator.
+        var inlineKey = Convert.ToBase64String(new byte[30]);
+        var sdp =
+            "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\ns=peer\r\nc=IN IP4 127.0.0.1\r\nt=0 0\r\n"
+            + $"a=fingerprint:sha-256 {string.Join(':', Enumerable.Repeat("CD", 32))}\r\n"
+            + "m=audio 5002 UDP/TLS/RTP/SAVPF 0\r\na=rtpmap:0 PCMU/8000\r\n"
+            + "m=video 5004 UDP/TLS/RTP/SAVPF 96\r\na=rtpmap:96 VP8/90000\r\n"
+            + $"a=crypto:1 AES_CM_128_HMAC_SHA1_80 inline:{inlineKey}\r\n";
+
+        var parameters = SdpUtilities.TryParseMediaParameters(
+            sdp, LocalAudio,
+            new SdpMediaNegotiationOptions
+            {
+                Video = VideoOptions(),
+                Dtls = new SdpDtlsNegotiationOptions
+                {
+                    FingerprintAlgorithm = "sha-256",
+                    FingerprintValue = string.Join(':', Enumerable.Repeat("AB", 32)),
+                },
+            });
+
+        Assert.NotNull(parameters);
+        Assert.NotNull(parameters!.Video);
+        Assert.Null(parameters.Video!.SrtpSuite); // keyed via DTLS, not SDES a=crypto
+    }
+
+    [Fact]
+    public void Media_parameters_omit_dtls_video_with_stray_crypto_without_local_identity()
+    {
+        // DTLS-profile video with a stray a=crypto but no local DTLS identity: the crypto is
+        // ignored (DTLS profile), and DTLS can't key without an identity → decline. Mirrors the
+        // negotiator's decline, keeping resolver and negotiator in sync.
+        var inlineKey = Convert.ToBase64String(new byte[30]);
+        var sdp =
+            "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\ns=peer\r\nc=IN IP4 127.0.0.1\r\nt=0 0\r\n"
+            + $"a=fingerprint:sha-256 {string.Join(':', Enumerable.Repeat("CD", 32))}\r\n"
+            + "m=audio 5002 UDP/TLS/RTP/SAVPF 0\r\na=rtpmap:0 PCMU/8000\r\n"
+            + "m=video 5004 UDP/TLS/RTP/SAVPF 96\r\na=rtpmap:96 VP8/90000\r\n"
+            + $"a=crypto:1 AES_CM_128_HMAC_SHA1_80 inline:{inlineKey}\r\n";
 
         var parameters = SdpUtilities.TryParseMediaParameters(
             sdp, LocalAudio, new SdpMediaNegotiationOptions { Video = VideoOptions() });
