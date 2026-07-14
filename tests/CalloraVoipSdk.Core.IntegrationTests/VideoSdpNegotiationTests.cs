@@ -143,7 +143,7 @@ public sealed class VideoSdpNegotiationTests
     }
 
     [Fact]
-    public void Sdes_video_offer_gets_zero_port_mirror_while_audio_negotiates_sdes()
+    public void Sdes_video_offer_is_answered_with_its_own_video_crypto()
     {
         var inlineKey = Convert.ToBase64String(new byte[30]);
         var offer =
@@ -159,7 +159,10 @@ public sealed class VideoSdpNegotiationTests
 
         Assert.NotNull(answer);
         Assert.Contains("m=audio 41000 RTP/SAVP", answer!, StringComparison.Ordinal);
-        Assert.Contains("m=video 0 RTP/SAVP", answer, StringComparison.Ordinal);
+        // The video m-line is now answered (not zero-port) and carries its own SDES crypto.
+        Assert.Contains("m=video 41002 RTP/SAVP 96", answer, StringComparison.Ordinal);
+        var videoSection = answer[answer.IndexOf("m=video", StringComparison.Ordinal)..];
+        Assert.Contains("a=crypto:", videoSection, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -232,15 +235,36 @@ public sealed class VideoSdpNegotiationTests
     }
 
     [Fact]
-    public void Media_parameters_omit_video_for_sdes_keyed_video_mline()
+    public void Media_parameters_resolve_sdes_keyed_video()
     {
-        // Mirrors the negotiator's zero-port decline: never start media the answer refused.
+        // The negotiator now answers SDES video, so its parameters resolve too (in sync).
+        // The SDES key material itself is recovered by the SRTP enricher, not here.
         var inlineKey = Convert.ToBase64String(new byte[30]);
         var sdp =
             "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\ns=peer\r\nc=IN IP4 127.0.0.1\r\nt=0 0\r\n"
             + "m=audio 5002 RTP/AVP 0\r\na=rtpmap:0 PCMU/8000\r\n"
             + "m=video 5004 RTP/SAVP 96\r\na=rtpmap:96 VP8/90000\r\n"
             + $"a=crypto:1 AES_CM_128_HMAC_SHA1_80 inline:{inlineKey}\r\n";
+
+        var parameters = SdpUtilities.TryParseMediaParameters(
+            sdp, LocalAudio, new SdpMediaNegotiationOptions { Video = VideoOptions() });
+
+        Assert.NotNull(parameters);
+        Assert.NotNull(parameters!.Video);
+        Assert.Equal("VP8", parameters.Video!.CodecName);
+    }
+
+    [Fact]
+    public void Media_parameters_omit_video_for_sdes_video_with_unsupported_suite()
+    {
+        // An a=crypto whose suite we cannot answer is keyless-secure → declined, in sync with
+        // the negotiator.
+        var inlineKey = Convert.ToBase64String(new byte[30]);
+        var sdp =
+            "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\ns=peer\r\nc=IN IP4 127.0.0.1\r\nt=0 0\r\n"
+            + "m=audio 5002 RTP/AVP 0\r\na=rtpmap:0 PCMU/8000\r\n"
+            + "m=video 5004 RTP/SAVP 96\r\na=rtpmap:96 VP8/90000\r\n"
+            + $"a=crypto:1 F8_128_HMAC_SHA1_80 inline:{inlineKey}\r\n"; // real RFC 4568 suite, not implemented
 
         var parameters = SdpUtilities.TryParseMediaParameters(
             sdp, LocalAudio, new SdpMediaNegotiationOptions { Video = VideoOptions() });
