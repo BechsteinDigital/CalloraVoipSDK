@@ -486,6 +486,7 @@ internal static class SdpUtilities
             ClockRate = match.ClockRate,
             FormatParameters = video.Fmtp
                 .FirstOrDefault(f => f.PayloadType == match.PayloadType)?.Parameters,
+            RtxPayloadType = VideoCodecCatalog.TryFindRtxPayloadType(video, match.PayloadType),
             LocalEndPoint = new IPEndPoint(localEndPoint.Address, videoOptions.Port),
             RemoteEndPoint = new IPEndPoint(remoteIp, video.Port),
         };
