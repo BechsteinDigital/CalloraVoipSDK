@@ -80,7 +80,7 @@ public sealed class IceMediaAttachmentTriggeredCheckTests
             return ValueTask.CompletedTask;
         }
 
-        await using var attachment = new IceMediaAttachment(IceParameters(), Capture, NullLoggerFactory.Instance);
+        await using var attachment = new IceMediaAttachment(IceMediaParameters.FromCall(IceParameters()), Capture, NullLoggerFactory.Instance);
 
         attachment.OnStunPacketReceived(InboundCheckFromPeer(), newSource);
         await triggered.Task.WaitAsync(TimeSpan.FromSeconds(5));
@@ -104,7 +104,7 @@ public sealed class IceMediaAttachmentTriggeredCheckTests
             return ValueTask.CompletedTask;
         }
 
-        await using var attachment = new IceMediaAttachment(IceParameters(), Capture, NullLoggerFactory.Instance);
+        await using var attachment = new IceMediaAttachment(IceMediaParameters.FromCall(IceParameters()), Capture, NullLoggerFactory.Instance);
 
         attachment.OnStunPacketReceived(InboundCheckFromPeer(), NominatedRemote);
         await Task.Delay(150);

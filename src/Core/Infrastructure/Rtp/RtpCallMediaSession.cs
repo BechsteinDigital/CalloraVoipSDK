@@ -200,7 +200,8 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
 
         // ICE on the media 5-tuple (RFC 8445 §7.3 inbound checks + RFC 7675 consent): the attachment
         // answers inbound checks and runs consent freshness on this same socket.
-        _iceMedia = new IceMediaAttachment(parameters, _rtp.SendRawAsync, loggerFactory, OnMediaConsentLost);
+        _iceMedia = new IceMediaAttachment(
+            IceMediaParameters.FromCall(parameters), _rtp.SendRawAsync, loggerFactory, OnMediaConsentLost);
         if (_iceMedia.IsActive)
             _rtp.StunPacketReceived += _iceMedia.OnStunPacketReceived;
 

@@ -69,4 +69,38 @@ public sealed class CallVideoParameters
 
     /// <summary>Remote UDP endpoint to send video RTP to.</summary>
     public required IPEndPoint RemoteEndPoint { get; init; }
+
+    // ── ICE for the video 5-tuple (RFC 8445 §7.3 inbound checks + RFC 7675 consent) —
+    // internal media-layer contract ─────────────────────────────────────────────────
+    // This SDK runs lite-ICE on the negotiated media 5-tuple; the ufrag/pwd are shared
+    // session-wide (no BUNDLE — the video m-line reuses the audio/session credentials),
+    // while the video stream runs its own consent loop and inbound-check responder on the
+    // video port. The remote credentials are recovered from the SDP video/session m-line;
+    // the local credentials and role are stamped from the channel's local ICE description.
+
+    /// <summary>
+    /// True when ICE is active for this call leg and the video stream should answer inbound
+    /// connectivity checks (RFC 8445 §7.3) and run consent freshness (RFC 7675) on the video
+    /// 5-tuple. <see langword="false"/> keeps the video port free of ICE (plain media path).
+    /// </summary>
+    internal bool IceEnabled { get; init; }
+
+    /// <summary>
+    /// True when this agent holds the ICE controlling role (RFC 8445 §5.1.1) — the same role
+    /// as the audio m-line, since ICE credentials are shared session-wide. Defaults to
+    /// controlling to mirror <see cref="CallMediaParameters.IceControlling"/>.
+    /// </summary>
+    internal bool IceControlling { get; init; } = true;
+
+    /// <summary>Local ICE username fragment for the video stream's connectivity checks (shared session-wide).</summary>
+    internal string? LocalIceUfrag { get; init; }
+
+    /// <summary>Local ICE password for the video stream's connectivity checks (shared session-wide).</summary>
+    internal string? LocalIcePwd { get; init; }
+
+    /// <summary>Remote ICE username fragment recovered from the peer's SDP for the video m-line.</summary>
+    internal string? RemoteIceUfrag { get; init; }
+
+    /// <summary>Remote ICE password recovered from the peer's SDP for the video m-line.</summary>
+    internal string? RemoteIcePwd { get; init; }
 }

@@ -2,7 +2,6 @@ using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Net;
 using Microsoft.Extensions.Logging;
-using CalloraVoipSdk.Core.Domain.Calls;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Stun.Ice;
 
@@ -24,12 +23,12 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
     private readonly ILogger<IceMediaAttachment> _logger;
 
     /// <summary>
-    /// Builds the attachment from the negotiated media parameters and the media socket's raw-send
+    /// Builds the attachment from the ICE view of the media 5-tuple and the media socket's raw-send
     /// delegate. Both the inbound handler and the consent session are optional — absent when ICE or
     /// the required credentials are not present.
     /// </summary>
     public IceMediaAttachment(
-        CallMediaParameters parameters,
+        IceMediaParameters parameters,
         Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask> sendRaw,
         ILoggerFactory loggerFactory,
         Action? onConsentLost = null)

@@ -59,7 +59,43 @@ internal static class CallMediaParametersIceEnricher
             RemoteIceOptions = parameters.RemoteIceOptions,
             RemoteIceCandidates = parameters.RemoteIceCandidates,
             RemoteIceEndOfCandidates = parameters.RemoteIceEndOfCandidates,
-            Video = parameters.Video
+            Video = EnrichVideo(parameters.Video, localIceDescription, iceControlling, iceEnabled)
+        };
+    }
+
+    // Stamps the session-shared local ICE credentials and role onto the video stream so it can run
+    // ICE on its own 5-tuple (RFC 8445 §7.3 / RFC 7675). The remote credentials are already resolved
+    // (shared session-wide); the enabled flag follows the leg. Preserves every other video field so
+    // the later SRTP/DTLS enrichers see an otherwise-unchanged object.
+    private static CallVideoParameters? EnrichVideo(
+        CallVideoParameters? video,
+        CallIceLocalDescription localIceDescription,
+        bool iceControlling,
+        bool iceEnabled)
+    {
+        if (video is null)
+            return null;
+
+        return new CallVideoParameters
+        {
+            PayloadType = video.PayloadType,
+            CodecName = video.CodecName,
+            ClockRate = video.ClockRate,
+            FormatParameters = video.FormatParameters,
+            RtxPayloadType = video.RtxPayloadType,
+            RemoteSupportsNack = video.RemoteSupportsNack,
+            RemoteSupportsPli = video.RemoteSupportsPli,
+            SrtpSuite = video.SrtpSuite,
+            SrtpLocalKeyParams = video.SrtpLocalKeyParams,
+            SrtpRemoteKeyParams = video.SrtpRemoteKeyParams,
+            LocalEndPoint = video.LocalEndPoint,
+            RemoteEndPoint = video.RemoteEndPoint,
+            IceEnabled = iceEnabled,
+            IceControlling = iceControlling,
+            LocalIceUfrag = localIceDescription.Ufrag,
+            LocalIcePwd = localIceDescription.Pwd,
+            RemoteIceUfrag = video.RemoteIceUfrag,
+            RemoteIcePwd = video.RemoteIcePwd,
         };
     }
 }
