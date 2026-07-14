@@ -33,6 +33,8 @@ internal static class CallMediaParametersSrtpEnricher
             && localCrypto is not null
             && string.Equals(remoteCrypto.CryptoSuite, localCrypto.CryptoSuite, StringComparison.Ordinal);
 
+        var video = EnrichVideo(parameters.Video, remoteSdp, localSdp);
+
         return new()
         {
             LocalEndPoint = parameters.LocalEndPoint,
@@ -58,13 +60,51 @@ internal static class CallMediaParametersSrtpEnricher
             RemoteIceOptions = parameters.RemoteIceOptions,
             RemoteIceCandidates = parameters.RemoteIceCandidates,
             RemoteIceEndOfCandidates = parameters.RemoteIceEndOfCandidates,
-            Video = parameters.Video,
+            Video = video,
             AppliedSrtpPolicy = appliedPolicy,
             SrtpDecisionReasonCode = reasonCode,
             SrtpSuite = sdesUsable ? remoteCrypto!.CryptoSuite : null,
             IsSrtcpEncrypted = sdesUsable,
             SrtpLocalKeyParams = sdesUsable ? localCrypto!.KeyParams : null,
             SrtpRemoteKeyParams = sdesUsable ? remoteCrypto!.KeyParams : null
+        };
+    }
+
+    /// <summary>
+    /// Recovers per-m-line SDES key material for the video stream (RFC 4568), the same way the
+    /// audio path does: the peer's SDP carries their key (inbound decrypt), our own local
+    /// description carries the key we generated (outbound encrypt). Returns the video parameters
+    /// with the SDES fields stamped when both keys are present and agree on the suite; otherwise
+    /// the original video parameters unchanged (a keyed video leg without usable keys stays
+    /// fail-closed-silent). <see langword="null"/> passes through for an audio-only leg.
+    /// </summary>
+    private static CallVideoParameters? EnrichVideo(CallVideoParameters? video, string remoteSdp, string? localSdp)
+    {
+        if (video is null)
+            return null;
+
+        var remoteCrypto = SdpUtilities.TryExtractVideoCrypto(remoteSdp);
+        var localCrypto = SdpUtilities.TryExtractVideoCrypto(localSdp);
+        var sdesUsable = remoteCrypto is not null
+            && localCrypto is not null
+            && string.Equals(remoteCrypto.CryptoSuite, localCrypto.CryptoSuite, StringComparison.Ordinal);
+        if (!sdesUsable)
+            return video;
+
+        return new CallVideoParameters
+        {
+            PayloadType = video.PayloadType,
+            CodecName = video.CodecName,
+            ClockRate = video.ClockRate,
+            FormatParameters = video.FormatParameters,
+            RtxPayloadType = video.RtxPayloadType,
+            RemoteSupportsNack = video.RemoteSupportsNack,
+            RemoteSupportsPli = video.RemoteSupportsPli,
+            LocalEndPoint = video.LocalEndPoint,
+            RemoteEndPoint = video.RemoteEndPoint,
+            SrtpSuite = remoteCrypto!.CryptoSuite,
+            SrtpLocalKeyParams = localCrypto!.KeyParams,
+            SrtpRemoteKeyParams = remoteCrypto.KeyParams
         };
     }
 }

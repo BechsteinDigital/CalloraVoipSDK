@@ -95,6 +95,37 @@ internal static class SdpUtilities
     }
 
     /// <summary>
+    /// Extracts the first usable SDES <c>a=crypto</c> line from the video m-line of an SDP
+    /// (RFC 4568) — a supported suite with inline key material — or <see langword="null"/> when
+    /// the video stream is absent, disabled, or carries no answerable crypto. Mirrors
+    /// <see cref="TryExtractAudioCrypto"/> so the SRTP enricher can recover per-m-line video keys.
+    /// </summary>
+    public static SdpCryptoAttribute? TryExtractVideoCrypto(string? sdp)
+    {
+        if (string.IsNullOrWhiteSpace(sdp))
+            return null;
+
+        try
+        {
+            var parsed = Parser.Parse(sdp);
+            var video = parsed.Media.FirstOrDefault(
+                m => m.MediaType.Equals("video", StringComparison.OrdinalIgnoreCase)
+                     && !m.Disabled
+                     && m.Port > 0);
+            if (video is null)
+                return null;
+
+            return video.Crypto.FirstOrDefault(
+                c => SdesCryptoSelector.TryMapSuite(c.CryptoSuite) is not null
+                     && c.KeyParams.StartsWith("inline:", StringComparison.OrdinalIgnoreCase));
+        }
+        catch (FormatException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Builds a default SDP offer for local capabilities.
     /// </summary>
     public static string BuildDefaultSdp(
@@ -456,16 +487,22 @@ internal static class SdpUtilities
         if (video is null)
             return null;
 
-        // Fail closed, matching the negotiator: SDES-keyed video is not wired yet, and
-        // a DTLS-keyed m-line is unusable without a local identity.
+        // Fail closed, matching the negotiator: a secure video m-line with no usable keying is
+        // declined. SDES a=crypto with an answerable suite is accepted (the key material is
+        // recovered downstream by the SRTP enricher); a DTLS m-line needs a fingerprint. An
+        // a=crypto whose suite we cannot answer, or a keyless SAVP profile, is keyless → decline.
         var remoteFp = video.Fingerprint ?? parsed.Fingerprint;
-        if (video.Crypto.Count > 0
-            || (SdpSecurityInspector.IsSecureProfile(video.Profile) && remoteFp is null))
+        var sdesAnswerable = video.Crypto.Any(
+            c => SdesCryptoSelector.TryMapSuite(c.CryptoSuite) is not null
+                 && c.KeyParams.StartsWith("inline:", StringComparison.OrdinalIgnoreCase));
+        if (!sdesAnswerable
+            && (video.Crypto.Count > 0
+                || (SdpSecurityInspector.IsSecureProfile(video.Profile) && remoteFp is null)))
         {
             return null;
         }
 
-        if (remoteFp is not null && localOptions.Dtls is null)
+        if (!sdesAnswerable && remoteFp is not null && localOptions.Dtls is null)
             return null;
 
         var localCodecs = VideoCodecCatalog.Resolve(videoOptions.PreferredCodecNames);

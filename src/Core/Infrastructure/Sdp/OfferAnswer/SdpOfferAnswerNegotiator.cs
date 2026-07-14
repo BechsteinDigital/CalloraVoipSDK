@@ -420,10 +420,11 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
 
     /// <summary>
     /// Negotiates the answer m-line for one offered video m-line (RFC 3264 §6 + RFC 6184/
-    /// 7741 codecs at 90 kHz). Returns <see langword="null"/> — a zero-port decline —
-    /// when video is not enabled locally, no codec matches, the offer is SDES-keyed
-    /// (per-m-line video keys are not wired yet), or a DTLS-keyed video m-line cannot
-    /// be answered with a fingerprint.
+    /// 7741 codecs at 90 kHz). SDES-keyed video (RFC 4568) is answered with our own key for
+    /// the video m-line, mirroring the audio path; DTLS-keyed video is answered with a
+    /// fingerprint. Returns <see langword="null"/> — a zero-port decline — when video is not
+    /// enabled locally, no codec matches, or a secure video m-line can be keyed neither via
+    /// SDES (no answerable a=crypto) nor via DTLS (no fingerprint / local identity).
     /// </summary>
     private static SdpMediaDescription? TryNegotiateVideoAnswerMedia(
         SdpMediaDescription offered,
@@ -439,16 +440,23 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             return null;
         }
 
-        // SDES-keyed video is not supported yet — fail closed instead of answering a
-        // keyless secure m-line.
         var remoteFp = offered.Fingerprint ?? remoteOffer.Fingerprint;
-        if (offered.Crypto.Count > 0 || (IsSdesSecuredProfile(offered.Profile) && remoteFp is null))
-            return null;
+
+        // SDES crypto (RFC 4568): answer the first supported suite with our OWN key for the
+        // video m-line. DTLS only keys the m-line when SDES did not — the two are mutually
+        // exclusive per m-line (RFC 5763).
+        IReadOnlyList<SdpCryptoAttribute> videoCrypto = [];
+        if (offered.Crypto.Count > 0)
+        {
+            var sdes = SdesCryptoSelector.SelectAnswer(offered.Crypto);
+            if (sdes is not null)
+                videoCrypto = [sdes.LocalAnswer];
+        }
 
         // DTLS-keyed video needs a fingerprinted answer (RFC 5763), same identity as audio.
         SdpFingerprint? fingerprint = null;
         string? dtlsSetup = null;
-        if (remoteFp is not null || IsDtlsSecuredProfile(offered.Profile))
+        if (videoCrypto.Count == 0 && (remoteFp is not null || IsDtlsSecuredProfile(offered.Profile)))
         {
             if (localOptions.Dtls is null || remoteFp is null)
                 return null;
@@ -459,6 +467,15 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
                 Value = localOptions.Dtls.Fingerprint
             };
             dtlsSetup = ResolveAnswerSetup(offered.DtlsSetup ?? remoteOffer.DtlsSetup);
+        }
+
+        // Fail closed: a secure video m-line we could key neither via SDES nor DTLS — a keyless
+        // SAVP profile, or an a=crypto whose suite we do not support — is declined, not answered
+        // in the clear.
+        if (videoCrypto.Count == 0 && fingerprint is null
+            && (IsSdesSecuredProfile(offered.Profile) || offered.Crypto.Count > 0))
+        {
+            return null;
         }
 
         // Name+clock match only — NEVER the static-PT fallback of the audio path:
@@ -486,6 +503,7 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             RtcpFeedback = VideoCodecCatalog.NegotiateFeedback(offered.RtcpFeedback),
             Mid = offered.Mid,
             RtcpMux = offered.RtcpMux,
+            Crypto = videoCrypto,
             Fingerprint = fingerprint,
             DtlsSetup = dtlsSetup
         };
