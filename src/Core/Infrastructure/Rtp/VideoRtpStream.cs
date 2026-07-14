@@ -15,16 +15,25 @@ namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
 /// on the negotiated video port, the codec's packetisation (H.264 RFC 6184 / VP8
 /// RFC 7741), and — on a DTLS-keyed call — its own DTLS association (RFC 5763: one per
 /// m-line without BUNDLE) with the same local identity and role as audio. Fail-closed
-/// like audio: a secure-negotiated leg never sends or accepts plaintext video. No video
-/// jitter buffer yet — packets feed the depacketiser in arrival order and any sequence
-/// gap discards the frame under assembly (loss recovery is the RTCP-feedback phase).
-/// SDES-keyed video is not wired: under SDES the video sub-stream has no SRTP context
-/// and stays fail-closed-silent until per-m-line SDES keying lands (follow-up).
+/// like audio: a secure-negotiated leg never sends or accepts plaintext video. On an
+/// RTX-negotiated leg (RFC 4588) inbound video passes through a bounded reorder window so a
+/// retransmitted packet — delivered on the repair stream — can fill the gap that prompted the
+/// NACK before playout; without RTX, packets feed the depacketiser in arrival order and a
+/// sequence gap discards the frame under assembly. SDES-keyed video is not wired: under SDES
+/// the video sub-stream has no SRTP context and stays fail-closed-silent until per-m-line SDES
+/// keying lands (follow-up).
 /// </summary>
 internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
 {
     // Conservative RTP payload budget below a 1500 MTU: RTP header + SRTP tag headroom.
     private const int MaxRtpPayloadSize = 1200;
+
+    // DECISION: inbound reorder/RTX-recovery window depth (packets). A pure depth window holds
+    // this many packets at steady state, so it both bounds the recovery window (a retransmit
+    // slots in only while its gap is still buffered) and the added playout latency. 32 balances
+    // a ~1-RTT retransmit window against latency; adaptive/contiguous-release playout is
+    // follow-up. Only active on RTX-negotiated legs, which opt into that recovery latency.
+    private const int ReorderWindowDepth = 32;
 
     private readonly RtpSession _rtp;
     private readonly DtlsMediaAttachment? _dtlsMedia;
@@ -43,8 +52,23 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
     private readonly uint _rtxSsrc;
     private int _rtxSequence;
 
+    // Inbound reorder/RTX-recovery window (RFC 4588): present only when RTX is negotiated.
+    // Normal and RTX-recovered packets both flow through it so a late retransmit can slot into
+    // the gap it repairs before playout. Null when RTX was not negotiated (arrival-order
+    // passthrough — the pre-RTX receive behaviour, byte-for-byte).
+    private readonly VideoReorderBuffer? _reorderBuffer;
+
+    // Arrival-order tracking, for fast NACK/PLI loss signalling (RFC 4585).
     private ushort _lastSequence;
     private bool _hasReceived;
+
+    // Delivery-order tracking, for release-order discontinuity → depacketiser reset.
+    private ushort _lastDeliveredSequence;
+    private bool _hasDelivered;
+
+    // Remote media SSRC, captured from inbound video to stamp RTX-recovered packets (RFC 4588 §4).
+    private uint _remoteMediaSsrc;
+
     private int _disposed;
 
     private VideoRtpStream(
@@ -85,6 +109,11 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
             _retransmitBuffer = new RtpRetransmissionBuffer();
             _rtp.ConfigureSecondaryStream(_rtxPayloadType);
             _rtp.PacketSent += _retransmitBuffer.Store;
+
+            // Inbound recovery: a reorder window absorbs network reordering and lets an RTX
+            // retransmit (delivered via SecondaryPacketReceived) fill its gap before playout.
+            _reorderBuffer = new VideoReorderBuffer(ReorderWindowDepth);
+            _rtp.SecondaryPacketReceived += OnRtxPacketReceived;
         }
 
         // Keyframe feedback (RFC 4585/5104) over the video RTCP-mux channel: inbound PLI/FIR
@@ -216,16 +245,68 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
         if (packet.PayloadType != _payloadType)
             return;
 
-        // Sequence gap: a fragment is missing — discard the frame under assembly so a torn
-        // frame is never delivered, and report the loss (RFC 4585 NACK for the missing
-        // packets, plus a throttled PLI) so decoding recovers instead of stalling.
+        _remoteMediaSsrc = packet.Ssrc;
+
+        // Arrival-order loss signalling (RFC 4585): request retransmit as soon as a forward gap
+        // appears — before the reorder window can slide past it. Fast NACK matters more for
+        // recovery than avoiding the occasional spurious NACK a reorder provokes (the peer's
+        // needless RTX is dropped as duplicate/too-late downstream). Reordered/duplicate
+        // arrivals yield an empty missing-set (MissingBetween), so they raise no NACK. Ordered
+        // delivery and the depacketiser reset are handled downstream, not here.
         if (_hasReceived && packet.SequenceNumber != unchecked((ushort)(_lastSequence + 1)))
-        {
-            _depacketiser.Reset();
             _keyFrameFeedback.OnLoss(packet.Ssrc, MissingBetween(_lastSequence, packet.SequenceNumber));
-        }
         _lastSequence = packet.SequenceNumber;
         _hasReceived = true;
+
+        Enqueue(packet);
+    }
+
+    // Recovers an inbound RTX repair packet (RFC 4588 §4) and feeds the original into the
+    // reorder window, where it can fill the gap that prompted the NACK — unless the window has
+    // already slid past it. Runs on the RTP receive-loop thread, the same thread as primary
+    // video, so reorder/delivery state needs no extra synchronisation.
+    private void OnRtxPacketReceived(Packets.RtpPacket rtx)
+    {
+        if (_reorderBuffer is null)
+            return;
+
+        // _remoteMediaSsrc is captured from the first primary video packet; an RTX arriving
+        // before any primary stamps the recovered packet with 0. Cosmetic only — the reorder
+        // buffer keys on sequence number and the depacketiser ignores SSRC.
+        if (!RtxPacketFactory.TryDecapsulate(rtx, _payloadType, _remoteMediaSsrc, out var original))
+        {
+            _logger.LogDebug("Dropping RTX packet too short to carry an original sequence number.");
+            return;
+        }
+
+        Enqueue(original!);
+    }
+
+    // Feeds one video packet (freshly received or RTX-recovered) toward the depacketiser. With
+    // RTX negotiated the reorder window releases in ascending sequence order (letting a late
+    // retransmit slot into its gap); without it the packet passes straight through in arrival
+    // order, preserving the pre-RTX behaviour exactly.
+    private void Enqueue(Packets.RtpPacket packet)
+    {
+        if (_reorderBuffer is null)
+        {
+            DeliverOrdered(packet);
+            return;
+        }
+
+        foreach (var released in _reorderBuffer.Insert(packet))
+            DeliverOrdered(released);
+    }
+
+    // Delivers one video packet in sequence order to the depacketiser. A discontinuity here is
+    // a gap the reorder window (or arrival order, without RTX) could not fill: the frame under
+    // assembly is torn, so reset before feeding on. The loss was already signalled on arrival.
+    private void DeliverOrdered(Packets.RtpPacket packet)
+    {
+        if (_hasDelivered && packet.SequenceNumber != unchecked((ushort)(_lastDeliveredSequence + 1)))
+            _depacketiser.Reset();
+        _lastDeliveredSequence = packet.SequenceNumber;
+        _hasDelivered = true;
 
         if (!_depacketiser.TryProcess(packet.Payload, packet.Timestamp, packet.Marker, out var frame))
             return;
@@ -254,6 +335,8 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
         _rtp.ControlPacketReceived -= _keyFrameFeedback.OnControlDatagram;
         if (_retransmitBuffer is not null)
             _rtp.PacketSent -= _retransmitBuffer.Store;
+        if (_reorderBuffer is not null)
+            _rtp.SecondaryPacketReceived -= OnRtxPacketReceived;
         if (_dtlsMedia is not null)
         {
             _rtp.StopTransmission();
