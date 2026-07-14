@@ -40,6 +40,19 @@ internal sealed class SdpIceParameters
 }
 
 /// <summary>
+/// Video media parameters for SDP offer/answer generation: the local RTP port for the
+/// <c>m=video</c> line and the codec capabilities to offer/accept.
+/// </summary>
+internal sealed class SdpVideoMediaOptions
+{
+    /// <summary>Local UDP port advertised for video RTP.</summary>
+    public required int Port { get; init; }
+
+    /// <summary>Video codec capabilities (e.g. VP8/H264 at 90 kHz).</summary>
+    public required IReadOnlyList<SdpCodecDefinition> Codecs { get; init; }
+}
+
+/// <summary>
 /// Options passed to offer/answer methods to include DTLS, ICE, rtcp-mux, and BUNDLE.
 /// All fields are optional; omitted features are not emitted in the SDP.
 /// </summary>
@@ -47,6 +60,12 @@ internal sealed class SdpMediaOptions
 {
     /// <summary>DTLS-SRTP parameters; null = plain RTP or SDES.</summary>
     public SdpDtlsParameters? Dtls { get; init; }
+
+    /// <summary>
+    /// Video media to offer/answer; null answers video m-lines with a zero-port mirror
+    /// (RFC 3264 §6) and offers audio only.
+    /// </summary>
+    public SdpVideoMediaOptions? Video { get; init; }
 
     /// <summary>
     /// SDES crypto lines to advertise in an offer (RFC 4568). Empty = plain RTP/AVP;

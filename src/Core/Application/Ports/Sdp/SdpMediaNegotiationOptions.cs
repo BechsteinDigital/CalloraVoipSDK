@@ -43,10 +43,33 @@ public sealed class SdpDtlsNegotiationOptions
 }
 
 /// <summary>
+/// Video parameters for SDP offer/answer generation (WebRTC phase 2): the local video
+/// RTP port and the codec preference. Presence of this object enables answering video
+/// m-lines and (on the offer path) offering an <c>m=video</c> line.
+/// </summary>
+public sealed class SdpVideoNegotiationOptions
+{
+    /// <summary>Local UDP port advertised for video RTP.</summary>
+    public required int Port { get; init; }
+
+    /// <summary>
+    /// Ordered video codec preference by SDP encoding name (<c>VP8</c>, <c>H264</c>).
+    /// <see langword="null"/> uses the SDK default (VP8, H264). Unknown names are ignored.
+    /// </summary>
+    public IReadOnlyList<string>? PreferredCodecNames { get; init; }
+}
+
+/// <summary>
 /// Optional runtime parameters that influence SDP negotiation output.
 /// </summary>
 public sealed class SdpMediaNegotiationOptions
 {
+    /// <summary>
+    /// Video negotiation parameters. <see langword="null"/> (default) keeps calls
+    /// audio-only: offered video m-lines are declined with a zero-port answer line
+    /// (RFC 3264 §6) and locally built offers carry no video.
+    /// </summary>
+    public SdpVideoNegotiationOptions? Video { get; init; }
     /// <summary>
     /// ICE settings to include in local SDP.
     /// </summary>

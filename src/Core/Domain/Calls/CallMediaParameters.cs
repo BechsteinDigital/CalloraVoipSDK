@@ -186,4 +186,10 @@ public sealed class CallMediaParameters
 
     /// <summary>Peer fingerprint digest from SDP <c>a=fingerprint</c> (colon-delimited hex).</summary>
     internal string? DtlsRemoteFingerprintValue { get; init; }
+
+    /// <summary>
+    /// Negotiated video parameters (WebRTC phase 2); <see langword="null"/> for an
+    /// audio-only call leg.
+    /// </summary>
+    public CallVideoParameters? Video { get; init; }
 }

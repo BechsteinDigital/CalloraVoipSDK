@@ -200,6 +200,7 @@ internal static class SdpUtilities
             var iceEnabled = !string.IsNullOrWhiteSpace(remoteIceUfrag)
                              && !string.IsNullOrWhiteSpace(remoteIcePwd)
                              && remoteIceCandidates.Count > 0;
+            var video = TryResolveVideoParameters(parsed, remoteIp, localEndPoint, localOptions);
 
             return new CallMediaParameters
             {
@@ -221,7 +222,8 @@ internal static class SdpUtilities
                 RemoteIcePwd = remoteIcePwd,
                 RemoteIceOptions = remoteIceOptions,
                 RemoteIceCandidates = remoteIceCandidates,
-                RemoteIceEndOfCandidates = audio.EndOfCandidates
+                RemoteIceEndOfCandidates = audio.EndOfCandidates,
+                Video = video
             };
         }
         catch
@@ -430,6 +432,65 @@ internal static class SdpUtilities
         return normalized.Contains("0-16", StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Resolves the negotiated video parameters from the remote SDP's first active video
+    /// m-line (WebRTC phase 2). Mirrors the negotiator's answer rules exactly — video is
+    /// only stamped when the m-line is one the SDK would actually accept: video locally
+    /// enabled, a supported codec matches (H.264 requires <c>packetization-mode=1</c>),
+    /// not SDES-keyed, and DTLS-keyed only when a local DTLS identity exists. The remote
+    /// video address follows the session/connection address like audio does.
+    /// </summary>
+    private static CallVideoParameters? TryResolveVideoParameters(
+        SdpSessionDescription parsed,
+        IPAddress remoteIp,
+        IPEndPoint localEndPoint,
+        SdpMediaNegotiationOptions? localOptions)
+    {
+        if (localOptions?.Video is not { } videoOptions)
+            return null;
+
+        var video = parsed.Media.FirstOrDefault(
+            m => m.MediaType.Equals("video", StringComparison.OrdinalIgnoreCase)
+                 && !m.Disabled
+                 && m.Port > 0);
+        if (video is null)
+            return null;
+
+        // Fail closed, matching the negotiator: SDES-keyed video is not wired yet, and
+        // a DTLS-keyed m-line is unusable without a local identity.
+        var remoteFp = video.Fingerprint ?? parsed.Fingerprint;
+        if (video.Crypto.Count > 0
+            || (SdpSecurityInspector.IsSecureProfile(video.Profile) && remoteFp is null))
+        {
+            return null;
+        }
+
+        if (remoteFp is not null && localOptions.Dtls is null)
+            return null;
+
+        var localCodecs = VideoCodecCatalog.Resolve(videoOptions.PreferredCodecNames);
+        var match = video.Codecs.FirstOrDefault(offered =>
+            VideoCodecCatalog.IsSupported(offered.Name)
+            && localCodecs.Any(local =>
+                local.Name.Equals(offered.Name, StringComparison.OrdinalIgnoreCase)
+                && local.ClockRate == offered.ClockRate)
+            && (!offered.Name.Equals("H264", StringComparison.OrdinalIgnoreCase)
+                || VideoCodecCatalog.HasPacketizationMode1(video.Fmtp, offered.PayloadType)));
+        if (match is null)
+            return null;
+
+        return new CallVideoParameters
+        {
+            PayloadType = match.PayloadType,
+            CodecName = match.Name.ToUpperInvariant(),
+            ClockRate = match.ClockRate,
+            FormatParameters = video.Fmtp
+                .FirstOrDefault(f => f.PayloadType == match.PayloadType)?.Parameters,
+            LocalEndPoint = new IPEndPoint(localEndPoint.Address, videoOptions.Port),
+            RemoteEndPoint = new IPEndPoint(remoteIp, video.Port),
+        };
+    }
+
     private static SdpMediaOptions? ConvertOptions(SdpMediaNegotiationOptions? options, bool forOffer = false)
     {
         if (options is null)
@@ -459,6 +520,16 @@ internal static class SdpUtilities
                     : SdesCryptoSelector.BuildDefaultOffer()]
                 : [];
 
+        // Video (WebRTC phase 2): resolve the codec preference once; presence enables
+        // offering/answering m=video.
+        var video = options.Video is { } videoOptions
+            ? new SdpVideoMediaOptions
+            {
+                Port = videoOptions.Port,
+                Codecs = VideoCodecCatalog.Resolve(videoOptions.PreferredCodecNames),
+            }
+            : null;
+
         var ice = options.Ice;
         if (ice is null)
             return new SdpMediaOptions
@@ -466,7 +537,8 @@ internal static class SdpUtilities
                 SessionId = options.SessionId,
                 SessionVersion = options.SessionVersion,
                 Crypto = crypto,
-                Dtls = dtls
+                Dtls = dtls,
+                Video = video
             };
 
         return new SdpMediaOptions
@@ -475,6 +547,7 @@ internal static class SdpUtilities
             SessionVersion = options.SessionVersion,
             Crypto = crypto,
             Dtls = dtls,
+            Video = video,
             Ice = new SdpIceParameters
             {
                 Ufrag = ice.Ufrag,
