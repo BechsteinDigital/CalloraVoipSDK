@@ -72,6 +72,15 @@ internal sealed class RtpSession : IRtpSession
     /// </summary>
     internal event Action<byte[], IPEndPoint>? StunPacketReceived;
 
+    /// <summary>
+    /// Raised when an inbound datagram on the media socket is classified as DTLS
+    /// (RFC 5764 §5.1.2 / RFC 7983 demux: first byte 20–63). Carries an independent copy
+    /// of the datagram and the sender's transport address; the DTLS-SRTP handshake layer
+    /// consumes these records and answers via <see cref="SendRawAsync"/> on this same
+    /// socket. DTLS datagrams are not passed to the RTP/RTCP paths.
+    /// </summary>
+    internal event Action<byte[], IPEndPoint>? DtlsPacketReceived;
+
     public RtpSession(RtpSessionOptions options, IRtpPacketCodec codec, ILogger<RtpSession> logger)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -288,6 +297,24 @@ internal sealed class RtpSession : IRtpSession
             return;
         }
 
+        // RFC 5764 §5.1.2 / RFC 7983 demux: DTLS record types occupy 20..63, disjoint from
+        // STUN (0..3) and RTP/RTCP (128..191). Routed to the DTLS-SRTP handshake layer.
+        if (source is not null && LooksLikeDtlsDatagram(datagram))
+        {
+            // Independent copy — the receive buffer is reused and the handshake engine
+            // consumes the record on its own thread.
+            var dtlsDatagram = datagram.ToArray();
+            try
+            {
+                DtlsPacketReceived?.Invoke(dtlsDatagram, source);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unhandled exception in DTLS datagram handler.");
+            }
+            return;
+        }
+
         if (LooksLikeRtcpDatagram(datagram))
         {
             // SRTCP (RFC 3711 §3.4): authenticate + decrypt before dispatch when a context is
@@ -450,6 +477,7 @@ internal sealed class RtpSession : IRtpSession
         _udp.Dispose();
         ControlPacketReceived = null;
         StunPacketReceived = null;
+        DtlsPacketReceived = null;
     }
 
     // RFC 7983 / RFC 5764 §5.1.2 demux: a STUN packet's first byte is in 0..3, disjoint from
@@ -462,6 +490,11 @@ internal sealed class RtpSession : IRtpSession
 
         return BinaryPrimitives.ReadUInt32BigEndian(datagram[4..8]) == 0x2112A442u;
     }
+
+    // RFC 5764 §5.1.2 / RFC 7983: a DTLS record's first byte (content type) is in 20..63.
+    // The 13-byte minimum is the DTLS record header — anything shorter cannot be DTLS.
+    private static bool LooksLikeDtlsDatagram(ReadOnlySpan<byte> datagram) =>
+        datagram.Length >= 13 && datagram[0] >= 20 && datagram[0] <= 63;
 
     private static bool LooksLikeRtcpDatagram(ReadOnlySpan<byte> datagram)
     {
