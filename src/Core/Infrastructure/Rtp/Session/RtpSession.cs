@@ -156,7 +156,8 @@ internal sealed class RtpSession : IRtpSession
     /// <summary>
     /// Sends one RTP packet with an explicitly supplied timestamp and without
     /// advancing the audio timestamp cursor used for normal media frames.
-    /// Used by RFC 4733 telephone-event packets that must keep a constant event timestamp.
+    /// Used by RFC 4733 telephone-event packets that must keep a constant event timestamp,
+    /// and by video frames whose packets all share one frame-level timestamp.
     /// </summary>
     internal ValueTask SendTimestampedAsync(
         ReadOnlyMemory<byte> payload,

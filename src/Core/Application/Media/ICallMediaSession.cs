@@ -63,4 +63,10 @@ internal interface ICallMediaSession : IAsyncDisposable
     /// Raised when an RTCP datagram is received on the RTP socket in RTCP-MUX mode.
     /// </summary>
     event Action<byte[]>? RtcpMuxDatagramReceived;
+
+    /// <summary>
+    /// Negotiated video sub-stream (WebRTC phase 2); <see langword="null"/> for an
+    /// audio-only call leg. Default implementation keeps audio-only sessions untouched.
+    /// </summary>
+    IVideoMediaStream? Video => null;
 }
