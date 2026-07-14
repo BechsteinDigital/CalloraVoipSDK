@@ -1,3 +1,5 @@
+using System.Buffers.Binary;
+
 namespace CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
 
 /// <summary>
@@ -104,5 +106,17 @@ internal static class OneByteRtpHeaderExtensions
         }
 
         return elements;
+    }
+
+    /// <summary>
+    /// Builds the transport-wide sequence number element (transport-cc / RFC 8888): a two-byte
+    /// big-endian counter for the negotiated <paramref name="id"/>, stamped on each outgoing packet
+    /// so the receiver can report arrival times keyed by it.
+    /// </summary>
+    public static RtpHeaderExtensionElement TransportSequenceNumber(byte id, ushort sequenceNumber)
+    {
+        var value = new byte[2];
+        BinaryPrimitives.WriteUInt16BigEndian(value, sequenceNumber);
+        return new RtpHeaderExtensionElement(id, value);
     }
 }

@@ -115,7 +115,8 @@ internal static class CallMediaParametersSrtpEnricher
             LocalIceUfrag = video.LocalIceUfrag,
             LocalIcePwd = video.LocalIcePwd,
             RemoteIceUfrag = video.RemoteIceUfrag,
-            RemoteIcePwd = video.RemoteIcePwd
+            RemoteIcePwd = video.RemoteIcePwd,
+            TransportWideCcExtensionId = video.TransportWideCcExtensionId
         };
     }
 }

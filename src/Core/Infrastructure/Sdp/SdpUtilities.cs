@@ -2,6 +2,7 @@ using System.Net;
 using System.Collections.ObjectModel;
 using CalloraVoipSdk.Core.Application.Ports.Sdp;
 using CalloraVoipSdk.Core.Domain.Calls;
+using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Models;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.OfferAnswer;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Parsing;
@@ -547,7 +548,23 @@ internal static class SdpUtilities
             // local credentials and the enabled/role flags are stamped later by the ICE enricher.
             RemoteIceUfrag = video.IceUfrag ?? sharedRemoteIceUfrag,
             RemoteIcePwd = video.IcePwd ?? sharedRemoteIcePwd,
+            // Transport-wide-cc header-extension id from the negotiated a=extmap (RFC 8285): the
+            // video stream stamps the transport-wide counter under this id when present.
+            TransportWideCcExtensionId = ResolveTransportCcExtensionId(video.Extensions),
         };
+    }
+
+    // The negotiated one-byte header-extension id for the transport-wide sequence number
+    // (transport-cc / RFC 8888), or null when the extension was not negotiated on this m-line.
+    private static byte? ResolveTransportCcExtensionId(IReadOnlyList<SdpExtmap> extensions)
+    {
+        foreach (var extension in extensions)
+        {
+            if (extension.Id is >= OneByteRtpHeaderExtensions.MinId and <= OneByteRtpHeaderExtensions.MaxId
+                && string.Equals(extension.Uri, RtpHeaderExtensionUris.TransportWideCc, StringComparison.Ordinal))
+                return (byte)extension.Id;
+        }
+        return null;
     }
 
     private static SdpMediaOptions? ConvertOptions(SdpMediaNegotiationOptions? options, bool forOffer = false)

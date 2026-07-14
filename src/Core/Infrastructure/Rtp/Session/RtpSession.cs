@@ -56,6 +56,7 @@ internal sealed class RtpSession : IRtpSession
     private readonly object _secondarySrtpProtectSync = new();
 
     private ushort _sequenceNumber;
+    private ushort _transportCcSequence;
     private uint _timestamp;
     private Task? _receiveLoop;
     private CancellationTokenSource? _loopCts;
@@ -771,6 +772,7 @@ internal sealed class RtpSession : IRtpSession
 
         ushort sequenceNumber;
         uint timestamp;
+        ushort? transportCcSequence = null;
 
         lock (_sendSync)
         {
@@ -782,6 +784,14 @@ internal sealed class RtpSession : IRtpSession
 
             if (advanceTimestamp)
                 _timestamp += (uint)_options.SamplesPerPacket;
+
+            // Transport-wide sequence number (transport-cc / RFC 8888): a monotonic counter across
+            // this transport's primary packets, allocated under the same lock so it stays ordered.
+            if (_options.TransportWideCcExtensionId is not null)
+            {
+                transportCcSequence = _transportCcSequence;
+                unchecked { _transportCcSequence++; }
+            }
         }
 
         var packet = new RtpPacket
@@ -791,7 +801,15 @@ internal sealed class RtpSession : IRtpSession
             SequenceNumber = sequenceNumber,
             Timestamp = timestamp,
             Ssrc = _ssrc,
-            Payload = payload
+            Payload = payload,
+            // Stamp the transport-wide-cc header extension before SRTP: RFC 3711 authenticates but
+            // does not encrypt the header extension, so the receiver reads the counter in the clear.
+            // FOLLOW-UP (perf): this allocates ~3 small heap objects per stamped packet; pool the
+            // 4-byte extension buffer before enabling transport-cc end-to-end (inert while gated off).
+            HeaderExtension = transportCcSequence is { } ccSeq
+                ? OneByteRtpHeaderExtensions.Encode(
+                    [OneByteRtpHeaderExtensions.TransportSequenceNumber(_options.TransportWideCcExtensionId!.Value, ccSeq)])
+                : null
         };
 
         var datagram = _codec.Encode(packet);

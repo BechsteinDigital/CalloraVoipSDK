@@ -8,7 +8,13 @@ namespace CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
 /// </summary>
 internal static class RtpHeaderExtensionUris
 {
-    /// <summary>Transport-wide congestion control sequence number (draft-holmer-rmcat-transport-wide-cc-extensions-01).</summary>
+    /// <summary>
+    /// Transport-wide congestion control sequence number
+    /// (draft-holmer-rmcat-transport-wide-cc-extensions-01). This is the URI Chrome/libwebrtc has
+    /// long used and matches the vast majority of WebRTC endpoints; the resolver matches it exactly
+    /// (Ordinal). FOLLOW-UP: accept additional/registered URIs (e.g. an RFC 8888 URN) once the BWE
+    /// chain is wired end-to-end.
+    /// </summary>
     internal const string TransportWideCc =
         "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01";
 }
