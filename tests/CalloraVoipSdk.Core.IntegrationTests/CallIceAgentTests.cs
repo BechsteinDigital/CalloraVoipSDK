@@ -126,7 +126,7 @@ public sealed class CallIceAgentTests
     }
 
     [Fact]
-    public async Task Gathering_adds_a_video_host_candidate_for_the_video_endpoint()
+    public async Task Gathering_adds_host_and_srflx_video_candidates_for_the_video_endpoint()
     {
         var probe = new FakeStunProbe { ReflexiveEndPoint = Srflx };
         var agent = Agent(Config(), probe);
@@ -135,13 +135,28 @@ public sealed class CallIceAgentTests
         var description = await agent.BuildLocalDescriptionAsync(LocalRtp, sharedMediaSocket: null, videoEndPoint);
 
         Assert.NotNull(description);
-        var videoCandidate = Assert.Single(description!.VideoCandidates);
-        Assert.Equal("host", videoCandidate.Type);
-        Assert.Equal(1, videoCandidate.Component); // RTP component of the video stream
-        Assert.Equal(40002, videoCandidate.Port);  // the video port, not the audio port
-        Assert.Equal(LocalRtp.Address.ToString(), videoCandidate.Address);
+        var videoHost = Assert.Single(description!.VideoCandidates.Where(c => c.Type == "host"));
+        Assert.Equal(1, videoHost.Component);      // RTP component of the video stream
+        Assert.Equal(40002, videoHost.Port);       // the video port, not the audio port
+        Assert.Equal(LocalRtp.Address.ToString(), videoHost.Address);
+        // Server-reflexive is gathered for the video 5-tuple too (the NAT path), mirroring audio.
+        Assert.Contains(description.VideoCandidates, c => c.Type == "srflx");
         // The audio candidates stay on their own port.
         Assert.DoesNotContain(description.Candidates, c => c.Port == 40002);
+    }
+
+    [Fact]
+    public async Task Gathering_adds_a_video_relay_candidate_when_turn_allocation_succeeds()
+    {
+        var probe = new FakeStunProbe { ReflexiveEndPoint = Srflx };
+        var turn = new FakeTurnAllocator { Allocation = new IceRelayAllocation { RelayedEndPoint = Relay } };
+        var agent = Agent(Config(withTurn: true), probe, turn);
+        var videoEndPoint = new IPEndPoint(LocalRtp.Address, 40002);
+
+        var description = await agent.BuildLocalDescriptionAsync(LocalRtp, sharedMediaSocket: null, videoEndPoint);
+
+        Assert.NotNull(description);
+        Assert.Contains(description!.VideoCandidates, c => c.Type == "relay" && c.Port == Relay.Port);
     }
 
     [Fact]
@@ -358,6 +373,29 @@ public sealed class CallIceAgentTests
         await agent.BuildLocalDescriptionAsync(LocalRtp, reservation);
 
         Assert.Same(reservation, probe.ObservedSharedSocket);
+    }
+
+    [Fact]
+    public async Task Gathering_passes_the_video_socket_to_the_stun_probe_for_the_video_gather()
+    {
+        // The video srflx candidate must reflect the video port, so the video gather probes STUN
+        // through the video socket — not the audio one.
+        var probe = new FakeStunProbe { ReflexiveEndPoint = Srflx };
+        var agent = Agent(Config(), probe);
+        using var audioSocket = new System.Net.Sockets.Socket(
+            System.Net.Sockets.AddressFamily.InterNetwork,
+            System.Net.Sockets.SocketType.Dgram,
+            System.Net.Sockets.ProtocolType.Udp);
+        using var videoSocket = new System.Net.Sockets.Socket(
+            System.Net.Sockets.AddressFamily.InterNetwork,
+            System.Net.Sockets.SocketType.Dgram,
+            System.Net.Sockets.ProtocolType.Udp);
+        var videoEndPoint = new IPEndPoint(LocalRtp.Address, 40002);
+
+        await agent.BuildLocalDescriptionAsync(LocalRtp, audioSocket, videoEndPoint, videoSocket);
+
+        // Video gathers after audio, so the last socket the probe observed is the video one.
+        Assert.Same(videoSocket, probe.ObservedSharedSocket);
     }
 
     // --- Selection: failure paths ---
