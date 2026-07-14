@@ -24,23 +24,35 @@ internal static class SdesMediaCryptoContextFactory
     public static (ISrtpContext? OutRtp, ISrtpContext? InRtp, ISrtcpContext? OutRtcp, ISrtcpContext? InRtcp)
         TryCreate(CallMediaParameters parameters, ILogger logger)
     {
-        if (parameters.SrtpSuite is null
-            || parameters.SrtpLocalKeyParams is null
-            || parameters.SrtpRemoteKeyParams is null)
-        {
-            return (null, null, null, null);
-        }
+        ArgumentNullException.ThrowIfNull(parameters);
+        return TryCreate(parameters.SrtpSuite, parameters.SrtpLocalKeyParams, parameters.SrtpRemoteKeyParams, logger);
+    }
 
-        var suite = SrtpCryptoSuiteNames.TryParse(parameters.SrtpSuite)
+    /// <summary>
+    /// Builds the SRTP and SRTCP context pairs from raw negotiated SDES key material
+    /// (RFC 4568/3711): outbound protects with our own key, inbound unprotects with the
+    /// peer's key. SRTP and SRTCP derive independent session keys from the same master key
+    /// (RFC 3711 §4.3.2). Returns all-<c>null</c> when no SDES material was negotiated (plain
+    /// RTP or DTLS keying). Set-but-unparsable key material throws — failing open would silently
+    /// send plaintext. This per-m-line overload lets each stream (audio, video) key from its own
+    /// <c>a=crypto</c> attribute.
+    /// </summary>
+    public static (ISrtpContext? OutRtp, ISrtpContext? InRtp, ISrtcpContext? OutRtcp, ISrtcpContext? InRtcp)
+        TryCreate(string? srtpSuite, string? localKeyParams, string? remoteKeyParams, ILogger logger)
+    {
+        if (srtpSuite is null || localKeyParams is null || remoteKeyParams is null)
+            return (null, null, null, null);
+
+        var suite = SrtpCryptoSuiteNames.TryParse(srtpSuite)
             ?? throw new InvalidOperationException(
-                $"Negotiated SRTP suite '{parameters.SrtpSuite}' is not supported by the media layer.");
+                $"Negotiated SRTP suite '{srtpSuite}' is not supported by the media layer.");
 
         SrtpKeyMaterial localKeys;
         SrtpKeyMaterial remoteKeys;
         try
         {
-            localKeys = SrtpKeyMaterial.ParseInline(parameters.SrtpLocalKeyParams, suite);
-            remoteKeys = SrtpKeyMaterial.ParseInline(parameters.SrtpRemoteKeyParams, suite);
+            localKeys = SrtpKeyMaterial.ParseInline(localKeyParams, suite);
+            remoteKeys = SrtpKeyMaterial.ParseInline(remoteKeyParams, suite);
         }
         catch (FormatException ex)
         {
@@ -50,8 +62,7 @@ internal static class SdesMediaCryptoContextFactory
         }
 
         logger.LogInformation(
-            "SRTP and SRTCP enabled for media session (suite {Suite}).",
-            parameters.SrtpSuite);
+            "SRTP and SRTCP enabled for media session (suite {Suite}).", srtpSuite);
         return (new SrtpContext(localKeys), new SrtpContext(remoteKeys),
                 new SrtcpContext(localKeys), new SrtcpContext(remoteKeys));
     }
