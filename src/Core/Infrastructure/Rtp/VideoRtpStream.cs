@@ -28,11 +28,11 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
     // Conservative RTP payload budget below a 1500 MTU: RTP header + SRTP tag headroom.
     private const int MaxRtpPayloadSize = 1200;
 
-    // DECISION: inbound reorder/RTX-recovery window depth (packets). A pure depth window holds
-    // this many packets at steady state, so it both bounds the recovery window (a retransmit
-    // slots in only while its gap is still buffered) and the added playout latency. 32 balances
-    // a ~1-RTT retransmit window against latency; adaptive/contiguous-release playout is
-    // follow-up. Only active on RTX-negotiated legs, which opt into that recovery latency.
+    // DECISION: inbound reorder/RTX-recovery window depth (packets). The reorder buffer releases
+    // in-order packets immediately (no steady-state latency) and only holds behind a gap; depth
+    // bounds how many packets are held — and thus how long — before it gives up on a missing
+    // packet. 32 covers a ~1-RTT retransmit window plus realistic reordering. Only active on
+    // RTX-negotiated legs.
     private const int ReorderWindowDepth = 32;
 
     private readonly RtpSession _rtp;

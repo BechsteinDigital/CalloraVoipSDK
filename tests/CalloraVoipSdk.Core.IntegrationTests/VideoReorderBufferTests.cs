@@ -5,11 +5,26 @@ namespace CalloraVoipSdk.Core.IntegrationTests;
 
 /// <summary>
 /// Video reorder buffer (WebRTC video playout, RFC 3550 ordering + RFC 4588 RTX window): a
-/// depth-bounded window that emits video RTP packets in ascending sequence order, correcting
-/// in-window reordering, skipping gaps it outgrows, and dropping duplicate/too-late packets.
+/// contiguous-release window that emits video RTP packets in ascending sequence order, passing
+/// an in-order stream straight through (no buffering latency), holding only behind a gap to let
+/// a reordered/retransmitted packet slot in, skipping a gap it outgrows, and dropping
+/// duplicate/too-late packets.
 /// </summary>
 public sealed class VideoReorderBufferTests
 {
+    [Fact]
+    public void In_order_stream_releases_immediately_without_holding()
+    {
+        var buffer = new VideoReorderBuffer(depth: 8);
+
+        // Every in-order packet comes straight back out; nothing is ever held.
+        for (ushort seq = 1; seq <= 6; seq++)
+        {
+            Assert.Equal((ushort[])[seq], SequencesOf(buffer.Insert(Packet(seq))).ToArray());
+            Assert.Equal(0, buffer.BufferedCount);
+        }
+    }
+
     [Fact]
     public void In_order_inserts_pass_through_in_order()
     {
@@ -24,17 +39,32 @@ public sealed class VideoReorderBufferTests
     }
 
     [Fact]
-    public void Reordered_inserts_within_depth_emerge_sorted()
+    public void A_gap_holds_subsequent_packets_until_it_is_filled()
     {
         var buffer = new VideoReorderBuffer(depth: 8);
 
-        // A fully shuffled burst that fits inside the window is reordered on flush.
-        foreach (var seq in (ushort[])[5, 2, 8, 1, 7, 3, 6, 4])
-            Assert.Empty(buffer.Insert(Packet(seq))); // window still filling → nothing released
+        Assert.Equal((ushort[])[1], SequencesOf(buffer.Insert(Packet(1))).ToArray());
+        Assert.Empty(buffer.Insert(Packet(3))); // gap at 2 → held
+        Assert.Empty(buffer.Insert(Packet(4))); // still held behind the gap
+        Assert.Equal(2, buffer.BufferedCount);
 
-        var released = SequencesOf(buffer.Flush());
+        // The missing 2 arrives (reorder or RTX): it and the contiguous run behind it release.
+        Assert.Equal((ushort[])[2, 3, 4], SequencesOf(buffer.Insert(Packet(2))).ToArray());
+        Assert.Equal(0, buffer.BufferedCount);
+    }
+
+    [Fact]
+    public void Reordered_pairs_are_corrected_and_released_in_order()
+    {
+        var buffer = new VideoReorderBuffer(depth: 8);
+        var released = new List<ushort>();
+
+        // Adjacent swaps (none arriving before the baseline) are corrected as each gap fills.
+        foreach (var seq in (ushort[])[1, 3, 2, 5, 4, 7, 6, 8])
+            released.AddRange(SequencesOf(buffer.Insert(Packet(seq))));
 
         Assert.Equal((ushort[])[1, 2, 3, 4, 5, 6, 7, 8], released.ToArray());
+        Assert.Equal(0, buffer.BufferedCount);
     }
 
     [Fact]
@@ -57,7 +87,7 @@ public sealed class VideoReorderBufferTests
         var buffer = new VideoReorderBuffer(depth: 2);
         var released = new List<ushort>();
 
-        // 4 is never delivered; the window can only hold 2, so it slides past the gap.
+        // 4 is never delivered; once more than depth packets pile up behind it the window skips.
         foreach (var seq in (ushort[])[1, 2, 3, 5, 6, 7])
             released.AddRange(SequencesOf(buffer.Insert(Packet(seq))));
         released.AddRange(SequencesOf(buffer.Flush()));
@@ -67,28 +97,28 @@ public sealed class VideoReorderBufferTests
     }
 
     [Fact]
-    public void Duplicate_still_in_the_window_is_dropped()
+    public void Duplicate_held_behind_a_gap_is_dropped()
     {
         var buffer = new VideoReorderBuffer(depth: 4);
 
-        Assert.Empty(buffer.Insert(Packet(5)));
-        Assert.Empty(buffer.Insert(Packet(5))); // duplicate
+        Assert.Equal((ushort[])[1], SequencesOf(buffer.Insert(Packet(1))).ToArray());
+        Assert.Empty(buffer.Insert(Packet(3))); // held behind the gap at 2
+        Assert.Empty(buffer.Insert(Packet(3))); // duplicate of the held packet
         Assert.Equal(1, buffer.BufferedCount);
     }
 
     [Fact]
-    public void Too_late_packet_below_the_released_mark_is_dropped()
+    public void Too_late_packet_below_the_expected_mark_is_dropped()
     {
-        var buffer = new VideoReorderBuffer(depth: 2);
+        var buffer = new VideoReorderBuffer(depth: 4);
 
-        // Fill and release 1 (window holds 2, 3).
-        Assert.Empty(buffer.Insert(Packet(1)));
+        // In-order 1,2,3 all release; the next expected is now 4.
+        for (ushort seq = 1; seq <= 3; seq++)
+            Assert.Equal((ushort[])[seq], SequencesOf(buffer.Insert(Packet(seq))).ToArray());
+
+        // A stale retransmit of 2 arrives late → already released past → dropped, nothing held.
         Assert.Empty(buffer.Insert(Packet(2)));
-        Assert.Equal((ushort[])[1], SequencesOf(buffer.Insert(Packet(3))).ToArray());
-
-        // 1 arrives again, already released past → dropped, window unchanged.
-        Assert.Empty(buffer.Insert(Packet(1)));
-        Assert.Equal(2, buffer.BufferedCount);
+        Assert.Equal(0, buffer.BufferedCount);
     }
 
     [Fact]
@@ -105,19 +135,18 @@ public sealed class VideoReorderBufferTests
     }
 
     [Fact]
-    public void Depth_of_one_releases_every_packet_but_the_newest()
+    public void Depth_of_one_holds_a_single_packet_then_skips_the_gap()
     {
         var buffer = new VideoReorderBuffer(depth: 1);
         var released = new List<ushort>();
 
-        // With a one-packet window, each new in-order packet releases its predecessor.
-        released.AddRange(SequencesOf(buffer.Insert(Packet(1)))); // holds 1
-        released.AddRange(SequencesOf(buffer.Insert(Packet(2)))); // releases 1, holds 2
-        released.AddRange(SequencesOf(buffer.Insert(Packet(3)))); // releases 2, holds 3
-
-        Assert.Equal((ushort[])[1, 2], released.ToArray());
+        released.AddRange(SequencesOf(buffer.Insert(Packet(1)))); // releases 1
+        Assert.Empty(buffer.Insert(Packet(3)));                   // holds one behind the gap at 2
         Assert.Equal(1, buffer.BufferedCount);
-        Assert.Equal((ushort[])[3], SequencesOf(buffer.Flush()).ToArray());
+        released.AddRange(SequencesOf(buffer.Insert(Packet(4)))); // over depth → skip 2, release 3,4
+
+        Assert.Equal((ushort[])[1, 3, 4], released.ToArray());
+        Assert.DoesNotContain((ushort)2, released);
     }
 
     [Fact]

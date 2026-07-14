@@ -81,7 +81,9 @@ public sealed class VideoRtxReceiveE2eTests
         using var peer = new UdpClient(new IPEndPoint(IPAddress.Loopback, peerPort));
         var target = new IPEndPoint(IPAddress.Loopback, receiverPort);
 
-        // Drop 3 and never retransmit it: the window slides past the gap and delivery skips it.
+        // Drop 3 and never retransmit it: once more than the reorder depth of packets pile up
+        // behind the gap, the window gives up and delivery skips it. The 4..64 burst is sized to
+        // exceed that depth so the skip is guaranteed to fire.
         await SendVideo(peer, target, 1);
         await SendVideo(peer, target, 2);
         for (ushort seq = 4; seq <= 64; seq++)
