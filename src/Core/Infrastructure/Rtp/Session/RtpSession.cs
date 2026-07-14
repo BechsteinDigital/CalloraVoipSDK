@@ -45,6 +45,16 @@ internal sealed class RtpSession : IRtpSession
     private ISrtcpContext? _outboundSrtcp;
     private ISrtcpContext? _inboundSrtcp;
 
+    // Secondary multiplexed stream (RFC 4588 RTX): one additional payload type carried on the
+    // same socket with its own SRTP contexts, so its independent sequence space never shares
+    // the primary stream's replay window / ROC. -1 until ConfigureSecondaryStream is called;
+    // contexts installed later (post-DTLS or from SDES keys) like the primary ones. Written
+    // once before the receive loop starts, read on the loop thread — volatile for visibility.
+    private volatile int _secondaryPayloadType = -1;
+    private ISrtpContext? _secondaryOutboundSrtp;
+    private ISrtpContext? _secondaryInboundSrtp;
+    private readonly object _secondarySrtpProtectSync = new();
+
     private ushort _sequenceNumber;
     private uint _timestamp;
     private Task? _receiveLoop;
@@ -89,6 +99,14 @@ internal sealed class RtpSession : IRtpSession
     /// socket. DTLS datagrams are not passed to the RTP/RTCP paths.
     /// </summary>
     internal event Action<byte[], IPEndPoint>? DtlsPacketReceived;
+
+    /// <summary>
+    /// Raised for an inbound RTP packet whose payload type matches the configured secondary
+    /// stream (RFC 4588 RTX). It is decrypted with the secondary SRTP context and dispatched
+    /// here, never through <see cref="PacketReceived"/>, so the primary stream's replay
+    /// window is untouched.
+    /// </summary>
+    internal event Action<RtpPacket>? SecondaryPacketReceived;
 
     public RtpSession(RtpSessionOptions options, IRtpPacketCodec codec, ILogger<RtpSession> logger)
     {
@@ -275,6 +293,67 @@ internal sealed class RtpSession : IRtpSession
     }
 
     /// <summary>
+    /// Routes inbound RTP packets of <paramref name="payloadType"/> to
+    /// <see cref="SecondaryPacketReceived"/> (RFC 4588 RTX) instead of the primary path.
+    /// Call once before the receive loop dispatches secondary traffic. The caller retains
+    /// ownership of the contexts installed via <see cref="InstallSecondarySecurityContexts"/>.
+    /// </summary>
+    internal void ConfigureSecondaryStream(byte payloadType) => _secondaryPayloadType = payloadType;
+
+    /// <summary>The configured secondary-stream payload type, or <c>null</c> when none.</summary>
+    internal byte? SecondaryPayloadType => _secondaryPayloadType >= 0 ? (byte)_secondaryPayloadType : null;
+
+    /// <summary>
+    /// Installs the SRTP contexts for the secondary (RTX) stream — separate from the primary
+    /// ones so its independent sequence space has its own replay window / ROC, though the
+    /// keys are the same as the primary stream's (RFC 4588 §9). See
+    /// <see cref="InstallSecurityContexts"/> for the fail-closed contract.
+    /// </summary>
+    internal void InstallSecondarySecurityContexts(ISrtpContext outbound, ISrtpContext inbound)
+    {
+        ArgumentNullException.ThrowIfNull(outbound);
+        ArgumentNullException.ThrowIfNull(inbound);
+        Volatile.Write(ref _secondaryOutboundSrtp, outbound);
+        Volatile.Write(ref _secondaryInboundSrtp, inbound);
+    }
+
+    /// <summary>
+    /// Sends a pre-built secondary-stream packet (RFC 4588 RTX) to the media peer, protected
+    /// with the secondary SRTP context. Fail-closed: on an encrypted-media leg with no
+    /// secondary context installed, the send is suppressed rather than leaking plaintext.
+    /// The packet carries its own SSRC and sequence number (the caller's RTX stream).
+    /// </summary>
+    internal async ValueTask SendSecondaryAsync(RtpPacket packet, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(packet);
+        if (Volatile.Read(ref _transmissionStopped) != 0)
+            return;
+
+        var datagram = _codec.Encode(packet);
+        if (Volatile.Read(ref _secondaryOutboundSrtp) is { } outbound)
+        {
+            try
+            {
+                lock (_secondarySrtpProtectSync)
+                    datagram = outbound.Protect(datagram);
+            }
+            catch (ObjectDisposedException)
+            {
+                _logger.LogDebug("Suppressing secondary RTP: context disposed during teardown.");
+                return;
+            }
+        }
+        else if (_options.RequireEncryptedMedia)
+        {
+            _logger.LogDebug("Suppressing secondary RTP: encrypted media required but no context installed yet.");
+            return;
+        }
+
+        await _udp.SendAsync(datagram, Volatile.Read(ref _latchedRemoteEndPoint) ?? _options.RemoteEndPoint, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// Returns an immutable sender-side RTP snapshot for RTCP SR generation.
     /// </summary>
     internal RtpSenderStatisticsSnapshot GetSenderStatisticsSnapshot()
@@ -432,6 +511,18 @@ internal sealed class RtpSession : IRtpSession
             return;
         }
 
+        // Secondary stream (RFC 4588 RTX): a configured payload type is decrypted with its
+        // own SRTP context and dispatched apart, so its independent sequence space does not
+        // disturb the primary stream's replay window. The RTP header (incl. PT, byte 1 low
+        // 7 bits) is plaintext under SRTP, so the routing decision is safe pre-decrypt.
+        if (_secondaryPayloadType >= 0
+            && datagram.Length >= 2
+            && (datagram[1] & 0x7F) == _secondaryPayloadType)
+        {
+            ProcessSecondaryDatagram(datagram, source);
+            return;
+        }
+
         // SRTP (RFC 3711): authenticate and decrypt before any RTP interpretation.
         // A packet failing the auth tag or replay check is dropped here — it never
         // reaches the codec, the jitter buffer, or the symmetric-RTP latch.
@@ -538,6 +629,63 @@ internal sealed class RtpSession : IRtpSession
         }
     }
 
+    // Decrypts a secondary-stream datagram with its own SRTP context and dispatches it,
+    // mirroring the primary path's fail-closed drops (auth/replay/malformed never kill the
+    // receive loop). Deliberately skips the symmetric-RTP latch and SSRC validation: the
+    // secondary stream (RTX) rides the already-latched media 5-tuple and its own sequence
+    // space is validated by the consumer via the recovered original packet.
+    private void ProcessSecondaryDatagram(ReadOnlySpan<byte> datagram, IPEndPoint? source)
+    {
+        if (_options.RequireEncryptedMedia && Volatile.Read(ref _secondaryInboundSrtp) is null)
+        {
+            _logger.LogDebug("Dropping secondary RTP from {Source}: encrypted media required but no context installed yet.", source);
+            return;
+        }
+
+        if (Volatile.Read(ref _secondaryInboundSrtp) is { } inbound)
+        {
+            try
+            {
+                datagram = inbound.Unprotect(datagram);
+            }
+            catch (SrtpAuthenticationException)
+            {
+                _logger.LogDebug("Dropping secondary SRTP packet failing authentication from {Source}.", source);
+                return;
+            }
+            catch (SrtpReplayException)
+            {
+                _logger.LogDebug("Dropping replayed secondary SRTP packet from {Source}.", source);
+                return;
+            }
+            catch (Exception ex) when (ex is ArgumentException or CryptographicException or ObjectDisposedException)
+            {
+                _logger.LogDebug("Dropping undecryptable secondary SRTP packet from {Source}: {Message}", source, ex.Message);
+                return;
+            }
+        }
+
+        RtpPacket packet;
+        try
+        {
+            packet = _codec.Decode(datagram);
+        }
+        catch (FormatException ex)
+        {
+            _logger.LogDebug("Dropping malformed secondary RTP datagram: {Message}", ex.Message);
+            return;
+        }
+
+        try
+        {
+            SecondaryPacketReceived?.Invoke(packet);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled exception in secondary RTP handler.");
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Dispose
     // -------------------------------------------------------------------------
@@ -558,6 +706,7 @@ internal sealed class RtpSession : IRtpSession
         ControlPacketReceived = null;
         StunPacketReceived = null;
         DtlsPacketReceived = null;
+        SecondaryPacketReceived = null;
     }
 
     // RFC 7983 / RFC 5764 §5.1.2 demux: a STUN packet's first byte is in 0..3, disjoint from
