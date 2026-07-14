@@ -361,7 +361,8 @@ internal sealed partial class SipCoreCallChannel : ICallChannel
                 ? new IPEndPoint(localEndPoint.Address, _localVideoPort)
                 : null;
             _localIceDescription = await _iceAgent
-                .BuildLocalDescriptionAsync(localEndPoint, _localMediaSocket.Client, videoLocalEndPoint, ct)
+                .BuildLocalDescriptionAsync(
+                    localEndPoint, _localMediaSocket.Client, videoLocalEndPoint, _localVideoSocket?.Client, ct)
                 .ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)

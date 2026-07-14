@@ -29,8 +29,8 @@ internal sealed class CallIceLocalDescription
 
     /// <summary>
     /// Gathered local ICE candidates for the video m-line (its own 5-tuple; the ufrag/pwd are
-    /// shared session-wide). Empty on an audio-only leg. Host-only for now — server-reflexive and
-    /// relay video candidates are a follow-up.
+    /// shared session-wide). Host, server-reflexive and relay, mirroring the audio candidates.
+    /// Empty on an audio-only leg.
     /// </summary>
     public IReadOnlyList<CallIceCandidate> VideoCandidates { get; init; } = [];
 }

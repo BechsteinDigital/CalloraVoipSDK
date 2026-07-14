@@ -44,6 +44,7 @@ internal sealed class CallIceAgent : ICallIceAgent
         IPEndPoint localEndPoint,
         System.Net.Sockets.Socket? sharedMediaSocket = null,
         IPEndPoint? videoLocalEndPoint = null,
+        System.Net.Sockets.Socket? videoSharedMediaSocket = null,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(localEndPoint);
@@ -51,16 +52,54 @@ internal sealed class CallIceAgent : ICallIceAgent
         if (!_configuration.Enabled)
         {
             _logger.LogDebug("ICE gathering skipped because ICE is disabled.");
-            PublishGatheringEvent(localEndPoint, candidateCount: 0, hostCount: 0, srflxCount: 0, relayCount: 0);
+            PublishGatheringEvent(localEndPoint, []);
             return null;
         }
 
-        _logger.LogDebug("ICE state={State}: gathering local candidates for {LocalEndPoint}.", CallIceNegotiationState.Gathering, localEndPoint);
+        // One TURN allocator and configuration serve every m-line; warn once (not per gathered
+        // stream) when TURN is configured but no allocator can turn it into relay candidates.
+        WarnIfTurnAllocatorMissing(localEndPoint);
 
-        var candidates = new List<CallIceCandidate>
+        var candidates = await GatherTransportCandidatesAsync(localEndPoint, sharedMediaSocket, ct)
+            .ConfigureAwait(false);
+        PublishGatheringEvent(localEndPoint, candidates);
+
+        // Video 5-tuple (no BUNDLE): gather its own candidates on the video port through the video
+        // socket, with the same STUN/TURN servers and the session-shared ufrag/pwd — host,
+        // server-reflexive, and relay, mirroring audio — so a peer can reach the video stream
+        // through NAT too.
+        IReadOnlyList<CallIceCandidate> videoCandidates = [];
+        if (videoLocalEndPoint is not null)
         {
-            BuildHostCandidate(localEndPoint)
+            videoCandidates = await GatherTransportCandidatesAsync(videoLocalEndPoint, videoSharedMediaSocket, ct)
+                .ConfigureAwait(false);
+            PublishGatheringEvent(videoLocalEndPoint, videoCandidates);
+        }
+
+        return new CallIceLocalDescription
+        {
+            Ufrag = GenerateUfrag(),
+            Pwd = GeneratePassword(),
+            Candidates = candidates,
+            VideoCandidates = videoCandidates
         };
+    }
+
+    // Gathers the ICE transport candidates for one media 5-tuple (RFC 8445 §5.1.1): the host
+    // candidate, one server-reflexive candidate per reachable STUN server (probed through
+    // <paramref name="sharedMediaSocket"/> so the mapped address carries the real media port), and
+    // one relay candidate per successful TURN allocation. Deduplicated. Used for both the audio and
+    // the video 5-tuple — only the endpoint and socket differ.
+    private async Task<IReadOnlyList<CallIceCandidate>> GatherTransportCandidatesAsync(
+        IPEndPoint localEndPoint,
+        System.Net.Sockets.Socket? sharedMediaSocket,
+        CancellationToken ct)
+    {
+        _logger.LogDebug(
+            "ICE state={State}: gathering local candidates for {LocalEndPoint}.",
+            CallIceNegotiationState.Gathering, localEndPoint);
+
+        var candidates = new List<CallIceCandidate> { BuildHostCandidate(localEndPoint) };
 
         var stunServers = _configuration.Servers
             .Where(static s => s.Type == IceServerType.Stun)
@@ -80,28 +119,11 @@ internal sealed class CallIceAgent : ICallIceAgent
             candidates.Add(BuildServerReflexiveCandidate(localEndPoint, mapped, foundationIndex: i + 1));
         }
 
-        var turnServers = _configuration.Servers
-            .Where(static s => s.Type == IceServerType.Turn)
-            .ToArray();
-        if (_turnRelayAllocator is null && turnServers.Length > 0)
-        {
-            _logger.LogWarning(
-                "ICE state={State}: TURN servers are configured but no relay allocator is available.",
-                CallIceNegotiationState.Gathering);
-            _telemetry?.PublishEvent(new IceTelemetryEvent
-            {
-                EventType = "sip.media.ice.gathering.turn_allocator_missing",
-                CorrelationId = $"ICE:GATHER:{localEndPoint}",
-                Attributes = new Dictionary<string, string>
-                {
-                    ["local_endpoint"] = localEndPoint.ToString(),
-                    ["turn_server_count"] = turnServers.Length.ToString()
-                }
-            });
-        }
-
         if (_turnRelayAllocator is not null)
         {
+            var turnServers = _configuration.Servers
+                .Where(static s => s.Type == IceServerType.Turn)
+                .ToArray();
             for (var i = 0; i < turnServers.Length; i++)
             {
                 ct.ThrowIfCancellationRequested();
@@ -123,31 +145,29 @@ internal sealed class CallIceAgent : ICallIceAgent
         var uniqueCandidates = DeduplicateCandidates(candidates);
         _logger.LogDebug(
             "ICE state={State}: gathered {CandidateCount} candidates for {LocalEndPoint}.",
-            CallIceNegotiationState.Gathered,
-            uniqueCandidates.Count,
-            localEndPoint);
-        PublishGatheringEvent(
-            localEndPoint,
-            uniqueCandidates.Count,
-            uniqueCandidates.Count(static c => c.Type.Equals("host", StringComparison.OrdinalIgnoreCase)),
-            uniqueCandidates.Count(static c => c.Type.Equals("srflx", StringComparison.OrdinalIgnoreCase)),
-            uniqueCandidates.Count(static c => c.Type.Equals("relay", StringComparison.OrdinalIgnoreCase)));
+            CallIceNegotiationState.Gathered, uniqueCandidates.Count, localEndPoint);
+        return uniqueCandidates;
+    }
 
-        // Video 5-tuple (no BUNDLE): a host candidate for the video port, sharing the session
-        // ufrag/pwd, so a peer can run connectivity checks against our video stream. Host-only for
-        // now — server-reflexive/relay video candidates would need STUN/TURN probes on the video
-        // socket (a follow-up); the host candidate covers the direct/LAN path.
-        var videoCandidates = videoLocalEndPoint is not null
-            ? (IReadOnlyList<CallIceCandidate>)[BuildHostCandidate(videoLocalEndPoint)]
-            : [];
+    private void WarnIfTurnAllocatorMissing(IPEndPoint localEndPoint)
+    {
+        var turnServerCount = _configuration.Servers.Count(static s => s.Type == IceServerType.Turn);
+        if (_turnRelayAllocator is not null || turnServerCount == 0)
+            return;
 
-        return new CallIceLocalDescription
+        _logger.LogWarning(
+            "ICE state={State}: TURN servers are configured but no relay allocator is available.",
+            CallIceNegotiationState.Gathering);
+        _telemetry?.PublishEvent(new IceTelemetryEvent
         {
-            Ufrag = GenerateUfrag(),
-            Pwd = GeneratePassword(),
-            Candidates = uniqueCandidates,
-            VideoCandidates = videoCandidates
-        };
+            EventType = "sip.media.ice.gathering.turn_allocator_missing",
+            CorrelationId = $"ICE:GATHER:{localEndPoint}",
+            Attributes = new Dictionary<string, string>
+            {
+                ["local_endpoint"] = localEndPoint.ToString(),
+                ["turn_server_count"] = turnServerCount.ToString()
+            }
+        });
     }
 
     /// <inheritdoc />
@@ -504,12 +524,7 @@ internal sealed class CallIceAgent : ICallIceAgent
         return negotiatedLocalEndPoint;
     }
 
-    private void PublishGatheringEvent(
-        IPEndPoint localEndPoint,
-        int candidateCount,
-        int hostCount,
-        int srflxCount,
-        int relayCount)
+    private void PublishGatheringEvent(IPEndPoint localEndPoint, IReadOnlyList<CallIceCandidate> candidates)
     {
         _telemetry?.PublishEvent(new IceTelemetryEvent
         {
@@ -518,10 +533,10 @@ internal sealed class CallIceAgent : ICallIceAgent
             Attributes = new Dictionary<string, string>
             {
                 ["local_endpoint"] = localEndPoint.ToString(),
-                ["candidate_count"] = candidateCount.ToString(),
-                ["host_count"] = hostCount.ToString(),
-                ["srflx_count"] = srflxCount.ToString(),
-                ["relay_count"] = relayCount.ToString()
+                ["candidate_count"] = candidates.Count.ToString(),
+                ["host_count"] = candidates.Count(static c => c.Type.Equals("host", StringComparison.OrdinalIgnoreCase)).ToString(),
+                ["srflx_count"] = candidates.Count(static c => c.Type.Equals("srflx", StringComparison.OrdinalIgnoreCase)).ToString(),
+                ["relay_count"] = candidates.Count(static c => c.Type.Equals("relay", StringComparison.OrdinalIgnoreCase)).ToString()
             }
         });
     }
