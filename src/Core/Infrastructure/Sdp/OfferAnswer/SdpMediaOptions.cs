@@ -62,6 +62,12 @@ internal sealed class SdpVideoMediaOptions
     /// leaves the video m-line without its own candidates.
     /// </summary>
     public IReadOnlyList<SdpIceCandidate> Candidates { get; init; } = [];
+
+    /// <summary>
+    /// RTP header-extension URIs the SDK supports/offers on the video m-line (RFC 8285). The
+    /// negotiator assigns one-byte ids in an offer and echoes the offered ids in an answer.
+    /// </summary>
+    public IReadOnlyList<string> HeaderExtensionUris { get; init; } = [];
 }
 
 /// <summary>

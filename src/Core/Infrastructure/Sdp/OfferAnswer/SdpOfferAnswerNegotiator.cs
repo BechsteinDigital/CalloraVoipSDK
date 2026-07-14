@@ -99,6 +99,9 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
                 IcePwd = ice?.Pwd,
                 IceOptions = ice?.Options,
                 Candidates = video.Candidates,
+                // RTP header extensions (RFC 8285 §5): the offer assigns one-byte ids to the
+                // supported URIs (transport-wide-cc for congestion control, etc.).
+                Extensions = BuildOfferExtmaps(video.HeaderExtensionUris),
                 Fingerprint = dtls is not null
                     ? new SdpFingerprint { Algorithm = dtls.Algorithm, Value = dtls.Fingerprint }
                     : null,
@@ -521,8 +524,47 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             IceUfrag = localOptions.Ice?.Ufrag,
             IcePwd = localOptions.Ice?.Pwd,
             IceOptions = localOptions.Ice?.Options,
-            Candidates = video.Candidates
+            Candidates = video.Candidates,
+            // RTP header extensions (RFC 8285 §5): echo the offered id for each URI we support,
+            // dropping the rest — the answer confirms the negotiated id↔uri mapping.
+            Extensions = BuildAnswerExtmaps(offered.Extensions, video.HeaderExtensionUris)
         };
+    }
+
+    // RFC 8285 §4.2: the one-byte header form uses ids 1..14 (0 is padding, 15 is reserved).
+    private const int OneByteMaxExtensionId = 14;
+
+    // Offer: assign sequential one-byte ids to the supported extension URIs (RFC 8285 §5). Only the
+    // first 14 fit the one-byte form; any beyond that are dropped (the SDK's supported set is small).
+    private static IReadOnlyList<SdpExtmap> BuildOfferExtmaps(IReadOnlyList<string> uris)
+    {
+        if (uris.Count == 0)
+            return [];
+
+        var extmaps = new List<SdpExtmap>(Math.Min(uris.Count, OneByteMaxExtensionId));
+        for (var i = 0; i < uris.Count && i < OneByteMaxExtensionId; i++)
+            extmaps.Add(new SdpExtmap { Id = i + 1, Uri = uris[i] });
+        return extmaps;
+    }
+
+    // Answer: for each offered extmap whose URI we support, echo it with the offered id (RFC 8285
+    // §5 — the offerer owns the id assignment); unsupported extensions are dropped. Only one-byte
+    // ids are echoed, since that is the form the SDK reads/writes.
+    private static IReadOnlyList<SdpExtmap> BuildAnswerExtmaps(
+        IReadOnlyList<SdpExtmap> offered, IReadOnlyList<string> supportedUris)
+    {
+        if (offered.Count == 0 || supportedUris.Count == 0)
+            return [];
+
+        var extmaps = new List<SdpExtmap>();
+        foreach (var extmap in offered)
+        {
+            if (extmap.Id is < 1 or > OneByteMaxExtensionId)
+                continue;
+            if (supportedUris.Contains(extmap.Uri, StringComparer.Ordinal))
+                extmaps.Add(new SdpExtmap { Id = extmap.Id, Uri = extmap.Uri });
+        }
+        return extmaps;
     }
 
     /// <summary>

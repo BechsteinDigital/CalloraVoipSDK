@@ -74,6 +74,9 @@ internal sealed class SdpMediaDescription
     /// <summary>RTCP feedback capabilities (<c>a=rtcp-fb</c>, RFC 4585 §4.2).</summary>
     public IReadOnlyList<SdpRtcpFeedback> RtcpFeedback { get; init; } = [];
 
+    /// <summary>RTP header-extension mappings (<c>a=extmap</c>, RFC 8285 §5).</summary>
+    public IReadOnlyList<SdpExtmap> Extensions { get; init; } = [];
+
     // -------------------------------------------------------------------------
     // ICE (RFC 8839)
     // -------------------------------------------------------------------------

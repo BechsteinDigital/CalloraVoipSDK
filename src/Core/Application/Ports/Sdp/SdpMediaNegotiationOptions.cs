@@ -71,6 +71,14 @@ public sealed class SdpVideoNegotiationOptions
     /// without its own candidates (the peer derives the target from the m-line address/port).
     /// </summary>
     public IReadOnlyList<CallIceCandidate> Candidates { get; init; } = [];
+
+    /// <summary>
+    /// RTP header-extension URIs the SDK supports/offers on the video m-line (<c>a=extmap</c>,
+    /// RFC 8285), e.g. the transport-wide-cc URI for congestion control. An offer assigns one-byte
+    /// ids to these; an answer echoes the offered ids for URIs in this list and drops the rest.
+    /// Empty (default) emits no <c>a=extmap</c> — header extensions stay off until opted in.
+    /// </summary>
+    public IReadOnlyList<string> HeaderExtensionUris { get; init; } = [];
 }
 
 /// <summary>

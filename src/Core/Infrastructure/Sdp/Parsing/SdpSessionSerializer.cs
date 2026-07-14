@@ -105,6 +105,10 @@ internal sealed class SdpSessionSerializer : ISdpSessionSerializer
         foreach (var feedback in media.RtcpFeedback)
             sb.AppendLine($"a=rtcp-fb:{feedback.Serialize()}");
 
+        // RTP header extension mappings (RFC 8285 §5)
+        foreach (var extmap in media.Extensions)
+            sb.AppendLine($"a=extmap:{extmap.Serialize()}");
+
         // Direction
         AppendDirection(sb, media.Direction);
 
