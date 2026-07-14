@@ -26,6 +26,7 @@ internal sealed class SipCoreCallChannel : ICallChannel
     private readonly ICallIceAgent? _iceAgent;
     private readonly ISipTelemetrySink _telemetry;
     private readonly SipCallChannelSrtpTelemetry _srtpTelemetry;
+    private readonly SipCallChannelSrtpPolicyGuard _srtpPolicyGuard;
     private readonly SrtpPolicy _appliedSrtpPolicy;
     private readonly string _srtpPolicySource;
     private readonly IReadOnlyList<string>? _preferredCodecNames;
@@ -73,6 +74,13 @@ internal sealed class SipCoreCallChannel : ICallChannel
     // parameters publish; read on the signaling thread that issues hold/unhold.
     private volatile string? _activeLocalSrtpKeyParams;
 
+    // DTLS-SRTP signaling (RFC 5763): local identity (fingerprint) plus whether locally
+    // originated offers advertise DTLS keying. _dtlsActiveOnCall latches once a leg
+    // negotiated DTLS so hold/unhold re-offers keep signaling it.
+    private readonly SdpDtlsNegotiationOptions? _dtlsOptions;
+    private readonly bool _offerDtlsSrtp;
+    private volatile bool _dtlsActiveOnCall;
+
     // Signature of the last published media parameters (SRTP keys + remote endpoint + codec).
     // A re-INVITE whose negotiated media differs from this re-publishes MediaParametersNegotiated
     // (rekey → the orchestrator rebuilds the media session); an identical one (a retransmission)
@@ -107,8 +115,12 @@ internal sealed class SipCoreCallChannel : ICallChannel
         string policySource,
         ICallIceAgent? iceAgent = null,
         IReadOnlyList<string>? preferredCodecNames = null,
-        IPAddress? advertisedPublicMediaAddress = null)
+        IPAddress? advertisedPublicMediaAddress = null,
+        SdpDtlsNegotiationOptions? dtlsOptions = null,
+        bool offerDtlsSrtp = false)
     {
+        _dtlsOptions = dtlsOptions;
+        _offerDtlsSrtp = offerDtlsSrtp && dtlsOptions is not null;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _sdpNegotiator = sdpNegotiator ?? throw new ArgumentNullException(nameof(sdpNegotiator));
         _iceAgent = iceAgent;
@@ -116,6 +128,7 @@ internal sealed class SipCoreCallChannel : ICallChannel
         _appliedSrtpPolicy = appliedSrtpPolicy;
         _srtpPolicySource = string.IsNullOrWhiteSpace(policySource) ? "unknown" : policySource;
         _srtpTelemetry = new SipCallChannelSrtpTelemetry(_telemetry, appliedSrtpPolicy, _srtpPolicySource);
+        _srtpPolicyGuard = new SipCallChannelSrtpPolicyGuard(appliedSrtpPolicy, _srtpTelemetry, _logger);
         _preferredCodecNames = preferredCodecNames;
         _configuredPublicMediaAddress = advertisedPublicMediaAddress;
 
@@ -137,12 +150,18 @@ internal sealed class SipCoreCallChannel : ICallChannel
         _iceControlling = true; // we send the offer → controlling (RFC 8445 §5.1.1)
         await EnsureLocalIceDescriptionAsync(localMediaEndPoint, ct).ConfigureAwait(false);
 
-        // Offer SDES SRTP unless policy forbids it (Disabled). Retain the exact string we
-        // send: its a=crypto line is the outbound encrypt key the media layer recovers.
+        // Offer DTLS-SRTP when configured (RFC 5763, mutually exclusive with SDES);
+        // otherwise offer SDES SRTP unless policy forbids it (Disabled). Retain the exact
+        // string we send: its a=crypto line is the outbound encrypt key the media layer
+        // recovers, its a=fingerprint commits our DTLS identity.
         var offerSdp = _sdpNegotiator.BuildDefaultSdp(
             localMediaEndPoint,
             hold,
-            BuildLocalSdpOptions(offerSrtpCrypto: _appliedSrtpPolicy != SrtpPolicy.Disabled));
+            BuildLocalSdpOptions(
+                offerSrtpCrypto: _appliedSrtpPolicy != SrtpPolicy.Disabled && !_offerDtlsSrtp,
+                // Disabled policy also disables DTLS offering — offering keying the policy
+                // would then terminate on success is self-defeating.
+                offerDtls: _offerDtlsSrtp && _appliedSrtpPolicy != SrtpPolicy.Disabled));
         _localOfferSdp = offerSdp;
         return offerSdp;
     }
@@ -220,9 +239,9 @@ internal sealed class SipCoreCallChannel : ICallChannel
         if (RemoteOfferHasIce(session.RemoteSdp))
             await EnsureLocalIceDescriptionAsync(localMediaEndPoint, ct).ConfigureAwait(false);
 
-        if (!ValidateInboundOfferAgainstPolicy(session.RemoteSdp, out var inboundOfferReasonCode))
+        if (!_srtpPolicyGuard.ValidateInboundOffer(session.RemoteSdp, out var inboundOfferReasonCode))
         {
-            await RejectInboundOnSrtpPolicyViolationAsync(
+            await _srtpPolicyGuard.RejectInboundAsync(
                     session,
                     inboundOfferReasonCode,
                     ct)
@@ -245,7 +264,7 @@ internal sealed class SipCoreCallChannel : ICallChannel
             var reasonCode = _appliedSrtpPolicy == SrtpPolicy.Required
                 ? SrtpDecisionReasonCodes.RequiredNegotiationFailed
                 : SrtpDecisionReasonCodes.MediaParametersUnavailable;
-            await RejectInboundOnSrtpPolicyViolationAsync(session, reasonCode, ct).ConfigureAwait(false);
+            await _srtpPolicyGuard.RejectInboundAsync(session, reasonCode, ct).ConfigureAwait(false);
             throw new InvalidOperationException(
                 $"Inbound SDP answer negotiation failed ({reasonCode}).");
         }
@@ -303,8 +322,17 @@ internal sealed class SipCoreCallChannel : ICallChannel
     /// </summary>
     private SdpMediaNegotiationOptions BuildReofferSdpOptions()
     {
+        // A re-offer conserves the call's established keying, never the initial-offer
+        // preference: a DTLS-keyed call re-offers DTLS (fingerprint + actpass) so the
+        // peer keeps the association; SDES calls re-advertise the live key instead —
+        // forcing DTLS onto an established SDES/plain call would break hold/unhold
+        // against non-DTLS peers.
         var srtpKey = _activeLocalSrtpKeyParams;
-        return BuildLocalSdpOptions(offerSrtpCrypto: srtpKey is not null, offerSrtpKeyParams: srtpKey);
+        var reofferDtls = _dtlsActiveOnCall;
+        return BuildLocalSdpOptions(
+            offerSrtpCrypto: srtpKey is not null && !reofferDtls,
+            offerSrtpKeyParams: srtpKey,
+            offerDtls: reofferDtls);
     }
 
     /// <summary>
@@ -365,7 +393,8 @@ internal sealed class SipCoreCallChannel : ICallChannel
     /// </summary>
     private SdpMediaNegotiationOptions BuildLocalSdpOptions(
         bool offerSrtpCrypto = false,
-        string? offerSrtpKeyParams = null)
+        string? offerSrtpKeyParams = null,
+        bool offerDtls = false)
     {
         var baseOptions = BuildSdpOptions();
         return new SdpMediaNegotiationOptions
@@ -374,6 +403,10 @@ internal sealed class SipCoreCallChannel : ICallChannel
             PreferredCodecNames = baseOptions?.PreferredCodecNames ?? _preferredCodecNames,
             OfferSrtpCrypto = offerSrtpCrypto,
             OfferSrtpKeyParams = offerSrtpKeyParams,
+            // Identity always travels along: the answer path needs it to respond to a
+            // DTLS offer even when we would not offer DTLS ourselves.
+            Dtls = _dtlsOptions,
+            OfferDtlsSrtp = offerDtls,
             SessionId = _sdpSessionId,
             SessionVersion = Interlocked.Increment(ref _sdpSessionVersion)
         };
@@ -648,12 +681,26 @@ internal sealed class SipCoreCallChannel : ICallChannel
         var withIceMetadata = CallMediaParametersIceEnricher.Enrich(parameters, _localIceDescription, _iceControlling);
         reasonCode = SrtpPolicyEvaluator.ResolveReasonCode(_appliedSrtpPolicy, withIceMetadata.IsSrtpNegotiated);
         var violatesPolicy = SrtpPolicyEvaluator.IsPolicyViolation(_appliedSrtpPolicy, withIceMetadata.IsSrtpNegotiated);
-        var enrichedParameters = CallMediaParametersSrtpEnricher.Enrich(
-            withIceMetadata, reasonCode, remoteSdp, _localAnswerSdp ?? _localOfferSdp, _appliedSrtpPolicy);
+        var enrichedParameters = CallMediaParametersDtlsEnricher.Enrich(
+            CallMediaParametersSrtpEnricher.Enrich(
+                withIceMetadata, reasonCode, remoteSdp, _localAnswerSdp ?? _localOfferSdp, _appliedSrtpPolicy),
+            remoteSdp, _localAnswerSdp ?? _localOfferSdp);
+
+        // Fail closed on a keyless secure negotiation: the exchange signals SRTP (secure
+        // profile / fingerprint) but produced neither SDES keys nor a DTLS association —
+        // e.g. a UDP/TLS answer without a fingerprint. Under Required this is a policy
+        // violation; the media layer additionally stays fail-closed (RequireEncryptedMedia).
+        if (IsKeylessSecureNegotiation(enrichedParameters))
+        {
+            reasonCode = SrtpDecisionReasonCodes.RequiredNegotiationFailed;
+            violatesPolicy = _appliedSrtpPolicy == SrtpPolicy.Required;
+        }
 
         // Remember the live outbound encrypt key so a later hold/unhold re-offers the same
         // key (keeps SRTP without rekeying); null when the call resolved to plain RTP.
+        // A DTLS-keyed leg latches instead so re-offers keep signaling DTLS.
         _activeLocalSrtpKeyParams = enrichedParameters.SrtpLocalKeyParams;
+        _dtlsActiveOnCall = enrichedParameters.IsDtlsNegotiated;
         _srtpTelemetry.PublishDecision(
             session,
             enrichedParameters.IsSrtpNegotiated,
@@ -714,14 +761,23 @@ internal sealed class SipCoreCallChannel : ICallChannel
         var reasonCode = SrtpPolicyEvaluator.ResolveReasonCode(_appliedSrtpPolicy, withIceMetadata.IsSrtpNegotiated);
         // On an inbound re-INVITE the session carries the fresh answer we sent (new local key);
         // on the outbound leg it is null and we fall back to our retained answer/offer.
-        var enriched = CallMediaParametersSrtpEnricher.Enrich(
-            withIceMetadata, reasonCode, remoteSdp,
-            session.LocalSdp ?? _localAnswerSdp ?? _localOfferSdp, _appliedSrtpPolicy);
+        var enriched = CallMediaParametersDtlsEnricher.Enrich(
+            CallMediaParametersSrtpEnricher.Enrich(
+                withIceMetadata, reasonCode, remoteSdp,
+                session.LocalSdp ?? _localAnswerSdp ?? _localOfferSdp, _appliedSrtpPolicy),
+            remoteSdp, session.LocalSdp ?? _localAnswerSdp ?? _localOfferSdp);
 
         if (string.Equals(RekeySignature(enriched), _lastPublishedSignature, StringComparison.Ordinal))
             return; // unchanged — retransmission or a re-INVITE that did not touch media
 
         var violatesPolicy = SrtpPolicyEvaluator.IsPolicyViolation(_appliedSrtpPolicy, withIceMetadata.IsSrtpNegotiated);
+        if (IsKeylessSecureNegotiation(enriched))
+        {
+            // See TryPublishMediaParameters: a re-INVITE downgrading to a keyless secure
+            // negotiation must not slip past the policy either.
+            reasonCode = SrtpDecisionReasonCodes.RequiredNegotiationFailed;
+            violatesPolicy = _appliedSrtpPolicy == SrtpPolicy.Required;
+        }
         _srtpTelemetry.PublishDecision(session, enriched.IsSrtpNegotiated, enriched.MediaProfile, reasonCode, violatesPolicy);
         if (violatesPolicy)
         {
@@ -730,14 +786,25 @@ internal sealed class SipCoreCallChannel : ICallChannel
         }
 
         _activeLocalSrtpKeyParams = enriched.SrtpLocalKeyParams;
+        _dtlsActiveOnCall = enriched.IsDtlsNegotiated;
         _lastPublishedSignature = RekeySignature(enriched);
         _logger.LogDebug("Re-publishing media parameters on re-INVITE rekey for call {CallId}.", session.CallId);
         MediaParametersNegotiated?.Invoke(this, enriched);
     }
 
+    /// <summary>
+    /// True when the SDP exchange signals secure media but negotiated no usable keying:
+    /// neither SDES key material nor a DTLS association. Such a leg must never run as
+    /// plain RTP while reporting <c>IsSrtpNegotiated</c>.
+    /// </summary>
+    private static bool IsKeylessSecureNegotiation(CallMediaParameters p) =>
+        p.IsSrtpNegotiated && p.SrtpLocalKeyParams is null && !p.IsDtlsNegotiated;
+
     /// <summary>Signature of the media-relevant parameters; equal signature = same media.</summary>
     private static string RekeySignature(CallMediaParameters p) =>
-        $"{p.RemoteEndPoint}|{p.PayloadType}|{p.CodecName}|{p.SrtpSuite}|{p.SrtpLocalKeyParams}|{p.SrtpRemoteKeyParams}";
+        $"{p.RemoteEndPoint}|{p.PayloadType}|{p.CodecName}|{p.MediaProfile}|{p.IsSrtpNegotiated}"
+        + $"|{p.SrtpSuite}|{p.SrtpLocalKeyParams}|{p.SrtpRemoteKeyParams}"
+        + $"|{p.IsDtlsNegotiated}|{p.DtlsIsClient}|{p.DtlsRemoteFingerprintAlgorithm}|{p.DtlsRemoteFingerprintValue}";
 
     // ── Session event handlers ────────────────────────────────────────────────
 
@@ -828,63 +895,6 @@ internal sealed class SipCoreCallChannel : ICallChannel
         Func<string, string, bool>? handler;
         lock (_callbackSync) handler = _onTransfer;
         return handler?.Invoke(referTo, referredBy) ?? false;
-    }
-
-    /// <summary>
-    /// Validates inbound offer security against the applied SRTP policy before sending 200 OK.
-    /// </summary>
-    private bool ValidateInboundOfferAgainstPolicy(string? remoteSdp, out string reasonCode)
-    {
-        if (string.IsNullOrWhiteSpace(remoteSdp))
-        {
-            reasonCode = _appliedSrtpPolicy == SrtpPolicy.Required
-                ? SrtpDecisionReasonCodes.RequiredRemoteNoSrtp
-                : SrtpDecisionReasonCodes.NotEvaluated;
-            return _appliedSrtpPolicy != SrtpPolicy.Required;
-        }
-
-        if (!SdpSecurityInspector.TryInspectAudioSecurity(remoteSdp, out var isSrtpSignaled, out _))
-        {
-            reasonCode = _appliedSrtpPolicy == SrtpPolicy.Required
-                ? SrtpDecisionReasonCodes.RequiredNegotiationFailed
-                : SrtpDecisionReasonCodes.NotEvaluated;
-            return _appliedSrtpPolicy != SrtpPolicy.Required;
-        }
-
-        reasonCode = SrtpPolicyEvaluator.ResolveReasonCode(_appliedSrtpPolicy, isSrtpSignaled);
-        return !SrtpPolicyEvaluator.IsPolicyViolation(_appliedSrtpPolicy, isSrtpSignaled);
-    }
-
-    /// <summary>
-    /// Rejects an inbound INVITE when SRTP policy validation fails.
-    /// </summary>
-    private async Task RejectInboundOnSrtpPolicyViolationAsync(
-        ISipCallSession session,
-        string reasonCode,
-        CancellationToken ct)
-    {
-        var inspected = SdpSecurityInspector.TryInspectAudioSecurity(
-            session.RemoteSdp,
-            out var isSrtpSignaled,
-            out var profile);
-        _srtpTelemetry.PublishDecision(
-            session,
-            inspected && isSrtpSignaled,
-            inspected ? profile : string.Empty,
-            reasonCode,
-            violatesPolicy: true);
-
-        try
-        {
-            await session.RejectAsync(488, "Not Acceptable Here", ct).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(
-                ex,
-                "Failed sending SRTP policy rejection for call {CallId}.",
-                session.CallId);
-        }
     }
 
     /// <summary>

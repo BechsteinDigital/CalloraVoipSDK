@@ -186,7 +186,10 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
             InboundSrtp      = _inboundSrtp,
             OutboundSrtcp    = _outboundSrtcp,
             InboundSrtcp     = _inboundSrtcp,
-            RequireEncryptedMedia = parameters.IsDtlsNegotiated
+            // Fail-closed backstop: any secure-signaled negotiation (SDES, DTLS, or a
+            // keyless degenerate exchange) must never fall through to plain RTP. SDES
+            // legs have their contexts installed above; DTLS legs get them post-handshake.
+            RequireEncryptedMedia = parameters.IsSrtpNegotiated || parameters.IsDtlsNegotiated
         };
 
         var logger = loggerFactory.CreateLogger<RtpSession>();

@@ -27,6 +27,8 @@ internal sealed class SipLineChannel : ILineChannel
     private readonly SrtpPolicy _globalSrtpPolicy;
     private readonly ISipTelemetrySink _telemetry;
     private readonly IReadOnlyList<string>? _preferredCodecNames;
+    private readonly SdpDtlsNegotiationOptions? _dtlsOptions;
+    private readonly bool _offerDtlsSrtp;
     private readonly ILogger<SipLineChannel> _logger;
     private readonly ILogger<SipCoreCallChannel> _callChannelLogger;
     private readonly object _sync = new();
@@ -64,8 +66,12 @@ internal sealed class SipLineChannel : ILineChannel
         SrtpPolicy globalSrtpPolicy,
         ISipTelemetrySink? telemetry,
         ILoggerFactory loggerFactory,
-        IReadOnlyList<string>? preferredCodecNames = null)
+        IReadOnlyList<string>? preferredCodecNames = null,
+        SdpDtlsNegotiationOptions? dtlsOptions = null,
+        bool offerDtlsSrtp = false)
     {
+        _dtlsOptions = dtlsOptions;
+        _offerDtlsSrtp = offerDtlsSrtp && dtlsOptions is not null;
         _account = account ?? throw new ArgumentNullException(nameof(account));
         _userAgent = string.IsNullOrWhiteSpace(userAgent) ? "CalloraVoipSdk/1.0" : userAgent;
         _registrationService = registrationService ?? throw new ArgumentNullException(nameof(registrationService));
@@ -196,7 +202,9 @@ internal sealed class SipLineChannel : ILineChannel
             resolvedPolicy.Source,
             _iceAgent,
             _preferredCodecNames,
-            PublicMediaAddress);
+            PublicMediaAddress,
+            _dtlsOptions,
+            _offerDtlsSrtp);
     }
 
     /// <summary>
@@ -316,7 +324,9 @@ internal sealed class SipLineChannel : ILineChannel
             policySource: "global",
             _iceAgent,
             _preferredCodecNames,
-            PublicMediaAddress);
+            PublicMediaAddress,
+            _dtlsOptions,
+            _offerDtlsSrtp);
         channel.AttachSession(args.Session);
 
         try

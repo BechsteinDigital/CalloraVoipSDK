@@ -38,6 +38,14 @@ public sealed class SdkConfiguration
     public SrtpPolicy     SrtpPolicy             { get; init; } = SrtpPolicy.Optional;
 
     /// <summary>
+    /// When <see langword="true"/>, outbound call offers advertise DTLS-SRTP keying
+    /// (RFC 5763: <c>UDP/TLS/RTP/SAVPF</c> profile plus certificate fingerprint) instead
+    /// of SDES <c>a=crypto</c>. Inbound DTLS-SRTP offers are answered regardless of this
+    /// setting. Default: <see langword="false"/> (SDES per <see cref="SrtpPolicy"/>).
+    /// </summary>
+    public bool           OfferDtlsSrtp          { get; init; }
+
+    /// <summary>
     /// ICE runtime configuration for NAT traversal and candidate-pair selection.
     /// Disabled by default.
     /// </summary>

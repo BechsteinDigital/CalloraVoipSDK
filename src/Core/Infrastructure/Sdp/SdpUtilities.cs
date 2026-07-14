@@ -35,6 +35,34 @@ internal static class SdpUtilities
     ];
 
     /// <summary>
+    /// Extracts the DTLS-SRTP signaling of the first active audio m-line (RFC 5763):
+    /// the certificate fingerprint (media-level wins over session-level, RFC 8122) and
+    /// the <c>a=setup</c> role. Both <see langword="null"/> when absent or unparsable.
+    /// </summary>
+    public static (SdpFingerprint? Fingerprint, string? Setup) TryExtractAudioDtls(string? sdp)
+    {
+        if (string.IsNullOrWhiteSpace(sdp))
+            return (null, null);
+
+        try
+        {
+            var parsed = Parser.Parse(sdp);
+            var audio = parsed.Media.FirstOrDefault(
+                m => m.MediaType.Equals("audio", StringComparison.OrdinalIgnoreCase)
+                     && !m.Disabled
+                     && m.Port > 0);
+            if (audio is null)
+                return (null, null);
+
+            return (audio.Fingerprint ?? parsed.Fingerprint, audio.DtlsSetup ?? parsed.DtlsSetup);
+        }
+        catch (FormatException)
+        {
+            return (null, null);
+        }
+    }
+
+    /// <summary>
     /// Extracts the first SDES crypto attribute with a supported suite and an inline key
     /// from the first active audio m-line of an SDP body (RFC 4568). Used to recover key
     /// material at the media layer from the SDP that actually went over the wire — both
@@ -407,12 +435,25 @@ internal static class SdpUtilities
         if (options is null)
             return null;
 
+        // DTLS-SRTP (RFC 5763): an offer carries the local fingerprint only when
+        // explicitly requested; the answer path always receives the identity — the
+        // negotiator emits it only when the peer actually offered DTLS.
+        var offersDtls = forOffer && options.OfferDtlsSrtp && options.Dtls is not null;
+        var dtls = options.Dtls is { } identity && (!forOffer || options.OfferDtlsSrtp)
+            ? new SdpDtlsParameters
+            {
+                Algorithm = identity.FingerprintAlgorithm,
+                Fingerprint = identity.FingerprintValue,
+            }
+            : null;
+
         // SDES crypto is only ever generated for a locally originated offer; answers key
         // themselves via the offered crypto and must not inject a fresh line here. A
         // re-offer (hold/unhold) of a running SRTP call passes OfferSrtpKeyParams to reuse
-        // the live key instead of rekeying.
+        // the live key instead of rekeying. A DTLS offer suppresses SDES entirely —
+        // the keying methods are mutually exclusive per offer.
         IReadOnlyList<SdpCryptoAttribute> crypto =
-            forOffer && options.OfferSrtpCrypto
+            forOffer && options.OfferSrtpCrypto && !offersDtls
                 ? [options.OfferSrtpKeyParams is { } key
                     ? SdesCryptoSelector.BuildOffer(key)
                     : SdesCryptoSelector.BuildDefaultOffer()]
@@ -424,7 +465,8 @@ internal static class SdpUtilities
             {
                 SessionId = options.SessionId,
                 SessionVersion = options.SessionVersion,
-                Crypto = crypto
+                Crypto = crypto,
+                Dtls = dtls
             };
 
         return new SdpMediaOptions
@@ -432,6 +474,7 @@ internal static class SdpUtilities
             SessionId = options.SessionId,
             SessionVersion = options.SessionVersion,
             Crypto = crypto,
+            Dtls = dtls,
             Ice = new SdpIceParameters
             {
                 Ufrag = ice.Ufrag,

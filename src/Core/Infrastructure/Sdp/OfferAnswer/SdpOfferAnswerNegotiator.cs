@@ -163,16 +163,17 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
         // downgrading to plain RTP is not allowed — reject instead. DTLS-keyed profiles
         // (UDP/TLS/…) are unaffected; a plain AVP offer carrying an unsupported a=crypto
         // falls back to an unencrypted answer, which stays legal for AVP.
-        if (localCrypto is null && IsSdesSecuredProfile(offeredAudio.Profile))
-            return new SdpOfferAnswerResult { Success = false };
-
         // --- DTLS (RFC 5763): resolve fingerprint and setup role ---
         SdpFingerprint? fingerprint = null;
         string? dtlsSetup = null;
         var remoteFp = offeredAudio.Fingerprint ?? remoteOffer.Fingerprint;
         var remoteSetup = offeredAudio.DtlsSetup ?? remoteOffer.DtlsSetup;
 
-        if (localOptions?.Dtls is not null)
+        // Answer with DTLS only when the peer actually offered it (remote fingerprint
+        // present) and SDES did not already win — the keying methods are mutually
+        // exclusive per m-line (RFC 5763). Note RFC 5763 §6.6 signals DTLS on RTP/SAVP(F)
+        // profiles too, not only UDP/TLS/* — the fingerprint decides, not the profile.
+        if (localOptions?.Dtls is not null && remoteFp is not null && localCrypto is null)
         {
             fingerprint = new SdpFingerprint
             {
@@ -181,11 +182,16 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             };
             dtlsSetup = ResolveAnswerSetup(remoteSetup);
         }
-        else if (remoteFp is not null && localOptions?.Dtls is null)
-        {
-            // Remote wants DTLS but we have no local fingerprint — cannot answer DTLS.
-            // Proceed without DTLS attributes; caller may treat this as a warning.
-        }
+
+        // Fail closed: a secure-profile offer we can key neither via SDES nor via DTLS
+        // cannot be answered — silently downgrading to plain RTP is not allowed.
+        if (localCrypto is null && fingerprint is null && IsSdesSecuredProfile(offeredAudio.Profile))
+            return new SdpOfferAnswerResult { Success = false };
+
+        // A DTLS-keyed profile additionally requires a DTLS answer — an SDES answer on
+        // UDP/TLS/* would contradict the profile's keying method.
+        if (fingerprint is null && IsDtlsSecuredProfile(offeredAudio.Profile))
+            return new SdpOfferAnswerResult { Success = false };
 
         // --- ICE credentials (RFC 8839) ---
         var ice = localOptions?.Ice;
@@ -430,7 +436,10 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             "actpass" => "active",
             "active" => "passive",
             "passive" => "active",
-            _ => "actpass"
+            // RFC 5763 §5: an answer MUST be active or passive — never actpass. With no
+            // remote a=setup the offer defaults to active (RFC 4145 §4), so we take the
+            // passive (server) side.
+            _ => "passive"
         };
 
     // -------------------------------------------------------------------------
@@ -458,4 +467,7 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
     private static bool IsSdesSecuredProfile(string offeredProfile) =>
         offeredProfile.Equals("RTP/SAVP", StringComparison.OrdinalIgnoreCase)
         || offeredProfile.Equals("RTP/SAVPF", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsDtlsSecuredProfile(string offeredProfile) =>
+        offeredProfile.StartsWith("UDP/TLS/", StringComparison.OrdinalIgnoreCase);
 }

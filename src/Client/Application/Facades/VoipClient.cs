@@ -268,12 +268,17 @@ public sealed class VoipClient : IVoipClient
             ? PayloadCodecKind.Pcmu
             : (PayloadCodecKind?)null;
         // DTLS-SRTP identity (RFC 5763): one ephemeral certificate per client instance.
-        // The handshaker keys DTLS-negotiated call legs; SDP fingerprint signaling that
-        // makes legs DTLS-negotiated is wired in the follow-up signaling package.
+        // Its fingerprint is signaled via SDP a=fingerprint (answers always, offers when
+        // OfferDtlsSrtp is set); the handshaker keys DTLS-negotiated call legs.
         var dtlsHandshaker = ResolveService<IDtlsSrtpHandshaker>(services)
             ?? new DtlsSrtpHandshaker(logFactory.CreateLogger<DtlsSrtpHandshaker>());
         var dtlsCertificate = ResolveService<DtlsCertificate>(services)
             ?? DtlsCertificate.GenerateEcdsaP256();
+        var dtlsSignalingOptions = new SdpDtlsNegotiationOptions
+        {
+            FingerprintAlgorithm = dtlsCertificate.Fingerprint.Algorithm,
+            FingerprintValue = dtlsCertificate.Fingerprint.Value,
+        };
         var mediaSessionFactory = ResolveService<ICallMediaSessionFactory>(services)
             ?? new RtpCallMediaSessionFactory(logFactory, bridgeTapCodec, dtlsHandshaker, dtlsCertificate);
         var rtcpPacketCodec = ResolveService<IRtcpPacketCodec>(services)
@@ -299,7 +304,9 @@ public sealed class VoipClient : IVoipClient
                 config.SrtpPolicy,
                 telemetry,
                 logFactory,
-                config.PreferredAudioCodecs);
+                config.PreferredAudioCodecs,
+                dtlsSignalingOptions,
+                config.OfferDtlsSrtp);
 
             return new PhoneLine(
                 account,
