@@ -46,6 +46,29 @@ public sealed class SdkConfiguration
     public bool           OfferDtlsSrtp          { get; init; }
 
     /// <summary>
+    /// When <see langword="true"/>, calls negotiate a video stream (WebRTC phase 2,
+    /// RFC 6184/7741): offers carry an <c>m=video</c> line and inbound video offers are
+    /// answered. Encoded video frames are exchanged via <c>ICall</c>'s media session;
+    /// the SDK does not encode/decode video itself. Default: <see langword="false"/>
+    /// (audio-only). Video is offered only when the offer is not SDES-keyed: an outbound
+    /// offer under a SDES-offering <see cref="SrtpPolicy"/> (Optional/Required without
+    /// <see cref="OfferDtlsSrtp"/>) stays audio-only — offer DTLS-SRTP or run plain to
+    /// carry video. Inbound plain/DTLS video offers are answered regardless; SDES video
+    /// is declined until per-m-line video keying lands.
+    /// Note: video does not yet gather ICE candidates — with <see cref="Ice"/> enabled the
+    /// video m-line carries its port but no candidates, so video needs direct connectivity
+    /// (no ICE-only peer) until per-component video ICE lands.
+    /// </summary>
+    public bool           EnableVideo            { get; init; }
+
+    /// <summary>
+    /// Ordered video codec preference by SDP encoding name (<c>VP8</c>, <c>H264</c>) when
+    /// <see cref="EnableVideo"/> is set. <see langword="null"/> uses the SDK default
+    /// (VP8, then H264). Unknown names are ignored.
+    /// </summary>
+    public IReadOnlyList<string>? PreferredVideoCodecs { get; init; }
+
+    /// <summary>
     /// ICE runtime configuration for NAT traversal and candidate-pair selection.
     /// Disabled by default.
     /// </summary>
