@@ -23,8 +23,8 @@ namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
 /// sequence gap discards the frame under assembly. SDES-keyed video (RFC 4568) derives its
 /// SRTP/SRTCP contexts from the video m-line's own key material, keyed from the first packet;
 /// the SDP <c>a=crypto</c> negotiation that populates those params is the remaining follow-up.
-/// Under SDES the RTX repair stream is not yet keyed — it stays fail-closed-silent until
-/// per-stream SDES RTX keying lands (follow-up); DTLS-keyed RTX is unaffected.
+/// Under SDES the RTX repair stream is keyed from the same video key material as a separate
+/// context pair (RFC 4588 §9: its own replay window); DTLS keys it post-handshake instead.
 /// </summary>
 internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
 {
@@ -79,6 +79,11 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
     private readonly ISrtpContext? _sdesInboundSrtp;
     private readonly ISrtcpContext? _sdesOutboundSrtcp;
     private readonly ISrtcpContext? _sdesInboundSrtcp;
+
+    // SDES SRTP contexts for the RTX repair stream (RFC 4588 §9: its own replay window),
+    // keyed from the same video key material; null unless both SDES and RTX are negotiated.
+    private readonly ISrtpContext? _rtxSdesOutboundSrtp;
+    private readonly ISrtpContext? _rtxSdesInboundSrtp;
 
     private int _disposed;
 
@@ -137,6 +142,20 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
             // retransmit (delivered via SecondaryPacketReceived) fill its gap before playout.
             _reorderBuffer = new VideoReorderBuffer(ReorderWindowDepth);
             _rtp.SecondaryPacketReceived += OnRtxPacketReceived;
+
+            // Key the repair stream under SDES: a separate SRTP context pair from the same video
+            // key material so it keeps its own replay window (RFC 4588 §9). Under DTLS the
+            // secondary contexts are instead derived post-handshake (onSecondaryContextsReady
+            // below); under plain RTP there are none. Without this the repair stream would stay
+            // fail-closed-silent on an SDES leg.
+            if (_sdesOutboundSrtp is not null)
+            {
+                (_rtxSdesOutboundSrtp, _rtxSdesInboundSrtp) =
+                    SdesMediaCryptoContextFactory.TryCreateSecondarySrtp(
+                        video.SrtpSuite, video.SrtpLocalKeyParams, video.SrtpRemoteKeyParams, _logger);
+                if (_rtxSdesOutboundSrtp is not null && _rtxSdesInboundSrtp is not null)
+                    _rtp.InstallSecondarySecurityContexts(_rtxSdesOutboundSrtp, _rtxSdesInboundSrtp);
+            }
         }
 
         // Keyframe feedback (RFC 4585/5104) over the video RTCP-mux channel: inbound PLI/FIR
@@ -373,6 +392,8 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
         _sdesInboundSrtp?.Dispose();
         _sdesOutboundSrtcp?.Dispose();
         _sdesInboundSrtcp?.Dispose();
+        _rtxSdesOutboundSrtp?.Dispose();
+        _rtxSdesInboundSrtp?.Dispose();
 
         FrameReceived = null;
         KeyFrameRequested = null;
