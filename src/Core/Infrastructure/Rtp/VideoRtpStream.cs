@@ -247,14 +247,13 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
 
         _remoteMediaSsrc = packet.Ssrc;
 
-        // Arrival-order loss signalling (RFC 4585): request retransmit as soon as a forward gap
-        // appears — before the reorder window can slide past it. Fast NACK matters more for
-        // recovery than avoiding the occasional spurious NACK a reorder provokes (the peer's
-        // needless RTX is dropped as duplicate/too-late downstream). Reordered/duplicate
-        // arrivals yield an empty missing-set (MissingBetween), so they raise no NACK. Ordered
-        // delivery and the depacketiser reset are handled downstream, not here.
-        if (_hasReceived && packet.SequenceNumber != unchecked((ushort)(_lastSequence + 1)))
-            _keyFrameFeedback.OnLoss(packet.Ssrc, MissingBetween(_lastSequence, packet.SequenceNumber));
+        // Arrival-order loss signalling (RFC 4585): on a genuine forward gap request retransmit
+        // at once — before the reorder window can slide past it — and request a keyframe. A
+        // reorder or duplicate is not loss (LossReport returns null): the reorder window corrects
+        // it downstream, so it raises neither a NACK nor a PLI. Ordered delivery and the
+        // depacketiser reset are handled downstream, not here.
+        if (_hasReceived && LossReport(_lastSequence, packet.SequenceNumber) is { } missing)
+            _keyFrameFeedback.OnLoss(packet.Ssrc, missing);
         _lastSequence = packet.SequenceNumber;
         _hasReceived = true;
 
@@ -355,16 +354,33 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
     // with a keyframe (PLI), so we stop enumerating and let the throttled PLI carry it.
     private const int MaxEnumeratedLoss = 256;
 
+    // A backward sequence step (a reorder) wraps the forward distance to at least this value;
+    // treated as reordering, not loss. Half the 16-bit space is the reorder/loss boundary.
+    private const int ReorderBoundary = 0x8000;
+
     /// <summary>
-    /// The sequence numbers missing between the last delivered packet and a newly arrived
-    /// one, for a forward gap. Empty for a duplicate/reorder (the delta is not a small
-    /// forward step) or a loss burst larger than <see cref="MaxEnumeratedLoss"/>.
+    /// Classifies a newly arrived sequence number against the last one for loss reporting:
+    /// <list type="bullet">
+    /// <item><see langword="null"/> — in-order, a duplicate, or a reorder (a backward step is
+    /// not loss): nothing to report.</item>
+    /// <item>empty — a forward loss burst larger than <see cref="MaxEnumeratedLoss"/>: report as
+    /// a PLI only (naming every packet in a NACK is pointless; a keyframe recovers faster).</item>
+    /// <item>a list — the missing sequence numbers of a small forward gap: NACK them (plus PLI).</item>
+    /// </list>
+    /// Suppressing the reorder case is what stops a reordered packet from provoking a spurious
+    /// NACK and keyframe request now that the reorder window corrects reordering downstream.
+    /// A forward loss burst of at least half the sequence space (≥ <see cref="ReorderBoundary"/>)
+    /// is indistinguishable from a backward step under 16-bit serial-number arithmetic and is
+    /// therefore treated as a reorder — a pathological case that never arises in a live stream.
     /// </summary>
-    private static IReadOnlyList<ushort> MissingBetween(ushort last, ushort current)
+    internal static IReadOnlyList<ushort>? LossReport(ushort last, ushort current)
     {
-        var gap = (ushort)(current - last); // forward distance, wraps naturally
-        if (gap < 2 || gap > MaxEnumeratedLoss)
-            return [];
+        var gap = (ushort)(current - last); // forward distance; a reorder wraps to a large value
+        if (gap < 2 || gap >= ReorderBoundary)
+            return null; // in-order (1), duplicate (0), or reorder (backward step)
+
+        if (gap > MaxEnumeratedLoss)
+            return Array.Empty<ushort>(); // forward loss too large to enumerate → PLI only
 
         var missing = new ushort[gap - 1];
         for (var i = 0; i < missing.Length; i++)
