@@ -46,6 +46,24 @@ public sealed class CallVideoParameters
     /// </summary>
     public bool RemoteSupportsPli { get; init; }
 
+    /// <summary>
+    /// Negotiated SDES crypto-suite token for the video m-line (RFC 4568), e.g.
+    /// <c>AES_CM_128_HMAC_SHA1_80</c>; <see langword="null"/> when the video stream is not
+    /// SDES-keyed (plain RTP or DTLS-keyed). Mutually exclusive with DTLS keying.
+    /// </summary>
+    public string? SrtpSuite { get; internal init; }
+
+    // ── SDES key material (RFC 4568) for the video m-line — internal media-layer contract ──
+    // Kept as plain SDP inline value strings so the domain stays free of crypto types; the
+    // video RTP stream parses them into SRTP/SRTCP contexts. Both directions must be present
+    // together with SrtpSuite for the stream to key.
+
+    /// <summary>Our answer's inline key params for the video m-line — encrypts outbound video.</summary>
+    internal string? SrtpLocalKeyParams { get; init; }
+
+    /// <summary>The peer's inline key params for the video m-line — decrypts inbound video.</summary>
+    internal string? SrtpRemoteKeyParams { get; init; }
+
     /// <summary>Local UDP endpoint to bind the video RTP socket to.</summary>
     public required IPEndPoint LocalEndPoint { get; init; }
 

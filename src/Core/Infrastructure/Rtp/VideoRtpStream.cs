@@ -6,6 +6,7 @@ using CalloraVoipSdk.Core.Infrastructure.Rtp.Packetisation;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Retransmission;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Session;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Wire;
+using CalloraVoipSdk.Core.Infrastructure.Srtp.Context;
 using Microsoft.Extensions.Logging;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
@@ -19,9 +20,11 @@ namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
 /// RTX-negotiated leg (RFC 4588) inbound video passes through a bounded reorder window so a
 /// retransmitted packet — delivered on the repair stream — can fill the gap that prompted the
 /// NACK before playout; without RTX, packets feed the depacketiser in arrival order and a
-/// sequence gap discards the frame under assembly. SDES-keyed video is not wired: under SDES
-/// the video sub-stream has no SRTP context and stays fail-closed-silent until per-m-line SDES
-/// keying lands (follow-up).
+/// sequence gap discards the frame under assembly. SDES-keyed video (RFC 4568) derives its
+/// SRTP/SRTCP contexts from the video m-line's own key material, keyed from the first packet;
+/// the SDP <c>a=crypto</c> negotiation that populates those params is the remaining follow-up.
+/// Under SDES the RTX repair stream is not yet keyed — it stays fail-closed-silent until
+/// per-stream SDES RTX keying lands (follow-up); DTLS-keyed RTX is unaffected.
 /// </summary>
 internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
 {
@@ -69,6 +72,14 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
     // Remote media SSRC, captured from inbound video to stamp RTX-recovered packets (RFC 4588 §4).
     private uint _remoteMediaSsrc;
 
+    // SDES SRTP/SRTCP contexts (RFC 4568) for an SDES-keyed video m-line; null for a plain or
+    // DTLS-keyed leg. Created and owned here (the RtpSession only borrows them), disposed —
+    // zeroing the keys — on teardown.
+    private readonly ISrtpContext? _sdesOutboundSrtp;
+    private readonly ISrtpContext? _sdesInboundSrtp;
+    private readonly ISrtcpContext? _sdesOutboundSrtcp;
+    private readonly ISrtcpContext? _sdesInboundSrtcp;
+
     private int _disposed;
 
     private VideoRtpStream(
@@ -83,6 +94,14 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
         CodecName = video.CodecName;
         (_packetiser, _depacketiser) = CreatePayloadFormat(video.CodecName);
 
+        // SDES keying (RFC 4568) for the video m-line: build the SRTP/SRTCP contexts from the
+        // video stream's own negotiated key material and hand them to the session (which borrows
+        // them). All-null for a plain or DTLS-keyed leg — DTLS installs its contexts post-
+        // handshake — so the primary path is unchanged there. Mutually exclusive with DTLS.
+        (_sdesOutboundSrtp, _sdesInboundSrtp, _sdesOutboundSrtcp, _sdesInboundSrtcp) =
+            SdesMediaCryptoContextFactory.TryCreate(
+                video.SrtpSuite, video.SrtpLocalKeyParams, video.SrtpRemoteKeyParams, _logger);
+
         _rtp = new RtpSession(
             new RtpSessionOptions
             {
@@ -93,6 +112,10 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
                 // Video frames carry explicit timestamps; the audio-style per-packet
                 // advance is unused. One nominal frame interval keeps RTCP maths sane.
                 SamplesPerPacket = video.ClockRate / 30,
+                OutboundSrtp = _sdesOutboundSrtp,
+                InboundSrtp = _sdesInboundSrtp,
+                OutboundSrtcp = _sdesOutboundSrtcp,
+                InboundSrtcp = _sdesInboundSrtcp,
                 RequireEncryptedMedia = parameters.IsSrtpNegotiated || parameters.IsDtlsNegotiated,
             },
             new RtpPacketCodec(),
@@ -344,6 +367,13 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
         }
 
         await _rtp.DisposeAsync().ConfigureAwait(false);
+
+        // Zero the SDES key material now the session has stopped using it (owner disposes).
+        _sdesOutboundSrtp?.Dispose();
+        _sdesInboundSrtp?.Dispose();
+        _sdesOutboundSrtcp?.Dispose();
+        _sdesInboundSrtcp?.Dispose();
+
         FrameReceived = null;
         KeyFrameRequested = null;
         _sendSync.Dispose();
