@@ -6,13 +6,13 @@ using Microsoft.Extensions.Logging;
 namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
 
 /// <summary>
-/// Keyframe-request feedback for one video stream (RFC 4585 PLI, RFC 5104 FIR). Two
-/// directions over the stream's RTCP-mux channel: an inbound PLI/FIR asks us (the video
-/// sender) for a fresh reference frame — surfaced as a keyframe-request callback for the
-/// encoder; a detected inbound packet loss makes us (the video receiver) send a PLI to
-/// the peer, throttled so a burst of loss does not flood RTCP (baresip uses a 500 ms
-/// picture-update interval). FIR is honoured on receive but not generated (PLI is the
-/// lighter request and enough for a single stream).
+/// RTCP feedback for one video stream (RFC 4585/5104) over the stream's RTCP-mux channel.
+/// Two directions: an inbound PLI/FIR asks us (the video sender) for a fresh reference
+/// frame — surfaced as a keyframe-request callback for the encoder; detected inbound
+/// packet loss makes us (the video receiver) report it to the peer — a Generic NACK naming
+/// the lost sequence numbers (RFC 4585 §6.2.1) so the peer can retransmit, plus a
+/// throttled PLI as the keyframe fallback. Feedback is only sent for the types the peer
+/// advertised in SDP (<c>a=rtcp-fb</c>); FIR is honoured on receive but not generated.
 /// </summary>
 internal sealed class VideoKeyFrameFeedback
 {
@@ -20,6 +20,8 @@ internal sealed class VideoKeyFrameFeedback
 
     private readonly IRtcpPacketCodec _codec;
     private readonly uint _localSsrc;
+    private readonly bool _remoteSupportsNack;
+    private readonly bool _remoteSupportsPli;
     private readonly Func<ReadOnlyMemory<byte>, CancellationToken, ValueTask> _sendControl;
     private readonly Action _onKeyFrameRequested;
     private readonly ILogger _logger;
@@ -30,6 +32,8 @@ internal sealed class VideoKeyFrameFeedback
     public VideoKeyFrameFeedback(
         IRtcpPacketCodec codec,
         uint localSsrc,
+        bool remoteSupportsNack,
+        bool remoteSupportsPli,
         Func<ReadOnlyMemory<byte>, CancellationToken, ValueTask> sendControl,
         Action onKeyFrameRequested,
         ILogger logger,
@@ -41,6 +45,8 @@ internal sealed class VideoKeyFrameFeedback
         ArgumentNullException.ThrowIfNull(logger);
         _codec = codec;
         _localSsrc = localSsrc;
+        _remoteSupportsNack = remoteSupportsNack;
+        _remoteSupportsPli = remoteSupportsPli;
         _sendControl = sendControl;
         _onKeyFrameRequested = onKeyFrameRequested;
         _logger = logger;
@@ -82,36 +88,82 @@ internal sealed class VideoKeyFrameFeedback
     }
 
     /// <summary>
-    /// Requests a keyframe from the peer by sending a PLI for its media stream, throttled
-    /// to at most one per 500 ms. Called on an inbound sequence gap. Fire-and-forget:
-    /// RTCP loss is tolerable and the throttle re-fires the request.
+    /// Reports detected inbound loss to the peer: a Generic NACK naming the missing
+    /// sequence numbers when the peer supports it, and a throttled PLI as the keyframe
+    /// fallback. Both are gated on the peer's advertised feedback — feedback it did not
+    /// offer is never sent. Fire-and-forget: RTCP loss is tolerable.
+    /// <paramref name="missingSequenceNumbers"/> must be ascending (as produced by the
+    /// receiver's forward-gap detection); the NACK bitmask grouping relies on it.
     /// </summary>
-    public void RequestRemoteKeyFrame(uint remoteSsrc)
+    public void OnLoss(uint remoteSsrc, IReadOnlyList<ushort> missingSequenceNumbers)
+    {
+        ArgumentNullException.ThrowIfNull(missingSequenceNumbers);
+
+        if (_remoteSupportsNack && missingSequenceNumbers.Count > 0)
+        {
+            var nack = new RtcpGenericNack
+            {
+                SenderSsrc = _localSsrc,
+                MediaSsrc = remoteSsrc,
+                Entries = BuildNackEntries(missingSequenceNumbers),
+            };
+            _ = SendAsync(nack, "NACK");
+        }
+
+        if (_remoteSupportsPli)
+            RequestThrottledPli(remoteSsrc);
+    }
+
+    private void RequestThrottledPli(uint remoteSsrc)
     {
         var now = Stopwatch.GetTimestamp();
         if (_lastPliSentTimestamp != long.MinValue && now - _lastPliSentTimestamp < PliThrottleTicks)
             return;
 
         _lastPliSentTimestamp = now;
-        _ = SendPliAsync(remoteSsrc);
+        _ = SendAsync(new RtcpPictureLossIndication { SenderSsrc = _localSsrc, MediaSsrc = remoteSsrc }, "PLI");
     }
 
-    private async Task SendPliAsync(uint remoteSsrc)
+    private async Task SendAsync(RtcpPacket feedback, string kind)
     {
         try
         {
-            var pli = new RtcpPictureLossIndication { SenderSsrc = _localSsrc, MediaSsrc = remoteSsrc };
-            var datagram = _codec.Encode([pli]);
-            await _sendControl(datagram, _lifetime).ConfigureAwait(false);
+            await _sendControl(_codec.Encode([feedback]), _lifetime).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
-            // Session teardown while sending — nothing to recover.
-            _logger.LogTrace("Video PLI send aborted by session teardown.");
+            _logger.LogTrace("Video {Kind} send aborted by session teardown.", kind);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to send video PLI to the peer.");
+            _logger.LogWarning(ex, "Failed to send video {Kind} to the peer.", kind);
         }
+    }
+
+    // Groups lost sequence numbers into Generic NACK entries (RFC 4585 §6.2.1): each entry
+    // is a base PID plus a 16-bit bitmask of the following packets (bit i = PID + i + 1).
+    private static IReadOnlyList<RtcpNackEntry> BuildNackEntries(IReadOnlyList<ushort> missing)
+    {
+        var entries = new List<RtcpNackEntry>();
+        var index = 0;
+        while (index < missing.Count)
+        {
+            var pid = missing[index];
+            ushort bitmask = 0;
+            var next = index + 1;
+            while (next < missing.Count)
+            {
+                var offset = (ushort)(missing[next] - pid);
+                if (offset is < 1 or > 16)
+                    break;
+                bitmask |= (ushort)(1 << (offset - 1));
+                next++;
+            }
+
+            entries.Add(new RtcpNackEntry { PacketId = pid, LostPacketBitmask = bitmask });
+            index = next;
+        }
+
+        return entries;
     }
 }

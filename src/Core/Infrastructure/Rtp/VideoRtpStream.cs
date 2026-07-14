@@ -70,7 +70,8 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
         // Keyframe feedback (RFC 4585/5104) over the video RTCP-mux channel: inbound PLI/FIR
         // → KeyFrameRequested (for the encoder); inbound loss → PLI to the peer, throttled.
         _keyFrameFeedback = new VideoKeyFrameFeedback(
-            new RtcpPacketCodec(), _rtp.LocalSsrc, _rtp.SendControlAsync,
+            new RtcpPacketCodec(), _rtp.LocalSsrc,
+            video.RemoteSupportsNack, video.RemoteSupportsPli, _rtp.SendControlAsync,
             () => KeyFrameRequested?.Invoke(),
             loggerFactory.CreateLogger<VideoKeyFrameFeedback>(), _lifetimeCts.Token);
         _rtp.ControlPacketReceived += _keyFrameFeedback.OnControlDatagram;
@@ -155,12 +156,12 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
             return;
 
         // Sequence gap: a fragment is missing — discard the frame under assembly so a torn
-        // frame is never delivered, and ask the peer for a keyframe (RFC 4585 PLI, throttled)
-        // so decoding recovers instead of stalling until the encoder's next intra frame.
+        // frame is never delivered, and report the loss (RFC 4585 NACK for the missing
+        // packets, plus a throttled PLI) so decoding recovers instead of stalling.
         if (_hasReceived && packet.SequenceNumber != unchecked((ushort)(_lastSequence + 1)))
         {
             _depacketiser.Reset();
-            _keyFrameFeedback.RequestRemoteKeyFrame(packet.Ssrc);
+            _keyFrameFeedback.OnLoss(packet.Ssrc, MissingBetween(_lastSequence, packet.SequenceNumber));
         }
         _lastSequence = packet.SequenceNumber;
         _hasReceived = true;
@@ -202,6 +203,27 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
         KeyFrameRequested = null;
         _sendSync.Dispose();
         _lifetimeCts.Dispose();
+    }
+
+    // Beyond this many missing packets a NACK is pointless — the loss is better recovered
+    // with a keyframe (PLI), so we stop enumerating and let the throttled PLI carry it.
+    private const int MaxEnumeratedLoss = 256;
+
+    /// <summary>
+    /// The sequence numbers missing between the last delivered packet and a newly arrived
+    /// one, for a forward gap. Empty for a duplicate/reorder (the delta is not a small
+    /// forward step) or a loss burst larger than <see cref="MaxEnumeratedLoss"/>.
+    /// </summary>
+    private static IReadOnlyList<ushort> MissingBetween(ushort last, ushort current)
+    {
+        var gap = (ushort)(current - last); // forward distance, wraps naturally
+        if (gap < 2 || gap > MaxEnumeratedLoss)
+            return [];
+
+        var missing = new ushort[gap - 1];
+        for (var i = 0; i < missing.Length; i++)
+            missing[i] = (ushort)(last + i + 1);
+        return missing;
     }
 
     private static (IVideoPacketiser Packetiser, IVideoDepacketiser Depacketiser) CreatePayloadFormat(

@@ -33,6 +33,19 @@ public sealed class CallVideoParameters
     /// </summary>
     public int? RtxPayloadType { get; init; }
 
+    /// <summary>
+    /// True when the peer advertised Generic NACK (<c>a=rtcp-fb:* nack</c>, RFC 4585):
+    /// the SDK may report lost packets so the peer can retransmit. When false, loss is not
+    /// NACKed (feedback the peer did not offer is not sent).
+    /// </summary>
+    public bool RemoteSupportsNack { get; init; }
+
+    /// <summary>
+    /// True when the peer advertised Picture Loss Indication (<c>a=rtcp-fb:* nack pli</c>,
+    /// RFC 4585 §6.3.1): the SDK may request a keyframe on unrecoverable loss.
+    /// </summary>
+    public bool RemoteSupportsPli { get; init; }
+
     /// <summary>Local UDP endpoint to bind the video RTP socket to.</summary>
     public required IPEndPoint LocalEndPoint { get; init; }
 
