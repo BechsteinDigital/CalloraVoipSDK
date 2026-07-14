@@ -84,6 +84,7 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
                 Direction = direction,
                 Codecs = video.Codecs,
                 Fmtp = VideoCodecCatalog.BuildFmtp(video.Codecs),
+                RtcpFeedback = VideoCodecCatalog.StandardFeedback,
                 Mid = options.Bundle == true ? "video" : null,
                 RtcpMux = options.RtcpMux == true,
                 Fingerprint = dtls is not null
@@ -473,6 +474,7 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             Codecs = negotiated,
             Direction = ResolveAnswerDirection(offered.Direction, answerDirection),
             Fmtp = offered.Fmtp.Where(f => acceptedPts.Contains(f.PayloadType)).ToArray(),
+            RtcpFeedback = VideoCodecCatalog.NegotiateFeedback(offered.RtcpFeedback),
             Mid = offered.Mid,
             RtcpMux = offered.RtcpMux,
             Fingerprint = fingerprint,

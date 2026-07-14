@@ -158,6 +158,15 @@ internal sealed class SdpSessionParser : ISdpSessionParser
                 break;
             }
 
+            // --- RTCP feedback (RFC 4585 §4.2) ---
+            case "rtcp-fb" when current is not null:
+            {
+                var feedback = SdpRtcpFeedback.TryParse(attrValue);
+                if (feedback is not null)
+                    current.RtcpFeedback.Add(feedback);
+                break;
+            }
+
             // --- ptime / maxptime ---
             case "ptime" when current is not null && int.TryParse(attrValue, out var ptime):
                 current.Ptime = ptime;

@@ -61,4 +61,33 @@ internal static class VideoCodecCatalog
             .Where(c => c.Name.Equals("H264", StringComparison.OrdinalIgnoreCase))
             .Select(c => new SdpFmtpAttribute { PayloadType = c.PayloadType, Parameters = "packetization-mode=1" })
             .ToArray();
+
+    /// <summary>
+    /// RTCP feedback the video media layer implements, offered/answered on every video
+    /// m-line for all formats (<c>*</c>): Generic NACK (RFC 4585), Picture Loss Indication
+    /// (RFC 4585 §6.3.1), and Full Intra Request (RFC 5104 §4.3.1). NACK is advertised for
+    /// symmetry — the SDK currently sends PLI on loss; retransmission is follow-up work.
+    /// </summary>
+    public static IReadOnlyList<SdpRtcpFeedback> StandardFeedback { get; } =
+    [
+        new SdpRtcpFeedback { PayloadType = "*", FeedbackType = "nack" },
+        new SdpRtcpFeedback { PayloadType = "*", FeedbackType = "nack", Parameter = "pli" },
+        new SdpRtcpFeedback { PayloadType = "*", FeedbackType = "ccm", Parameter = "fir" },
+    ];
+
+    /// <summary>
+    /// Answers RTCP feedback with the intersection of what the peer offered and what the
+    /// SDK implements (RFC 4585 §4.2 — only mutually supported feedback is negotiated).
+    /// Matched by feedback type and parameter, ignoring the payload-type field.
+    /// DECISION: the answer always advertises for all formats (<c>*</c>) even when the peer
+    /// offered a specific payload type (e.g. <c>96 ccm fir</c> is answered <c>* ccm fir</c>).
+    /// <c>*</c> is a superset of any single PT, so this is interop-safe for the single-video-
+    /// codec case; per-PT answer mirroring is deferred until multi-codec video needs it.
+    /// </summary>
+    public static IReadOnlyList<SdpRtcpFeedback> NegotiateFeedback(IReadOnlyList<SdpRtcpFeedback> offered) =>
+        StandardFeedback
+            .Where(mine => offered.Any(theirs =>
+                theirs.FeedbackType.Equals(mine.FeedbackType, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(theirs.Parameter, mine.Parameter, StringComparison.OrdinalIgnoreCase)))
+            .ToArray();
 }

@@ -101,6 +101,10 @@ internal sealed class SdpSessionSerializer : ISdpSessionSerializer
         foreach (var fmtp in media.Fmtp)
             sb.AppendLine($"a=fmtp:{fmtp.PayloadType} {fmtp.Parameters}");
 
+        // RTCP feedback (RFC 4585 §4.2)
+        foreach (var feedback in media.RtcpFeedback)
+            sb.AppendLine($"a=rtcp-fb:{feedback.Serialize()}");
+
         // Direction
         AppendDirection(sb, media.Direction);
 

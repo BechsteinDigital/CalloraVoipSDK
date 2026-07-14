@@ -37,6 +37,7 @@ internal sealed class MediaBuilder
     public string? DtlsSetup { get; set; }
 
     public List<SdpFmtpAttribute> Fmtp { get; } = [];
+    public List<SdpRtcpFeedback> RtcpFeedback { get; } = [];
     public List<SdpIceCandidate> Candidates { get; } = [];
     public List<SdpCryptoAttribute> Crypto { get; } = [];
 
@@ -63,6 +64,7 @@ internal sealed class MediaBuilder
             IceOptions = IceOptions,
             EndOfCandidates = EndOfCandidates,
             Fmtp = Fmtp.AsReadOnly(),
+            RtcpFeedback = RtcpFeedback.AsReadOnly(),
             Candidates = Candidates.AsReadOnly(),
             Crypto = Crypto.AsReadOnly(),
             Fingerprint = Fingerprint,

@@ -71,6 +71,9 @@ internal sealed class SdpMediaDescription
     /// <summary>Format-specific parameter lines (<c>a=fmtp</c>), keyed by payload type.</summary>
     public IReadOnlyList<SdpFmtpAttribute> Fmtp { get; init; } = [];
 
+    /// <summary>RTCP feedback capabilities (<c>a=rtcp-fb</c>, RFC 4585 §4.2).</summary>
+    public IReadOnlyList<SdpRtcpFeedback> RtcpFeedback { get; init; } = [];
+
     // -------------------------------------------------------------------------
     // ICE (RFC 8839)
     // -------------------------------------------------------------------------
