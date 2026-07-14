@@ -67,6 +67,7 @@ internal sealed partial class SipCoreCallChannel
                 Port = _localVideoPort,
                 PreferredCodecNames = _videoCodecNames,
                 OfferSrtpKeyParams = _activeLocalVideoSrtpKeyParams,
+                Candidates = _localIceDescription?.VideoCandidates ?? [],
             }
             : null;
 

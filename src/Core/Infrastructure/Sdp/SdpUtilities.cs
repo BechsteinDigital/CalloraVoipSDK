@@ -593,6 +593,7 @@ internal static class SdpUtilities
                         ? SdesCryptoSelector.BuildOffer(videoKey)
                         : SdesCryptoSelector.BuildDefaultOffer()]
                     : [],
+                Candidates = MapToSdpCandidates(videoOptions.Candidates),
             }
             : null;
 
@@ -619,24 +620,31 @@ internal static class SdpUtilities
                 Ufrag = ice.Ufrag,
                 Pwd = ice.Pwd,
                 Options = ice.Options,
-                Candidates = ice.Candidates.Select(c => new SdpIceCandidate
-                {
-                    Foundation = c.Foundation,
-                    Component = c.Component,
-                    Transport = c.Transport,
-                    Priority = c.Priority,
-                    Address = c.Address,
-                    Port = c.Port,
-                    Type = c.Type,
-                    RelatedAddress = c.RelatedAddress,
-                    RelatedPort = c.RelatedPort,
-                    Generation = c.Generation,
-                    Ufrag = c.Ufrag,
-                    NetworkId = c.NetworkId
-                }).ToArray()
+                Candidates = MapToSdpCandidates(ice.Candidates)
             }
         };
     }
+
+    // Maps domain ICE candidates to the SDP wire model (1:1), shared by the session-level ICE
+    // parameters and the per-m-line video candidates.
+    private static IReadOnlyList<SdpIceCandidate> MapToSdpCandidates(IReadOnlyList<CallIceCandidate> candidates)
+        => candidates.Count == 0
+            ? []
+            : candidates.Select(c => new SdpIceCandidate
+            {
+                Foundation = c.Foundation,
+                Component = c.Component,
+                Transport = c.Transport,
+                Priority = c.Priority,
+                Address = c.Address,
+                Port = c.Port,
+                Type = c.Type,
+                RelatedAddress = c.RelatedAddress,
+                RelatedPort = c.RelatedPort,
+                Generation = c.Generation,
+                Ufrag = c.Ufrag,
+                NetworkId = c.NetworkId
+            }).ToArray();
 
     private static IReadOnlyList<CallIceCandidate> BuildCallIceCandidates(IReadOnlyList<SdpIceCandidate> candidates)
     {

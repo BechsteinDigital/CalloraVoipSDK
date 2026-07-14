@@ -97,6 +97,56 @@ public sealed class VideoIceNegotiationTests
         Assert.Contains("a=ice-pwd:ansPwd", videoSection, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Offer_advertises_the_video_host_candidate_on_the_video_mline()
+    {
+        var offer = SdpUtilities.BuildDefaultSdp(LocalAudio, hold: false, new SdpMediaNegotiationOptions
+        {
+            Video = new SdpVideoNegotiationOptions { Port = 41002, Candidates = [VideoHostCandidate(41002)] },
+            Ice = new SdpIceNegotiationOptions { Ufrag = "offU", Pwd = "offPwd" },
+        });
+
+        var audioSection = offer[offer.IndexOf("m=audio", StringComparison.Ordinal)..offer.IndexOf("m=video", StringComparison.Ordinal)];
+        var videoSection = offer[offer.IndexOf("m=video", StringComparison.Ordinal)..];
+        Assert.Contains("a=candidate:", videoSection, StringComparison.Ordinal);
+        Assert.Contains("41002 typ host", videoSection, StringComparison.Ordinal);
+        // The audio m-line carried no candidates here — the video candidate is m-line-scoped.
+        Assert.DoesNotContain("a=candidate:", audioSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Answer_advertises_the_video_host_candidate_on_the_video_mline()
+    {
+        var offer =
+            "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\ns=peer\r\nc=IN IP4 127.0.0.1\r\nt=0 0\r\n"
+            + "a=ice-ufrag:peerU\r\na=ice-pwd:peerPwd\r\n"
+            + "m=audio 5002 RTP/AVP 0\r\na=rtpmap:0 PCMU/8000\r\na=sendrecv\r\n"
+            + "m=video 5004 RTP/AVP 96\r\na=rtpmap:96 VP8/90000\r\n";
+
+        var answer = SdpUtilities.TryBuildNegotiatedAnswer(offer, LocalAudio, hold: false,
+            new SdpMediaNegotiationOptions
+            {
+                Video = new SdpVideoNegotiationOptions { Port = 41002, Candidates = [VideoHostCandidate(41002)] },
+                Ice = new SdpIceNegotiationOptions { Ufrag = "ansU", Pwd = "ansPwd" },
+            });
+
+        Assert.NotNull(answer);
+        var videoSection = answer![answer.IndexOf("m=video", StringComparison.Ordinal)..];
+        Assert.Contains("a=candidate:", videoSection, StringComparison.Ordinal);
+        Assert.Contains("41002 typ host", videoSection, StringComparison.Ordinal);
+    }
+
+    private static CallIceCandidate VideoHostCandidate(int port) => new()
+    {
+        Foundation = "host",
+        Component = 1,
+        Transport = "UDP",
+        Priority = 2130706431,
+        Address = "127.0.0.1",
+        Port = port,
+        Type = "host",
+    };
+
     // ── Enrichment: local credentials/role stamped and preserved ─────────────────
 
     [Fact]
