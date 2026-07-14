@@ -443,10 +443,11 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
         var remoteFp = offered.Fingerprint ?? remoteOffer.Fingerprint;
 
         // SDES crypto (RFC 4568): answer the first supported suite with our OWN key for the
-        // video m-line. DTLS only keys the m-line when SDES did not — the two are mutually
-        // exclusive per m-line (RFC 5763).
+        // video m-line. Only on a non-DTLS profile — a DTLS profile (UDP/TLS/*) is fingerprint-
+        // keyed and any a=crypto on it is ignored (RFC 5763); the two keying methods are
+        // mutually exclusive per m-line.
         IReadOnlyList<SdpCryptoAttribute> videoCrypto = [];
-        if (offered.Crypto.Count > 0)
+        if (offered.Crypto.Count > 0 && !IsDtlsSecuredProfile(offered.Profile))
         {
             var sdes = SdesCryptoSelector.SelectAnswer(offered.Crypto);
             if (sdes is not null)

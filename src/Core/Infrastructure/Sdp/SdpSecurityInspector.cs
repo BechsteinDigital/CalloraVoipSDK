@@ -76,4 +76,12 @@ internal static class SdpSecurityInspector
     public static bool IsSecureProfile(string? profile) =>
         !string.IsNullOrWhiteSpace(profile)
         && profile.Contains("SAVP", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Returns true when the profile token indicates a DTLS transport (<c>UDP/TLS/…</c>,
+    /// RFC 5764). Such a profile is fingerprint-keyed; any <c>a=crypto</c> on it is ignored.
+    /// </summary>
+    public static bool IsDtlsProfile(string? profile) =>
+        !string.IsNullOrWhiteSpace(profile)
+        && profile.StartsWith("UDP/TLS/", StringComparison.OrdinalIgnoreCase);
 }
