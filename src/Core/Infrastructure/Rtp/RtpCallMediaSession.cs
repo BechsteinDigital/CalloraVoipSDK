@@ -38,6 +38,7 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
     // RFC 7675 consent freshness. Inactive (routes nothing) when ICE was not negotiated.
     private readonly IceMediaAttachment _iceMedia;
     private readonly DtlsMediaAttachment? _dtlsMedia;
+    private readonly VideoRtpStream? _videoStream;
     private readonly IJitterBuffer _jitterBuffer;
 
     // SRTP/SRTCP contexts created (and thus owned) by this session; internal for test evidence.
@@ -211,7 +212,14 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
             _rtp.InstallSecurityContexts, _rtp.StopTransmission, loggerFactory);
         if (_dtlsMedia is not null)
             _rtp.DtlsPacketReceived += _dtlsMedia.OnDtlsPacketReceived;
+
+        // Video sub-stream (WebRTC phase 2): own socket, own payload format, and on
+        // DTLS-keyed legs its own handshake — null for audio-only legs.
+        _videoStream = VideoRtpStream.TryCreate(parameters, loggerFactory, dtlsHandshaker, dtlsCertificate);
     }
+
+    /// <inheritdoc />
+    public IVideoMediaStream? Video => _videoStream;
 
     // RFC 7675 §5.1: on ICE consent loss the pair is dead — cease media transmission on it. The
     // socket stays open (ICE restart could revive the path); surfacing the loss to the application
@@ -231,6 +239,7 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
         _ = _rtp.StartAsync(_cts.Token);
         _iceMedia.Start();
         _dtlsMedia?.Start(_cts.Token);
+        _videoStream?.Start(_cts.Token);
         _playoutLoop = RunPlayoutLoopAsync(_cts.Token);
         return Task.CompletedTask;
     }
@@ -437,6 +446,11 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
             _rtp.DtlsPacketReceived -= _dtlsMedia.OnDtlsPacketReceived;
             await _dtlsMedia.DisposeAsync().ConfigureAwait(false);
         }
+
+        // Video runs on its own socket and DTLS association — tear it down independently.
+        if (_videoStream is not null)
+            await _videoStream.DisposeAsync().ConfigureAwait(false);
+
         _cts.Cancel();
 
         var playoutLoop = _playoutLoop;

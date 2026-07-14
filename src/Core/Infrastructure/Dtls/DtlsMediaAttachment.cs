@@ -100,6 +100,12 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
     /// handshaker, certificate, or peer fingerprint must not start at all).
     /// Returns <see langword="null"/> when the leg did not negotiate DTLS.
     /// </summary>
+    /// <param name="remoteEndPointOverride">
+    /// Remote transport address of the media stream this attachment keys; defaults to
+    /// the audio remote endpoint. A video m-line runs its own DTLS association on its
+    /// own socket (RFC 5763: one association per m-line without BUNDLE) and passes its
+    /// video remote endpoint here.
+    /// </param>
     /// <exception cref="InvalidOperationException">
     /// DTLS was negotiated but the DTLS dependencies or the peer fingerprint are missing.
     /// </exception>
@@ -110,7 +116,8 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
         Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask> sendRaw,
         Action<ISrtpContext, ISrtpContext, ISrtcpContext, ISrtcpContext> onContextsReady,
         Action onHandshakeFailed,
-        ILoggerFactory loggerFactory)
+        ILoggerFactory loggerFactory,
+        IPEndPoint? remoteEndPointOverride = null)
     {
         ArgumentNullException.ThrowIfNull(parameters);
         ArgumentNullException.ThrowIfNull(sendRaw);
@@ -131,7 +138,7 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
         };
 
         return new DtlsMediaAttachment(
-            parameters.DtlsIsClient, parameters.RemoteEndPoint, expected,
+            parameters.DtlsIsClient, remoteEndPointOverride ?? parameters.RemoteEndPoint, expected,
             handshaker!, certificate!, sendRaw, onContextsReady, onHandshakeFailed, loggerFactory);
     }
 
