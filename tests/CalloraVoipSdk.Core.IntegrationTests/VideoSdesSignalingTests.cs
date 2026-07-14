@@ -55,6 +55,37 @@ public sealed class VideoSdesSignalingTests
     }
 
     [Fact]
+    public void Outbound_sdes_video_offer_keys_parameters_from_our_offer_and_peer_answer()
+    {
+        // Our locally originated offer carries its own video a=crypto (our outbound key).
+        var ourOffer = SdpUtilities.BuildDefaultSdp(LocalAudio, hold: false,
+            new SdpMediaNegotiationOptions { Video = VideoOptions(), OfferSrtpCrypto = true });
+        var ourVideoKey = SdpUtilities.TryExtractVideoCrypto(ourOffer)?.KeyParams;
+        Assert.NotNull(ourVideoKey);
+
+        // The peer answers with its own video crypto (our inbound key).
+        var peerVideoKey = "inline:" + Convert.ToBase64String(new byte[30]);
+        var peerAnswer =
+            "v=0\r\no=- 2 2 IN IP4 127.0.0.1\r\ns=peer\r\nc=IN IP4 127.0.0.1\r\nt=0 0\r\n"
+            + "m=audio 6002 RTP/SAVP 0\r\na=rtpmap:0 PCMU/8000\r\n"
+            + $"a=crypto:1 AES_CM_128_HMAC_SHA1_80 inline:{Convert.ToBase64String(new byte[30])}\r\n"
+            + "m=video 6004 RTP/SAVP 96\r\na=rtpmap:96 VP8/90000\r\n"
+            + $"a=crypto:1 AES_CM_128_HMAC_SHA1_80 {peerVideoKey}\r\n";
+
+        var parameters = SdpUtilities.TryParseMediaParameters(
+            peerAnswer, LocalAudio, new SdpMediaNegotiationOptions { Video = VideoOptions() });
+        Assert.NotNull(parameters!.Video);
+
+        var enriched = CallMediaParametersSrtpEnricher.Enrich(
+            parameters, reasonCode: "test", remoteSdp: peerAnswer, localSdp: ourOffer, appliedPolicy: SrtpPolicy.Required);
+
+        Assert.NotNull(enriched.Video);
+        Assert.Equal("AES_CM_128_HMAC_SHA1_80", enriched.Video!.SrtpSuite);
+        Assert.Equal(ourVideoKey, enriched.Video.SrtpLocalKeyParams);   // our offer key = outbound
+        Assert.Equal(peerVideoKey, enriched.Video.SrtpRemoteKeyParams); // peer answer key = inbound
+    }
+
+    [Fact]
     public void Plain_video_offer_leaves_video_parameters_unkeyed()
     {
         var offer =

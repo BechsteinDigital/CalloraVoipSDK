@@ -57,6 +57,13 @@ public sealed class SdpVideoNegotiationOptions
     /// <see langword="null"/> uses the SDK default (VP8, H264). Unknown names are ignored.
     /// </summary>
     public IReadOnlyList<string>? PreferredCodecNames { get; init; }
+
+    /// <summary>
+    /// Live outbound SDES key params for the video m-line to re-advertise on a re-offer
+    /// (hold/unhold), so a running SRTP video stream is not rekeyed mid-call. Applies only when
+    /// the session offers SDES crypto; <see langword="null"/> generates a fresh video key.
+    /// </summary>
+    public string? OfferSrtpKeyParams { get; init; }
 }
 
 /// <summary>

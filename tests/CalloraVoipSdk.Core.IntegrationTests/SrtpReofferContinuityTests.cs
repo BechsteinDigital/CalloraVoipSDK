@@ -104,6 +104,48 @@ public sealed class SrtpReofferContinuityTests
         Assert.DoesNotContain("a=crypto", session.CapturedHoldSdp!, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Hold_reoffer_reuses_the_live_video_key()
+    {
+        // A video-enabled SDES call re-advertises the SAME per-m-line video key on hold — the
+        // running SRTP video stream must not be rekeyed (RFC 4568 per-m-line keying).
+        using var channel = CreateVideoChannel();
+        var localEndPoint = new IPEndPoint(IPAddress.Loopback, channel.LocalMediaPort);
+        var offerSdp = await channel.BuildOfferSdpAsync(localEndPoint, hold: false, CancellationToken.None);
+        var videoOfferKey = SdpUtilities.TryExtractVideoCrypto(offerSdp)?.KeyParams;
+        Assert.NotNull(videoOfferKey);
+
+        var session = new FakeReofferSession(PeerAnswerSdpWithVideo(channel.LocalMediaPort, videoPort: 6004));
+        channel.AttachSession(session);
+
+        await channel.HoldAsync();
+
+        Assert.NotNull(session.CapturedHoldSdp);
+        var holdVideoCrypto = SdpUtilities.TryExtractVideoCrypto(session.CapturedHoldSdp);
+        Assert.NotNull(holdVideoCrypto);
+        Assert.Equal(videoOfferKey, holdVideoCrypto!.KeyParams); // reused, not rekeyed
+    }
+
+    private static SipCoreCallChannel CreateVideoChannel() => new(
+        NullLogger<SipCoreCallChannel>.Instance,
+        new SdpNegotiator(),
+        NullSipTelemetrySink.Instance,
+        SrtpPolicy.Optional,
+        policySource: "test",
+        iceAgent: null,
+        preferredCodecNames: null,
+        advertisedPublicMediaAddress: null,
+        dtlsOptions: null,
+        offerDtlsSrtp: false,
+        enableVideo: true);
+
+    private static string PeerAnswerSdpWithVideo(int mediaPort, int videoPort) =>
+        "v=0\r\no=- 2 2 IN IP4 127.0.0.1\r\ns=peer\r\nc=IN IP4 127.0.0.1\r\nt=0 0\r\n"
+        + $"m=audio {mediaPort} RTP/SAVP 0\r\na=rtpmap:0 PCMU/8000\r\n"
+        + $"a=crypto:1 {Suite} {InlineKey(70)}\r\na=sendrecv\r\n"
+        + $"m=video {videoPort} RTP/SAVP 96\r\na=rtpmap:96 VP8/90000\r\n"
+        + $"a=crypto:1 {Suite} {InlineKey(90)}\r\n";
+
     // Established outbound session that captures hold/unhold re-offer SDP.
     private sealed class FakeReofferSession(string remoteSdp) : ISipCallSession
     {

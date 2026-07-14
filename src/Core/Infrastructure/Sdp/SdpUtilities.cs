@@ -571,12 +571,19 @@ internal static class SdpUtilities
                 : [];
 
         // Video (WebRTC phase 2): resolve the codec preference once; presence enables
-        // offering/answering m=video.
+        // offering/answering m=video. SDES keying is per-m-line (RFC 4568): the video stream
+        // gets its OWN a=crypto with a fresh key on the initial offer, or re-advertises the
+        // retained video key on a re-offer (OfferSrtpKeyParams) so hold/unhold does not rekey.
         var video = options.Video is { } videoOptions
             ? new SdpVideoMediaOptions
             {
                 Port = videoOptions.Port,
                 Codecs = VideoCodecCatalog.Resolve(videoOptions.PreferredCodecNames),
+                Crypto = forOffer && options.OfferSrtpCrypto && !offersDtls
+                    ? [videoOptions.OfferSrtpKeyParams is { } videoKey
+                        ? SdesCryptoSelector.BuildOffer(videoKey)
+                        : SdesCryptoSelector.BuildDefaultOffer()]
+                    : [],
             }
             : null;
 
