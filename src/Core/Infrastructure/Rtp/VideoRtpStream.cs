@@ -128,6 +128,9 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
                 OutboundSrtcp = _sdesOutboundSrtcp,
                 InboundSrtcp = _sdesInboundSrtcp,
                 RequireEncryptedMedia = parameters.IsSrtpNegotiated || parameters.IsDtlsNegotiated,
+                // Transport-wide-cc (RFC 8888): stamp the transport-wide sequence number on
+                // outgoing video packets when the a=extmap was negotiated for this m-line.
+                TransportWideCcExtensionId = video.TransportWideCcExtensionId,
             },
             new RtpPacketCodec(),
             loggerFactory.CreateLogger<RtpSession>());
