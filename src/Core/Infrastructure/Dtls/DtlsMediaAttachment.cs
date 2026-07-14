@@ -22,6 +22,7 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
     private readonly DtlsCertificate _certificate;
     private readonly Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask> _sendRaw;
     private readonly Action<ISrtpContext, ISrtpContext, ISrtcpContext, ISrtcpContext> _onContextsReady;
+    private readonly Action<ISrtpContext, ISrtpContext>? _onSecondaryContextsReady;
     private readonly Action _onHandshakeFailed;
     private readonly ILogger<DtlsMediaAttachment> _logger;
     private readonly QueueDatagramTransport _transport;
@@ -37,6 +38,8 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
     private ISrtpContext? _inboundSrtp;
     private ISrtcpContext? _outboundSrtcp;
     private ISrtcpContext? _inboundSrtcp;
+    private ISrtpContext? _rtxOutboundSrtp;
+    private ISrtpContext? _rtxInboundSrtp;
     private int _disposed;
 
     private DtlsMediaAttachment(
@@ -47,6 +50,7 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
         DtlsCertificate certificate,
         Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask> sendRaw,
         Action<ISrtpContext, ISrtpContext, ISrtcpContext, ISrtcpContext> onContextsReady,
+        Action<ISrtpContext, ISrtpContext>? onSecondaryContextsReady,
         Action onHandshakeFailed,
         ILoggerFactory loggerFactory)
     {
@@ -57,6 +61,7 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
         _certificate = certificate;
         _sendRaw = sendRaw;
         _onContextsReady = onContextsReady;
+        _onSecondaryContextsReady = onSecondaryContextsReady;
         _onHandshakeFailed = onHandshakeFailed;
         _logger = loggerFactory.CreateLogger<DtlsMediaAttachment>();
         _transport = new QueueDatagramTransport(DispatchOutbound);
@@ -117,7 +122,8 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
         Action<ISrtpContext, ISrtpContext, ISrtcpContext, ISrtcpContext> onContextsReady,
         Action onHandshakeFailed,
         ILoggerFactory loggerFactory,
-        IPEndPoint? remoteEndPointOverride = null)
+        IPEndPoint? remoteEndPointOverride = null,
+        Action<ISrtpContext, ISrtpContext>? onSecondaryContextsReady = null)
     {
         ArgumentNullException.ThrowIfNull(parameters);
         ArgumentNullException.ThrowIfNull(sendRaw);
@@ -139,7 +145,8 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
 
         return new DtlsMediaAttachment(
             parameters.DtlsIsClient, remoteEndPointOverride ?? parameters.RemoteEndPoint, expected,
-            handshaker!, certificate!, sendRaw, onContextsReady, onHandshakeFailed, loggerFactory);
+            handshaker!, certificate!, sendRaw, onContextsReady, onSecondaryContextsReady,
+            onHandshakeFailed, loggerFactory);
     }
 
     /// <summary>
@@ -187,6 +194,15 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
                 _outboundSrtcp = new SrtcpContext(result.Keys.LocalKeys);
                 _inboundSrtcp = new SrtcpContext(result.Keys.RemoteKeys);
                 _onContextsReady(_outboundSrtp, _inboundSrtp, _outboundSrtcp, _inboundSrtcp);
+
+                // RTX repair stream (RFC 4588 §9): its own SRTP contexts from the same keys,
+                // so its independent sequence space has its own replay window / ROC.
+                if (_onSecondaryContextsReady is { } onRtx)
+                {
+                    _rtxOutboundSrtp = new SrtpContext(result.Keys.LocalKeys);
+                    _rtxInboundSrtp = new SrtpContext(result.Keys.RemoteKeys);
+                    onRtx(_rtxOutboundSrtp, _rtxInboundSrtp);
+                }
             }
             catch (OperationCanceledException)
             {
@@ -268,5 +284,7 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
         _inboundSrtp?.Dispose();
         _outboundSrtcp?.Dispose();
         _inboundSrtcp?.Dispose();
+        _rtxOutboundSrtp?.Dispose();
+        _rtxInboundSrtp?.Dispose();
     }
 }

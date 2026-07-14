@@ -3,6 +3,7 @@ using CalloraVoipSdk.Core.Domain.Calls;
 using CalloraVoipSdk.Core.Infrastructure.Dtls;
 using CalloraVoipSdk.Core.Infrastructure.Rtcp.Wire;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packetisation;
+using CalloraVoipSdk.Core.Infrastructure.Rtp.Retransmission;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Session;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Wire;
 using Microsoft.Extensions.Logging;
@@ -34,6 +35,13 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
     private readonly byte _payloadType;
     private readonly VideoKeyFrameFeedback _keyFrameFeedback;
     private readonly CancellationTokenSource _lifetimeCts = new();
+
+    // RTX retransmission (RFC 4588): retains sent packets so an inbound NACK can be answered
+    // by resending them on the repair stream. Null when RTX was not negotiated.
+    private readonly RtpRetransmissionBuffer? _retransmitBuffer;
+    private readonly byte _rtxPayloadType;
+    private readonly uint _rtxSsrc;
+    private int _rtxSequence;
 
     private ushort _lastSequence;
     private bool _hasReceived;
@@ -67,23 +75,76 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
             loggerFactory.CreateLogger<RtpSession>());
         _rtp.PacketReceived += OnPacketReceived;
 
+        // RTX repair stream (RFC 4588): configure the negotiated payload type so inbound RTX
+        // is demultiplexed onto its own SRTP context (never disturbing the primary replay
+        // window), and retain sent packets so an inbound NACK can be answered by resending.
+        if (video.RtxPayloadType is { } rtxPt)
+        {
+            _rtxPayloadType = (byte)rtxPt;
+            _rtxSsrc = unchecked((uint)Random.Shared.Next());
+            _retransmitBuffer = new RtpRetransmissionBuffer();
+            _rtp.ConfigureSecondaryStream(_rtxPayloadType);
+            _rtp.PacketSent += _retransmitBuffer.Store;
+        }
+
         // Keyframe feedback (RFC 4585/5104) over the video RTCP-mux channel: inbound PLI/FIR
-        // → KeyFrameRequested (for the encoder); inbound loss → PLI to the peer, throttled.
+        // → KeyFrameRequested (for the encoder); inbound loss → NACK/PLI to the peer; inbound
+        // NACK → RTX retransmit of the requested packets.
         _keyFrameFeedback = new VideoKeyFrameFeedback(
             new RtcpPacketCodec(), _rtp.LocalSsrc,
             video.RemoteSupportsNack, video.RemoteSupportsPli, _rtp.SendControlAsync,
             () => KeyFrameRequested?.Invoke(),
+            OnRetransmitRequested,
             loggerFactory.CreateLogger<VideoKeyFrameFeedback>(), _lifetimeCts.Token);
         _rtp.ControlPacketReceived += _keyFrameFeedback.OnControlDatagram;
 
         // DTLS-SRTP for the video 5-tuple: same identity, role, and peer fingerprint as
         // audio (the answer commits one a=setup per session in this SDK), own handshake.
+        // When RTX is negotiated, the handshake also keys the repair stream's own contexts.
         _dtlsMedia = DtlsMediaAttachment.TryCreate(
             parameters, dtlsHandshaker, dtlsCertificate, _rtp.SendRawAsync,
             _rtp.InstallSecurityContexts, _rtp.StopTransmission, loggerFactory,
-            remoteEndPointOverride: video.RemoteEndPoint);
+            remoteEndPointOverride: video.RemoteEndPoint,
+            onSecondaryContextsReady: _retransmitBuffer is null ? null : _rtp.InstallSecondarySecurityContexts);
         if (_dtlsMedia is not null)
             _rtp.DtlsPacketReceived += _dtlsMedia.OnDtlsPacketReceived;
+    }
+
+    // Answers an inbound NACK (RFC 4585) by resending the requested packets on the RTX repair
+    // stream (RFC 4588): each still in the buffer is re-wrapped with the rtx payload type,
+    // SSRC, and a fresh rtx sequence number, then sent on the secondary stream. Runs on the
+    // RTCP receive-loop thread. A packet no longer in the window is simply not resent.
+    private void OnRetransmitRequested(IReadOnlyList<ushort> sequenceNumbers)
+    {
+        if (_retransmitBuffer is null)
+            return;
+
+        foreach (var seq in sequenceNumbers)
+        {
+            if (!_retransmitBuffer.TryGet(seq, out var original))
+                continue;
+
+            var rtxSeq = unchecked((ushort)Interlocked.Increment(ref _rtxSequence));
+            var rtx = RtxPacketFactory.Encapsulate(original, _rtxPayloadType, _rtxSsrc, rtxSeq);
+            _ = SendRtxAsync(rtx);
+        }
+    }
+
+    private async Task SendRtxAsync(Packets.RtpPacket rtx)
+    {
+        try
+        {
+            await _rtp.SendSecondaryAsync(rtx, _lifetimeCts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // Teardown while retransmitting — nothing to recover.
+            _logger.LogTrace("RTX retransmission aborted by session teardown.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to send an RTX retransmission.");
+        }
     }
 
     /// <inheritdoc />
@@ -191,6 +252,8 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
         _lifetimeCts.Cancel();
         _rtp.PacketReceived -= OnPacketReceived;
         _rtp.ControlPacketReceived -= _keyFrameFeedback.OnControlDatagram;
+        if (_retransmitBuffer is not null)
+            _rtp.PacketSent -= _retransmitBuffer.Store;
         if (_dtlsMedia is not null)
         {
             _rtp.StopTransmission();

@@ -58,7 +58,7 @@ internal sealed class RtpRetransmissionBuffer
     /// Looks up a previously sent packet by its sequence number for retransmission.
     /// Returns <see langword="false"/> when it is no longer in the window.
     /// </summary>
-    public bool TryGet(ushort sequenceNumber, out RtpPacket? packet)
+    public bool TryGet(ushort sequenceNumber, [System.Diagnostics.CodeAnalysis.MaybeNullWhen(false)] out RtpPacket packet)
     {
         lock (_sync)
         {
