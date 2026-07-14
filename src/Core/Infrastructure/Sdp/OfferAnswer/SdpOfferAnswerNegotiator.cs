@@ -98,6 +98,7 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
                 IceUfrag = ice?.Ufrag,
                 IcePwd = ice?.Pwd,
                 IceOptions = ice?.Options,
+                Candidates = video.Candidates,
                 Fingerprint = dtls is not null
                     ? new SdpFingerprint { Algorithm = dtls.Algorithm, Value = dtls.Fingerprint }
                     : null,
@@ -515,12 +516,12 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             Crypto = videoCrypto,
             Fingerprint = fingerprint,
             DtlsSetup = dtlsSetup,
-            // ICE (RFC 8839): answer the video m-line with the session-shared ufrag/pwd so the peer
-            // applies ICE to the video 5-tuple, mirroring the audio answer. Video candidates are a
-            // documented follow-up; the consent path uses the m-line address/port as the 5-tuple.
+            // ICE (RFC 8839): answer the video m-line with the session-shared ufrag/pwd plus our
+            // own video host candidate so the peer can check the video 5-tuple, mirroring audio.
             IceUfrag = localOptions.Ice?.Ufrag,
             IcePwd = localOptions.Ice?.Pwd,
-            IceOptions = localOptions.Ice?.Options
+            IceOptions = localOptions.Ice?.Options,
+            Candidates = video.Candidates
         };
     }
 

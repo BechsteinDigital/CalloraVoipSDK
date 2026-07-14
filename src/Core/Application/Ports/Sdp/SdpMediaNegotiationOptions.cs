@@ -64,6 +64,13 @@ public sealed class SdpVideoNegotiationOptions
     /// the session offers SDES crypto; <see langword="null"/> generates a fresh video key.
     /// </summary>
     public string? OfferSrtpKeyParams { get; init; }
+
+    /// <summary>
+    /// Local ICE candidates to advertise on the video m-line (<c>a=candidate</c>, RFC 8839) so a
+    /// peer can run connectivity checks against the video 5-tuple. Empty leaves the video m-line
+    /// without its own candidates (the peer derives the target from the m-line address/port).
+    /// </summary>
+    public IReadOnlyList<CallIceCandidate> Candidates { get; init; } = [];
 }
 
 /// <summary>

@@ -56,6 +56,12 @@ internal sealed class SdpVideoMediaOptions
     /// empty for a plain or DTLS-keyed offer.
     /// </summary>
     public IReadOnlyList<SdpCryptoAttribute> Crypto { get; init; } = [];
+
+    /// <summary>
+    /// Per-m-line ICE candidates for the video stream (<c>a=candidate</c>, RFC 8839); empty
+    /// leaves the video m-line without its own candidates.
+    /// </summary>
+    public IReadOnlyList<SdpIceCandidate> Candidates { get; init; } = [];
 }
 
 /// <summary>

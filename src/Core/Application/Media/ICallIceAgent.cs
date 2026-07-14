@@ -13,11 +13,15 @@ internal interface ICallIceAgent
     /// Builds local ICE credentials and candidates for one SDP offer/answer exchange.
     /// <paramref name="sharedMediaSocket"/> is the already-bound RTP reservation socket;
     /// STUN gathering sends through it so the srflx candidate reflects the real media
-    /// port (binding a second socket to that port would fail).
+    /// port (binding a second socket to that port would fail). When
+    /// <paramref name="videoLocalEndPoint"/> is provided, a host candidate for the video
+    /// 5-tuple is gathered too (RFC 8839), returned in
+    /// <see cref="CallIceLocalDescription.VideoCandidates"/>.
     /// </summary>
     Task<CallIceLocalDescription?> BuildLocalDescriptionAsync(
         IPEndPoint localEndPoint,
         System.Net.Sockets.Socket? sharedMediaSocket = null,
+        IPEndPoint? videoLocalEndPoint = null,
         CancellationToken ct = default);
 
     /// <summary>

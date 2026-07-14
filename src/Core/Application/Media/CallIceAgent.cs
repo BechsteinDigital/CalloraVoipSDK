@@ -43,6 +43,7 @@ internal sealed class CallIceAgent : ICallIceAgent
     public async Task<CallIceLocalDescription?> BuildLocalDescriptionAsync(
         IPEndPoint localEndPoint,
         System.Net.Sockets.Socket? sharedMediaSocket = null,
+        IPEndPoint? videoLocalEndPoint = null,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(localEndPoint);
@@ -132,11 +133,20 @@ internal sealed class CallIceAgent : ICallIceAgent
             uniqueCandidates.Count(static c => c.Type.Equals("srflx", StringComparison.OrdinalIgnoreCase)),
             uniqueCandidates.Count(static c => c.Type.Equals("relay", StringComparison.OrdinalIgnoreCase)));
 
+        // Video 5-tuple (no BUNDLE): a host candidate for the video port, sharing the session
+        // ufrag/pwd, so a peer can run connectivity checks against our video stream. Host-only for
+        // now — server-reflexive/relay video candidates would need STUN/TURN probes on the video
+        // socket (a follow-up); the host candidate covers the direct/LAN path.
+        var videoCandidates = videoLocalEndPoint is not null
+            ? (IReadOnlyList<CallIceCandidate>)[BuildHostCandidate(videoLocalEndPoint)]
+            : [];
+
         return new CallIceLocalDescription
         {
             Ufrag = GenerateUfrag(),
             Pwd = GeneratePassword(),
-            Candidates = uniqueCandidates
+            Candidates = uniqueCandidates,
+            VideoCandidates = videoCandidates
         };
     }
 

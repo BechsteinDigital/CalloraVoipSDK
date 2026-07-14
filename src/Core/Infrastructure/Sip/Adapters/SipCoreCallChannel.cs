@@ -352,9 +352,16 @@ internal sealed partial class SipCoreCallChannel : ICallChannel
         try
         {
             // Route STUN gathering through the reserved media socket so the srflx
-            // candidate carries the real RTP port (a second bind would EADDRINUSE).
+            // candidate carries the real RTP port (a second bind would EADDRINUSE). When video is
+            // enabled, gather a host candidate for the video 5-tuple too (its own port, shared
+            // ufrag/pwd) so a peer can check the video stream (RFC 8839). The video candidate
+            // reuses the same resolved advertised address as the audio host candidate (both from
+            // `localEndPoint.Address`) — only the port differs.
+            var videoLocalEndPoint = _videoEnabled
+                ? new IPEndPoint(localEndPoint.Address, _localVideoPort)
+                : null;
             _localIceDescription = await _iceAgent
-                .BuildLocalDescriptionAsync(localEndPoint, _localMediaSocket.Client, ct)
+                .BuildLocalDescriptionAsync(localEndPoint, _localMediaSocket.Client, videoLocalEndPoint, ct)
                 .ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
