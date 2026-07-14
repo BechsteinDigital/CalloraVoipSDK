@@ -184,6 +184,9 @@ internal sealed class RtpSession : IRtpSession
         }
     }
 
+    /// <summary>Local synchronization source (RFC 3550 §5.1) — used as the sender SSRC of RTCP feedback.</summary>
+    internal uint LocalSsrc => _ssrc;
+
     /// <summary>
     /// Sends one RTCP datagram via the RTP socket (RTCP-MUX mode).
     /// </summary>

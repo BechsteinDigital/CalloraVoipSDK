@@ -1,6 +1,7 @@
 using CalloraVoipSdk.Core.Application.Media;
 using CalloraVoipSdk.Core.Domain.Calls;
 using CalloraVoipSdk.Core.Infrastructure.Dtls;
+using CalloraVoipSdk.Core.Infrastructure.Rtcp.Wire;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packetisation;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Session;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Wire;
@@ -31,6 +32,8 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
     private readonly SemaphoreSlim _sendSync = new(1, 1);
     private readonly ILogger<VideoRtpStream> _logger;
     private readonly byte _payloadType;
+    private readonly VideoKeyFrameFeedback _keyFrameFeedback;
+    private readonly CancellationTokenSource _lifetimeCts = new();
 
     private ushort _lastSequence;
     private bool _hasReceived;
@@ -64,6 +67,14 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
             loggerFactory.CreateLogger<RtpSession>());
         _rtp.PacketReceived += OnPacketReceived;
 
+        // Keyframe feedback (RFC 4585/5104) over the video RTCP-mux channel: inbound PLI/FIR
+        // → KeyFrameRequested (for the encoder); inbound loss → PLI to the peer, throttled.
+        _keyFrameFeedback = new VideoKeyFrameFeedback(
+            new RtcpPacketCodec(), _rtp.LocalSsrc, _rtp.SendControlAsync,
+            () => KeyFrameRequested?.Invoke(),
+            loggerFactory.CreateLogger<VideoKeyFrameFeedback>(), _lifetimeCts.Token);
+        _rtp.ControlPacketReceived += _keyFrameFeedback.OnControlDatagram;
+
         // DTLS-SRTP for the video 5-tuple: same identity, role, and peer fingerprint as
         // audio (the answer commits one a=setup per session in this SDK), own handshake.
         _dtlsMedia = DtlsMediaAttachment.TryCreate(
@@ -82,6 +93,9 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
 
     /// <inheritdoc />
     public event Action<byte[], uint>? FrameReceived;
+
+    /// <inheritdoc />
+    public event Action? KeyFrameRequested;
 
     /// <summary>
     /// Creates the video stream for a leg that negotiated video; <see langword="null"/>
@@ -140,10 +154,14 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
         if (packet.PayloadType != _payloadType)
             return;
 
-        // Sequence gap: a fragment is missing — discard the frame under assembly so a
-        // torn frame is never delivered (no retransmission until the feedback phase).
+        // Sequence gap: a fragment is missing — discard the frame under assembly so a torn
+        // frame is never delivered, and ask the peer for a keyframe (RFC 4585 PLI, throttled)
+        // so decoding recovers instead of stalling until the encoder's next intra frame.
         if (_hasReceived && packet.SequenceNumber != unchecked((ushort)(_lastSequence + 1)))
+        {
             _depacketiser.Reset();
+            _keyFrameFeedback.RequestRemoteKeyFrame(packet.Ssrc);
+        }
         _lastSequence = packet.SequenceNumber;
         _hasReceived = true;
 
@@ -169,7 +187,9 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
             return;
 
+        _lifetimeCts.Cancel();
         _rtp.PacketReceived -= OnPacketReceived;
+        _rtp.ControlPacketReceived -= _keyFrameFeedback.OnControlDatagram;
         if (_dtlsMedia is not null)
         {
             _rtp.StopTransmission();
@@ -179,7 +199,9 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
 
         await _rtp.DisposeAsync().ConfigureAwait(false);
         FrameReceived = null;
+        KeyFrameRequested = null;
         _sendSync.Dispose();
+        _lifetimeCts.Dispose();
     }
 
     private static (IVideoPacketiser Packetiser, IVideoDepacketiser Depacketiser) CreatePayloadFormat(

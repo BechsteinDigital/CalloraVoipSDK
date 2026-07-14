@@ -28,4 +28,11 @@ internal interface IVideoMediaStream
     /// never delivered partially.
     /// </summary>
     event Action<byte[], uint>? FrameReceived;
+
+    /// <summary>
+    /// Raised when the peer requested a keyframe via RTCP PLI/FIR (RFC 4585/5104) — the
+    /// encoder feeding <see cref="SendFrameAsync"/> should emit an intra frame next. The
+    /// stream itself sends a PLI to the peer automatically when it detects inbound loss.
+    /// </summary>
+    event Action? KeyFrameRequested;
 }
