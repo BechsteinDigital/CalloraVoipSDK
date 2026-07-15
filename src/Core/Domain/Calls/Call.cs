@@ -415,6 +415,29 @@ internal sealed class Call : ICall, IDisposable
     }
 
     /// <summary>
+    /// Registers an incoming video frame listener for this call.
+    /// </summary>
+    internal void AddVideoFrameListener(Action<CallVideoFrame> onFrame) =>
+        _channel.AddVideoFrameListener(onFrame);
+
+    /// <summary>
+    /// Removes a previously registered video frame listener.
+    /// </summary>
+    internal void RemoveVideoFrameListener(Action<CallVideoFrame> onFrame) =>
+        _channel.RemoveVideoFrameListener(onFrame);
+
+    /// <summary>
+    /// Sends one outbound encoded video frame through the call channel.
+    /// </summary>
+    internal Task SendVideoFrameAsync(CallVideoFrame frame, CancellationToken ct = default)
+    {
+        if (State is not (CallState.Connected or CallState.OnHold))
+            throw new InvalidOperationException($"Call must be Connected or OnHold, is {State}.");
+
+        return _channel.SendVideoFrameAsync(frame, ct);
+    }
+
+    /// <summary>
     /// Ensures a specific call state before running a signaling action.
     /// </summary>
     private void GuardState(CallState required)

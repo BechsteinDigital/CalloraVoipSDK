@@ -33,9 +33,11 @@ internal sealed partial class SipCoreCallChannel : ICallChannel
     private readonly object _callbackSync = new();
     private readonly object _sessionSync = new();
     private readonly object _audioSync = new();
+    private readonly object _videoSync = new();
     private readonly Queue<CallState> _stateBuffer = new();
     private readonly Queue<bool> _remoteHoldBuffer = new();
     private readonly List<Action<CallAudioFrame>> _audioListeners = [];
+    private readonly List<Action<CallVideoFrame>> _videoListeners = [];
 
     // Pre-allocated local UDP socket so the port is known before the SDP offer is built.
     private readonly UdpClient _localMediaSocket;
@@ -54,6 +56,7 @@ internal sealed partial class SipCoreCallChannel : ICallChannel
     private Action<bool>? _onRemoteHold;
     private Func<string, string, bool>? _onTransfer;
     private Func<CallAudioFrame, CancellationToken, Task>? _audioSendDelegate;
+    private Func<CallVideoFrame, CancellationToken, Task>? _videoSendDelegate;
     private Func<byte, int, CancellationToken, Task>? _dtmfSendDelegate;
     private CallIceLocalDescription? _localIceDescription;
 
@@ -918,6 +921,7 @@ internal sealed partial class SipCoreCallChannel : ICallChannel
         _localVideoSocket?.Dispose();
 
         lock (_audioSync) _audioListeners.Clear();
+        lock (_videoSync) _videoListeners.Clear();
         lock (_callbackSync)
         {
             _stateBuffer.Clear();
@@ -927,6 +931,7 @@ internal sealed partial class SipCoreCallChannel : ICallChannel
             _onRemoteHold = null;
             _onTransfer = null;
             _audioSendDelegate = null;
+            _videoSendDelegate = null;
             _dtmfSendDelegate = null;
         }
     }

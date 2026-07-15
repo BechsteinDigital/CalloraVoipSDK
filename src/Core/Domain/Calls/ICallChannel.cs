@@ -32,11 +32,14 @@ internal interface ICallChannel : IDisposable
     Task<bool> BlindTransferAsync(string targetUri, TimeSpan timeout, CancellationToken ct);
     Task<bool> AttendedTransferAsync(ICallChannel target, TimeSpan timeout, CancellationToken ct);
     Task SendAudioFrameAsync(CallAudioFrame frame, CancellationToken ct = default);
+    Task SendVideoFrameAsync(CallVideoFrame frame, CancellationToken ct = default);
 
     // ── Callbacks (set once by Call aggregate before any events can fire) ─────
     void BindCallbacks(CallChannelCallbacks callbacks);
     void AddAudioFrameListener(Action<CallAudioFrame> onFrame);
     void RemoveAudioFrameListener(Action<CallAudioFrame> onFrame);
+    void AddVideoFrameListener(Action<CallVideoFrame> onFrame);
+    void RemoveVideoFrameListener(Action<CallVideoFrame> onFrame);
 
     // ── Remote identity (inbound) ─────────────────────────────────────────────
 
@@ -74,6 +77,20 @@ internal interface ICallChannel : IDisposable
     /// session is started. Pass <see langword="null"/> to disable sending.
     /// </summary>
     void SetAudioSendDelegate(Func<CallAudioFrame, CancellationToken, Task>? sendDelegate);
+
+    /// <summary>
+    /// Delivers one inbound video frame received from the network.
+    /// Called by the application media orchestrator when a complete encoded video frame
+    /// has been reassembled from RTP. All registered video frame listeners are notified synchronously.
+    /// </summary>
+    void DeliverInboundVideoFrame(CallVideoFrame frame);
+
+    /// <summary>
+    /// Sets (or clears) the delegate used by <see cref="SendVideoFrameAsync"/> to route
+    /// video to the network. Called by the application media orchestrator once the video
+    /// media session is started. Pass <see langword="null"/> to disable sending.
+    /// </summary>
+    void SetVideoSendDelegate(Func<CallVideoFrame, CancellationToken, Task>? sendDelegate);
 
     /// <summary>
     /// Sets (or clears) the delegate used by <see cref="SendDtmfAsync(byte)"/> to route
