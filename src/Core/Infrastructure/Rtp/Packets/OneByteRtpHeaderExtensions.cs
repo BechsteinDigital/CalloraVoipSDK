@@ -121,6 +121,27 @@ internal static class OneByteRtpHeaderExtensions
     }
 
     /// <summary>
+    /// Builds a <c>0xBEDE</c> extension carrying only the transport-wide sequence number, writing the
+    /// wire bytes directly — without the intermediate element list and value buffer that
+    /// <see cref="Encode"/> allocates. The allocation-lean path for stamping every outgoing packet;
+    /// the bytes are identical to <c>Encode([TransportSequenceNumber(id, sequenceNumber)])</c>.
+    /// </summary>
+    /// <exception cref="ArgumentException"><paramref name="id"/> is out of the 1..14 range.</exception>
+    public static RtpExtension EncodeTransportSequenceNumber(byte id, ushort sequenceNumber)
+    {
+        if (id is < MinId or > MaxId)
+            throw new ArgumentException(
+                $"One-byte header-extension id {id} is out of range (must be {MinId}..{MaxId}).", nameof(id));
+
+        // header(1) + two value bytes + one trailing padding byte = 4, already a 32-bit boundary.
+        var data = new byte[4];
+        data[0] = (byte)((id << 4) | (2 - 1)); // id in the high nibble, length-1 in the low
+        BinaryPrimitives.WriteUInt16BigEndian(data.AsSpan(1), sequenceNumber);
+        // data[3] stays zero — RFC 8285 trailing padding.
+        return new RtpExtension { Profile = Profile, Data = data };
+    }
+
+    /// <summary>
     /// Reads the transport-wide sequence number carried under the negotiated <paramref name="id"/>
     /// from an incoming packet's header extension (the receive-side counterpart to
     /// <see cref="TransportSequenceNumber"/>). Returns <see langword="false"/> when the extension is
