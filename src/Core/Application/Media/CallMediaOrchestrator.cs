@@ -195,6 +195,23 @@ internal sealed class CallMediaOrchestrator : IDisposable
         channel.SetDtmfSendDelegate((toneCode, durationMs, ct) =>
             session.SendDtmfAsync(toneCode, durationMs, ct));
 
+        // Video sub-stream (WebRTC phase 2): present only when the session negotiated video —
+        // wire it symmetrically to audio. The SDK is transport-only: the negotiated payload type
+        // is fixed by the codec, and the frame's RTP timestamp drives packetisation. Inbound
+        // keyframe classification is not yet surfaced by the depacketiser, so IsKeyFrame is left
+        // false until that follow-up lands.
+        var video = session.Video;
+        Action<byte[], uint>? inboundVideoHandler = null;
+        if (video is not null)
+        {
+            var videoPayloadType = video.PayloadType;
+            inboundVideoHandler = (encodedFrame, rtpTimestamp) =>
+                channel.DeliverInboundVideoFrame(
+                    new CallVideoFrame(encodedFrame, videoPayloadType, rtpTimestamp, IsKeyFrame: false));
+            video.FrameReceived += inboundVideoHandler;
+            channel.SetVideoSendDelegate((frame, ct) => video.SendFrameAsync(frame.Payload, frame.RtpTimestamp, ct));
+        }
+
         if (sdkCall is not null)
             sdkCall.SetQualitySnapshot(qualityMonitor.GetLatestSnapshot());
 
@@ -205,7 +222,9 @@ internal sealed class CallMediaOrchestrator : IDisposable
             inboundHandler,
             inboundDtmfHandler,
             metricsHandler,
-            qualityHandler);
+            qualityHandler,
+            video,
+            inboundVideoHandler);
         _active[call.CallId] = entry;
         _activity[call.CallId] = new MediaActivity { Call = call, LastActivityUtc = DateTimeOffset.UtcNow };
 
@@ -334,6 +353,9 @@ internal sealed class CallMediaOrchestrator : IDisposable
         entry.QualityMonitor.QualitySnapshotUpdated -= entry.QualityHandler;
         entry.Channel.SetAudioSendDelegate(null);
         entry.Channel.SetDtmfSendDelegate(null);
+        if (entry.Video is not null && entry.InboundVideoHandler is not null)
+            entry.Video.FrameReceived -= entry.InboundVideoHandler;
+        entry.Channel.SetVideoSendDelegate(null);
     }
 
     private async Task<CallMediaParameters> ResolveIceCandidatePairAsync(ICall call, CallMediaParameters parameters)

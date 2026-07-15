@@ -10,4 +10,6 @@ internal sealed record ActiveMediaEntry(
     Action<CallAudioFrame> InboundHandler,
     Action<byte, int> InboundDtmfHandler,
     Action<CallMediaRuntimeMetrics> MetricsHandler,
-    Action<CallQualitySnapshot> QualityHandler);
+    Action<CallQualitySnapshot> QualityHandler,
+    IVideoMediaStream? Video = null,
+    Action<byte[], uint>? InboundVideoHandler = null);
