@@ -14,4 +14,5 @@ internal sealed record ActiveMediaEntry(
     IVideoMediaStream? Video = null,
     Action<byte[], uint, bool>? InboundVideoHandler = null,
     Action? CongestionHandler = null,
-    Action? KeyFrameHandler = null);
+    Action? KeyFrameHandler = null,
+    Action? ConsentLostHandler = null);

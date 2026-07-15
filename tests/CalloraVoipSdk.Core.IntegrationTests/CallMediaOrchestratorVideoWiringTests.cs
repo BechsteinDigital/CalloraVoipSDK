@@ -208,6 +208,30 @@ public sealed class CallMediaOrchestratorVideoWiringTests
         Assert.Equal(800_000, call.RecommendedVideoBitrateBps); // unchanged from the initial prime
     }
 
+    [Fact]
+    public void Consent_loss_moves_the_call_to_disconnected()
+    {
+        var session = new FakeVideoSession(video: null);
+        var channel = new RecordingCallChannel();
+        using var orchestrator = new CallMediaOrchestrator(
+            new FakeSessionFactory(session),
+            NullLoggerFactory.Instance,
+            new RtcpPacketCodec());
+        var call = new Call(
+            CallId.New(), CallDirection.Inbound, "sip:remote@test.invalid",
+            channel, new FakePhoneLine(), NullLogger<Call>.Instance);
+        orchestrator.AttachCall(call, channel);
+        channel.RaiseMediaNegotiated(VideoParams()); // sets up the media session → wires MediaConsentLost
+
+        var states = new List<CallIceState>();
+        ((ICall)call).IceConnectionStateChanged += (_, e) => states.Add(e.NewState);
+
+        session.RaiseMediaConsentLost(); // RFC 7675 consent expired on the media 5-tuple → transmission ceases
+
+        Assert.Equal(CallIceState.Disconnected, ((ICall)call).IceConnectionState);
+        Assert.Equal([CallIceState.Disconnected], states);
+    }
+
     private static async Task WaitUntilAsync(Func<bool> condition)
     {
         for (var i = 0; i < 200 && !condition(); i++)
@@ -260,6 +284,9 @@ public sealed class CallMediaOrchestratorVideoWiringTests
         public event Action<CallMediaRuntimeMetrics>? RuntimeMetricsUpdated;
         public event Action<byte[]>? RtcpMuxDatagramReceived;
 #pragma warning restore CS0067
+
+        public event Action? MediaConsentLost;
+        public void RaiseMediaConsentLost() => MediaConsentLost?.Invoke();
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }

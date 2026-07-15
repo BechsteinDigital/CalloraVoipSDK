@@ -195,6 +195,16 @@ internal sealed class CallMediaOrchestrator : IDisposable
         channel.SetDtmfSendDelegate((toneCode, durationMs, ct) =>
             session.SendDtmfAsync(toneCode, durationMs, ct));
 
+        // Surface a running ICE transport state: on RFC 7675 consent loss the session ceases media and
+        // raises MediaConsentLost — move the call to Disconnected so the application can react (tear down
+        // or, later, trigger an ICE restart). Only ICE legs raise it, so no gating is needed here.
+        Action? consentLostHandler = null;
+        if (sdkCall is not null)
+        {
+            consentLostHandler = () => sdkCall.SetIceConnectionState(Domain.Calls.CallIceState.Disconnected);
+            session.MediaConsentLost += consentLostHandler;
+        }
+
         // Video sub-stream (WebRTC phase 2): present only when the session negotiated video —
         // wire it symmetrically to audio. The SDK is transport-only: the negotiated payload type
         // is fixed by the codec, and the frame's RTP timestamp drives packetisation. The
@@ -242,7 +252,8 @@ internal sealed class CallMediaOrchestrator : IDisposable
             video,
             inboundVideoHandler,
             congestionHandler,
-            keyFrameHandler);
+            keyFrameHandler,
+            consentLostHandler);
         _active[call.CallId] = entry;
         _activity[call.CallId] = new MediaActivity { Call = call, LastActivityUtc = DateTimeOffset.UtcNow };
 
@@ -377,6 +388,8 @@ internal sealed class CallMediaOrchestrator : IDisposable
             entry.Video.CongestionUpdated -= entry.CongestionHandler;
         if (entry.Video is not null && entry.KeyFrameHandler is not null)
             entry.Video.KeyFrameRequested -= entry.KeyFrameHandler;
+        if (entry.ConsentLostHandler is not null)
+            entry.Session.MediaConsentLost -= entry.ConsentLostHandler;
         entry.Channel.SetVideoSendDelegate(null);
     }
 
@@ -394,6 +407,10 @@ internal sealed class CallMediaOrchestrator : IDisposable
 
             // Surface the ICE outcome (state + selected pair) read-only on the call.
             (call as Domain.Calls.Call)?.SetIceSnapshot(CallIceSnapshotFactory.From(selection));
+
+            // Seed the running ICE transport state so a later consent loss reads as Connected → Disconnected.
+            if (selection.HasSelectedPair)
+                (call as Domain.Calls.Call)?.SetIceConnectionState(Domain.Calls.CallIceState.Connected);
 
             _logger.LogInformation(
                 "ICE selection for call {CallId}: state={State} selected={Selected} reason={ReasonCode}.",

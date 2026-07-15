@@ -18,6 +18,7 @@ internal sealed class Call : ICall, IDisposable
     private CallQualitySnapshot    _qualitySnapshot = CallQualitySnapshot.CreateEmpty(DateTimeOffset.UtcNow);
     private CallRtpStatistics?     _rtpStatistics;
     private CallIceSnapshot?       _iceSnapshot;
+    private CallIceState           _iceConnectionState = CallIceState.Disabled;
     private long?                  _recommendedVideoBitrateBps;
     private NetworkQuality?        _videoNetworkQuality;
     private bool                   _disposed;
@@ -539,6 +540,33 @@ internal sealed class Call : ICall, IDisposable
     internal void SetIceSnapshot(CallIceSnapshot snapshot)
     {
         lock (_sync) _iceSnapshot = snapshot;
+    }
+
+    /// <inheritdoc />
+    public CallIceState IceConnectionState { get { lock (_sync) return _iceConnectionState; } }
+
+    /// <inheritdoc />
+    public event EventHandler<CallIceConnectionStateChangedEventArgs>? IceConnectionStateChanged;
+
+    /// <summary>
+    /// Updates the running ICE transport state and raises <see cref="IceConnectionStateChanged"/> when it
+    /// actually changes. Called by the application media orchestrator (Connected on pair selection,
+    /// Disconnected on RFC 7675 consent loss). Idempotent: setting the same state is a no-op.
+    /// </summary>
+    internal void SetIceConnectionState(CallIceState newState)
+    {
+        EventHandler<CallIceConnectionStateChangedEventArgs>? handler;
+        CallIceState previous;
+        lock (_sync)
+        {
+            if (_iceConnectionState == newState)
+                return;
+
+            previous              = _iceConnectionState;
+            _iceConnectionState   = newState;
+            handler               = IceConnectionStateChanged; // snapshot before releasing lock
+        }
+        handler?.Invoke(this, new CallIceConnectionStateChangedEventArgs(previous, newState, this));
     }
 
     /// <summary>

@@ -99,12 +99,14 @@ internal sealed class FakeCall : ICall
     public CallId CallId { get; } = CallId.New();
     public CallState State => CallState.Ringing;
     public CallMediaParameters? MediaParameters => null;
+    public CallIceState IceConnectionState => CallIceState.Disabled;
 
     public event EventHandler<CallStateChangedEventArgs>? StateChanged { add { } remove { } }
     public event EventHandler<HoldStateChangedEventArgs>? HoldStateChanged { add { } remove { } }
     public event EventHandler<DtmfReceivedEventArgs>? DtmfReceived { add { } remove { } }
     public event EventHandler<TransferRequestedEventArgs>? TransferRequested { add { } remove { } }
     public event EventHandler<CallQualitySnapshotChangedEventArgs>? QualitySnapshotChanged { add { } remove { } }
+    public event EventHandler<CallIceConnectionStateChangedEventArgs>? IceConnectionStateChanged { add { } remove { } }
 
     public CallDirection Direction => throw new NotImplementedException();
     public string RemoteParty => throw new NotImplementedException();

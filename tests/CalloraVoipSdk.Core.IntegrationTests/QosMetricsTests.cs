@@ -192,6 +192,7 @@ public sealed class QosMetricsTests
         public event Action<byte, int>? DtmfReceived { add { } remove { } }
         public event Action<CallMediaRuntimeMetrics>? RuntimeMetricsUpdated { add { } remove { } }
         public event Action<byte[]>? RtcpMuxDatagramReceived { add { } remove { } }
+        public event Action? MediaConsentLost { add { } remove { } }
 
         public Task StartAsync(CancellationToken ct = default) => Task.CompletedTask;
         public Task SendFrameAsync(CallAudioFrame frame, CancellationToken ct = default) => Task.CompletedTask;

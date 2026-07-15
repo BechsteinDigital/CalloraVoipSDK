@@ -65,6 +65,13 @@ internal interface ICallMediaSession : IAsyncDisposable
     event Action<byte[]>? RtcpMuxDatagramReceived;
 
     /// <summary>
+    /// Raised once when RFC 7675 ICE consent is lost for this leg's media path and transmission ceases.
+    /// Lets the orchestrator surface a running <see cref="Core.Domain.Calls.CallIceState.Disconnected"/>
+    /// to the call. Audio-only or non-ICE legs never raise it.
+    /// </summary>
+    event Action? MediaConsentLost;
+
+    /// <summary>
     /// Negotiated video sub-stream (WebRTC phase 2); <see langword="null"/> for an
     /// audio-only call leg. Default implementation keeps audio-only sessions untouched.
     /// </summary>
