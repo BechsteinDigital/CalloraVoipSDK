@@ -15,4 +15,6 @@ internal sealed record ActiveMediaEntry(
     Action<byte[], uint, bool>? InboundVideoHandler = null,
     Action? CongestionHandler = null,
     Action? KeyFrameHandler = null,
-    Action? ConsentLostHandler = null);
+    Action? ConsentLostHandler = null,
+    Action? ConnectivityDegradedHandler = null,
+    Action? ConnectivityRecoveredHandler = null);

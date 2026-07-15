@@ -20,6 +20,8 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
     private readonly IPEndPoint _nominatedRemote;
     private readonly ConcurrentDictionary<IPEndPoint, byte> _triggeredSources = new();
     private readonly Action? _onConsentLost;
+    private readonly Action? _onConnectivityDegraded;
+    private readonly Action? _onConnectivityRecovered;
     private readonly ILogger<IceMediaAttachment> _logger;
 
     /// <summary>
@@ -31,7 +33,9 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
         IceMediaParameters parameters,
         Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask> sendRaw,
         ILoggerFactory loggerFactory,
-        Action? onConsentLost = null)
+        Action? onConsentLost = null,
+        Action? onConnectivityDegraded = null,
+        Action? onConnectivityRecovered = null)
     {
         ArgumentNullException.ThrowIfNull(parameters);
         ArgumentNullException.ThrowIfNull(sendRaw);
@@ -39,12 +43,15 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
 
         _logger = loggerFactory.CreateLogger<IceMediaAttachment>();
         _onConsentLost = onConsentLost;
+        _onConnectivityDegraded = onConnectivityDegraded;
+        _onConnectivityRecovered = onConnectivityRecovered;
         _nominatedRemote = parameters.RemoteEndPoint;
         _inbound = parameters.IceEnabled
             ? IceInboundStunHandlerFactory.Create(
                 parameters.LocalIceUfrag, parameters.LocalIcePwd, parameters.IceControlling, sendRaw, loggerFactory)
             : null;
-        _consent = IceMediaConsentSessionFactory.TryCreate(parameters, sendRaw, OnConsentLost, loggerFactory);
+        _consent = IceMediaConsentSessionFactory.TryCreate(
+            parameters, sendRaw, OnConsentLost, loggerFactory, _onConnectivityDegraded, _onConnectivityRecovered);
 
         if (_inbound is not null)
             _inbound.CheckAccepted += OnInboundCheckAccepted;

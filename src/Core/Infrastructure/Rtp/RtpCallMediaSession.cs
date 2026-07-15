@@ -114,6 +114,12 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
     /// <inheritdoc />
     public event Action? MediaConsentLost;
 
+    /// <inheritdoc />
+    public event Action? MediaConnectivityDegraded;
+
+    /// <inheritdoc />
+    public event Action? MediaConnectivityRecovered;
+
     internal RtpCallMediaSession(
         CallMediaParameters parameters,
         ILoggerFactory loggerFactory,
@@ -200,7 +206,8 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
         // ICE on the media 5-tuple (RFC 8445 §7.3 inbound checks + RFC 7675 consent): the attachment
         // answers inbound checks and runs consent freshness on this same socket.
         _iceMedia = new IceMediaAttachment(
-            IceMediaParameters.FromCall(parameters), _rtp.SendRawAsync, loggerFactory, OnMediaConsentLost);
+            IceMediaParameters.FromCall(parameters), _rtp.SendRawAsync, loggerFactory,
+            OnMediaConsentLost, OnMediaConnectivityDegraded, OnMediaConnectivityRecovered);
         if (_iceMedia.IsActive)
             _rtp.StunPacketReceived += _iceMedia.OnStunPacketReceived;
 
@@ -229,7 +236,7 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
         _logger.LogWarning("Ceasing media transmission for the call after ICE consent loss (RFC 7675 §5.1).");
         _rtp.StopTransmission();
 
-        // Surface the loss so the orchestrator can move the call's ICE state to Disconnected. Defensive:
+        // Surface the loss so the orchestrator can move the call's ICE state to Failed. Defensive:
         // a throwing handler must not disturb the consent-monitor loop that raised this.
         try
         {
@@ -240,6 +247,12 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
             _logger.LogWarning(ex, "ICE consent-loss handler threw while surfacing the transport state.");
         }
     }
+
+    // Transient connectivity changes from the consent monitor (still inside the consent window). Unlike
+    // consent loss they do NOT cease transmission — the path may recover — they only surface the running
+    // ICE state. The monitor already isolates a throwing handler, so no extra guarding is needed here.
+    private void OnMediaConnectivityDegraded() => MediaConnectivityDegraded?.Invoke();
+    private void OnMediaConnectivityRecovered() => MediaConnectivityRecovered?.Invoke();
 
     /// <inheritdoc />
     public Task StartAsync(CancellationToken ct = default)
@@ -483,6 +496,8 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
         RuntimeMetricsUpdated = null;
         RtcpMuxDatagramReceived = null;
         MediaConsentLost = null;
+        MediaConnectivityDegraded = null;
+        MediaConnectivityRecovered = null;
         _cts.Dispose();
 
         // Zero the SRTP session keys once the RTP session (their only borrower) is down.
