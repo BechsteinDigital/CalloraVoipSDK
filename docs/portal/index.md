@@ -21,7 +21,7 @@ and intelligent decision logic.
 
 ## Current Status
 
-**Available on [nuget.org](https://www.nuget.org/packages/CalloraVoipSdk) — current release: v4.4.1.**
+**Available on [nuget.org](https://www.nuget.org/packages/CalloraVoipSdk) — current release: v4.5.0.**
 
 **What works today:**
 
@@ -34,6 +34,7 @@ and intelligent decision logic.
 | Adaptive jitter buffer | ✅ Production-ready |
 | Media cross-connect / bridge | ✅ Production-ready |
 | Per-call media tap (frame receivers/senders for bots and streaming) | ✅ Production-ready |
+| Encoded video: send/receive, transport-cc bitrate recommendation, keyframe feedback ([transport-only](guides/video-calls.md)) | ✅ New in v4.5.0 |
 | Module registry (`client.Modules`) as plugin extension point | ✅ Production-ready |
 | Configurable audio codec preference | ✅ Production-ready |
 | DTMF send/receive (RFC 4733) | ✅ Production-ready |

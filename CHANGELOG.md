@@ -6,6 +6,34 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
 
 ## [Unreleased]
 
+## [4.5.0] - 2026-07-15
+
+### Added
+- **Public video API (transport-only)**: send and receive encoded video frames over the public
+  facade. `client.Media.CreateVideoReceiver()` exposes inbound frames via
+  `IVideoReceiver.FrameReceived` (a `VideoFrame`: encoded payload, RTP payload type, 90 kHz
+  timestamp, key-frame flag); `client.Media.CreateVideoSender().SendAsync(VideoFrame)` injects
+  outbound encoded frames. The SDK negotiates the video m-line, packetizes/depacketizes RTP
+  (VP8, H.264) and moves the bytes — it **never encodes or decodes**. Bring your own codec.
+- **Recommended outbound video bitrate**: `IVideoSender.RecommendedBitrateBps` and
+  `NetworkQuality` (Good/Fair/Poor) are derived from transport-cc feedback, with a
+  `RecommendedBitrateChanged` event so you can size your encoder to the network in one line
+  (`sender.RecommendedBitrateChanged += (_, e) => encoder.SetBitrate(e.RecommendedBitrateBps)`).
+- **Keyframe handling**: inbound frames carry `VideoFrame.IsKeyFrame` (VP8 P-bit, H.264 IDR);
+  `IVideoSender.KeyFrameRequested` fires when the peer requests a fresh reference frame (RTCP
+  PLI/FIR) so you can force an intra frame. On inbound loss the SDK reports it to the peer
+  (Generic NACK + throttled PLI, RFC 4585) gated on the peer's advertised feedback. FIR is
+  honoured on receive but not generated.
+- **Default-video convenience**: `client.AttachDefaultVideoAsync(call)` /
+  `DetachDefaultVideoAsync(call)` wire an application-supplied `IVideoDevice` (your codec
+  package: capture + encode + decode + render) to the call, mirroring
+  `AttachDefaultAudioAsync`. The device is resolved from dependency injection and receives the
+  negotiated codec via `VideoConnectionParameters`; without a registered `IVideoDevice` the
+  attach fails closed (the core ships no codec). Negotiated video parameters are readable on
+  `ICall.MediaParameters.Video` (`CallVideoParameters`).
+- **Example**: `examples/CalloraVoipSdk.Sample.VideoCalling` wires a video call over the public
+  API only, including the bitrate hook against a marked `StubVideoEncoder` placeholder.
+
 ## [4.4.1] - 2026-07-11
 
 ### Fixed

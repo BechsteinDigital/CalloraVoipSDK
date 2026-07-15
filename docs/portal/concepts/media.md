@@ -20,6 +20,20 @@ MediaConnector connector = client.Media.CreateConnector(); // bridge two calls
 Attaching these to a call is the [media tap](../guides/media-tap.md); bridging is the
 [bridge guide](../guides/bridge-calls.md).
 
+## Video
+
+Video has its own transport-only primitives — the SDK moves encoded frames but never
+encodes or decodes:
+
+```csharp
+IVideoReceiver videoIn  = client.Media.CreateVideoReceiver(); // inbound encoded VideoFrames
+IVideoSender   videoOut = client.Media.CreateVideoSender();   // outbound encoded VideoFrames
+```
+
+`IVideoSender` also surfaces the SDK's recommended outbound bitrate and peer keyframe
+requests so you can drive your encoder. Bring your own codec (VP8, H.264, …). Full walkthrough:
+[Video calls](../guides/video-calls.md).
+
 ## Default audio device
 
 For a plain softphone you usually skip the primitives and let the SDK wire the OS

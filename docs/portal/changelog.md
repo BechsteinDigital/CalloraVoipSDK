@@ -5,6 +5,15 @@ The authoritative changelog lives in the repository:
 
 ## Release highlights
 
+### 4.5.0 — 2026-07-15
+- Public **video** API (transport-only): send/receive encoded frames
+  (`client.Media.CreateVideoReceiver()/CreateVideoSender()`, `VideoFrame`), a ready-to-use
+  recommended outbound bitrate + `NetworkQuality` from transport-cc
+  (`IVideoSender.RecommendedBitrateChanged`), inbound key-frame flags and RTCP PLI/FIR
+  keyframe-request feedback, plus a default-video convenience
+  (`client.AttachDefaultVideoAsync` with a DI-supplied `IVideoDevice` codec). The SDK never
+  encodes/decodes — bring your own VP8/H.264 codec. See [Video calls](guides/video-calls.md)
+
 ### 4.4.1 — 2026-07-11
 - Native Opus (RFC 7587) in the Linux and Windows audio devices: negotiated Opus now decodes/encodes
   at 48 kHz through `AttachDefaultAudioAsync` instead of being mis-decoded as G.722. Opus stays
