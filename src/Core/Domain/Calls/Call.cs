@@ -576,6 +576,24 @@ internal sealed class Call : ICall, IDisposable
     }
 
     /// <summary>
+    /// Raised when the peer requested a keyframe via RTCP PLI/FIR — the application's encoder
+    /// (feeding the public video sender) should emit an intra frame next. Snapshotted inside the
+    /// lock to avoid races with concurrent subscribe/unsubscribe. Subscribed by the public video sender.
+    /// </summary>
+    internal event Action? VideoKeyFrameRequested;
+
+    /// <summary>
+    /// Emits <see cref="VideoKeyFrameRequested"/>. Called by the application media orchestrator when
+    /// the video stream surfaces an inbound keyframe request.
+    /// </summary>
+    internal void RaiseVideoKeyFrameRequested()
+    {
+        Action? handler;
+        lock (_sync) handler = VideoKeyFrameRequested; // snapshot before releasing lock
+        handler?.Invoke();
+    }
+
+    /// <summary>
     /// Disposes the call and hangs up if still active.
     /// </summary>
     public void Dispose()

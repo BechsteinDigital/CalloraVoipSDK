@@ -26,10 +26,11 @@ internal interface IVideoMediaStream
 
     /// <summary>
     /// Raised when one complete inbound video frame was reassembled: the encoded frame
-    /// bytes plus its RTP timestamp (90 kHz). Frames with lost packets are discarded,
-    /// never delivered partially.
+    /// bytes, its RTP timestamp (90 kHz), and whether it is an intra-coded key frame
+    /// (decodable without prior frames). Frames with lost packets are discarded, never
+    /// delivered partially.
     /// </summary>
-    event Action<byte[], uint>? FrameReceived;
+    event Action<byte[], uint, bool>? FrameReceived;
 
     /// <summary>
     /// Raised when the peer requested a keyframe via RTCP PLI/FIR (RFC 4585/5104) — the

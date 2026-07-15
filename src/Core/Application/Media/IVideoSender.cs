@@ -43,4 +43,12 @@ public interface IVideoSender : IDisposable
     /// whole point of the API: <c>sender.RecommendedBitrateChanged += (_, e) =&gt; encoder.SetBitrate(e.RecommendedBitrateBps);</c>
     /// </summary>
     event EventHandler<VideoBitrateRecommendationEventArgs>? RecommendedBitrateChanged;
+
+    /// <summary>
+    /// Raised when the remote peer requested a keyframe (RTCP PLI/FIR) for the attached call — force
+    /// your encoder to emit an intra frame next and send it via <see cref="SendAsync"/> with
+    /// <see cref="VideoFrame.IsKeyFrame"/> set. Stops firing on <see cref="Detach"/>/dispose. Typical
+    /// usage: <c>sender.KeyFrameRequested += (_, _) =&gt; encoder.ForceKeyFrame();</c>
+    /// </summary>
+    event EventHandler? KeyFrameRequested;
 }

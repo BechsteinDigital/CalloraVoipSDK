@@ -57,7 +57,55 @@ public sealed class CallMediaOrchestratorVideoWiringTests
         Assert.Equal(new byte[] { 1, 2, 3 }, frame.Payload);
         Assert.Equal(96, frame.PayloadType);        // fixed by the negotiated video codec
         Assert.Equal(9000u, frame.RtpTimestamp);
-        Assert.False(frame.IsKeyFrame);             // inbound keyframe classification not yet surfaced
+        Assert.False(frame.IsKeyFrame);             // delta frame → depacketiser classified it as non-key
+    }
+
+    [Fact]
+    public void Inbound_keyframe_flag_is_forwarded_to_the_channel()
+    {
+        var stream = new RecordingVideoStream { PayloadType = 96 };
+        var (orchestrator, channel, _) = Build(stream);
+        using var _o = orchestrator;
+        channel.RaiseMediaNegotiated(VideoParams());
+
+        stream.RaiseFrameReceived([1, 2, 3], rtpTimestamp: 9000, keyFrame: true);
+
+        var frame = Assert.Single(channel.InboundVideo);
+        Assert.True(frame.IsKeyFrame); // depacketiser's keyframe classification reaches the call channel
+    }
+
+    [Fact]
+    public void Keyframe_request_from_stream_reaches_the_call()
+    {
+        var stream = new RecordingVideoStream { PayloadType = 96 };
+        var (orchestrator, channel, call) = Build(stream);
+        using var _o = orchestrator;
+        var requests = 0;
+        call.VideoKeyFrameRequested += () => requests++;
+        channel.RaiseMediaNegotiated(VideoParams());
+
+        stream.RaiseKeyFrameRequested();
+
+        Assert.Equal(1, requests);
+    }
+
+    [Fact]
+    public async Task Teardown_stops_keyframe_requests_to_the_call()
+    {
+        var stream = new RecordingVideoStream { PayloadType = 96 };
+        var (orchestrator, channel, call) = Build(stream);
+        using var _o = orchestrator;
+        var requests = 0;
+        call.VideoKeyFrameRequested += () => requests++;
+        channel.RaiseMediaNegotiated(VideoParams());
+
+        orchestrator.OnCallStateChanged(
+            this, new CallStateChangedEventArgs(CallState.Connected, CallState.Terminated, call));
+        await WaitUntilAsync(() => channel.VideoSendDelegateClearedCount > 0);
+
+        stream.RaiseKeyFrameRequested(); // unsubscribed on teardown → must be ignored
+
+        Assert.Equal(0, requests);
     }
 
     [Fact]
@@ -177,10 +225,8 @@ public sealed class CallMediaOrchestratorVideoWiringTests
         public long? RecommendedBitrateBps { get; set; }
         public NetworkQuality? NetworkQuality { get; set; }
 
-#pragma warning disable CS0067 // KeyFrameRequested is part of the contract but unused by these tests
-        public event Action<byte[], uint>? FrameReceived;
+        public event Action<byte[], uint, bool>? FrameReceived;
         public event Action? KeyFrameRequested;
-#pragma warning restore CS0067
         public event Action? CongestionUpdated;
 
         public Task SendFrameAsync(ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken ct = default)
@@ -189,7 +235,9 @@ public sealed class CallMediaOrchestratorVideoWiringTests
             return Task.CompletedTask;
         }
 
-        public void RaiseFrameReceived(byte[] frame, uint rtpTimestamp) => FrameReceived?.Invoke(frame, rtpTimestamp);
+        public void RaiseFrameReceived(byte[] frame, uint rtpTimestamp, bool keyFrame = false) =>
+            FrameReceived?.Invoke(frame, rtpTimestamp, keyFrame);
+        public void RaiseKeyFrameRequested() => KeyFrameRequested?.Invoke();
         public void RaiseCongestionUpdated() => CongestionUpdated?.Invoke();
     }
 

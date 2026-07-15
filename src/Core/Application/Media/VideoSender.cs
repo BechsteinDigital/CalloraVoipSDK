@@ -40,19 +40,24 @@ public sealed class VideoSender : IVideoSender
             _call = sdkCall;
         }
 
-        // Move the congestion subscription to the new call (unsubscribing an equal previous call first
-        // keeps a re-attach from double-subscribing the fixed handler).
+        // Move the congestion + keyframe-request subscriptions to the new call (unsubscribing an equal
+        // previous call first keeps a re-attach from double-subscribing the fixed handlers).
         if (previousCall is not null)
+        {
             previousCall.VideoCongestionChanged -= OnCallCongestionChanged;
+            previousCall.VideoKeyFrameRequested -= OnCallKeyFrameRequested;
+        }
         sdkCall.VideoCongestionChanged += OnCallCongestionChanged;
+        sdkCall.VideoKeyFrameRequested += OnCallKeyFrameRequested;
 
-        // If disposed or re-attached during the unlocked window, undo this subscription.
+        // If disposed or re-attached during the unlocked window, undo these subscriptions.
         lock (_sync)
         {
             if (!_disposed && ReferenceEquals(_call, sdkCall))
                 return;
         }
         sdkCall.VideoCongestionChanged -= OnCallCongestionChanged;
+        sdkCall.VideoKeyFrameRequested -= OnCallKeyFrameRequested;
     }
 
     /// <summary>Detaches from the current call; subsequent <see cref="SendAsync"/> calls will fail until re-attached.</summary>
@@ -65,7 +70,10 @@ public sealed class VideoSender : IVideoSender
             _call = null;
         }
         if (call is not null)
+        {
             call.VideoCongestionChanged -= OnCallCongestionChanged;
+            call.VideoKeyFrameRequested -= OnCallKeyFrameRequested;
+        }
     }
 
     /// <inheritdoc />
@@ -103,6 +111,28 @@ public sealed class VideoSender : IVideoSender
             {
                 // Isolate one subscriber's fault from the others and the RTP control thread.
                 _logger.LogDebug(ex, "Video bitrate-recommendation subscriber threw; continuing with the remaining subscribers.");
+            }
+        }
+    }
+
+    /// <inheritdoc />
+    public event EventHandler? KeyFrameRequested;
+
+    private void OnCallKeyFrameRequested()
+    {
+        var handlers = KeyFrameRequested;
+        if (handlers is null) return;
+
+        foreach (EventHandler handler in handlers.GetInvocationList())
+        {
+            try
+            {
+                handler(this, EventArgs.Empty);
+            }
+            catch (Exception ex)
+            {
+                // Isolate one subscriber's fault from the others and the RTP control thread.
+                _logger.LogDebug(ex, "Video keyframe-request subscriber threw; continuing with the remaining subscribers.");
             }
         }
     }
@@ -162,7 +192,10 @@ public sealed class VideoSender : IVideoSender
             _call = null;
         }
         if (call is not null)
+        {
             call.VideoCongestionChanged -= OnCallCongestionChanged;
+            call.VideoKeyFrameRequested -= OnCallKeyFrameRequested;
+        }
     }
 
     private static byte[] GetPayloadArray(ReadOnlyMemory<byte> payload)

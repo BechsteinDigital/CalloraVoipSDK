@@ -27,7 +27,7 @@ public sealed class VideoSdesMediaE2eTests
         await using var receiver = CreateSession(VideoParameters(portB, portA, localSeed: 120, remoteSeed: 110));
 
         var received = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
-        receiver.Video!.FrameReceived += (frame, _) => received.TrySetResult(frame);
+        receiver.Video!.FrameReceived += (frame, _, _) => received.TrySetResult(frame);
 
         await receiver.StartAsync();
         await sender.StartAsync();
@@ -57,7 +57,7 @@ public sealed class VideoSdesMediaE2eTests
         await using var receiver = CreateSession(VideoParameters(portB, portA, localSeed: 120, remoteSeed: 199));
 
         var received = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
-        receiver.Video!.FrameReceived += (frame, _) => received.TrySetResult(frame);
+        receiver.Video!.FrameReceived += (frame, _, _) => received.TrySetResult(frame);
 
         await receiver.StartAsync();
         await sender.StartAsync();

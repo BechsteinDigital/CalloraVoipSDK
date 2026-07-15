@@ -24,7 +24,13 @@ internal interface IVideoDepacketiser
     /// </param>
     /// <param name="marker">The packet's RTP marker bit.</param>
     /// <param name="frame">The completed frame, when the return value is <see langword="true"/>.</param>
-    bool TryProcess(ReadOnlyMemory<byte> rtpPayload, uint rtpTimestamp, bool marker, out byte[]? frame);
+    /// <param name="isKeyFrame">
+    /// <see langword="true"/> when the completed frame is an intra-coded key frame decodable
+    /// without prior frames (VP8 P-bit clear, RFC 7741 §4.3; H.264 IDR NAL type 5, RFC 6184).
+    /// Meaningful only when the return value is <see langword="true"/>; <see langword="false"/>
+    /// otherwise.
+    /// </param>
+    bool TryProcess(ReadOnlyMemory<byte> rtpPayload, uint rtpTimestamp, bool marker, out byte[]? frame, out bool isKeyFrame);
 
     /// <summary>
     /// Discards any frame under assembly — call on RTP sequence gaps so a fragment of a

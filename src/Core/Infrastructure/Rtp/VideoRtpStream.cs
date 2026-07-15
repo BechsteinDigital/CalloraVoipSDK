@@ -315,7 +315,7 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
     internal TransportCcCongestionController? Congestion => _transportCcCongestion;
 
     /// <inheritdoc />
-    public event Action<byte[], uint>? FrameReceived;
+    public event Action<byte[], uint, bool>? FrameReceived;
 
     /// <inheritdoc />
     public event Action? KeyFrameRequested;
@@ -457,12 +457,12 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
         _lastDeliveredSequence = packet.SequenceNumber;
         _hasDelivered = true;
 
-        if (!_depacketiser.TryProcess(packet.Payload, packet.Timestamp, packet.Marker, out var frame))
+        if (!_depacketiser.TryProcess(packet.Payload, packet.Timestamp, packet.Marker, out var frame, out var isKeyFrame))
             return;
 
         try
         {
-            FrameReceived?.Invoke(frame!, packet.Timestamp);
+            FrameReceived?.Invoke(frame!, packet.Timestamp, isKeyFrame);
         }
         catch (Exception ex)
         {

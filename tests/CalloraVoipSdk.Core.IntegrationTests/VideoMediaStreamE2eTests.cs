@@ -29,7 +29,7 @@ public sealed class VideoMediaStreamE2eTests
         await using var receiver = CreateSession(VideoParameters(portB, portA, codec, payloadType));
 
         var received = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
-        receiver.Video!.FrameReceived += (frame, _) => received.TrySetResult(frame);
+        receiver.Video!.FrameReceived += (frame, _, _) => received.TrySetResult(frame);
 
         await receiver.StartAsync();
         await sender.StartAsync();
@@ -64,7 +64,7 @@ public sealed class VideoMediaStreamE2eTests
             DtlsVideoParameters(portB, portA, isClient: false, certA.Fingerprint), certB);
 
         var received = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
-        receiver.Video!.FrameReceived += (frame, _) => received.TrySetResult(frame);
+        receiver.Video!.FrameReceived += (frame, _, _) => received.TrySetResult(frame);
 
         await receiver.StartAsync();
         await sender.StartAsync();
