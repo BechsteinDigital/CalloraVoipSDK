@@ -32,17 +32,79 @@ public sealed class VideoSender : IVideoSender
         if (call is not Call sdkCall)
             throw new ArgumentException("Call must be created by this SDK.", nameof(call));
 
+        Call? previousCall;
         lock (_sync)
         {
             ThrowIfDisposed();
+            previousCall = _call;
             _call = sdkCall;
         }
+
+        // Move the congestion subscription to the new call (unsubscribing an equal previous call first
+        // keeps a re-attach from double-subscribing the fixed handler).
+        if (previousCall is not null)
+            previousCall.VideoCongestionChanged -= OnCallCongestionChanged;
+        sdkCall.VideoCongestionChanged += OnCallCongestionChanged;
+
+        // If disposed or re-attached during the unlocked window, undo this subscription.
+        lock (_sync)
+        {
+            if (!_disposed && ReferenceEquals(_call, sdkCall))
+                return;
+        }
+        sdkCall.VideoCongestionChanged -= OnCallCongestionChanged;
     }
 
     /// <summary>Detaches from the current call; subsequent <see cref="SendAsync"/> calls will fail until re-attached.</summary>
     public void Detach()
     {
-        lock (_sync) _call = null;
+        Call? call;
+        lock (_sync)
+        {
+            call = _call;
+            _call = null;
+        }
+        if (call is not null)
+            call.VideoCongestionChanged -= OnCallCongestionChanged;
+    }
+
+    /// <inheritdoc />
+    public long? RecommendedBitrateBps
+    {
+        get { Call? call; lock (_sync) call = _call; return call?.RecommendedVideoBitrateBps; }
+    }
+
+    /// <inheritdoc />
+    public NetworkQuality? NetworkQuality
+    {
+        get { Call? call; lock (_sync) call = _call; return call?.VideoNetworkQuality; }
+    }
+
+    /// <inheritdoc />
+    public event EventHandler<VideoBitrateRecommendationEventArgs>? RecommendedBitrateChanged;
+
+    private void OnCallCongestionChanged()
+    {
+        Call? call;
+        lock (_sync) call = _call;
+        if (call is null) return;
+
+        var args = new VideoBitrateRecommendationEventArgs(call.RecommendedVideoBitrateBps, call.VideoNetworkQuality);
+        var handlers = RecommendedBitrateChanged;
+        if (handlers is null) return;
+
+        foreach (EventHandler<VideoBitrateRecommendationEventArgs> handler in handlers.GetInvocationList())
+        {
+            try
+            {
+                handler(this, args);
+            }
+            catch (Exception ex)
+            {
+                // Isolate one subscriber's fault from the others and the RTP control thread.
+                _logger.LogDebug(ex, "Video bitrate-recommendation subscriber threw; continuing with the remaining subscribers.");
+            }
+        }
     }
 
     /// <summary>
@@ -91,12 +153,16 @@ public sealed class VideoSender : IVideoSender
     /// <summary>Detaches and disposes the sender; further sends throw <see cref="ObjectDisposedException"/>.</summary>
     public void Dispose()
     {
+        Call? call;
         lock (_sync)
         {
             if (_disposed) return;
             _disposed = true;
+            call = _call;
             _call = null;
         }
+        if (call is not null)
+            call.VideoCongestionChanged -= OnCallCongestionChanged;
     }
 
     private static byte[] GetPayloadArray(ReadOnlyMemory<byte> payload)

@@ -149,4 +149,60 @@ public sealed class PublicVideoTapContractTests : IDisposable
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => sender.SendAsync(new VideoFrame(new byte[] { 1 }, 96, 1, IsKeyFrame: false)));
     }
+
+    [Fact]
+    public void Sender_surfaces_the_calls_congestion_recommendation()
+    {
+        using IVideoSender sender = _media.CreateVideoSender();
+        sender.AttachToCall(_call);
+        var events = new List<VideoBitrateRecommendationEventArgs>();
+        sender.RecommendedBitrateChanged += (_, e) => events.Add(e);
+
+        _call.SetVideoCongestion(500_000, NetworkQuality.Fair);
+
+        Assert.Equal(500_000, sender.RecommendedBitrateBps);
+        Assert.Equal(NetworkQuality.Fair, sender.NetworkQuality);
+        var e = Assert.Single(events);
+        Assert.Equal(500_000, e.RecommendedBitrateBps);
+        Assert.Equal(NetworkQuality.Fair, e.NetworkQuality);
+    }
+
+    [Fact]
+    public void Detached_sender_stops_receiving_congestion_updates()
+    {
+        using IVideoSender sender = _media.CreateVideoSender();
+        sender.AttachToCall(_call);
+        var count = 0;
+        sender.RecommendedBitrateChanged += (_, _) => count++;
+
+        sender.Detach();
+        _call.SetVideoCongestion(400_000, NetworkQuality.Poor);
+
+        Assert.Equal(0, count);
+        Assert.Null(sender.RecommendedBitrateBps); // detached → no attached call
+        Assert.Null(sender.NetworkQuality);
+    }
+
+    [Fact]
+    public void Unattached_sender_reports_no_recommendation()
+    {
+        using IVideoSender sender = _media.CreateVideoSender();
+
+        Assert.Null(sender.RecommendedBitrateBps);
+        Assert.Null(sender.NetworkQuality);
+    }
+
+    [Fact]
+    public void Disposed_sender_unsubscribes_from_congestion_updates()
+    {
+        IVideoSender sender = _media.CreateVideoSender();
+        sender.AttachToCall(_call);
+        var count = 0;
+        sender.RecommendedBitrateChanged += (_, _) => count++;
+
+        sender.Dispose();
+        _call.SetVideoCongestion(300_000, NetworkQuality.Poor);
+
+        Assert.Equal(0, count);
+    }
 }
