@@ -72,6 +72,16 @@ public interface IVoipClient : IDisposable
     /// <summary>Detaches default audio routing from the specified call.</summary>
     Task DetachDefaultAudioAsync(ICall call, CancellationToken ct = default);
 
+    /// <summary>
+    /// Attaches default video routing to the specified call. Requires an <c>IVideoDevice</c> registered via
+    /// dependency injection (the SDK is transport-only and ships no codec); fails closed otherwise.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No video codec device is registered.</exception>
+    Task AttachDefaultVideoAsync(ICall call, CancellationToken ct = default);
+
+    /// <summary>Detaches default video routing from the specified call.</summary>
+    Task DetachDefaultVideoAsync(ICall call, CancellationToken ct = default);
+
     /// <summary>Lists runtime-selectable input devices.</summary>
     IReadOnlyList<AudioDeviceDescriptor> GetAvailableInputAudioDevices();
 

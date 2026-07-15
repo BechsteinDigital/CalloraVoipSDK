@@ -7,6 +7,7 @@ using CalloraVoipSdk.Core.Application.Lines;
 using CalloraVoipSdk.Core.Application.Media;
 using CalloraVoipSdk.Core.Application.Media.Sessions;
 using CalloraVoipSdk.Core.Application.Ports.Audio;
+using CalloraVoipSdk.Core.Application.Ports.Video;
 using CalloraVoipSdk.Core.Application.Ports.Connectivity;
 using CalloraVoipSdk.Core.Application.Ports.Media;
 using CalloraVoipSdk.Core.Application.Ports.Sdp;
@@ -321,7 +322,13 @@ public sealed class VoipClient : IVoipClient
         });
 
         Lines.IncomingCall += (s, e) => IncomingCall?.Invoke(s, e);
-        _convenienceOrchestrator = new SdkConvenienceOrchestrator(Lines, Media, _audioDevice, logFactory);
+
+        // Video is transport-only: the SDK ships no codec, so the video device is optional and resolved
+        // purely from DI (no platform-factory fallback like audio). When absent, AttachDefaultVideoAsync
+        // fails closed. The application registers an IVideoDevice (its codec package) to enable it.
+        var injectedVideoDevice = ResolveService<IVideoDevice>(services);
+        _convenienceOrchestrator = new SdkConvenienceOrchestrator(
+            Lines, Media, _audioDevice, logFactory, injectedVideoDevice);
 
         // Module registration is the last construction step so OnAttached sees a fully built client.
         Modules = new ModuleRegistry(this);
@@ -506,6 +513,29 @@ public sealed class VoipClient : IVoipClient
     {
         ThrowIfDisposed();
         return _convenienceOrchestrator.DetachDefaultAudioAsync(call, ct);
+    }
+
+    /// <summary>
+    /// Convenience video flow: attaches SDK default video routing (receiver, sender, and the
+    /// application-supplied <c>IVideoDevice</c> codec package) to the specified call and auto-detaches on
+    /// call termination. If another convenience default-video route is active on a different call, it is
+    /// replaced. The SDK is transport-only and ships no codec, so a video device must be registered via
+    /// dependency injection; otherwise this fails closed.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No video codec device is registered.</exception>
+    public Task AttachDefaultVideoAsync(ICall call, CancellationToken ct = default)
+    {
+        ThrowIfDisposed();
+        return _convenienceOrchestrator.AttachDefaultVideoAsync(call, ct);
+    }
+
+    /// <summary>
+    /// Convenience video flow: detaches the default video routing from the specified call.
+    /// </summary>
+    public Task DetachDefaultVideoAsync(ICall call, CancellationToken ct = default)
+    {
+        ThrowIfDisposed();
+        return _convenienceOrchestrator.DetachDefaultVideoAsync(call, ct);
     }
 
     /// <summary>
