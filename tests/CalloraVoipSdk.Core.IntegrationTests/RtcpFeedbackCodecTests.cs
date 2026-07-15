@@ -88,6 +88,58 @@ public sealed class RtcpFeedbackCodecTests
         Assert.Equal((ushort[])[100, 101, 103, 65535, 0], decoded.LostSequenceNumbers().ToArray());
     }
 
+    // ── Transport-wide-cc (RTPFB FMT=15) ────────────────────────────────────────
+
+    [Fact]
+    public void Transport_cc_feedback_round_trips_through_the_compound_codec()
+    {
+        var feedback = new RtcpTransportFeedback
+        {
+            SenderSsrc = 0xAABBCCDD,
+            MediaSsrc = 0x11223344,
+            ReferenceTimeTicks = 5,
+            FeedbackPacketCount = 9,
+            Statuses =
+            [
+                new RtcpTransportFeedbackStatus { SequenceNumber = 700, Received = true, DeltaTicks = 3 },
+                new RtcpTransportFeedbackStatus { SequenceNumber = 701, Received = false },
+                new RtcpTransportFeedbackStatus { SequenceNumber = 702, Received = true, DeltaTicks = 1 },
+            ],
+        };
+
+        var wire = Codec.Encode([feedback]);
+        Assert.Equal(0x8F, wire[0]); // V=2, FMT=15
+        Assert.Equal(205, wire[1]);
+
+        var decoded = Assert.IsType<RtcpTransportFeedback>(Assert.Single(Codec.Decode(wire)));
+        Assert.Equal(feedback.SenderSsrc, decoded.SenderSsrc);
+        Assert.Equal(feedback.MediaSsrc, decoded.MediaSsrc);
+        Assert.Equal(5, decoded.ReferenceTimeTicks);
+        Assert.Equal(9, decoded.FeedbackPacketCount);
+        Assert.Equal([(ushort)700, 701, 702], decoded.Statuses.Select(s => s.SequenceNumber).ToArray());
+        Assert.Equal([true, false, true], decoded.Statuses.Select(s => s.Received).ToArray());
+    }
+
+    [Fact]
+    public void Transport_cc_feedback_after_receiver_report_in_a_compound_is_decoded()
+    {
+        var rr = new RtcpReceiverReport { Ssrc = 0x5, ReportBlocks = [] };
+        var feedback = new RtcpTransportFeedback
+        {
+            SenderSsrc = 0x5,
+            MediaSsrc = 0x9,
+            ReferenceTimeTicks = 0,
+            FeedbackPacketCount = 1,
+            Statuses = [new RtcpTransportFeedbackStatus { SequenceNumber = 10, Received = true, DeltaTicks = 0 }],
+        };
+
+        var decoded = Codec.Decode(Codec.Encode([rr, feedback]));
+
+        Assert.Equal(2, decoded.Count);
+        Assert.IsType<RtcpReceiverReport>(decoded[0]);
+        Assert.IsType<RtcpTransportFeedback>(decoded[1]);
+    }
+
     // ── Compound coexistence & fail-closed ──────────────────────────────────────
 
     [Fact]

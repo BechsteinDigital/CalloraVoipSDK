@@ -8,7 +8,9 @@ namespace CalloraVoipSdk.Core.Infrastructure.Rtcp.Wire;
 /// PT=206), Generic NACK (RTPFB, PT=205). The common feedback layout after the 4-byte
 /// RTCP header is <c>sender SSRC(4) | media SSRC(4) | FCI(variable)</c> (RFC 4585 §6.1);
 /// the feedback message type (FMT) travels in the header's low 5 bits. Kept apart from
-/// <see cref="RtcpPacketCodec"/> so the base RTCP codec stays focused.
+/// <see cref="RtcpPacketCodec"/> so the base RTCP codec stays focused. Transport-wide-cc
+/// feedback (RTPFB FMT=15, draft-holmer §3.1) is dispatched here to its own
+/// <see cref="RtcpTransportFeedbackCodec"/>, whose chunk/delta packing is more involved.
 /// </summary>
 internal static class RtcpFeedbackCodec
 {
@@ -37,6 +39,8 @@ internal static class RtcpFeedbackCodec
                 => DecodeFir(senderSsrc, fci),
             (RtcpPacketType.TransportFeedback, RtcpGenericNack.FeedbackMessageType)
                 => DecodeNack(senderSsrc, mediaSsrc, fci),
+            (RtcpPacketType.TransportFeedback, RtcpTransportFeedback.FeedbackMessageType)
+                => RtcpTransportFeedbackCodec.Decode(senderSsrc, mediaSsrc, fci),
             _ => null,
         };
     }
@@ -50,6 +54,7 @@ internal static class RtcpFeedbackCodec
         RtcpPictureLossIndication pli => EncodePli(pli),
         RtcpFullIntraRequest fir => EncodeFir(fir),
         RtcpGenericNack nack => EncodeNack(nack),
+        RtcpTransportFeedback transportFeedback => RtcpTransportFeedbackCodec.Encode(transportFeedback),
         _ => null,
     };
 
