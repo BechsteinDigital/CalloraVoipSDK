@@ -172,4 +172,35 @@ public sealed class OneByteRtpHeaderExtensionsTests
 
         Assert.False(OneByteRtpHeaderExtensions.TryReadTransportSequenceNumber(extension, 5, out _));
     }
+
+    // ── Allocation-lean transport-cc stamp (must match the generic encode byte for byte) ──────────
+
+    [Theory]
+    [InlineData((byte)1, (ushort)0)]
+    [InlineData((byte)5, (ushort)40_000)]
+    [InlineData((byte)14, (ushort)65_535)]
+    public void EncodeTransportSequenceNumber_matches_the_generic_encode(byte id, ushort seq)
+    {
+        var lean = OneByteRtpHeaderExtensions.EncodeTransportSequenceNumber(id, seq);
+        var generic = OneByteRtpHeaderExtensions.Encode([OneByteRtpHeaderExtensions.TransportSequenceNumber(id, seq)]);
+
+        Assert.NotNull(generic);
+        Assert.Equal(generic!.Profile, lean.Profile);
+        Assert.Equal(generic.Data.ToArray(), lean.Data.ToArray());
+    }
+
+    [Fact]
+    public void EncodeTransportSequenceNumber_round_trips_via_read()
+    {
+        var extension = OneByteRtpHeaderExtensions.EncodeTransportSequenceNumber(7, 12_345);
+
+        Assert.True(OneByteRtpHeaderExtensions.TryReadTransportSequenceNumber(extension, 7, out var seq));
+        Assert.Equal(12_345, seq);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(15)]
+    public void EncodeTransportSequenceNumber_rejects_out_of_range_ids(byte id)
+        => Assert.Throws<ArgumentException>(() => OneByteRtpHeaderExtensions.EncodeTransportSequenceNumber(id, 1));
 }

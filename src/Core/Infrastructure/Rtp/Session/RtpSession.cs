@@ -804,11 +804,11 @@ internal sealed class RtpSession : IRtpSession
             Payload = payload,
             // Stamp the transport-wide-cc header extension before SRTP: RFC 3711 authenticates but
             // does not encrypt the header extension, so the receiver reads the counter in the clear.
-            // FOLLOW-UP (perf): this allocates ~3 small heap objects per stamped packet; pool the
-            // 4-byte extension buffer before enabling transport-cc end-to-end (inert while gated off).
+            // FOLLOW-UP (perf): still ~2 heap objects per stamped packet (the 4-byte buffer + the
+            // RtpExtension); full pooling — reusing them across packets — remains open.
             HeaderExtension = transportCcSequence is { } ccSeq
-                ? OneByteRtpHeaderExtensions.Encode(
-                    [OneByteRtpHeaderExtensions.TransportSequenceNumber(_options.TransportWideCcExtensionId!.Value, ccSeq)])
+                ? OneByteRtpHeaderExtensions.EncodeTransportSequenceNumber(
+                    _options.TransportWideCcExtensionId!.Value, ccSeq)
                 : null
         };
 
