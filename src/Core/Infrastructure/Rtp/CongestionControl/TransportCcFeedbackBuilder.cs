@@ -13,9 +13,6 @@ namespace CalloraVoipSdk.Core.Infrastructure.Rtp.CongestionControl;
 /// </summary>
 internal static class TransportCcFeedbackBuilder
 {
-    private const long ReferenceTimeUnitMicros = 64_000; // 64 ms
-    private const long DeltaUnitMicros = 250;
-    private const long MicrosPerSecond = 1_000_000;
     private const int MaxReferenceTime = 0x7FFFFF;   // signed 24-bit
     private const int MinReferenceTime = -0x800000;
 
@@ -75,8 +72,8 @@ internal static class TransportCcFeedbackBuilder
                 "Batch spans more than 32767 sequence numbers; the 16-bit unwrap window is ambiguous.",
                 nameof(arrivals));
 
-        var baseArrivalMicros = ToMicros(earliestBySequence[baseSequence] - epochTimestamp, ticksPerSecond);
-        var referenceTime = FloorDiv(baseArrivalMicros, ReferenceTimeUnitMicros);
+        var baseArrivalMicros = TransportCcTime.ToMicros(earliestBySequence[baseSequence] - epochTimestamp, ticksPerSecond);
+        var referenceTime = FloorDiv(baseArrivalMicros, TransportCcTime.ReferenceTimeUnitMicros);
         if (referenceTime is < MinReferenceTime or > MaxReferenceTime)
             throw new ArgumentException(
                 $"Reference time {referenceTime} (64 ms units) is out of the signed 24-bit range; " +
@@ -84,7 +81,7 @@ internal static class TransportCcFeedbackBuilder
 
         // reconstructedMicros tracks the receiver's view rebuilt from the quantised deltas, so delta
         // rounding does not drift across the report (each delta is relative to the previous rebuilt time).
-        var reconstructedMicros = referenceTime * ReferenceTimeUnitMicros;
+        var reconstructedMicros = referenceTime * TransportCcTime.ReferenceTimeUnitMicros;
         var statuses = new RtcpTransportFeedbackStatus[maxSequence - baseSequence + 1];
         for (var sequence = baseSequence; sequence <= maxSequence; sequence++)
         {
@@ -99,9 +96,9 @@ internal static class TransportCcFeedbackBuilder
                 continue;
             }
 
-            var arrivalMicros = ToMicros(arrivalTicks - epochTimestamp, ticksPerSecond);
-            var deltaTicks = RoundDiv(arrivalMicros - reconstructedMicros, DeltaUnitMicros);
-            reconstructedMicros += deltaTicks * DeltaUnitMicros;
+            var arrivalMicros = TransportCcTime.ToMicros(arrivalTicks - epochTimestamp, ticksPerSecond);
+            var deltaTicks = RoundDiv(arrivalMicros - reconstructedMicros, TransportCcTime.DeltaUnitMicros);
+            reconstructedMicros += deltaTicks * TransportCcTime.DeltaUnitMicros;
             statuses[index] = new RtcpTransportFeedbackStatus
             {
                 SequenceNumber = unchecked((ushort)sequence),
@@ -118,15 +115,6 @@ internal static class TransportCcFeedbackBuilder
             FeedbackPacketCount = feedbackPacketCount,
             Statuses = statuses,
         };
-    }
-
-    // Overflow-safe conversion of a tick difference to microseconds (split into whole seconds plus
-    // remainder so the intermediate product cannot overflow for realistic session lengths).
-    private static long ToMicros(long tickDifference, long ticksPerSecond)
-    {
-        var seconds = tickDifference / ticksPerSecond;
-        var remainder = tickDifference % ticksPerSecond;
-        return seconds * MicrosPerSecond + remainder * MicrosPerSecond / ticksPerSecond;
     }
 
     // Floor division toward negative infinity (C# integer division truncates toward zero).

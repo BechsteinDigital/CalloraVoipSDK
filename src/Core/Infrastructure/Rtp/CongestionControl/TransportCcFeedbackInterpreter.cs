@@ -12,11 +12,6 @@ namespace CalloraVoipSdk.Core.Infrastructure.Rtp.CongestionControl;
 /// </summary>
 internal static class TransportCcFeedbackInterpreter
 {
-    // draft-holmer §3.1: reference time is in 64 ms units, receive deltas in 250 µs units. Kept in
-    // step with TransportCcFeedbackBuilder — the Build→Interpret round-trip test guards the pairing.
-    private const long ReferenceTimeUnitMicros = 64_000;
-    private const long DeltaUnitMicros = 250;
-
     /// <summary>
     /// Reconstructs each reported packet's outcome in sequence order. Received packets carry an
     /// arrival time in microseconds accumulated from the report's reference time; not-received
@@ -27,7 +22,7 @@ internal static class TransportCcFeedbackInterpreter
         ArgumentNullException.ThrowIfNull(feedback);
 
         var results = new TransportCcFeedbackResult[feedback.Statuses.Count];
-        var arrivalMicros = feedback.ReferenceTimeTicks * ReferenceTimeUnitMicros;
+        var arrivalMicros = feedback.ReferenceTimeTicks * TransportCcTime.ReferenceTimeUnitMicros;
         for (var i = 0; i < feedback.Statuses.Count; i++)
         {
             var status = feedback.Statuses[i];
@@ -35,7 +30,7 @@ internal static class TransportCcFeedbackInterpreter
             {
                 // Each delta is relative to the previous received packet (or the reference time for
                 // the first), so accumulate to rebuild the absolute arrival time.
-                arrivalMicros += status.DeltaTicks * DeltaUnitMicros;
+                arrivalMicros += status.DeltaTicks * TransportCcTime.DeltaUnitMicros;
                 results[i] = new TransportCcFeedbackResult
                 {
                     SequenceNumber = status.SequenceNumber,
