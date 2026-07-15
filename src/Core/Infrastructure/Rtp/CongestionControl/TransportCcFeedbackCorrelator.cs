@@ -12,8 +12,6 @@ namespace CalloraVoipSdk.Core.Infrastructure.Rtp.CongestionControl;
 /// </summary>
 internal static class TransportCcFeedbackCorrelator
 {
-    private const long MicrosPerSecond = 1_000_000;
-
     /// <summary>
     /// Produces the delay-gradient samples for one report, in sequence order. Empty when fewer than
     /// two packets could be correlated (a gradient needs a predecessor).
@@ -41,7 +39,7 @@ internal static class TransportCcFeedbackCorrelator
             if (!result.Received || !sendHistory.TryGetSendTimestamp(result.SequenceNumber, out var sendTicks))
                 continue; // a gap or an evicted send time breaks the chain — no sample here
 
-            var sendMicros = ToMicros(sendTicks, ticksPerSecond);
+            var sendMicros = TransportCcTime.ToMicros(sendTicks, ticksPerSecond);
             if (hasPrevious)
             {
                 var gradient = (result.ArrivalMicros - previousArrivalMicros) - (sendMicros - previousSendMicros);
@@ -58,13 +56,5 @@ internal static class TransportCcFeedbackCorrelator
         }
 
         return samples;
-    }
-
-    // Overflow-safe tick→microsecond conversion (whole seconds plus remainder).
-    private static long ToMicros(long ticks, long ticksPerSecond)
-    {
-        var seconds = ticks / ticksPerSecond;
-        var remainder = ticks % ticksPerSecond;
-        return seconds * MicrosPerSecond + remainder * MicrosPerSecond / ticksPerSecond;
     }
 }
