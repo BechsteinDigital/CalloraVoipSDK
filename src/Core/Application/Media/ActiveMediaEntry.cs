@@ -12,4 +12,5 @@ internal sealed record ActiveMediaEntry(
     Action<CallMediaRuntimeMetrics> MetricsHandler,
     Action<CallQualitySnapshot> QualityHandler,
     IVideoMediaStream? Video = null,
-    Action<byte[], uint>? InboundVideoHandler = null);
+    Action<byte[], uint>? InboundVideoHandler = null,
+    Action? CongestionHandler = null);

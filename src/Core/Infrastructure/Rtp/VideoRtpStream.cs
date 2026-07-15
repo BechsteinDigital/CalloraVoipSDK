@@ -232,6 +232,7 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
                 loggerFactory.CreateLogger<TransportCcCongestionController>());
             _rtp.PacketSent += _transportCcCongestion.OnPacketSent;
             _rtp.ControlPacketReceived += _transportCcCongestion.OnControlDatagram;
+            _transportCcCongestion.RecommendedBitrateChanged += OnCongestionRecommendationChanged;
         }
 
         // DTLS-SRTP for the video 5-tuple: same identity, role, and peer fingerprint as
@@ -318,6 +319,19 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
 
     /// <inheritdoc />
     public event Action? KeyFrameRequested;
+
+    /// <inheritdoc />
+    public long? RecommendedBitrateBps => _transportCcCongestion?.RecommendedBitrateBps;
+
+    /// <inheritdoc />
+    public NetworkQuality? NetworkQuality => _transportCcCongestion?.Quality;
+
+    /// <inheritdoc />
+    public event Action? CongestionUpdated;
+
+    // Re-raises the congestion controller's change notification as the stream-level event; the
+    // updated value is read back via RecommendedBitrateBps / NetworkQuality.
+    private void OnCongestionRecommendationChanged(long bitrateBps) => CongestionUpdated?.Invoke();
 
     /// <summary>
     /// Creates the video stream for a leg that negotiated video; <see langword="null"/>
@@ -472,6 +486,7 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
         {
             _rtp.PacketSent -= _transportCcCongestion.OnPacketSent;
             _rtp.ControlPacketReceived -= _transportCcCongestion.OnControlDatagram;
+            _transportCcCongestion.RecommendedBitrateChanged -= OnCongestionRecommendationChanged;
         }
         if (_retransmitBuffer is not null)
             _rtp.PacketSent -= _retransmitBuffer.Store;
@@ -499,6 +514,7 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
 
         FrameReceived = null;
         KeyFrameRequested = null;
+        CongestionUpdated = null;
         _sendSync.Dispose();
         _lifetimeCts.Dispose();
     }
