@@ -119,4 +119,56 @@ internal static class OneByteRtpHeaderExtensions
         BinaryPrimitives.WriteUInt16BigEndian(value, sequenceNumber);
         return new RtpHeaderExtensionElement(id, value);
     }
+
+    /// <summary>
+    /// Reads the transport-wide sequence number carried under the negotiated <paramref name="id"/>
+    /// from an incoming packet's header extension (the receive-side counterpart to
+    /// <see cref="TransportSequenceNumber"/>). Returns <see langword="false"/> when the extension is
+    /// absent, is not the <c>0xBEDE</c> profile, carries no element with that id, or that element is
+    /// not the expected two bytes — the caller then treats the packet as unstamped.
+    /// </summary>
+    public static bool TryReadTransportSequenceNumber(
+        RtpExtension? extension, byte id, out ushort sequenceNumber)
+    {
+        sequenceNumber = 0;
+        if (extension is null || extension.Profile != Profile)
+            return false;
+
+        // Inline scan (same lenient rules as Parse: skip padding, stop at id 15, tolerate a
+        // truncated tail) with an early exit on the matched id — no list or per-element copy, so
+        // this stays allocation-free on the per-packet receive path.
+        var data = extension.Data.Span;
+        var offset = 0;
+        while (offset < data.Length)
+        {
+            var header = data[offset];
+            if (header == 0) // padding
+            {
+                offset++;
+                continue;
+            }
+
+            var elementId = (byte)(header >> 4);
+            if (elementId == 15) // reserved: stop parsing
+                break;
+
+            var length = (header & 0x0F) + 1;
+            offset++;
+            if (offset + length > data.Length) // truncated trailing element
+                break;
+
+            if (elementId == id)
+            {
+                if (length != 2)
+                    return false;
+
+                sequenceNumber = BinaryPrimitives.ReadUInt16BigEndian(data.Slice(offset, length));
+                return true;
+            }
+
+            offset += length;
+        }
+
+        return false;
+    }
 }

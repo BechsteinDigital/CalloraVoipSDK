@@ -130,4 +130,46 @@ public sealed class OneByteRtpHeaderExtensionsTests
         Assert.Throws<ArgumentException>(
             () => OneByteRtpHeaderExtensions.Encode([new RtpHeaderExtensionElement(1, tooLong)]));
     }
+
+    // ── Transport-wide sequence number read-back (receive side) ─────────────────────
+
+    [Fact]
+    public void TryReadTransportSequenceNumber_round_trips_the_stamped_value()
+    {
+        var extension = OneByteRtpHeaderExtensions.Encode(
+            [OneByteRtpHeaderExtensions.TransportSequenceNumber(5, 40000)]);
+
+        Assert.True(OneByteRtpHeaderExtensions.TryReadTransportSequenceNumber(extension, 5, out var seq));
+        Assert.Equal(40000, seq);
+    }
+
+    [Fact]
+    public void TryReadTransportSequenceNumber_returns_false_for_a_missing_extension()
+        => Assert.False(OneByteRtpHeaderExtensions.TryReadTransportSequenceNumber(null, 5, out _));
+
+    [Fact]
+    public void TryReadTransportSequenceNumber_returns_false_for_a_different_id()
+    {
+        var extension = OneByteRtpHeaderExtensions.Encode(
+            [OneByteRtpHeaderExtensions.TransportSequenceNumber(5, 123)]);
+
+        Assert.False(OneByteRtpHeaderExtensions.TryReadTransportSequenceNumber(extension, 6, out _));
+    }
+
+    [Fact]
+    public void TryReadTransportSequenceNumber_returns_false_when_the_element_is_not_two_bytes()
+    {
+        // Same id, but a one-byte value — not a transport sequence number.
+        var extension = OneByteRtpHeaderExtensions.Encode([Element(5, 0xAA)]);
+
+        Assert.False(OneByteRtpHeaderExtensions.TryReadTransportSequenceNumber(extension, 5, out _));
+    }
+
+    [Fact]
+    public void TryReadTransportSequenceNumber_returns_false_for_a_non_bede_profile()
+    {
+        var extension = new RtpExtension { Profile = 0x1000, Data = new byte[] { 0x50, 0x9C, 0x40, 0x00 } };
+
+        Assert.False(OneByteRtpHeaderExtensions.TryReadTransportSequenceNumber(extension, 5, out _));
+    }
 }
