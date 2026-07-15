@@ -109,6 +109,57 @@ public sealed class CallMediaOrchestratorVideoWiringTests
         Assert.Empty(channel.InboundVideo); // handler was unsubscribed on teardown
     }
 
+    [Fact]
+    public void Congestion_recommendation_is_primed_on_wiring_and_refreshed_on_each_report()
+    {
+        var stream = new RecordingVideoStream
+        {
+            PayloadType = 96,
+            RecommendedBitrateBps = 800_000,
+            NetworkQuality = NetworkQuality.Good,
+        };
+        var (orchestrator, channel, call) = Build(stream);
+        using var _o = orchestrator;
+        var changes = 0;
+        call.VideoCongestionChanged += () => changes++;
+
+        channel.RaiseMediaNegotiated(VideoParams());
+
+        Assert.Equal(800_000, call.RecommendedVideoBitrateBps); // primed on wiring
+        Assert.Equal(NetworkQuality.Good, call.VideoNetworkQuality);
+
+        stream.RecommendedBitrateBps = 400_000;
+        stream.NetworkQuality = NetworkQuality.Poor;
+        stream.RaiseCongestionUpdated();
+
+        Assert.Equal(400_000, call.RecommendedVideoBitrateBps);
+        Assert.Equal(NetworkQuality.Poor, call.VideoNetworkQuality);
+        Assert.True(changes >= 1);
+    }
+
+    [Fact]
+    public async Task Teardown_stops_congestion_updates_to_the_call()
+    {
+        var stream = new RecordingVideoStream
+        {
+            PayloadType = 96,
+            RecommendedBitrateBps = 800_000,
+            NetworkQuality = NetworkQuality.Good,
+        };
+        var (orchestrator, channel, call) = Build(stream);
+        using var _o = orchestrator;
+        channel.RaiseMediaNegotiated(VideoParams());
+
+        orchestrator.OnCallStateChanged(
+            this, new CallStateChangedEventArgs(CallState.Connected, CallState.Terminated, call));
+        await WaitUntilAsync(() => channel.VideoSendDelegateClearedCount > 0);
+
+        stream.RecommendedBitrateBps = 111_000;
+        stream.RaiseCongestionUpdated(); // unsubscribed on teardown → must be ignored
+
+        Assert.Equal(800_000, call.RecommendedVideoBitrateBps); // unchanged from the initial prime
+    }
+
     private static async Task WaitUntilAsync(Func<bool> condition)
     {
         for (var i = 0; i < 200 && !condition(); i++)
@@ -123,11 +174,14 @@ public sealed class CallMediaOrchestratorVideoWiringTests
         public string CodecName => "VP8";
         public int PayloadType { get; init; } = 96;
         public List<(byte[] Frame, uint Timestamp)> Sent { get; } = [];
+        public long? RecommendedBitrateBps { get; set; }
+        public NetworkQuality? NetworkQuality { get; set; }
 
 #pragma warning disable CS0067 // KeyFrameRequested is part of the contract but unused by these tests
         public event Action<byte[], uint>? FrameReceived;
         public event Action? KeyFrameRequested;
 #pragma warning restore CS0067
+        public event Action? CongestionUpdated;
 
         public Task SendFrameAsync(ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken ct = default)
         {
@@ -136,6 +190,7 @@ public sealed class CallMediaOrchestratorVideoWiringTests
         }
 
         public void RaiseFrameReceived(byte[] frame, uint rtpTimestamp) => FrameReceived?.Invoke(frame, rtpTimestamp);
+        public void RaiseCongestionUpdated() => CongestionUpdated?.Invoke();
     }
 
     private sealed class FakeVideoSession(IVideoMediaStream? video) : ICallMediaSession

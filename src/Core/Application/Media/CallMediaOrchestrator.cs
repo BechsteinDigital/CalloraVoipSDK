@@ -202,6 +202,7 @@ internal sealed class CallMediaOrchestrator : IDisposable
         // false until that follow-up lands.
         var video = session.Video;
         Action<byte[], uint>? inboundVideoHandler = null;
+        Action? congestionHandler = null;
         if (video is not null)
         {
             var videoPayloadType = video.PayloadType;
@@ -210,6 +211,15 @@ internal sealed class CallMediaOrchestrator : IDisposable
                     new CallVideoFrame(encodedFrame, videoPayloadType, rtpTimestamp, IsKeyFrame: false));
             video.FrameReceived += inboundVideoHandler;
             channel.SetVideoSendDelegate((frame, ct) => video.SendFrameAsync(frame.Payload, frame.RtpTimestamp, ct));
+
+            // Push the SDK's ready-to-use bitrate recommendation + network quality onto the call so the
+            // public video sender can read/subscribe. Prime it now, then refresh on each feedback report.
+            if (sdkCall is not null)
+            {
+                sdkCall.SetVideoCongestion(video.RecommendedBitrateBps, video.NetworkQuality);
+                congestionHandler = () => sdkCall.SetVideoCongestion(video.RecommendedBitrateBps, video.NetworkQuality);
+                video.CongestionUpdated += congestionHandler;
+            }
         }
 
         if (sdkCall is not null)
@@ -224,7 +234,8 @@ internal sealed class CallMediaOrchestrator : IDisposable
             metricsHandler,
             qualityHandler,
             video,
-            inboundVideoHandler);
+            inboundVideoHandler,
+            congestionHandler);
         _active[call.CallId] = entry;
         _activity[call.CallId] = new MediaActivity { Call = call, LastActivityUtc = DateTimeOffset.UtcNow };
 
@@ -355,6 +366,8 @@ internal sealed class CallMediaOrchestrator : IDisposable
         entry.Channel.SetDtmfSendDelegate(null);
         if (entry.Video is not null && entry.InboundVideoHandler is not null)
             entry.Video.FrameReceived -= entry.InboundVideoHandler;
+        if (entry.Video is not null && entry.CongestionHandler is not null)
+            entry.Video.CongestionUpdated -= entry.CongestionHandler;
         entry.Channel.SetVideoSendDelegate(null);
     }
 

@@ -18,6 +18,8 @@ internal sealed class Call : ICall, IDisposable
     private CallQualitySnapshot    _qualitySnapshot = CallQualitySnapshot.CreateEmpty(DateTimeOffset.UtcNow);
     private CallRtpStatistics?     _rtpStatistics;
     private CallIceSnapshot?       _iceSnapshot;
+    private long?                  _recommendedVideoBitrateBps;
+    private NetworkQuality?        _videoNetworkQuality;
     private bool                   _disposed;
 
     /// <inheritdoc />
@@ -537,6 +539,40 @@ internal sealed class Call : ICall, IDisposable
     internal void SetIceSnapshot(CallIceSnapshot snapshot)
     {
         lock (_sync) _iceSnapshot = snapshot;
+    }
+
+    /// <summary>
+    /// Latest SDK-recommended outbound video bitrate (bits per second), or <see langword="null"/> when
+    /// transport-cc congestion control is inactive for this leg. Read by the public video sender.
+    /// </summary>
+    internal long? RecommendedVideoBitrateBps { get { lock (_sync) return _recommendedVideoBitrateBps; } }
+
+    /// <summary>
+    /// Latest coarse network quality for this leg's video, or <see langword="null"/> when congestion
+    /// control is inactive.
+    /// </summary>
+    internal NetworkQuality? VideoNetworkQuality { get { lock (_sync) return _videoNetworkQuality; } }
+
+    /// <summary>
+    /// Raised when the video congestion recommendation changes. Snapshotted inside the lock to avoid
+    /// races with concurrent subscribe/unsubscribe. Subscribed by the public video sender.
+    /// </summary>
+    internal event Action? VideoCongestionChanged;
+
+    /// <summary>
+    /// Updates the video congestion recommendation and emits <see cref="VideoCongestionChanged"/>.
+    /// Called by the application media orchestrator on each transport-cc feedback report.
+    /// </summary>
+    internal void SetVideoCongestion(long? recommendedBitrateBps, NetworkQuality? quality)
+    {
+        Action? handler;
+        lock (_sync)
+        {
+            _recommendedVideoBitrateBps = recommendedBitrateBps;
+            _videoNetworkQuality        = quality;
+            handler                     = VideoCongestionChanged; // snapshot before releasing lock
+        }
+        handler?.Invoke();
     }
 
     /// <summary>

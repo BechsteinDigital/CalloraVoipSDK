@@ -1,3 +1,5 @@
+using CalloraVoipSdk.Core.Domain.Calls;
+
 namespace CalloraVoipSdk.Core.Application.Media;
 
 /// <summary>
@@ -35,4 +37,24 @@ internal interface IVideoMediaStream
     /// stream itself sends a PLI to the peer automatically when it detects inbound loss.
     /// </summary>
     event Action? KeyFrameRequested;
+
+    /// <summary>
+    /// The current SDK-recommended outbound video bitrate in bits per second, or
+    /// <see langword="null"/> when transport-cc congestion control is inactive for this leg (the peer
+    /// did not negotiate the a=extmap). Updated on each feedback report; the application sets its
+    /// encoder to this value (transport-only — the SDK never encodes).
+    /// </summary>
+    long? RecommendedBitrateBps { get; }
+
+    /// <summary>
+    /// The current coarse network-quality indicator, or <see langword="null"/> when congestion control
+    /// is inactive for this leg.
+    /// </summary>
+    NetworkQuality? NetworkQuality { get; }
+
+    /// <summary>
+    /// Raised after a feedback report when <see cref="RecommendedBitrateBps"/> changed. Never fires when
+    /// congestion control is inactive. Fires on the RTP control thread — handlers must be fast.
+    /// </summary>
+    event Action? CongestionUpdated;
 }

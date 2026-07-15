@@ -1,9 +1,10 @@
-namespace CalloraVoipSdk.Core.Application.Media;
+namespace CalloraVoipSdk.Core.Domain.Calls;
 
 /// <summary>
 /// Coarse, ready-to-use indicator of the media path's health, derived by the SDK from the congestion
 /// signal (delay trend + loss). Meant for a simple UI hint or a plugin decision — read it instead of
-/// interpreting raw metrics yourself.
+/// interpreting raw metrics yourself. A call-media value describing the leg, alongside
+/// <see cref="CallQualitySnapshot"/>.
 /// </summary>
 public enum NetworkQuality
 {
