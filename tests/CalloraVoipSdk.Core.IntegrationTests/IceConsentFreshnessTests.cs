@@ -117,6 +117,36 @@ public sealed class IceConsentFreshnessTests
     }
 
     [Fact]
+    public async Task Monitor_signals_degraded_then_recovered_across_a_transient_miss()
+    {
+        var clock = new MutableClock(DateTimeOffset.UnixEpoch);
+        var degraded = new TaskCompletionSource();
+        var recovered = new TaskCompletionSource();
+        var checks = 0;
+
+        await using var monitor = new IceConsentMonitor(
+            new IceConsentFreshnessPolicy(TimeSpan.FromSeconds(5)),
+            sendConsentCheck: _ =>
+            {
+                var n = Interlocked.Increment(ref checks);
+                clock.Advance(TimeSpan.FromSeconds(5)); // stays inside the 30 s consent window
+                return Task.FromResult(n != 1);        // check #1 unanswered (degrade), then answered (recover)
+            },
+            onConsentLost: () => { },
+            loggerFactory: NullLoggerFactory.Instance,
+            utcNow: () => clock.Now,
+            delay: (_, ct) => Task.Delay(1, ct),
+            nextRandom: () => 0.5,
+            onConnectivityDegraded: () => degraded.TrySetResult(),
+            onConnectivityRecovered: () => recovered.TrySetResult());
+
+        monitor.Start();
+
+        await degraded.Task.WaitAsync(TimeSpan.FromSeconds(5));   // transient miss surfaced
+        await recovered.Task.WaitAsync(TimeSpan.FromSeconds(5));  // next answer recovers it
+    }
+
+    [Fact]
     public async Task Monitor_dispose_is_idempotent()
     {
         var monitor = new IceConsentMonitor(

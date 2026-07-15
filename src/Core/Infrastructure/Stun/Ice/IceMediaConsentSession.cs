@@ -50,7 +50,9 @@ internal sealed class IceMediaConsentSession : IAsyncDisposable
         TimeSpan? checkTimeout = null,
         Func<DateTimeOffset>? utcNow = null,
         Func<TimeSpan, CancellationToken, Task>? delay = null,
-        Func<double>? nextRandom = null)
+        Func<double>? nextRandom = null,
+        Action? onConnectivityDegraded = null,
+        Action? onConnectivityRecovered = null)
     {
         ArgumentNullException.ThrowIfNull(codec);
         ArgumentNullException.ThrowIfNull(sendRaw);
@@ -79,7 +81,9 @@ internal sealed class IceMediaConsentSession : IAsyncDisposable
             loggerFactory,
             utcNow,
             delay,
-            nextRandom);
+            nextRandom,
+            onConnectivityDegraded,
+            onConnectivityRecovered);
     }
 
     /// <summary>Starts the consent loop. Idempotent (see <see cref="IceConsentMonitor.Start"/>).</summary>

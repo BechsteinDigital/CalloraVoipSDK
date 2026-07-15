@@ -14,6 +14,8 @@ internal sealed class IceConsentMonitor : IAsyncDisposable
     private readonly IceConsentFreshnessPolicy _policy;
     private readonly Func<CancellationToken, Task<bool>> _sendConsentCheck;
     private readonly Action _onConsentLost;
+    private readonly Action? _onConnectivityDegraded;
+    private readonly Action? _onConnectivityRecovered;
     private readonly Func<DateTimeOffset> _utcNow;
     private readonly Func<TimeSpan, CancellationToken, Task> _delay;
     private readonly Func<double> _nextRandom;
@@ -26,7 +28,10 @@ internal sealed class IceConsentMonitor : IAsyncDisposable
     /// <summary>
     /// Creates a consent monitor. <paramref name="sendConsentCheck"/> sends one consent check and
     /// returns <see langword="true"/> when it was answered; <paramref name="onConsentLost"/> is
-    /// invoked once when consent expires.
+    /// invoked once when consent expires (RFC 7675 §5.1). <paramref name="onConnectivityDegraded"/> is
+    /// invoked when a check first goes unanswered while still inside the consent window (a transient
+    /// disconnect that may recover); <paramref name="onConnectivityRecovered"/> is invoked when a check
+    /// is answered again after a degrade. Both are optional.
     /// </summary>
     public IceConsentMonitor(
         IceConsentFreshnessPolicy policy,
@@ -35,7 +40,9 @@ internal sealed class IceConsentMonitor : IAsyncDisposable
         ILoggerFactory loggerFactory,
         Func<DateTimeOffset>? utcNow = null,
         Func<TimeSpan, CancellationToken, Task>? delay = null,
-        Func<double>? nextRandom = null)
+        Func<double>? nextRandom = null,
+        Action? onConnectivityDegraded = null,
+        Action? onConnectivityRecovered = null)
     {
         _policy = policy ?? throw new ArgumentNullException(nameof(policy));
         _sendConsentCheck = sendConsentCheck ?? throw new ArgumentNullException(nameof(sendConsentCheck));
@@ -45,6 +52,8 @@ internal sealed class IceConsentMonitor : IAsyncDisposable
         _utcNow = utcNow ?? (() => DateTimeOffset.UtcNow);
         _delay = delay ?? Task.Delay;
         _nextRandom = nextRandom ?? Random.Shared.NextDouble;
+        _onConnectivityDegraded = onConnectivityDegraded;
+        _onConnectivityRecovered = onConnectivityRecovered;
     }
 
     /// <summary>Starts the consent loop. Idempotent and thread-safe — a second call, or a call
@@ -62,6 +71,7 @@ internal sealed class IceConsentMonitor : IAsyncDisposable
     private async Task RunAsync(CancellationToken ct)
     {
         var lastConfirmed = _utcNow();
+        var degraded = false;
 
         while (!ct.IsCancellationRequested)
         {
@@ -80,6 +90,12 @@ internal sealed class IceConsentMonitor : IAsyncDisposable
             if (answered)
             {
                 lastConfirmed = _utcNow();
+                if (degraded)
+                {
+                    degraded = false;
+                    _logger.LogInformation("ICE connectivity recovered: a consent check was answered again.");
+                    Raise(_onConnectivityRecovered);
+                }
                 continue;
             }
 
@@ -91,6 +107,28 @@ internal sealed class IceConsentMonitor : IAsyncDisposable
                 _onConsentLost();
                 return;
             }
+
+            // Unanswered but still inside the consent window: a transient degrade (WebRTC "disconnected")
+            // that may recover. Signal it once; keep looping so a later answer can recover or expire.
+            if (!degraded)
+            {
+                degraded = true;
+                _logger.LogWarning(
+                    "ICE connectivity degraded: a consent check went unanswered (still within the consent window).");
+                Raise(_onConnectivityDegraded);
+            }
+        }
+    }
+
+    private void Raise(Action? handler)
+    {
+        try
+        {
+            handler?.Invoke();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "ICE consent monitor connectivity-state handler threw.");
         }
     }
 
