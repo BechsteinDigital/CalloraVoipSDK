@@ -4,6 +4,7 @@ using CalloraVoipSdk.Core.Application.Calls;
 using CalloraVoipSdk.Core.Application.Lines;
 using CalloraVoipSdk.Core.Application.Media;
 using CalloraVoipSdk.Core.Application.Ports.Audio;
+using CalloraVoipSdk.Core.Application.Ports.Video;
 using CalloraVoipSdk.Core.Domain.Calls;
 using CalloraVoipSdk.Core.Domain.Events;
 using CalloraVoipSdk.Core.Domain.Lines;
@@ -20,24 +21,32 @@ internal sealed class SdkConvenienceOrchestrator : IDisposable
     private readonly PhoneLineManager _lineManager;
     private readonly MediaManager _mediaManager;
     private readonly IAudioDevice _audioDevice;
+    private readonly IVideoDevice? _videoDevice;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<SdkConvenienceOrchestrator> _logger;
     private readonly ConcurrentDictionary<CallId, DefaultAudioCallAttachment> _defaultAudioAttachments = new();
+    private readonly ConcurrentDictionary<CallId, DefaultVideoCallAttachment> _defaultVideoAttachments = new();
     private int _disposed;
 
     /// <summary>
     /// Creates one convenience orchestrator bound to the SDK runtime instance.
     /// </summary>
+    /// <param name="videoDevice">
+    /// Optional application-supplied video codec device. <see langword="null"/> when no codec package is
+    /// registered — <see cref="AttachDefaultVideoAsync"/> then fails closed. The SDK core ships no codec.
+    /// </param>
     internal SdkConvenienceOrchestrator(
         PhoneLineManager lineManager,
         MediaManager mediaManager,
         IAudioDevice audioDevice,
-        ILoggerFactory loggerFactory)
+        ILoggerFactory loggerFactory,
+        IVideoDevice? videoDevice = null)
     {
         _lineManager = lineManager ?? throw new ArgumentNullException(nameof(lineManager));
         _mediaManager = mediaManager ?? throw new ArgumentNullException(nameof(mediaManager));
         _audioDevice = audioDevice ?? throw new ArgumentNullException(nameof(audioDevice));
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
+        _videoDevice = videoDevice;
         _logger = loggerFactory.CreateLogger<SdkConvenienceOrchestrator>();
     }
 
@@ -228,6 +237,53 @@ internal sealed class SdkConvenienceOrchestrator : IDisposable
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Attaches SDK default video (receiver, sender, and the application-supplied video codec device) to
+    /// the call. Existing convenience default-video attachments on other calls are replaced.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No video codec device is registered.</exception>
+    internal Task AttachDefaultVideoAsync(ICall call, CancellationToken ct)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(call);
+        ct.ThrowIfCancellationRequested();
+
+        if (_videoDevice is null)
+            throw new InvalidOperationException(
+                "No video codec device is registered. Supply one via SdkConfiguration or dependency injection " +
+                "(IVideoDevice); the SDK core is transport-only and ships no codec.");
+
+        // Convenience flow is optimized for one active default video route.
+        ReplaceOtherDefaultVideoAttachments(call.CallId);
+
+        var attachment = _defaultVideoAttachments.GetOrAdd(
+            call.CallId,
+            _ => new DefaultVideoCallAttachment(
+                call,
+                _mediaManager,
+                _videoDevice,
+                _loggerFactory,
+                (_, disposedAttachment) => RemoveDefaultVideoAttachment(call.CallId, disposedAttachment)));
+
+        attachment.EnsureStarted();
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Detaches convenience default video from a call if present.
+    /// </summary>
+    internal Task DetachDefaultVideoAsync(ICall call, CancellationToken ct)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(call);
+        ct.ThrowIfCancellationRequested();
+
+        if (_defaultVideoAttachments.TryRemove(call.CallId, out var attachment))
+            attachment.Dispose();
+
+        return Task.CompletedTask;
+    }
+
     /// <inheritdoc />
     public void Dispose()
     {
@@ -247,6 +303,41 @@ internal sealed class SdkConvenienceOrchestrator : IDisposable
         }
 
         _defaultAudioAttachments.Clear();
+
+        foreach (var entry in _defaultVideoAttachments.Values)
+        {
+            try
+            {
+                entry.Dispose();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Failed disposing default video attachment during SDK shutdown.");
+            }
+        }
+
+        _defaultVideoAttachments.Clear();
+    }
+
+    private void ReplaceOtherDefaultVideoAttachments(CallId currentCallId)
+    {
+        foreach (var pair in _defaultVideoAttachments)
+        {
+            if (pair.Key == currentCallId)
+                continue;
+
+            if (_defaultVideoAttachments.TryRemove(pair.Key, out var previous))
+                previous.Dispose();
+        }
+    }
+
+    private void RemoveDefaultVideoAttachment(CallId callId, DefaultVideoCallAttachment attachment)
+    {
+        if (_defaultVideoAttachments.TryGetValue(callId, out var existing)
+            && ReferenceEquals(existing, attachment))
+        {
+            _defaultVideoAttachments.TryRemove(callId, out _);
+        }
     }
 
     private void ReplaceOtherDefaultAudioAttachments(CallId currentCallId)
