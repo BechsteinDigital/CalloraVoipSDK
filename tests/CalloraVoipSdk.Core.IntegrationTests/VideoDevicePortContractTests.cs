@@ -1,3 +1,4 @@
+using System.Net;
 using CalloraVoipSdk.Core.Application.Media;
 using CalloraVoipSdk.Core.Application.Ports.Video;
 using CalloraVoipSdk.Core.Domain.Calls;
@@ -121,6 +122,25 @@ public sealed class VideoDevicePortContractTests : IDisposable
     {
         Assert.Equal(90_000, VideoConnectionParameters.Default.ClockRate);
         Assert.Equal("VP8", VideoConnectionParameters.Default.CodecName);
+    }
+
+    [Fact]
+    public void From_maps_the_negotiated_video_parameters()
+    {
+        var negotiated = new CallVideoParameters
+        {
+            PayloadType = 100,
+            CodecName = "H264",
+            ClockRate = 90_000,
+            LocalEndPoint = new IPEndPoint(IPAddress.Loopback, 40004),
+            RemoteEndPoint = new IPEndPoint(IPAddress.Loopback, 40006),
+        };
+
+        var parameters = VideoConnectionParameters.From(negotiated);
+
+        Assert.Equal(100, parameters.PayloadType);
+        Assert.Equal("H264", parameters.CodecName);
+        Assert.Equal(90_000, parameters.ClockRate);
     }
 
     // ── Test double: a minimal IVideoDevice that records inbound frames and relays outbound ones ──
