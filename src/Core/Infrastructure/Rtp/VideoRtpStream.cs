@@ -41,6 +41,14 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
     // RTX-negotiated legs.
     private const int ReorderWindowDepth = 32;
 
+    // Sender-side transport-cc congestion-control tuning (delay-trend EWMA + fixed overuse threshold
+    // + loss EWMA). Initial values — an adaptive threshold / SCReAM (RFC 8298) is the later accuracy
+    // upgrade. Send-history capacity covers peak-bitrate × feedback RTT with headroom.
+    private const int TransportCcSendHistoryCapacity = 4096;
+    private const double TransportCcDelaySmoothing = 0.1;
+    private const long TransportCcOveruseThresholdMicros = 5_000; // 5 ms
+    private const double TransportCcLossSmoothing = 0.1;
+
     private readonly RtpSession _rtp;
     private readonly DtlsMediaAttachment? _dtlsMedia;
 
@@ -59,6 +67,11 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
     // numbers and periodically reports arrivals to the sender for congestion control. Null unless the
     // a=extmap was negotiated for this m-line — so a leg that did not offer it sends no feedback.
     private readonly TransportCcFeedbackSender? _transportCcSender;
+
+    // Sender-side transport-cc congestion control (draft-holmer): records our stamped sends and folds
+    // inbound feedback into the delay-trend + loss estimators. Read via the internal Congestion
+    // property until the public congestion API lands. Null unless the a=extmap was negotiated.
+    private readonly TransportCcCongestionController? _transportCcCongestion;
     private readonly CancellationTokenSource _lifetimeCts = new();
 
     // RTX retransmission (RFC 4588): retains sent packets so an inbound NACK can be answered
@@ -194,6 +207,18 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
                 new RtcpPacketCodec(), transportCcExtensionId, _rtp.LocalSsrc, _rtp.SendControlAsync,
                 Stopwatch.GetTimestamp, Stopwatch.Frequency,
                 loggerFactory.CreateLogger<TransportCcFeedbackSender>(), _lifetimeCts.Token);
+
+            // Sender side of transport-cc: record each stamped send (PacketSent, primary only) and
+            // fold inbound feedback reports (ControlPacketReceived) into the congestion estimators.
+            _transportCcCongestion = new TransportCcCongestionController(
+                transportCcExtensionId, new RtcpPacketCodec(),
+                new TransportCcSendHistory(TransportCcSendHistoryCapacity),
+                new TransportCcDelayTrendEstimator(TransportCcDelaySmoothing, TransportCcOveruseThresholdMicros),
+                new TransportCcLossEstimator(TransportCcLossSmoothing),
+                Stopwatch.GetTimestamp, Stopwatch.Frequency,
+                loggerFactory.CreateLogger<TransportCcCongestionController>());
+            _rtp.PacketSent += _transportCcCongestion.OnPacketSent;
+            _rtp.ControlPacketReceived += _transportCcCongestion.OnControlDatagram;
         }
 
         // DTLS-SRTP for the video 5-tuple: same identity, role, and peer fingerprint as
@@ -267,6 +292,13 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
 
     /// <inheritdoc />
     public int PayloadType => _payloadType;
+
+    /// <summary>
+    /// Sender-side transport-cc congestion state (delay trend + loss), or <see langword="null"/> when
+    /// transport-cc was not negotiated for this stream. Internal until the public congestion API is
+    /// added (pending the facade name); surfaced for the wiring test.
+    /// </summary>
+    internal TransportCcCongestionController? Congestion => _transportCcCongestion;
 
     /// <inheritdoc />
     public event Action<byte[], uint>? FrameReceived;
@@ -423,6 +455,11 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
         _lifetimeCts.Cancel();
         _rtp.PacketReceived -= OnPacketReceived;
         _rtp.ControlPacketReceived -= _keyFrameFeedback.OnControlDatagram;
+        if (_transportCcCongestion is not null)
+        {
+            _rtp.PacketSent -= _transportCcCongestion.OnPacketSent;
+            _rtp.ControlPacketReceived -= _transportCcCongestion.OnControlDatagram;
+        }
         if (_retransmitBuffer is not null)
             _rtp.PacketSent -= _retransmitBuffer.Store;
         if (_reorderBuffer is not null)
