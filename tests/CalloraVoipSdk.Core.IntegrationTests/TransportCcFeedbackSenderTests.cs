@@ -2,6 +2,7 @@ using CalloraVoipSdk.Core.Application.Media.Rtcp.Packets;
 using CalloraVoipSdk.Core.Infrastructure.Rtcp.Wire;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.CongestionControl;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CalloraVoipSdk.Core.IntegrationTests;
@@ -112,5 +113,41 @@ public sealed class TransportCcFeedbackSenderTests
         Assert.Equal(2, sent.Count);
         Assert.Equal(0, Decode(sent[0]).FeedbackPacketCount);
         Assert.Equal(1, Decode(sent[1]).FeedbackPacketCount);
+    }
+
+    [Fact]
+    public void Overflow_of_the_arrival_buffer_still_sends_and_is_logged()
+    {
+        var sent = new List<byte[]>();
+        var logger = new CapturingLogger();
+        long clock = 0;
+        var sender = new TransportCcFeedbackSender(
+            new RtcpPacketCodec(), ExtId, LocalSsrc,
+            (data, _) => { sent.Add(data.ToArray()); return ValueTask.CompletedTask; },
+            () => clock, Frequency, logger, CancellationToken.None);
+
+        // More arrivals than the ring buffer holds (1024) before the interval elapses: the oldest
+        // are overwritten. The report still goes out (no crash) and the overflow is logged once.
+        for (ushort i = 0; i < 1100; i++)
+            sender.OnVideoPacketReceived(Stamped(ExtId, i, i));
+        clock = 150_000;
+        sender.OnVideoPacketReceived(Stamped(ExtId, 1100, 1100));
+
+        Assert.NotEmpty(sent);
+        Assert.Contains(LogLevel.Debug, logger.Levels);
+    }
+
+    private sealed class CapturingLogger : ILogger
+    {
+        public List<LogLevel> Levels { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter)
+            => Levels.Add(logLevel);
     }
 }

@@ -40,6 +40,7 @@ internal sealed class TransportCcFeedbackSender
     private long _lastSendTimestamp;
     private uint _remoteSsrc;
     private byte _feedbackPacketCount;
+    private long _lastReportedDrops;
 
     public TransportCcFeedbackSender(
         IRtcpPacketCodec codec,
@@ -101,6 +102,18 @@ internal sealed class TransportCcFeedbackSender
     private void SendFeedback()
     {
         var batch = _recorder.Drain();
+
+        // Surface receive-buffer overflow (arrivals overwritten at a pathological packet rate): the
+        // report is then incomplete. Cumulative count — logged once per growth, not per report.
+        var dropped = _recorder.DroppedCount;
+        if (dropped > _lastReportedDrops)
+        {
+            _logger.LogDebug(
+                "Transport-cc arrival buffer overflow: {Dropped} arrival(s) dropped so far (capacity " +
+                "{Capacity}); the feedback report may be incomplete.", dropped, RecorderCapacity);
+            _lastReportedDrops = dropped;
+        }
+
         if (batch.Count == 0)
             return;
 
