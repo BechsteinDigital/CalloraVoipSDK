@@ -1,4 +1,5 @@
 using CalloraVoipSdk.Core.Application.Ports.Sdp;
+using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Sip.Adapters;
 
@@ -68,6 +69,11 @@ internal sealed partial class SipCoreCallChannel
                 PreferredCodecNames = _videoCodecNames,
                 OfferSrtpKeyParams = _activeLocalVideoSrtpKeyParams,
                 Candidates = _localIceDescription?.VideoCandidates ?? [],
+                // Offer the transport-wide-cc header extension (RFC 8285 / draft-holmer): a peer that
+                // supports it echoes the a=extmap in its answer, enabling transport-cc congestion
+                // control on the video stream. A peer that does not omits it — the stream stays
+                // gate-off, unchanged. Opportunistic, so SIP peers without it are unaffected.
+                HeaderExtensionUris = [RtpHeaderExtensionUris.TransportWideCc],
             }
             : null;
 
