@@ -175,26 +175,41 @@ public sealed class RtcpFeedbackCodecTests
     }
 
     [Fact]
-    public void Truncated_feedback_ssrc_pair_throws()
+    public void Truncated_feedback_ssrc_pair_is_skipped_and_the_compound_survives()
     {
-        var packet = new byte[8]; // header(4) + only one SSRC(4)
-        packet[0] = 0x81;
-        packet[1] = 206;
-        BinaryPrimitives.WriteUInt16BigEndian(packet.AsSpan(2), 1);
+        // A PSFB claiming 8 bytes but carrying only one SSRC where the pair is required is
+        // malformed: RFC 3550 §6.1 wants it skipped, not thrown, so a following RR still decodes.
+        var malformed = new byte[8];
+        malformed[0] = 0x81;
+        malformed[1] = 206;
+        BinaryPrimitives.WriteUInt16BigEndian(malformed.AsSpan(2), 1);
+        var rr = Codec.Encode([new RtcpReceiverReport { Ssrc = 0x7, ReportBlocks = [] }]);
 
-        Assert.Throws<ArgumentException>(() => Codec.Decode(packet));
+        var compound = new byte[malformed.Length + rr.Length];
+        malformed.CopyTo(compound, 0);
+        rr.CopyTo(compound, malformed.Length);
+
+        Assert.Equal(0x7u, Assert.IsType<RtcpReceiverReport>(Assert.Single(Codec.Decode(compound))).Ssrc);
+        // The malformed packet on its own decodes to an empty list rather than throwing.
+        Assert.Empty(Codec.Decode(malformed));
     }
 
     [Fact]
-    public void Fir_fci_not_divisible_by_entry_size_throws()
+    public void Malformed_fir_fci_is_skipped_and_the_compound_survives()
     {
-        // header(4) + SSRC pair(8) + 4 FCI bytes (a FIR entry is 8 bytes).
-        var packet = new byte[16];
-        packet[0] = 0x84; // FMT=4
-        packet[1] = 206;
-        BinaryPrimitives.WriteUInt16BigEndian(packet.AsSpan(2), 3);
+        // FIR (PSFB FMT=4) with an FCI length not divisible by the 8-byte entry size → malformed.
+        var malformed = new byte[16]; // header(4) + SSRC pair(8) + 4 FCI bytes
+        malformed[0] = 0x84;
+        malformed[1] = 206;
+        BinaryPrimitives.WriteUInt16BigEndian(malformed.AsSpan(2), 3);
+        var rr = Codec.Encode([new RtcpReceiverReport { Ssrc = 0x9, ReportBlocks = [] }]);
 
-        Assert.Throws<ArgumentException>(() => Codec.Decode(packet));
+        var compound = new byte[malformed.Length + rr.Length];
+        malformed.CopyTo(compound, 0);
+        rr.CopyTo(compound, malformed.Length);
+
+        Assert.Equal(0x9u, Assert.IsType<RtcpReceiverReport>(Assert.Single(Codec.Decode(compound))).Ssrc);
+        Assert.Empty(Codec.Decode(malformed));
     }
 
     [Fact]
