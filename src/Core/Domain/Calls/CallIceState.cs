@@ -25,6 +25,14 @@ public enum CallIceState
     /// <summary>A candidate pair was selected successfully; media flows over the selected pair.</summary>
     Connected,
 
+    /// <summary>
+    /// The selected pair lost connectivity after <see cref="Connected"/> — RFC 7675 consent was not
+    /// refreshed in time and media transmission ceased. Transient: the path may recover (or be revived
+    /// by an ICE restart), so the socket stays open. Distinct from <see cref="Failed"/>, which is an
+    /// establishment failure before any pair was selected.
+    /// </summary>
+    Disconnected,
+
     /// <summary>ICE checks failed; the leg fell back to the negotiated SDP endpoints.</summary>
     Failed
 }

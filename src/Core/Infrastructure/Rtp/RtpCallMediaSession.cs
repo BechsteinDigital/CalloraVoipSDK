@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Logging;
-using System.Buffers.Binary;
 using System.Collections.ObjectModel;
 using System.Runtime.InteropServices;
 using CalloraVoipSdk.Core.Application.Media;
@@ -27,10 +26,7 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
     private static readonly TimeSpan DefaultMetricsPublishInterval = TimeSpan.FromSeconds(1);
     private const double DefaultRoundTripTimeHintMs = 60;
     private const int MaxConcealmentBurstPackets = 3;
-    private const int DtmfMinDurationMs = 40;
     private const int DtmfDefaultDurationMs = 160;
-    private const int DtmfDefaultVolume = 10;
-    private const int TelephoneEventPayloadLength = 4;
 
     private readonly RtpSession _rtp;
 
@@ -114,6 +110,9 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
 
     /// <inheritdoc />
     public event Action<byte[]>? RtcpMuxDatagramReceived;
+
+    /// <inheritdoc />
+    public event Action? MediaConsentLost;
 
     internal RtpCallMediaSession(
         CallMediaParameters parameters,
@@ -229,6 +228,17 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
     {
         _logger.LogWarning("Ceasing media transmission for the call after ICE consent loss (RFC 7675 §5.1).");
         _rtp.StopTransmission();
+
+        // Surface the loss so the orchestrator can move the call's ICE state to Disconnected. Defensive:
+        // a throwing handler must not disturb the consent-monitor loop that raised this.
+        try
+        {
+            MediaConsentLost?.Invoke();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "ICE consent-loss handler threw while surfacing the transport state.");
+        }
     }
 
     /// <inheritdoc />
@@ -273,23 +283,23 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
     {
         if (toneCode > 15)
             throw new ArgumentOutOfRangeException(nameof(toneCode), toneCode, "DTMF tone code must be between 0 and 15.");
-        if (durationMs < DtmfMinDurationMs)
+        if (durationMs < RtpTelephoneEventCodec.MinDurationMs)
             throw new ArgumentOutOfRangeException(
                 nameof(durationMs),
                 durationMs,
-                $"DTMF duration must be at least {DtmfMinDurationMs} ms.");
+                $"DTMF duration must be at least {RtpTelephoneEventCodec.MinDurationMs} ms.");
 
         var payloadType = _telephoneEventPayloadType
             ?? throw new InvalidOperationException("RTP telephone-event was not negotiated for this call media session.");
-        var durationRtpUnits = ConvertDurationMsToRtpUnits(durationMs, _clockRate);
+        var durationRtpUnits = RtpTelephoneEventCodec.DurationMsToRtpUnits(durationMs, _clockRate);
         var startDurationRtpUnits = (ushort)Math.Max(1, durationRtpUnits / 2);
         var eventTimestamp = _rtp.GetCurrentTimestamp();
 
-        var startPacketPayload = BuildTelephoneEventPayload(
+        var startPacketPayload = RtpTelephoneEventCodec.BuildPayload(
             toneCode,
             endOfEvent: false,
             durationRtpUnits: startDurationRtpUnits);
-        var endPacketPayload = BuildTelephoneEventPayload(
+        var endPacketPayload = RtpTelephoneEventCodec.BuildPayload(
             toneCode,
             endOfEvent: true,
             durationRtpUnits: durationRtpUnits);
@@ -472,6 +482,7 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
         DtmfReceived = null;
         RuntimeMetricsUpdated = null;
         RtcpMuxDatagramReceived = null;
+        MediaConsentLost = null;
         _cts.Dispose();
 
         // Zero the SRTP session keys once the RTP session (their only borrower) is down.
@@ -888,7 +899,7 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
 
     private void HandleInboundTelephoneEvent(RtpPacket packet)
     {
-        if (!TryParseTelephoneEvent(
+        if (!RtpTelephoneEventCodec.TryParse(
                 packet.Payload.Span,
                 out var toneCode,
                 out var endOfEvent,
@@ -933,7 +944,7 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
             return;
 
         _pendingDtmfCompleted = true;
-        var durationMs = ConvertDurationRtpUnitsToMs(_pendingDtmfDurationRtpUnits, _clockRate);
+        var durationMs = RtpTelephoneEventCodec.DurationRtpUnitsToMs(_pendingDtmfDurationRtpUnits, _clockRate);
         DispatchInboundDtmf(toneCode, durationMs);
     }
 
@@ -947,51 +958,6 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
         {
             _logger.LogDebug(ex, "Unhandled exception while dispatching inbound RTP DTMF event.");
         }
-    }
-
-    private static bool TryParseTelephoneEvent(
-        ReadOnlySpan<byte> payload,
-        out byte toneCode,
-        out bool endOfEvent,
-        out ushort durationRtpUnits)
-    {
-        toneCode = 0;
-        endOfEvent = false;
-        durationRtpUnits = 0;
-
-        if (payload.Length < TelephoneEventPayloadLength)
-            return false;
-
-        toneCode = payload[0];
-        endOfEvent = (payload[1] & 0x80) != 0;
-        durationRtpUnits = BinaryPrimitives.ReadUInt16BigEndian(payload.Slice(2, 2));
-        return true;
-    }
-
-    private static byte[] BuildTelephoneEventPayload(
-        byte toneCode,
-        bool endOfEvent,
-        ushort durationRtpUnits)
-    {
-        var payload = new byte[TelephoneEventPayloadLength];
-        payload[0] = toneCode;
-        payload[1] = (byte)((endOfEvent ? 0x80 : 0x00) | (DtmfDefaultVolume & 0x3F));
-        BinaryPrimitives.WriteUInt16BigEndian(payload.AsSpan(2, 2), durationRtpUnits);
-        return payload;
-    }
-
-    private static ushort ConvertDurationMsToRtpUnits(int durationMs, int clockRate)
-    {
-        var units = durationMs * clockRate / 1000.0;
-        var rounded = (int)Math.Round(units, MidpointRounding.AwayFromZero);
-        return (ushort)Math.Clamp(rounded, 1, ushort.MaxValue);
-    }
-
-    private static int ConvertDurationRtpUnitsToMs(ushort durationRtpUnits, int clockRate)
-    {
-        var milliseconds = durationRtpUnits * 1000.0 / Math.Max(clockRate, 1);
-        var rounded = (int)Math.Round(milliseconds, MidpointRounding.AwayFromZero);
-        return Math.Max(rounded, DtmfMinDurationMs);
     }
 
 }

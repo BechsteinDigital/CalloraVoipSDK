@@ -80,6 +80,15 @@ public interface ICall
     CallIceSnapshot? IceSnapshot { get; }
 
     /// <summary>
+    /// Running ICE transport state for this leg (RFC 8445 / RFC 7675). Unlike the one-shot
+    /// <see cref="IceSnapshot"/> (final establishment state), this tracks post-establishment changes —
+    /// notably <see cref="CallIceState.Connected"/> → <see cref="CallIceState.Disconnected"/> when
+    /// consent is lost. <see cref="CallIceState.Disabled"/> for non-ICE legs. Changes are signalled by
+    /// <see cref="IceConnectionStateChanged"/>.
+    /// </summary>
+    CallIceState IceConnectionState { get; }
+
+    /// <summary>
     /// Peer-asserted caller identity (P-Asserted-Identity, RFC 3325) parsed from an inbound INVITE
     /// when the sending peer is trusted, for trunk/PBX routing; <see langword="null"/> for outbound
     /// calls, untrusted peers, or when the header is absent.
@@ -128,6 +137,14 @@ public interface ICall
     /// the signaling-thread events above. Not buffered.
     /// </summary>
     event EventHandler<CallQualitySnapshotChangedEventArgs>? QualitySnapshotChanged;
+
+    /// <summary>
+    /// Raised when the running ICE transport state changes after establishment (for example
+    /// <see cref="CallIceState.Connected"/> → <see cref="CallIceState.Disconnected"/> on consent loss).
+    /// Fires on a media/RTCP thread, not the signaling thread. Lets the application react to a lost media
+    /// path — tear down, alert the user, or (later) trigger an ICE restart. Not buffered.
+    /// </summary>
+    event EventHandler<CallIceConnectionStateChangedEventArgs>? IceConnectionStateChanged;
 
     // ── Actions ───────────────────────────────────────────────────────────────
 
