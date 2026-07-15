@@ -51,6 +51,18 @@ public sealed class MediaManager
     public IMediaSender CreateSender() => new MediaSender(_loggerFactory.CreateLogger<MediaSender>());
 
     /// <summary>
+    /// Creates a detached video receiver for a call's inbound encoded video frames (transport-only;
+    /// decode with your own codec). Attach it to a call to start receiving.
+    /// </summary>
+    public IVideoReceiver CreateVideoReceiver() => new VideoReceiver(_loggerFactory.CreateLogger<VideoReceiver>());
+
+    /// <summary>
+    /// Creates a detached video sender for a call's outbound encoded video frames (transport-only;
+    /// encode with your own codec). Attach it to a call, then push frames.
+    /// </summary>
+    public IVideoSender CreateVideoSender() => new VideoSender(_loggerFactory.CreateLogger<VideoSender>());
+
+    /// <summary>
     /// Creates a connector for one-way or two-way media links.
     /// </summary>
     public MediaConnector CreateConnector() => new(_loggerFactory);
