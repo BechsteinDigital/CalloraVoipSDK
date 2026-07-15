@@ -99,9 +99,12 @@ internal sealed class DefaultVideoCallAttachment : IDisposable
                 return;
         }
 
-        // Transport-only: the negotiated video codec is not yet surfaced publicly on the call, so the
-        // device is handed the defaults for now (see follow-up: expose the negotiated video parameters).
-        var parameters = VideoConnectionParameters.Default;
+        // The negotiated video codec is surfaced on the call once media is set up; hand the device the
+        // agreed format so it encodes/decodes correctly, falling back to the transport default only when
+        // no video was negotiated (audio-only leg or parameters not yet published). Mirrors the audio path.
+        var parameters = _call.MediaParameters?.Video is { } video
+            ? VideoConnectionParameters.From(video)
+            : VideoConnectionParameters.Default;
 
         try
         {

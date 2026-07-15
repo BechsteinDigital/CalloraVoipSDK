@@ -20,4 +20,21 @@ public sealed class VideoConnectionParameters
 
     /// <summary>RTP clock rate in Hz — 90000 for video (RFC 3551).</summary>
     public int ClockRate { get; init; } = 90_000;
+
+    /// <summary>
+    /// Builds transport-only connection parameters from the negotiated video parameters of a call, so the
+    /// device encodes/decodes in the SDP-agreed format. Mirrors
+    /// <see cref="CalloraVoipSdk.Core.Application.Ports.Audio.AudioConnectionParameters.From"/>.
+    /// </summary>
+    /// <param name="video">The negotiated video parameters from <c>CallMediaParameters.Video</c>.</param>
+    public static VideoConnectionParameters From(CalloraVoipSdk.Core.Domain.Calls.CallVideoParameters video)
+    {
+        ArgumentNullException.ThrowIfNull(video);
+        return new VideoConnectionParameters
+        {
+            PayloadType = video.PayloadType,
+            CodecName = video.CodecName,
+            ClockRate = video.ClockRate,
+        };
+    }
 }

@@ -1,3 +1,4 @@
+using System.Net;
 using CalloraVoipSdk.Core.Application.Convenience;
 using CalloraVoipSdk.Core.Application.Lines;
 using CalloraVoipSdk.Core.Application.Media;
@@ -70,12 +71,44 @@ public sealed class DefaultVideoConvenienceTests : IDisposable
         await orchestrator.AttachDefaultVideoAsync(_call, CancellationToken.None);
 
         Assert.True(device.Connected);
-        Assert.Equal("VP8", device.Parameters!.CodecName); // default until negotiated params are surfaced
+        Assert.Equal("VP8", device.Parameters!.CodecName); // no video negotiated on this call → transport default
 
         _channel.DeliverInboundVideoFrame(new CallVideoFrame([1, 2, 3], PayloadType: 96, RtpTimestamp: 9000, IsKeyFrame: true));
         var frame = Assert.Single(device.Received);
         Assert.Equal(new byte[] { 1, 2, 3 }, frame.Payload.ToArray());
         Assert.True(frame.IsKeyFrame);
+    }
+
+    [Fact]
+    public async Task Attach_hands_the_device_the_negotiated_video_codec_parameters()
+    {
+        var device = new RecordingVideoDevice();
+        using var orchestrator = BuildOrchestrator(device);
+        _call.SetMediaParameters(new CallMediaParameters
+        {
+            LocalEndPoint = new IPEndPoint(IPAddress.Loopback, 40000),
+            RemoteEndPoint = new IPEndPoint(IPAddress.Loopback, 40002),
+            PayloadType = 9,
+            ClockRate = 8000,
+            SamplesPerPacket = 160,
+            Video = new CallVideoParameters
+            {
+                PayloadType = 100,
+                CodecName = "H264",
+                ClockRate = 90_000,
+                LocalEndPoint = new IPEndPoint(IPAddress.Loopback, 40004),
+                RemoteEndPoint = new IPEndPoint(IPAddress.Loopback, 40006),
+            },
+        });
+        _call.TransitionTo(CallState.Ringing);
+        _call.TransitionTo(CallState.Connected);
+
+        await orchestrator.AttachDefaultVideoAsync(_call, CancellationToken.None);
+
+        Assert.True(device.Connected);
+        Assert.Equal("H264", device.Parameters!.CodecName);
+        Assert.Equal(100, device.Parameters.PayloadType);
+        Assert.Equal(90_000, device.Parameters.ClockRate);
     }
 
     [Fact]
