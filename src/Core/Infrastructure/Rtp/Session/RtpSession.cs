@@ -410,7 +410,15 @@ internal sealed class RtpSession : IRtpSession
                 {
                     break; // Socket disposed during shutdown.
                 }
-                catch (SocketException ex) when (!cancellationToken.IsCancellationRequested)
+                catch (SocketException) when (cancellationToken.IsCancellationRequested)
+                {
+                    // Torn down during shutdown. Windows surfaces the socket close as a
+                    // WSAECONNRESET ("connection forcibly closed") on the pending receive after a
+                    // prior send hit an ICMP port-unreachable; that must not fault the loop and
+                    // propagate out of DisposeAsync. Benign — stop receiving.
+                    break;
+                }
+                catch (SocketException ex)
                 {
                     _logger.LogWarning(ex, "RTP socket error on {LocalEndPoint}", _options.LocalEndPoint);
                 }
