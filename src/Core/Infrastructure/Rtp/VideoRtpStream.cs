@@ -49,6 +49,16 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
     private const long TransportCcOveruseThresholdMicros = 5_000; // 5 ms
     private const double TransportCcLossSmoothing = 0.1;
 
+    // AIMD recommended-bitrate policy (the ready-to-use recommendation the public API exposes). A
+    // gentle multiplicative back-off (GCC-like) with additive probing; SCReAM (RFC 8298) is the later
+    // upgrade. Clamped to a broad video range; the application sets its encoder to the recommendation.
+    private const long TransportCcInitialVideoBitrateBps = 1_000_000; // 1 Mbps start
+    private const long TransportCcMinVideoBitrateBps = 100_000;       // 100 kbps floor
+    private const long TransportCcMaxVideoBitrateBps = 5_000_000;     // 5 Mbps ceiling
+    private const long TransportCcBitrateIncreaseStepBps = 100_000;   // additive probe per healthy report
+    private const double TransportCcBitrateDecreaseFactor = 0.85;     // multiplicative back-off on congestion
+    private const double TransportCcBitrateLossThreshold = 0.1;       // ≥10% loss backs off regardless of delay
+
     private readonly RtpSession _rtp;
     private readonly DtlsMediaAttachment? _dtlsMedia;
 
@@ -215,6 +225,9 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
                 new TransportCcSendHistory(TransportCcSendHistoryCapacity),
                 new TransportCcDelayTrendEstimator(TransportCcDelaySmoothing, TransportCcOveruseThresholdMicros),
                 new TransportCcLossEstimator(TransportCcLossSmoothing),
+                new CongestionBitrateController(
+                    TransportCcInitialVideoBitrateBps, TransportCcMinVideoBitrateBps, TransportCcMaxVideoBitrateBps,
+                    TransportCcBitrateIncreaseStepBps, TransportCcBitrateDecreaseFactor, TransportCcBitrateLossThreshold),
                 Stopwatch.GetTimestamp, Stopwatch.Frequency,
                 loggerFactory.CreateLogger<TransportCcCongestionController>());
             _rtp.PacketSent += _transportCcCongestion.OnPacketSent;

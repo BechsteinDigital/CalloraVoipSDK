@@ -1,3 +1,4 @@
+using CalloraVoipSdk.Core.Application.Media;
 using CalloraVoipSdk.Core.Infrastructure.Rtcp.Wire;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.CongestionControl;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
@@ -15,10 +16,14 @@ public sealed class TransportCcCongestionControllerTests
 {
     private const byte ExtId = 5;
 
-    private static TransportCcCongestionController Controller(Func<long> clock) =>
+    private static CongestionBitrateController Bitrate() =>
+        new(initialBitrateBps: 1_000_000, minBitrateBps: 100_000, maxBitrateBps: 5_000_000,
+            increaseStepBps: 100_000, decreaseFactor: 0.5, lossThreshold: 0.1);
+
+    private static TransportCcCongestionController Controller(Func<long> clock, CongestionBitrateController? bitrate = null) =>
         new(ExtId, new RtcpPacketCodec(), new TransportCcSendHistory(64),
             new TransportCcDelayTrendEstimator(1.0, 100), new TransportCcLossEstimator(1.0),
-            clock, 1_000_000, NullLogger.Instance);
+            bitrate ?? Bitrate(), clock, 1_000_000, NullLogger.Instance);
 
     private static RtpPacket Stamped(ushort seq) => new()
     {
@@ -114,6 +119,53 @@ public sealed class TransportCcCongestionControllerTests
     }
 
     [Fact]
+    public void Overuse_feedback_lowers_the_recommended_bitrate_and_marks_quality_poor()
+    {
+        long clock = 0;
+        var controller = Controller(() => clock);
+        var raised = new List<long>();
+        controller.RecommendedBitrateChanged += bps => raised.Add(bps);
+
+        clock = 0;     controller.OnPacketSent(Stamped(1));
+        clock = 1_000; controller.OnPacketSent(Stamped(2));
+        clock = 2_000; controller.OnPacketSent(Stamped(3));
+
+        controller.OnControlDatagram(
+            FeedbackDatagram(Arrival(1, 10_000), Arrival(2, 11_250), Arrival(3, 12_500)));
+
+        Assert.Equal(CongestionSignal.Overusing, controller.Signal);
+        Assert.Equal(500_000, controller.RecommendedBitrateBps); // 1_000_000 × 0.5 back-off
+        Assert.Equal(NetworkQuality.Poor, controller.Quality);
+        Assert.Equal(new long[] { 500_000 }, raised);
+    }
+
+    [Fact]
+    public void Healthy_feedback_probes_the_recommended_bitrate_upward_and_stays_good()
+    {
+        long clock = 0;
+        var controller = Controller(() => clock);
+
+        clock = 0;     controller.OnPacketSent(Stamped(1));
+        clock = 1_000; controller.OnPacketSent(Stamped(2));
+        clock = 2_000; controller.OnPacketSent(Stamped(3));
+
+        controller.OnControlDatagram(
+            FeedbackDatagram(Arrival(1, 10_000), Arrival(2, 11_000), Arrival(3, 12_000)));
+
+        Assert.Equal(CongestionSignal.Normal, controller.Signal);
+        Assert.Equal(1_100_000, controller.RecommendedBitrateBps); // +100_000 additive probe
+        Assert.Equal(NetworkQuality.Good, controller.Quality);
+    }
+
+    [Fact]
+    public void Recommended_bitrate_starts_at_the_initial_value_before_any_feedback()
+    {
+        var controller = Controller(() => 0);
+        Assert.Equal(1_000_000, controller.RecommendedBitrateBps);
+        Assert.Equal(NetworkQuality.Good, controller.Quality);
+    }
+
+    [Fact]
     public void Rejects_invalid_construction()
     {
         var codec = new RtcpPacketCodec();
@@ -122,8 +174,10 @@ public sealed class TransportCcCongestionControllerTests
         var loss = new TransportCcLossEstimator(0.5);
 
         Assert.Throws<ArgumentNullException>(() => new TransportCcCongestionController(
-            ExtId, codec, history, trend, loss, null!, 1_000_000, NullLogger.Instance));
+            ExtId, codec, history, trend, loss, Bitrate(), null!, 1_000_000, NullLogger.Instance));
+        Assert.Throws<ArgumentNullException>(() => new TransportCcCongestionController(
+            ExtId, codec, history, trend, loss, null!, () => 0, 1_000_000, NullLogger.Instance));
         Assert.Throws<ArgumentOutOfRangeException>(() => new TransportCcCongestionController(
-            ExtId, codec, history, trend, loss, () => 0, 0, NullLogger.Instance));
+            ExtId, codec, history, trend, loss, Bitrate(), () => 0, 0, NullLogger.Instance));
     }
 }
