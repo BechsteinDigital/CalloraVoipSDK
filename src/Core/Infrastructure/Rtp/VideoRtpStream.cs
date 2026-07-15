@@ -1,7 +1,9 @@
+using System.Diagnostics;
 using CalloraVoipSdk.Core.Application.Media;
 using CalloraVoipSdk.Core.Domain.Calls;
 using CalloraVoipSdk.Core.Infrastructure.Dtls;
 using CalloraVoipSdk.Core.Infrastructure.Rtcp.Wire;
+using CalloraVoipSdk.Core.Infrastructure.Rtp.CongestionControl;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packetisation;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Retransmission;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Session;
@@ -52,6 +54,11 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
     private readonly ILogger<VideoRtpStream> _logger;
     private readonly byte _payloadType;
     private readonly VideoKeyFrameFeedback _keyFrameFeedback;
+
+    // Receive-side transport-cc feedback (draft-holmer): records inbound transport-wide sequence
+    // numbers and periodically reports arrivals to the sender for congestion control. Null unless the
+    // a=extmap was negotiated for this m-line — so a leg that did not offer it sends no feedback.
+    private readonly TransportCcFeedbackSender? _transportCcSender;
     private readonly CancellationTokenSource _lifetimeCts = new();
 
     // RTX retransmission (RFC 4588): retains sent packets so an inbound NACK can be answered
@@ -177,6 +184,17 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
             OnRetransmitRequested,
             loggerFactory.CreateLogger<VideoKeyFrameFeedback>(), _lifetimeCts.Token);
         _rtp.ControlPacketReceived += _keyFrameFeedback.OnControlDatagram;
+
+        // Transport-cc feedback (draft-holmer): when the a=extmap was negotiated for this m-line,
+        // report inbound arrivals to the sender for congestion control over the same RTCP-mux channel.
+        // Gate-off (null) otherwise — no feedback on a leg that did not offer the extension.
+        if (video.TransportWideCcExtensionId is { } transportCcExtensionId)
+        {
+            _transportCcSender = new TransportCcFeedbackSender(
+                new RtcpPacketCodec(), transportCcExtensionId, _rtp.LocalSsrc, _rtp.SendControlAsync,
+                Stopwatch.GetTimestamp, Stopwatch.Frequency,
+                loggerFactory.CreateLogger<TransportCcFeedbackSender>(), _lifetimeCts.Token);
+        }
 
         // DTLS-SRTP for the video 5-tuple: same identity, role, and peer fingerprint as
         // audio (the answer commits one a=setup per session in this SDK), own handshake.
@@ -325,6 +343,10 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
             _keyFrameFeedback.OnLoss(packet.Ssrc, missing);
         _lastSequence = packet.SequenceNumber;
         _hasReceived = true;
+
+        // Report the arrival to transport-cc congestion control (a no-op when the extension was not
+        // negotiated). Runs on this receive-loop thread — the sender's single consumer.
+        _transportCcSender?.OnVideoPacketReceived(packet);
 
         Enqueue(packet);
     }
