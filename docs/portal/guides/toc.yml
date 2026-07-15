@@ -6,6 +6,8 @@
   href: audio-devices.md
 - name: Media tap
   href: media-tap.md
+- name: Video calls
+  href: video-calls.md
 - name: Bridge two calls
   href: bridge-calls.md
 - name: Recording / playback

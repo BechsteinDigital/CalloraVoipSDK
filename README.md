@@ -15,7 +15,7 @@ CalloraVoipSdk is a .NET VoIP SDK (net8.0 / net9.0 / net10.0) for building softp
 It exposes a stable, developer-friendly API through `VoipClient` while keeping transport, media and device internals behind a clean facade — and opens up through a module registry for building products like AI voice agents on top.
 
 📖 **Documentation:** [bechsteindigital.github.io/CalloraVoipSDK](https://bechsteindigital.github.io/CalloraVoipSDK/)
-🧪 **Examples:** [`examples/`](examples) — runnable console samples (BasicCalling, Dialer, Transfer, CustomAudio)
+🧪 **Examples:** [`examples/`](examples) — runnable console samples (BasicCalling, Dialer, Transfer, CustomAudio, VideoCalling)
 
 ## Why CalloraVoipSdk
 
@@ -59,6 +59,12 @@ Available in the repository today:
   media address for CGNAT / static 1:1 NAT (`SipAccount.PublicMediaHost`)
 - Per-call media tap: attach frame receivers/senders to any call for bots, bridging
   and streaming scenarios (`client.Media.CreateReceiver()/CreateSender()`)
+- Encoded video (transport-only): send/receive encoded frames
+  (`client.Media.CreateVideoReceiver()/CreateVideoSender()`), a ready-to-use recommended
+  outbound bitrate + `NetworkQuality` from transport-cc feedback, inbound keyframe flags and
+  RTCP PLI/FIR keyframe-request feedback, plus a default-video convenience
+  (`client.AttachDefaultVideoAsync(call)` with an application-supplied `IVideoDevice` codec).
+  The SDK never encodes/decodes — bring your own VP8/H.264 codec
 - Module registry (`client.Modules`) as the extension point for separately shipped
   feature modules
 - Configurable audio codec preference (`SdkConfiguration.PreferredAudioCodecs`)
@@ -360,6 +366,35 @@ using var client = new VoipClient(new SdkConfiguration
     PreferredAudioCodecs = ["PCMU"]
 });
 ```
+
+### 8. Video call (bring your own codec)
+
+Video is **transport-only** — the SDK moves encoded frames but never encodes or decodes.
+Attach a receiver/sender to a call and drive your own VP8/H.264 codec. The SDK hands you a
+ready-to-use recommended bitrate and surfaces peer keyframe requests.
+
+```csharp
+using CalloraVoipSdk.Core.Application.Media;
+
+using var videoIn = client.Media.CreateVideoReceiver();
+using var videoOut = client.Media.CreateVideoSender();
+videoIn.AttachToCall(call);
+videoOut.AttachToCall(call);
+
+// Inbound: decode encoded frames yourself (handler runs on the media path — never block).
+videoIn.FrameReceived += (_, e) => myDecoder.Decode(e.Frame.Payload);
+
+// The payoff: let the SDK size your encoder to the network.
+videoOut.RecommendedBitrateChanged += (_, e) => encoder.SetBitrate(e.RecommendedBitrateBps);
+videoOut.KeyFrameRequested += (_, _) => encoder.ForceKeyFrame();
+
+// Outbound: send already-encoded frames.
+await videoOut.SendAsync(new VideoFrame(encodedBytes, PayloadType: 96, RtpTimestamp: ts, IsKeyFrame: false));
+```
+
+Prefer the "audio-simple" path? Package your codec behind an `IVideoDevice`, register it in
+DI, and call `await client.AttachDefaultVideoAsync(call)`. Full walkthrough:
+[Video calls guide](https://bechsteindigital.github.io/CalloraVoipSDK/guides/video-calls.html).
 
 ## Extending the SDK — module registry
 
