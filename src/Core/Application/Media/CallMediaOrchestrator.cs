@@ -195,14 +195,21 @@ internal sealed class CallMediaOrchestrator : IDisposable
         channel.SetDtmfSendDelegate((toneCode, durationMs, ct) =>
             session.SendDtmfAsync(toneCode, durationMs, ct));
 
-        // Surface a running ICE transport state: on RFC 7675 consent loss the session ceases media and
-        // raises MediaConsentLost — move the call to Disconnected so the application can react (tear down
-        // or, later, trigger an ICE restart). Only ICE legs raise it, so no gating is needed here.
+        // Surface a running ICE transport state from the consent monitor (RFC 7675): a transient degrade
+        // → Disconnected (media keeps flowing, may recover), a later recovery → Connected, and consent
+        // loss/expiry → Failed (media has ceased). The application can react (tear down or, later, trigger
+        // an ICE restart). Only ICE legs raise these, so no gating is needed here.
         Action? consentLostHandler = null;
+        Action? connectivityDegradedHandler = null;
+        Action? connectivityRecoveredHandler = null;
         if (sdkCall is not null)
         {
-            consentLostHandler = () => sdkCall.SetIceConnectionState(Domain.Calls.CallIceState.Disconnected);
+            consentLostHandler = () => sdkCall.SetIceConnectionState(Domain.Calls.CallIceState.Failed);
+            connectivityDegradedHandler = () => sdkCall.SetIceConnectionState(Domain.Calls.CallIceState.Disconnected);
+            connectivityRecoveredHandler = () => sdkCall.SetIceConnectionState(Domain.Calls.CallIceState.Connected);
             session.MediaConsentLost += consentLostHandler;
+            session.MediaConnectivityDegraded += connectivityDegradedHandler;
+            session.MediaConnectivityRecovered += connectivityRecoveredHandler;
         }
 
         // Video sub-stream (WebRTC phase 2): present only when the session negotiated video —
@@ -253,7 +260,9 @@ internal sealed class CallMediaOrchestrator : IDisposable
             inboundVideoHandler,
             congestionHandler,
             keyFrameHandler,
-            consentLostHandler);
+            consentLostHandler,
+            connectivityDegradedHandler,
+            connectivityRecoveredHandler);
         _active[call.CallId] = entry;
         _activity[call.CallId] = new MediaActivity { Call = call, LastActivityUtc = DateTimeOffset.UtcNow };
 
@@ -390,6 +399,10 @@ internal sealed class CallMediaOrchestrator : IDisposable
             entry.Video.KeyFrameRequested -= entry.KeyFrameHandler;
         if (entry.ConsentLostHandler is not null)
             entry.Session.MediaConsentLost -= entry.ConsentLostHandler;
+        if (entry.ConnectivityDegradedHandler is not null)
+            entry.Session.MediaConnectivityDegraded -= entry.ConnectivityDegradedHandler;
+        if (entry.ConnectivityRecoveredHandler is not null)
+            entry.Session.MediaConnectivityRecovered -= entry.ConnectivityRecoveredHandler;
         entry.Channel.SetVideoSendDelegate(null);
     }
 

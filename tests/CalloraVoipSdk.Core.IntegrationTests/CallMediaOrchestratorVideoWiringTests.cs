@@ -209,11 +209,39 @@ public sealed class CallMediaOrchestratorVideoWiringTests
     }
 
     [Fact]
-    public void Consent_loss_moves_the_call_to_disconnected()
+    public void Consent_loss_moves_the_call_to_failed()
+    {
+        var (orchestrator, session, call) = BuildConsentWiredCall();
+        using var _o = orchestrator;
+        var states = new List<CallIceState>();
+        ((ICall)call).IceConnectionStateChanged += (_, e) => states.Add(e.NewState);
+
+        session.RaiseMediaConsentLost(); // RFC 7675 consent expired → transmission ceased
+
+        Assert.Equal(CallIceState.Failed, ((ICall)call).IceConnectionState);
+        Assert.Equal([CallIceState.Failed], states);
+    }
+
+    [Fact]
+    public void Connectivity_degrade_then_recover_moves_the_call_disconnected_then_connected()
+    {
+        var (orchestrator, session, call) = BuildConsentWiredCall();
+        using var _o = orchestrator;
+        var states = new List<CallIceState>();
+        ((ICall)call).IceConnectionStateChanged += (_, e) => states.Add(e.NewState);
+
+        session.RaiseMediaConnectivityDegraded(); // transient miss, media keeps flowing
+        session.RaiseMediaConnectivityRecovered(); // next check answered
+
+        Assert.Equal(CallIceState.Connected, ((ICall)call).IceConnectionState);
+        Assert.Equal([CallIceState.Disconnected, CallIceState.Connected], states);
+    }
+
+    private static (CallMediaOrchestrator Orchestrator, FakeVideoSession Session, Call Call) BuildConsentWiredCall()
     {
         var session = new FakeVideoSession(video: null);
         var channel = new RecordingCallChannel();
-        using var orchestrator = new CallMediaOrchestrator(
+        var orchestrator = new CallMediaOrchestrator(
             new FakeSessionFactory(session),
             NullLoggerFactory.Instance,
             new RtcpPacketCodec());
@@ -221,15 +249,8 @@ public sealed class CallMediaOrchestratorVideoWiringTests
             CallId.New(), CallDirection.Inbound, "sip:remote@test.invalid",
             channel, new FakePhoneLine(), NullLogger<Call>.Instance);
         orchestrator.AttachCall(call, channel);
-        channel.RaiseMediaNegotiated(VideoParams()); // sets up the media session → wires MediaConsentLost
-
-        var states = new List<CallIceState>();
-        ((ICall)call).IceConnectionStateChanged += (_, e) => states.Add(e.NewState);
-
-        session.RaiseMediaConsentLost(); // RFC 7675 consent expired on the media 5-tuple → transmission ceases
-
-        Assert.Equal(CallIceState.Disconnected, ((ICall)call).IceConnectionState);
-        Assert.Equal([CallIceState.Disconnected], states);
+        channel.RaiseMediaNegotiated(VideoParams()); // sets up the media session → wires the consent handlers
+        return (orchestrator, session, call);
     }
 
     private static async Task WaitUntilAsync(Func<bool> condition)
@@ -287,6 +308,10 @@ public sealed class CallMediaOrchestratorVideoWiringTests
 
         public event Action? MediaConsentLost;
         public void RaiseMediaConsentLost() => MediaConsentLost?.Invoke();
+        public event Action? MediaConnectivityDegraded;
+        public void RaiseMediaConnectivityDegraded() => MediaConnectivityDegraded?.Invoke();
+        public event Action? MediaConnectivityRecovered;
+        public void RaiseMediaConnectivityRecovered() => MediaConnectivityRecovered?.Invoke();
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }

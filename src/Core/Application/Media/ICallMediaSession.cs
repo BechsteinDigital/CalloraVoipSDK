@@ -66,10 +66,23 @@ internal interface ICallMediaSession : IAsyncDisposable
 
     /// <summary>
     /// Raised once when RFC 7675 ICE consent is lost for this leg's media path and transmission ceases.
-    /// Lets the orchestrator surface a running <see cref="Core.Domain.Calls.CallIceState.Disconnected"/>
+    /// Lets the orchestrator surface a running <see cref="Core.Domain.Calls.CallIceState.Failed"/>
     /// to the call. Audio-only or non-ICE legs never raise it.
     /// </summary>
     event Action? MediaConsentLost;
+
+    /// <summary>
+    /// Raised when a consent check first goes unanswered while still inside the consent window — a
+    /// transient degrade (surfaced as <see cref="Core.Domain.Calls.CallIceState.Disconnected"/>) that
+    /// does not cease transmission. Audio-only or non-ICE legs never raise it.
+    /// </summary>
+    event Action? MediaConnectivityDegraded;
+
+    /// <summary>
+    /// Raised when a consent check is answered again after a degrade — the path recovered (surfaced as
+    /// <see cref="Core.Domain.Calls.CallIceState.Connected"/>). Audio-only or non-ICE legs never raise it.
+    /// </summary>
+    event Action? MediaConnectivityRecovered;
 
     /// <summary>
     /// Negotiated video sub-stream (WebRTC phase 2); <see langword="null"/> for an

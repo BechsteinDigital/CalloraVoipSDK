@@ -29,7 +29,9 @@ internal static class IceMediaConsentSessionFactory
         IceMediaParameters parameters,
         Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask> sendRaw,
         Action onConsentLost,
-        ILoggerFactory loggerFactory)
+        ILoggerFactory loggerFactory,
+        Action? onConnectivityDegraded = null,
+        Action? onConnectivityRecovered = null)
     {
         ArgumentNullException.ThrowIfNull(parameters);
         ArgumentNullException.ThrowIfNull(sendRaw);
@@ -56,6 +58,8 @@ internal static class IceMediaConsentSessionFactory
             parameters.IceControlling,
             IceTieBreaker.Derive(parameters.LocalIcePwd),
             onConsentLost,
-            loggerFactory);
+            loggerFactory,
+            onConnectivityDegraded: onConnectivityDegraded,
+            onConnectivityRecovered: onConnectivityRecovered);
     }
 }
