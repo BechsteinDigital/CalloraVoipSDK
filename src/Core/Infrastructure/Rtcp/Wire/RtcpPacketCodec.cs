@@ -77,7 +77,7 @@ internal sealed class RtcpPacketCodec : IRtcpPacketCodec
                 RtcpPacketType.ExtendedReport => DecodeXr(body),
                 // Feedback (RFC 4585/5104): the low 5 header bits carry the FMT, not an RC.
                 RtcpPacketType.TransportFeedback or RtcpPacketType.PayloadFeedback
-                    => RtcpFeedbackCodec.Decode(pt, count, body),
+                    => DecodeFeedbackTolerant(pt, count, body),
                 _ => null,
             };
 
@@ -87,6 +87,23 @@ internal sealed class RtcpPacketCodec : IRtcpPacketCodec
         }
 
         return packets;
+    }
+
+    // RFC 3550 §6.1: a malformed feedback packet must not discard the surrounding compound
+    // (typically the SR/RR it starts with). The feedback sub-codecs validate strictly and throw
+    // on a truncated or inconsistent FCI; at the compound layer that means "skip just this packet"
+    // (its length field already advanced the read offset), not "drop the whole datagram". Scoped to
+    // ArgumentException so a genuine decoder bug (e.g. IndexOutOfRange) still surfaces.
+    private static RtcpPacket? DecodeFeedbackTolerant(RtcpPacketType pt, int fmt, ReadOnlySpan<byte> body)
+    {
+        try
+        {
+            return RtcpFeedbackCodec.Decode(pt, fmt, body);
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
     }
 
     // -------------------------------------------------------------------------
