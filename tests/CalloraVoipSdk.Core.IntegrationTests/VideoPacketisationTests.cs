@@ -63,7 +63,7 @@ public sealed class VideoPacketisationTests
         byte[]? rebuilt = null;
         for (var i = 0; i < payloads.Count; i++)
         {
-            var done = depacketiser.TryProcess(payloads[i].Payload, 9000, payloads[i].IsLastOfFrame, out rebuilt);
+            var done = depacketiser.TryProcess(payloads[i].Payload, 9000, payloads[i].IsLastOfFrame, out rebuilt, out _);
             Assert.Equal(i == payloads.Count - 1, done);
         }
 
@@ -87,7 +87,7 @@ public sealed class VideoPacketisationTests
         pps.CopyTo(stapA, 5 + sps.Length);
 
         var depacketiser = new H264Depacketiser();
-        Assert.True(depacketiser.TryProcess(stapA, 9000, marker: true, out var frame));
+        Assert.True(depacketiser.TryProcess(stapA, 9000, marker: true, out var frame, out _));
         Assert.Equal(new[] { sps, pps }, AnnexBParser.ParseNalUnits(frame!).Select(n => n.ToArray()));
     }
 
@@ -101,11 +101,11 @@ public sealed class VideoPacketisationTests
 
         // Feed from the second fragment on — no frame may ever surface.
         foreach (var p in payloads.Skip(1))
-            Assert.False(depacketiser.TryProcess(p.Payload, 9000, p.IsLastOfFrame, out _));
+            Assert.False(depacketiser.TryProcess(p.Payload, 9000, p.IsLastOfFrame, out _, out _));
 
         // The next intact frame still assembles after the discard.
         var next = new H264Packetiser().Packetise(AnnexB((Nal(0x61, 50), false)), 1200);
-        Assert.True(depacketiser.TryProcess(next[0].Payload, 9020, marker: true, out var frame));
+        Assert.True(depacketiser.TryProcess(next[0].Payload, 9020, marker: true, out var frame, out _));
         Assert.NotNull(frame);
     }
 
@@ -116,7 +116,7 @@ public sealed class VideoPacketisationTests
     public void H264_malformed_payloads_are_discarded(byte[] payload)
     {
         var depacketiser = new H264Depacketiser();
-        Assert.False(depacketiser.TryProcess(payload, 9000, marker: true, out var frame));
+        Assert.False(depacketiser.TryProcess(payload, 9000, marker: true, out var frame, out _));
         Assert.Null(frame);
     }
 
@@ -137,7 +137,7 @@ public sealed class VideoPacketisationTests
         var depacketiser = new H264Depacketiser();
 
         // First fragment (S=1) delivered with a lying marker — truncated fragment run.
-        Assert.False(depacketiser.TryProcess(payloads[0].Payload, 9000, marker: true, out var frame));
+        Assert.False(depacketiser.TryProcess(payloads[0].Payload, 9000, marker: true, out var frame, out _));
         Assert.Null(frame);
     }
 
@@ -147,10 +147,10 @@ public sealed class VideoPacketisationTests
         var payloads = new H264Packetiser().Packetise(AnnexB((Nal(0x65, 3000), false)), 1200);
         var depacketiser = new H264Depacketiser();
 
-        Assert.False(depacketiser.TryProcess(payloads[0].Payload, 9000, marker: false, out _));
+        Assert.False(depacketiser.TryProcess(payloads[0].Payload, 9000, marker: false, out _, out _));
         // A second S=1 without a closing E is a protocol violation — fail closed.
-        Assert.False(depacketiser.TryProcess(payloads[0].Payload, 9000, marker: false, out _));
-        Assert.False(depacketiser.TryProcess(payloads[^1].Payload, 9000, marker: true, out var frame));
+        Assert.False(depacketiser.TryProcess(payloads[0].Payload, 9000, marker: false, out _, out _));
+        Assert.False(depacketiser.TryProcess(payloads[^1].Payload, 9000, marker: true, out var frame, out _));
         Assert.Null(frame);
     }
 
@@ -162,8 +162,8 @@ public sealed class VideoPacketisationTests
         var second = new H264Packetiser().Packetise(AnnexB((Nal(0x65, 60), false)), 1200);
 
         var depacketiser = new H264Depacketiser();
-        Assert.False(depacketiser.TryProcess(first[0].Payload, 1000, marker: false, out _));
-        Assert.True(depacketiser.TryProcess(second[0].Payload, 4600, marker: true, out var frame));
+        Assert.False(depacketiser.TryProcess(first[0].Payload, 1000, marker: false, out _, out _));
+        Assert.True(depacketiser.TryProcess(second[0].Payload, 4600, marker: true, out var frame, out _));
 
         // Only the second access unit surfaces — the half frame was discarded.
         var nals = AnnexBParser.ParseNalUnits(frame!);
@@ -198,7 +198,7 @@ public sealed class VideoPacketisationTests
         byte[]? rebuilt = null;
         for (var i = 0; i < payloads.Count; i++)
         {
-            var done = depacketiser.TryProcess(payloads[i].Payload, 9000, payloads[i].IsLastOfFrame, out rebuilt);
+            var done = depacketiser.TryProcess(payloads[i].Payload, 9000, payloads[i].IsLastOfFrame, out rebuilt, out _);
             Assert.Equal(i == payloads.Count - 1, done);
         }
 
@@ -212,7 +212,7 @@ public sealed class VideoPacketisationTests
         byte[] payload = [0x90, 0x80, 0x81, 0x02, 0xAA, 0xBB, 0xCC];
 
         var depacketiser = new Vp8Depacketiser();
-        Assert.True(depacketiser.TryProcess(payload, 9000, marker: true, out var frame));
+        Assert.True(depacketiser.TryProcess(payload, 9000, marker: true, out var frame, out _));
         Assert.Equal(new byte[] { 0xAA, 0xBB, 0xCC }, frame);
     }
 
@@ -224,7 +224,7 @@ public sealed class VideoPacketisationTests
     public void Vp8_all_extension_layouts_are_skipped(byte[] payload)
     {
         var depacketiser = new Vp8Depacketiser();
-        Assert.True(depacketiser.TryProcess(payload, 9000, marker: true, out var frame));
+        Assert.True(depacketiser.TryProcess(payload, 9000, marker: true, out var frame, out _));
         Assert.Equal(new byte[] { 0xAA, 0xBB }, frame);
     }
 
@@ -236,8 +236,8 @@ public sealed class VideoPacketisationTests
         var second = new Vp8Packetiser().Packetise(secondFrame, maxPayloadSize: 1200);
 
         var depacketiser = new Vp8Depacketiser();
-        Assert.False(depacketiser.TryProcess(first[0].Payload, 1000, marker: false, out _));
-        Assert.True(depacketiser.TryProcess(second[0].Payload, 4600, marker: true, out var frame));
+        Assert.False(depacketiser.TryProcess(first[0].Payload, 1000, marker: false, out _, out _));
+        Assert.True(depacketiser.TryProcess(second[0].Payload, 4600, marker: true, out var frame, out _));
         Assert.Equal(secondFrame, frame);
     }
 
@@ -248,7 +248,80 @@ public sealed class VideoPacketisationTests
 
         var depacketiser = new Vp8Depacketiser();
         foreach (var p in payloads.Skip(1))
-            Assert.False(depacketiser.TryProcess(p.Payload, 9000, p.IsLastOfFrame, out _));
+            Assert.False(depacketiser.TryProcess(p.Payload, 9000, p.IsLastOfFrame, out _, out _));
+    }
+
+    // ── Keyframe classification (inbound IsKeyFrame) ─────────────────────────────
+
+    [Fact]
+    public void H264_idr_single_nal_is_classified_as_keyframe()
+    {
+        var payloads = new H264Packetiser().Packetise(AnnexB((Nal(0x65, 50), false)), 1200); // type 5 = IDR
+        var depacketiser = new H264Depacketiser();
+
+        Assert.True(depacketiser.TryProcess(payloads[0].Payload, 9000, marker: true, out _, out var isKeyFrame));
+        Assert.True(isKeyFrame);
+    }
+
+    [Fact]
+    public void H264_non_idr_slice_is_not_a_keyframe()
+    {
+        var payloads = new H264Packetiser().Packetise(AnnexB((Nal(0x61, 50), false)), 1200); // type 1 = non-IDR
+        var depacketiser = new H264Depacketiser();
+
+        Assert.True(depacketiser.TryProcess(payloads[0].Payload, 9000, marker: true, out _, out var isKeyFrame));
+        Assert.False(isKeyFrame);
+    }
+
+    [Fact]
+    public void H264_fragmented_idr_is_classified_as_keyframe()
+    {
+        var payloads = new H264Packetiser().Packetise(AnnexB((Nal(0x65, 3000), false)), 1200); // FU-A run
+        var depacketiser = new H264Depacketiser();
+
+        var isKeyFrame = false;
+        for (var i = 0; i < payloads.Count; i++)
+            depacketiser.TryProcess(payloads[i].Payload, 9000, payloads[i].IsLastOfFrame, out _, out isKeyFrame);
+
+        Assert.True(isKeyFrame);
+    }
+
+    [Fact]
+    public void H264_stap_a_carrying_an_idr_is_a_keyframe()
+    {
+        var sps = Nal(0x67, 8);
+        var idr = Nal(0x65, 20);
+        var stapA = new byte[1 + 2 + sps.Length + 2 + idr.Length];
+        stapA[0] = 24; // STAP-A
+        stapA[1] = 0; stapA[2] = (byte)sps.Length;
+        sps.CopyTo(stapA, 3);
+        stapA[3 + sps.Length] = 0; stapA[4 + sps.Length] = (byte)idr.Length;
+        idr.CopyTo(stapA, 5 + sps.Length);
+
+        var depacketiser = new H264Depacketiser();
+        Assert.True(depacketiser.TryProcess(stapA, 9000, marker: true, out _, out var isKeyFrame));
+        Assert.True(isKeyFrame);
+    }
+
+    [Fact]
+    public void Vp8_frame_with_p_bit_clear_is_a_keyframe()
+    {
+        byte[] payload = [0x10, 0x00, 0xAA, 0xBB]; // S=1/PID=0 descriptor; VP8 header P=0 → key frame
+        var depacketiser = new Vp8Depacketiser();
+
+        Assert.True(depacketiser.TryProcess(payload, 9000, marker: true, out var frame, out var isKeyFrame));
+        Assert.True(isKeyFrame);
+        Assert.Equal(new byte[] { 0x00, 0xAA, 0xBB }, frame); // the VP8 header byte stays part of the frame
+    }
+
+    [Fact]
+    public void Vp8_frame_with_p_bit_set_is_not_a_keyframe()
+    {
+        byte[] payload = [0x10, 0x01, 0xAA, 0xBB]; // VP8 header P=1 → inter frame
+        var depacketiser = new Vp8Depacketiser();
+
+        Assert.True(depacketiser.TryProcess(payload, 9000, marker: true, out _, out var isKeyFrame));
+        Assert.False(isKeyFrame);
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────

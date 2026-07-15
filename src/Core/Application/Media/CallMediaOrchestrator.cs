@@ -197,18 +197,19 @@ internal sealed class CallMediaOrchestrator : IDisposable
 
         // Video sub-stream (WebRTC phase 2): present only when the session negotiated video —
         // wire it symmetrically to audio. The SDK is transport-only: the negotiated payload type
-        // is fixed by the codec, and the frame's RTP timestamp drives packetisation. Inbound
-        // keyframe classification is not yet surfaced by the depacketiser, so IsKeyFrame is left
-        // false until that follow-up lands.
+        // is fixed by the codec, and the frame's RTP timestamp drives packetisation. The
+        // depacketiser classifies each reassembled frame, so IsKeyFrame reflects the real intra
+        // flag (VP8 P-bit / H.264 IDR).
         var video = session.Video;
-        Action<byte[], uint>? inboundVideoHandler = null;
+        Action<byte[], uint, bool>? inboundVideoHandler = null;
         Action? congestionHandler = null;
+        Action? keyFrameHandler = null;
         if (video is not null)
         {
             var videoPayloadType = video.PayloadType;
-            inboundVideoHandler = (encodedFrame, rtpTimestamp) =>
+            inboundVideoHandler = (encodedFrame, rtpTimestamp, isKeyFrame) =>
                 channel.DeliverInboundVideoFrame(
-                    new CallVideoFrame(encodedFrame, videoPayloadType, rtpTimestamp, IsKeyFrame: false));
+                    new CallVideoFrame(encodedFrame, videoPayloadType, rtpTimestamp, isKeyFrame));
             video.FrameReceived += inboundVideoHandler;
             channel.SetVideoSendDelegate((frame, ct) => video.SendFrameAsync(frame.Payload, frame.RtpTimestamp, ct));
 
@@ -219,6 +220,11 @@ internal sealed class CallMediaOrchestrator : IDisposable
                 sdkCall.SetVideoCongestion(video.RecommendedBitrateBps, video.NetworkQuality);
                 congestionHandler = () => sdkCall.SetVideoCongestion(video.RecommendedBitrateBps, video.NetworkQuality);
                 video.CongestionUpdated += congestionHandler;
+
+                // Forward the peer's RTCP PLI/FIR keyframe request to the public video sender so the
+                // application's encoder can emit an intra frame next.
+                keyFrameHandler = () => sdkCall.RaiseVideoKeyFrameRequested();
+                video.KeyFrameRequested += keyFrameHandler;
             }
         }
 
@@ -235,7 +241,8 @@ internal sealed class CallMediaOrchestrator : IDisposable
             qualityHandler,
             video,
             inboundVideoHandler,
-            congestionHandler);
+            congestionHandler,
+            keyFrameHandler);
         _active[call.CallId] = entry;
         _activity[call.CallId] = new MediaActivity { Call = call, LastActivityUtc = DateTimeOffset.UtcNow };
 
@@ -368,6 +375,8 @@ internal sealed class CallMediaOrchestrator : IDisposable
             entry.Video.FrameReceived -= entry.InboundVideoHandler;
         if (entry.Video is not null && entry.CongestionHandler is not null)
             entry.Video.CongestionUpdated -= entry.CongestionHandler;
+        if (entry.Video is not null && entry.KeyFrameHandler is not null)
+            entry.Video.KeyFrameRequested -= entry.KeyFrameHandler;
         entry.Channel.SetVideoSendDelegate(null);
     }
 

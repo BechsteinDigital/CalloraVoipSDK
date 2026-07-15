@@ -12,12 +12,14 @@ internal sealed class Vp8Depacketiser : IVideoDepacketiser
 {
     private readonly MemoryStream _frame = new();
     private bool _frameActive;
+    private bool _isKeyFrame;
     private uint _timestamp;
 
     /// <inheritdoc />
-    public bool TryProcess(ReadOnlyMemory<byte> rtpPayload, uint rtpTimestamp, bool marker, out byte[]? frame)
+    public bool TryProcess(ReadOnlyMemory<byte> rtpPayload, uint rtpTimestamp, bool marker, out byte[]? frame, out bool isKeyFrame)
     {
         frame = null;
+        isKeyFrame = false;
 
         // Frame boundary without a marker (markerless senders): never merge the half
         // frame into the next one.
@@ -36,6 +38,9 @@ internal sealed class Vp8Depacketiser : IVideoDepacketiser
         {
             _frame.SetLength(0);
             _frameActive = true;
+            // First byte of the VP8 payload header (RFC 7741 §4.3 → RFC 6386 §9.1): bit 0
+            // is P (inverse key-frame flag); P=0 marks a key frame.
+            _isKeyFrame = (payload[headerLength] & 0x01) == 0;
         }
         else if (!_frameActive)
         {
@@ -48,6 +53,7 @@ internal sealed class Vp8Depacketiser : IVideoDepacketiser
             return false;
 
         frame = _frame.ToArray();
+        isKeyFrame = _isKeyFrame;
         _frame.SetLength(0);
         _frameActive = false;
         return frame.Length > 0;
@@ -58,6 +64,7 @@ internal sealed class Vp8Depacketiser : IVideoDepacketiser
     {
         _frame.SetLength(0);
         _frameActive = false;
+        _isKeyFrame = false;
     }
 
     private bool Discard()

@@ -13,15 +13,21 @@ internal sealed class H264Depacketiser : IVideoDepacketiser
 {
     private static readonly byte[] StartCode = [0, 0, 0, 1];
 
+    // NAL unit type 5 = coded slice of an IDR picture (RFC 6184 / H.264 §7.4.1) — its
+    // presence in the access unit marks a key frame.
+    private const int IdrNalType = 5;
+
     private readonly MemoryStream _frame = new();
     private readonly MemoryStream _fragment = new();
     private bool _fragmentActive;
+    private bool _isKeyFrame;
     private uint _timestamp;
 
     /// <inheritdoc />
-    public bool TryProcess(ReadOnlyMemory<byte> rtpPayload, uint rtpTimestamp, bool marker, out byte[]? frame)
+    public bool TryProcess(ReadOnlyMemory<byte> rtpPayload, uint rtpTimestamp, bool marker, out byte[]? frame, out bool isKeyFrame)
     {
         frame = null;
+        isKeyFrame = false;
 
         // A timestamp change without a closing marker means the sender started the next
         // access unit (markerless senders exist) — the half frame must never merge into it.
@@ -59,7 +65,9 @@ internal sealed class H264Depacketiser : IVideoDepacketiser
             return false;
 
         frame = _frame.ToArray();
+        isKeyFrame = _isKeyFrame;
         _frame.SetLength(0);
+        _isKeyFrame = false;
         return true;
     }
 
@@ -69,6 +77,7 @@ internal sealed class H264Depacketiser : IVideoDepacketiser
         _frame.SetLength(0);
         _fragment.SetLength(0);
         _fragmentActive = false;
+        _isKeyFrame = false;
     }
 
     private bool Discard()
@@ -81,6 +90,9 @@ internal sealed class H264Depacketiser : IVideoDepacketiser
     {
         if (_fragmentActive)
             return false; // a new NAL inside an open FU-A run means lost fragments
+
+        if ((nal[0] & 0x1F) == IdrNalType)
+            _isKeyFrame = true;
 
         _frame.Write(StartCode);
         _frame.Write(nal);
@@ -103,6 +115,9 @@ internal sealed class H264Depacketiser : IVideoDepacketiser
             offset += 2;
             if (size == 0 || offset + size > payload.Length)
                 return false;
+
+            if ((payload[offset] & 0x1F) == IdrNalType)
+                _isKeyFrame = true;
 
             _frame.Write(StartCode);
             _frame.Write(payload.Slice(offset, size));
@@ -127,6 +142,9 @@ internal sealed class H264Depacketiser : IVideoDepacketiser
         {
             if (_fragmentActive)
                 return false; // S=1 inside an open run — protocol violation, fail closed
+
+            if ((fuHeader & 0x1F) == IdrNalType)
+                _isKeyFrame = true;
 
             _fragment.SetLength(0);
             _fragment.WriteByte((byte)((payload[0] & 0xE0) | (fuHeader & 0x1F)));

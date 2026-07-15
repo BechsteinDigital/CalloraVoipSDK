@@ -34,7 +34,7 @@ public sealed class VideoRtxReceiveE2eTests
 
         var delivered = new List<int>();
         var gate = new object();
-        receiver.Video!.FrameReceived += (frame, _) =>
+        receiver.Video!.FrameReceived += (frame, _, _) =>
         {
             lock (gate) delivered.Add(frame[0]); // frame[0] is the frame's id
         };
@@ -72,7 +72,7 @@ public sealed class VideoRtxReceiveE2eTests
 
         var delivered = new List<int>();
         var gate = new object();
-        receiver.Video!.FrameReceived += (frame, _) =>
+        receiver.Video!.FrameReceived += (frame, _, _) =>
         {
             lock (gate) delivered.Add(frame[0]);
         };

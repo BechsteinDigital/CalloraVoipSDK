@@ -205,4 +205,45 @@ public sealed class PublicVideoTapContractTests : IDisposable
 
         Assert.Equal(0, count);
     }
+
+    [Fact]
+    public void Sender_surfaces_the_calls_keyframe_request()
+    {
+        using IVideoSender sender = _media.CreateVideoSender();
+        sender.AttachToCall(_call);
+        var count = 0;
+        sender.KeyFrameRequested += (_, _) => count++;
+
+        _call.RaiseVideoKeyFrameRequested();
+
+        Assert.Equal(1, count);
+    }
+
+    [Fact]
+    public void Detached_sender_stops_receiving_keyframe_requests()
+    {
+        using IVideoSender sender = _media.CreateVideoSender();
+        sender.AttachToCall(_call);
+        var count = 0;
+        sender.KeyFrameRequested += (_, _) => count++;
+
+        sender.Detach();
+        _call.RaiseVideoKeyFrameRequested();
+
+        Assert.Equal(0, count);
+    }
+
+    [Fact]
+    public void Disposed_sender_unsubscribes_from_keyframe_requests()
+    {
+        IVideoSender sender = _media.CreateVideoSender();
+        sender.AttachToCall(_call);
+        var count = 0;
+        sender.KeyFrameRequested += (_, _) => count++;
+
+        sender.Dispose();
+        _call.RaiseVideoKeyFrameRequested();
+
+        Assert.Equal(0, count);
+    }
 }
