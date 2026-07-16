@@ -17,4 +17,12 @@ internal static class RtpHeaderExtensionUris
     /// </summary>
     internal const string TransportWideCc =
         "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01";
+
+    /// <summary>
+    /// Media identification (MID) SDES header extension (RFC 9143 / RFC 8843 §15). Carries the m-line's
+    /// <c>a=mid</c> token per packet so a BUNDLE receiver can route an inbound packet to the right media
+    /// section before an SSRC is latched. This is the exact URN browsers/libwebrtc negotiate via
+    /// <c>a=extmap</c>; the resolver matches it Ordinal.
+    /// </summary>
+    internal const string Mid = "urn:ietf:params:rtp-hdrext:sdes:mid";
 }
