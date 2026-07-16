@@ -1,4 +1,3 @@
-using System.Net;
 using CalloraVoipSdk.Core.Infrastructure.Dtls;
 using CalloraVoipSdk.Core.Infrastructure.Rtp;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
@@ -55,11 +54,10 @@ internal static class WebRtcSessionFactory
         if (midExtensionId is null || string.IsNullOrEmpty(localAudio.Mid))
             return null;
 
-        // Remote media address from the peer's audio m-line (or its session connection line).
-        var remoteAddress = remoteAudio.ConnectionAddress ?? remoteDescription.ConnectionAddress;
-        if (!IPAddress.TryParse(remoteAddress, out var remoteIp))
+        // Remote media address: the best ICE candidate (RFC 8839), or the m-line address/port.
+        var remoteEndPoint = WebRtcRemoteEndPoint.Resolve(remoteAudio, remoteDescription.ConnectionAddress);
+        if (remoteEndPoint is null)
             return null;
-        var remoteEndPoint = new IPEndPoint(remoteIp, remoteAudio.Port);
 
         // DTLS-SRTP (WebRTC is DTLS only): the peer's fingerprint, and our role from both a=setup values
         // (RFC 5763 §5 / RFC 4145: the active side is the client).
