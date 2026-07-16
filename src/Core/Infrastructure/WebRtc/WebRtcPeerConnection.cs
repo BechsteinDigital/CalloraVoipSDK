@@ -1,3 +1,6 @@
+using System.Net;
+using CalloraVoipSdk.Core.Infrastructure.Dtls;
+using CalloraVoipSdk.Core.Infrastructure.Rtp;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Models;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.OfferAnswer;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Parsing;
@@ -23,12 +26,16 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     private readonly ISdpOfferAnswerNegotiator _negotiator;
     private readonly ISdpSessionParser _parser;
     private readonly ISdpSessionSerializer _serializer;
+    private readonly IDtlsSrtpHandshaker _handshaker;
+    private readonly DtlsCertificate _certificate;
+    private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<WebRtcPeerConnection> _logger;
     private readonly object _sync = new();
 
     private WebRtcConnectionState _state = WebRtcConnectionState.New;
     private string? _remoteDescription;
     private string? _localDescription;
+    private BundledMediaSession? _session;
 
     /// <summary>Raised when the connection state changes (RFC 8829 <c>connectionstatechange</c>).</summary>
     public event Action<WebRtcConnectionState>? ConnectionStateChanged;
@@ -38,6 +45,8 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         ISdpOfferAnswerNegotiator negotiator,
         ISdpSessionParser parser,
         ISdpSessionSerializer serializer,
+        IDtlsSrtpHandshaker handshaker,
+        DtlsCertificate certificate,
         ILoggerFactory loggerFactory)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
@@ -48,7 +57,9 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         _negotiator = negotiator ?? throw new ArgumentNullException(nameof(negotiator));
         _parser = parser ?? throw new ArgumentNullException(nameof(parser));
         _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
-        ArgumentNullException.ThrowIfNull(loggerFactory);
+        _handshaker = handshaker ?? throw new ArgumentNullException(nameof(handshaker));
+        _certificate = certificate ?? throw new ArgumentNullException(nameof(certificate));
+        _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
         _logger = loggerFactory.CreateLogger<WebRtcPeerConnection>();
     }
 
@@ -68,6 +79,12 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     public string? LocalDescription
     {
         get { lock (_sync) { return _localDescription; } }
+    }
+
+    /// <summary>The bound local media endpoint of the shared transport, or null before a session is built.</summary>
+    public IPEndPoint? LocalMediaEndPoint
+    {
+        get { lock (_sync) { return _session?.LocalEndPoint; } }
     }
 
     /// <summary>
@@ -102,14 +119,53 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         }
 
         var answer = _serializer.Serialize(result.Answer);
+
+        // Build the shared media transport from the negotiated descriptions (WebRTC is DTLS-SRTP over one
+        // BUNDLE group). A non-bundle exchange yields no session — the answer is still returned, but the
+        // peer has no media transport (logged), which StartAsync then surfaces.
+        var session = WebRtcSessionFactory.TryCreate(
+            offer, result.Answer, _options, _handshaker, _certificate, _loggerFactory);
+        if (session is null)
+            _logger.LogWarning("The remote description did not negotiate a BUNDLE media session; no transport was built.");
+        else
+            WireSession(session);
+
         lock (_sync)
         {
             _remoteDescription = remoteSdp;
             _localDescription = answer;
+            _session = session;
         }
 
         TransitionTo(WebRtcConnectionState.Connecting);
         return Task.FromResult(answer);
+    }
+
+    /// <summary>
+    /// Starts the shared transport: the receive loop, the ICE consent loop, and the DTLS handshake.
+    /// The connection reaches <see cref="WebRtcConnectionState.Connected"/> once the handshake installs
+    /// the SRTP keys.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No BUNDLE media session was built (no remote description, or a non-bundle one).</exception>
+    public Task StartAsync(CancellationToken cancellationToken = default)
+    {
+        BundledMediaSession? session;
+        lock (_sync) { session = _session; }
+        if (session is null)
+            throw new InvalidOperationException("Apply a BUNDLE remote description before starting the peer.");
+
+        return session.StartAsync(cancellationToken);
+    }
+
+    // Maps the transport's lifecycle onto the WebRTC connection state (RFC 8829): keys installed →
+    // Connected, handshake failure or consent loss → Failed, a transient consent miss → Disconnected.
+    private void WireSession(BundledMediaSession session)
+    {
+        session.Connected += () => TransitionTo(WebRtcConnectionState.Connected);
+        session.HandshakeFailed += () => TransitionTo(WebRtcConnectionState.Failed);
+        session.MediaConsentLost += () => TransitionTo(WebRtcConnectionState.Failed);
+        session.MediaConnectivityDegraded += () => TransitionTo(WebRtcConnectionState.Disconnected);
+        session.MediaConnectivityRecovered += () => TransitionTo(WebRtcConnectionState.Connected);
     }
 
     // WebRTC is always BUNDLE + rtcp-mux (RFC 8843 / RFC 8834); the DTLS identity and ICE credentials
@@ -143,9 +199,13 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     }
 
     /// <inheritdoc />
-    public ValueTask DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
+        BundledMediaSession? session;
+        lock (_sync) { session = _session; _session = null; }
+
         TransitionTo(WebRtcConnectionState.Closed);
-        return ValueTask.CompletedTask;
+        if (session is not null)
+            await session.DisposeAsync().ConfigureAwait(false);
     }
 }

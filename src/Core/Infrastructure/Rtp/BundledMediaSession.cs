@@ -36,6 +36,9 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     /// <summary>Raised when the shared DTLS handshake fails — media stays blocked (fail closed).</summary>
     public event Action? HandshakeFailed;
 
+    /// <summary>Raised when the shared DTLS handshake installs the SRTP keys and media can flow.</summary>
+    public event Action? Connected;
+
     /// <summary>Raised once when RFC 7675 ICE consent is lost for the shared 5-tuple.</summary>
     public event Action? MediaConsentLost;
 
@@ -98,7 +101,8 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         _dtls = new BundledDtlsKeying(
             options.DtlsIsClient, options.RemoteEndPoint, options.RemoteFingerprint,
             handshaker, certificate, inbound, _outbound, _transport,
-            onHandshakeFailed: () => HandshakeFailed?.Invoke(), loggerFactory);
+            onHandshakeFailed: () => HandshakeFailed?.Invoke(), loggerFactory,
+            onKeysInstalled: () => Connected?.Invoke());
 
         _ice = new BundledIceControl(
             options.Ice, inbound, _transport.SendToAsync, loggerFactory,

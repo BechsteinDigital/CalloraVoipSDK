@@ -1,4 +1,5 @@
 using System.Net;
+using CalloraVoipSdk.Core.Infrastructure.Dtls;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Models;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.OfferAnswer;
@@ -82,12 +83,39 @@ public sealed class WebRtcPeerConnectionTests
         Assert.Contains(WebRtcConnectionState.Closed, closed);
     }
 
+    [Fact]
+    public async Task SetRemoteDescription_builds_a_bound_media_transport()
+    {
+        await using var peer = Peer(Pcmu);
+
+        await peer.SetRemoteDescriptionAsync(WebRtcOffer());
+
+        Assert.NotNull(peer.LocalMediaEndPoint);
+        Assert.NotEqual(0, peer.LocalMediaEndPoint!.Port); // the shared bundle socket bound
+    }
+
+    [Fact]
+    public async Task StartAsync_before_a_remote_description_throws()
+    {
+        await using var peer = Peer(Pcmu);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => peer.StartAsync());
+    }
+
+    [Fact]
+    public async Task StartAsync_after_a_remote_description_starts_the_transport()
+    {
+        await using var peer = Peer(Pcmu);
+        await peer.SetRemoteDescriptionAsync(WebRtcOffer());
+
+        await peer.StartAsync(); // receive loop + ICE + DTLS handshake begin; no peer, so no Connected yet
+    }
+
     // ── harness ──────────────────────────────────────────────────────────────────
 
     private static WebRtcPeerConnection Peer(IReadOnlyList<SdpCodecDefinition> audioCodecs) =>
         new(new WebRtcPeerOptions
             {
-                LocalEndPoint = new IPEndPoint(IPAddress.Loopback, 6000),
+                LocalEndPoint = new IPEndPoint(IPAddress.Loopback, 0),
                 AudioCodecs = audioCodecs,
                 Video = new SdpVideoMediaOptions
                 {
@@ -98,6 +126,7 @@ public sealed class WebRtcPeerConnectionTests
                 Ice = new SdpIceParameters { Ufrag = "localU", Pwd = "localpassword1234567890" },
             },
             new SdpOfferAnswerNegotiator(), new SdpSessionParser(), new SdpSessionSerializer(),
+            new DtlsSrtpHandshaker(NullLogger<DtlsSrtpHandshaker>.Instance), DtlsCertificate.GenerateEcdsaP256(),
             NullLoggerFactory.Instance);
 
     // A remote WebRTC offer (BUNDLE + DTLS + ICE + video), built with the negotiator and serialized.

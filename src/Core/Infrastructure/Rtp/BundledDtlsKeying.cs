@@ -29,7 +29,8 @@ internal sealed class BundledDtlsKeying : IAsyncDisposable
         BundledOutboundPipeline outbound,
         IBundledDatagramSender sender,
         Action onHandshakeFailed,
-        ILoggerFactory loggerFactory)
+        ILoggerFactory loggerFactory,
+        Action? onKeysInstalled = null)
     {
         _inbound = inbound ?? throw new ArgumentNullException(nameof(inbound));
         ArgumentNullException.ThrowIfNull(outbound);
@@ -48,6 +49,7 @@ internal sealed class BundledDtlsKeying : IAsyncDisposable
             {
                 inbound.InstallInboundKeys(inboundSrtp, inboundSrtcp);
                 outbound.InstallOutboundKey(outboundSrtp);
+                onKeysInstalled?.Invoke(); // media can now flow (RFC 5763: keys derived from the handshake)
             },
             onHandshakeFailed: onHandshakeFailed,
             loggerFactory);
