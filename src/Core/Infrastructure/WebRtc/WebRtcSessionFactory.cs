@@ -40,7 +40,9 @@ internal static class WebRtcSessionFactory
         ArgumentNullException.ThrowIfNull(loggerFactory);
 
         var offerAudio = remoteOffer.Media.FirstOrDefault(m => m.MediaType.Equals("audio", Ci) && !m.Disabled);
-        var answerAudio = localAnswer.Media.FirstOrDefault(m => m.MediaType.Equals("audio", Ci) && !m.Disabled);
+        // The local answer m-line's port is a placeholder under ICE (the real address comes via
+        // candidates), so it is gated by its MID below, not by a zero port.
+        var answerAudio = localAnswer.Media.FirstOrDefault(m => m.MediaType.Equals("audio", Ci));
         if (offerAudio is null || answerAudio is null)
             return null;
 
@@ -102,7 +104,8 @@ internal static class WebRtcSessionFactory
 
     private static BundledTrackConfig? TryBuildVideoTrack(SdpSessionDescription localAnswer, uint audioSsrc)
     {
-        var video = localAnswer.Media.FirstOrDefault(m => m.MediaType.Equals("video", Ci) && !m.Disabled);
+        // Gated by the MID (grouped into the bundle), not the placeholder port under ICE.
+        var video = localAnswer.Media.FirstOrDefault(m => m.MediaType.Equals("video", Ci));
         if (video is null || string.IsNullOrEmpty(video.Mid))
             return null;
 
