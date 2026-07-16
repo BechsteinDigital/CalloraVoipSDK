@@ -24,6 +24,8 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     private readonly BundledIceControl _ice;
     private readonly BundledVideoTrack? _video;
     private readonly string _audioMid;
+    private readonly uint _audioSsrc;
+    private readonly ILogger<BundledMediaSession> _logger;
 
     /// <summary>Raised with each decrypted inbound audio RTP packet.</summary>
     public event Action<RtpPacket>? AudioReceived;
@@ -33,6 +35,15 @@ internal sealed class BundledMediaSession : IAsyncDisposable
 
     /// <summary>Raised when the shared DTLS handshake fails — media stays blocked (fail closed).</summary>
     public event Action? HandshakeFailed;
+
+    /// <summary>Raised once when RFC 7675 ICE consent is lost for the shared 5-tuple.</summary>
+    public event Action? MediaConsentLost;
+
+    /// <summary>Raised on a transient consent miss still inside the consent window (RFC 7675).</summary>
+    public event Action? MediaConnectivityDegraded;
+
+    /// <summary>Raised when a consent check is answered again after a degrade.</summary>
+    public event Action? MediaConnectivityRecovered;
 
     public BundledMediaSession(
         BundledMediaSessionOptions options,
@@ -47,6 +58,7 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(loggerFactory);
 
         _audioMid = options.Audio.Mid;
+        _logger = loggerFactory.CreateLogger<BundledMediaSession>();
 
         // Inbound: demux the shared socket by the negotiated m-lines' payload types, route each MID.
         var payloadTypesByMid = new Dictionary<string, IReadOnlyCollection<int>>(StringComparer.Ordinal)
@@ -58,7 +70,7 @@ internal sealed class BundledMediaSession : IAsyncDisposable
 
         var router = new BundledTrackRouter(
             BundledRtpDemultiplexerFactory.Create(options.MidExtensionId, payloadTypesByMid));
-        router.RegisterTrack(options.Audio.Mid, packet => AudioReceived?.Invoke(packet));
+        router.RegisterTrack(options.Audio.Mid, RaiseAudioReceived);
 
         var inbound = new BundledInboundPipeline(
             router, new RtpPacketCodec(), loggerFactory.CreateLogger<BundledInboundPipeline>());
@@ -88,7 +100,27 @@ internal sealed class BundledMediaSession : IAsyncDisposable
             handshaker, certificate, inbound, _outbound, _transport,
             onHandshakeFailed: () => HandshakeFailed?.Invoke(), loggerFactory);
 
-        _ice = new BundledIceControl(options.Ice, inbound, _transport.SendToAsync, loggerFactory);
+        _ice = new BundledIceControl(
+            options.Ice, inbound, _transport.SendToAsync, loggerFactory,
+            onConsentLost: () => MediaConsentLost?.Invoke(),
+            onConnectivityDegraded: () => MediaConnectivityDegraded?.Invoke(),
+            onConnectivityRecovered: () => MediaConnectivityRecovered?.Invoke());
+
+        _audioSsrc = options.Audio.Ssrc;
+    }
+
+    // Dispatches inbound audio to subscribers on the receive loop; a throwing subscriber must not tear
+    // down the shared receive loop (the video path is guarded the same way inside BundledVideoTrack).
+    private void RaiseAudioReceived(RtpPacket packet)
+    {
+        try
+        {
+            AudioReceived?.Invoke(packet);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled exception in bundled audio AudioReceived handler.");
+        }
     }
 
     private static BundledOutboundTrack BuildOutboundTrack(BundledMediaSessionOptions options, BundledTrackConfig track) =>
@@ -98,6 +130,9 @@ internal sealed class BundledMediaSession : IAsyncDisposable
 
     /// <summary>The endpoint the shared socket is bound to (the actual port after an ephemeral bind).</summary>
     public IPEndPoint LocalEndPoint => _transport.LocalEndPoint;
+
+    /// <summary>The local audio track's synchronisation source.</summary>
+    public uint AudioSsrc => _audioSsrc;
 
     /// <summary>Whether this bundle carries a video track.</summary>
     public bool HasVideo => _video is not null;
