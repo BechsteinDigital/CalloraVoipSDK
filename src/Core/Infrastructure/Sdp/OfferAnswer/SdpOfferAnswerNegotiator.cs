@@ -268,7 +268,9 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             IceUfrag = ice?.Ufrag,
             IcePwd = ice?.Pwd,
             IceOptions = ice?.Options,
-            Candidates = ice?.Candidates ?? []
+            Candidates = ice?.Candidates ?? [],
+            // Echo the MID SDES extension (RFC 9143) when the BUNDLE offer advertised it (no-op otherwise).
+            Extensions = BuildAnswerExtmaps(offeredAudio.Extensions, WithMidExtension([]))
         };
 
         // RFC 3264 §6: the answer must carry one m-line per offered m-line, in offer
@@ -537,7 +539,7 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             Candidates = video.Candidates,
             // RTP header extensions (RFC 8285 §5): echo the offered id for each URI we support,
             // dropping the rest — the answer confirms the negotiated id↔uri mapping.
-            Extensions = BuildAnswerExtmaps(offered.Extensions, video.HeaderExtensionUris)
+            Extensions = BuildAnswerExtmaps(offered.Extensions, WithMidExtension(video.HeaderExtensionUris))
         };
     }
 
@@ -556,6 +558,13 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             extmaps.Add(new SdpExtmap { Id = i + 1, Uri = uris[i] });
         return extmaps;
     }
+
+    // The answer echoes the MID SDES extension (RFC 9143) whenever the offer advertised it: adding the
+    // MID URI to the supported set makes BuildAnswerExtmaps mirror the offered id (RFC 8843 §9 — the
+    // same id the offer used on every m-line). A no-op when the offer carried no MID extension (outside
+    // BUNDLE), so non-bundle answers are unchanged.
+    private static IReadOnlyList<string> WithMidExtension(IReadOnlyList<string> supportedUris) =>
+        [RtpHeaderExtensionUris.Mid, .. supportedUris];
 
     // Answer: for each offered extmap whose URI we support, echo it with the offered id (RFC 8285
     // §5 — the offerer owns the id assignment); unsupported extensions are dropped. Only one-byte
