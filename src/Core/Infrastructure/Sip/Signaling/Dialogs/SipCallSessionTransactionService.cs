@@ -21,6 +21,11 @@ internal sealed class SipCallSessionTransactionService
     private int _cancelledInviteCSeq;
     private SipDialogTerminationReason? _cancelledInviteReason;
 
+    // Bound stale-nonce refreshes so a peer that answers stale=true to every authenticated request
+    // cannot spin an INVITE/in-dialog transaction into an unbounded retry loop (DoS). One fresh nonce
+    // should suffice; this mirrors the REGISTER path (SipRegistrationService.maxStaleRetries).
+    private const int MaxStaleNonceRetries = 2;
+
     /// <summary>
     /// Creates a transaction service bound to one call session context.
     /// </summary>
@@ -65,6 +70,7 @@ internal sealed class SipCallSessionTransactionService
         var cseq = _context.NextLocalCSeq();
         var nonceCount = 1;
         var authAttempted = false;
+        var staleRetries = 0;
         string? authorization = null;
         string? authorizationHeaderName = null;
         var reliablePrackSync = new object();
@@ -198,6 +204,7 @@ internal sealed class SipCallSessionTransactionService
             }
 
             if (authAttempted
+                && staleRetries < MaxStaleNonceRetries
                 && finalResponse.Response.StatusCode is 401 or 407
                 && !string.IsNullOrWhiteSpace(_context.AuthPassword))
             {
@@ -215,11 +222,20 @@ internal sealed class SipCallSessionTransactionService
                         nonceCount++,
                         out var generatedAuthorization))
                 {
+                    staleRetries++;
                     authorizationHeaderName = nextAuthorizationHeaderName;
                     authorization = generatedAuthorization;
                     cseq = _context.NextLocalCSeq();
                     continue;
                 }
+            }
+            else if (authAttempted
+                && staleRetries >= MaxStaleNonceRetries
+                && finalResponse.Response.StatusCode is 401 or 407)
+            {
+                _context.Logger.LogWarning(
+                    "SIP session {CallId}: peer issued more than {Max} stale-nonce INVITE challenges; abandoning digest retry.",
+                    _context.CallId, MaxStaleNonceRetries);
             }
 
             _context.ActiveInviteBranch = null;
@@ -543,6 +559,7 @@ internal sealed class SipCallSessionTransactionService
     {
         var nonceCount = 1;
         var authAttempted = false;
+        var staleRetries = 0;
         string? authorizationHeaderName = null;
         string? authorizationHeaderValue = null;
 
@@ -614,6 +631,15 @@ internal sealed class SipCallSessionTransactionService
 
             if (isStaleNonce)
             {
+                if (staleRetries >= MaxStaleNonceRetries)
+                {
+                    _context.Logger.LogWarning(
+                        "SIP session {CallId}: peer issued more than {Max} stale-nonce {Method} challenges; abandoning digest retry.",
+                        _context.CallId, MaxStaleNonceRetries, method);
+                    return response;
+                }
+
+                staleRetries++;
                 authorizationHeaderName = nextAuthorizationHeaderName;
                 authorizationHeaderValue = nextAuthorizationHeaderValue;
                 nonceCount++;
