@@ -245,10 +245,34 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     private SdpMediaOptions MediaOptions() => new()
     {
         Dtls = _options.Dtls,
-        Ice = _options.Ice,
+        Ice = new SdpIceParameters
+        {
+            Ufrag = _options.Ice.Ufrag,
+            Pwd = _options.Ice.Pwd,
+            Options = _options.Ice.Options,
+            // Advertise our media address as a host candidate (RFC 8839) so the peer can reach us; a
+            // browser only sends media once ICE succeeds against our candidates. Skipped when no fixed
+            // port is configured (the ephemeral bound port is not known until the transport binds).
+            Candidates = _options.LocalEndPoint.Port > 0
+                ? [LocalHostCandidate(), .. _options.Ice.Candidates]
+                : _options.Ice.Candidates,
+        },
         Video = _options.Video,
         Bundle = true,
         RtcpMux = true,
+    };
+
+    // A host ICE candidate for the local media endpoint (RFC 8445 §5.1.2.1 priority: host type-pref 126,
+    // local-pref 65535, RTP component 1). rtcp-mux shares component 1, so no RTCP candidate is needed.
+    private SdpIceCandidate LocalHostCandidate() => new()
+    {
+        Foundation = "1",
+        Component = 1,
+        Transport = "udp",
+        Priority = (126L << 24) | (65535L << 8) | 255L,
+        Address = _options.LocalEndPoint.Address.ToString(),
+        Port = _options.LocalEndPoint.Port,
+        Type = "host",
     };
 
     private void TransitionTo(WebRtcConnectionState next)
