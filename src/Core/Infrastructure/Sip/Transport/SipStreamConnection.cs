@@ -20,18 +20,27 @@ internal sealed class SipStreamConnection : IDisposable
     private readonly SemaphoreSlim _sendGate = new(1, 1);
     private readonly SipWireStreamFramer _framer = new();
     private readonly Task _receiveLoop;
+    private readonly TimeSpan _readTimeout;
     private int _disposed;
+
+    private static readonly TimeSpan DefaultReadTimeout = TimeSpan.FromMinutes(5);
 
     /// <summary>
     /// Creates a stream connection and starts message receive loop.
     /// </summary>
+    /// <param name="readTimeout">
+    /// Idle timeout for a single read: a peer that sends nothing (or stalls mid-message) within this
+    /// window has the connection torn down. Defaults to 5 minutes, well above any RFC 5626 keepalive
+    /// interval so a healthy connection is never reaped.
+    /// </param>
     public SipStreamConnection(
         SipTransportProtocol protocol,
         TcpClient client,
         Stream stream,
         ILogger logger,
         Func<IPEndPoint, SipTransportProtocol, ReadOnlyMemory<byte>, Task> onFrameAsync,
-        Action onClosed)
+        Action onClosed,
+        TimeSpan? readTimeout = null)
     {
         Protocol = protocol;
         _client = client ?? throw new ArgumentNullException(nameof(client));
@@ -39,6 +48,7 @@ internal sealed class SipStreamConnection : IDisposable
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _onFrameAsync = onFrameAsync ?? throw new ArgumentNullException(nameof(onFrameAsync));
         _onClosed = onClosed ?? throw new ArgumentNullException(nameof(onClosed));
+        _readTimeout = readTimeout ?? DefaultReadTimeout;
 
         RemoteEndPoint = (IPEndPoint)(_client.Client.RemoteEndPoint
             ?? throw new InvalidOperationException("Stream connection remote endpoint is unavailable."));
@@ -86,7 +96,22 @@ internal sealed class SipStreamConnection : IDisposable
         {
             while (!ct.IsCancellationRequested)
             {
-                var read = await _stream.ReadAsync(buffer.AsMemory(0, buffer.Length), ct).ConfigureAwait(false);
+                int read;
+                using (var readCts = CancellationTokenSource.CreateLinkedTokenSource(ct))
+                {
+                    readCts.CancelAfter(_readTimeout);
+                    try
+                    {
+                        read = await _stream.ReadAsync(buffer.AsMemory(0, buffer.Length), readCts.Token).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+                    {
+                        // Idle/stalled peer: no data within the read window — tear the connection down.
+                        _logger.LogDebug("SIP stream idle for {Timeout} from {Remote}; closing.", _readTimeout, RemoteEndPoint);
+                        break;
+                    }
+                }
+
                 if (read <= 0)
                     break;
 
