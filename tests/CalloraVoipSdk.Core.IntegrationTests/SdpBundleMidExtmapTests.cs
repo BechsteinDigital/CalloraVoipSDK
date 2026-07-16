@@ -65,4 +65,48 @@ public sealed class SdpBundleMidExtmapTests
         Assert.Contains(video.Extensions, e => e.Uri == RtpHeaderExtensionUris.TransportWideCc); // still offered
         Assert.Null(offer.Group);
     }
+
+    [Fact]
+    public void A_bundle_answer_echoes_the_mid_extension_id_on_both_m_lines()
+    {
+        var negotiator = new SdpOfferAnswerNegotiator();
+        var offer = negotiator.CreateOffer(
+            Local, AudioCodecs, SdpMediaDirection.SendRecv,
+            new SdpMediaOptions { Bundle = true, RtcpMux = true, Video = Video() });
+        var offeredMidId = offer.Media.Single(m => m.MediaType == "audio")
+            .Extensions.Single(e => e.Uri == RtpHeaderExtensionUris.Mid).Id;
+
+        var result = negotiator.NegotiateAnswer(
+            offer, new IPEndPoint(IPAddress.Loopback, 6000), AudioCodecs, SdpMediaDirection.SendRecv,
+            new SdpMediaOptions { RtcpMux = true, Video = Video() });
+
+        Assert.True(result.Success);
+        var audio = result.Answer!.Media.Single(m => m.MediaType == "audio");
+        var video = result.Answer.Media.Single(m => m.MediaType == "video");
+
+        var audioMid = audio.Extensions.Single(e => e.Uri == RtpHeaderExtensionUris.Mid);
+        var videoMid = video.Extensions.Single(e => e.Uri == RtpHeaderExtensionUris.Mid);
+        Assert.Equal(offeredMidId, audioMid.Id); // the answer mirrors the offered id (RFC 8285 §5)
+        Assert.Equal(offeredMidId, videoMid.Id);
+    }
+
+    [Fact]
+    public void A_non_bundle_answer_advertises_no_mid_extension()
+    {
+        var negotiator = new SdpOfferAnswerNegotiator();
+        var offer = negotiator.CreateOffer(
+            Local, AudioCodecs, SdpMediaDirection.SendRecv,
+            new SdpMediaOptions { RtcpMux = true, Video = Video() });
+
+        var result = negotiator.NegotiateAnswer(
+            offer, new IPEndPoint(IPAddress.Loopback, 6000), AudioCodecs, SdpMediaDirection.SendRecv,
+            new SdpMediaOptions { RtcpMux = true, Video = Video() });
+
+        Assert.True(result.Success);
+        var audio = result.Answer!.Media.Single(m => m.MediaType == "audio");
+        Assert.Empty(audio.Extensions); // no MID echoed → audio answer stays extmap-free (backward compatible)
+        Assert.DoesNotContain(
+            result.Answer.Media.Single(m => m.MediaType == "video").Extensions,
+            e => e.Uri == RtpHeaderExtensionUris.Mid);
+    }
 }
