@@ -110,7 +110,41 @@ public sealed class WebRtcPeerConnectionTests
         await peer.StartAsync(); // receive loop + ICE + DTLS handshake begin; no peer, so no Connected yet
     }
 
+    [Fact]
+    public void CreateOffer_advertises_a_host_ice_candidate_for_the_local_endpoint()
+    {
+        var offer = PeerAt(40100).CreateOffer();
+
+        var audio = new SdpSessionParser().Parse(offer).Media.Single(m => m.MediaType == "audio");
+        var candidate = Assert.Single(audio.Candidates.Where(c => c.Type == "host"));
+        Assert.Equal("udp", candidate.Transport);
+        Assert.Equal(1, candidate.Component); // RTP; rtcp-mux shares it
+        Assert.Equal("127.0.0.1", candidate.Address);
+        Assert.Equal(40100, candidate.Port);
+    }
+
+    [Fact]
+    public void A_peer_without_a_fixed_port_advertises_no_host_candidate()
+    {
+        var offer = PeerAt(0).CreateOffer(); // ephemeral bind — the real port is unknown until the transport binds
+
+        var audio = new SdpSessionParser().Parse(offer).Media.Single(m => m.MediaType == "audio");
+        Assert.DoesNotContain(audio.Candidates, c => c.Type == "host");
+    }
+
     // ── harness ──────────────────────────────────────────────────────────────────
+
+    private static WebRtcPeerConnection PeerAt(int localPort) =>
+        new(new WebRtcPeerOptions
+            {
+                LocalEndPoint = new IPEndPoint(IPAddress.Loopback, localPort),
+                AudioCodecs = Pcmu,
+                Dtls = new SdpDtlsParameters { Algorithm = "sha-256", Fingerprint = "11:22:33" },
+                Ice = new SdpIceParameters { Ufrag = "localU", Pwd = "localpassword1234567890" },
+            },
+            new SdpOfferAnswerNegotiator(), new SdpSessionParser(), new SdpSessionSerializer(),
+            new DtlsSrtpHandshaker(NullLogger<DtlsSrtpHandshaker>.Instance), DtlsCertificate.GenerateEcdsaP256(),
+            NullLoggerFactory.Instance);
 
     private static WebRtcPeerConnection Peer(IReadOnlyList<SdpCodecDefinition> audioCodecs) =>
         new(new WebRtcPeerOptions
