@@ -27,6 +27,11 @@ namespace CalloraVoipSdk.Core.Infrastructure.Stun.Wire;
 /// </summary>
 internal sealed class StunMessageCodec : IStunMessageCodec
 {
+    // Upper bound on attributes decoded from one message. Well above any real STUN/TURN message
+    // (typically < 20) yet far below the ~16k a zero-length-attribute flood could otherwise force.
+    private const int MaxAttributesPerMessage = 64;
+
+
     /// <inheritdoc />
     public byte[] Encode(StunMessage message)
         => EncodeCore(message, ReadOnlySpan<byte>.Empty, addFingerprint: false);
@@ -84,14 +89,18 @@ internal sealed class StunMessageCodec : IStunMessageCodec
         if (rawMessage.Length < StunWireConstants.HeaderSize)
             return false;
 
+        int messageEnd = MessageEndFromDeclaredLength(rawMessage);
+        if (messageEnd < 0)
+            return false;
+
         int offset = StunWireConstants.HeaderSize;
-        while (offset + StunWireConstants.AttributeHeaderSize <= rawMessage.Length)
+        while (offset + StunWireConstants.AttributeHeaderSize <= messageEnd)
         {
             ushort type      = BinaryPrimitives.ReadUInt16BigEndian(rawMessage[offset..]);
             ushort attrLen   = BinaryPrimitives.ReadUInt16BigEndian(rawMessage[(offset + 2)..]);
             int    dataStart = offset + StunWireConstants.AttributeHeaderSize;
 
-            if (dataStart + attrLen > rawMessage.Length)
+            if (dataStart + attrLen > messageEnd)
                 break;
 
             if (type == (ushort)StunAttributeType.MessageIntegrity)
@@ -99,17 +108,13 @@ internal sealed class StunMessageCodec : IStunMessageCodec
                 if (attrLen != 20)
                     return false;
 
-                // The STUN length field is 16-bit: a MESSAGE-INTEGRITY that would place the adjusted
-                // length beyond 65535 cannot belong to a valid message. Compute in int and reject the
-                // overflow instead of silently wrapping into a wrong HMAC length (RFC 5389 §15.4).
-                int adjustedLengthValue =
+                // Bounded by the declared length above, so offset - HeaderSize + 24 <= 65535: the
+                // ushort length field (RFC 5389 §15.4) can never overflow.
+                var adjustedLength = (ushort)(
                     offset
                     - StunWireConstants.HeaderSize
                     + StunWireConstants.AttributeHeaderSize
-                    + 20;
-                if (adjustedLengthValue > ushort.MaxValue)
-                    return false;
-                ushort adjustedLength = (ushort)adjustedLengthValue;
+                    + 20);
 
                 var computed = ComputeHmacSha1WithAdjustedLength(rawMessage, offset, adjustedLength, hmacKey);
                 var stored = rawMessage[dataStart..(dataStart + 20)];
@@ -119,7 +124,20 @@ internal sealed class StunMessageCodec : IStunMessageCodec
             offset = dataStart + AlignTo4(attrLen);
         }
 
-        return false; // MESSAGE-INTEGRITY not found.
+        return false; // MESSAGE-INTEGRITY not found within the declared message.
+    }
+
+    /// <summary>
+    /// Returns the exclusive end offset of the message as fixed by the 16-bit STUN length field,
+    /// or -1 when the buffer does not actually contain the declared number of bytes. Binding parsers
+    /// to this — rather than the raw buffer length — ignores trailing bytes of an oversized receive
+    /// buffer and keeps the adjusted-length arithmetic inside the 16-bit field.
+    /// </summary>
+    private static int MessageEndFromDeclaredLength(ReadOnlySpan<byte> rawMessage)
+    {
+        ushort declaredLength = BinaryPrimitives.ReadUInt16BigEndian(rawMessage[2..]);
+        int messageEnd = StunWireConstants.HeaderSize + declaredLength;
+        return messageEnd > rawMessage.Length ? -1 : messageEnd;
     }
 
     /// <inheritdoc />
@@ -136,14 +154,18 @@ internal sealed class StunMessageCodec : IStunMessageCodec
         if (rawMessage.Length < StunWireConstants.HeaderSize)
             return false;
 
+        int messageEnd = MessageEndFromDeclaredLength(rawMessage);
+        if (messageEnd < 0)
+            return false;
+
         int offset = StunWireConstants.HeaderSize;
-        while (offset + StunWireConstants.AttributeHeaderSize <= rawMessage.Length)
+        while (offset + StunWireConstants.AttributeHeaderSize <= messageEnd)
         {
             ushort type      = BinaryPrimitives.ReadUInt16BigEndian(rawMessage[offset..]);
             ushort attrLen   = BinaryPrimitives.ReadUInt16BigEndian(rawMessage[(offset + 2)..]);
             int    dataStart = offset + StunWireConstants.AttributeHeaderSize;
 
-            if (dataStart + attrLen > rawMessage.Length)
+            if (dataStart + attrLen > messageEnd)
                 break;
 
             if (type == (ushort)StunAttributeType.Fingerprint)
@@ -153,16 +175,12 @@ internal sealed class StunMessageCodec : IStunMessageCodec
 
                 uint stored = BinaryPrimitives.ReadUInt32BigEndian(rawMessage[dataStart..]);
 
-                // See VerifyIntegrity: reject a FINGERPRINT whose adjusted length would exceed the
-                // 16-bit STUN length field rather than wrapping the ushort cast.
-                int adjustedLengthValue =
+                // Bounded by the declared length above, so the adjusted length stays inside 16 bits.
+                var adjustedLength = (ushort)(
                     offset
                     - StunWireConstants.HeaderSize
                     + StunWireConstants.AttributeHeaderSize
-                    + 4;
-                if (adjustedLengthValue > ushort.MaxValue)
-                    return false;
-                ushort adjustedLength = (ushort)adjustedLengthValue;
+                    + 4);
 
                 uint crc = ComputeCrc32WithAdjustedLength(rawMessage, offset, adjustedLength);
                 uint expected = crc ^ StunWireConstants.FingerprintXorMask;
@@ -452,6 +470,12 @@ internal sealed class StunMessageCodec : IStunMessageCodec
 
         while (offset + StunWireConstants.AttributeHeaderSize <= attrData.Length)
         {
+            // Attribute-flood guard: a pathological message of zero-length attributes advances the
+            // offset only 4 bytes per attribute, so a 65535-byte section could mint ~16k attribute
+            // objects. A real STUN/TURN message carries far fewer; stop once the cap is reached.
+            if (result.Count >= MaxAttributesPerMessage)
+                break;
+
             ushort attrType  = BinaryPrimitives.ReadUInt16BigEndian(attrData[offset..]);
             ushort attrLen   = BinaryPrimitives.ReadUInt16BigEndian(attrData[(offset + 2)..]);
             int    dataStart = offset + StunWireConstants.AttributeHeaderSize;
