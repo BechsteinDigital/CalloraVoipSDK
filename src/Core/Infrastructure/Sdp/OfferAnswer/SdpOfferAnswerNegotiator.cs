@@ -1,5 +1,6 @@
 using System.Net;
 using CalloraVoipSdk.Core.Infrastructure.Common.Network;
+using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Models;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Sdp.OfferAnswer;
@@ -51,6 +52,13 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             mid = "audio";
         }
 
+        // The MID SDES header extension (RFC 9143 / RFC 8843 §9) rides every bundled m-line so the peer
+        // stamps each packet's MID on the shared transport. It must carry the SAME extmap id on every
+        // m-line — the demultiplexer reads one id — so offer it first on each so BuildOfferExtmaps
+        // assigns it the same id (1). Outside BUNDLE the extmaps are unchanged.
+        IReadOnlyList<string> BundledExtmapUris(IReadOnlyList<string> uris) =>
+            options?.Bundle == true ? [RtpHeaderExtensionUris.Mid, .. uris] : uris;
+
         var media = new SdpMediaDescription
         {
             MediaType = "audio",
@@ -61,6 +69,7 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             Fmtp = fmtp,
             Mid = mid,
             Crypto = crypto,
+            Extensions = BuildOfferExtmaps(BundledExtmapUris([])),
             RtcpMux = options?.RtcpMux == true,
             IceUfrag = ice?.Ufrag,
             IcePwd = ice?.Pwd,
@@ -100,8 +109,9 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
                 IceOptions = ice?.Options,
                 Candidates = video.Candidates,
                 // RTP header extensions (RFC 8285 §5): the offer assigns one-byte ids to the
-                // supported URIs (transport-wide-cc for congestion control, etc.).
-                Extensions = BuildOfferExtmaps(video.HeaderExtensionUris),
+                // supported URIs (the MID SDES extension first under BUNDLE, then transport-wide-cc
+                // for congestion control, etc.) — MID keeps the same id as the audio m-line.
+                Extensions = BuildOfferExtmaps(BundledExtmapUris(video.HeaderExtensionUris)),
                 Fingerprint = dtls is not null
                     ? new SdpFingerprint { Algorithm = dtls.Algorithm, Value = dtls.Fingerprint }
                     : null,
