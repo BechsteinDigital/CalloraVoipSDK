@@ -30,7 +30,7 @@ internal sealed class AckTestSipCallSessionContext : ISipCallSessionContext
         IsRemoteHold = _ => false
     };
 
-    public ISipDigestAuthenticator DigestAuthenticator { get; } = new NoopSipDigestAuthenticator();
+    public ISipDigestAuthenticator DigestAuthenticator { get; init; } = new NoopSipDigestAuthenticator();
 
     public ILogger Logger { get; }
 
@@ -54,7 +54,7 @@ internal sealed class AckTestSipCallSessionContext : ISipCallSessionContext
 
     public string AuthUsername { get; } = "alice";
 
-    public string? AuthPassword => null;
+    public string? AuthPassword { get; init; }
 
     public string UserAgent { get; } = "CalloraVoipSdk.Tests";
 
