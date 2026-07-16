@@ -26,7 +26,13 @@ internal sealed class RtpSession : IRtpSession
 
     private readonly UdpClient _udp;
     private readonly uint _ssrc;
-    private readonly Dictionary<uint, RtpSequenceValidator> _validators = new();
+
+    // One sequence validator per observed SSRC, accessed only on the single receive loop thread.
+    // Capped and LRU-evicted so a peer spoofing a stream of distinct SSRCs cannot grow this table
+    // without bound (memory DoS). A real session sees a handful of SSRCs; 64 is generous headroom.
+    private const int MaxTrackedSsrcs = 64;
+    private readonly Dictionary<uint, RtpTrackedSsrc> _validators = new();
+    private long _ssrcActivityClock;
 
     // Symmetric RTP / comedia (RFC dodging NAT without ICE): once a valid RTP packet
     // arrives, remember its actual source and send back there instead of the SDP-advertised
@@ -215,6 +221,20 @@ internal sealed class RtpSession : IRtpSession
 
     /// <summary>Local synchronization source (RFC 3550 §5.1) — used as the sender SSRC of RTCP feedback.</summary>
     internal uint LocalSsrc => _ssrc;
+
+    /// <summary>Number of distinct inbound SSRCs currently tracked (test/diagnostic seam).</summary>
+    internal int TrackedSsrcCount => _validators.Count;
+
+    /// <summary>True when the given SSRC currently has a sequence validator (test/diagnostic seam).</summary>
+    internal bool IsSsrcTracked(uint ssrc) => _validators.ContainsKey(ssrc);
+
+    /// <summary>
+    /// Feeds one inbound datagram through the receive pipeline synchronously, bypassing the socket.
+    /// Test seam only, so the SSRC-tracking cap can be exercised deterministically on one thread —
+    /// never called on the runtime receive path.
+    /// </summary>
+    internal void InjectInboundDatagramForTest(ReadOnlySpan<byte> datagram)
+        => ProcessDatagram(datagram, source: null);
 
     /// <summary>
     /// Sends one RTCP datagram via the RTP socket (RTCP-MUX mode).
@@ -612,13 +632,20 @@ internal sealed class RtpSession : IRtpSession
         }
 
         // Sequence number validation (RFC 3550 §A.1)
-        if (!_validators.TryGetValue(packet.Ssrc, out var validator))
+        if (!_validators.TryGetValue(packet.Ssrc, out var tracked))
         {
-            validator = new RtpSequenceValidator();
-            _validators[packet.Ssrc] = validator;
+            if (_validators.Count >= MaxTrackedSsrcs)
+                EvictLeastRecentlyActiveSsrc();
+
+            tracked = new RtpTrackedSsrc(new RtpSequenceValidator(), ++_ssrcActivityClock);
+            _validators[packet.Ssrc] = tracked;
+        }
+        else
+        {
+            tracked.LastActivity = ++_ssrcActivityClock;
         }
 
-        var result = validator.Validate(packet.SequenceNumber);
+        var result = tracked.Validator.Validate(packet.SequenceNumber);
         switch (result)
         {
             case RtpSequenceResult.Valid:
@@ -648,6 +675,28 @@ internal sealed class RtpSession : IRtpSession
         {
             _logger.LogError(ex, "Unhandled exception in RTP PacketReceived handler");
         }
+    }
+
+    // Removes the least-recently-active SSRC so the validator table stays bounded. Runs only when
+    // the cap is reached, on the receive loop thread (same as all _validators access), so no lock.
+    private void EvictLeastRecentlyActiveSsrc()
+    {
+        uint evictKey = 0;
+        var oldestActivity = long.MaxValue;
+        foreach (var entry in _validators)
+        {
+            if (entry.Value.LastActivity < oldestActivity)
+            {
+                oldestActivity = entry.Value.LastActivity;
+                evictKey = entry.Key;
+            }
+        }
+
+        _validators.Remove(evictKey);
+        _logger.LogDebug(
+            "RTP validator table reached {Max} SSRCs; evicted least-recently-active SSRC={Ssrc:X8}.",
+            MaxTrackedSsrcs,
+            evictKey);
     }
 
     // Decrypts a secondary-stream datagram with its own SRTP context and dispatches it,
