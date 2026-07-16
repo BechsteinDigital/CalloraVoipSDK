@@ -99,11 +99,17 @@ internal sealed class StunMessageCodec : IStunMessageCodec
                 if (attrLen != 20)
                     return false;
 
-                ushort adjustedLength = (ushort)(
+                // The STUN length field is 16-bit: a MESSAGE-INTEGRITY that would place the adjusted
+                // length beyond 65535 cannot belong to a valid message. Compute in int and reject the
+                // overflow instead of silently wrapping into a wrong HMAC length (RFC 5389 §15.4).
+                int adjustedLengthValue =
                     offset
                     - StunWireConstants.HeaderSize
                     + StunWireConstants.AttributeHeaderSize
-                    + 20);
+                    + 20;
+                if (adjustedLengthValue > ushort.MaxValue)
+                    return false;
+                ushort adjustedLength = (ushort)adjustedLengthValue;
 
                 var computed = ComputeHmacSha1WithAdjustedLength(rawMessage, offset, adjustedLength, hmacKey);
                 var stored = rawMessage[dataStart..(dataStart + 20)];
@@ -147,11 +153,16 @@ internal sealed class StunMessageCodec : IStunMessageCodec
 
                 uint stored = BinaryPrimitives.ReadUInt32BigEndian(rawMessage[dataStart..]);
 
-                ushort adjustedLength = (ushort)(
+                // See VerifyIntegrity: reject a FINGERPRINT whose adjusted length would exceed the
+                // 16-bit STUN length field rather than wrapping the ushort cast.
+                int adjustedLengthValue =
                     offset
                     - StunWireConstants.HeaderSize
                     + StunWireConstants.AttributeHeaderSize
-                    + 4);
+                    + 4;
+                if (adjustedLengthValue > ushort.MaxValue)
+                    return false;
+                ushort adjustedLength = (ushort)adjustedLengthValue;
 
                 uint crc = ComputeCrc32WithAdjustedLength(rawMessage, offset, adjustedLength);
                 uint expected = crc ^ StunWireConstants.FingerprintXorMask;
@@ -533,8 +544,11 @@ internal sealed class StunMessageCodec : IStunMessageCodec
         if (xor) port ^= StunWireConstants.MagicCookieHighWord;
 
         IPAddress address;
-        if (family == 0x01) // IPv4
+        if (family == 0x01) // IPv4: 4-byte address at value[4..8]
         {
+            if (value.Length < 8)
+                return new UnknownRawAttribute(typeCode) { Value = value.ToArray() };
+
             var addrBytes = value[4..8].ToArray();
             if (xor)
             {
@@ -544,8 +558,13 @@ internal sealed class StunMessageCodec : IStunMessageCodec
             }
             address = new IPAddress(addrBytes);
         }
-        else // IPv6 (family == 0x02)
+        else if (family == 0x02) // IPv6: 16-byte address at value[4..20]
         {
+            // Guard the slice: a truncated IPv6 attribute (family=0x02 but < 20 bytes) must not
+            // throw out of the decoder — a malformed attribute becomes an UnknownRawAttribute.
+            if (value.Length < 20)
+                return new UnknownRawAttribute(typeCode) { Value = value.ToArray() };
+
             var addrBytes = value[4..20].ToArray();
             if (xor)
             {
@@ -555,6 +574,10 @@ internal sealed class StunMessageCodec : IStunMessageCodec
                 for (int i = 0; i < 12; i++) addrBytes[4 + i] ^= transactionId[i];
             }
             address = new IPAddress(addrBytes);
+        }
+        else // unknown address family: do not guess the layout
+        {
+            return new UnknownRawAttribute(typeCode) { Value = value.ToArray() };
         }
 
         var endPoint = new IPEndPoint(address, port);
