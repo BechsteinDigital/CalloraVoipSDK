@@ -51,6 +51,31 @@ internal sealed class TurnServerOptions
     public uint ChannelBindingLifetimeSeconds { get; init; } = 600;
 
     /// <summary>
+    /// Maximum permissions retained per allocation. A client that installs more distinct peer
+    /// permissions is refused with 486 Allocation Quota Reached. 0 means unlimited (not recommended).
+    /// </summary>
+    public int MaxPermissionsPerAllocation { get; init; } = 128;
+
+    /// <summary>
+    /// Maximum channel bindings retained per allocation. Binding beyond this is refused with 486
+    /// Allocation Quota Reached. 0 means unlimited (not recommended).
+    /// </summary>
+    public int MaxChannelBindingsPerAllocation { get; init; } = 128;
+
+    /// <summary>
+    /// Maximum total concurrent allocations across all clients. Guards against an unbounded
+    /// allocation table (e.g. UDP source spoofing). Exceeding it yields 486 Allocation Quota Reached.
+    /// 0 means unlimited (not recommended for production).
+    /// </summary>
+    public int MaxTotalAllocations { get; init; } = 16384;
+
+    /// <summary>
+    /// Interval at which a background sweep removes expired allocations and prunes expired
+    /// permissions and channel bindings, independent of client traffic.
+    /// </summary>
+    public uint AllocationSweepIntervalSeconds { get; init; } = 30;
+
+    /// <summary>
     /// Whether requests must be authenticated using long-term credentials.
     /// </summary>
     public bool RequireAuthentication { get; init; } = true;

@@ -14,6 +14,10 @@ internal sealed class TurnServerAllocation : IAsyncDisposable
     private readonly ConcurrentDictionary<ushort, TurnServerChannelBinding> _channelsByNumber = new();
     private readonly ConcurrentDictionary<string, TurnServerChannelBinding> _channelsByPeer = new(StringComparer.Ordinal);
 
+    // Serializes the compound "count-check then insert" so a per-allocation quota is enforced
+    // exactly. Reads (HasValidPermission, TryResolve*) stay lock-free on the concurrent maps.
+    private readonly object _quotaGate = new();
+
     /// <summary>
     /// Logical client key used in allocation lookup tables.
     /// </summary>
@@ -85,16 +89,29 @@ internal sealed class TurnServerAllocation : IAsyncDisposable
     public string? Realm { get; set; }
 
     /// <summary>
-    /// Adds or updates permission for the peer endpoint.
+    /// Adds or updates permission for the peer endpoint, honouring the per-allocation quota.
+    /// Returns false when a new peer would exceed <paramref name="maxPermissions"/> (0 = unlimited).
+    /// Refreshing an existing permission always succeeds.
     /// </summary>
-    public void UpsertPermission(IPEndPoint peerEndPoint, DateTimeOffset expiresAtUtc)
+    public bool TryUpsertPermission(IPEndPoint peerEndPoint, DateTimeOffset expiresAtUtc, int maxPermissions)
     {
         var key = ToEndpointKey(peerEndPoint);
-        _permissions[key] = new TurnServerPermission
+        lock (_quotaGate)
         {
-            PeerEndPoint = peerEndPoint,
-            ExpiresAtUtc = expiresAtUtc
-        };
+            if (maxPermissions > 0
+                && !_permissions.ContainsKey(key)
+                && _permissions.Count >= maxPermissions)
+            {
+                return false;
+            }
+
+            _permissions[key] = new TurnServerPermission
+            {
+                PeerEndPoint = peerEndPoint,
+                ExpiresAtUtc = expiresAtUtc
+            };
+            return true;
+        }
     }
 
     /// <summary>
@@ -114,19 +131,55 @@ internal sealed class TurnServerAllocation : IAsyncDisposable
     }
 
     /// <summary>
-    /// Adds or updates channel binding for the peer endpoint.
+    /// Adds or updates channel binding for the peer endpoint, honouring the per-allocation quota.
+    /// Returns false when a new channel would exceed <paramref name="maxChannelBindings"/>
+    /// (0 = unlimited). Re-binding an existing channel number always succeeds.
     /// </summary>
-    public void UpsertChannelBinding(ushort channelNumber, IPEndPoint peerEndPoint, DateTimeOffset expiresAtUtc)
+    public bool TryUpsertChannelBinding(
+        ushort channelNumber,
+        IPEndPoint peerEndPoint,
+        DateTimeOffset expiresAtUtc,
+        int maxChannelBindings)
     {
-        var binding = new TurnServerChannelBinding
+        lock (_quotaGate)
         {
-            ChannelNumber = channelNumber,
-            PeerEndPoint = peerEndPoint,
-            ExpiresAtUtc = expiresAtUtc
-        };
+            if (maxChannelBindings > 0
+                && !_channelsByNumber.ContainsKey(channelNumber)
+                && _channelsByNumber.Count >= maxChannelBindings)
+            {
+                return false;
+            }
 
-        _channelsByNumber[channelNumber] = binding;
-        _channelsByPeer[ToEndpointKey(peerEndPoint)] = binding;
+            var binding = new TurnServerChannelBinding
+            {
+                ChannelNumber = channelNumber,
+                PeerEndPoint = peerEndPoint,
+                ExpiresAtUtc = expiresAtUtc
+            };
+
+            _channelsByNumber[channelNumber] = binding;
+            _channelsByPeer[ToEndpointKey(peerEndPoint)] = binding;
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Removes permissions and channel bindings whose lifetime has elapsed. Invoked by the server's
+    /// background sweep so stale entries are reclaimed even without further client traffic.
+    /// </summary>
+    public void PruneExpired(DateTimeOffset nowUtc)
+    {
+        foreach (var entry in _permissions)
+        {
+            if (nowUtc > entry.Value.ExpiresAtUtc)
+                _permissions.TryRemove(entry.Key, out _);
+        }
+
+        foreach (var entry in _channelsByNumber)
+        {
+            if (nowUtc > entry.Value.ExpiresAtUtc)
+                RemoveChannelBinding(entry.Value);
+        }
     }
 
     /// <summary>

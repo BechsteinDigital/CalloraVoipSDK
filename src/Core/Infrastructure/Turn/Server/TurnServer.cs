@@ -23,7 +23,7 @@ namespace CalloraVoipSdk.Core.Infrastructure.Turn.Server;
 /// Supported server-side relay flow: peer → Data Indication/ChannelData to client.
 /// </para>
 /// </summary>
-internal sealed class TurnServer : IAsyncDisposable
+internal sealed partial class TurnServer : IAsyncDisposable
 {
     private readonly TurnServerTransport _transport;
     private readonly IStunMessageCodec _codec;
@@ -49,6 +49,7 @@ internal sealed class TurnServer : IAsyncDisposable
     private readonly ConcurrentDictionary<string, TurnServerAllocation> _allocationsByClient = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, Task> _relayTasks = new(StringComparer.Ordinal);
     private Task? _receiveLoop;
+    private Task? _sweepLoop;
 
     /// <summary>
     /// Local endpoint the TURN server listens on.
@@ -83,6 +84,12 @@ internal sealed class TurnServer : IAsyncDisposable
             throw new ArgumentOutOfRangeException(nameof(options), "MaxConcurrentUdpPacketHandlers must be >= 0.");
         if (_options.DefaultAllocationLifetimeSeconds > _options.MaxAllocationLifetimeSeconds)
             throw new ArgumentOutOfRangeException(nameof(options), "Default allocation lifetime cannot exceed max allocation lifetime.");
+        if (_options.MaxPermissionsPerAllocation < 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "MaxPermissionsPerAllocation must be >= 0.");
+        if (_options.MaxChannelBindingsPerAllocation < 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "MaxChannelBindingsPerAllocation must be >= 0.");
+        if (_options.MaxTotalAllocations < 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "MaxTotalAllocations must be >= 0.");
         if (_options.RequireAuthentication && authOptions is null)
             throw new ArgumentNullException(nameof(authOptions), "TURN authentication is required but auth options are missing.");
 
@@ -98,6 +105,7 @@ internal sealed class TurnServer : IAsyncDisposable
             _responseFactory,
             _mobilityService,
             ReplaceAllocationAsync,
+            HasAllocationCapacity,
             _logger);
         _tcpExtensionHandler = new TurnTcpExtensionHandler(
             _allocationsByClient,
@@ -147,6 +155,8 @@ internal sealed class TurnServer : IAsyncDisposable
             _ => throw new ArgumentOutOfRangeException()
         };
 
+        _sweepLoop = SweepExpiredAllocationsAsync(_stop.Token);
+
         _logger.LogInformation(
             "TURN server listening on {EndPoint} via {Transport} (stream-cap={Cap}, udp-cap={UdpCap}, policy={Policy}, backlog={Backlog})",
             LocalEndPoint,
@@ -178,6 +188,21 @@ internal sealed class TurnServer : IAsyncDisposable
             catch (Exception ex)
             {
                 _logger.LogError(ex, "TURN receive loop exited with error");
+            }
+        }
+
+        if (_sweepLoop is not null)
+        {
+            try
+            {
+                await _sweepLoop.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "TURN allocation sweep loop exited with error");
             }
         }
 
@@ -674,7 +699,14 @@ internal sealed class TurnServer : IAsyncDisposable
         if (!IsPeerFamilyMatchingAllocation(allocation!, peer))
             return Task.FromResult(_responseFactory.BuildErrorResponse(request, 443, "Peer Address Family Mismatch", includeAuthAttributes: false));
 
-        allocation!.UpsertPermission(peer, DateTimeOffset.UtcNow.AddSeconds(_options.PermissionLifetimeSeconds));
+        if (!allocation!.TryUpsertPermission(
+                peer,
+                DateTimeOffset.UtcNow.AddSeconds(_options.PermissionLifetimeSeconds),
+                _options.MaxPermissionsPerAllocation))
+        {
+            return Task.FromResult(_responseFactory.BuildErrorResponse(request, 486, "Allocation Quota Reached", includeAuthAttributes: false));
+        }
+
         return Task.FromResult(_responseFactory.BuildSuccessResponse(request, []));
     }
 
@@ -698,8 +730,18 @@ internal sealed class TurnServer : IAsyncDisposable
         if (!allocation!.IsChannelCompatible(channel.Value, peer))
             return Task.FromResult(_responseFactory.BuildErrorResponse(request, 400, "Bad Request", includeAuthAttributes: false));
 
-        allocation.UpsertPermission(peer, DateTimeOffset.UtcNow.AddSeconds(_options.PermissionLifetimeSeconds));
-        allocation.UpsertChannelBinding(channel.Value, peer, DateTimeOffset.UtcNow.AddSeconds(_options.ChannelBindingLifetimeSeconds));
+        if (!allocation!.TryUpsertPermission(
+                peer,
+                DateTimeOffset.UtcNow.AddSeconds(_options.PermissionLifetimeSeconds),
+                _options.MaxPermissionsPerAllocation)
+            || !allocation.TryUpsertChannelBinding(
+                channel.Value,
+                peer,
+                DateTimeOffset.UtcNow.AddSeconds(_options.ChannelBindingLifetimeSeconds),
+                _options.MaxChannelBindingsPerAllocation))
+        {
+            return Task.FromResult(_responseFactory.BuildErrorResponse(request, 486, "Allocation Quota Reached", includeAuthAttributes: false));
+        }
 
         return Task.FromResult(_responseFactory.BuildSuccessResponse(request, []));
     }
@@ -870,95 +912,6 @@ internal sealed class TurnServer : IAsyncDisposable
         {
             _logger.LogError(ex, "TURN failed to send response to {Sender}", context.RemoteEndPoint);
         }
-    }
-
-    private async Task ReplaceAllocationAsync(TurnServerAllocation allocation, CancellationToken ct)
-    {
-        TurnServerAllocation? previousAllocation;
-        await _allocationMutationGate.WaitAsync(ct).ConfigureAwait(false);
-        try
-        {
-            _allocationsByClient.TryRemove(allocation.ClientKey, out previousAllocation);
-            _relayTasks.TryRemove(allocation.ClientKey, out _);
-
-            _allocationsByClient[allocation.ClientKey] = allocation;
-            var relayTask = StartRelayTask(allocation, ct);
-            if (relayTask != Task.CompletedTask)
-                _relayTasks[allocation.ClientKey] = relayTask;
-        }
-        finally
-        {
-            _allocationMutationGate.Release();
-        }
-
-        if (previousAllocation is not null)
-            await DisposeAllocationResourcesAsync(previousAllocation).ConfigureAwait(false);
-    }
-
-    private async Task RemoveAllocationAsync(string clientKey)
-    {
-        TurnServerAllocation? allocation;
-        await _allocationMutationGate.WaitAsync().ConfigureAwait(false);
-        try
-        {
-            _allocationsByClient.TryRemove(clientKey, out allocation);
-            _relayTasks.TryRemove(clientKey, out _);
-        }
-        finally
-        {
-            _allocationMutationGate.Release();
-        }
-
-        if (allocation is not null)
-            await DisposeAllocationResourcesAsync(allocation).ConfigureAwait(false);
-    }
-
-    private Task StartRelayTask(TurnServerAllocation allocation, CancellationToken ct)
-    {
-        return allocation.RelayedTransport switch
-        {
-            TurnRequestedTransportProtocol.Udp => RelayReceiveLoopAsync(allocation, ct),
-            TurnRequestedTransportProtocol.Tcp => _tcpPassiveConnectionService.RunAsync(allocation, SendToClientAsync, ct),
-            _ => Task.CompletedTask
-        };
-    }
-
-    private async Task DisposeAllocationResourcesAsync(TurnServerAllocation allocation)
-    {
-        _mobilityService.RemoveTicketsForAllocation(allocation.ClientKey);
-        _tcpConnectionBroker.RemoveByAllocation(allocation.ClientKey);
-        await allocation.DisposeAsync().ConfigureAwait(false);
-    }
-
-    private bool TryGetLiveAllocation(string clientKey, out TurnServerAllocation? allocation)
-    {
-        allocation = null;
-
-        if (!_allocationsByClient.TryGetValue(clientKey, out var existing))
-            return false;
-
-        if (DateTimeOffset.UtcNow <= existing.ExpiresAtUtc)
-        {
-            allocation = existing;
-            return true;
-        }
-
-        _ = RemoveAllocationAsync(clientKey);
-        return false;
-    }
-
-    private static bool IsPeerFamilyMatchingAllocation(TurnServerAllocation allocation, IPEndPoint peerEndPoint)
-        => TurnMobilityService.IsPeerFamilyMatchingAllocation(allocation, peerEndPoint);
-
-    private uint ClampAllocationLifetime(uint? requestedLifetime)
-    {
-        if (!requestedLifetime.HasValue)
-            return _options.DefaultAllocationLifetimeSeconds;
-
-        return Math.Clamp(
-            requestedLifetime.Value,
-            0,
-            _options.MaxAllocationLifetimeSeconds);
     }
 
     private void TrackConnectionTask(Task task)

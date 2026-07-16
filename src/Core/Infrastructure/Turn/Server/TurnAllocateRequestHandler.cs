@@ -19,28 +19,36 @@ internal sealed class TurnAllocateRequestHandler
     private readonly TurnServerResponseFactory _responseFactory;
     private readonly TurnMobilityService _mobilityService;
     private readonly Func<TurnServerAllocation, CancellationToken, Task> _replaceAllocationAsync;
+    private readonly Func<string, bool> _hasAllocationCapacity;
     private readonly ILogger<TurnServer> _logger;
 
     /// <summary>
     /// Creates a handler for Allocate requests.
     /// </summary>
+    /// <param name="hasAllocationCapacity">
+    /// Predicate over the client key that returns false when a new allocation would exceed the
+    /// server-wide allocation quota (an existing allocation for the same client always has capacity).
+    /// </param>
     public TurnAllocateRequestHandler(
         TurnServerOptions options,
         TurnServerResponseFactory responseFactory,
         TurnMobilityService mobilityService,
         Func<TurnServerAllocation, CancellationToken, Task> replaceAllocationAsync,
+        Func<string, bool> hasAllocationCapacity,
         ILogger<TurnServer> logger)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(responseFactory);
         ArgumentNullException.ThrowIfNull(mobilityService);
         ArgumentNullException.ThrowIfNull(replaceAllocationAsync);
+        ArgumentNullException.ThrowIfNull(hasAllocationCapacity);
         ArgumentNullException.ThrowIfNull(logger);
 
         _options = options;
         _responseFactory = responseFactory;
         _mobilityService = mobilityService;
         _replaceAllocationAsync = replaceAllocationAsync;
+        _hasAllocationCapacity = hasAllocationCapacity;
         _logger = logger;
     }
 
@@ -84,6 +92,15 @@ internal sealed class TurnAllocateRequestHandler
 
         if (requestedMobilityTicket is not null && !_options.EnableMobility)
             return _responseFactory.BuildErrorResponse(request, 405, "Mobility Forbidden", includeAuthAttributes: false);
+
+        // Enforce the server-wide allocation quota before provisioning any relay resource, so a flood
+        // of (possibly source-spoofed) Allocate requests cannot grow the allocation table without bound.
+        if (!_hasAllocationCapacity(context.ClientKey))
+        {
+            _logger.LogWarning(
+                "TURN allocation quota reached; refusing Allocate from {Client}", context.RemoteEndPoint);
+            return _responseFactory.BuildErrorResponse(request, 486, "Allocation Quota Reached", includeAuthAttributes: false);
+        }
 
         var requestedLifetime = TurnAttributeMapper.DecodeLifetime(request)?.Seconds;
         var allocationLifetime = ClampAllocationLifetime(requestedLifetime);
