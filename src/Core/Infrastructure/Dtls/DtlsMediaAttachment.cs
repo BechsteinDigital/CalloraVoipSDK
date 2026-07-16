@@ -143,10 +143,48 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
             Value = parameters.DtlsRemoteFingerprintValue!,
         };
 
-        return new DtlsMediaAttachment(
+        return Create(
             parameters.DtlsIsClient, remoteEndPointOverride ?? parameters.RemoteEndPoint, expected,
-            handshaker!, certificate!, sendRaw, onContextsReady, onSecondaryContextsReady,
-            onHandshakeFailed, loggerFactory);
+            handshaker!, certificate!, sendRaw, onContextsReady, onHandshakeFailed, loggerFactory,
+            onSecondaryContextsReady);
+    }
+
+    /// <summary>
+    /// Creates the attachment from explicit DTLS parameters, independent of any SIP call context, so a
+    /// bundled transport (RFC 8843) can key its one shared DTLS association the same way (ADR-011 B3-2).
+    /// <see cref="TryCreate"/> is the SIP entry point that derives these inputs from the negotiated call.
+    /// </summary>
+    /// <param name="isClient">Whether this side runs the DTLS client role (RFC 5763 setup:active).</param>
+    /// <param name="remoteEndPoint">The peer media endpoint DTLS records are exchanged with.</param>
+    /// <param name="expectedRemoteFingerprint">The peer certificate fingerprint that authenticates the handshake.</param>
+    /// <param name="sendRaw">Sends a raw DTLS record to the peer over the media socket.</param>
+    /// <param name="onContextsReady">Receives the derived outbound/inbound SRTP and SRTCP contexts.</param>
+    /// <param name="onSecondaryContextsReady">Optional RTX (RFC 4588) SRTP contexts from the same keys.</param>
+    /// <param name="onHandshakeFailed">Invoked when the handshake fails, so the owner keeps media blocked.</param>
+    public static DtlsMediaAttachment Create(
+        bool isClient,
+        IPEndPoint remoteEndPoint,
+        DtlsFingerprint expectedRemoteFingerprint,
+        IDtlsSrtpHandshaker handshaker,
+        DtlsCertificate certificate,
+        Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask> sendRaw,
+        Action<ISrtpContext, ISrtpContext, ISrtcpContext, ISrtcpContext> onContextsReady,
+        Action onHandshakeFailed,
+        ILoggerFactory loggerFactory,
+        Action<ISrtpContext, ISrtpContext>? onSecondaryContextsReady = null)
+    {
+        ArgumentNullException.ThrowIfNull(remoteEndPoint);
+        ArgumentNullException.ThrowIfNull(expectedRemoteFingerprint);
+        ArgumentNullException.ThrowIfNull(handshaker);
+        ArgumentNullException.ThrowIfNull(certificate);
+        ArgumentNullException.ThrowIfNull(sendRaw);
+        ArgumentNullException.ThrowIfNull(onContextsReady);
+        ArgumentNullException.ThrowIfNull(onHandshakeFailed);
+        ArgumentNullException.ThrowIfNull(loggerFactory);
+
+        return new DtlsMediaAttachment(
+            isClient, remoteEndPoint, expectedRemoteFingerprint, handshaker, certificate,
+            sendRaw, onContextsReady, onSecondaryContextsReady, onHandshakeFailed, loggerFactory);
     }
 
     /// <summary>
