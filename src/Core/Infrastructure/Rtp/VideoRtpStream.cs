@@ -133,7 +133,7 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
         _logger = loggerFactory.CreateLogger<VideoRtpStream>();
         _payloadType = (byte)video.PayloadType;
         CodecName = video.CodecName;
-        (_packetiser, _depacketiser) = CreatePayloadFormat(video.CodecName);
+        (_packetiser, _depacketiser) = VideoPayloadFormat.Create(video.CodecName);
 
         // SDES keying (RFC 4568) for the video m-line: build the SRTP/SRTCP contexts from the
         // video stream's own negotiated key material and hand them to the session (which borrows
@@ -557,12 +557,4 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
         return missing;
     }
 
-    private static (IVideoPacketiser Packetiser, IVideoDepacketiser Depacketiser) CreatePayloadFormat(
-        string codecName) => codecName.ToUpperInvariant() switch
-    {
-        "VP8" => (new Vp8Packetiser(), new Vp8Depacketiser()),
-        "H264" => (new H264Packetiser(), new H264Depacketiser()),
-        _ => throw new InvalidOperationException(
-            $"Negotiated video codec '{codecName}' has no RTP payload format implementation."),
-    };
 }
