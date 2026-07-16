@@ -85,6 +85,17 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IAsyncDisp
         await _udp.SendAsync(datagram, remote, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Sends a datagram to an explicit target rather than the default remote. ICE needs this: a STUN
+    /// response goes back to the source of the check, and a triggered check to a peer-reflexive address
+    /// (RFC 8445 §7.3), neither of which is necessarily the nominated remote.
+    /// </summary>
+    public async ValueTask SendToAsync(ReadOnlyMemory<byte> datagram, IPEndPoint target, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        await _udp.SendAsync(datagram, target, cancellationToken).ConfigureAwait(false);
+    }
+
     private async Task RunReceiveLoopAsync(CancellationToken cancellationToken)
     {
         _logger.LogDebug("Bundled media receive loop started on {LocalEndPoint}", _localEndPoint);
