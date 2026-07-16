@@ -437,9 +437,12 @@ internal sealed class RtpSession : IRtpSession
 
     private void ProcessDatagram(ReadOnlySpan<byte> datagram, IPEndPoint? source)
     {
-        // RFC 7983 demux: STUN connectivity checks share the media 5-tuple with RTP/RTCP.
-        // Route them out before any RTP/RTCP interpretation; the ICE layer owns the response.
-        if (source is not null && LooksLikeStunDatagram(datagram))
+        // RFC 7983 demux (STUN/DTLS/RTP/RTCP share the media 5-tuple): classify once, then route.
+        var kind = MediaPacketClassifier.Classify(datagram);
+
+        // STUN connectivity checks — routed out before any RTP/RTCP interpretation; the ICE layer
+        // owns the response.
+        if (source is not null && kind is MediaPacketKind.Stun)
         {
             // The receive buffer is reused for the next datagram; the ICE handler may
             // authenticate or respond asynchronously, so hand it an independent copy.
@@ -455,9 +458,8 @@ internal sealed class RtpSession : IRtpSession
             return;
         }
 
-        // RFC 5764 §5.1.2 / RFC 7983 demux: DTLS record types occupy 20..63, disjoint from
-        // STUN (0..3) and RTP/RTCP (128..191). Routed to the DTLS-SRTP handshake layer.
-        if (source is not null && LooksLikeDtlsDatagram(datagram))
+        // DTLS records (RFC 5764 §5.1.2 / RFC 7983) — routed to the DTLS-SRTP handshake layer.
+        if (source is not null && kind is MediaPacketKind.Dtls)
         {
             // Independent copy — the receive buffer is reused and the handshake engine
             // consumes the record on its own thread.
@@ -473,7 +475,7 @@ internal sealed class RtpSession : IRtpSession
             return;
         }
 
-        if (LooksLikeRtcpDatagram(datagram))
+        if (kind is MediaPacketKind.Rtcp)
         {
             // SRTCP (RFC 3711 §3.4): authenticate + decrypt before dispatch when a context is
             // negotiated. UnprotectRtcp returns a fresh array; on plain RTCP we copy, since the
@@ -727,35 +729,6 @@ internal sealed class RtpSession : IRtpSession
         DtlsPacketReceived = null;
         SecondaryPacketReceived = null;
         PacketSent = null;
-    }
-
-    // RFC 7983 / RFC 5764 §5.1.2 demux: a STUN packet's first byte is in 0..3, disjoint from
-    // RTP/RTCP (128..191). The 32-bit magic cookie (RFC 5389 §6) at offset 4 confirms it and
-    // rejects any stray low-byte datagram that is not STUN.
-    private static bool LooksLikeStunDatagram(ReadOnlySpan<byte> datagram)
-    {
-        if (datagram.Length < 8 || datagram[0] > 3)
-            return false;
-
-        return BinaryPrimitives.ReadUInt32BigEndian(datagram[4..8]) == 0x2112A442u;
-    }
-
-    // RFC 5764 §5.1.2 / RFC 7983: a DTLS record's first byte (content type) is in 20..63.
-    // The 13-byte minimum is the DTLS record header — anything shorter cannot be DTLS.
-    private static bool LooksLikeDtlsDatagram(ReadOnlySpan<byte> datagram) =>
-        datagram.Length >= 13 && datagram[0] >= 20 && datagram[0] <= 63;
-
-    private static bool LooksLikeRtcpDatagram(ReadOnlySpan<byte> datagram)
-    {
-        if (datagram.Length < 2)
-            return false;
-
-        var version = datagram[0] >> 6;
-        if (version != 2)
-            return false;
-
-        var packetType = datagram[1];
-        return packetType is >= 192 and <= 223;
     }
 
     private static uint ClampToUInt32(long value)
