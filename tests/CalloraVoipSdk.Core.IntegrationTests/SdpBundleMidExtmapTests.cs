@@ -1,7 +1,9 @@
 using System.Net;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
+using CalloraVoipSdk.Core.Infrastructure.Sdp;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Models;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.OfferAnswer;
+using CalloraVoipSdk.Core.Infrastructure.Sdp.Parsing;
 
 namespace CalloraVoipSdk.Core.IntegrationTests;
 
@@ -108,5 +110,40 @@ public sealed class SdpBundleMidExtmapTests
         Assert.DoesNotContain(
             result.Answer.Media.Single(m => m.MediaType == "video").Extensions,
             e => e.Uri == RtpHeaderExtensionUris.Mid);
+    }
+
+    [Fact]
+    public void TryExtractBundleMid_recovers_the_mid_id_and_tokens_from_a_bundle_sdp()
+    {
+        var offer = new SdpOfferAnswerNegotiator().CreateOffer(
+            Local, AudioCodecs, SdpMediaDirection.SendRecv,
+            new SdpMediaOptions { Bundle = true, RtcpMux = true, Video = Video() });
+        var sdp = new SdpSessionSerializer().Serialize(offer);
+
+        var info = SdpUtilities.TryExtractBundleMid(sdp);
+
+        Assert.NotNull(info);
+        Assert.Equal(1, info!.MidExtensionId);   // the shared sdes:mid id
+        Assert.Equal("audio", info.AudioMid);
+        Assert.Equal("video", info.VideoMid);
+    }
+
+    [Fact]
+    public void TryExtractBundleMid_returns_null_without_the_mid_extension()
+    {
+        var offer = new SdpOfferAnswerNegotiator().CreateOffer(
+            Local, AudioCodecs, SdpMediaDirection.SendRecv,
+            new SdpMediaOptions { RtcpMux = true, Video = Video() });
+
+        Assert.Null(SdpUtilities.TryExtractBundleMid(new SdpSessionSerializer().Serialize(offer)));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void TryExtractBundleMid_is_null_for_empty_sdp(string? sdp)
+    {
+        Assert.Null(SdpUtilities.TryExtractBundleMid(sdp));
     }
 }

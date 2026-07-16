@@ -127,6 +127,38 @@ internal static class SdpUtilities
     }
 
     /// <summary>
+    /// Recovers the negotiated BUNDLE MID facts from an SDP (RFC 8843 §9 / RFC 9143): the shared
+    /// <c>sdes:mid</c> header-extension id and each m-line's <c>a=mid</c>. Returns <see langword="null"/>
+    /// when no <c>sdes:mid</c> extension was negotiated (the media is not BUNDLE-routed) or the SDP is
+    /// malformed. The id is read once — it is the same on every m-line of a bundle.
+    /// </summary>
+    public static SdpBundleMidInfo? TryExtractBundleMid(string? sdp)
+    {
+        if (string.IsNullOrWhiteSpace(sdp)) return null;
+        try
+        {
+            var parsed = Parser.Parse(sdp);
+            byte? midExtensionId = null;
+            string? audioMid = null;
+            string? videoMid = null;
+            foreach (var media in parsed.Media)
+            {
+                midExtensionId ??= ResolveMidExtensionId(media.Extensions);
+                if (media.MediaType.Equals("audio", StringComparison.OrdinalIgnoreCase))
+                    audioMid = media.Mid;
+                else if (media.MediaType.Equals("video", StringComparison.OrdinalIgnoreCase))
+                    videoMid = media.Mid;
+            }
+
+            return midExtensionId is { } id ? new SdpBundleMidInfo(id, audioMid, videoMid) : null;
+        }
+        catch (FormatException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Builds a default SDP offer for local capabilities.
     /// </summary>
     public static string BuildDefaultSdp(
@@ -562,6 +594,19 @@ internal static class SdpUtilities
         {
             if (extension.Id is >= OneByteRtpHeaderExtensions.MinId and <= OneByteRtpHeaderExtensions.MaxId
                 && string.Equals(extension.Uri, RtpHeaderExtensionUris.TransportWideCc, StringComparison.Ordinal))
+                return (byte)extension.Id;
+        }
+        return null;
+    }
+
+    // The negotiated one-byte header-extension id for the MID SDES extension (RFC 9143), or null when
+    // the extension was not negotiated on this m-line.
+    private static byte? ResolveMidExtensionId(IReadOnlyList<SdpExtmap> extensions)
+    {
+        foreach (var extension in extensions)
+        {
+            if (extension.Id is >= OneByteRtpHeaderExtensions.MinId and <= OneByteRtpHeaderExtensions.MaxId
+                && string.Equals(extension.Uri, RtpHeaderExtensionUris.Mid, StringComparison.Ordinal))
                 return (byte)extension.Id;
         }
         return null;
