@@ -30,7 +30,12 @@ internal sealed class StunBindingRequestHandler : IStunRequestHandler
     private readonly ILogger<StunBindingRequestHandler> _logger;
 
     /// <summary>
-    /// Initialises a handler that processes Binding Requests without authentication.
+    /// Initialises a handler that processes Binding Requests <b>without authentication</b>.
+    /// <para>
+    /// Every Binding Request is answered regardless of origin — appropriate only for a public STUN
+    /// endpoint on a trusted network. Where authentication is expected this is a spoofing risk, so
+    /// selecting this constructor must be a deliberate choice; construction emits a warning log.
+    /// </para>
     /// </summary>
     public StunBindingRequestHandler(
         IStunMessageCodec                  codec,
@@ -84,7 +89,9 @@ internal sealed class StunBindingRequestHandler : IStunRequestHandler
 
     /// <summary>
     /// Initialises a handler that resolves credentials per USERNAME/REALM via provider lookup.
-    /// This constructor enables multi-user STUN authentication.
+    /// This constructor enables multi-user STUN authentication. Passing a null
+    /// <paramref name="credentialProvider"/> with no third-party authorization yields an
+    /// unauthenticated handler — see the no-authentication constructor's remarks.
     /// </summary>
     public StunBindingRequestHandler(
         IStunMessageCodec                  codec,
@@ -110,6 +117,8 @@ internal sealed class StunBindingRequestHandler : IStunRequestHandler
         _nonceManager            = nonceManager;
         _thirdPartyAuthorization = thirdPartyAuthorization;
         _logger                  = logger;
+
+        WarnIfUnauthenticated();
     }
 
     private StunBindingRequestHandler(
@@ -137,6 +146,23 @@ internal sealed class StunBindingRequestHandler : IStunRequestHandler
         _nonceManager            = nonceManager;
         _thirdPartyAuthorization = thirdPartyAuthorization;
         _logger                  = logger;
+
+        WarnIfUnauthenticated();
+    }
+
+    // Surfaces a misconfiguration where the handler was built without any authentication mechanism:
+    // Binding is then answered for every sender. That is valid for a public STUN endpoint but a
+    // spoofing risk if authentication was intended, so the choice is logged once at construction.
+    private void WarnIfUnauthenticated()
+    {
+        if (_credentialProvider is null
+            && _fallbackCredentials is null
+            && _thirdPartyAuthorization is null)
+        {
+            _logger.LogWarning(
+                "STUN Binding handler constructed WITHOUT authentication: every Binding Request is answered " +
+                "unauthenticated. Ensure this is intentional (public STUN) and not a missing-credentials misconfiguration.");
+        }
     }
 
     /// <inheritdoc />
