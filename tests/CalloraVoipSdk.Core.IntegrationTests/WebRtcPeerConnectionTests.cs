@@ -1,0 +1,119 @@
+using System.Net;
+using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
+using CalloraVoipSdk.Core.Infrastructure.Sdp.Models;
+using CalloraVoipSdk.Core.Infrastructure.Sdp.OfferAnswer;
+using CalloraVoipSdk.Core.Infrastructure.Sdp.Parsing;
+using CalloraVoipSdk.Core.Infrastructure.WebRtc;
+using Microsoft.Extensions.Logging.Abstractions;
+
+namespace CalloraVoipSdk.Core.IntegrationTests;
+
+/// <summary>
+/// The signalling surface of the WebRTC peer (Weg 1 / ADR-010 founder architecture): it consumes a
+/// remote SDP offer and produces a WebRTC answer — BUNDLE (RFC 8843), DTLS-SRTP (RFC 5763), rtcp-mux
+/// (RFC 8834), and the sdes:mid extension (RFC 9143) — via the existing SDP negotiator, driving the
+/// <see cref="WebRtcConnectionState"/> machine. It is signalling-neutral (SDP in, SDP out) and does not
+/// touch the SIP call path.
+/// </summary>
+public sealed class WebRtcPeerConnectionTests
+{
+    private static readonly IReadOnlyList<SdpCodecDefinition> Pcmu =
+        [new SdpCodecDefinition { PayloadType = 0, Name = "PCMU", ClockRate = 8000 }];
+    private static readonly IReadOnlyList<SdpCodecDefinition> Opus =
+        [new SdpCodecDefinition { PayloadType = 111, Name = "opus", ClockRate = 48000, Channels = 2 }];
+
+    [Fact]
+    public async Task SetRemoteDescription_answers_a_webrtc_offer_with_bundle_dtls_and_mid()
+    {
+        await using var peer = Peer(Pcmu);
+        var states = new List<WebRtcConnectionState>();
+        peer.ConnectionStateChanged += states.Add;
+
+        var answer = await peer.SetRemoteDescriptionAsync(WebRtcOffer());
+
+        Assert.Equal(WebRtcConnectionState.Connecting, peer.State);
+        Assert.Contains(WebRtcConnectionState.Connecting, states);
+        Assert.Equal(answer, peer.LocalDescription);
+
+        var parsed = new SdpSessionParser().Parse(answer);
+        Assert.StartsWith("BUNDLE", parsed.Group);
+
+        var audio = parsed.Media.Single(m => m.MediaType == "audio");
+        var video = parsed.Media.Single(m => m.MediaType == "video");
+        Assert.Equal("audio", audio.Mid);
+        Assert.Equal("video", video.Mid);
+        Assert.Contains(audio.Extensions, e => e.Uri == RtpHeaderExtensionUris.Mid);
+        Assert.Contains(video.Extensions, e => e.Uri == RtpHeaderExtensionUris.Mid);
+        Assert.NotNull(audio.Fingerprint);         // DTLS-SRTP answer (RFC 5763)
+        Assert.NotNull(audio.IceUfrag);            // ICE credentials (RFC 8839)
+        Assert.True(audio.RtcpMux);                // rtcp-mux (RFC 8834)
+    }
+
+    [Fact]
+    public async Task An_empty_remote_description_is_rejected()
+    {
+        await using var peer = Peer(Pcmu);
+        await Assert.ThrowsAsync<ArgumentException>(() => peer.SetRemoteDescriptionAsync("   "));
+        Assert.Equal(WebRtcConnectionState.New, peer.State);
+    }
+
+    [Fact]
+    public async Task A_non_negotiable_offer_moves_the_peer_to_failed()
+    {
+        // The peer only offers Opus; the remote offers PCMU — no audio codec intersects.
+        await using var peer = Peer(Opus);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => peer.SetRemoteDescriptionAsync(WebRtcOffer()));
+
+        Assert.Equal(WebRtcConnectionState.Failed, peer.State);
+        Assert.Null(peer.LocalDescription);
+    }
+
+    [Fact]
+    public async Task Disposing_the_peer_closes_it()
+    {
+        var closed = new List<WebRtcConnectionState>();
+        var peer = Peer(Pcmu);
+        peer.ConnectionStateChanged += closed.Add;
+
+        await peer.DisposeAsync();
+
+        Assert.Equal(WebRtcConnectionState.Closed, peer.State);
+        Assert.Contains(WebRtcConnectionState.Closed, closed);
+    }
+
+    // ── harness ──────────────────────────────────────────────────────────────────
+
+    private static WebRtcPeerConnection Peer(IReadOnlyList<SdpCodecDefinition> audioCodecs) =>
+        new(new WebRtcPeerOptions
+            {
+                LocalEndPoint = new IPEndPoint(IPAddress.Loopback, 6000),
+                AudioCodecs = audioCodecs,
+                Video = new SdpVideoMediaOptions
+                {
+                    Port = 6002,
+                    Codecs = [new SdpCodecDefinition { PayloadType = 96, Name = "H264", ClockRate = 90000 }],
+                },
+                Dtls = new SdpDtlsParameters { Algorithm = "sha-256", Fingerprint = "11:22:33" },
+                Ice = new SdpIceParameters { Ufrag = "localU", Pwd = "localpassword1234567890" },
+            },
+            new SdpOfferAnswerNegotiator(), new SdpSessionParser(), new SdpSessionSerializer(),
+            NullLoggerFactory.Instance);
+
+    // A remote WebRTC offer (BUNDLE + DTLS + ICE + video), built with the negotiator and serialized.
+    private static string WebRtcOffer() => new SdpSessionSerializer().Serialize(
+        new SdpOfferAnswerNegotiator().CreateOffer(
+            new IPEndPoint(IPAddress.Loopback, 5000), Pcmu, SdpMediaDirection.SendRecv,
+            new SdpMediaOptions
+            {
+                Bundle = true,
+                RtcpMux = true,
+                Dtls = new SdpDtlsParameters { Algorithm = "sha-256", Fingerprint = "AA:BB:CC", Setup = "actpass" },
+                Ice = new SdpIceParameters { Ufrag = "remoteU", Pwd = "remotepassword1234567890" },
+                Video = new SdpVideoMediaOptions
+                {
+                    Port = 5002,
+                    Codecs = [new SdpCodecDefinition { PayloadType = 96, Name = "H264", ClockRate = 90000 }],
+                },
+            }));
+}
