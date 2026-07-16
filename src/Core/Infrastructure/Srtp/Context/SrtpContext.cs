@@ -5,9 +5,12 @@ using CalloraVoipSdk.Core.Infrastructure.Srtp.Crypto;
 namespace CalloraVoipSdk.Core.Infrastructure.Srtp.Context;
 
 /// <summary>
-/// SRTP context for one SSRC and one direction (RFC 3711).
+/// SRTP context for one direction (RFC 3711) under one shared master key.
 /// Implements AES-CM encryption (§4.1), HMAC-SHA1 authentication (§4.2),
 /// and replay protection via a 64-packet sliding window (§3.3.2).
+/// The session keys are shared across SSRCs (RFC 3711 §4.3 derives them from the master key,
+/// not the SSRC — the SSRC only feeds the IV), while the rollover counter and replay window are
+/// per-SSRC (§3.2.1), so one context serves every SSRC a BUNDLE transport (RFC 8843) carries.
 /// </summary>
 internal sealed class SrtpContext : ISrtpContext
 {
@@ -18,19 +21,14 @@ internal sealed class SrtpContext : ISrtpContext
     private readonly SrtpCryptoSuite _suite;
     private readonly int _authTagLength;
 
-    // Sender-side index: tracks the last outbound packet index for ROC advancement.
-    // Kept separate from the receiver replay window (RFC 3711 recommends per-direction
-    // contexts; the SDK creates one context per direction).
-    private ulong _senderIndex;
+    // Per-SSRC ROC + replay state (RFC 3711 §3.2.1). One entry per synchronisation source seen on
+    // this direction; a single-stream context simply holds one. Inbound state is created only once a
+    // packet from an SSRC authenticates, so an unauthenticated SSRC spray cannot grow the map.
+    private readonly Dictionary<uint, SrtpSsrcState> _ssrcState = [];
 
-    // Receiver replay window: 64-bit bitmap, high bit = newest packet (RFC 3711 §3.3.2)
-    private ulong _replayWindowIndex;
-    private ulong _replayWindowBitmap;
-    private const int ReplayWindowSize = 64;
-
-    // Serializes all mutable state (sender index, replay window) and key usage so the
-    // context is thread-safe on its own — concurrent Protect calls would otherwise race
-    // the ROC advancement and concurrent Unprotect calls the replay window.
+    // Serializes all mutable state (per-SSRC indices, replay windows) and key usage so the context
+    // is thread-safe on its own — concurrent Protect calls would otherwise race a stream's ROC
+    // advancement and concurrent Unprotect calls its replay window.
     private readonly object _sync = new();
     private bool _disposed;
 
@@ -46,6 +44,15 @@ internal sealed class SrtpContext : ISrtpContext
 
     /// <summary>Derived session keys — internal test seam for dispose/zeroing evidence.</summary>
     internal SrtpSessionKeys SessionKeys => _keys;
+
+    /// <summary>
+    /// Number of SSRCs with committed per-SSRC state — internal test seam proving that inbound state
+    /// is created only for authenticated sources (a forged-SSRC flood leaves this at zero).
+    /// </summary>
+    internal int TrackedSourceCount
+    {
+        get { lock (_sync) { return _ssrcState.Count; } }
+    }
 
     // -------------------------------------------------------------------------
     // Protect (encrypt outbound)
@@ -70,7 +77,8 @@ internal sealed class SrtpContext : ISrtpContext
         var payloadLen  = rtpPacket.Length - headerLen;
         var ssrc        = BinaryPrimitives.ReadUInt32BigEndian(rtpPacket[8..]);
         var seq         = BinaryPrimitives.ReadUInt16BigEndian(rtpPacket[2..]);
-        var packetIndex = ComputeSenderIndex(seq);
+        var state       = GetOrAddState(ssrc);
+        var packetIndex = state.ComputeSenderIndex(seq);
 
         // Encrypt payload in-place in final SRTP buffer.
         var result = GC.AllocateUninitializedArray<byte>(rtpPacket.Length + _authTagLength);
@@ -87,9 +95,8 @@ internal sealed class SrtpContext : ISrtpContext
         ComputeAuthTag(result.AsSpan(0, rtpPacket.Length), GetRoc(packetIndex), tag);
         tag[.._authTagLength].CopyTo(result.AsSpan(rtpPacket.Length, _authTagLength));
 
-        // Advance sender-side index so ROC is correct for subsequent packets
-        if (packetIndex >= _senderIndex)
-            _senderIndex = packetIndex;
+        // Advance this SSRC's sender-side index so ROC is correct for subsequent packets
+        state.AdvanceSender(packetIndex);
 
         return result;
     }
@@ -118,7 +125,13 @@ internal sealed class SrtpContext : ISrtpContext
         var receivedTag = srtpPacket[rtpLen..];
         var seq  = BinaryPrimitives.ReadUInt16BigEndian(rtpSpan[2..]);
         var ssrc = BinaryPrimitives.ReadUInt32BigEndian(rtpSpan[8..]);
-        var packetIndex = ComputePacketIndex(seq);
+
+        // Look up this SSRC's state, or start from a fresh (ROC 0) estimate for an unseen SSRC. The
+        // fresh state stays a local until the packet authenticates, so a forged-SSRC flood cannot
+        // create per-SSRC entries without holding the master key.
+        _ssrcState.TryGetValue(ssrc, out var existing);
+        var state = existing ?? new SrtpSsrcState();
+        var packetIndex = state.ComputePacketIndex(seq);
 
         // 1. Verify auth tag before decryption (RFC 3711 §3.3 — verify-then-decrypt)
         Span<byte> expectedTag = stackalloc byte[AuthTagFullLength];
@@ -126,8 +139,12 @@ internal sealed class SrtpContext : ISrtpContext
         if (!CryptographicOperations.FixedTimeEquals(receivedTag, expectedTag[.._authTagLength]))
             throw new SrtpAuthenticationException("SRTP authentication tag mismatch.");
 
+        // Authenticated: commit the state for this SSRC so its ROC/replay window persists.
+        if (existing is null)
+            _ssrcState[ssrc] = state;
+
         // 2. Replay check (RFC 3711 §3.3.2)
-        CheckReplay(packetIndex);
+        state.CheckReplay(packetIndex);
 
         // 3. Decrypt
         var output = GC.AllocateUninitializedArray<byte>(rtpLen);
@@ -142,10 +159,17 @@ internal sealed class SrtpContext : ISrtpContext
             AesCmXor(_keys.CipherKey, iv, output.AsSpan(headerLen, payloadLen));
         }
 
-        // 4. Update replay window
-        UpdateReplayWindow(packetIndex);
+        // 4. Update this SSRC's replay window
+        state.UpdateReplayWindow(packetIndex);
 
         return output;
+    }
+
+    private SrtpSsrcState GetOrAddState(uint ssrc)
+    {
+        if (!_ssrcState.TryGetValue(ssrc, out var state))
+            _ssrcState[ssrc] = state = new SrtpSsrcState();
+        return state;
     }
 
     // -------------------------------------------------------------------------
@@ -231,66 +255,11 @@ internal sealed class SrtpContext : ISrtpContext
     }
 
     // -------------------------------------------------------------------------
-    // Packet index (RFC 3711 §3.3.1) — extended 48-bit index from 16-bit seq
+    // Packet index (RFC 3711 §3.3.1) — the extended index estimation and the replay window
+    // now live per-SSRC on SrtpSsrcState; the context only maps the index to its ROC here.
     // -------------------------------------------------------------------------
-
-    // RFC 3711 §3.3.1: estimate packet index using signed 16-bit delta.
-    // delta = (seq - s_l) as a signed 16-bit integer handles wrap-around naturally:
-    // positive = seq is ahead, negative = seq is behind the reference.
-    // Equivalent to the libsrtp reference implementation.
-
-    private ulong ComputeSenderIndex(ushort seq)
-    {
-        var sL        = (ushort)(_senderIndex & 0xFFFF);
-        var delta     = (short)(seq - sL);
-        var estimated = (long)_senderIndex + delta;
-        return estimated >= 0 ? (ulong)estimated : (ulong)seq;
-    }
 
     private static uint GetRoc(ulong packetIndex) => (uint)(packetIndex >> 16);
-
-    private ulong ComputePacketIndex(ushort seq)
-    {
-        var sL        = (ushort)(_replayWindowIndex & 0xFFFF);
-        var delta     = (short)(seq - sL);
-        var estimated = (long)_replayWindowIndex + delta;
-        return estimated >= 0 ? (ulong)estimated : (ulong)seq;
-    }
-
-    // -------------------------------------------------------------------------
-    // Replay protection (RFC 3711 §3.3.2)
-    // -------------------------------------------------------------------------
-
-    private void CheckReplay(ulong index)
-    {
-        if (index > _replayWindowIndex)
-            return; // newer than window — allowed
-
-        var diff = _replayWindowIndex - index;
-        if (diff >= ReplayWindowSize)
-            throw new SrtpReplayException($"SRTP packet index {index} is outside the replay window.");
-
-        if ((_replayWindowBitmap & (1UL << (int)diff)) != 0)
-            throw new SrtpReplayException($"SRTP packet index {index} has already been received (replay).");
-    }
-
-    private void UpdateReplayWindow(ulong index)
-    {
-        if (index > _replayWindowIndex)
-        {
-            var shift = index - _replayWindowIndex;
-            _replayWindowBitmap = shift >= ReplayWindowSize
-                ? 0
-                : _replayWindowBitmap << (int)shift;
-            _replayWindowBitmap |= 1;
-            _replayWindowIndex   = index;
-        }
-        else
-        {
-            var diff = _replayWindowIndex - index;
-            _replayWindowBitmap |= 1UL << (int)diff;
-        }
-    }
 
     // -------------------------------------------------------------------------
     // RTP header length (fixed + CSRC + optional extension)
