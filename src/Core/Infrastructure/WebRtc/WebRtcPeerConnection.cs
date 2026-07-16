@@ -40,6 +40,12 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     /// <summary>Raised when the connection state changes (RFC 8829 <c>connectionstatechange</c>).</summary>
     public event Action<WebRtcConnectionState>? ConnectionStateChanged;
 
+    /// <summary>Raised with each inbound audio RTP payload (the app owns the codec — transport-only).</summary>
+    public event Action<byte[]>? AudioReceived;
+
+    /// <summary>Raised with each reassembled inbound video frame (frame, RTP timestamp, is-key-frame).</summary>
+    public event Action<byte[], uint, bool>? VideoFrameReceived;
+
     public WebRtcPeerConnection(
         WebRtcPeerOptions options,
         ISdpOfferAnswerNegotiator negotiator,
@@ -157,8 +163,31 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         return session.StartAsync(cancellationToken);
     }
 
+    /// <summary>
+    /// Sends one audio RTP payload on the peer's audio track (suppressed until the handshake keys the
+    /// transport). The payload is an already-encoded RTP payload — the app owns the codec.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No BUNDLE media session was built.</exception>
+    public ValueTask SendAudioAsync(ReadOnlyMemory<byte> payload, CancellationToken cancellationToken = default)
+        => SessionOrThrow().SendAudioAsync(payload, cancellationToken: cancellationToken);
+
+    /// <summary>
+    /// Packetises and sends one encoded video frame on the peer's video track.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No BUNDLE media session, or the bundle has no video track.</exception>
+    public Task SendVideoFrameAsync(ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default)
+        => SessionOrThrow().SendVideoFrameAsync(encodedFrame, rtpTimestamp, cancellationToken);
+
+    private BundledMediaSession SessionOrThrow()
+    {
+        BundledMediaSession? session;
+        lock (_sync) { session = _session; }
+        return session ?? throw new InvalidOperationException("Apply a BUNDLE remote description before exchanging media.");
+    }
+
     // Maps the transport's lifecycle onto the WebRTC connection state (RFC 8829): keys installed →
     // Connected, handshake failure or consent loss → Failed, a transient consent miss → Disconnected.
+    // Inbound media is surfaced as the peer's own track events.
     private void WireSession(BundledMediaSession session)
     {
         session.Connected += () => TransitionTo(WebRtcConnectionState.Connected);
@@ -166,6 +195,8 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         session.MediaConsentLost += () => TransitionTo(WebRtcConnectionState.Failed);
         session.MediaConnectivityDegraded += () => TransitionTo(WebRtcConnectionState.Disconnected);
         session.MediaConnectivityRecovered += () => TransitionTo(WebRtcConnectionState.Connected);
+        session.AudioReceived += packet => AudioReceived?.Invoke(packet.Payload.ToArray());
+        session.VideoFrameReceived += (frame, timestamp, isKeyFrame) => VideoFrameReceived?.Invoke(frame, timestamp, isKeyFrame);
     }
 
     // WebRTC is always BUNDLE + rtcp-mux (RFC 8843 / RFC 8834); the DTLS identity and ICE credentials
