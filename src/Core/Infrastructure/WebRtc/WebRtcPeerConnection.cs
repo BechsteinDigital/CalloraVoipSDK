@@ -35,6 +35,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     private WebRtcConnectionState _state = WebRtcConnectionState.New;
     private string? _remoteDescription;
     private string? _localDescription;
+    private SdpSessionDescription? _localOfferModel;
     private BundledMediaSession? _session;
 
     /// <summary>Raised when the connection state changes (RFC 8829 <c>connectionstatechange</c>).</summary>
@@ -94,43 +95,83 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     }
 
     /// <summary>
-    /// Applies the peer's SDP offer and produces the local answer (RFC 8829 setRemoteDescription →
-    /// createAnswer, folded into one signalling-neutral step). The answer is a WebRTC answer — BUNDLE,
-    /// DTLS-SRTP, rtcp-mux, and the sdes:mid extension — built by the SDP negotiator, and becomes
-    /// <see cref="LocalDescription"/>. Moves the peer to <see cref="WebRtcConnectionState.Connecting"/>.
+    /// Creates a local WebRTC offer (RFC 8829 createOffer + setLocalDescription): BUNDLE, DTLS-SRTP,
+    /// rtcp-mux, and the sdes:mid extension. It becomes <see cref="LocalDescription"/>; apply the peer's
+    /// answer with <see cref="SetRemoteDescriptionAsync"/> to establish media.
+    /// </summary>
+    public string CreateOffer()
+    {
+        var offerModel = _negotiator.CreateOffer(
+            _options.LocalEndPoint, _options.AudioCodecs, SdpMediaDirection.SendRecv, MediaOptions());
+        var offerSdp = _serializer.Serialize(offerModel);
+        lock (_sync)
+        {
+            _localOfferModel = offerModel;
+            _localDescription = offerSdp;
+        }
+
+        return offerSdp;
+    }
+
+    /// <summary>
+    /// Applies the peer's remote description and returns this peer's local description. As the answerer
+    /// (no local offer created) the remote description is an offer: this negotiates and returns the
+    /// WebRTC answer (RFC 8829 setRemoteDescription → createAnswer). As the offerer (after
+    /// <see cref="CreateOffer"/>) the remote description is the answer: it is applied and the existing
+    /// offer is returned. Either way the shared BUNDLE media transport is built from the two
+    /// descriptions and the peer moves to <see cref="WebRtcConnectionState.Connecting"/>.
     /// </summary>
     /// <exception cref="ArgumentException">The remote description is missing or not valid SDP.</exception>
-    /// <exception cref="InvalidOperationException">No answer could be negotiated for the offer.</exception>
+    /// <exception cref="InvalidOperationException">As the answerer, no answer could be negotiated.</exception>
     public Task<string> SetRemoteDescriptionAsync(string remoteSdp, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(remoteSdp);
         cancellationToken.ThrowIfCancellationRequested();
 
-        SdpSessionDescription offer;
+        SdpSessionDescription remote;
         try
         {
-            offer = _parser.Parse(remoteSdp);
+            remote = _parser.Parse(remoteSdp);
         }
         catch (FormatException ex)
         {
             throw new ArgumentException("The remote description is not valid SDP.", nameof(remoteSdp), ex);
         }
 
-        var result = _negotiator.NegotiateAnswer(
-            offer, _options.LocalEndPoint, _options.AudioCodecs, SdpMediaDirection.SendRecv, AnswerOptions());
-        if (!result.Success || result.Answer is null)
+        SdpSessionDescription pendingOffer;
+        lock (_sync)
         {
-            TransitionTo(WebRtcConnectionState.Failed);
-            throw new InvalidOperationException("Could not negotiate an answer for the remote description.");
+            pendingOffer = _localOfferModel!;
         }
 
-        var answer = _serializer.Serialize(result.Answer);
+        SdpSessionDescription localModel;
+        string localSdp;
+        if (pendingOffer is not null)
+        {
+            // Offerer: the remote description is the answer; our offer is the local description.
+            localModel = pendingOffer;
+            localSdp = _localDescription!;
+        }
+        else
+        {
+            // Answerer: the remote description is the offer; negotiate our answer.
+            var result = _negotiator.NegotiateAnswer(
+                remote, _options.LocalEndPoint, _options.AudioCodecs, SdpMediaDirection.SendRecv, MediaOptions());
+            if (!result.Success || result.Answer is null)
+            {
+                TransitionTo(WebRtcConnectionState.Failed);
+                throw new InvalidOperationException("Could not negotiate an answer for the remote description.");
+            }
 
-        // Build the shared media transport from the negotiated descriptions (WebRTC is DTLS-SRTP over one
-        // BUNDLE group). A non-bundle exchange yields no session — the answer is still returned, but the
-        // peer has no media transport (logged), which StartAsync then surfaces.
+            localModel = result.Answer;
+            localSdp = _serializer.Serialize(result.Answer);
+        }
+
+        // Build the shared media transport from the two descriptions (WebRTC is DTLS-SRTP over one
+        // BUNDLE group). A non-bundle exchange yields no session — the local description is still
+        // returned, but the peer has no transport (logged), which StartAsync then surfaces.
         var session = WebRtcSessionFactory.TryCreate(
-            offer, result.Answer, _options, _handshaker, _certificate, _loggerFactory);
+            remote, localModel, _options, _handshaker, _certificate, _loggerFactory);
         if (session is null)
             _logger.LogWarning("The remote description did not negotiate a BUNDLE media session; no transport was built.");
         else
@@ -139,12 +180,12 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         lock (_sync)
         {
             _remoteDescription = remoteSdp;
-            _localDescription = answer;
+            _localDescription = localSdp;
             _session = session;
         }
 
         TransitionTo(WebRtcConnectionState.Connecting);
-        return Task.FromResult(answer);
+        return Task.FromResult(localSdp);
     }
 
     /// <summary>
@@ -200,8 +241,8 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     }
 
     // WebRTC is always BUNDLE + rtcp-mux (RFC 8843 / RFC 8834); the DTLS identity and ICE credentials
-    // come from the local configuration.
-    private SdpMediaOptions AnswerOptions() => new()
+    // come from the local configuration. Used for both the offer and the answer.
+    private SdpMediaOptions MediaOptions() => new()
     {
         Dtls = _options.Dtls,
         Ice = _options.Ice,

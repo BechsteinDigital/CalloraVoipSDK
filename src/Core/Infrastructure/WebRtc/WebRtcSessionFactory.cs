@@ -11,9 +11,11 @@ namespace CalloraVoipSdk.Core.Infrastructure.WebRtc;
 /// <summary>
 /// Builds the shared media transport (<see cref="BundledMediaSession"/>) for a WebRTC peer from the
 /// negotiated descriptions (Weg 1 / ADR-011 B5). A WebRTC peer holds all the facts itself — its own
-/// answer plus the peer's offer — so it derives the transport options directly (endpoints, DTLS role and
+/// description plus the peer's — so it derives the transport options directly (endpoints, DTLS role and
 /// remote fingerprint, ICE credentials, payload types, and the BUNDLE MID facts) without the SIP call
-/// path's CallMediaParameters/enricher machinery, keeping the WebRTC path off the SIP module.
+/// path's CallMediaParameters/enricher machinery, keeping the WebRTC path off the SIP module. It is
+/// role-neutral: <paramref name="localDescription"/> is this peer's description (offer or answer) and
+/// <paramref name="remoteDescription"/> is the peer's, so it serves both the offerer and the answerer.
 /// </summary>
 internal static class WebRtcSessionFactory
 {
@@ -24,47 +26,49 @@ internal static class WebRtcSessionFactory
     /// when the descriptions are not a keyed BUNDLE session (no audio, no sdes:mid, or no DTLS
     /// fingerprint) — WebRTC media is DTLS-SRTP over one BUNDLE group.
     /// </summary>
+    /// <param name="localDescription">This peer's description (the offer if offering, else the answer).</param>
+    /// <param name="remoteDescription">The other peer's description (the answer if we offered, else the offer).</param>
     public static BundledMediaSession? TryCreate(
-        SdpSessionDescription remoteOffer,
-        SdpSessionDescription localAnswer,
+        SdpSessionDescription remoteDescription,
+        SdpSessionDescription localDescription,
         WebRtcPeerOptions options,
         IDtlsSrtpHandshaker handshaker,
         DtlsCertificate certificate,
         ILoggerFactory loggerFactory)
     {
-        ArgumentNullException.ThrowIfNull(remoteOffer);
-        ArgumentNullException.ThrowIfNull(localAnswer);
+        ArgumentNullException.ThrowIfNull(remoteDescription);
+        ArgumentNullException.ThrowIfNull(localDescription);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(handshaker);
         ArgumentNullException.ThrowIfNull(certificate);
         ArgumentNullException.ThrowIfNull(loggerFactory);
 
-        var offerAudio = remoteOffer.Media.FirstOrDefault(m => m.MediaType.Equals("audio", Ci) && !m.Disabled);
-        // The local answer m-line's port is a placeholder under ICE (the real address comes via
-        // candidates), so it is gated by its MID below, not by a zero port.
-        var answerAudio = localAnswer.Media.FirstOrDefault(m => m.MediaType.Equals("audio", Ci));
-        if (offerAudio is null || answerAudio is null)
+        var remoteAudio = remoteDescription.Media.FirstOrDefault(m => m.MediaType.Equals("audio", Ci) && !m.Disabled);
+        // The local m-line's port is a placeholder under ICE (the real address comes via candidates), so
+        // the local side is gated by its MID below, not by a zero port.
+        var localAudio = localDescription.Media.FirstOrDefault(m => m.MediaType.Equals("audio", Ci));
+        if (remoteAudio is null || localAudio is null)
             return null;
 
-        // BUNDLE facts from the answer we produced: the shared sdes:mid id and the audio m-line's MID.
-        var midExtensionId = MidExtensionId(answerAudio);
-        if (midExtensionId is null || string.IsNullOrEmpty(answerAudio.Mid))
+        // BUNDLE facts from our own description: the shared sdes:mid id and the audio m-line's MID.
+        var midExtensionId = MidExtensionId(localAudio);
+        if (midExtensionId is null || string.IsNullOrEmpty(localAudio.Mid))
             return null;
 
-        // Remote media address from the offer's audio m-line (or the session connection line).
-        var remoteAddress = offerAudio.ConnectionAddress ?? remoteOffer.ConnectionAddress;
+        // Remote media address from the peer's audio m-line (or its session connection line).
+        var remoteAddress = remoteAudio.ConnectionAddress ?? remoteDescription.ConnectionAddress;
         if (!IPAddress.TryParse(remoteAddress, out var remoteIp))
             return null;
-        var remoteEndPoint = new IPEndPoint(remoteIp, offerAudio.Port);
+        var remoteEndPoint = new IPEndPoint(remoteIp, remoteAudio.Port);
 
-        // DTLS-SRTP (WebRTC is DTLS only): the peer's fingerprint, and our role from the answer's setup
-        // (RFC 5763 §5: active = client).
-        var fingerprint = offerAudio.Fingerprint ?? remoteOffer.Fingerprint;
+        // DTLS-SRTP (WebRTC is DTLS only): the peer's fingerprint, and our role from both a=setup values
+        // (RFC 5763 §5 / RFC 4145: the active side is the client).
+        var fingerprint = remoteAudio.Fingerprint ?? remoteDescription.Fingerprint;
         if (fingerprint is null)
             return null;
-        var dtlsIsClient = string.Equals(answerAudio.DtlsSetup, "active", Ci);
+        var dtlsIsClient = ResolveIsClient(localAudio.DtlsSetup, remoteAudio.DtlsSetup);
 
-        var audioCodec = answerAudio.Codecs.FirstOrDefault(c => !c.Name.Equals("telephone-event", Ci));
+        var audioCodec = localAudio.Codecs.FirstOrDefault(c => !c.Name.Equals("telephone-event", Ci));
         if (audioCodec is null)
             return null;
         var clockRate = audioCodec.ClockRate > 0 ? audioCodec.ClockRate : 8000;
@@ -72,13 +76,13 @@ internal static class WebRtcSessionFactory
         var audioSsrc = NewSsrc();
         var audioTrack = new BundledTrackConfig
         {
-            Mid = answerAudio.Mid,
+            Mid = localAudio.Mid,
             Ssrc = audioSsrc,
             PayloadType = (byte)audioCodec.PayloadType,
             SamplesPerPacket = clockRate * 20 / 1000, // 20 ms frames
         };
 
-        var videoTrack = TryBuildVideoTrack(localAnswer, audioSsrc);
+        var videoTrack = TryBuildVideoTrack(localDescription, audioSsrc);
 
         var sessionOptions = new BundledMediaSessionOptions
         {
@@ -92,20 +96,20 @@ internal static class WebRtcSessionFactory
             Ice = new IceMediaParameters(
                 remoteEndPoint,
                 IceEnabled: true,
-                IceControlling: false, // the answerer is ICE-controlled (RFC 8445 §5.1.1)
+                IceControlling: false,
                 LocalIceUfrag: options.Ice.Ufrag,
                 LocalIcePwd: options.Ice.Pwd,
-                RemoteIceUfrag: offerAudio.IceUfrag,
-                RemoteIcePwd: offerAudio.IcePwd),
+                RemoteIceUfrag: remoteAudio.IceUfrag,
+                RemoteIcePwd: remoteAudio.IcePwd),
         };
 
         return new BundledMediaSession(sessionOptions, handshaker, certificate, loggerFactory);
     }
 
-    private static BundledTrackConfig? TryBuildVideoTrack(SdpSessionDescription localAnswer, uint audioSsrc)
+    private static BundledTrackConfig? TryBuildVideoTrack(SdpSessionDescription localDescription, uint audioSsrc)
     {
         // Gated by the MID (grouped into the bundle), not the placeholder port under ICE.
-        var video = localAnswer.Media.FirstOrDefault(m => m.MediaType.Equals("video", Ci));
+        var video = localDescription.Media.FirstOrDefault(m => m.MediaType.Equals("video", Ci));
         if (video is null || string.IsNullOrEmpty(video.Mid))
             return null;
 
@@ -121,6 +125,18 @@ internal static class WebRtcSessionFactory
             PayloadType = (byte)codec.PayloadType,
             VideoCodecName = codec.Name,
         };
+    }
+
+    // Local DTLS role from both a=setup values (RFC 4145 §4 / RFC 5763 §5): a concrete local role wins;
+    // an offerer's actpass defers to the peer's answer (peer active → we are server, peer passive → we
+    // are client). Defaults to the client role when both are silent (WebRTC answerer default).
+    private static bool ResolveIsClient(string? localSetup, string? remoteSetup)
+    {
+        if (string.Equals(localSetup, "active", Ci)) return true;
+        if (string.Equals(localSetup, "passive", Ci)) return false;
+        if (string.Equals(remoteSetup, "active", Ci)) return false;
+        if (string.Equals(remoteSetup, "passive", Ci)) return true;
+        return true;
     }
 
     private static byte? MidExtensionId(SdpMediaDescription media)
