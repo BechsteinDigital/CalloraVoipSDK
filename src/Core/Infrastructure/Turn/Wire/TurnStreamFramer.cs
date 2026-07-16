@@ -8,6 +8,12 @@ namespace CalloraVoipSdk.Core.Infrastructure.Turn.Wire;
 /// </summary>
 internal static class TurnStreamFramer
 {
+    // A STUN control message framed over TURN-TCP/TLS is small; nothing legitimate approaches the
+    // 64 KiB the 16-bit length field could claim. Validate the declared length against this ceiling
+    // before allocating the frame buffer, so a single 4-byte header cannot force a large speculative
+    // allocation (memory DoS). ChannelData is bounded separately — see ReadFrameAsync.
+    private const int MaxStunFrameBodyBytes = 16 * 1024;
+
     /// <summary>
     /// Reads one full frame from the stream.
     /// Returns null on clean EOF.
@@ -27,6 +33,9 @@ internal static class TurnStreamFramer
 
         if (first >= 0x4000 && first <= 0x7FFF)
         {
+            // ChannelData carries a relayed peer datagram, which the server itself can legitimately
+            // produce up to the 16-bit length maximum (~64 KiB). It is already bounded by that field,
+            // so no tighter cap is applied here — only the STUN control path is capped.
             ushort channelLength = BinaryPrimitives.ReadUInt16BigEndian(header.AsSpan(2));
             var payload = new byte[channelLength];
             int payloadRead = await ReadExactAsync(stream, payload, ct).ConfigureAwait(false);
@@ -42,6 +51,9 @@ internal static class TurnStreamFramer
         }
 
         ushort stunLength = BinaryPrimitives.ReadUInt16BigEndian(header.AsSpan(2));
+        if (stunLength > MaxStunFrameBodyBytes)
+            throw new InvalidDataException($"TURN STUN frame body {stunLength} exceeds the {MaxStunFrameBodyBytes}-byte limit.");
+
         var packet = new byte[StunWireConstants.HeaderSize + stunLength];
         header.CopyTo(packet, 0);
 
