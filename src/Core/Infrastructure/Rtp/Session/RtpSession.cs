@@ -19,6 +19,7 @@ namespace CalloraVoipSdk.Core.Infrastructure.Rtp.Session;
 internal sealed class RtpSession : IRtpSession
 {
     private readonly RtpSessionOptions _options;
+    private readonly RtpOutboundHeaderExtensionStamper _extensionStamper;
     private readonly IRtpPacketCodec _codec;
     private readonly ILogger<RtpSession> _logger;
     private readonly object _sendSync = new();
@@ -123,6 +124,8 @@ internal sealed class RtpSession : IRtpSession
         ArgumentNullException.ThrowIfNull(logger);
 
         _options = options;
+        _extensionStamper = new RtpOutboundHeaderExtensionStamper(
+            options.TransportWideCcExtensionId, options.MidExtensionId, options.Mid);
         _codec   = codec;
         _logger  = logger;
         _ssrc    = options.Ssrc ?? (uint)Random.Shared.Next();
@@ -810,14 +813,12 @@ internal sealed class RtpSession : IRtpSession
             Timestamp = timestamp,
             Ssrc = _ssrc,
             Payload = payload,
-            // Stamp the transport-wide-cc header extension before SRTP: RFC 3711 authenticates but
-            // does not encrypt the header extension, so the receiver reads the counter in the clear.
-            // FOLLOW-UP (perf): still ~2 heap objects per stamped packet (the 4-byte buffer + the
-            // RtpExtension); full pooling — reusing them across packets — remains open.
-            HeaderExtension = transportCcSequence is { } ccSeq
-                ? OneByteRtpHeaderExtensions.EncodeTransportSequenceNumber(
-                    _options.TransportWideCcExtensionId!.Value, ccSeq)
-                : null
+            // Stamp the header extension (transport-cc, and MID on a BUNDLE transport) before SRTP:
+            // RFC 3711 authenticates but does not encrypt the header extension, so the receiver reads
+            // the counter and MID in the clear. When MID is not negotiated the bytes are identical to
+            // stamping transport-cc alone. FOLLOW-UP (perf): still ~2 heap objects per stamped packet;
+            // full pooling — reusing them across packets — remains open.
+            HeaderExtension = _extensionStamper.Build(transportCcSequence)
         };
 
         var datagram = _codec.Encode(packet);

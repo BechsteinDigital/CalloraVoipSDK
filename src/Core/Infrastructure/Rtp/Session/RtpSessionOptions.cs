@@ -81,4 +81,18 @@ internal sealed class RtpSessionOptions
     /// times for congestion control. <see langword="null"/> stamps no extension (default).
     /// </summary>
     public byte? TransportWideCcExtensionId { get; init; }
+
+    /// <summary>
+    /// Negotiated one-byte header-extension id for the MID SDES extension (RFC 9143), used on a BUNDLE
+    /// transport so the peer can associate this stream's SSRC with its m-line. When set together with
+    /// <see cref="Mid"/>, each outgoing RTP packet carries the MID token (alongside the transport-wide
+    /// counter when that is also negotiated). <see langword="null"/> stamps no MID (default; non-BUNDLE).
+    /// </summary>
+    public byte? MidExtensionId { get; init; }
+
+    /// <summary>
+    /// This stream's <c>a=mid</c> token (for example <c>audio</c>, <c>video</c>) stamped on outgoing
+    /// packets when <see cref="MidExtensionId"/> is set. <see langword="null"/> outside BUNDLE.
+    /// </summary>
+    public string? Mid { get; init; }
 }
