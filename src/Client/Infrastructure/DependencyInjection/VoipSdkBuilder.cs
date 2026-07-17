@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using CalloraVoipSdk.Core.Application.Ports.Audio;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Observability;
+using CalloraVoipSdk.WebRtc;
 
 namespace CalloraVoipSdk.DependencyInjection;
 
@@ -53,4 +54,13 @@ public sealed class CalloraBuilder
         _services.PostConfigure<SdkOptions>(options => options.DefaultTransport = transport);
         return this;
     }
+
+    /// <summary>
+    /// Composes the WebRTC facade onto the same host (ADR-012, two-facade composition). Equivalent to a
+    /// standalone <see cref="WebRtcServiceCollectionExtensions.AddCalloraWebRtc"/>, letting a host
+    /// configure both facades in one chain: <c>AddCallora(...).AddWebRtc(...)</c>. Returns the WebRTC
+    /// builder so WebRTC-specific overrides continue the chain.
+    /// </summary>
+    public CalloraWebRtcBuilder AddWebRtc(Action<WebRtcOptions>? configure = null)
+        => _services.AddCalloraWebRtc(configure);
 }
