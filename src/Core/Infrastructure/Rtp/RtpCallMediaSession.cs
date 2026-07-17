@@ -54,7 +54,7 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
 
     private readonly ILogger<RtpCallMediaSession> _logger;
     private readonly CancellationTokenSource _cts = new();
-    private readonly object _rtcpStatsSync = new();
+    private readonly InboundRtpStatistics _inboundStats = new();
     private readonly TimeSpan _playoutInterval;
     private readonly TimeSpan _metricsPublishInterval;
     private readonly uint _defaultFrameDurationRtpUnits;
@@ -70,23 +70,6 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
     private ushort _lastDeliveredSequence;
     private int _observedInboundPayloadType = -1;
     private int _loggedUnadvertisedInboundPayloadType;
-    private long _packetsReceived;
-    private long _packetsQueued;
-    private long _packetsDelivered;
-    private long _packetsDroppedLate;
-    private long _packetsDroppedOverflow;
-    private long _packetsDroppedDuplicate;
-    private long _packetsConcealed;
-    private long _packetsUnrecoverableLoss;
-    private bool _hasInboundRtcpStats;
-    private bool _hasRemoteSsrc;
-    private uint _remoteSsrc;
-    private ushort _baseSequence;
-    private ushort _maxSequence;
-    private uint _sequenceCycles;
-    private uint _packetsReceivedForRtcp;
-    private uint _priorExpectedForFraction;
-    private uint _priorReceivedForFraction;
     // RFC 4733 inbound DTMF reassembly state. Touched only by HandleInboundTelephoneEvent,
     // which runs solely on the single RTP receive loop (RtpSession fires PacketReceived
     // sequentially) — no other thread reads or writes it, so no synchronization is needed.
@@ -363,46 +346,28 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
         var jitterRtpUnits = ConvertJitterMsToRtpUnits(jitterMs, _clockRate);
         var localRttHintMs = _jitterBuffer.EstimatedRoundTripTimeMs;
 
-        lock (_rtcpStatsSync)
-        {
-            var packetsExpected = CalculatePacketsExpected();
-            var packetsReceivedForRtcp = _packetsReceivedForRtcp;
-            var cumulativeLost = ClampSigned24((long)packetsExpected - packetsReceivedForRtcp);
+        var report = _inboundStats.CaptureRtcpReport();
+        var localLossPercent = report.PacketsExpected == 0
+            ? 0
+            : Math.Max(0, report.CumulativePacketsLost) * 100.0 / report.PacketsExpected;
 
-            var expectedInterval = packetsExpected - _priorExpectedForFraction;
-            var receivedInterval = packetsReceivedForRtcp - _priorReceivedForFraction;
-            var lostInterval = (long)expectedInterval - receivedInterval;
-            var fractionLost = ComputeFractionLost(expectedInterval, lostInterval);
-
-            _priorExpectedForFraction = packetsExpected;
-            _priorReceivedForFraction = packetsReceivedForRtcp;
-
-            var localLossPercent = packetsExpected == 0
-                ? 0
-                : Math.Max(0, cumulativeLost) * 100.0 / packetsExpected;
-            var remoteSsrc = _hasRemoteSsrc ? (uint?)_remoteSsrc : null;
-            var extendedHighest = !_hasInboundRtcpStats
-                ? 0
-                : _sequenceCycles + _maxSequence;
-
-            return new CallMediaRtpSnapshot(
-                CapturedAtUtc: now,
-                LocalSsrc: sender.LocalSsrc,
-                RemoteSsrc: remoteSsrc,
-                SenderPacketCount: sender.SenderPacketCount,
-                SenderOctetCount: sender.SenderOctetCount,
-                LastSentRtpTimestamp: sender.LastSentRtpTimestamp,
-                HasSentRtpPackets: sender.HasSentPackets,
-                PacketsExpected: packetsExpected,
-                PacketsReceived: packetsReceivedForRtcp,
-                FractionLost: fractionLost,
-                CumulativePacketsLost: cumulativeLost,
-                ExtendedHighestSequenceNumber: extendedHighest,
-                InterarrivalJitterRtpUnits: jitterRtpUnits,
-                LocalReceiveJitterMs: jitterMs,
-                LocalReceivePacketLossPercent: localLossPercent,
-                LocalRoundTripTimeHintMs: localRttHintMs);
-        }
+        return new CallMediaRtpSnapshot(
+            CapturedAtUtc: now,
+            LocalSsrc: sender.LocalSsrc,
+            RemoteSsrc: report.RemoteSsrc,
+            SenderPacketCount: sender.SenderPacketCount,
+            SenderOctetCount: sender.SenderOctetCount,
+            LastSentRtpTimestamp: sender.LastSentRtpTimestamp,
+            HasSentRtpPackets: sender.HasSentPackets,
+            PacketsExpected: report.PacketsExpected,
+            PacketsReceived: report.PacketsReceived,
+            FractionLost: report.FractionLost,
+            CumulativePacketsLost: report.CumulativePacketsLost,
+            ExtendedHighestSequenceNumber: report.ExtendedHighestSequenceNumber,
+            InterarrivalJitterRtpUnits: jitterRtpUnits,
+            LocalReceiveJitterMs: jitterMs,
+            LocalReceivePacketLossPercent: localLossPercent,
+            LocalRoundTripTimeHintMs: localRttHintMs);
     }
 
     /// <inheritdoc />
@@ -418,8 +383,8 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
     {
         var isTelephoneEventPacket = IsTelephoneEventPayloadType(packet.PayloadType);
         TrackInboundPayloadType(packet.PayloadType);
-        TrackInboundStatistics(packet);
-        Interlocked.Increment(ref _packetsReceived);
+        _inboundStats.TrackSequence(packet.Ssrc, packet.SequenceNumber);
+        _inboundStats.RecordReceived();
 
         if (isTelephoneEventPacket)
         {
@@ -567,7 +532,7 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
         _lastDeliveredPayloadType = packet.PayloadType;
         _lastDeliveredSequence = packet.SequenceNumber;
         _hasLastDeliveredSequence = true;
-        Interlocked.Increment(ref _packetsDelivered);
+        _inboundStats.RecordDelivered();
     }
 
     private void EmitConcealmentFramesIfNeeded(ushort incomingSequenceNumber, byte incomingPayloadType, int incomingPayloadLength)
@@ -586,11 +551,11 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
             var concealedPayload = CreateConcealmentPayload(incomingPayloadType, incomingPayloadLength);
             DispatchFrame(concealedPayload, incomingPayloadType);
             _lastDeliveredSequence = unchecked((ushort)(_lastDeliveredSequence + 1));
-            Interlocked.Increment(ref _packetsConcealed);
+            _inboundStats.RecordConcealed();
         }
 
         if (gapSize > concealmentCount)
-            Interlocked.Add(ref _packetsUnrecoverableLoss, gapSize - concealmentCount);
+            _inboundStats.AddUnrecoverableLoss(gapSize - concealmentCount);
     }
 
     private byte[] CreateConcealmentPayload(byte payloadType, int fallbackLength)
@@ -689,11 +654,11 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
         switch (addResult)
         {
             case JitterBufferAddResult.Queued:
-                Interlocked.Increment(ref _packetsQueued);
+                _inboundStats.RecordQueued();
                 break;
 
             case JitterBufferAddResult.Late:
-                Interlocked.Increment(ref _packetsDroppedLate);
+                _inboundStats.RecordDroppedLate();
                 _logger.LogDebug(
                     "RTP packet dropped as late in jitter buffer: seq={Seq}, ts={Timestamp}, pt={PayloadType}, ssrc={Ssrc:X8}.",
                     packet.SequenceNumber,
@@ -703,7 +668,7 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
                 break;
 
             case JitterBufferAddResult.Overflow:
-                Interlocked.Increment(ref _packetsDroppedOverflow);
+                _inboundStats.RecordDroppedOverflow();
                 _logger.LogDebug(
                     "RTP packet dropped due to jitter buffer overflow: seq={Seq}, ts={Timestamp}, ssrc={Ssrc:X8}.",
                     packet.SequenceNumber,
@@ -712,7 +677,7 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
                 break;
 
             case JitterBufferAddResult.Duplicate:
-                Interlocked.Increment(ref _packetsDroppedDuplicate);
+                _inboundStats.RecordDroppedDuplicate();
                 break;
         }
     }
@@ -736,20 +701,23 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
     }
 
     private CallMediaRuntimeMetrics CreateRuntimeMetricsSnapshot(DateTimeOffset timestamp)
-        => new(
+    {
+        var counters = _inboundStats.SnapshotCounters();
+        return new(
             capturedAtUtc: timestamp,
-            packetsReceived: Interlocked.Read(ref _packetsReceived),
-            packetsQueued: Interlocked.Read(ref _packetsQueued),
-            packetsDelivered: Interlocked.Read(ref _packetsDelivered),
-            packetsDroppedLate: Interlocked.Read(ref _packetsDroppedLate),
-            packetsDroppedOverflow: Interlocked.Read(ref _packetsDroppedOverflow),
-            packetsDroppedDuplicate: Interlocked.Read(ref _packetsDroppedDuplicate),
-            packetsConcealed: Interlocked.Read(ref _packetsConcealed),
-            packetsUnrecoverableLoss: Interlocked.Read(ref _packetsUnrecoverableLoss),
+            packetsReceived: counters.PacketsReceived,
+            packetsQueued: counters.PacketsQueued,
+            packetsDelivered: counters.PacketsDelivered,
+            packetsDroppedLate: counters.PacketsDroppedLate,
+            packetsDroppedOverflow: counters.PacketsDroppedOverflow,
+            packetsDroppedDuplicate: counters.PacketsDroppedDuplicate,
+            packetsConcealed: counters.PacketsConcealed,
+            packetsUnrecoverableLoss: counters.PacketsUnrecoverableLoss,
             bufferedPackets: _jitterBuffer.BufferedCount,
             estimatedJitterMs: _jitterBuffer.EstimatedJitterMs,
             adaptiveDelayMs: _jitterBuffer.CurrentDelayMs,
             estimatedRoundTripTimeMs: _jitterBuffer.EstimatedRoundTripTimeMs);
+    }
 
 
     private static TimeSpan ResolvePlayoutInterval(CallMediaParameters parameters, TimeSpan? configuredInterval)
@@ -799,58 +767,6 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
         }
     }
 
-    private void TrackInboundStatistics(RtpPacket packet)
-    {
-        lock (_rtcpStatsSync)
-        {
-            if (!_hasRemoteSsrc || _remoteSsrc != packet.Ssrc)
-            {
-                _remoteSsrc = packet.Ssrc;
-                _hasRemoteSsrc = true;
-                ResetInboundRtcpStatistics(packet.SequenceNumber);
-                return;
-            }
-
-            _packetsReceivedForRtcp++;
-
-            if (IsSequenceNewer(packet.SequenceNumber, _maxSequence))
-            {
-                if (packet.SequenceNumber < _maxSequence)
-                    _sequenceCycles += 1u << 16;
-
-                _maxSequence = packet.SequenceNumber;
-            }
-        }
-    }
-
-    private void ResetInboundRtcpStatistics(ushort firstSequenceNumber)
-    {
-        _hasInboundRtcpStats = true;
-        _baseSequence = firstSequenceNumber;
-        _maxSequence = firstSequenceNumber;
-        _sequenceCycles = 0;
-        _packetsReceivedForRtcp = 1;
-        _priorExpectedForFraction = 0;
-        _priorReceivedForFraction = 0;
-    }
-
-    private uint CalculatePacketsExpected()
-    {
-        if (!_hasInboundRtcpStats)
-            return 0;
-
-        return _sequenceCycles + _maxSequence - _baseSequence + 1;
-    }
-
-    private static byte ComputeFractionLost(uint expectedInterval, long lostInterval)
-    {
-        if (expectedInterval == 0 || lostInterval <= 0)
-            return 0;
-
-        var scaled = (lostInterval << 8) / expectedInterval;
-        return (byte)Math.Clamp(scaled, 0, 255);
-    }
-
     private static uint ConvertJitterMsToRtpUnits(double jitterMs, int clockRate)
     {
         if (jitterMs <= 0)
@@ -862,16 +778,6 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
 
         return (uint)Math.Round(units, MidpointRounding.AwayFromZero);
     }
-
-    private static int ClampSigned24(long value)
-    {
-        const int min = -8_388_608;
-        const int max = 8_388_607;
-        return (int)Math.Clamp(value, min, max);
-    }
-
-    private static bool IsSequenceNewer(ushort sequenceNumber, ushort reference)
-        => unchecked((short)(sequenceNumber - reference)) > 0;
 
     private static bool IsValidPayloadType(int payloadType)
         => payloadType is >= 0 and <= 127;
