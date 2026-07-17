@@ -171,6 +171,21 @@ public sealed class WebRtcPeerConnectionTests
         Assert.Equal(video.Msid, second.Media.Single(m => m.MediaType == "video").Msid);
     }
 
+    [Fact]
+    public async Task The_answer_carries_our_msid_on_audio_and_video()
+    {
+        await using var peer = Peer(Pcmu);
+
+        var answer = new SdpSessionParser().Parse(await peer.SetRemoteDescriptionAsync(WebRtcOffer()));
+
+        var audio = answer.Media.Single(m => m.MediaType == "audio");
+        var video = answer.Media.Single(m => m.MediaType == "video");
+        Assert.NotNull(audio.Msid);
+        Assert.NotNull(video.Msid);
+        Assert.Equal(audio.Msid!.StreamId, video.Msid!.StreamId);   // our one MediaStream
+        Assert.NotEqual(audio.Msid.TrackId, video.Msid.TrackId);
+    }
+
     // ── harness ──────────────────────────────────────────────────────────────────
 
     private static WebRtcPeerConnection PeerAt(int localPort) =>
