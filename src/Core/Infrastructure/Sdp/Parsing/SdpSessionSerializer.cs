@@ -80,6 +80,10 @@ internal sealed class SdpSessionSerializer : ISdpSessionSerializer
         if (media.Mid is not null)
             sb.AppendLine($"a=mid:{media.Mid}");
 
+        // MSID (RFC 8830): MediaStream / track identity
+        if (media.Msid is not null)
+            sb.AppendLine($"a=msid:{media.Msid.Serialize()}");
+
         // DTLS fingerprint / setup (RFC 8122 / RFC 4145) — media-level overrides session
         if (media.Fingerprint is not null)
             sb.AppendLine($"a=fingerprint:{media.Fingerprint.Serialize()}");

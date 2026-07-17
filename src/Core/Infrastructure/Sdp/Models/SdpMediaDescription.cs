@@ -57,6 +57,11 @@ internal sealed class SdpMediaDescription
     /// <summary>Media Identification tag for BUNDLE grouping (<c>a=mid</c>, RFC 5888).</summary>
     public string? Mid { get; init; }
 
+    /// <summary>
+    /// WebRTC MediaStream / track identity (<c>a=msid</c>, RFC 8830); <see langword="null"/> when absent.
+    /// </summary>
+    public SdpMsid? Msid { get; init; }
+
     // -------------------------------------------------------------------------
     // Bandwidth
     // -------------------------------------------------------------------------

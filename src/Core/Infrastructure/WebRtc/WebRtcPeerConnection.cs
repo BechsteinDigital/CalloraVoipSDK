@@ -42,6 +42,12 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     private readonly ILogger<WebRtcPeerConnection> _logger;
     private readonly object _sync = new();
 
+    // Stable WebRTC track identity (a=msid, RFC 8830): one MediaStream carrying one audio and one
+    // video track. Generated once per peer so re-offers keep the same stream/track ids.
+    private readonly string _mediaStreamId = Guid.NewGuid().ToString("N");
+    private readonly string _audioTrackId = Guid.NewGuid().ToString("N");
+    private readonly string _videoTrackId = Guid.NewGuid().ToString("N");
+
     private WebRtcConnectionState _state = WebRtcConnectionState.New;
     private string? _remoteDescription;
     private string? _localDescription;
@@ -275,6 +281,10 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
                 : _options.Ice.Candidates,
         },
         Video = _options.Video,
+        AudioMsid = new SdpMsid { StreamId = _mediaStreamId, TrackId = _audioTrackId },
+        VideoMsid = _options.Video is not null
+            ? new SdpMsid { StreamId = _mediaStreamId, TrackId = _videoTrackId }
+            : null,
         Bundle = true,
         RtcpMux = true,
     };
