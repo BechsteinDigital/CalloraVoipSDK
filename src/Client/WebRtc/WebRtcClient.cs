@@ -1,0 +1,101 @@
+using System.Security.Cryptography;
+using CalloraVoipSdk.Core.Infrastructure.Dtls;
+using CalloraVoipSdk.Core.Infrastructure.Sdp.Models;
+using CalloraVoipSdk.Core.Infrastructure.Sdp.OfferAnswer;
+using CalloraVoipSdk.Core.Infrastructure.Sdp.Parsing;
+using CalloraVoipSdk.Core.Infrastructure.WebRtc;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+
+namespace CalloraVoipSdk.WebRtc;
+
+/// <summary>
+/// The WebRTC peer facade (Level 1). Builds signalling-neutral <see cref="IPeerConnection"/>s that run
+/// ICE, DTLS-SRTP, BUNDLE and RTP/RTCP internally; the app owns signalling and the codec (transport
+/// only). Zero-config <c>new WebRtcClient()</c> offers Opus over an ephemeral loopback endpoint with a
+/// fresh per-peer DTLS identity. See ADR-012 for the four-level design and the manager/DI tiers to come.
+/// </summary>
+public sealed class WebRtcClient : IWebRtcClient
+{
+    private readonly WebRtcConfiguration _config;
+    private readonly ILoggerFactory _loggerFactory;
+
+    /// <summary>Creates a client with the given configuration, or all defaults when omitted.</summary>
+    public WebRtcClient(WebRtcConfiguration? config = null)
+    {
+        _config = config ?? new WebRtcConfiguration();
+        _loggerFactory = _config.LoggerFactory ?? NullLoggerFactory.Instance;
+    }
+
+    /// <inheritdoc />
+    public IPeerConnection CreatePeer()
+    {
+        // A fresh DTLS identity per peer is the WebRTC privacy default (unless the app pins one).
+        var certificate = _config.DtlsCertificate is { } pinned
+            ? DtlsCertificate.FromX509(pinned)
+            : DtlsCertificate.GenerateEcdsaP256();
+
+        var options = new WebRtcPeerOptions
+        {
+            LocalEndPoint = _config.LocalEndPoint,
+            AudioCodecs = ResolveCodecs(_config.AudioCodecs, WebRtcCodecCatalog.Audio),
+            Video = _config.EnableVideo
+                ? new SdpVideoMediaOptions
+                {
+                    Port = _config.LocalEndPoint.Port,
+                    Codecs = ResolveCodecs(_config.VideoCodecs, WebRtcCodecCatalog.Video),
+                }
+                : null,
+            Dtls = new SdpDtlsParameters
+            {
+                Algorithm = certificate.Fingerprint.Algorithm,
+                Fingerprint = certificate.Fingerprint.Value,
+            },
+            Ice = new SdpIceParameters { Ufrag = GenerateUfrag(), Pwd = GeneratePassword() },
+        };
+
+        var peer = new WebRtcPeerConnection(
+            options,
+            new SdpOfferAnswerNegotiator(),
+            new SdpSessionParser(),
+            new SdpSessionSerializer(),
+            new DtlsSrtpHandshaker(_loggerFactory.CreateLogger<DtlsSrtpHandshaker>()),
+            certificate,
+            _loggerFactory);
+
+        return new PeerConnection(peer);
+    }
+
+    private static IReadOnlyList<SdpCodecDefinition> ResolveCodecs(
+        IReadOnlyList<string> names,
+        Func<string, SdpCodecDefinition> resolve)
+        => names.Select(resolve).ToArray();
+
+    // RFC 8445 §5.1.2 style credentials: an ICE ufrag/pwd generated fresh per peer.
+    private static string GenerateUfrag() => Convert.ToHexString(RandomNumberGenerator.GetBytes(4));
+    private static string GeneratePassword() => Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
+}
+
+/// <summary>
+/// Maps WebRTC codec names to their wire definitions with the standard payload types (RFC 3551 static
+/// PTs; Opus/H.264/VP8 on their conventional dynamic PTs). Transport-only: the SDK packetises, the app
+/// owns the codec.
+/// </summary>
+internal static class WebRtcCodecCatalog
+{
+    public static SdpCodecDefinition Audio(string name) => name.Trim().ToLowerInvariant() switch
+    {
+        "opus" => new SdpCodecDefinition { PayloadType = 111, Name = "opus", ClockRate = 48000, Channels = 2 },
+        "pcmu" => new SdpCodecDefinition { PayloadType = 0, Name = "PCMU", ClockRate = 8000 },
+        "pcma" => new SdpCodecDefinition { PayloadType = 8, Name = "PCMA", ClockRate = 8000 },
+        "g722" => new SdpCodecDefinition { PayloadType = 9, Name = "G722", ClockRate = 8000 },
+        _ => throw new ArgumentException($"Unknown WebRTC audio codec '{name}'.", nameof(name)),
+    };
+
+    public static SdpCodecDefinition Video(string name) => name.Trim().ToUpperInvariant() switch
+    {
+        "H264" => new SdpCodecDefinition { PayloadType = 96, Name = "H264", ClockRate = 90000 },
+        "VP8" => new SdpCodecDefinition { PayloadType = 96, Name = "VP8", ClockRate = 90000 },
+        _ => throw new ArgumentException($"Unknown WebRTC video codec '{name}'.", nameof(name)),
+    };
+}

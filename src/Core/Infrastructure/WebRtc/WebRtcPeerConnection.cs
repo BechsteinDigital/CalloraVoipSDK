@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Net;
 using CalloraVoipSdk.Core.Infrastructure.Dtls;
 using CalloraVoipSdk.Core.Infrastructure.Rtp;
@@ -50,6 +51,8 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
 
     private WebRtcConnectionState _state = WebRtcConnectionState.New;
     private string? _remoteDescription;
+    private SdpMsid? _remoteAudioMsid;
+    private SdpMsid? _remoteVideoMsid;
     private string? _localDescription;
     private SdpSessionDescription? _localOfferModel;
     private BundledMediaSession? _session;
@@ -109,6 +112,22 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     public IPEndPoint? LocalMediaEndPoint
     {
         get { lock (_sync) { return _session?.LocalEndPoint; } }
+    }
+
+    /// <summary>
+    /// The remote peer's audio-track identity (a=msid, RFC 8830) from the applied remote description, or
+    /// null before one is applied or when the remote advertised no audio msid. This is the remote stream's
+    /// identity — what the W3C track model surfaces on the receiver, not this peer's own local msid.
+    /// </summary>
+    public SdpMsid? RemoteAudioMsid
+    {
+        get { lock (_sync) { return _remoteAudioMsid; } }
+    }
+
+    /// <summary>The remote peer's video-track identity (a=msid), or null. See <see cref="RemoteAudioMsid"/>.</summary>
+    public SdpMsid? RemoteVideoMsid
+    {
+        get { lock (_sync) { return _remoteVideoMsid; } }
     }
 
     /// <summary>
@@ -201,6 +220,10 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             _remoteDescription = remoteSdp;
             _localDescription = localSdp;
             _session = session;
+            // Retain the remote track identity (a=msid) so the receiver can group inbound tracks by the
+            // remote MediaStream (the W3C RTCTrackEvent.streams semantics).
+            _remoteAudioMsid = remote.Media.FirstOrDefault(m => string.Equals(m.MediaType, "audio", StringComparison.OrdinalIgnoreCase))?.Msid;
+            _remoteVideoMsid = remote.Media.FirstOrDefault(m => string.Equals(m.MediaType, "video", StringComparison.OrdinalIgnoreCase))?.Msid;
         }
 
         // Publish _session before wiring its event handlers, so a state-transition callback can never
