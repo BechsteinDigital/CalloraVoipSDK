@@ -82,8 +82,7 @@ internal sealed class SipCallSessionTransactionService
             ct.ThrowIfCancellationRequested();
             var branch = SipProtocol.NewBranch();
             var transactionInviteCSeq = cseq;
-            _context.ActiveInviteCSeq = cseq;
-            _context.ActiveInviteBranch = branch;
+            _context.SetActiveInvite(cseq, branch);
 
             var headers = _headers.CreateDialogRequestHeaders(
                 method: "INVITE",
@@ -143,7 +142,18 @@ internal sealed class SipCallSessionTransactionService
             Task prackCompletion;
             lock (reliablePrackSync)
                 prackCompletion = reliablePrackSendChain;
-            await prackCompletion.WaitAsync(ct).ConfigureAwait(false);
+            try
+            {
+                await prackCompletion.WaitAsync(ct).ConfigureAwait(false);
+            }
+            catch
+            {
+                // A failed or cancelled reliable-PRACK chain aborts the INVITE while the dialog may
+                // still be in Ringing and therefore cancellable. Clear the active INVITE state so a
+                // later CANCEL cannot fire against this abandoned transaction (HARD-C2).
+                _context.ClearActiveInvite();
+                throw;
+            }
 
             var finalResponse = transactionResult.FinalResponse;
             _context.ApplyInviteDialogResponse(finalResponse.Response);
@@ -153,8 +163,10 @@ internal sealed class SipCallSessionTransactionService
             if (SipProtocol.IsSuccess(finalResponse.Response.StatusCode))
             {
                 _context.RemoteTag = SipProtocol.ExtractTag(finalResponse.Response.Header("To")) ?? _context.RemoteTag;
+                // A 2xx makes the INVITE non-cancellable; clear before the ACK so a failing ACK send
+                // cannot leave a stale CANCEL target once the dialog becomes Established (HARD-C2).
+                _context.ClearActiveInvite();
                 await SendAckAsync(cseq, _context.RemoteEndPoint, ct).ConfigureAwait(false);
-                _context.ActiveInviteBranch = null;
 
                 if (TryConsumeCancelledInvite(cseq, out var cancelledInviteReason))
                 {
@@ -238,7 +250,7 @@ internal sealed class SipCallSessionTransactionService
                     _context.CallId, MaxStaleNonceRetries);
             }
 
-            _context.ActiveInviteBranch = null;
+            _context.ClearActiveInvite();
             ClearCancelledInvite(cseq);
 
             // RFC 3261 §20.33 / RFC 7339 §5.3: parse Retry-After from 503 responses.
@@ -474,17 +486,21 @@ internal sealed class SipCallSessionTransactionService
         CancellationToken ct,
         SipDialogTerminationReason? reason = null)
     {
-        if (_context.ActiveInviteCSeq <= 0 || string.IsNullOrWhiteSpace(_context.ActiveInviteBranch))
+        // Snapshot CSeq+branch as one atomic pair: the INVITE loop clears both together when the
+        // transaction completes, so reading the two properties separately could build a CANCEL with
+        // a live CSeq and a null/stale branch (or vice versa) (HARD-C2).
+        var (activeCSeq, activeBranch) = _context.ActiveInvite;
+        if (activeCSeq <= 0 || string.IsNullOrWhiteSpace(activeBranch))
             return;
 
-        MarkCancelledInvite(_context.ActiveInviteCSeq, reason);
+        MarkCancelledInvite(activeCSeq, reason);
 
         // RFC 3261 §9.1: CANCEL matches the INVITE transaction by reusing the INVITE
         // request's top Via branch. The numeric CSeq equals the INVITE CSeq; the method is CANCEL.
         var headers = _headers.CreateDialogRequestHeaders(
             method: "CANCEL",
-            cseq: _context.ActiveInviteCSeq,
-            branch: _context.ActiveInviteBranch,
+            cseq: activeCSeq,
+            branch: activeBranch,
             authorizationHeaderName: null,
             authorizationHeader: null,
             includeContentType: false);
