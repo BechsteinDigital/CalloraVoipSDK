@@ -23,7 +23,7 @@ namespace CalloraVoipSdk.Core.Infrastructure.Turn.Server;
 /// Supported server-side relay flow: peer → Data Indication/ChannelData to client.
 /// </para>
 /// </summary>
-internal sealed partial class TurnServer : IAsyncDisposable
+internal sealed class TurnServer : IAsyncDisposable
 {
     private readonly TurnServerTransport _transport;
     private readonly IStunMessageCodec _codec;
@@ -42,12 +42,10 @@ internal sealed partial class TurnServer : IAsyncDisposable
     private readonly TcpListener? _tcpListener;
     private readonly SemaphoreSlim? _streamConnectionSlots;
     private readonly SemaphoreSlim? _udpPacketSlots;
-    private readonly SemaphoreSlim _allocationMutationGate = new(1, 1);
     private readonly CancellationTokenSource _stop = new();
     private readonly ConcurrentDictionary<int, Task> _connectionTasks = new();
     private int _nextConnectionTaskId;
-    private readonly ConcurrentDictionary<string, TurnServerAllocation> _allocationsByClient = new(StringComparer.Ordinal);
-    private readonly ConcurrentDictionary<string, Task> _relayTasks = new(StringComparer.Ordinal);
+    private readonly TurnAllocationRegistry _registry;
     private Task? _receiveLoop;
     private Task? _sweepLoop;
 
@@ -100,18 +98,24 @@ internal sealed partial class TurnServer : IAsyncDisposable
         _responseFactory = new TurnServerResponseFactory(_authOptions);
         _requestAuthenticator = new TurnServerRequestAuthenticator(_options, _authOptions, _codec, _responseFactory);
         _tcpPassiveConnectionService = new TurnTcpPassiveConnectionService(_codec, _tcpConnectionBroker, _logger);
+        _registry = new TurnAllocationRegistry(
+            _options,
+            _logger,
+            _mobilityService,
+            _tcpConnectionBroker,
+            StartRelayTask);
         _allocateRequestHandler = new TurnAllocateRequestHandler(
             _options,
             _responseFactory,
             _mobilityService,
-            ReplaceAllocationAsync,
-            HasAllocationCapacity,
+            _registry.ReplaceAsync,
+            _registry.HasCapacity,
             _logger);
         _tcpExtensionHandler = new TurnTcpExtensionHandler(
-            _allocationsByClient,
+            _registry.Table,
             _responseFactory,
             _tcpConnectionBroker,
-            key => TryGetLiveAllocation(key, out var allocation) ? allocation : null,
+            key => _registry.TryGetLive(key, out var allocation) ? allocation : null,
             _logger);
         _tlsServerCertificate = tlsServerCertificate;
         _streamConnectionSlots = _options.MaxConcurrentStreamConnections > 0
@@ -155,7 +159,7 @@ internal sealed partial class TurnServer : IAsyncDisposable
             _ => throw new ArgumentOutOfRangeException()
         };
 
-        _sweepLoop = SweepExpiredAllocationsAsync(_stop.Token);
+        _sweepLoop = _registry.RunSweepAsync(_stop.Token);
 
         _logger.LogInformation(
             "TURN server listening on {EndPoint} via {Transport} (stream-cap={Cap}, udp-cap={UdpCap}, policy={Policy}, backlog={Backlog})",
@@ -206,21 +210,7 @@ internal sealed partial class TurnServer : IAsyncDisposable
             }
         }
 
-        foreach (var key in _allocationsByClient.Keys.ToArray())
-            await RemoveAllocationAsync(key).ConfigureAwait(false);
-
-        var relayTasks = _relayTasks.Values.ToArray();
-        if (relayTasks.Length > 0)
-        {
-            try
-            {
-                await Task.WhenAll(relayTasks).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogDebug(ex, "TURN relay tasks completed with errors during shutdown");
-            }
-        }
+        await _registry.DisposeAllAsync().ConfigureAwait(false);
 
         var connectionTasks = _connectionTasks.Values.ToArray();
         if (connectionTasks.Length > 0)
@@ -240,7 +230,7 @@ internal sealed partial class TurnServer : IAsyncDisposable
         await _tcpConnectionBroker.DisposeAsync().ConfigureAwait(false);
         _streamConnectionSlots?.Dispose();
         _udpPacketSlots?.Dispose();
-        _allocationMutationGate.Dispose();
+        _registry.Dispose();
         _stop.Dispose();
     }
 
@@ -450,7 +440,7 @@ internal sealed partial class TurnServer : IAsyncDisposable
         {
             if (connection is not null)
             {
-                await RemoveAllocationAsync(connection.ClientKey()).ConfigureAwait(false);
+                await _registry.RemoveAsync(connection.ClientKey()).ConfigureAwait(false);
                 _tcpConnectionBroker.RemoveByClientStream(connection.Id);
                 await connection.DisposeAsync().ConfigureAwait(false);
             }
@@ -577,7 +567,7 @@ internal sealed partial class TurnServer : IAsyncDisposable
         if (method != TurnMessageMethod.Send)
             return;
 
-        if (!TryGetLiveAllocation(context.ClientKey, out var allocation))
+        if (!_registry.TryGetLive(context.ClientKey, out var allocation))
             return;
 
         var peer = TurnAttributeMapper.DecodeXorPeerAddress(indication)?.EndPoint;
@@ -622,7 +612,7 @@ internal sealed partial class TurnServer : IAsyncDisposable
 
             if (!_mobilityService.TryResolveAllocationByTicket(
                     mobilityTicket.Ticket,
-                    _allocationsByClient,
+                    _registry.Table,
                     out var oldClientKey,
                     out var resolved))
                 return _responseFactory.BuildErrorResponse(request, 400, "Bad Request", includeAuthAttributes: false);
@@ -634,13 +624,13 @@ internal sealed partial class TurnServer : IAsyncDisposable
                 return _responseFactory.BuildErrorResponse(request, 400, "Bad Request", includeAuthAttributes: false);
 
             if (!_mobilityService.TryMigrateAllocationToClient(
-                    _allocationsByClient,
+                    _registry.Table,
                     oldClientKey,
                     context,
                     out allocation))
                 return _responseFactory.BuildErrorResponse(request, 437, "Allocation Mismatch", includeAuthAttributes: false);
         }
-        else if (!TryGetLiveAllocation(context.ClientKey, out allocation))
+        else if (!_registry.TryGetLive(context.ClientKey, out allocation))
         {
             return _responseFactory.BuildErrorResponse(request, 437, "Allocation Mismatch", includeAuthAttributes: false);
         }
@@ -659,7 +649,7 @@ internal sealed partial class TurnServer : IAsyncDisposable
         var requestedLifetime = TurnAttributeMapper.DecodeLifetime(request)?.Seconds;
         if (requestedLifetime == 0)
         {
-            await RemoveAllocationAsync(allocation!.ClientKey).ConfigureAwait(false);
+            await _registry.RemoveAsync(allocation!.ClientKey).ConfigureAwait(false);
             return _responseFactory.BuildSuccessResponse(
                 request,
                 [TurnAttributeMapper.Encode(new TurnLifetimeAttribute { Seconds = 0 })]);
@@ -689,7 +679,7 @@ internal sealed partial class TurnServer : IAsyncDisposable
 
     private Task<StunMessage> HandleCreatePermissionRequestAsync(StunMessage request, TurnClientContext context)
     {
-        if (!TryGetLiveAllocation(context.ClientKey, out var allocation))
+        if (!_registry.TryGetLive(context.ClientKey, out var allocation))
             return Task.FromResult(_responseFactory.BuildErrorResponse(request, 437, "Allocation Mismatch", includeAuthAttributes: false));
 
         var peer = TurnAttributeMapper.DecodeXorPeerAddress(request)?.EndPoint;
@@ -712,7 +702,7 @@ internal sealed partial class TurnServer : IAsyncDisposable
 
     private Task<StunMessage> HandleChannelBindRequestAsync(StunMessage request, TurnClientContext context)
     {
-        if (!TryGetLiveAllocation(context.ClientKey, out var allocation))
+        if (!_registry.TryGetLive(context.ClientKey, out var allocation))
             return Task.FromResult(_responseFactory.BuildErrorResponse(request, 437, "Allocation Mismatch", includeAuthAttributes: false));
 
         var peer = TurnAttributeMapper.DecodeXorPeerAddress(request)?.EndPoint;
@@ -752,7 +742,7 @@ internal sealed partial class TurnServer : IAsyncDisposable
         byte[] payload,
         CancellationToken ct)
     {
-        if (!TryGetLiveAllocation(context.ClientKey, out var allocation))
+        if (!_registry.TryGetLive(context.ClientKey, out var allocation))
             return;
 
         var now = DateTimeOffset.UtcNow;
@@ -809,7 +799,7 @@ internal sealed partial class TurnServer : IAsyncDisposable
             var now = DateTimeOffset.UtcNow;
             if (now > allocation.ExpiresAtUtc)
             {
-                await RemoveAllocationAsync(allocation.ClientKey).ConfigureAwait(false);
+                await _registry.RemoveAsync(allocation.ClientKey).ConfigureAwait(false);
                 break;
             }
 
@@ -877,6 +867,30 @@ internal sealed partial class TurnServer : IAsyncDisposable
     }
 
     // ── Shared helpers ──────────────────────────────────────────────────────
+
+    private Task StartRelayTask(TurnServerAllocation allocation, CancellationToken ct)
+    {
+        return allocation.RelayedTransport switch
+        {
+            TurnRequestedTransportProtocol.Udp => RelayReceiveLoopAsync(allocation, ct),
+            TurnRequestedTransportProtocol.Tcp => _tcpPassiveConnectionService.RunAsync(allocation, SendToClientAsync, ct),
+            _ => Task.CompletedTask
+        };
+    }
+
+    private static bool IsPeerFamilyMatchingAllocation(TurnServerAllocation allocation, IPEndPoint peerEndPoint)
+        => TurnMobilityService.IsPeerFamilyMatchingAllocation(allocation, peerEndPoint);
+
+    private uint ClampAllocationLifetime(uint? requestedLifetime)
+    {
+        if (!requestedLifetime.HasValue)
+            return _options.DefaultAllocationLifetimeSeconds;
+
+        return Math.Clamp(
+            requestedLifetime.Value,
+            0,
+            _options.MaxAllocationLifetimeSeconds);
+    }
 
     private async Task SendResponseAsync(
         TurnClientContext context,
