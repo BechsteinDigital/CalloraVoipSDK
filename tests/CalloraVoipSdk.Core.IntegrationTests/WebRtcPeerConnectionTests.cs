@@ -51,6 +51,25 @@ public sealed class WebRtcPeerConnectionTests
     }
 
     [Fact]
+    public async Task Offerer_applying_the_answer_returns_its_own_offer_as_local_description()
+    {
+        // Guards the offerer branch of SetRemoteDescription (HARD-C6): the local description belongs to
+        // the pending offer and is captured under _sync, so applying the peer's answer returns the
+        // original offer unchanged rather than a stale/torn read.
+        await using var offerer = Peer(Pcmu);
+        await using var answerer = Peer(Pcmu);
+
+        var offer = offerer.CreateOffer();
+        var answer = await answerer.SetRemoteDescriptionAsync(offer);
+
+        var returnedLocal = await offerer.SetRemoteDescriptionAsync(answer);
+
+        Assert.Equal(offer, returnedLocal);
+        Assert.Equal(offer, offerer.LocalDescription);
+        Assert.Equal(WebRtcConnectionState.Connecting, offerer.State);
+    }
+
+    [Fact]
     public async Task An_empty_remote_description_is_rejected()
     {
         await using var peer = Peer(Pcmu);

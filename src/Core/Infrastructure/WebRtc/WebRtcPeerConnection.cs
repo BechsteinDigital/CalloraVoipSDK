@@ -19,6 +19,16 @@ namespace CalloraVoipSdk.Core.Infrastructure.WebRtc;
 /// RFC 9143) via the existing SDP negotiator, plus the <see cref="WebRtcConnectionState"/> machine. The
 /// media transport (the <c>BundledMediaSession</c> built from the negotiated description) and track
 /// events attach in a later slice.
+/// <para>
+/// Threading contract (HARD-C6, interim): the signalling handshake — <see cref="CreateOffer"/>,
+/// <see cref="SetRemoteDescriptionAsync"/>, <see cref="StartAsync"/> — is a single ordered sequence
+/// and must be driven by one caller at a time, mirroring the W3C signalling-state serialisation; the
+/// internal <c>_sync</c> gate protects the shared fields but does not make out-of-order concurrent
+/// signalling meaningful. The media hot path (<see cref="SendAudioAsync"/>/<see cref="SendVideoFrameAsync"/>)
+/// racing teardown is NOT yet fully hardened against a concurrent <see cref="DisposeAsync"/>; that
+/// contract is finalised together with the public WebRtc facade slice (see roadmap). Until then callers
+/// must stop sending before disposing.
+/// </para>
 /// </summary>
 internal sealed class WebRtcPeerConnection : IAsyncDisposable
 {
@@ -139,9 +149,13 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         }
 
         SdpSessionDescription pendingOffer;
+        string? pendingLocalDescription;
         lock (_sync)
         {
+            // Capture the offerer state as one snapshot: the local description belongs to _localOfferModel
+            // and must be read under the same gate, not unsynchronised afterwards (HARD-C6).
             pendingOffer = _localOfferModel!;
+            pendingLocalDescription = _localDescription;
         }
 
         SdpSessionDescription localModel;
@@ -150,7 +164,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         {
             // Offerer: the remote description is the answer; our offer is the local description.
             localModel = pendingOffer;
-            localSdp = _localDescription!;
+            localSdp = pendingLocalDescription!;
         }
         else
         {
@@ -174,8 +188,6 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             remote, localModel, _options, _handshaker, _certificate, _loggerFactory);
         if (session is null)
             _logger.LogWarning("The remote description did not negotiate a BUNDLE media session; no transport was built.");
-        else
-            WireSession(session);
 
         lock (_sync)
         {
@@ -183,6 +195,11 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             _localDescription = localSdp;
             _session = session;
         }
+
+        // Publish _session before wiring its event handlers, so a state-transition callback can never
+        // fire against a peer that has not yet recorded the session it belongs to (HARD-C6).
+        if (session is not null)
+            WireSession(session);
 
         TransitionTo(WebRtcConnectionState.Connecting);
         return Task.FromResult(localSdp);
