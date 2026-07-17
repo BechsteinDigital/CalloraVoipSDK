@@ -5,7 +5,7 @@ namespace CalloraVoipSdk;
 /// <summary>
 /// Policy facade exposing active SDK policy defaults.
 /// </summary>
-public sealed class PolicyManager
+public sealed class PolicyManager : IPolicyManager
 {
     internal PolicyManager(SrtpPolicy defaultSrtpPolicy)
     {

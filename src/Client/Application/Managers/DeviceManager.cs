@@ -5,7 +5,7 @@ namespace CalloraVoipSdk;
 /// <summary>
 /// Runtime audio device control facade.
 /// </summary>
-public sealed class DeviceManager
+public sealed class DeviceManager : IDeviceManager
 {
     private readonly Func<IAudioDeviceRuntimeControl> _runtime;
     private readonly Action _throwIfDisposed;

@@ -6,7 +6,7 @@ namespace CalloraVoipSdk;
 /// <summary>
 /// Runtime quality facade for call-level snapshots and subscriptions.
 /// </summary>
-public sealed class QualityManager
+public sealed class QualityManager : IQualityManager
 {
     internal QualityManager()
     {

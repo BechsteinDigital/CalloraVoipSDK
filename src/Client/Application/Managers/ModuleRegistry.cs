@@ -8,7 +8,7 @@ namespace CalloraVoipSdk;
 /// (register <see cref="IVoipClientModule"/> services before <c>AddCallora</c>) or
 /// programmatically via <see cref="Register"/>.
 /// </summary>
-public sealed class ModuleRegistry
+public sealed class ModuleRegistry : IModuleRegistry
 {
     private readonly object _sync = new();
     private readonly IVoipClient _owner;

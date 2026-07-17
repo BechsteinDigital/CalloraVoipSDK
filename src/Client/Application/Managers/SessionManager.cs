@@ -8,7 +8,7 @@ namespace CalloraVoipSdk;
 /// <summary>
 /// Read-only runtime view over active calls and media sessions.
 /// </summary>
-public sealed class SessionManager
+public sealed class SessionManager : ISessionManager
 {
     private readonly CallManager _calls;
     private readonly IPlaybackModule _playback;

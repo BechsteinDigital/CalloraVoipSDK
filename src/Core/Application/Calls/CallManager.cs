@@ -8,7 +8,7 @@ namespace CalloraVoipSdk.Core.Application.Calls;
 /// Registry of the SDK's live calls. Exposes the active-call collection, lookup, and
 /// add/remove/state-change notifications. Instances are created by the SDK, not by consumers.
 /// </summary>
-public sealed class CallManager : ICallRegistry
+public sealed class CallManager : ICallRegistry, ICallManager
 {
     private readonly ConcurrentDictionary<CallId, Call> _calls = new();
 

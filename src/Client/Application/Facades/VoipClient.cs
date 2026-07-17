@@ -56,17 +56,17 @@ public sealed class VoipClient : IVoipClient
     /// <summary>
     /// Active call manager for this SDK instance.
     /// </summary>
-    public CallManager Calls { get; }
+    public ICallManager Calls { get; }
 
     /// <summary>
     /// Registered line manager for this SDK instance.
     /// </summary>
-    public PhoneLineManager Lines { get; }
+    public IPhoneLineManager Lines { get; }
 
     /// <summary>
     /// Media manager for sender/receiver/connector orchestration.
     /// </summary>
-    public MediaManager Media { get; }
+    public IMediaManager Media { get; }
 
     /// <summary>
     /// Playback module facade.
@@ -81,37 +81,37 @@ public sealed class VoipClient : IVoipClient
     /// <summary>
     /// Module availability facade.
     /// </summary>
-    public ModuleManager ModuleManager { get; }
+    public IModuleManager ModuleManager { get; }
 
     /// <summary>
     /// Registry resolving optional modules contributed by separate packages.
     /// </summary>
-    public ModuleRegistry Modules { get; }
+    public IModuleRegistry Modules { get; }
 
     /// <summary>
     /// Runtime session view facade.
     /// </summary>
-    public SessionManager SessionManager { get; }
+    public ISessionManager SessionManager { get; }
 
     /// <summary>
     /// Runtime audio-device facade.
     /// </summary>
-    public DeviceManager DeviceManager { get; }
+    public IDeviceManager DeviceManager { get; }
 
     /// <summary>
     /// Runtime quality facade.
     /// </summary>
-    public QualityManager QualityManager { get; }
+    public IQualityManager QualityManager { get; }
 
     /// <summary>
     /// Runtime policy facade.
     /// </summary>
-    public PolicyManager PolicyManager { get; }
+    public IPolicyManager PolicyManager { get; }
 
     /// <summary>
     /// Runtime telemetry facade.
     /// </summary>
-    public TelemetryManager TelemetryManager { get; }
+    public ITelemetryManager TelemetryManager { get; }
 
     /// <summary>
     /// Raised when a new inbound call arrives on any registered line. Fires on the SDK's SIP
@@ -252,14 +252,19 @@ public sealed class VoipClient : IVoipClient
             _ownsCallSignalingService = false;
         }
 
-        Calls = new CallManager();
-        Calls.CallStateChanged += (s, e) => CallStateChanged?.Invoke(s, e);
+        // Managers are exposed through interfaces (HARD-E5); construction keeps concrete locals where a
+        // manager's constructor requires the concrete peer type.
+        var callManager = new CallManager();
+        Calls = callManager;
+        callManager.CallStateChanged += (s, e) => CallStateChanged?.Invoke(s, e);
 
         var audioFileCodecs = ResolveService<IAudioFileCodecRegistry>(services)
             ?? new AudioFileCodecRegistry();
-        Media = new MediaManager(logFactory, audioFileCodecs);
-        ModuleManager = new ModuleManager(Media);
-        SessionManager = new SessionManager(Calls, ModuleManager.Playback, ModuleManager.Recording);
+        var mediaManager = new MediaManager(logFactory, audioFileCodecs);
+        Media = mediaManager;
+        var moduleManager = new ModuleManager(mediaManager);
+        ModuleManager = moduleManager;
+        SessionManager = new SessionManager(callManager, moduleManager.Playback, moduleManager.Recording);
         DeviceManager = new DeviceManager(GetAudioDeviceRuntimeControl, ThrowIfDisposed);
         QualityManager = new QualityManager();
         PolicyManager = new PolicyManager(config.SrtpPolicy);
@@ -297,7 +302,7 @@ public sealed class VoipClient : IVoipClient
             mediaSessionFactory, logFactory, rtcpPacketCodec, iceAgent, mediaSupervision);
         Calls.CallStateChanged += _mediaOrchestrator.OnCallStateChanged;
 
-        Lines = new PhoneLineManager(account =>
+        var lineManager = new PhoneLineManager(account =>
         {
             var channel = new SipLineChannel(
                 account,
@@ -318,12 +323,13 @@ public sealed class VoipClient : IVoipClient
             return new PhoneLine(
                 account,
                 channel,
-                Calls,
+                callManager,
                 config.MaxConcurrentCallsPerLine,
                 logFactory,
                 onCallCreated: (call, callChannel) =>
                     _mediaOrchestrator.AttachCall(call, callChannel));
         });
+        Lines = lineManager;
 
         Lines.IncomingCall += (s, e) => IncomingCall?.Invoke(s, e);
 
@@ -332,7 +338,7 @@ public sealed class VoipClient : IVoipClient
         // fails closed. The application registers an IVideoDevice (its codec package) to enable it.
         var injectedVideoDevice = ResolveService<IVideoDevice>(services);
         _convenienceOrchestrator = new SdkConvenienceOrchestrator(
-            Lines, Media, _audioDevice, logFactory, injectedVideoDevice);
+            lineManager, mediaManager, _audioDevice, logFactory, injectedVideoDevice);
 
         // Module registration is the last construction step so OnAttached sees a fully built client.
         Modules = new ModuleRegistry(this);

@@ -15,13 +15,13 @@ namespace CalloraVoipSdk;
 public interface IVoipClient : IDisposable
 {
     /// <summary>Active call manager for this SDK instance.</summary>
-    CallManager Calls { get; }
+    ICallManager Calls { get; }
 
     /// <summary>Registered line manager for this SDK instance.</summary>
-    PhoneLineManager Lines { get; }
+    IPhoneLineManager Lines { get; }
 
     /// <summary>Media manager for sender/receiver/connector orchestration.</summary>
-    MediaManager Media { get; }
+    IMediaManager Media { get; }
 
     /// <summary>Playback module facade.</summary>
     IPlaybackModule PlaybackManager { get; }
@@ -30,25 +30,25 @@ public interface IVoipClient : IDisposable
     IRecordingModule RecordingManager { get; }
 
     /// <summary>Module availability facade.</summary>
-    ModuleManager ModuleManager { get; }
+    IModuleManager ModuleManager { get; }
 
     /// <summary>Registry resolving optional modules contributed by separate packages.</summary>
-    ModuleRegistry Modules { get; }
+    IModuleRegistry Modules { get; }
 
     /// <summary>Runtime session view facade.</summary>
-    SessionManager SessionManager { get; }
+    ISessionManager SessionManager { get; }
 
     /// <summary>Runtime audio-device facade.</summary>
-    DeviceManager DeviceManager { get; }
+    IDeviceManager DeviceManager { get; }
 
     /// <summary>Runtime quality facade.</summary>
-    QualityManager QualityManager { get; }
+    IQualityManager QualityManager { get; }
 
     /// <summary>Runtime policy facade.</summary>
-    PolicyManager PolicyManager { get; }
+    IPolicyManager PolicyManager { get; }
 
     /// <summary>Runtime telemetry facade.</summary>
-    TelemetryManager TelemetryManager { get; }
+    ITelemetryManager TelemetryManager { get; }
 
     /// <summary>Raised when a new inbound call arrives on any registered line.</summary>
     event EventHandler<IncomingCallEventArgs>? IncomingCall;
