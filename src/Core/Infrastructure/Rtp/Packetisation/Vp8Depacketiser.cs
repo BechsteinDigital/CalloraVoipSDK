@@ -16,6 +16,9 @@ internal sealed class Vp8Depacketiser : IVideoDepacketiser
     private uint _timestamp;
 
     /// <inheritdoc />
+    public long DiscardedPacketCount { get; private set; }
+
+    /// <inheritdoc />
     public bool TryProcess(ReadOnlyMemory<byte> rtpPayload, uint rtpTimestamp, bool marker, out byte[]? frame, out bool isKeyFrame)
     {
         frame = null;
@@ -44,6 +47,7 @@ internal sealed class Vp8Depacketiser : IVideoDepacketiser
         }
         else if (!_frameActive)
         {
+            DiscardedPacketCount++;
             return false; // continuation of a frame whose start we never saw — drop
         }
 
@@ -69,6 +73,7 @@ internal sealed class Vp8Depacketiser : IVideoDepacketiser
 
     private bool Discard()
     {
+        DiscardedPacketCount++;
         Reset();
         return false;
     }

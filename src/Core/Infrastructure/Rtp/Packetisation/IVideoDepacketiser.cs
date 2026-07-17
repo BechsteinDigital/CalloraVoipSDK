@@ -37,4 +37,12 @@ internal interface IVideoDepacketiser
     /// lost frame is never glued to the next one.
     /// </summary>
     void Reset();
+
+    /// <summary>
+    /// Number of RTP payloads discarded as unusable — a malformed payload, an unsupported
+    /// packetisation mode, or a fragment/continuation whose frame start was lost. A rising
+    /// count signals upstream packet loss or a non-conformant sender; it is not incremented
+    /// by the normal markerless frame-boundary reset.
+    /// </summary>
+    long DiscardedPacketCount { get; }
 }
