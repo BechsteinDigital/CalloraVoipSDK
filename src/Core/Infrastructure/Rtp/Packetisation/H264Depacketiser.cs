@@ -24,6 +24,9 @@ internal sealed class H264Depacketiser : IVideoDepacketiser
     private uint _timestamp;
 
     /// <inheritdoc />
+    public long DiscardedPacketCount { get; private set; }
+
+    /// <inheritdoc />
     public bool TryProcess(ReadOnlyMemory<byte> rtpPayload, uint rtpTimestamp, bool marker, out byte[]? frame, out bool isKeyFrame)
     {
         frame = null;
@@ -82,6 +85,7 @@ internal sealed class H264Depacketiser : IVideoDepacketiser
 
     private bool Discard()
     {
+        DiscardedPacketCount++;
         Reset();
         return false;
     }

@@ -4,7 +4,7 @@ using CalloraVoipSdk.Core.Domain.Calls;
 using CalloraVoipSdk.Core.Domain.Lines;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Adapters;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Signaling;
-using CalloraVoipSdk.Core.Security;
+using CalloraVoipSdk.Core.Domain.Security;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 

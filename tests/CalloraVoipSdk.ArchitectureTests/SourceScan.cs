@@ -67,6 +67,29 @@ internal static class SourceScan
         return match.Success ? match.Groups[1].Value : null;
     }
 
+    private static readonly string[] Layers = ["Domain", "Application", "Infrastructure"];
+
+    /// <summary>
+    /// Prueft, ob eine Datei ihr Schicht-Segment (Domain/Application/Infrastructure) korrekt im
+    /// Namespace fuehrt. Verstoss ist sowohl ein FREMDES Schicht-Segment als auch das FEHLEN des
+    /// eigenen (Layer-Omission, wie das fruehere Core.Security unter Domain/Security/). Dateien
+    /// ausserhalb der drei Schichtordner sind nicht betroffen.
+    /// </summary>
+    public static bool LayerSegmentViolation(string relativePath, string declaredNamespace)
+    {
+        var folderLayer = Layers.FirstOrDefault(l => relativePath.Contains($"/{l}/", StringComparison.Ordinal));
+        if (folderLayer is null)
+        {
+            return false;
+        }
+
+        var carriesForeignLayer = Layers.Any(l =>
+            l != folderLayer &&
+            Regex.IsMatch(declaredNamespace, $@"(^|\.){l}(\.|$)"));
+        var ownLayerMissing = !Regex.IsMatch(declaredNamespace, $@"(^|\.){folderLayer}(\.|$)");
+        return carriesForeignLayer || ownLayerMissing;
+    }
+
     /// <summary>
     /// Vergleicht Ist-Verstoesse gegen die Baseline. Schlaegt fehl bei neuen Verstoessen
     /// UND bei veralteten Baseline-Eintraegen (Baseline darf nur schrumpfen).

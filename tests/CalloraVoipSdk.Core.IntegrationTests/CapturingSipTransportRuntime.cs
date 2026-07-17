@@ -87,11 +87,28 @@ internal sealed class CapturingSipTransportRuntime : ISipTransportRuntime
         CancellationToken ct = default) =>
         Task.CompletedTask;
 
+    public Task SendResponseAsync(
+        int statusCode,
+        string reasonPhrase,
+        IReadOnlyDictionary<string, string> headers,
+        string? body,
+        IPEndPoint remoteEndPoint,
+        SipTransportProtocol transport,
+        CancellationToken ct = default) =>
+        SendResponseAsync(statusCode, reasonPhrase, headers, body, remoteEndPoint, ct);
+
     public Task<IPEndPoint> ResolveRemoteEndPointAsync(
         string host,
         int port,
         CancellationToken ct = default) =>
         Task.FromResult(new IPEndPoint(IPAddress.Loopback, port));
+
+    public Task<IPEndPoint> ResolveRemoteEndPointAsync(
+        string host,
+        int port,
+        SipTransportProtocol transport,
+        CancellationToken ct = default) =>
+        ResolveRemoteEndPointAsync(host, port, ct);
 
     public Task<IReadOnlyList<SipRouteCandidate>> ResolveRemoteRouteCandidatesAsync(
         string host,

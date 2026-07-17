@@ -16,6 +16,10 @@ internal static class TransportCcFeedbackBuilder
     private const int MaxReferenceTime = 0x7FFFFF;   // signed 24-bit
     private const int MinReferenceTime = -0x800000;
 
+    // The 16-bit signed sequence unwrap can represent at most ±32767 from the anchor, so a batch may
+    // span fewer than 2^15 sequence numbers; a wider span is rejected as ambiguous (and unbounded).
+    private const int MaxUnwrappedSequenceSpan = 32_768;
+
     /// <summary>
     /// Builds one feedback message covering every sequence number from the lowest to the highest in
     /// <paramref name="arrivals"/>. Duplicate sequence numbers keep their earliest arrival.
@@ -67,7 +71,7 @@ internal static class TransportCcFeedbackBuilder
 
         // Reject a span the 16-bit unwrap cannot represent unambiguously — this also bounds the
         // status array (a malformed batch cannot force a huge allocation).
-        if ((long)maxSequence - baseSequence >= 32_768)
+        if ((long)maxSequence - baseSequence >= MaxUnwrappedSequenceSpan)
             throw new ArgumentException(
                 "Batch spans more than 32767 sequence numbers; the 16-bit unwrap window is ambiguous.",
                 nameof(arrivals));

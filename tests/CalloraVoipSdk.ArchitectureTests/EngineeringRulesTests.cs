@@ -48,20 +48,23 @@ public sealed class EngineeringRulesTests
     }
 
     // --- Regel: Das Schicht-Segment des Namespace muss zur Ordner-Schicht passen ---
-    // Die Codebase nutzt bewusst logische Namespaces (Domain/Security -> Core.Security,
-    // Contracts/ klappt in den Elternnamespace). Strikte Ordner=Namespace-Gleichheit
-    // ist daher nicht die Regel. Architektonisch relevant ist nur: eine Datei unter
-    // Infrastructure/ darf keinen Application.- oder Domain.-Namespace tragen (und umgekehrt).
+    // Eine Datei unter Domain/ (bzw. Application/, Infrastructure/) MUSS ihr eigenes
+    // Schicht-Segment im Namespace tragen UND darf kein fremdes Schicht-Segment tragen.
+    // Untergeordnete Ordner (z. B. Contracts/) duerfen weiterhin in den Elternnamespace
+    // klappen — das behaelt das Schicht-Segment und bleibt erlaubt. Nicht erlaubt ist die
+    // Layer-Omission (frueher Core.Security unter Domain/Security/ bzw. Infrastructure/Security/):
+    // der urspruengliche Foreign-Layer-Only-Check (HARD-G1) uebersah genau diesen Drift.
 
     // K3 behoben (B.3): die Application.Media.Rtcp.*-Dateien liegen jetzt unter
     // src/Core/Application/Media/Rtcp/ (Namespace unveraendert). Nur die echte Impl
     // RtcpPacketCodec.cs (Infrastructure.Rtcp.Wire) bleibt in Infrastructure/.
+    // HARD-G1: SrtpPolicy/SrtpDecisionReasonCodes -> Core.Domain.Security,
+    // TlsConfiguration/SipDomainCertificateValidator -> Core.Infrastructure.Security.
     private static readonly string[] LayerSegmentBaseline = [];
 
     [Fact]
     public void Schicht_Segment_des_Namespace_passt_zur_Ordner_Schicht()
     {
-        var layers = new[] { "Domain", "Application", "Infrastructure" };
         var violations = new List<string>();
 
         foreach (var file in SourceScan.CsFiles("src/Core/Domain", "src/Core/Application", "src/Core/Infrastructure"))
@@ -73,20 +76,31 @@ public sealed class EngineeringRulesTests
             }
 
             var relative = SourceScan.Relative(file);
-            var folderLayer = layers.First(l => relative.Contains($"/{l}/", StringComparison.Ordinal));
-
-            // Fremdes Schicht-Segment im Namespace, das nicht die eigene Ordner-Schicht ist.
-            var foreignLayer = layers.FirstOrDefault(l =>
-                l != folderLayer &&
-                Regex.IsMatch(declared, $@"(^|\.){l}(\.|$)"));
-
-            if (foreignLayer is not null)
+            if (SourceScan.LayerSegmentViolation(relative, declared))
             {
                 violations.Add(relative);
             }
         }
 
         SourceScan.AssertMatchesBaseline("Schicht-Segment = Ordner-Schicht", violations, LayerSegmentBaseline);
+    }
+
+    // Diskriminierender Regressionsschutz fuer die verschaerfte Regel (HARD-G1): der frueheres
+    // Foreign-Layer-Only-Check haette die Layer-Omission (Core.Security) durchgelassen.
+    [Theory]
+    // Layer-Omission — genau der behobene Drift: unter Domain/ bzw. Infrastructure/ ohne eigenes Segment.
+    [InlineData("src/Core/Domain/Security/SrtpPolicy.cs", "CalloraVoipSdk.Core.Security", true)]
+    [InlineData("src/Core/Infrastructure/Security/TlsConfiguration.cs", "CalloraVoipSdk.Core.Security", true)]
+    // Fremdes Schicht-Segment.
+    [InlineData("src/Core/Application/Media/Foo.cs", "CalloraVoipSdk.Core.Infrastructure.Media", true)]
+    // Korrekt nach dem Fix.
+    [InlineData("src/Core/Domain/Security/SrtpPolicy.cs", "CalloraVoipSdk.Core.Domain.Security", false)]
+    [InlineData("src/Core/Infrastructure/Security/TlsConfiguration.cs", "CalloraVoipSdk.Core.Infrastructure.Security", false)]
+    // Contracts/ klappt in den Elternnamespace — behaelt das Schicht-Segment, bleibt erlaubt.
+    [InlineData("src/Core/Infrastructure/Sip/Signaling/Contracts/ISipCallSession.cs", "CalloraVoipSdk.Core.Infrastructure.Sip.Signaling", false)]
+    public void LayerSegmentViolation_erkennt_Omission_und_Foreign_Layer(string relative, string declared, bool expected)
+    {
+        Assert.Equal(expected, SourceScan.LayerSegmentViolation(relative, declared));
     }
 
     // --- Regel: max. 1000 Zeilen pro Datei ---

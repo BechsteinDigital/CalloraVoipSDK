@@ -1,4 +1,4 @@
-using CalloraVoipSdk.Core.Security;
+using CalloraVoipSdk.Core.Domain.Security;
 
 namespace CalloraVoipSdk;
 

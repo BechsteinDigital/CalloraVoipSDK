@@ -1,6 +1,6 @@
 using System.Security.Cryptography.X509Certificates;
 
-namespace CalloraVoipSdk.Core.Security;
+namespace CalloraVoipSdk.Core.Infrastructure.Security;
 
 /// <summary>
 /// TLS configuration for SIP transport connections.

@@ -5,11 +5,12 @@ using CalloraVoipSdk.Core.Application.Calls;
 using CalloraVoipSdk.Core.Application.Media;
 using CalloraVoipSdk.Core.Domain.Calls;
 using CalloraVoipSdk.Core.Application.Ports.Sdp;
+using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
 using CalloraVoipSdk.Core.Infrastructure.Sdp;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Observability;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Signaling;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Wire;
-using CalloraVoipSdk.Core.Security;
+using CalloraVoipSdk.Core.Domain.Security;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Sip.Adapters;
 
@@ -19,7 +20,7 @@ namespace CalloraVoipSdk.Core.Infrastructure.Sip.Adapters;
 /// Fires <see cref="ICallChannel.MediaParametersNegotiated"/> once the SDP exchange
 /// is complete so the application media orchestrator can set up RTP I/O.
 /// </summary>
-internal sealed partial class SipCoreCallChannel : ICallChannel
+internal sealed class SipCoreCallChannel : ICallChannel
 {
     private readonly ILogger<SipCoreCallChannel> _logger;
     private readonly ISdpNegotiator _sdpNegotiator;
@@ -32,12 +33,16 @@ internal sealed partial class SipCoreCallChannel : ICallChannel
     private readonly IReadOnlyList<string>? _preferredCodecNames;
     private readonly object _callbackSync = new();
     private readonly object _sessionSync = new();
-    private readonly object _audioSync = new();
-    private readonly object _videoSync = new();
-    private readonly Queue<CallState> _stateBuffer = new();
-    private readonly Queue<bool> _remoteHoldBuffer = new();
-    private readonly List<Action<CallAudioFrame>> _audioListeners = [];
-    private readonly List<Action<CallVideoFrame>> _videoListeners = [];
+
+    // Consumer-callback dispatch + early-event buffering (state/DTMF/remote-hold/transfer) — its own
+    // collaborator so the channel no longer carries the handlers, buffers and their lock inline.
+    private readonly SipCallChannelNotifier _notifier = new();
+
+    // Encoded-media-frame taps (send delegate + inbound listener fan-out) — own collaborators so the
+    // channel no longer carries the audio/video frame state and locks inline (were the AudioFrames
+    // methods and the VideoFrames partial).
+    private readonly SipCallChannelFrameTap<CallAudioFrame> _audioTap;
+    private readonly SipCallChannelFrameTap<CallVideoFrame> _videoTap;
 
     // Pre-allocated local UDP socket so the port is known before the SDP offer is built.
     private readonly UdpClient _localMediaSocket;
@@ -51,12 +56,6 @@ internal sealed partial class SipCoreCallChannel : ICallChannel
     private readonly bool _videoEnabled;
     private readonly IReadOnlyList<string>? _videoCodecNames;
 
-    private Action<CallState>? _onStateChange;
-    private Action<byte, int>? _onDtmf;
-    private Action<bool>? _onRemoteHold;
-    private Func<string, string, bool>? _onTransfer;
-    private Func<CallAudioFrame, CancellationToken, Task>? _audioSendDelegate;
-    private Func<CallVideoFrame, CancellationToken, Task>? _videoSendDelegate;
     private Func<byte, int, CancellationToken, Task>? _dtmfSendDelegate;
     private CallIceLocalDescription? _localIceDescription;
 
@@ -142,6 +141,8 @@ internal sealed partial class SipCoreCallChannel : ICallChannel
         _videoEnabled = enableVideo;
         _videoCodecNames = preferredVideoCodecNames;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _audioTap = new SipCallChannelFrameTap<CallAudioFrame>("Audio", _logger);
+        _videoTap = new SipCallChannelFrameTap<CallVideoFrame>("Video", _logger);
         _sdpNegotiator = sdpNegotiator ?? throw new ArgumentNullException(nameof(sdpNegotiator));
         _iceAgent = iceAgent;
         _telemetry = telemetry ?? throw new ArgumentNullException(nameof(telemetry));
@@ -244,7 +245,7 @@ internal sealed partial class SipCoreCallChannel : ICallChannel
 
         var state = SipCallChannelConversions.MapState(session.State);
         if (state is not null)
-            NotifyState(state.Value);
+            _notifier.NotifyState(state.Value);
     }
 
     /// <inheritdoc />
@@ -509,33 +510,14 @@ internal sealed partial class SipCoreCallChannel : ICallChannel
 
     /// <inheritdoc />
     public Task SendAudioFrameAsync(CallAudioFrame frame, CancellationToken ct = default)
-    {
-        Func<CallAudioFrame, CancellationToken, Task>? send;
-        lock (_callbackSync) send = _audioSendDelegate;
-        return send is not null ? send(frame, ct) : Task.CompletedTask;
-    }
+        => _audioTap.SendFrameAsync(frame, ct);
 
     /// <inheritdoc />
-    public void DeliverInboundAudioFrame(CallAudioFrame frame)
-    {
-        Action<CallAudioFrame>[] listeners;
-        lock (_audioSync) listeners = [.. _audioListeners];
-        foreach (var listener in listeners)
-        {
-            try { listener(frame); }
-            catch (Exception ex)
-            {
-                // Isolate one listener's fault from the others and the RTP/callback thread.
-                _logger.LogDebug(ex, "Audio frame listener threw; continuing with the remaining listeners.");
-            }
-        }
-    }
+    public void DeliverInboundAudioFrame(CallAudioFrame frame) => _audioTap.DeliverInbound(frame);
 
     /// <inheritdoc />
     public void SetAudioSendDelegate(Func<CallAudioFrame, CancellationToken, Task>? sendDelegate)
-    {
-        lock (_callbackSync) _audioSendDelegate = sendDelegate;
-    }
+        => _audioTap.SetSendDelegate(sendDelegate);
 
     /// <inheritdoc />
     public void SetDtmfSendDelegate(Func<byte, int, CancellationToken, Task>? sendDelegate)
@@ -545,58 +527,45 @@ internal sealed partial class SipCoreCallChannel : ICallChannel
 
     /// <inheritdoc />
     public void DeliverInboundDtmf(byte toneCode, int durationMs)
-        => NotifyDtmf(toneCode, durationMs);
+        => _notifier.NotifyDtmf(toneCode, durationMs);
 
     /// <inheritdoc />
-    public void BindCallbacks(CallChannelCallbacks callbacks)
-    {
-        ArgumentNullException.ThrowIfNull(callbacks);
-
-        List<CallState> pendingStates;
-        List<bool> pendingRemoteHold;
-
-        lock (_callbackSync)
-        {
-            _onStateChange = callbacks.OnStateChange;
-            _onDtmf = callbacks.OnDtmf;
-            _onRemoteHold = callbacks.OnRemoteHold;
-            _onTransfer = callbacks.OnTransferRequested;
-
-            pendingStates = _stateBuffer.ToList();
-            pendingRemoteHold = _remoteHoldBuffer.ToList();
-            _stateBuffer.Clear();
-            _remoteHoldBuffer.Clear();
-        }
-
-        foreach (var state in pendingStates)
-            callbacks.OnStateChange(state);
-
-        if (callbacks.OnRemoteHold is null) return;
-        foreach (var isOnHold in pendingRemoteHold)
-            callbacks.OnRemoteHold(isOnHold);
-    }
+    public void BindCallbacks(CallChannelCallbacks callbacks) => _notifier.Bind(callbacks);
 
     /// <inheritdoc />
     public void AddAudioFrameListener(Action<CallAudioFrame> onFrame)
     {
-        ArgumentNullException.ThrowIfNull(onFrame);
-
         if (Volatile.Read(ref _disposed) != 0)
             throw new ObjectDisposedException(nameof(SipCoreCallChannel));
-
-        lock (_audioSync)
-        {
-            if (_audioListeners.Contains(onFrame)) return;
-            _audioListeners.Add(onFrame);
-        }
+        _audioTap.AddListener(onFrame);
     }
 
     /// <inheritdoc />
-    public void RemoveAudioFrameListener(Action<CallAudioFrame> onFrame)
+    public void RemoveAudioFrameListener(Action<CallAudioFrame> onFrame) => _audioTap.RemoveListener(onFrame);
+
+    // ── Video frames (delegated to the video tap) ─────────────────────────────
+
+    /// <inheritdoc />
+    public Task SendVideoFrameAsync(CallVideoFrame frame, CancellationToken ct = default)
+        => _videoTap.SendFrameAsync(frame, ct);
+
+    /// <inheritdoc />
+    public void DeliverInboundVideoFrame(CallVideoFrame frame) => _videoTap.DeliverInbound(frame);
+
+    /// <inheritdoc />
+    public void SetVideoSendDelegate(Func<CallVideoFrame, CancellationToken, Task>? sendDelegate)
+        => _videoTap.SetSendDelegate(sendDelegate);
+
+    /// <inheritdoc />
+    public void AddVideoFrameListener(Action<CallVideoFrame> onFrame)
     {
-        if (onFrame == null) return;
-        lock (_audioSync) _audioListeners.Remove(onFrame);
+        if (Volatile.Read(ref _disposed) != 0)
+            throw new ObjectDisposedException(nameof(SipCoreCallChannel));
+        _videoTap.AddListener(onFrame);
     }
+
+    /// <inheritdoc />
+    public void RemoveVideoFrameListener(Action<CallVideoFrame> onFrame) => _videoTap.RemoveListener(onFrame);
 
     // ── Media parameters ──────────────────────────────────────────────────────
 
@@ -804,63 +773,25 @@ internal sealed partial class SipCoreCallChannel : ICallChannel
 
         var state = SipCallChannelConversions.MapState(e.NewState);
         if (state is null) return;
-        NotifyState(state.Value);
+        _notifier.NotifyState(state.Value);
     }
 
     private void HandleSessionRemoteHoldChanged(object? sender, bool isOnHold)
     {
         if (Volatile.Read(ref _disposed) != 0) return;
-        NotifyRemoteHold(isOnHold);
+        _notifier.NotifyRemoteHold(isOnHold);
     }
 
     private void HandleSessionDtmfReceived(object? sender, SipDtmfReceivedEventArgs e)
     {
         if (Volatile.Read(ref _disposed) != 0) return;
-        NotifyDtmf(e.ToneCode, e.DurationMilliseconds);
+        _notifier.NotifyDtmf(e.ToneCode, e.DurationMilliseconds);
     }
 
     private void HandleSessionTransferRequested(object? sender, SipTransferRequestedEventArgs e)
     {
         if (Volatile.Read(ref _disposed) != 0) return;
-        e.Accept = NotifyTransferRequested(e.ReferTo, e.ReferredBy);
-    }
-
-    // ── Notification helpers ──────────────────────────────────────────────────
-
-    private void NotifyState(CallState state)
-    {
-        Action<CallState>? handler;
-        lock (_callbackSync)
-        {
-            if (_onStateChange == null) { _stateBuffer.Enqueue(state); return; }
-            handler = _onStateChange;
-        }
-        handler(state);
-    }
-
-    private void NotifyRemoteHold(bool isOnHold)
-    {
-        Action<bool>? handler;
-        lock (_callbackSync)
-        {
-            if (_onRemoteHold == null) { _remoteHoldBuffer.Enqueue(isOnHold); return; }
-            handler = _onRemoteHold;
-        }
-        handler(isOnHold);
-    }
-
-    private void NotifyDtmf(byte toneCode, int durationMs)
-    {
-        Action<byte, int>? handler;
-        lock (_callbackSync) handler = _onDtmf;
-        handler?.Invoke(toneCode, durationMs);
-    }
-
-    private bool NotifyTransferRequested(string referTo, string referredBy)
-    {
-        Func<string, string, bool>? handler;
-        lock (_callbackSync) handler = _onTransfer;
-        return handler?.Invoke(referTo, referredBy) ?? false;
+        e.Accept = _notifier.NotifyTransferRequested(e.ReferTo, e.ReferredBy);
     }
 
     /// <summary>
@@ -888,7 +819,106 @@ internal sealed partial class SipCoreCallChannel : ICallChannel
                 session.CallId);
         }
 
-        NotifyState(CallState.Terminated);
+        _notifier.NotifyState(CallState.Terminated);
+    }
+
+    // ── SDP negotiation options (offer/answer/hold/re-offer, video) ────────────
+    // Deeply coupled to the channel's live negotiated state (ICE description, SRTP/DTLS keying,
+    // video ports, origin version) — cohesive channel logic, kept here rather than in a state-free
+    // collaborator (formerly the SdpOptions partial file, HARD-G2/R3).
+
+    /// <summary>
+    /// SDP options for a hold/unhold re-offer. Keeps SDES SRTP alive on a running secure
+    /// call by re-advertising the live outbound key (no rekey, no downgrade to plain RTP);
+    /// a plain call re-offers plain RTP unchanged.
+    /// </summary>
+    private SdpMediaNegotiationOptions BuildReofferSdpOptions()
+    {
+        // A re-offer conserves the call's established keying, never the initial-offer
+        // preference: a DTLS-keyed call re-offers DTLS (fingerprint + actpass) so the
+        // peer keeps the association; SDES calls re-advertise the live key instead —
+        // forcing DTLS onto an established SDES/plain call would break hold/unhold
+        // against non-DTLS peers.
+        var srtpKey = _activeLocalSrtpKeyParams;
+        var reofferDtls = _dtlsActiveOnCall;
+        return BuildLocalSdpOptions(
+            offerSrtpCrypto: srtpKey is not null && !reofferDtls,
+            offerSrtpKeyParams: srtpKey,
+            offerDtls: reofferDtls);
+    }
+
+    /// <summary>
+    /// Creates optional SDP negotiation options from the currently gathered local ICE description.
+    /// </summary>
+    private SdpMediaNegotiationOptions? BuildSdpOptions()
+    {
+        if (_localIceDescription is null && _preferredCodecNames is null && !_videoEnabled)
+            return null;
+
+        return new SdpMediaNegotiationOptions
+        {
+            Ice = _localIceDescription is null
+                ? null
+                : new SdpIceNegotiationOptions
+                {
+                    Ufrag = _localIceDescription.Ufrag,
+                    Pwd = _localIceDescription.Pwd,
+                    Options = _localIceDescription.Options,
+                    Candidates = _localIceDescription.Candidates
+                },
+            PreferredCodecNames = _preferredCodecNames,
+            Video = BuildVideoOptions()
+        };
+    }
+
+    /// <summary>
+    /// Video negotiation parameters when video is enabled: the reserved local video port, the
+    /// configured codec preference, and the live video SDES key so a re-offer re-advertises it
+    /// (no rekey). <see langword="null"/> keeps the leg audio-only.
+    /// </summary>
+    private SdpVideoNegotiationOptions? BuildVideoOptions() =>
+        _videoEnabled
+            ? new SdpVideoNegotiationOptions
+            {
+                Port = _localVideoPort,
+                PreferredCodecNames = _videoCodecNames,
+                OfferSrtpKeyParams = _activeLocalVideoSrtpKeyParams,
+                Candidates = _localIceDescription?.VideoCandidates ?? [],
+                // Offer the transport-wide-cc header extension (RFC 8285 / draft-holmer): a peer that
+                // supports it echoes the a=extmap in its answer, enabling transport-cc congestion
+                // control on the video stream. A peer that does not omits it — the stream stays
+                // gate-off, unchanged. Opportunistic, so SIP peers without it are unaffected.
+                HeaderExtensionUris = [RtpHeaderExtensionUris.TransportWideCc],
+            }
+            : null;
+
+    /// <summary>
+    /// SDP options for a locally originated description (offer/answer/hold/unhold). Carries
+    /// the stable per-leg origin session id and a session version incremented on every call —
+    /// each represents a media change the peer must detect (RFC 4566 §5.2 / RFC 3264 §5).
+    /// Retransmissions reuse the already-built SDP string and never call this, so the version
+    /// stays put when nothing changed.
+    /// </summary>
+    private SdpMediaNegotiationOptions BuildLocalSdpOptions(
+        bool offerSrtpCrypto = false,
+        string? offerSrtpKeyParams = null,
+        bool offerDtls = false)
+    {
+        var baseOptions = BuildSdpOptions();
+        return new SdpMediaNegotiationOptions
+        {
+            Ice = baseOptions?.Ice,
+            PreferredCodecNames = baseOptions?.PreferredCodecNames ?? _preferredCodecNames,
+            OfferSrtpCrypto = offerSrtpCrypto,
+            OfferSrtpKeyParams = offerSrtpKeyParams,
+            // Identity always travels along: the answer path needs it to respond to a
+            // DTLS offer even when we would not offer DTLS ourselves.
+            Dtls = _dtlsOptions,
+            OfferDtlsSrtp = offerDtls,
+            Video = BuildVideoOptions(),
+            SessionId = _sdpSessionId,
+            SessionVersion = Interlocked.Increment(ref _sdpSessionVersion)
+        };
     }
 
     // ── Dispose ───────────────────────────────────────────────────────────────
@@ -920,18 +950,11 @@ internal sealed partial class SipCoreCallChannel : ICallChannel
         _localMediaSocket.Dispose();
         _localVideoSocket?.Dispose();
 
-        lock (_audioSync) _audioListeners.Clear();
-        lock (_videoSync) _videoListeners.Clear();
+        _audioTap.Dispose();
+        _videoTap.Dispose();
+        _notifier.Dispose();
         lock (_callbackSync)
         {
-            _stateBuffer.Clear();
-            _remoteHoldBuffer.Clear();
-            _onStateChange = null;
-            _onDtmf = null;
-            _onRemoteHold = null;
-            _onTransfer = null;
-            _audioSendDelegate = null;
-            _videoSendDelegate = null;
             _dtmfSendDelegate = null;
         }
     }

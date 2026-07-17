@@ -1,4 +1,4 @@
-namespace CalloraVoipSdk.Core.Security;
+namespace CalloraVoipSdk.Core.Domain.Security;
 
 /// <summary>
 /// Stable reason-code constants for SRTP policy and negotiation decisions.

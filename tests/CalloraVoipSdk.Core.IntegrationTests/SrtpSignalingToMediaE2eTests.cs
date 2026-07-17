@@ -10,7 +10,7 @@ using CalloraVoipSdk.Core.Infrastructure.Sip.Observability;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Signaling;
 using CalloraVoipSdk.Core.Infrastructure.Srtp.Context;
 using CalloraVoipSdk.Core.Infrastructure.Srtp.Crypto;
-using CalloraVoipSdk.Core.Security;
+using CalloraVoipSdk.Core.Domain.Security;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CalloraVoipSdk.Core.IntegrationTests;

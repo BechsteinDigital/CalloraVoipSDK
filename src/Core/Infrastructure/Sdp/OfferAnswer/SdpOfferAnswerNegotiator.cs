@@ -199,7 +199,11 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
         IReadOnlyList<SdpCryptoAttribute> crypto = [];
         SdpCryptoAttribute? localCrypto = null;
         SdpCryptoAttribute? remoteCrypto = null;
-        if (offeredAudio.Crypto.Count > 0)
+        // Ignore a=crypto on a DTLS-keyed profile (UDP/TLS/*): it is fingerprint-keyed and any
+        // a=crypto on it must be ignored (RFC 5763), exactly as the video m-line does. Without this
+        // guard a spurious a=crypto on a DTLS offer would be selected as SDES, which then trips the
+        // DTLS-profile fail-closed check below and wrongly rejects the audio m-line (HARD-S1).
+        if (offeredAudio.Crypto.Count > 0 && !SdpSecurityInspector.IsDtlsProfile(offeredAudio.Profile))
         {
             var sdes = SdesCryptoSelector.SelectAnswer(offeredAudio.Crypto);
             if (sdes is not null)
@@ -242,7 +246,7 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
 
         // A DTLS-keyed profile additionally requires a DTLS answer — an SDES answer on
         // UDP/TLS/* would contradict the profile's keying method.
-        if (fingerprint is null && IsDtlsSecuredProfile(offeredAudio.Profile))
+        if (fingerprint is null && SdpSecurityInspector.IsDtlsProfile(offeredAudio.Profile))
             return new SdpOfferAnswerResult { Success = false };
 
         // --- ICE credentials (RFC 8839) ---
@@ -471,7 +475,7 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
         // keyed and any a=crypto on it is ignored (RFC 5763); the two keying methods are
         // mutually exclusive per m-line.
         IReadOnlyList<SdpCryptoAttribute> videoCrypto = [];
-        if (offered.Crypto.Count > 0 && !IsDtlsSecuredProfile(offered.Profile))
+        if (offered.Crypto.Count > 0 && !SdpSecurityInspector.IsDtlsProfile(offered.Profile))
         {
             var sdes = SdesCryptoSelector.SelectAnswer(offered.Crypto);
             if (sdes is not null)
@@ -481,7 +485,7 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
         // DTLS-keyed video needs a fingerprinted answer (RFC 5763), same identity as audio.
         SdpFingerprint? fingerprint = null;
         string? dtlsSetup = null;
-        if (videoCrypto.Count == 0 && (remoteFp is not null || IsDtlsSecuredProfile(offered.Profile)))
+        if (videoCrypto.Count == 0 && (remoteFp is not null || SdpSecurityInspector.IsDtlsProfile(offered.Profile)))
         {
             if (localOptions.Dtls is null || remoteFp is null)
                 return null;
@@ -744,7 +748,4 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
     private static bool IsSdesSecuredProfile(string offeredProfile) =>
         offeredProfile.Equals("RTP/SAVP", StringComparison.OrdinalIgnoreCase)
         || offeredProfile.Equals("RTP/SAVPF", StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsDtlsSecuredProfile(string offeredProfile) =>
-        offeredProfile.StartsWith("UDP/TLS/", StringComparison.OrdinalIgnoreCase);
 }
