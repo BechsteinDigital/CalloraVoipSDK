@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using NAudio.Codecs;
 using NAudio.Wave;
 using CalloraVoipSdk.Audio.Abstractions.Domain.Devices;
+using CalloraVoipSdk.Audio.Abstractions.Processing;
 using CalloraVoipSdk.Core.Application.Media;
 using CalloraVoipSdk.Core.Application.Media.Sessions;
 using CalloraVoipSdk.Core.Application.Ports.Audio;
@@ -397,7 +398,7 @@ public sealed class WindowsAudioDevice : IAudioDeviceProvider, IAudioDeviceRunti
             decoded,
             GetCodecSampleRate(inboundCodec),
             playbackSampleRate);
-        var adjustedPcm = ApplyGain(playbackPcm, outputMuted, outputVolume);
+        var adjustedPcm = PcmGain.ApplyInPlace(playbackPcm, outputMuted, outputVolume);
         playbackBuffer?.AddSamples(adjustedPcm, 0, adjustedPcm.Length);
     }
 
@@ -428,7 +429,7 @@ public sealed class WindowsAudioDevice : IAudioDeviceProvider, IAudioDeviceRunti
 
         var capturedPcm = new byte[e.BytesRecorded];
         Buffer.BlockCopy(e.Buffer, 0, capturedPcm, 0, e.BytesRecorded);
-        var adjustedCapture = ApplyGain(capturedPcm, inputMuted, inputVolume);
+        var adjustedCapture = PcmGain.ApplyInPlace(capturedPcm, inputMuted, inputVolume);
 
         var outboundSampleRate = GetCodecSampleRate(outboundCodec);
         var outboundPcm = ConvertPcmSampleRate(
@@ -795,29 +796,6 @@ public sealed class WindowsAudioDevice : IAudioDeviceProvider, IAudioDeviceRunti
         return converted;
     }
 
-    private static byte[] ApplyGain(byte[] pcm, bool muted, float volume)
-    {
-        if (pcm.Length == 0)
-            return pcm;
-
-        if (muted || volume <= 0f)
-            return new byte[pcm.Length];
-
-        if (Math.Abs(volume - 1f) < 0.0001f)
-            return pcm;
-
-        var adjusted = new byte[pcm.Length];
-        for (var i = 0; i < pcm.Length; i += 2)
-        {
-            var sample = (short)(pcm[i] | (pcm[i + 1] << 8));
-            var scaled = (int)Math.Round(sample * volume, MidpointRounding.AwayFromZero);
-            scaled = Math.Clamp(scaled, short.MinValue, short.MaxValue);
-            adjusted[i] = (byte)(scaled & 0xFF);
-            adjusted[i + 1] = (byte)(scaled >> 8);
-        }
-
-        return adjusted;
-    }
 
     private void ThrowIfDisposed()
     {
