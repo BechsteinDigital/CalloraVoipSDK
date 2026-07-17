@@ -189,6 +189,34 @@ internal interface ISipCallSessionContext
     string? ActiveInviteBranch { get; set; }
 
     /// <summary>
+    /// Reads the active INVITE CSeq and branch as one atomic snapshot. The CANCEL flow must use
+    /// this instead of reading <see cref="ActiveInviteCSeq"/> and <see cref="ActiveInviteBranch"/>
+    /// separately: the two are cleared together when the INVITE completes, so two separate reads can
+    /// straddle that clear and build a CANCEL with a mismatched CSeq/branch (HARD-C2). The default
+    /// composition is only safe for immutable/single-threaded implementations.
+    /// </summary>
+    (int CSeq, string? Branch) ActiveInvite => (ActiveInviteCSeq, ActiveInviteBranch);
+
+    /// <summary>
+    /// Publishes the active INVITE CSeq and branch as one atomic pair.
+    /// </summary>
+    void SetActiveInvite(int cseq, string? branch)
+    {
+        ActiveInviteCSeq = cseq;
+        ActiveInviteBranch = branch;
+    }
+
+    /// <summary>
+    /// Atomically clears the active INVITE state so a later CANCEL cannot fire against a completed
+    /// or abandoned INVITE transaction (HARD-C2, PRACK/abnormal-exit leak).
+    /// </summary>
+    void ClearActiveInvite()
+    {
+        ActiveInviteCSeq = 0;
+        ActiveInviteBranch = null;
+    }
+
+    /// <summary>
     /// True when one local INVITE client transaction is currently in progress.
     /// </summary>
     bool HasPendingLocalInviteTransaction { get; }

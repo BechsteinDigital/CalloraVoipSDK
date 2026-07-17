@@ -460,8 +460,12 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
             if (State is SipDialogState.Established or SipDialogState.OnHold)
             {
                 // RFC 3261 §9.1: if a re-INVITE transaction is in flight, send CANCEL for it;
-                // otherwise send BYE to terminate the established dialog.
-                if (_activeInviteCSeq > 0 && !string.IsNullOrWhiteSpace(_activeInviteBranch))
+                // otherwise send BYE to terminate the established dialog. Snapshot the pair under
+                // _sync so the decision cannot straddle the INVITE loop clearing both fields (HARD-C2).
+                bool inviteInFlight;
+                lock (_sync)
+                    inviteInFlight = _activeInviteCSeq > 0 && !string.IsNullOrWhiteSpace(_activeInviteBranch);
+                if (inviteInFlight)
                     await _transactionService.SendCancelAsync(ct, reason).ConfigureAwait(false);
                 else
                     await _transactionService.SendByeAsync(ct, reason).ConfigureAwait(false);

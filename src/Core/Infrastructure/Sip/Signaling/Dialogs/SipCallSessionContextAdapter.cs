@@ -105,6 +105,31 @@ internal sealed class SipCallSessionContextAdapter : ISipCallSessionContext
         set { lock (_session._sync) _session._activeInviteBranch = value; }
     }
 
+    // Atomic snapshot/set/clear of the (CSeq, branch) pair — the correct path for the CANCEL flow,
+    // since the two fields are published and cleared together (HARD-C2).
+    public (int CSeq, string? Branch) ActiveInvite
+    {
+        get { lock (_session._sync) return (_session._activeInviteCSeq, _session._activeInviteBranch); }
+    }
+
+    public void SetActiveInvite(int cseq, string? branch)
+    {
+        lock (_session._sync)
+        {
+            _session._activeInviteCSeq = cseq;
+            _session._activeInviteBranch = branch;
+        }
+    }
+
+    public void ClearActiveInvite()
+    {
+        lock (_session._sync)
+        {
+            _session._activeInviteCSeq = 0;
+            _session._activeInviteBranch = null;
+        }
+    }
+
     public bool HasPendingLocalInviteTransaction
     {
         get
