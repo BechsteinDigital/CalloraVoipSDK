@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Sockets;
 using CalloraVoipSdk.Core.Infrastructure.Stun.Wire;
+using CalloraVoipSdk.Core.Infrastructure.Turn.Client;
 using CalloraVoipSdk.Core.Infrastructure.Turn.Server;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -49,6 +50,22 @@ public sealed class TurnServerE2eTests
         Assert.NotEqual(0, allocation.RelayedEndPoint.Port);
         // Default server lifetime is granted when the client does not request one.
         Assert.True(allocation.LifetimeSeconds > 0, "Allocate must grant a positive lifetime.");
+    }
+
+    [Fact]
+    public async Task Production_turn_client_allocates_against_the_server()
+    {
+        // Exercises the real TurnClient (and its extracted TurnClientTransport) end to end: a single
+        // Allocate is self-contained, so the per-transaction socket the client opens is not a problem.
+        var codec = new StunMessageCodec();
+        await using var server = CreateStartedServer(codec);
+        var client = new TurnClient(codec, NullLogger<TurnClient>.Instance);
+
+        var result = await client.AllocateAsync(server.LocalEndPoint, credentials: null);
+
+        Assert.NotNull(result.RelayedEndPoint);
+        Assert.Equal(IPAddress.Loopback, result.RelayedEndPoint.Address);
+        Assert.True(result.LifetimeSeconds > 0);
     }
 
     [Fact]
