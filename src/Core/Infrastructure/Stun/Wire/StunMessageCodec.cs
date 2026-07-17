@@ -118,7 +118,11 @@ internal sealed class StunMessageCodec : IStunMessageCodec
 
                 var computed = ComputeHmacSha1WithAdjustedLength(rawMessage, offset, adjustedLength, hmacKey);
                 var stored = rawMessage[dataStart..(dataStart + 20)];
-                return CryptographicOperations.FixedTimeEquals(stored, computed);
+                var matches = CryptographicOperations.FixedTimeEquals(stored, computed);
+                // Zero the derived HMAC result after the compare, consistent with the key-copy
+                // zeroing above (RFC 5389 §15.4 key hygiene / defense-in-depth) (HARD-D2).
+                CryptographicOperations.ZeroMemory(computed);
+                return matches;
             }
 
             offset = dataStart + AlignTo4(attrLen);
