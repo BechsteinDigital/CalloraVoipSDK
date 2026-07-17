@@ -17,12 +17,11 @@ internal sealed class SrtcpContext : ISrtcpContext
     private const int RtcpHeaderLength = 8;
     private const int SrtcpIndexLength = 4;
     private const int AuthTagFullLength = 20;
-    private const int AesCmBlockLength = 16;
-    private const int MaxAesCmKeystreamBytes = 1 << 20;
     private const uint EncryptionFlag = 0x8000_0000;
     private const uint SrtcpIndexMask = 0x7FFF_FFFF;
 
     private readonly SrtpSessionKeys _keys;
+    private readonly AesCmCipher _cipher;
     private readonly int _authTagLength;
 
     // Per-SSRC SRTCP index and replay window (RFC 3711 §3.2.3): the index and replay state are
@@ -40,6 +39,7 @@ internal sealed class SrtcpContext : ISrtcpContext
     {
         ArgumentNullException.ThrowIfNull(material);
         _keys = SrtpKeyDerivation.DeriveRtcp(material);
+        _cipher = new AesCmCipher(_keys.CipherKey);
         _authTagLength = material.Suite is SrtpCryptoSuite.AesCm128HmacSha1_32
                                         or SrtpCryptoSuite.AesCm256HmacSha1_32
             ? 4 : 10;
@@ -71,7 +71,7 @@ internal sealed class SrtcpContext : ISrtcpContext
             {
                 Span<byte> iv = stackalloc byte[16];
                 BuildIv(ssrc, index, iv);
-                AesCmXor(_keys.CipherKey, iv, result.AsSpan(RtcpHeaderLength, encryptedLen));
+                _cipher.Xor(iv, result.AsSpan(RtcpHeaderLength, encryptedLen));
             }
 
             // E-flag = 1 (payload encrypted) plus the 31-bit index.
@@ -128,50 +128,12 @@ internal sealed class SrtcpContext : ISrtcpContext
             {
                 Span<byte> iv = stackalloc byte[16];
                 BuildIv(ssrc, index, iv);
-                AesCmXor(_keys.CipherKey, iv, output.AsSpan(RtcpHeaderLength, encryptedLen));
+                _cipher.Xor(iv, output.AsSpan(RtcpHeaderLength, encryptedLen));
             }
 
             // 4. Update the SSRC's replay window.
             state.UpdateReplayWindow(index);
             return output;
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    // AES-CM (RFC 3711 §4.1) — mirrored from SrtpContext to keep the running SRTP path
-    // untouched; consolidation into a shared primitive is follow-up work.
-    // -------------------------------------------------------------------------
-
-    private static void AesCmXor(byte[] key, ReadOnlySpan<byte> iv, Span<byte> data)
-    {
-        if (data.Length > MaxAesCmKeystreamBytes)
-            throw new CryptographicException("SRTCP AES-CM payload exceeds the RFC3711 2^16-block keystream limit.");
-
-        using var aes  = Aes.Create();
-        aes.Key        = key;
-        aes.Mode       = CipherMode.ECB;
-        aes.Padding    = PaddingMode.None;
-        using var enc = aes.CreateEncryptor();
-
-        var block = new byte[16];
-        var counterIv = new byte[16];
-        iv.CopyTo(counterIv);
-        var offset = 0;
-        var counter = 0;
-
-        while (offset < data.Length)
-        {
-            counterIv[14] = (byte)(counter >> 8);
-            counterIv[15] = (byte)counter;
-
-            enc.TransformBlock(counterIv, 0, AesCmBlockLength, block, 0);
-
-            var chunk = Math.Min(AesCmBlockLength, data.Length - offset);
-            for (var i = 0; i < chunk; i++)
-                data[offset + i] ^= block[i];
-
-            offset += chunk;
-            counter++;
         }
     }
 
@@ -233,6 +195,7 @@ internal sealed class SrtcpContext : ISrtcpContext
             if (_disposed)
                 return;
             _disposed = true;
+            _cipher.Dispose();
             _keys.Zero();
         }
     }

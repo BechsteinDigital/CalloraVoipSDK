@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Runtime.InteropServices;
@@ -22,8 +21,16 @@ public sealed class LinuxAudioDevice : IAudioDeviceProvider, IAudioDeviceRuntime
     private static readonly IReadOnlyDictionary<int, string> EmptyPayloadTypeCodecMap =
         new ReadOnlyDictionary<int, string>(new Dictionary<int, string>());
 
+    // Bounds the decoded-PCM playback buffer at 1 second (50 × 20 ms frames). The RX path
+    // (OnFrameReceived, network-paced) can burst ahead of the PortAudio playback callback
+    // (hardware-paced, one frame per invocation); an unbounded queue would grow without limit
+    // under jitter or a stalled output stream, inflating both memory and mouth-to-ear latency
+    // (HARD-F4). DropOldest is the jitter-buffer-correct policy: on overflow the stalest frames
+    // are discarded so playback stays fresh and latency stays bounded.
+    private const int PlaybackQueueCapacity = 50;
+
     private readonly object _sync = new();
-    private readonly ConcurrentQueue<byte[]> _playbackQueue = new();
+    private readonly BoundedPlaybackBuffer _playbackQueue = new(PlaybackQueueCapacity);
 
     private PortAudioSharp.Stream? _inputStream;
     private PortAudioSharp.Stream? _outputStream;
@@ -215,7 +222,9 @@ public sealed class LinuxAudioDevice : IAudioDeviceProvider, IAudioDeviceRuntime
                     SampleRate = _activeSampleRate,
                     BitsPerSample = _bitsPerSample,
                     Channels = _channels
-                });
+                },
+                playbackQueueDepth: _playbackQueue.Depth,
+                droppedPlaybackFrames: _playbackQueue.DroppedFrames);
         }
     }
 
@@ -593,6 +602,7 @@ public sealed class LinuxAudioDevice : IAudioDeviceProvider, IAudioDeviceRuntime
             _outputStream = null;
         }
 
+        // Drain the buffer and reset its drop metric so a reconnect starts with an empty queue.
         _playbackQueue.Clear();
     }
 

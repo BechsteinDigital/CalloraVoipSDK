@@ -15,9 +15,8 @@ namespace CalloraVoipSdk.Core.Infrastructure.Srtp.Context;
 internal sealed class SrtpContext : ISrtpContext
 {
     private const int AuthTagFullLength = 20;
-    private const int AesCmBlockLength = 16;
-    private const int MaxAesCmKeystreamBytes = 1 << 20;
     private readonly SrtpSessionKeys _keys;
+    private readonly AesCmCipher _cipher;
     private readonly SrtpCryptoSuite _suite;
     private readonly int _authTagLength;
 
@@ -37,6 +36,7 @@ internal sealed class SrtpContext : ISrtpContext
         ArgumentNullException.ThrowIfNull(material);
         _suite         = material.Suite;
         _keys          = SrtpKeyDerivation.Derive(material);
+        _cipher        = new AesCmCipher(_keys.CipherKey);
         _authTagLength = material.Suite is SrtpCryptoSuite.AesCm128HmacSha1_32
                                        or SrtpCryptoSuite.AesCm256HmacSha1_32
             ? 4 : 10;
@@ -87,7 +87,7 @@ internal sealed class SrtpContext : ISrtpContext
         {
             Span<byte> iv = stackalloc byte[16];
             BuildIv(ssrc, packetIndex, iv);
-            AesCmXor(_keys.CipherKey, iv, result.AsSpan(headerLen, payloadLen));
+            _cipher.Xor(iv, result.AsSpan(headerLen, payloadLen));
         }
 
         // Append auth tag over header + encrypted payload
@@ -156,7 +156,7 @@ internal sealed class SrtpContext : ISrtpContext
         {
             Span<byte> iv = stackalloc byte[16];
             BuildIv(ssrc, packetIndex, iv);
-            AesCmXor(_keys.CipherKey, iv, output.AsSpan(headerLen, payloadLen));
+            _cipher.Xor(iv, output.AsSpan(headerLen, payloadLen));
         }
 
         // 4. Update this SSRC's replay window
@@ -175,39 +175,6 @@ internal sealed class SrtpContext : ISrtpContext
     // -------------------------------------------------------------------------
     // AES-CM encryption/decryption (symmetric, RFC 3711 §4.1)
     // -------------------------------------------------------------------------
-
-    private static void AesCmXor(byte[] key, ReadOnlySpan<byte> iv, Span<byte> data)
-    {
-        if (data.Length > MaxAesCmKeystreamBytes)
-            throw new CryptographicException("SRTP AES-CM payload exceeds the RFC3711 2^16-block keystream limit.");
-
-        using var aes  = Aes.Create();
-        aes.Key        = key;
-        aes.Mode       = CipherMode.ECB;
-        aes.Padding    = PaddingMode.None;
-        using var enc = aes.CreateEncryptor();
-
-        var block = new byte[16];
-        var counterIv = new byte[16];
-        iv.CopyTo(counterIv);
-        var offset = 0;
-        var counter = 0;
-
-        while (offset < data.Length)
-        {
-            counterIv[14] = (byte)(counter >> 8);
-            counterIv[15] = (byte)counter;
-
-            enc.TransformBlock(counterIv, 0, AesCmBlockLength, block, 0);
-
-            var chunk = Math.Min(AesCmBlockLength, data.Length - offset);
-            for (var i = 0; i < chunk; i++)
-                data[offset + i] ^= block[i];
-
-            offset += chunk;
-            counter++;
-        }
-    }
 
     // -------------------------------------------------------------------------
     // IV construction (RFC 3711 §4.1)
@@ -312,6 +279,7 @@ internal sealed class SrtpContext : ISrtpContext
             if (_disposed)
                 return;
             _disposed = true;
+            _cipher.Dispose();
             _keys.Zero();
         }
     }
