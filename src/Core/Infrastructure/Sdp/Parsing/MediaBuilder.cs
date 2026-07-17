@@ -28,6 +28,7 @@ internal sealed class MediaBuilder
     public bool RtcpMux { get; set; }
     public int? RtcpPort { get; set; }
     public string? Mid { get; set; }
+    public SdpMsid? Msid { get; set; }
     public int? Bandwidth { get; set; }
     public string? IceUfrag { get; set; }
     public string? IcePwd { get; set; }
@@ -59,6 +60,7 @@ internal sealed class MediaBuilder
             RtcpMux = RtcpMux,
             RtcpPort = RtcpPort,
             Mid = Mid,
+            Msid = Msid,
             Bandwidth = Bandwidth,
             IceUfrag = IceUfrag,
             IcePwd = IcePwd,

@@ -199,6 +199,11 @@ internal sealed class SdpSessionParser : ISdpSessionParser
                 current.Mid = attrValue.Trim();
                 break;
 
+            // --- MSID (RFC 8830): MediaStream / track identity ---
+            case "msid" when current is not null:
+                current.Msid = SdpMsid.TryParse(attrValue);
+                break;
+
             // --- BUNDLE group (RFC 5888) ---
             case "group" when current is null && !string.IsNullOrWhiteSpace(attrValue):
                 sessionGroup = attrValue.Trim();
