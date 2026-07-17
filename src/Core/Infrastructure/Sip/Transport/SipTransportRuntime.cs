@@ -498,7 +498,19 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
                 context.Response.Close();
                 return;
             }
-            var wsContext = await context.AcceptWebSocketAsync(SipTransportRuntimeUtilities.SelectOfferedSipSubProtocol(context.Request)).WaitAsync(ct).ConfigureAwait(false);
+
+            // RFC 7118 §5: a SIP-over-WebSocket client must offer the "sip" subprotocol. Reject the
+            // upgrade when it does not, rather than accepting a WebSocket with no negotiated
+            // subprotocol that could not carry SIP framing (HARD-E6).
+            var sipSubProtocol = SipTransportRuntimeUtilities.SelectOfferedSipSubProtocol(context.Request);
+            if (sipSubProtocol is null)
+            {
+                context.Response.StatusCode = (int)HttpStatusCode.BadRequest;
+                context.Response.Close();
+                return;
+            }
+
+            var wsContext = await context.AcceptWebSocketAsync(sipSubProtocol).WaitAsync(ct).ConfigureAwait(false);
             var remoteEndPoint = context.Request.RemoteEndPoint ?? new IPEndPoint(IPAddress.Loopback, 0);
             var id = Interlocked.Increment(ref _inboundWebSocketConnectionId);
             var connection = new SipWebSocketConnection(
