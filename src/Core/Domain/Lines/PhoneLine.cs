@@ -96,10 +96,10 @@ internal sealed class PhoneLine : IPhoneLine, IDisposable
     }
 
     public Task UnregisterAsync(CancellationToken ct = default)
-    {
-        _channel.StopRegistration();
-        return Task.CompletedTask;
-    }
+        // Real de-registration: stop the refresh loop AND await the REGISTER Expires:0 round-trip
+        // (RFC 3261 §10.2.2), so the returned task reflects the binding removal (HARD-E1) rather than
+        // completing before the de-register is even sent.
+        => _channel.StopRegistrationAsync(ct);
 
     // ── Inbound ───────────────────────────────────────────────────────────────
     private void HandleInbound(ICallChannel channel, string remoteParty)

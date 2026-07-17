@@ -26,6 +26,15 @@ internal interface ILineChannel : IDisposable
     void StopRegistration();
 
     /// <summary>
+    /// Stops SIP registration and awaits the explicit de-registration (REGISTER with Expires:0,
+    /// RFC 3261 §10.2.2). Unlike <see cref="StopRegistration"/> — which fires the de-register as
+    /// best-effort cleanup for the synchronous dispose path — the returned task completes only after
+    /// the de-register round-trip, so callers of <see cref="IPhoneLine.UnregisterAsync"/> can await
+    /// the binding removal.
+    /// </summary>
+    Task StopRegistrationAsync(CancellationToken ct = default);
+
+    /// <summary>
     /// Prepare the transport channel for an outbound call, without sending INVITE yet.
     /// This allows the domain Call aggregate to bind callbacks first.
     /// </summary>

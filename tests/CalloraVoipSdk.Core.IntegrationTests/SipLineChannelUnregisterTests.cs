@@ -46,6 +46,35 @@ public sealed class SipLineChannelUnregisterTests
         channel.Dispose();
     }
 
+    [Fact]
+    public async Task StopRegistrationAsync_awaits_the_deregister_round_trip()
+    {
+        var registration = new CapturingRegistrationService();
+        var channel = new SipLineChannel(
+            new SipAccount { Username = "u", Password = "p", SipServer = "sipconnect.example" },
+            "test/1.0",
+            registration,
+            new NoopSignalingService(),
+            new NoopSdpNegotiator(),
+            iceAgent: null,
+            SrtpPolicy.Optional,
+            telemetry: null,
+            NullLoggerFactory.Instance);
+
+        channel.StartRegistration(_ => { });
+        await PollUntil(() => registration.RegisterCount >= 1);
+        await Task.Delay(100); // let the channel persist Call-ID/CSeq from the 200 OK
+
+        await channel.StopRegistrationAsync(); // awaited de-register (HARD-E1)
+
+        // No PollUntil: the awaited path guarantees the REGISTER Expires:0 completed before returning.
+        Assert.NotNull(registration.LastUnregister);
+        Assert.Equal("call-id", registration.LastUnregister!.ExistingCallId); // reuse, not fresh
+        Assert.Equal(2, registration.LastUnregister.StartCSeq);               // continues (1 → 2)
+
+        channel.Dispose();
+    }
+
     private static async Task PollUntil(Func<bool> condition, int timeoutMs = 5000)
     {
         var deadline = Environment.TickCount64 + timeoutMs;
