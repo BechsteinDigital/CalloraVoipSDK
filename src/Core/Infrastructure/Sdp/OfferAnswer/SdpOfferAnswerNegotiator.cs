@@ -199,7 +199,11 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
         IReadOnlyList<SdpCryptoAttribute> crypto = [];
         SdpCryptoAttribute? localCrypto = null;
         SdpCryptoAttribute? remoteCrypto = null;
-        if (offeredAudio.Crypto.Count > 0)
+        // Ignore a=crypto on a DTLS-keyed profile (UDP/TLS/*): it is fingerprint-keyed and any
+        // a=crypto on it must be ignored (RFC 5763), exactly as the video m-line does. Without this
+        // guard a spurious a=crypto on a DTLS offer would be selected as SDES, which then trips the
+        // DTLS-profile fail-closed check below and wrongly rejects the audio m-line (HARD-S1).
+        if (offeredAudio.Crypto.Count > 0 && !SdpSecurityInspector.IsDtlsProfile(offeredAudio.Profile))
         {
             var sdes = SdesCryptoSelector.SelectAnswer(offeredAudio.Crypto);
             if (sdes is not null)
