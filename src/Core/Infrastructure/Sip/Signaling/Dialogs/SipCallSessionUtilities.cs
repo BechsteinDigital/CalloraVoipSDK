@@ -49,16 +49,7 @@ internal static class SipCallSessionUtilities
     public static async Task<bool> SendReliableProvisionalAndWaitForPrackAsync(
         SipRequest invite,
         string localTag,
-        string callId,
-        SipReliableProvisionalManager reliableProvisionalManager,
-        SipCallSessionHeaderService headerService,
-        ISipServerTransactionEngine serverTransactions,
-        IPEndPoint remoteEndPoint,
-        SipTransportProtocol signalingTransport,
-        ILogger logger,
-        TimeSpan timeout,
-        TimeSpan reliableProvisionalT1,
-        TimeSpan reliableProvisionalT2,
+        ReliableProvisionalSendContext context,
         CancellationToken ct)
     {
         try
@@ -66,22 +57,22 @@ internal static class SipCallSessionUtilities
             var inviteCseq = SipProtocol.ExtractCSeqNumber(invite.Header("CSeq"));
             if (inviteCseq <= 0)
             {
-                logger.LogWarning("SIP session {CallId}: INVITE CSeq invalid for reliable provisional flow.", callId);
+                context.Logger.LogWarning("SIP session {CallId}: INVITE CSeq invalid for reliable provisional flow.", context.CallId);
                 return false;
             }
 
-            var rseq = reliableProvisionalManager.RegisterPendingInviteProvisional(inviteCseq);
-            var provisionalHeaders = headerService.CreateResponseHeadersFromRequest(
+            var rseq = context.ReliableProvisionalManager.RegisterPendingInviteProvisional(inviteCseq);
+            var provisionalHeaders = context.HeaderService.CreateResponseHeadersFromRequest(
                 invite,
                 localTag,
                 includeContentType: false);
             provisionalHeaders["Require"] = "100rel";
             provisionalHeaders["RSeq"] = rseq.ToString();
 
-            await serverTransactions.SendResponseAsync(
+            await context.ServerTransactions.SendResponseAsync(
                     invite,
-                    remoteEndPoint,
-                    signalingTransport,
+                    context.RemoteEndPoint,
+                    context.SignalingTransport,
                     statusCode: 180,
                     reasonPhrase: "Ringing",
                     provisionalHeaders,
@@ -89,21 +80,21 @@ internal static class SipCallSessionUtilities
                     ct)
                 .ConfigureAwait(false);
 
-            var prackWaitTask = reliableProvisionalManager.WaitForPrackAsync(rseq, timeout, ct);
+            var prackWaitTask = context.ReliableProvisionalManager.WaitForPrackAsync(rseq, context.Timeout, ct);
 
-            if (signalingTransport == SipTransportProtocol.Udp)
+            if (context.SignalingTransport == SipTransportProtocol.Udp)
             {
-                var retransmitDelay = reliableProvisionalT1;
+                var retransmitDelay = context.ReliableProvisionalT1;
                 while (!prackWaitTask.IsCompleted)
                 {
                     await Task.Delay(retransmitDelay, ct).ConfigureAwait(false);
                     if (prackWaitTask.IsCompleted)
                         break;
 
-                    await serverTransactions.SendResponseAsync(
+                    await context.ServerTransactions.SendResponseAsync(
                             invite,
-                            remoteEndPoint,
-                            signalingTransport,
+                            context.RemoteEndPoint,
+                            context.SignalingTransport,
                             statusCode: 180,
                             reasonPhrase: "Ringing",
                             provisionalHeaders,
@@ -112,7 +103,7 @@ internal static class SipCallSessionUtilities
                         .ConfigureAwait(false);
 
                     retransmitDelay = TimeSpan.FromMilliseconds(
-                        Math.Min(reliableProvisionalT2.TotalMilliseconds, retransmitDelay.TotalMilliseconds * 2));
+                        Math.Min(context.ReliableProvisionalT2.TotalMilliseconds, retransmitDelay.TotalMilliseconds * 2));
                 }
             }
 
@@ -120,14 +111,14 @@ internal static class SipCallSessionUtilities
             if (prackReceived)
                 return true;
 
-            var timeoutHeaders = headerService.CreateResponseHeadersFromRequest(
+            var timeoutHeaders = context.HeaderService.CreateResponseHeadersFromRequest(
                 invite,
                 localTag,
                 includeContentType: false);
-            await serverTransactions.SendResponseAsync(
+            await context.ServerTransactions.SendResponseAsync(
                     invite,
-                    remoteEndPoint,
-                    signalingTransport,
+                    context.RemoteEndPoint,
+                    context.SignalingTransport,
                     statusCode: 504,
                     reasonPhrase: "Server Time-out",
                     timeoutHeaders,
@@ -142,7 +133,7 @@ internal static class SipCallSessionUtilities
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "SIP session {CallId}: reliable provisional handshake failed.", callId);
+            context.Logger.LogWarning(ex, "SIP session {CallId}: reliable provisional handshake failed.", context.CallId);
             return false;
         }
     }

@@ -863,16 +863,19 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
         => await SipCallSessionUtilities.SendReliableProvisionalAndWaitForPrackAsync(
                 invite,
                 localTag,
-                CallId,
-                _reliableProvisionalManager,
-                _headerService,
-                _serverTransactions,
-                _remoteEndPoint,
-                _signalingTransport,
-                _logger,
-                _timeout,
-                ReliableProvisionalT1,
-                ReliableProvisionalT2,
+                new ReliableProvisionalSendContext
+                {
+                    CallId = CallId,
+                    ReliableProvisionalManager = _reliableProvisionalManager,
+                    HeaderService = _headerService,
+                    ServerTransactions = _serverTransactions,
+                    RemoteEndPoint = _remoteEndPoint,
+                    SignalingTransport = _signalingTransport,
+                    Logger = _logger,
+                    Timeout = _timeout,
+                    ReliableProvisionalT1 = ReliableProvisionalT1,
+                    ReliableProvisionalT2 = ReliableProvisionalT2
+                },
                 ct)
             .ConfigureAwait(false);
     /// <summary>
