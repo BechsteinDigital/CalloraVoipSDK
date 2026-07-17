@@ -90,6 +90,30 @@ public sealed class WebRtcPeerConnectionTests
     }
 
     [Fact]
+    public async Task Sending_after_dispose_throws_object_disposed()
+    {
+        var peer = Peer(Pcmu);
+        await peer.SetRemoteDescriptionAsync(WebRtcOffer());
+        await peer.DisposeAsync();
+
+        // HARD-C6: a send begun after dispose is refused, never operating on a disposed media session.
+        await Assert.ThrowsAsync<ObjectDisposedException>(async () => await peer.SendAudioAsync(new byte[] { 1 }));
+        await Assert.ThrowsAsync<ObjectDisposedException>(async () => await peer.SendVideoFrameAsync(new byte[] { 1 }, 0));
+    }
+
+    [Fact]
+    public async Task Disposing_twice_is_idempotent()
+    {
+        var peer = Peer(Pcmu);
+        await peer.SetRemoteDescriptionAsync(WebRtcOffer());
+
+        await peer.DisposeAsync();
+        await peer.DisposeAsync();   // second dispose is a no-op (null session, drained gate)
+
+        Assert.Equal(WebRtcConnectionState.Closed, peer.State);
+    }
+
+    [Fact]
     public async Task Disposing_the_peer_closes_it()
     {
         var closed = new List<WebRtcConnectionState>();

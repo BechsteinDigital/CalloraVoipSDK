@@ -25,9 +25,9 @@ namespace CalloraVoipSdk.Core.Infrastructure.WebRtc;
 /// and must be driven by one caller at a time, mirroring the W3C signalling-state serialisation; the
 /// internal <c>_sync</c> gate protects the shared fields but does not make out-of-order concurrent
 /// signalling meaningful. The media hot path (<see cref="SendAudioAsync"/>/<see cref="SendVideoFrameAsync"/>)
-/// racing teardown is NOT yet fully hardened against a concurrent <see cref="DisposeAsync"/>; that
-/// contract is finalised together with the public WebRtc facade slice (see roadmap). Until then callers
-/// must stop sending before disposing.
+/// is hardened against a concurrent <see cref="DisposeAsync"/> (HARD-C6): each send holds a drain lease so
+/// dispose waits for in-flight sends before tearing down the media session, and a send begun after
+/// dispose throws <see cref="ObjectDisposedException"/>.
 /// </para>
 /// </summary>
 internal sealed class WebRtcPeerConnection : IAsyncDisposable
@@ -53,6 +53,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     private string? _localDescription;
     private SdpSessionDescription? _localOfferModel;
     private BundledMediaSession? _session;
+    private readonly SendDrainGate _sendGate = new();
 
     /// <summary>Raised when the connection state changes (RFC 8829 <c>connectionstatechange</c>).</summary>
     public event Action<WebRtcConnectionState>? ConnectionStateChanged;
@@ -232,21 +233,55 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     /// transport). The payload is an already-encoded RTP payload — the app owns the codec.
     /// </summary>
     /// <exception cref="InvalidOperationException">No BUNDLE media session was built.</exception>
-    public ValueTask SendAudioAsync(ReadOnlyMemory<byte> payload, CancellationToken cancellationToken = default)
-        => SessionOrThrow().SendAudioAsync(payload, cancellationToken: cancellationToken);
+    /// <exception cref="ObjectDisposedException">The peer is disposing or disposed.</exception>
+    public async ValueTask SendAudioAsync(ReadOnlyMemory<byte> payload, CancellationToken cancellationToken = default)
+    {
+        var session = AcquireSendLease();
+        try
+        {
+            await session.SendAudioAsync(payload, cancellationToken: cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _sendGate.Exit();
+        }
+    }
 
     /// <summary>
     /// Packetises and sends one encoded video frame on the peer's video track.
     /// </summary>
     /// <exception cref="InvalidOperationException">No BUNDLE media session, or the bundle has no video track.</exception>
-    public Task SendVideoFrameAsync(ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default)
-        => SessionOrThrow().SendVideoFrameAsync(encodedFrame, rtpTimestamp, cancellationToken);
-
-    private BundledMediaSession SessionOrThrow()
+    /// <exception cref="ObjectDisposedException">The peer is disposing or disposed.</exception>
+    public async Task SendVideoFrameAsync(ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default)
     {
+        var session = AcquireSendLease();
+        try
+        {
+            await session.SendVideoFrameAsync(encodedFrame, rtpTimestamp, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _sendGate.Exit();
+        }
+    }
+
+    // Takes a drain lease for one send and returns the live session. The lease keeps DisposeAsync from
+    // disposing the session until the send's Exit; a send begun after dispose is refused. Callers MUST
+    // Exit the gate (the send methods do so in a finally) once the returned session is no longer used.
+    private BundledMediaSession AcquireSendLease()
+    {
+        if (!_sendGate.TryEnter())
+            throw new ObjectDisposedException(nameof(WebRtcPeerConnection));
+
         BundledMediaSession? session;
         lock (_sync) { session = _session; }
-        return session ?? throw new InvalidOperationException("Apply a BUNDLE remote description before exchanging media.");
+        if (session is null)
+        {
+            _sendGate.Exit();
+            throw new InvalidOperationException("Apply a BUNDLE remote description before exchanging media.");
+        }
+
+        return session;
     }
 
     // Maps the transport's lifecycle onto the WebRTC connection state (RFC 8829): keys installed →
@@ -328,6 +363,13 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         lock (_sync) { session = _session; _session = null; }
 
         TransitionTo(WebRtcConnectionState.Closed);
+
+        // Refuse new sends and wait for in-flight ones to finish before tearing down the session, so a
+        // concurrent send never operates on a disposed media session (HARD-C6). Idempotent: a second
+        // dispose sees a null session and an already-drained gate. Drain completion is bounded by the
+        // in-flight sends: a send that never completes (unbounded blocking, an un-cancelled token) keeps
+        // dispose waiting — callers wanting a bounded teardown must cancel pending sends first.
+        await _sendGate.BeginDrainAsync().ConfigureAwait(false);
         if (session is not null)
             await session.DisposeAsync().ConfigureAwait(false);
     }
