@@ -156,6 +156,25 @@ internal sealed class SipLineChannel : ILineChannel
     /// </summary>
     public void StopRegistration()
     {
+        var (registrationCallId, registrationCSeq) = StopRegistrationLoop();
+        _ = UnregisterAsyncSafe(registrationCallId, registrationCSeq);
+        _onState?.Invoke(LineState.Unregistered);
+    }
+
+    /// <inheritdoc />
+    public async Task StopRegistrationAsync(CancellationToken ct = default)
+    {
+        var (registrationCallId, registrationCSeq) = StopRegistrationLoop();
+        // Await the de-register (REGISTER Expires:0) so IPhoneLine.UnregisterAsync completes only
+        // after the binding-removal round-trip, not merely after the refresh loop is cancelled.
+        await UnregisterAsyncSafe(registrationCallId, registrationCSeq, ct).ConfigureAwait(false);
+        _onState?.Invoke(LineState.Unregistered);
+    }
+
+    // Cancels the refresh loop and snapshots the live binding identity for the unregister
+    // (RFC 3261 §10.2.2 removal reuses the registration's Call-ID + next CSeq).
+    private (string? CallId, int CSeq) StopRegistrationLoop()
+    {
         CancellationTokenSource? registrationCts;
         string? registrationCallId;
         int registrationCSeq;
@@ -163,8 +182,6 @@ internal sealed class SipLineChannel : ILineChannel
         {
             registrationCts = _registrationCts;
             _registrationCts = null;
-            // Snapshot the live binding identity for the unregister (RFC 3261 §10.2.2 removal
-            // reuses the registration's Call-ID + next CSeq).
             registrationCallId = _registrationCallId;
             registrationCSeq = _registrationNextCSeq;
         }
@@ -182,8 +199,7 @@ internal sealed class SipLineChannel : ILineChannel
             }
         }
 
-        _ = UnregisterAsyncSafe(registrationCallId, registrationCSeq);
-        _onState?.Invoke(LineState.Unregistered);
+        return (registrationCallId, registrationCSeq);
     }
 
     /// <summary>
@@ -527,7 +543,7 @@ internal sealed class SipLineChannel : ILineChannel
     /// <summary>
     /// Performs unREGISTER as best-effort cleanup and isolates failures.
     /// </summary>
-    private async Task UnregisterAsyncSafe(string? registrationCallId, int registrationCSeq)
+    private async Task UnregisterAsyncSafe(string? registrationCallId, int registrationCSeq, CancellationToken ct = default)
     {
         try
         {
@@ -536,7 +552,7 @@ internal sealed class SipLineChannel : ILineChannel
             // is not recognised by registrars as removing the existing binding, which then lingers
             // until expiry — leaving a second, dead binding that forks inbound INVITEs into the void.
             await _registrationService
-                .UnregisterAsync(CreateRegistrationRequest(registrationCallId, registrationCSeq), CancellationToken.None)
+                .UnregisterAsync(CreateRegistrationRequest(registrationCallId, registrationCSeq), ct)
                 .ConfigureAwait(false);
         }
         catch (Exception ex)
