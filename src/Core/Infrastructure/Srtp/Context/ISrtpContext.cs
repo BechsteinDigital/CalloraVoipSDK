@@ -2,7 +2,9 @@ namespace CalloraVoipSdk.Core.Infrastructure.Srtp.Context;
 
 /// <summary>
 /// Encrypts and decrypts RTP packets according to SRTP (RFC 3711).
-/// One context covers one SSRC and one direction (send or receive).
+/// One context covers one direction (send or receive) under one shared master key; it tracks the
+/// rollover counter and replay window per SSRC (RFC 3711 §3.2.1) internally, so it serves every
+/// SSRC a BUNDLE transport (RFC 8843) carries — not just a single stream.
 /// Disposing a context zeroes its derived session keys; the owner that created the
 /// context is responsible for disposing it once the media session ends.
 /// </summary>
