@@ -33,11 +33,13 @@ internal sealed partial class SipCoreCallChannel : ICallChannel
     private readonly object _callbackSync = new();
     private readonly object _sessionSync = new();
     private readonly object _audioSync = new();
-    private readonly object _videoSync = new();
     private readonly Queue<CallState> _stateBuffer = new();
     private readonly Queue<bool> _remoteHoldBuffer = new();
     private readonly List<Action<CallAudioFrame>> _audioListeners = [];
-    private readonly List<Action<CallVideoFrame>> _videoListeners = [];
+
+    // Encoded-video-frame tap (send delegate + inbound listener fan-out) — its own collaborator so the
+    // channel no longer carries the video state/locks inline (was the VideoFrames partial).
+    private readonly SipCallChannelVideoFrameTap _videoTap;
 
     // Pre-allocated local UDP socket so the port is known before the SDP offer is built.
     private readonly UdpClient _localMediaSocket;
@@ -56,7 +58,6 @@ internal sealed partial class SipCoreCallChannel : ICallChannel
     private Action<bool>? _onRemoteHold;
     private Func<string, string, bool>? _onTransfer;
     private Func<CallAudioFrame, CancellationToken, Task>? _audioSendDelegate;
-    private Func<CallVideoFrame, CancellationToken, Task>? _videoSendDelegate;
     private Func<byte, int, CancellationToken, Task>? _dtmfSendDelegate;
     private CallIceLocalDescription? _localIceDescription;
 
@@ -142,6 +143,7 @@ internal sealed partial class SipCoreCallChannel : ICallChannel
         _videoEnabled = enableVideo;
         _videoCodecNames = preferredVideoCodecNames;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _videoTap = new SipCallChannelVideoFrameTap(_logger);
         _sdpNegotiator = sdpNegotiator ?? throw new ArgumentNullException(nameof(sdpNegotiator));
         _iceAgent = iceAgent;
         _telemetry = telemetry ?? throw new ArgumentNullException(nameof(telemetry));
@@ -598,6 +600,30 @@ internal sealed partial class SipCoreCallChannel : ICallChannel
         lock (_audioSync) _audioListeners.Remove(onFrame);
     }
 
+    // ── Video frames (delegated to the video tap) ─────────────────────────────
+
+    /// <inheritdoc />
+    public Task SendVideoFrameAsync(CallVideoFrame frame, CancellationToken ct = default)
+        => _videoTap.SendFrameAsync(frame, ct);
+
+    /// <inheritdoc />
+    public void DeliverInboundVideoFrame(CallVideoFrame frame) => _videoTap.DeliverInbound(frame);
+
+    /// <inheritdoc />
+    public void SetVideoSendDelegate(Func<CallVideoFrame, CancellationToken, Task>? sendDelegate)
+        => _videoTap.SetSendDelegate(sendDelegate);
+
+    /// <inheritdoc />
+    public void AddVideoFrameListener(Action<CallVideoFrame> onFrame)
+    {
+        if (Volatile.Read(ref _disposed) != 0)
+            throw new ObjectDisposedException(nameof(SipCoreCallChannel));
+        _videoTap.AddListener(onFrame);
+    }
+
+    /// <inheritdoc />
+    public void RemoveVideoFrameListener(Action<CallVideoFrame> onFrame) => _videoTap.RemoveListener(onFrame);
+
     // ── Media parameters ──────────────────────────────────────────────────────
 
     /// <summary>
@@ -921,7 +947,7 @@ internal sealed partial class SipCoreCallChannel : ICallChannel
         _localVideoSocket?.Dispose();
 
         lock (_audioSync) _audioListeners.Clear();
-        lock (_videoSync) _videoListeners.Clear();
+        _videoTap.Dispose();
         lock (_callbackSync)
         {
             _stateBuffer.Clear();
@@ -931,7 +957,6 @@ internal sealed partial class SipCoreCallChannel : ICallChannel
             _onRemoteHold = null;
             _onTransfer = null;
             _audioSendDelegate = null;
-            _videoSendDelegate = null;
             _dtmfSendDelegate = null;
         }
     }
