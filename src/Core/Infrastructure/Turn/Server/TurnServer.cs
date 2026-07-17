@@ -46,6 +46,8 @@ internal sealed class TurnServer : IAsyncDisposable
     private readonly ConcurrentDictionary<int, Task> _connectionTasks = new();
     private int _nextConnectionTaskId;
     private readonly TurnAllocationRegistry _registry;
+    private readonly TurnRefreshRequestHandler _refreshHandler;
+    private readonly TurnPermissionRequestHandler _permissionHandler;
     private Task? _receiveLoop;
     private Task? _sweepLoop;
 
@@ -104,6 +106,8 @@ internal sealed class TurnServer : IAsyncDisposable
             _mobilityService,
             _tcpConnectionBroker,
             StartRelayTask);
+        _refreshHandler = new TurnRefreshRequestHandler(_options, _responseFactory, _mobilityService, _registry);
+        _permissionHandler = new TurnPermissionRequestHandler(_options, _responseFactory, _registry);
         _allocateRequestHandler = new TurnAllocateRequestHandler(
             _options,
             _responseFactory,
@@ -542,9 +546,9 @@ internal sealed class TurnServer : IAsyncDisposable
         {
             TurnMessageMethod.Allocate => await _allocateRequestHandler.HandleAsync(request, context, authenticatedCredentials, ct)
                 .ConfigureAwait(false),
-            TurnMessageMethod.Refresh => await HandleRefreshRequestAsync(request, context).ConfigureAwait(false),
-            TurnMessageMethod.CreatePermission => await HandleCreatePermissionRequestAsync(request, context).ConfigureAwait(false),
-            TurnMessageMethod.ChannelBind => await HandleChannelBindRequestAsync(request, context).ConfigureAwait(false),
+            TurnMessageMethod.Refresh => await _refreshHandler.HandleAsync(request, context).ConfigureAwait(false),
+            TurnMessageMethod.CreatePermission => _permissionHandler.HandleCreatePermission(request, context),
+            TurnMessageMethod.ChannelBind => _permissionHandler.HandleChannelBind(request, context),
             TurnMessageMethod.Connect => await _tcpExtensionHandler.HandleConnectRequestAsync(request, context, ct).ConfigureAwait(false),
             TurnMessageMethod.ConnectionBind => _tcpExtensionHandler.HandleConnectionBindRequest(request, context),
             _ => _responseFactory.BuildErrorResponse(request, 400, "Bad Request", includeAuthAttributes: false)
@@ -593,147 +597,6 @@ internal sealed class TurnServer : IAsyncDisposable
         {
             _logger.LogError(ex, "TURN failed to forward Send Indication payload to {Peer}", peer);
         }
-    }
-
-    // ── TURN request handlers ───────────────────────────────────────────────
-
-    private async Task<StunMessage> HandleRefreshRequestAsync(StunMessage request, TurnClientContext context)
-    {
-        var mobilityTicket = TurnAttributeMapper.DecodeMobilityTicket(request);
-
-        TurnServerAllocation? allocation;
-        if (mobilityTicket is not null)
-        {
-            if (!_options.EnableMobility)
-                return _responseFactory.BuildErrorResponse(request, 405, "Mobility Forbidden", includeAuthAttributes: false);
-
-            if (mobilityTicket.Ticket.Length == 0)
-                return _responseFactory.BuildErrorResponse(request, 400, "Bad Request", includeAuthAttributes: false);
-
-            if (!_mobilityService.TryResolveAllocationByTicket(
-                    mobilityTicket.Ticket,
-                    _registry.Table,
-                    out var oldClientKey,
-                    out var resolved))
-                return _responseFactory.BuildErrorResponse(request, 400, "Bad Request", includeAuthAttributes: false);
-
-            if (resolved is null)
-                return _responseFactory.BuildErrorResponse(request, 437, "Allocation Mismatch", includeAuthAttributes: false);
-
-            if (string.Equals(oldClientKey, context.ClientKey, StringComparison.Ordinal))
-                return _responseFactory.BuildErrorResponse(request, 400, "Bad Request", includeAuthAttributes: false);
-
-            if (!_mobilityService.TryMigrateAllocationToClient(
-                    _registry.Table,
-                    oldClientKey,
-                    context,
-                    out allocation))
-                return _responseFactory.BuildErrorResponse(request, 437, "Allocation Mismatch", includeAuthAttributes: false);
-        }
-        else if (!_registry.TryGetLive(context.ClientKey, out allocation))
-        {
-            return _responseFactory.BuildErrorResponse(request, 437, "Allocation Mismatch", includeAuthAttributes: false);
-        }
-
-        var requestedFamily = TurnAttributeMapper.DecodeRequestedAddressFamily(request)?.Family;
-        if (requestedFamily is not null)
-        {
-            var allocationFamily = allocation!.RelayedEndPoint.AddressFamily == AddressFamily.InterNetworkV6
-                ? TurnAddressFamily.IPv6
-                : TurnAddressFamily.IPv4;
-
-            if (requestedFamily != allocationFamily)
-                return _responseFactory.BuildErrorResponse(request, 443, "Peer Address Family Mismatch", includeAuthAttributes: false);
-        }
-
-        var requestedLifetime = TurnAttributeMapper.DecodeLifetime(request)?.Seconds;
-        if (requestedLifetime == 0)
-        {
-            await _registry.RemoveAsync(allocation!.ClientKey).ConfigureAwait(false);
-            return _responseFactory.BuildSuccessResponse(
-                request,
-                [TurnAttributeMapper.Encode(new TurnLifetimeAttribute { Seconds = 0 })]);
-        }
-
-        var lifetime = ClampAllocationLifetime(requestedLifetime);
-        allocation!.ExpiresAtUtc = DateTimeOffset.UtcNow.AddSeconds(lifetime);
-        if (mobilityTicket is not null)
-            _mobilityService.RemoveTicket(mobilityTicket.Ticket.Span);
-
-        var responseAttributes = new List<StunAttribute>
-        {
-            TurnAttributeMapper.Encode(new TurnLifetimeAttribute { Seconds = lifetime })
-        };
-        if (mobilityTicket is not null)
-        {
-            responseAttributes.Add(TurnAttributeMapper.Encode(new TurnMobilityTicketAttribute
-            {
-                Ticket = _mobilityService.IssueTicket(allocation)
-            }));
-        }
-
-        return _responseFactory.BuildSuccessResponse(
-            request,
-            responseAttributes);
-    }
-
-    private Task<StunMessage> HandleCreatePermissionRequestAsync(StunMessage request, TurnClientContext context)
-    {
-        if (!_registry.TryGetLive(context.ClientKey, out var allocation))
-            return Task.FromResult(_responseFactory.BuildErrorResponse(request, 437, "Allocation Mismatch", includeAuthAttributes: false));
-
-        var peer = TurnAttributeMapper.DecodeXorPeerAddress(request)?.EndPoint;
-        if (peer is null)
-            return Task.FromResult(_responseFactory.BuildErrorResponse(request, 400, "Bad Request", includeAuthAttributes: false));
-
-        if (!IsPeerFamilyMatchingAllocation(allocation!, peer))
-            return Task.FromResult(_responseFactory.BuildErrorResponse(request, 443, "Peer Address Family Mismatch", includeAuthAttributes: false));
-
-        if (!allocation!.TryUpsertPermission(
-                peer,
-                DateTimeOffset.UtcNow.AddSeconds(_options.PermissionLifetimeSeconds),
-                _options.MaxPermissionsPerAllocation))
-        {
-            return Task.FromResult(_responseFactory.BuildErrorResponse(request, 486, "Allocation Quota Reached", includeAuthAttributes: false));
-        }
-
-        return Task.FromResult(_responseFactory.BuildSuccessResponse(request, []));
-    }
-
-    private Task<StunMessage> HandleChannelBindRequestAsync(StunMessage request, TurnClientContext context)
-    {
-        if (!_registry.TryGetLive(context.ClientKey, out var allocation))
-            return Task.FromResult(_responseFactory.BuildErrorResponse(request, 437, "Allocation Mismatch", includeAuthAttributes: false));
-
-        var peer = TurnAttributeMapper.DecodeXorPeerAddress(request)?.EndPoint;
-        var channel = TurnAttributeMapper.DecodeChannelNumber(request)?.ChannelNumber;
-
-        if (peer is null || !channel.HasValue)
-            return Task.FromResult(_responseFactory.BuildErrorResponse(request, 400, "Bad Request", includeAuthAttributes: false));
-
-        if (channel.Value < 0x4000 || channel.Value > 0x7FFF)
-            return Task.FromResult(_responseFactory.BuildErrorResponse(request, 400, "Bad Request", includeAuthAttributes: false));
-
-        if (!IsPeerFamilyMatchingAllocation(allocation!, peer))
-            return Task.FromResult(_responseFactory.BuildErrorResponse(request, 443, "Peer Address Family Mismatch", includeAuthAttributes: false));
-
-        if (!allocation!.IsChannelCompatible(channel.Value, peer))
-            return Task.FromResult(_responseFactory.BuildErrorResponse(request, 400, "Bad Request", includeAuthAttributes: false));
-
-        if (!allocation!.TryUpsertPermission(
-                peer,
-                DateTimeOffset.UtcNow.AddSeconds(_options.PermissionLifetimeSeconds),
-                _options.MaxPermissionsPerAllocation)
-            || !allocation.TryUpsertChannelBinding(
-                channel.Value,
-                peer,
-                DateTimeOffset.UtcNow.AddSeconds(_options.ChannelBindingLifetimeSeconds),
-                _options.MaxChannelBindingsPerAllocation))
-        {
-            return Task.FromResult(_responseFactory.BuildErrorResponse(request, 486, "Allocation Quota Reached", includeAuthAttributes: false));
-        }
-
-        return Task.FromResult(_responseFactory.BuildSuccessResponse(request, []));
     }
 
     private async Task HandleChannelDataFromClientAsync(
@@ -880,17 +743,6 @@ internal sealed class TurnServer : IAsyncDisposable
 
     private static bool IsPeerFamilyMatchingAllocation(TurnServerAllocation allocation, IPEndPoint peerEndPoint)
         => TurnMobilityService.IsPeerFamilyMatchingAllocation(allocation, peerEndPoint);
-
-    private uint ClampAllocationLifetime(uint? requestedLifetime)
-    {
-        if (!requestedLifetime.HasValue)
-            return _options.DefaultAllocationLifetimeSeconds;
-
-        return Math.Clamp(
-            requestedLifetime.Value,
-            0,
-            _options.MaxAllocationLifetimeSeconds);
-    }
 
     private async Task SendResponseAsync(
         TurnClientContext context,
