@@ -30,6 +30,7 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IAsyncDisp
     private IPEndPoint? _remoteEndPoint;
     private Task? _receiveLoop;
     private CancellationTokenSource? _loopCts;
+    private int _started;
 
     public BundledMediaTransport(
         BundledMediaTransportOptions options,
@@ -64,6 +65,11 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IAsyncDisp
     /// <summary>Starts the shared receive loop. Idempotent per instance; call once after wiring.</summary>
     public Task StartAsync(CancellationToken cancellationToken = default)
     {
+        // Claim the start atomically (HARD-C5): a second call must not replace _loopCts/_receiveLoop,
+        // which would orphan the first CTS (never disposed) and leave the first loop running.
+        if (Interlocked.Exchange(ref _started, 1) != 0)
+            return Task.CompletedTask;
+
         // Link the caller token so DisposeAsync can stop the loop by cancellation before the socket is
         // disposed — cancelling the pending receive yields a clean OperationCanceledException, whereas
         // disposing the socket underneath a pending receive can surface as a raw fault.
@@ -71,6 +77,9 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IAsyncDisp
         _receiveLoop = RunReceiveLoopAsync(_loopCts.Token);
         return Task.CompletedTask;
     }
+
+    /// <summary>Test seam (HARD-C5): the current receive-loop task, to assert repeated starts do not replace it.</summary>
+    internal Task? ReceiveLoopForTest => _receiveLoop;
 
     /// <inheritdoc />
     public async ValueTask SendAsync(ReadOnlyMemory<byte> datagram, CancellationToken cancellationToken)
