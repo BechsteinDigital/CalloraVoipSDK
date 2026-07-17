@@ -46,8 +46,7 @@ internal interface ISipTransportRuntime : IDisposable
         string? body,
         IPEndPoint remoteEndPoint,
         SipTransportProtocol transport,
-        CancellationToken ct = default) =>
-        SendRequestAsync(method, requestUri, headers, body, remoteEndPoint, ct);
+        CancellationToken ct = default);
 
     /// <summary>
     /// Sends a SIP response datagram to a remote endpoint.
@@ -70,8 +69,7 @@ internal interface ISipTransportRuntime : IDisposable
         string? body,
         IPEndPoint remoteEndPoint,
         SipTransportProtocol transport,
-        CancellationToken ct = default) =>
-        SendResponseAsync(statusCode, reasonPhrase, headers, body, remoteEndPoint, ct);
+        CancellationToken ct = default);
 
     /// <summary>
     /// Resolves the network endpoint for a SIP host/port target.
@@ -88,8 +86,7 @@ internal interface ISipTransportRuntime : IDisposable
         string host,
         int port,
         SipTransportProtocol transport,
-        CancellationToken ct = default) =>
-        ResolveRemoteEndPointAsync(host, port, ct);
+        CancellationToken ct = default);
 
     /// <summary>
     /// Resolves ordered remote route candidates for one host/port/transport target.
@@ -115,5 +112,5 @@ internal interface ISipTransportRuntime : IDisposable
     /// <summary>
     /// Returns local endpoint bound for a specific transport protocol.
     /// </summary>
-    IPEndPoint GetLocalEndPoint(SipTransportProtocol transport) => LocalEndPoint;
+    IPEndPoint GetLocalEndPoint(SipTransportProtocol transport);
 }

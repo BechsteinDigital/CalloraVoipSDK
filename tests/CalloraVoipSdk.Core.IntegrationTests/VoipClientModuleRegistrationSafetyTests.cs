@@ -84,6 +84,16 @@ internal sealed class RecordingTransportRuntime(ISipTransportRuntime inner) : IS
         CancellationToken ct = default) =>
         inner.SendRequestAsync(method, requestUri, headers, body, remoteEndPoint, ct);
 
+    public Task SendRequestAsync(
+        string method,
+        string requestUri,
+        IReadOnlyDictionary<string, string> headers,
+        string? body,
+        IPEndPoint remoteEndPoint,
+        SipTransportProtocol transport,
+        CancellationToken ct = default) =>
+        inner.SendRequestAsync(method, requestUri, headers, body, remoteEndPoint, transport, ct);
+
     public Task SendResponseAsync(
         int statusCode,
         string reasonPhrase,
@@ -93,8 +103,27 @@ internal sealed class RecordingTransportRuntime(ISipTransportRuntime inner) : IS
         CancellationToken ct = default) =>
         inner.SendResponseAsync(statusCode, reasonPhrase, headers, body, remoteEndPoint, ct);
 
+    public Task SendResponseAsync(
+        int statusCode,
+        string reasonPhrase,
+        IReadOnlyDictionary<string, string> headers,
+        string? body,
+        IPEndPoint remoteEndPoint,
+        SipTransportProtocol transport,
+        CancellationToken ct = default) =>
+        inner.SendResponseAsync(statusCode, reasonPhrase, headers, body, remoteEndPoint, transport, ct);
+
     public Task<IPEndPoint> ResolveRemoteEndPointAsync(string host, int port, CancellationToken ct = default) =>
         inner.ResolveRemoteEndPointAsync(host, port, ct);
+
+    public Task<IPEndPoint> ResolveRemoteEndPointAsync(
+        string host,
+        int port,
+        SipTransportProtocol transport,
+        CancellationToken ct = default) =>
+        inner.ResolveRemoteEndPointAsync(host, port, transport, ct);
+
+    public IPEndPoint GetLocalEndPoint(SipTransportProtocol transport) => inner.GetLocalEndPoint(transport);
 
     public void Dispose()
     {
