@@ -10,6 +10,11 @@ using Org.BouncyCastle.Tls;
 using Org.BouncyCastle.Tls.Crypto;
 using Org.BouncyCastle.Tls.Crypto.Impl.BC;
 using Org.BouncyCastle.X509;
+// Aliased so this file's Org.BouncyCastle.X509.X509Certificate / Org.BouncyCastle.Tls.HashAlgorithm are
+// not shadowed by the System.Security.Cryptography namespace.
+using X509Certificate2 = System.Security.Cryptography.X509Certificates.X509Certificate2;
+using ECDsaCertExtensions = System.Security.Cryptography.X509Certificates.ECDsaCertificateExtensions;
+using CryptographicException = System.Security.Cryptography.CryptographicException;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Dtls;
 
@@ -61,6 +66,50 @@ internal sealed class DtlsCertificate
             new Asn1SignatureFactory("SHA256WITHECDSA", keyPair.Private, random));
 
         return new DtlsCertificate(keyPair.Private, certificate);
+    }
+
+    /// <summary>
+    /// Wraps a caller-supplied certificate as the DTLS-SRTP identity (opt-in, HARD-E7): a stable/pinned
+    /// identity instead of the ephemeral per-instance default. The certificate must be an ECDSA
+    /// <b>P-256</b> certificate with an accessible private key — the DTLS signer is ECDSA/SHA-256, so RSA,
+    /// other curves, and non-exportable (e.g. HSM/CNG) keys are rejected fail-closed rather than silently
+    /// producing an unusable identity. Authentication is by SDP <c>a=fingerprint</c> (RFC 8122), so no
+    /// PKI trust is required; sharing this with the SIP-TLS certificate is the caller's choice.
+    /// </summary>
+    /// <exception cref="ArgumentException">The certificate is not an exportable ECDSA P-256 key pair.</exception>
+    internal static DtlsCertificate FromX509(X509Certificate2 certificate)
+    {
+        ArgumentNullException.ThrowIfNull(certificate);
+
+        using var ecdsa = ECDsaCertExtensions.GetECDsaPrivateKey(certificate)
+            ?? throw new ArgumentException(
+                "The DTLS-SRTP certificate must be an ECDSA certificate with an accessible private key; " +
+                "the DTLS signer is ECDSA/SHA-256, so RSA and key-less certificates are not supported.",
+                nameof(certificate));
+
+        if (ecdsa.KeySize != 256)
+        {
+            throw new ArgumentException(
+                $"The DTLS-SRTP certificate must use the NIST P-256 curve (256-bit ECDSA), got {ecdsa.KeySize}-bit.",
+                nameof(certificate));
+        }
+
+        byte[] pkcs8PrivateKey;
+        try
+        {
+            pkcs8PrivateKey = ecdsa.ExportPkcs8PrivateKey();
+        }
+        catch (CryptographicException ex)
+        {
+            throw new ArgumentException(
+                "The DTLS-SRTP certificate's ECDSA private key is not exportable (e.g. a non-exportable " +
+                "HSM/CNG key); supply a certificate whose key material is available.",
+                nameof(certificate), ex);
+        }
+
+        var privateKey = PrivateKeyFactory.CreateKey(pkcs8PrivateKey);
+        var bcCertificate = new X509CertificateParser().ReadCertificate(certificate.RawData);
+        return new DtlsCertificate(privateKey, bcCertificate);
     }
 
     /// <summary>

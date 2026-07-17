@@ -273,8 +273,12 @@ public sealed class VoipClient : IVoipClient
         // OfferDtlsSrtp is set); the handshaker keys DTLS-negotiated call legs.
         var dtlsHandshaker = ResolveService<IDtlsSrtpHandshaker>(services)
             ?? new DtlsSrtpHandshaker(logFactory.CreateLogger<DtlsSrtpHandshaker>());
+        // Precedence: an internally DI-registered certificate, then a caller-supplied one from config
+        // (HARD-E7, opt-in stable identity), else a fresh ephemeral ECDSA P-256 (WebRTC privacy default).
         var dtlsCertificate = ResolveService<DtlsCertificate>(services)
-            ?? DtlsCertificate.GenerateEcdsaP256();
+            ?? (config.DtlsCertificate is { } suppliedDtlsCertificate
+                ? DtlsCertificate.FromX509(suppliedDtlsCertificate)
+                : DtlsCertificate.GenerateEcdsaP256());
         var dtlsSignalingOptions = new SdpDtlsNegotiationOptions
         {
             FingerprintAlgorithm = dtlsCertificate.Fingerprint.Algorithm,

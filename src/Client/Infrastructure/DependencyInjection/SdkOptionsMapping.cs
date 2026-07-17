@@ -32,6 +32,7 @@ internal static class SdkOptionsMapping
             EnableAutomaticAudioDeviceSelection = options.EnableAutomaticAudioDeviceSelection,
             PreferredAudioCodecs = options.PreferredAudioCodecs,
             OfferDtlsSrtp = options.OfferDtlsSrtp,
+            DtlsCertificate = options.DtlsCertificate,
             EnableVideo = options.EnableVideo,
             PreferredVideoCodecs = options.PreferredVideoCodecs,
             BridgeAudioFormat = options.BridgeAudioFormat,

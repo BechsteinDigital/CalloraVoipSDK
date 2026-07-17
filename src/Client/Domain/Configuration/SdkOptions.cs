@@ -1,3 +1,4 @@
+using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Logging;
 using CalloraVoipSdk.Core.Application.Ports.Audio;
 using CalloraVoipSdk.Core.Security;
@@ -56,6 +57,13 @@ public sealed class SdkOptions
     /// See <see cref="SdkConfiguration.OfferDtlsSrtp"/> for semantics.
     /// </summary>
     public bool OfferDtlsSrtp { get; set; }
+
+    /// <summary>
+    /// Optional DTLS-SRTP identity certificate for the media plane; <see langword="null"/> uses the
+    /// ephemeral ECDSA P-256 default. See <see cref="SdkConfiguration.DtlsCertificate"/> for semantics
+    /// and constraints (ECDSA P-256 with an exportable private key).
+    /// </summary>
+    public X509Certificate2? DtlsCertificate { get; set; }
 
     /// <summary>
     /// Enable video (<c>m=video</c>) negotiation for calls.

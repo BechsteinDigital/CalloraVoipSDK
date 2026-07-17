@@ -1,3 +1,4 @@
+using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Logging;
 using CalloraVoipSdk.Core.Application.Ports.Audio;
 using CalloraVoipSdk.Core.Infrastructure.Audio;
@@ -44,6 +45,17 @@ public sealed class SdkConfiguration
     /// setting. Default: <see langword="false"/> (SDES per <see cref="SrtpPolicy"/>).
     /// </summary>
     public bool           OfferDtlsSrtp          { get; init; }
+
+    /// <summary>
+    /// Optional DTLS-SRTP identity certificate (RFC 5763) for the media plane. <see langword="null"/>
+    /// (default) generates a fresh ephemeral ECDSA P-256 certificate per client instance — the WebRTC
+    /// privacy default. Supply your own for a stable/pinned identity (enterprise, compliance): it must be
+    /// an ECDSA <b>P-256</b> certificate with an accessible private key (RSA, other curves, and
+    /// non-exportable HSM keys are rejected fail-closed). The DTLS certificate is authenticated by SDP
+    /// <c>a=fingerprint</c> (RFC 8122), not PKI, and is independent of the SIP-TLS certificate
+    /// (<see cref="Tls"/>) — pass the same <see cref="X509Certificate2"/> to both to share one identity.
+    /// </summary>
+    public X509Certificate2? DtlsCertificate    { get; init; }
 
     /// <summary>
     /// When <see langword="true"/>, calls negotiate a video stream (WebRTC phase 2,
