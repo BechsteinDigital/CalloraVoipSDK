@@ -5,7 +5,7 @@ namespace CalloraVoipSdk;
 /// <summary>
 /// Telemetry facade for SIP events, metrics, and call-detail records.
 /// </summary>
-public sealed class TelemetryManager
+public sealed class TelemetryManager : ITelemetryManager
 {
     internal TelemetryManager(ClientTelemetrySink sink)
     {

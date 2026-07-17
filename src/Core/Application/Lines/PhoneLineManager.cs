@@ -9,7 +9,7 @@ namespace CalloraVoipSdk.Core.Application.Lines;
 /// current line collection, and aggregates each line's inbound-call notifications. Instances are
 /// created by the SDK, not by consumers.
 /// </summary>
-public sealed class PhoneLineManager : IDisposable
+public sealed class PhoneLineManager : IPhoneLineManager
 {
     private readonly Func<SipAccount, PhoneLine> _factory;
     private readonly ConcurrentDictionary<LineId, PhoneLine> _lines = new();

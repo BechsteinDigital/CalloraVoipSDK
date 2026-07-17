@@ -6,7 +6,7 @@ namespace CalloraVoipSdk;
 /// <summary>
 /// Runtime availability facade for optional SDK modules.
 /// </summary>
-public sealed class ModuleManager
+public sealed class ModuleManager : IModuleManager
 {
     internal ModuleManager(MediaManager media)
     {

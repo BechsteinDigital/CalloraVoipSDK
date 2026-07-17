@@ -10,7 +10,7 @@ namespace CalloraVoipSdk.Core.Application.Media;
 /// <summary>
 /// Factory and orchestration entrypoint for media routing, recording and playback.
 /// </summary>
-public sealed class MediaManager
+public sealed class MediaManager : IMediaManager
 {
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<MediaManager> _logger;
