@@ -23,6 +23,13 @@ public interface IPeerConnection : IAsyncDisposable
     /// <summary>Raised on every lifecycle transition (RFC 8829 <c>connectionstatechange</c>).</summary>
     event EventHandler<PeerConnectionState>? ConnectionStateChanged;
 
+    /// <summary>
+    /// Raised once per remote track, when that track's first frame arrives (the W3C <c>track</c> event).
+    /// Subscribe to the track's <see cref="RemoteTrack.FrameReceived"/> synchronously in the handler to
+    /// receive every frame — the first frame is delivered immediately after this event returns.
+    /// </summary>
+    event EventHandler<RemoteTrack>? TrackReceived;
+
     /// <summary>Produces a local WebRTC offer (BUNDLE, DTLS-SRTP, ICE, rtcp-mux) for the app to signal out.</summary>
     string CreateOffer();
 

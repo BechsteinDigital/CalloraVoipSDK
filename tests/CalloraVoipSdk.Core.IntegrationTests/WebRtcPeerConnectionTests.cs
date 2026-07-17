@@ -210,6 +210,33 @@ public sealed class WebRtcPeerConnectionTests
         Assert.NotEqual(audio.Msid.TrackId, video.Msid.TrackId);
     }
 
+    [Fact]
+    public async Task SetRemoteDescription_captures_the_remote_track_identity_grouped_by_stream()
+    {
+        // The offerer advertises one MediaStream carrying its audio and video tracks (a=msid); the answerer
+        // must retain that remote identity so a receiver can group the tracks (W3C RTCTrackEvent.streams).
+        await using var offerer = Peer(Pcmu);
+        await using var answerer = Peer(Pcmu);
+
+        await answerer.SetRemoteDescriptionAsync(offerer.CreateOffer());
+
+        Assert.NotNull(answerer.RemoteAudioMsid);
+        Assert.NotNull(answerer.RemoteVideoMsid);
+        Assert.Equal(answerer.RemoteAudioMsid!.StreamId, answerer.RemoteVideoMsid!.StreamId);   // one remote stream
+        Assert.NotEqual(answerer.RemoteAudioMsid.TrackId, answerer.RemoteVideoMsid.TrackId);
+    }
+
+    [Fact]
+    public async Task SetRemoteDescription_leaves_the_remote_track_identity_null_when_the_offer_has_no_msid()
+    {
+        await using var answerer = Peer(Pcmu);
+
+        await answerer.SetRemoteDescriptionAsync(WebRtcOffer());   // negotiator offer without a=msid
+
+        Assert.Null(answerer.RemoteAudioMsid);
+        Assert.Null(answerer.RemoteVideoMsid);
+    }
+
     // ── harness ──────────────────────────────────────────────────────────────────
 
     private static WebRtcPeerConnection PeerAt(int localPort) =>
