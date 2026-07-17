@@ -1,5 +1,6 @@
 using System.Net;
 using System.Collections.ObjectModel;
+using Microsoft.Extensions.Logging;
 using CalloraVoipSdk.Core.Application.Ports.Sdp;
 using CalloraVoipSdk.Core.Domain.Calls;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
@@ -182,7 +183,8 @@ internal static class SdpUtilities
         string remoteOffer,
         IPEndPoint localEndPoint,
         bool hold,
-        SdpMediaNegotiationOptions? localOptions = null)
+        SdpMediaNegotiationOptions? localOptions = null,
+        ILogger? logger = null)
     {
         try
         {
@@ -198,8 +200,12 @@ internal static class SdpUtilities
                 ? Serializer.Serialize(result.Answer)
                 : null;
         }
-        catch
+        catch (Exception ex)
         {
+            // Untrusted remote SDP: any parse/negotiate/serialize failure means "no answerable
+            // offer". Broad by design (a malformed INVITE must never crash the signaling path),
+            // but no longer silent — logged so failures are observable (HARD-G3).
+            logger?.LogDebug(ex, "Discarding unparseable remote SDP offer during answer negotiation.");
             return null;
         }
     }
@@ -212,7 +218,8 @@ internal static class SdpUtilities
     public static CallMediaParameters? TryParseMediaParameters(
         string remoteSdp,
         IPEndPoint localEndPoint,
-        SdpMediaNegotiationOptions? localOptions = null)
+        SdpMediaNegotiationOptions? localOptions = null,
+        ILogger? logger = null)
     {
         if (string.IsNullOrWhiteSpace(remoteSdp)) return null;
         try
@@ -291,8 +298,11 @@ internal static class SdpUtilities
                 Video = video
             };
         }
-        catch
+        catch (Exception ex)
         {
+            // Untrusted remote SDP: treat any parse/extraction failure as "no usable media".
+            // Broad by design (must not crash inbound-INVITE handling) but logged (HARD-G3).
+            logger?.LogDebug(ex, "Discarding unparseable remote SDP during media-parameter parsing.");
             return null;
         }
     }
@@ -300,7 +310,7 @@ internal static class SdpUtilities
     /// <summary>
     /// Returns true when SDP indicates remote hold semantics.
     /// </summary>
-    public static bool IsRemoteHoldSdp(string? sdp)
+    public static bool IsRemoteHoldSdp(string? sdp, ILogger? logger = null)
     {
         if (string.IsNullOrWhiteSpace(sdp)) return false;
 
@@ -311,8 +321,11 @@ internal static class SdpUtilities
             var direction = audio?.Direction ?? parsed.SessionDirection;
             return direction is SdpMediaDirection.SendOnly or SdpMediaDirection.Inactive;
         }
-        catch
+        catch (Exception ex)
         {
+            // Unparseable remote SDP: fall back to a direction-attribute substring probe rather than
+            // crash the hold check. Logged so the fallback path is observable (HARD-G3).
+            logger?.LogDebug(ex, "Falling back to substring hold detection for unparseable remote SDP.");
             return sdp.Contains("a=sendonly", StringComparison.OrdinalIgnoreCase)
                    || sdp.Contains("a=inactive", StringComparison.OrdinalIgnoreCase);
         }

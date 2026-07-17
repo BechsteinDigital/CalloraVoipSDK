@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Models;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Parsing;
 
@@ -17,7 +18,8 @@ internal static class SdpSecurityInspector
     public static bool TryInspectAudioSecurity(
         string? sdp,
         out bool isSrtpSignaled,
-        out string mediaProfile)
+        out string mediaProfile,
+        ILogger? logger = null)
     {
         isSrtpSignaled = false;
         mediaProfile = string.Empty;
@@ -39,8 +41,11 @@ internal static class SdpSecurityInspector
             isSrtpSignaled = IsSrtpSignaled(parsed, audio);
             return true;
         }
-        catch
+        catch (Exception ex)
         {
+            // Untrusted remote SDP: an unparseable body yields "no SRTP signal determinable".
+            // Broad by design (must not crash the SRTP policy guard) but logged (HARD-G3).
+            logger?.LogDebug(ex, "Discarding unparseable remote SDP during SRTP security inspection.");
             return false;
         }
     }

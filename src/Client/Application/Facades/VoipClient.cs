@@ -200,7 +200,8 @@ public sealed class VoipClient : IVoipClient
             _ownsRegistrationService = false;
         }
 
-        var sdpNegotiator = ResolveService<ISdpNegotiator>(services) ?? new SdpNegotiator();
+        var sdpNegotiator = ResolveService<ISdpNegotiator>(services)
+            ?? new SdpNegotiator(logFactory.CreateLogger<SdpNegotiator>());
         var sdpProvider = new SipSessionSdpProvider
         {
             BuildOffer = (ep, hold) => sdpNegotiator.BuildDefaultSdp(ep, hold, null),

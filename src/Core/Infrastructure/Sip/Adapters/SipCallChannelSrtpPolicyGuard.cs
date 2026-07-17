@@ -43,7 +43,7 @@ internal sealed class SipCallChannelSrtpPolicyGuard
             return _appliedSrtpPolicy != SrtpPolicy.Required;
         }
 
-        if (!SdpSecurityInspector.TryInspectAudioSecurity(remoteSdp, out var isSrtpSignaled, out _))
+        if (!SdpSecurityInspector.TryInspectAudioSecurity(remoteSdp, out var isSrtpSignaled, out _, _logger))
         {
             reasonCode = _appliedSrtpPolicy == SrtpPolicy.Required
                 ? SrtpDecisionReasonCodes.RequiredNegotiationFailed
@@ -69,7 +69,8 @@ internal sealed class SipCallChannelSrtpPolicyGuard
         var inspected = SdpSecurityInspector.TryInspectAudioSecurity(
             session.RemoteSdp,
             out var isSrtpSignaled,
-            out var profile);
+            out var profile,
+            _logger);
         _srtpTelemetry.PublishDecision(
             session,
             inspected && isSrtpSignaled,
