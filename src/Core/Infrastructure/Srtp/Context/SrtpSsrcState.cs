@@ -15,14 +15,11 @@ namespace CalloraVoipSdk.Core.Infrastructure.Srtp.Context;
 /// </remarks>
 internal sealed class SrtpSsrcState
 {
-    private const int ReplayWindowSize = 64;
-
     // Sender-side index: tracks the last outbound packet index for ROC advancement (RFC 3711 §3.3.1).
     private ulong _senderIndex;
 
-    // Receiver replay window: 64-bit bitmap, high bit = newest packet (RFC 3711 §3.3.2).
-    private ulong _replayWindowIndex;
-    private ulong _replayWindowBitmap;
+    // Receiver replay window (RFC 3711 §3.3.2), shared with SRTCP via SlidingReplayWindow.
+    private readonly SlidingReplayWindow _replay = new("SRTP packet index");
 
     // RFC 3711 §3.3.1: estimate the extended packet index from the 16-bit sequence number using a
     // signed 16-bit delta, which handles wrap-around naturally (positive = ahead, negative = behind).
@@ -47,9 +44,10 @@ internal sealed class SrtpSsrcState
     /// <summary>Estimates the inbound extended packet index for the given sequence number.</summary>
     public ulong ComputePacketIndex(ushort seq)
     {
-        var sL        = (ushort)(_replayWindowIndex & 0xFFFF);
-        var delta     = (short)(seq - sL);
-        var estimated = (long)_replayWindowIndex + delta;
+        var windowIndex = _replay.HighestIndex;
+        var sL          = (ushort)(windowIndex & 0xFFFF);
+        var delta       = (short)(seq - sL);
+        var estimated   = (long)windowIndex + delta;
         return estimated >= 0 ? (ulong)estimated : (ulong)seq;
     }
 
@@ -59,35 +57,8 @@ internal sealed class SrtpSsrcState
     /// packet has been accepted.
     /// </summary>
     /// <exception cref="SrtpReplayException">The index is too old or is a replay.</exception>
-    public void CheckReplay(ulong index)
-    {
-        if (index > _replayWindowIndex)
-            return; // newer than window — allowed
-
-        var diff = _replayWindowIndex - index;
-        if (diff >= ReplayWindowSize)
-            throw new SrtpReplayException($"SRTP packet index {index} is outside the replay window.");
-
-        if ((_replayWindowBitmap & (1UL << (int)diff)) != 0)
-            throw new SrtpReplayException($"SRTP packet index {index} has already been received (replay).");
-    }
+    public void CheckReplay(ulong index) => _replay.Check(index);
 
     /// <summary>Records an accepted packet index in the replay window (RFC 3711 §3.3.2).</summary>
-    public void UpdateReplayWindow(ulong index)
-    {
-        if (index > _replayWindowIndex)
-        {
-            var shift = index - _replayWindowIndex;
-            _replayWindowBitmap = shift >= ReplayWindowSize
-                ? 0
-                : _replayWindowBitmap << (int)shift;
-            _replayWindowBitmap |= 1;
-            _replayWindowIndex   = index;
-        }
-        else
-        {
-            var diff = _replayWindowIndex - index;
-            _replayWindowBitmap |= 1UL << (int)diff;
-        }
-    }
+    public void UpdateReplayWindow(ulong index) => _replay.Update(index);
 }
