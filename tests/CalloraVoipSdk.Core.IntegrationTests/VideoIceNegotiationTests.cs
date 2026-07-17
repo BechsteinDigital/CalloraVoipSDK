@@ -4,7 +4,7 @@ using CalloraVoipSdk.Core.Application.Ports.Sdp;
 using CalloraVoipSdk.Core.Domain.Calls;
 using CalloraVoipSdk.Core.Infrastructure.Sdp;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Adapters;
-using CalloraVoipSdk.Core.Security;
+using CalloraVoipSdk.Core.Domain.Security;
 
 namespace CalloraVoipSdk.Core.IntegrationTests;
 

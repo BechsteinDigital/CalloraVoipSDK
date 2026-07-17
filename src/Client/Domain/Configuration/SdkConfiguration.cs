@@ -2,7 +2,8 @@ using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Logging;
 using CalloraVoipSdk.Core.Application.Ports.Audio;
 using CalloraVoipSdk.Core.Infrastructure.Audio;
-using CalloraVoipSdk.Core.Security;
+using CalloraVoipSdk.Core.Domain.Security;
+using CalloraVoipSdk.Core.Infrastructure.Security;
 
 namespace CalloraVoipSdk;
 

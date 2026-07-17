@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 
-namespace CalloraVoipSdk.Core.Security;
+namespace CalloraVoipSdk.Core.Infrastructure.Security;
 
 /// <summary>
 /// Validates X.509 certificates against SIP domain identities per RFC 5922

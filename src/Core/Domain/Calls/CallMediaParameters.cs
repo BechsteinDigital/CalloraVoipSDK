@@ -1,6 +1,6 @@
 using System.Net;
 using System.Collections.ObjectModel;
-using CalloraVoipSdk.Core.Security;
+using CalloraVoipSdk.Core.Domain.Security;
 
 namespace CalloraVoipSdk.Core.Domain.Calls;
 

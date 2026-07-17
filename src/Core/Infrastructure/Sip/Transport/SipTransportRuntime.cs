@@ -10,7 +10,7 @@ using CalloraVoipSdk.Core.Infrastructure.Common.Disposal;
 using CalloraVoipSdk.Core.Infrastructure.Common.Network;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Routing;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Wire;
-using CalloraVoipSdk.Core.Security;
+using CalloraVoipSdk.Core.Infrastructure.Security;
 namespace CalloraVoipSdk.Core.Infrastructure.Sip.Transport;
 
 /// <summary>

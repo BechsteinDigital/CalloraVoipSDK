@@ -3,7 +3,7 @@ using CalloraVoipSdk.DependencyInjection;
 using CalloraVoipSdk.Modules;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Transport;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Wire;
-using CalloraVoipSdk.Core.Security;
+using CalloraVoipSdk.Core.Infrastructure.Security;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Xunit;

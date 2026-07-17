@@ -2,7 +2,7 @@ using CalloraVoipSdk.Core.Domain.Calls;
 using CalloraVoipSdk.Core.Infrastructure.Sdp;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Adapters;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Observability;
-using CalloraVoipSdk.Core.Security;
+using CalloraVoipSdk.Core.Domain.Security;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
