@@ -50,4 +50,41 @@ public sealed class SdkOptions
     /// See <see cref="SdkConfiguration.PreferredAudioCodecs"/> for semantics.
     /// </summary>
     public IReadOnlyList<string>? PreferredAudioCodecs { get; set; }
+
+    /// <summary>
+    /// Offer DTLS-SRTP keying (RFC 5763) on outbound media, not only SDES.
+    /// See <see cref="SdkConfiguration.OfferDtlsSrtp"/> for semantics.
+    /// </summary>
+    public bool OfferDtlsSrtp { get; set; }
+
+    /// <summary>
+    /// Enable video (<c>m=video</c>) negotiation for calls.
+    /// See <see cref="SdkConfiguration.EnableVideo"/> for semantics.
+    /// </summary>
+    public bool EnableVideo { get; set; }
+
+    /// <summary>
+    /// Ordered video codec preference by SDP encoding name; only applies when
+    /// <see cref="EnableVideo"/> is set. <see langword="null"/> uses the SDK default.
+    /// See <see cref="SdkConfiguration.PreferredVideoCodecs"/> for semantics.
+    /// </summary>
+    public IReadOnlyList<string>? PreferredVideoCodecs { get; set; }
+
+    /// <summary>
+    /// Audio format delivered to bridge/recording consumers.
+    /// See <see cref="SdkConfiguration.BridgeAudioFormat"/> for semantics.
+    /// </summary>
+    public BridgeAudioFormat BridgeAudioFormat { get; set; } = BridgeAudioFormat.Passthrough;
+
+    /// <summary>
+    /// Timeout after which an answered call that never receives inbound media is torn down.
+    /// See <see cref="SdkConfiguration.InboundMediaTimeout"/> for semantics.
+    /// </summary>
+    public TimeSpan InboundMediaTimeout { get; set; } = TimeSpan.FromSeconds(15);
+
+    /// <summary>
+    /// Hang up a held call when its media goes silent.
+    /// See <see cref="SdkConfiguration.HangupHeldCallOnMediaSilence"/> for semantics.
+    /// </summary>
+    public bool HangupHeldCallOnMediaSilence { get; set; }
 }
