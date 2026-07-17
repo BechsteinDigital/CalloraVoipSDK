@@ -291,21 +291,7 @@ internal sealed class CallMediaOrchestrator : IDisposable
         try
         {
             var snapshot = entry.Session.GetRuntimeMetricsSnapshot();
-            _logger.LogInformation(
-                "Media metrics for call {CallId}: recv={Recv} queued={Queued} delivered={Delivered} conceal={Conceal} dropLate={Late} dropOverflow={Overflow} dropDuplicate={Duplicate} dropUnrecoverable={Unrecoverable} jitterMs={JitterMs:F2} delayMs={DelayMs:F2} rttMs={RttMs:F2} buffered={Buffered}.",
-                callId,
-                snapshot.PacketsReceived,
-                snapshot.PacketsQueued,
-                snapshot.PacketsDelivered,
-                snapshot.PacketsConcealed,
-                snapshot.PacketsDroppedLate,
-                snapshot.PacketsDroppedOverflow,
-                snapshot.PacketsDroppedDuplicate,
-                snapshot.PacketsUnrecoverableLoss,
-                snapshot.EstimatedJitterMs,
-                snapshot.AdaptiveDelayMs,
-                snapshot.EstimatedRoundTripTimeMs,
-                snapshot.BufferedPackets);
+            LogMediaMetrics(LogLevel.Information, callId, snapshot);
             UnwireSession(entry);
             await entry.QualityMonitor.DisposeAsync().ConfigureAwait(false);
             await entry.Session.DisposeAsync().ConfigureAwait(false);
@@ -338,8 +324,19 @@ internal sealed class CallMediaOrchestrator : IDisposable
     {
         CheckInboundMediaActivity(callId, metrics);
 
-        _logger.LogDebug(
-            "Media metrics update for call {CallId}: recv={Recv} queued={Queued} delivered={Delivered} conceal={Conceal} late={Late} overflow={Overflow} duplicate={Duplicate} unrecoverable={Unrecoverable} jitterMs={JitterMs:F2} delayMs={DelayMs:F2} rttMs={RttMs:F2} buffered={Buffered}.",
+        LogMediaMetrics(LogLevel.Debug, callId, metrics);
+    }
+
+    /// <summary>
+    /// Emits the per-call media-metrics line. The teardown summary (Information) and the periodic
+    /// update (Debug) logged the same 13 fields and differed only in level and wording; they now
+    /// share this one template (HARD-R6).
+    /// </summary>
+    private void LogMediaMetrics(LogLevel level, CallId callId, CallMediaRuntimeMetrics metrics)
+    {
+        _logger.Log(
+            level,
+            "Media metrics for call {CallId}: recv={Recv} queued={Queued} delivered={Delivered} conceal={Conceal} dropLate={Late} dropOverflow={Overflow} dropDuplicate={Duplicate} dropUnrecoverable={Unrecoverable} jitterMs={JitterMs:F2} delayMs={DelayMs:F2} rttMs={RttMs:F2} buffered={Buffered}.",
             callId,
             metrics.PacketsReceived,
             metrics.PacketsQueued,
