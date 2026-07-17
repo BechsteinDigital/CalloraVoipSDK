@@ -107,7 +107,7 @@ internal sealed class PhoneLine : IPhoneLine, IDisposable
         if (_maxCalls > 0 && Volatile.Read(ref _activeLineCallCount) >= _maxCalls)
         {
             _logger.LogWarning("Inbound call rejected: max calls reached on [{User}]", Account.Username);
-            channel.HangupAsync().ConfigureAwait(false);
+            _ = ObserveHangupAsync(channel.HangupAsync(), "inbound rejection (max calls)");
             return;
         }
 
@@ -137,6 +137,21 @@ internal sealed class PhoneLine : IPhoneLine, IDisposable
         return call;
     }
 
+    // Observes a fire-and-forget hangup started from a synchronous path (inbound rejection, dispose):
+    // the task cannot be awaited there, but a failure must not vanish from a critical path — it is
+    // logged rather than silently dropped (HARD-E2). The observer itself never faults.
+    private async Task ObserveHangupAsync(Task hangup, string context)
+    {
+        try
+        {
+            await hangup.ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Hangup during {Context} failed on line [{User}].", context, Account.Username);
+        }
+    }
+
     private void TransitionTo(LineState next)
     {
         LineStateChangedEventArgs? args;
@@ -157,7 +172,7 @@ internal sealed class PhoneLine : IPhoneLine, IDisposable
 
         // Only hang up calls that belong to this line.
         foreach (var call in _callRegistry.Active.Where(c => ReferenceEquals(c.Line, this)))
-            call.HangupAsync().ConfigureAwait(false);
+            _ = ObserveHangupAsync(call.HangupAsync(), "line dispose");
 
         _channel.Dispose();
     }
