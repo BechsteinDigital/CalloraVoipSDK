@@ -32,8 +32,10 @@ internal sealed partial class SipCoreCallChannel : ICallChannel
     private readonly IReadOnlyList<string>? _preferredCodecNames;
     private readonly object _callbackSync = new();
     private readonly object _sessionSync = new();
-    private readonly Queue<CallState> _stateBuffer = new();
-    private readonly Queue<bool> _remoteHoldBuffer = new();
+
+    // Consumer-callback dispatch + early-event buffering (state/DTMF/remote-hold/transfer) — its own
+    // collaborator so the channel no longer carries the handlers, buffers and their lock inline.
+    private readonly SipCallChannelNotifier _notifier = new();
 
     // Encoded-media-frame taps (send delegate + inbound listener fan-out) — own collaborators so the
     // channel no longer carries the audio/video frame state and locks inline (were the AudioFrames
@@ -53,10 +55,6 @@ internal sealed partial class SipCoreCallChannel : ICallChannel
     private readonly bool _videoEnabled;
     private readonly IReadOnlyList<string>? _videoCodecNames;
 
-    private Action<CallState>? _onStateChange;
-    private Action<byte, int>? _onDtmf;
-    private Action<bool>? _onRemoteHold;
-    private Func<string, string, bool>? _onTransfer;
     private Func<byte, int, CancellationToken, Task>? _dtmfSendDelegate;
     private CallIceLocalDescription? _localIceDescription;
 
@@ -246,7 +244,7 @@ internal sealed partial class SipCoreCallChannel : ICallChannel
 
         var state = SipCallChannelConversions.MapState(session.State);
         if (state is not null)
-            NotifyState(state.Value);
+            _notifier.NotifyState(state.Value);
     }
 
     /// <inheritdoc />
@@ -528,36 +526,10 @@ internal sealed partial class SipCoreCallChannel : ICallChannel
 
     /// <inheritdoc />
     public void DeliverInboundDtmf(byte toneCode, int durationMs)
-        => NotifyDtmf(toneCode, durationMs);
+        => _notifier.NotifyDtmf(toneCode, durationMs);
 
     /// <inheritdoc />
-    public void BindCallbacks(CallChannelCallbacks callbacks)
-    {
-        ArgumentNullException.ThrowIfNull(callbacks);
-
-        List<CallState> pendingStates;
-        List<bool> pendingRemoteHold;
-
-        lock (_callbackSync)
-        {
-            _onStateChange = callbacks.OnStateChange;
-            _onDtmf = callbacks.OnDtmf;
-            _onRemoteHold = callbacks.OnRemoteHold;
-            _onTransfer = callbacks.OnTransferRequested;
-
-            pendingStates = _stateBuffer.ToList();
-            pendingRemoteHold = _remoteHoldBuffer.ToList();
-            _stateBuffer.Clear();
-            _remoteHoldBuffer.Clear();
-        }
-
-        foreach (var state in pendingStates)
-            callbacks.OnStateChange(state);
-
-        if (callbacks.OnRemoteHold is null) return;
-        foreach (var isOnHold in pendingRemoteHold)
-            callbacks.OnRemoteHold(isOnHold);
-    }
+    public void BindCallbacks(CallChannelCallbacks callbacks) => _notifier.Bind(callbacks);
 
     /// <inheritdoc />
     public void AddAudioFrameListener(Action<CallAudioFrame> onFrame)
@@ -800,63 +772,25 @@ internal sealed partial class SipCoreCallChannel : ICallChannel
 
         var state = SipCallChannelConversions.MapState(e.NewState);
         if (state is null) return;
-        NotifyState(state.Value);
+        _notifier.NotifyState(state.Value);
     }
 
     private void HandleSessionRemoteHoldChanged(object? sender, bool isOnHold)
     {
         if (Volatile.Read(ref _disposed) != 0) return;
-        NotifyRemoteHold(isOnHold);
+        _notifier.NotifyRemoteHold(isOnHold);
     }
 
     private void HandleSessionDtmfReceived(object? sender, SipDtmfReceivedEventArgs e)
     {
         if (Volatile.Read(ref _disposed) != 0) return;
-        NotifyDtmf(e.ToneCode, e.DurationMilliseconds);
+        _notifier.NotifyDtmf(e.ToneCode, e.DurationMilliseconds);
     }
 
     private void HandleSessionTransferRequested(object? sender, SipTransferRequestedEventArgs e)
     {
         if (Volatile.Read(ref _disposed) != 0) return;
-        e.Accept = NotifyTransferRequested(e.ReferTo, e.ReferredBy);
-    }
-
-    // ── Notification helpers ──────────────────────────────────────────────────
-
-    private void NotifyState(CallState state)
-    {
-        Action<CallState>? handler;
-        lock (_callbackSync)
-        {
-            if (_onStateChange == null) { _stateBuffer.Enqueue(state); return; }
-            handler = _onStateChange;
-        }
-        handler(state);
-    }
-
-    private void NotifyRemoteHold(bool isOnHold)
-    {
-        Action<bool>? handler;
-        lock (_callbackSync)
-        {
-            if (_onRemoteHold == null) { _remoteHoldBuffer.Enqueue(isOnHold); return; }
-            handler = _onRemoteHold;
-        }
-        handler(isOnHold);
-    }
-
-    private void NotifyDtmf(byte toneCode, int durationMs)
-    {
-        Action<byte, int>? handler;
-        lock (_callbackSync) handler = _onDtmf;
-        handler?.Invoke(toneCode, durationMs);
-    }
-
-    private bool NotifyTransferRequested(string referTo, string referredBy)
-    {
-        Func<string, string, bool>? handler;
-        lock (_callbackSync) handler = _onTransfer;
-        return handler?.Invoke(referTo, referredBy) ?? false;
+        e.Accept = _notifier.NotifyTransferRequested(e.ReferTo, e.ReferredBy);
     }
 
     /// <summary>
@@ -884,7 +818,7 @@ internal sealed partial class SipCoreCallChannel : ICallChannel
                 session.CallId);
         }
 
-        NotifyState(CallState.Terminated);
+        _notifier.NotifyState(CallState.Terminated);
     }
 
     // ── Dispose ───────────────────────────────────────────────────────────────
@@ -918,14 +852,9 @@ internal sealed partial class SipCoreCallChannel : ICallChannel
 
         _audioTap.Dispose();
         _videoTap.Dispose();
+        _notifier.Dispose();
         lock (_callbackSync)
         {
-            _stateBuffer.Clear();
-            _remoteHoldBuffer.Clear();
-            _onStateChange = null;
-            _onDtmf = null;
-            _onRemoteHold = null;
-            _onTransfer = null;
             _dtmfSendDelegate = null;
         }
     }
