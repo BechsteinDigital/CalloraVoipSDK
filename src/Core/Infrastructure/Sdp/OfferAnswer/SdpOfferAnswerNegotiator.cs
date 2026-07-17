@@ -68,6 +68,7 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             Codecs = codecs,
             Fmtp = fmtp,
             Mid = mid,
+            Msid = options?.AudioMsid,
             Crypto = crypto,
             Extensions = BuildOfferExtmaps(BundledExtmapUris([])),
             RtcpMux = options?.RtcpMux == true,
@@ -98,6 +99,7 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
                 Fmtp = [.. VideoCodecCatalog.BuildFmtp(video.Codecs), .. rtxFmtp],
                 RtcpFeedback = VideoCodecCatalog.StandardFeedback,
                 Mid = options.Bundle == true ? "video" : null,
+                Msid = video.Msid,
                 RtcpMux = options.RtcpMux == true,
                 Crypto = video.Crypto,
                 // ICE (RFC 8839): advertise the session-shared ufrag/pwd on the video m-line so a

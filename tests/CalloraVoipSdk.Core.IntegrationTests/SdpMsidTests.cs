@@ -1,4 +1,6 @@
+using System.Net;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Models;
+using CalloraVoipSdk.Core.Infrastructure.Sdp.OfferAnswer;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Parsing;
 
 namespace CalloraVoipSdk.Core.IntegrationTests;
@@ -71,6 +73,53 @@ public sealed class SdpMsidTests
 
         var reparsed = new SdpSessionParser().Parse(sdp);
         Assert.Equal(session.Media.Single().Msid, reparsed.Media.Single().Msid);
+    }
+
+    [Fact]
+    public void A_bundle_offer_emits_a_msid_on_audio_and_video_with_a_shared_stream()
+    {
+        const string streamId = "stream-1";
+        var offer = new SdpOfferAnswerNegotiator().CreateOffer(
+            new IPEndPoint(IPAddress.Loopback, 5000),
+            [new SdpCodecDefinition { PayloadType = 0, Name = "PCMU", ClockRate = 8000 }],
+            SdpMediaDirection.SendRecv,
+            new SdpMediaOptions
+            {
+                Bundle = true,
+                RtcpMux = true,
+                AudioMsid = new SdpMsid { StreamId = streamId, TrackId = "audio-track" },
+                Video = new SdpVideoMediaOptions
+                {
+                    Port = 5002,
+                    Codecs = [new SdpCodecDefinition { PayloadType = 96, Name = "H264", ClockRate = 90000 }],
+                    Msid = new SdpMsid { StreamId = streamId, TrackId = "video-track" },
+                },
+            });
+
+        var audio = offer.Media.Single(m => m.MediaType == "audio");
+        var video = offer.Media.Single(m => m.MediaType == "video");
+
+        Assert.Equal(streamId, audio.Msid!.StreamId);
+        Assert.Equal("audio-track", audio.Msid.TrackId);
+        Assert.Equal(streamId, video.Msid!.StreamId);        // one MediaStream across both tracks
+        Assert.Equal("video-track", video.Msid.TrackId);
+
+        var sdp = new SdpSessionSerializer().Serialize(offer);
+        Assert.Contains("a=msid:stream-1 audio-track", sdp, StringComparison.Ordinal);
+        Assert.Contains("a=msid:stream-1 video-track", sdp, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void An_offer_without_msid_options_emits_no_msid()
+    {
+        var offer = new SdpOfferAnswerNegotiator().CreateOffer(
+            new IPEndPoint(IPAddress.Loopback, 5000),
+            [new SdpCodecDefinition { PayloadType = 0, Name = "PCMU", ClockRate = 8000 }],
+            SdpMediaDirection.SendRecv,
+            new SdpMediaOptions { Bundle = true, RtcpMux = true });
+
+        Assert.Null(offer.Media.Single(m => m.MediaType == "audio").Msid);
+        Assert.DoesNotContain("a=msid", new SdpSessionSerializer().Serialize(offer), StringComparison.Ordinal);
     }
 
     [Fact]
