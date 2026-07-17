@@ -51,7 +51,7 @@ public sealed class VoipClient : IVoipClient
     private readonly CallMediaOrchestrator _mediaOrchestrator;
     private readonly SdkConvenienceOrchestrator _convenienceOrchestrator;
     private int _runtimeStarted;
-    private bool _disposed;
+    private int _disposed;
 
     /// <summary>
     /// Active call manager for this SDK instance.
@@ -680,10 +680,11 @@ public sealed class VoipClient : IVoipClient
     /// </summary>
     public void Dispose()
     {
-        if (_disposed)
+        // Claim disposal atomically so two concurrent Dispose() callers cannot both run the teardown
+        // (double-dispose of orchestrators/transport/audio); mirrors the _runtimeStarted guard (HARD-C4).
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
             return;
 
-        _disposed = true;
         _convenienceOrchestrator.Dispose();
         _mediaOrchestrator.Dispose();
         Lines.Dispose();
@@ -718,7 +719,7 @@ public sealed class VoipClient : IVoipClient
 
     private void ThrowIfDisposed()
     {
-        if (_disposed)
+        if (Volatile.Read(ref _disposed) != 0)
             throw new ObjectDisposedException(nameof(VoipClient));
     }
 
