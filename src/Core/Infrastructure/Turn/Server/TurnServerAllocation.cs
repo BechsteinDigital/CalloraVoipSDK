@@ -10,6 +10,9 @@ namespace CalloraVoipSdk.Core.Infrastructure.Turn.Server;
 /// </summary>
 internal sealed class TurnServerAllocation : IAsyncDisposable
 {
+    // Permissions are keyed by peer IP address ONLY (RFC 5766 §8): a permission installed for an
+    // address must let that peer's traffic through regardless of source port. Channel bindings
+    // (below) stay keyed by the full IP:port transport address (RFC 5766 §11).
     private readonly ConcurrentDictionary<string, TurnServerPermission> _permissions = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<ushort, TurnServerChannelBinding> _channelsByNumber = new();
     private readonly ConcurrentDictionary<string, TurnServerChannelBinding> _channelsByPeer = new(StringComparer.Ordinal);
@@ -90,12 +93,14 @@ internal sealed class TurnServerAllocation : IAsyncDisposable
 
     /// <summary>
     /// Adds or updates permission for the peer endpoint, honouring the per-allocation quota.
-    /// Returns false when a new peer would exceed <paramref name="maxPermissions"/> (0 = unlimited).
-    /// Refreshing an existing permission always succeeds.
+    /// Permissions are keyed by IP address only (RFC 5766 §8): supplying the same address with a
+    /// different port refreshes the existing permission rather than consuming a new slot.
+    /// Returns false when a new peer address would exceed <paramref name="maxPermissions"/>
+    /// (0 = unlimited). Refreshing an existing permission always succeeds.
     /// </summary>
     public bool TryUpsertPermission(IPEndPoint peerEndPoint, DateTimeOffset expiresAtUtc, int maxPermissions)
     {
-        var key = ToEndpointKey(peerEndPoint);
+        var key = ToPermissionKey(peerEndPoint);
         lock (_quotaGate)
         {
             if (maxPermissions > 0
@@ -115,11 +120,12 @@ internal sealed class TurnServerAllocation : IAsyncDisposable
     }
 
     /// <summary>
-    /// Returns true when the peer endpoint is currently permitted.
+    /// Returns true when the peer endpoint is currently permitted. The check is by IP address only
+    /// (RFC 5766 §8), so a permitted address is honoured for any source port.
     /// </summary>
     public bool HasValidPermission(IPEndPoint peerEndPoint, DateTimeOffset nowUtc)
     {
-        var key = ToEndpointKey(peerEndPoint);
+        var key = ToPermissionKey(peerEndPoint);
         if (!_permissions.TryGetValue(key, out var permission))
             return false;
 
@@ -277,5 +283,9 @@ internal sealed class TurnServerAllocation : IAsyncDisposable
         _channelsByPeer.TryRemove(ToEndpointKey(binding.PeerEndPoint), out _);
     }
 
+    // Full transport-address key (IP:port) for channel bindings (RFC 5766 §11).
     private static string ToEndpointKey(IPEndPoint endPoint) => $"{endPoint.Address}:{endPoint.Port}";
+
+    // IP-only key for permissions (RFC 5766 §8): the port is intentionally excluded.
+    private static string ToPermissionKey(IPEndPoint endPoint) => endPoint.Address.ToString();
 }
