@@ -51,6 +51,13 @@ public sealed class LinuxAudioDevice : IAudioDeviceProvider, IAudioDeviceRuntime
 
     private G722CodecState? _g722DecodeState;
     private G722CodecState? _g722EncodeState;
+
+    // Cached stateless G722 codec instances (NAudio's G722Codec keeps no per-instance state — the
+    // codec state lives in G722CodecState), reused per frame instead of allocating one per
+    // encode/decode call on the audio hotpath (HARD-F1). Separate encode/decode instances keep the
+    // capture thread and the receive thread off a shared instance.
+    private readonly G722Codec _g722EncodeCodec = new();
+    private readonly G722Codec _g722DecodeCodec = new();
     private OpusDeviceCodec? _opusCodec;
 
     /// <summary>
@@ -837,7 +844,7 @@ public sealed class LinuxAudioDevice : IAudioDeviceProvider, IAudioDeviceRuntime
         Buffer.BlockCopy(pcm, 0, samples, 0, pcm.Length);
 
         var encoded = new byte[Math.Max(1, sampleCount / 2)];
-        new G722Codec().Encode(state, encoded, samples, sampleCount);
+        _g722EncodeCodec.Encode(state, encoded, samples, sampleCount);
         return encoded;
     }
 
@@ -848,7 +855,7 @@ public sealed class LinuxAudioDevice : IAudioDeviceProvider, IAudioDeviceRuntime
             return Array.Empty<byte>();
 
         var samples = new short[payload.Length * 2];
-        new G722Codec().Decode(state, samples, payload, payload.Length);
+        _g722DecodeCodec.Decode(state, samples, payload, payload.Length);
 
         var pcm = new byte[samples.Length * 2];
         Buffer.BlockCopy(samples, 0, pcm, 0, pcm.Length);
