@@ -25,7 +25,8 @@ namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
 /// NACK before playout; without RTX, packets feed the depacketiser in arrival order and a
 /// sequence gap discards the frame under assembly. SDES-keyed video (RFC 4568) derives its
 /// SRTP/SRTCP contexts from the video m-line's own key material, keyed from the first packet;
-/// the SDP <c>a=crypto</c> negotiation that populates those params is the remaining follow-up.
+/// the SDP <c>a=crypto</c> negotiation that populates those params is wired via the video branch
+/// of <c>CallMediaParametersSrtpEnricher</c> (offer/answer per RFC 4568, per-m-line keys).
 /// Under SDES the RTX repair stream is keyed from the same video key material as a separate
 /// context pair (RFC 4588 §9: its own replay window); DTLS keys it post-handshake instead.
 /// </summary>
