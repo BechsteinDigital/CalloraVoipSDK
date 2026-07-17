@@ -222,13 +222,16 @@ internal sealed class SipCallSessionHeaderService
         var localUser = SipProtocol.TryParseSipUri(_context.LocalUri, out var parsedUser, out _, out _)
             ? parsedUser
             : "user";
+        // Read host+port as one atomic snapshot so a concurrent writer cannot splice a new host
+        // onto an old port in the Contact URI (HARD-C1).
+        var advertisedContact = _context.AdvertisedPublicContact;
         var contactUri = SipSignalingFormat.BuildContactUri(
             localUser,
             advertisedLocalEndPoint,
             _context.SignalingTransport,
             forceSecureScheme: false,
-            advertisedHost: _context.AdvertisedPublicHost,
-            advertisedPort: _context.AdvertisedPublicPort);
+            advertisedHost: advertisedContact.Host,
+            advertisedPort: advertisedContact.Port);
         var toHeader = EnsureTag(request.Header("To"), localTag);
 
         // RFC 3581 §4: reflect rport/received into the top Via of responses to inbound requests.

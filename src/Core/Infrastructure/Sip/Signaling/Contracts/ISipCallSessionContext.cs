@@ -159,6 +159,16 @@ internal interface ISipCallSessionContext
     int? AdvertisedPublicPort { get; }
 
     /// <summary>
+    /// Reads the advertised public contact (<see cref="AdvertisedPublicHost"/> and
+    /// <see cref="AdvertisedPublicPort"/>) as a single snapshot. Callers that need both values as
+    /// one logical pair must use this instead of reading the two properties separately: an
+    /// implementation backed by mutable state returns both under one lock, so a concurrent writer
+    /// can never produce a mismatched host/port (HARD-C1). The default composition is only safe
+    /// for immutable/single-threaded implementations.
+    /// </summary>
+    (string? Host, int? Port) AdvertisedPublicContact => (AdvertisedPublicHost, AdvertisedPublicPort);
+
+    /// <summary>
     /// Local SIP tag.
     /// </summary>
     string? LocalTag { get; set; }

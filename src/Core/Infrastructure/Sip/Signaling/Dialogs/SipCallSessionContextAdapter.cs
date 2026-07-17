@@ -62,9 +62,18 @@ internal sealed class SipCallSessionContextAdapter : ISipCallSessionContext
 
     public SipRequest? InitialInvite => _session._initialInvite;
 
-    public string? AdvertisedPublicHost => _session._advertisedPublicHost;
+    // Read the advertised contact under _sync so host+port are observed as the atomic pair the
+    // session publishes them as (HARD-C1); int? is not atomically readable on its own.
+    public string? AdvertisedPublicHost { get { lock (_session._sync) return _session._advertisedPublicHost; } }
 
-    public int? AdvertisedPublicPort => _session._advertisedPublicPort;
+    public int? AdvertisedPublicPort { get { lock (_session._sync) return _session._advertisedPublicPort; } }
+
+    // Single-lock snapshot of the pair — the only correct way for a caller to read host+port
+    // together, since two separate property reads span two lock scopes and can straddle a write.
+    public (string? Host, int? Port) AdvertisedPublicContact
+    {
+        get { lock (_session._sync) return (_session._advertisedPublicHost, _session._advertisedPublicPort); }
+    }
 
     public IPEndPoint RemoteEndPoint
     {

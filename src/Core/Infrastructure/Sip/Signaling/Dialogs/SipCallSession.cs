@@ -204,12 +204,21 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
     public System.Net.IPEndPoint LocalSignalingEndPoint =>
         _transport.GetLocalEndPoint(_signalingTransport);
     /// <inheritdoc />
-    public System.Net.IPEndPoint? RemoteSignalingEndPoint => _remoteEndPoint;
+    public System.Net.IPEndPoint? RemoteSignalingEndPoint
+    {
+        get { lock (_sync) return _remoteEndPoint; }
+    }
     /// <inheritdoc />
     public void SetAdvertisedPublicContact(string? host, int? port)
     {
-        _advertisedPublicHost = string.IsNullOrWhiteSpace(host) ? null : host.Trim();
-        _advertisedPublicPort = port is > 0 ? port : null;
+        // Host and port form one logical contact: publish them atomically under the same gate the
+        // adapter reads them through, so a concurrent reader never observes a mismatched pair
+        // (int? is a non-atomic 8-byte value — a torn read is otherwise possible). See HARD-C1.
+        lock (_sync)
+        {
+            _advertisedPublicHost = string.IsNullOrWhiteSpace(host) ? null : host.Trim();
+            _advertisedPublicPort = port is > 0 ? port : null;
+        }
     }
     /// <inheritdoc />
     public SipDialogTerminationReason? LastTerminationReason
