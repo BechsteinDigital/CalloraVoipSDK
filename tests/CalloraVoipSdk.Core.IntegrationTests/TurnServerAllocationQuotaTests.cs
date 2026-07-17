@@ -22,18 +22,22 @@ public sealed class TurnServerAllocationQuotaTests
 
     private static IPEndPoint Peer(int port) => new(IPAddress.Parse("203.0.113.5"), port);
 
+    // Permissions are keyed by IP address only (RFC 5766 §8), so distinct permission slots must be
+    // driven by distinct addresses, not ports; channel-binding tests keep using distinct ports.
+    private static IPEndPoint PeerAddr(int host) => new(IPAddress.Parse($"203.0.113.{host}"), 6000);
+
     [Fact]
     public void TryUpsertPermission_refuses_new_peer_beyond_cap_but_allows_refresh()
     {
         var alloc = NewAllocation();
         var future = DateTimeOffset.UtcNow.AddMinutes(5);
 
-        Assert.True(alloc.TryUpsertPermission(Peer(1001), future, maxPermissions: 2));
-        Assert.True(alloc.TryUpsertPermission(Peer(1002), future, maxPermissions: 2));
-        // A third distinct peer exceeds the cap.
-        Assert.False(alloc.TryUpsertPermission(Peer(1003), future, maxPermissions: 2));
+        Assert.True(alloc.TryUpsertPermission(PeerAddr(1), future, maxPermissions: 2));
+        Assert.True(alloc.TryUpsertPermission(PeerAddr(2), future, maxPermissions: 2));
+        // A third distinct peer address exceeds the cap.
+        Assert.False(alloc.TryUpsertPermission(PeerAddr(3), future, maxPermissions: 2));
         // Refreshing an existing permission is always allowed (no new slot consumed).
-        Assert.True(alloc.TryUpsertPermission(Peer(1001), future, maxPermissions: 2));
+        Assert.True(alloc.TryUpsertPermission(PeerAddr(1), future, maxPermissions: 2));
     }
 
     [Fact]
@@ -66,16 +70,16 @@ public sealed class TurnServerAllocationQuotaTests
         var past = DateTimeOffset.UtcNow.AddSeconds(-1);
         var future = DateTimeOffset.UtcNow.AddMinutes(5);
 
-        // Fill the cap with (soon-)expired permissions.
-        Assert.True(alloc.TryUpsertPermission(Peer(4001), past, maxPermissions: 2));
-        Assert.True(alloc.TryUpsertPermission(Peer(4002), past, maxPermissions: 2));
+        // Fill the cap with (soon-)expired permissions (distinct peer addresses).
+        Assert.True(alloc.TryUpsertPermission(PeerAddr(1), past, maxPermissions: 2));
+        Assert.True(alloc.TryUpsertPermission(PeerAddr(2), past, maxPermissions: 2));
         // Cap full — the expired entries still occupy their slots until swept.
-        Assert.False(alloc.TryUpsertPermission(Peer(4003), future, maxPermissions: 2));
+        Assert.False(alloc.TryUpsertPermission(PeerAddr(3), future, maxPermissions: 2));
 
         alloc.PruneExpired(DateTimeOffset.UtcNow);
 
         // The sweep freed the expired slots, so a new permission fits again.
-        Assert.True(alloc.TryUpsertPermission(Peer(4003), future, maxPermissions: 2));
+        Assert.True(alloc.TryUpsertPermission(PeerAddr(3), future, maxPermissions: 2));
     }
 
     [Fact]
