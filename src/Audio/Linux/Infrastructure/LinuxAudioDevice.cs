@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 using NAudio.Codecs;
 using PortAudioSharp;
 using CalloraVoipSdk.Audio.Abstractions.Domain.Devices;
+using CalloraVoipSdk.Audio.Abstractions.Processing;
 using CalloraVoipSdk.Core.Application.Media;
 using CalloraVoipSdk.Core.Application.Media.Sessions;
 using CalloraVoipSdk.Core.Application.Ports.Audio;
@@ -415,7 +416,7 @@ public sealed class LinuxAudioDevice : IAudioDeviceProvider, IAudioDeviceRuntime
             decodedPcm,
             GetCodecSampleRate(inboundCodec),
             playbackSampleRate);
-        var adjustedPlayback = ApplyGain(playbackPcm, outputMuted, outputVolume);
+        var adjustedPlayback = PcmGain.ApplyInPlace(playbackPcm, outputMuted, outputVolume);
         _playbackQueue.Enqueue(adjustedPlayback);
     }
 
@@ -474,7 +475,7 @@ public sealed class LinuxAudioDevice : IAudioDeviceProvider, IAudioDeviceRuntime
         var pcm = new byte[pcmBytes];
         Marshal.Copy(input, pcm, 0, pcmBytes);
 
-        var adjustedCapture = ApplyGain(pcm, inputMuted, inputVolume);
+        var adjustedCapture = PcmGain.ApplyInPlace(pcm, inputMuted, inputVolume);
 
         var outboundSampleRate = GetCodecSampleRate(outboundCodec);
         var outboundPcm = ConvertPcmSampleRate(
@@ -890,30 +891,6 @@ public sealed class LinuxAudioDevice : IAudioDeviceProvider, IAudioDeviceRuntime
         }
 
         return converted;
-    }
-
-    private static byte[] ApplyGain(byte[] pcm, bool muted, float volume)
-    {
-        if (pcm.Length == 0)
-            return pcm;
-
-        if (muted || volume <= 0f)
-            return new byte[pcm.Length];
-
-        if (Math.Abs(volume - 1f) < 0.0001f)
-            return pcm;
-
-        var adjusted = new byte[pcm.Length];
-        for (var i = 0; i < pcm.Length; i += 2)
-        {
-            var sample = (short)(pcm[i] | (pcm[i + 1] << 8));
-            var scaled = (int)Math.Round(sample * volume, MidpointRounding.AwayFromZero);
-            scaled = Math.Clamp(scaled, short.MinValue, short.MaxValue);
-            adjusted[i] = (byte)(scaled & 0xFF);
-            adjusted[i + 1] = (byte)(scaled >> 8);
-        }
-
-        return adjusted;
     }
 
     private void ThrowIfDisposed()
