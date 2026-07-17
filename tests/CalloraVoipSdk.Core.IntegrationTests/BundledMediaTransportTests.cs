@@ -74,6 +74,25 @@ public sealed class BundledMediaTransportTests
         await transport.DisposeAsync(); // stops the loop and disposes the socket without hanging
     }
 
+    [Fact]
+    public async Task StartAsync_is_idempotent_and_does_not_replace_the_loop()
+    {
+        await using var transport = new BundledMediaTransport(
+            new BundledMediaTransportOptions { LocalEndPoint = Loopback() },
+            InboundPipeline(_ => { }, _ => { }), NullLogger<BundledMediaTransport>.Instance);
+
+        await transport.StartAsync();
+        var firstLoop = transport.ReceiveLoopForTest;
+
+        // A second start must be a no-op: replacing the loop would leak the first CTS and loop task.
+        await transport.StartAsync();
+        var secondLoop = transport.ReceiveLoopForTest;
+
+        Assert.NotNull(firstLoop);
+        Assert.Same(firstLoop, secondLoop);
+        // DisposeAsync (await using) then stops the single loop and disposes the socket without hanging.
+    }
+
     // ── harness ──────────────────────────────────────────────────────────────────
 
     private static TaskCompletionSource<RtpPacket> Tcs() =>
