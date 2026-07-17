@@ -8,8 +8,11 @@ namespace CalloraVoipSdk.Core.Domain.Calls;
 /// Negotiated media parameters for one active call leg.
 /// Produced by the infrastructure adapter after SDP offer/answer exchange
 /// and consumed by the application media orchestrator to set up RTP I/O.
+/// A <see langword="record"/> so a derived leg (e.g. after ICE candidate-pair selection) can be
+/// produced with a <c>with</c> expression that carries every field across — a hand-written copy had
+/// silently dropped the SDES/DTLS key material and video parameters when overriding the endpoints.
 /// </summary>
-public sealed class CallMediaParameters
+public sealed record CallMediaParameters
 {
     /// <summary>Local UDP endpoint to bind the RTP socket to.</summary>
     public required IPEndPoint LocalEndPoint { get; init; }
@@ -192,4 +195,15 @@ public sealed class CallMediaParameters
     /// audio-only call leg.
     /// </summary>
     public CallVideoParameters? Video { get; init; }
+
+    /// <summary>
+    /// A diagnostic representation that deliberately allow-lists only non-secret operational fields.
+    /// The compiler-generated record <see cref="object.ToString"/> would otherwise serialise the
+    /// internal SDES/DTLS key material and fingerprint value into any log that prints an instance.
+    /// </summary>
+    public override string ToString() =>
+        $"CallMediaParameters {{ PayloadType = {PayloadType}, CodecName = {CodecName}, " +
+        $"ClockRate = {ClockRate}, RtcpMux = {RtcpMux}, IceEnabled = {IceEnabled}, " +
+        $"IsSrtpNegotiated = {IsSrtpNegotiated}, IsDtlsNegotiated = {IsDtlsNegotiated}, " +
+        $"MediaProfile = {MediaProfile}, HasVideo = {Video is not null} }}";
 }

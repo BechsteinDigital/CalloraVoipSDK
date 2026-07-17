@@ -443,33 +443,15 @@ internal sealed class CallMediaOrchestrator : IDisposable
                 ? selection.RemoteEndPoint
                 : parameters.RemoteRtcpEndPoint;
 
-            return new CallMediaParameters
+            // Carry every negotiated field across and override only the ICE-selected transport
+            // endpoints. A hand-written copy here previously dropped the SDES/DTLS key material,
+            // IceControlling, and Video, silently downgrading secure/video calls after ICE (HARD-R5).
+            return parameters with
             {
                 LocalEndPoint = selection.LocalEndPoint,
                 RemoteEndPoint = selection.RemoteEndPoint,
-                RtcpMux = parameters.RtcpMux,
                 LocalRtcpEndPoint = localRtcp,
-                RemoteRtcpEndPoint = remoteRtcp,
-                PayloadType = parameters.PayloadType,
-                CodecName = parameters.CodecName,
-                PayloadTypeCodecMap = parameters.PayloadTypeCodecMap,
-                TelephoneEventPayloadType = parameters.TelephoneEventPayloadType,
-                ClockRate = parameters.ClockRate,
-                SamplesPerPacket = parameters.SamplesPerPacket,
-                MediaProfile = parameters.MediaProfile,
-                IsSrtpNegotiated = parameters.IsSrtpNegotiated,
-                AppliedSrtpPolicy = parameters.AppliedSrtpPolicy,
-                SrtpDecisionReasonCode = parameters.SrtpDecisionReasonCode,
-                IceEnabled = parameters.IceEnabled,
-                LocalIceUfrag = parameters.LocalIceUfrag,
-                LocalIcePwd = parameters.LocalIcePwd,
-                LocalIceOptions = parameters.LocalIceOptions,
-                LocalIceCandidates = parameters.LocalIceCandidates,
-                RemoteIceUfrag = parameters.RemoteIceUfrag,
-                RemoteIcePwd = parameters.RemoteIcePwd,
-                RemoteIceOptions = parameters.RemoteIceOptions,
-                RemoteIceCandidates = parameters.RemoteIceCandidates,
-                RemoteIceEndOfCandidates = parameters.RemoteIceEndOfCandidates
+                RemoteRtcpEndPoint = remoteRtcp
             };
         }
         catch (Exception ex)
