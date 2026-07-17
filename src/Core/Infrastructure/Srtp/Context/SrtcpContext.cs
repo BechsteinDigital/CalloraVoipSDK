@@ -21,20 +21,17 @@ internal sealed class SrtcpContext : ISrtcpContext
     private const int MaxAesCmKeystreamBytes = 1 << 20;
     private const uint EncryptionFlag = 0x8000_0000;
     private const uint SrtcpIndexMask = 0x7FFF_FFFF;
-    private const int ReplayWindowSize = 64;
 
     private readonly SrtpSessionKeys _keys;
     private readonly int _authTagLength;
 
-    // Sender-side SRTCP index (31-bit), pre-incremented per packet (RFC 3711 §3.4).
-    private uint _sendIndex;
+    // Per-SSRC SRTCP index and replay window (RFC 3711 §3.2.3): the index and replay state are
+    // per synchronisation source, so several RTCP senders multiplexed over one BUNDLE key do not
+    // collide in a single shared window (HARD-D1). Only authenticated packets reach the receive
+    // path (verify-then-decrypt), so the map is bounded by legitimate senders and needs no cap.
+    private readonly Dictionary<uint, SrtcpSsrcState> _ssrcState = [];
 
-    // Receiver replay window: 64-bit bitmap, high bit = newest (RFC 3711 §3.3.2 applied to
-    // the explicit SRTCP index).
-    private uint _replayWindowIndex;
-    private ulong _replayWindowBitmap;
-
-    // Serializes mutable state (sender index, replay window) and key usage so the context is
+    // Serializes mutable state (per-SSRC index/replay windows) and key usage so the context is
     // thread-safe on its own.
     private readonly object _sync = new();
     private bool _disposed;
@@ -61,8 +58,8 @@ internal sealed class SrtcpContext : ISrtcpContext
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
 
-            var index = (_sendIndex + 1) & SrtcpIndexMask;
             var ssrc = BinaryPrimitives.ReadUInt32BigEndian(rtcpPacket[4..]);
+            var index = GetOrAddState(ssrc).NextSendIndex();
             var encryptedLen = rtcpPacket.Length - RtcpHeaderLength;
 
             // Layout: [clear header + encrypted payload][E|index (4)][auth tag].
@@ -87,7 +84,6 @@ internal sealed class SrtcpContext : ISrtcpContext
             ComputeAuthTag(result.AsSpan(0, authedLen), tag);
             tag[.._authTagLength].CopyTo(result.AsSpan(authedLen, _authTagLength));
 
-            _sendIndex = index;
             return result;
         }
     }
@@ -115,9 +111,12 @@ internal sealed class SrtcpContext : ISrtcpContext
             var indexWord = BinaryPrimitives.ReadUInt32BigEndian(authedSpan[(authedLen - SrtcpIndexLength)..]);
             var encrypted = (indexWord & EncryptionFlag) != 0;
             var index = indexWord & SrtcpIndexMask;
+            // Sender SSRC from the clear (unencrypted) RTCP header — keys the per-SSRC replay state.
+            var ssrc = BinaryPrimitives.ReadUInt32BigEndian(authedSpan[4..]);
 
-            // 2. Replay check on the explicit SRTCP index (RFC 3711 §3.3.2).
-            CheckReplay(index);
+            // 2. Per-SSRC replay check on the explicit SRTCP index (RFC 3711 §3.2.3/§3.3.2).
+            var state = GetOrAddState(ssrc);
+            state.CheckReplay(index);
 
             var rtcpLen = authedLen - SrtcpIndexLength;
             var output = GC.AllocateUninitializedArray<byte>(rtcpLen);
@@ -127,14 +126,13 @@ internal sealed class SrtcpContext : ISrtcpContext
             var encryptedLen = rtcpLen - RtcpHeaderLength;
             if (encrypted && encryptedLen > 0)
             {
-                var ssrc = BinaryPrimitives.ReadUInt32BigEndian(output.AsSpan(4));
                 Span<byte> iv = stackalloc byte[16];
                 BuildIv(ssrc, index, iv);
                 AesCmXor(_keys.CipherKey, iv, output.AsSpan(RtcpHeaderLength, encryptedLen));
             }
 
-            // 4. Update replay window.
-            UpdateReplayWindow(index);
+            // 4. Update the SSRC's replay window.
+            state.UpdateReplayWindow(index);
             return output;
         }
     }
@@ -214,38 +212,14 @@ internal sealed class SrtcpContext : ISrtcpContext
     }
 
     // -------------------------------------------------------------------------
-    // Replay protection (RFC 3711 §3.3.2) on the explicit SRTCP index.
+    // Per-SSRC crypto state (RFC 3711 §3.2.3). Caller holds _sync.
     // -------------------------------------------------------------------------
 
-    private void CheckReplay(uint index)
+    private SrtcpSsrcState GetOrAddState(uint ssrc)
     {
-        if (index > _replayWindowIndex)
-            return;
-
-        var diff = _replayWindowIndex - index;
-        if (diff >= ReplayWindowSize)
-            throw new SrtpReplayException($"SRTCP index {index} is outside the replay window.");
-
-        if ((_replayWindowBitmap & (1UL << (int)diff)) != 0)
-            throw new SrtpReplayException($"SRTCP index {index} has already been received (replay).");
-    }
-
-    private void UpdateReplayWindow(uint index)
-    {
-        if (index > _replayWindowIndex)
-        {
-            var shift = index - _replayWindowIndex;
-            _replayWindowBitmap = shift >= ReplayWindowSize
-                ? 0
-                : _replayWindowBitmap << (int)shift;
-            _replayWindowBitmap |= 1;
-            _replayWindowIndex   = index;
-        }
-        else
-        {
-            var diff = _replayWindowIndex - index;
-            _replayWindowBitmap |= 1UL << (int)diff;
-        }
+        if (!_ssrcState.TryGetValue(ssrc, out var state))
+            _ssrcState[ssrc] = state = new SrtcpSsrcState();
+        return state;
     }
 
     /// <summary>
