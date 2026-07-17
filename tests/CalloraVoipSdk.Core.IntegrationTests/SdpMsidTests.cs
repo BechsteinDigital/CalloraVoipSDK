@@ -88,11 +88,11 @@ public sealed class SdpMsidTests
                 Bundle = true,
                 RtcpMux = true,
                 AudioMsid = new SdpMsid { StreamId = streamId, TrackId = "audio-track" },
+                VideoMsid = new SdpMsid { StreamId = streamId, TrackId = "video-track" },
                 Video = new SdpVideoMediaOptions
                 {
                     Port = 5002,
                     Codecs = [new SdpCodecDefinition { PayloadType = 96, Name = "H264", ClockRate = 90000 }],
-                    Msid = new SdpMsid { StreamId = streamId, TrackId = "video-track" },
                 },
             });
 

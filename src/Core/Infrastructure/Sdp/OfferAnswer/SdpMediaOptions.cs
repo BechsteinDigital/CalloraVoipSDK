@@ -58,12 +58,6 @@ internal sealed class SdpVideoMediaOptions
     public IReadOnlyList<SdpCryptoAttribute> Crypto { get; init; } = [];
 
     /// <summary>
-    /// WebRTC MediaStream/track identity for the video m-line (<c>a=msid</c>, RFC 8830); null emits
-    /// no <c>a=msid</c>.
-    /// </summary>
-    public SdpMsid? Msid { get; init; }
-
-    /// <summary>
     /// Per-m-line ICE candidates for the video stream (<c>a=candidate</c>, RFC 8839); empty
     /// leaves the video m-line without its own candidates.
     /// </summary>
@@ -103,6 +97,13 @@ internal sealed class SdpMediaOptions
     /// no <c>a=msid</c>.
     /// </summary>
     public SdpMsid? AudioMsid { get; init; }
+
+    /// <summary>
+    /// WebRTC MediaStream/track identity for the video m-line (<c>a=msid</c>, RFC 8830); null emits
+    /// no <c>a=msid</c>. Kept at the negotiation-options level (parallel to <see cref="AudioMsid"/>)
+    /// so the caller need not clone the app-supplied <see cref="Video"/> options to add identity.
+    /// </summary>
+    public SdpMsid? VideoMsid { get; init; }
 
     /// <summary>ICE credentials and candidates; null = no ICE.</summary>
     public SdpIceParameters? Ice { get; init; }

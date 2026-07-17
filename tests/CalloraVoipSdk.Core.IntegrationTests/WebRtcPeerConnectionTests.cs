@@ -151,6 +151,26 @@ public sealed class WebRtcPeerConnectionTests
         Assert.DoesNotContain(audio.Candidates, c => c.Type == "host");
     }
 
+    [Fact]
+    public async Task CreateOffer_stamps_a_stable_msid_on_audio_and_video()
+    {
+        await using var peer = Peer(Pcmu);
+
+        var first = new SdpSessionParser().Parse(peer.CreateOffer());
+        var audio = first.Media.Single(m => m.MediaType == "audio");
+        var video = first.Media.Single(m => m.MediaType == "video");
+
+        Assert.NotNull(audio.Msid);
+        Assert.NotNull(video.Msid);
+        Assert.Equal(audio.Msid!.StreamId, video.Msid!.StreamId);   // one MediaStream (RFC 8830)
+        Assert.NotEqual(audio.Msid.TrackId, video.Msid.TrackId);     // distinct tracks
+
+        // Track identity is stable across re-offers (same peer → same stream/track ids).
+        var second = new SdpSessionParser().Parse(peer.CreateOffer());
+        Assert.Equal(audio.Msid, second.Media.Single(m => m.MediaType == "audio").Msid);
+        Assert.Equal(video.Msid, second.Media.Single(m => m.MediaType == "video").Msid);
+    }
+
     // ── harness ──────────────────────────────────────────────────────────────────
 
     private static WebRtcPeerConnection PeerAt(int localPort) =>
