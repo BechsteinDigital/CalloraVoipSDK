@@ -24,6 +24,14 @@ public sealed class SdkOptionsValidator : IValidateOptions<SdkOptions>
             failures.Add($"SdkOptions.MaxConcurrentCallsPerLine must be >= 0, got {options.MaxConcurrentCallsPerLine}.");
         }
 
+        // Zero is the documented "disable the timeout" sentinel; a negative value is neither a disable
+        // nor a valid interval and would otherwise silently feed a call-teardown timer (HARD-E9).
+        if (options.InboundMediaTimeout < TimeSpan.Zero)
+        {
+            failures.Add(
+                $"SdkOptions.InboundMediaTimeout must be >= 0 (TimeSpan.Zero disables it), got {options.InboundMediaTimeout}.");
+        }
+
         if (options.Ice.ConnectivityCheckTimeout <= TimeSpan.Zero)
         {
             failures.Add(
