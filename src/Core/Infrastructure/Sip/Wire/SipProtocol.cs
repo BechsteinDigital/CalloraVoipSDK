@@ -213,23 +213,31 @@ internal static class SipProtocol
             return (null, null);
 
         return (ReadViaParameter(topVia, "received"), ParsePort(ReadViaParameter(topVia, "rport")));
-
-        static string? ReadViaParameter(string via, string name)
-        {
-            var marker = ";" + name + "=";
-            var index = via.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
-            if (index < 0)
-                return null;
-
-            var tail = via[(index + marker.Length)..];
-            var end = tail.IndexOfAny([';', ' ', '\t', ',']);
-            var value = end >= 0 ? tail[..end] : tail;
-            return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-        }
-
-        static int? ParsePort(string? value) =>
-            int.TryParse(value, out var port) && port is > 0 and <= 65535 ? port : null;
     }
+
+    /// <summary>
+    /// Reads a single Via parameter value (RFC 3261 §7.1): locates <c>;name=</c> in a top-Via entry
+    /// and returns the token up to the next parameter/whitespace/comma boundary, or
+    /// <see langword="null"/> when absent. The leading <c>;</c> in the marker prevents matching a
+    /// parameter whose name merely ends with <paramref name="name"/> (e.g. a spurious
+    /// <c>xreceived=</c>). Shared by all Via-parameter readers so the scan lives in one place.
+    /// </summary>
+    private static string? ReadViaParameter(string via, string name)
+    {
+        var marker = ";" + name + "=";
+        var index = via.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        if (index < 0)
+            return null;
+
+        var tail = via[(index + marker.Length)..];
+        var end = tail.IndexOfAny([';', ' ', '\t', ',']);
+        var value = end >= 0 ? tail[..end] : tail;
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    /// <summary>Parses a Via port parameter, accepting only a valid 1..65535 value.</summary>
+    private static int? ParsePort(string? value) =>
+        int.TryParse(value, out var port) && port is > 0 and <= 65535 ? port : null;
 
     /// <summary>
     /// Reflects Via parameters per RFC 3261 §18.2.1 and RFC 3581 §4:
@@ -311,30 +319,10 @@ internal static class SipProtocol
         if (string.IsNullOrWhiteSpace(topVia))
             return actualRemote;
 
-        // Extract ;received=<ip>
-        string? receivedIpStr = null;
-        var receivedIdx = topVia.IndexOf("received=", StringComparison.OrdinalIgnoreCase);
-        if (receivedIdx >= 0 && (receivedIdx == 0 || topVia[receivedIdx - 1] == ';'))
-        {
-            var start = receivedIdx + "received=".Length;
-            var end = start;
-            while (end < topVia.Length && topVia[end] != ';' && topVia[end] != ',')
-                end++;
-            receivedIpStr = topVia[start..end].Trim();
-        }
-
-        // Extract rport=<port> (with value, not bare)
-        int? rportValue = null;
-        var rportIdx = topVia.IndexOf("rport=", StringComparison.OrdinalIgnoreCase);
-        if (rportIdx >= 0 && (rportIdx == 0 || topVia[rportIdx - 1] == ';'))
-        {
-            var start = rportIdx + "rport=".Length;
-            var end = start;
-            while (end < topVia.Length && char.IsDigit(topVia[end]))
-                end++;
-            if (end > start && int.TryParse(topVia[start..end], out var p))
-                rportValue = p;
-        }
+        // Shared Via-parameter scan (RFC 3261 §18.2.1 received / RFC 3581 §4 rport). ParsePort also
+        // range-checks, so an out-of-range rport falls back to the sent-by port instead of throwing.
+        var receivedIpStr = ReadViaParameter(topVia, "received");
+        var rportValue = ParsePort(ReadViaParameter(topVia, "rport"));
 
         // Determine target IP: received > actual source
         System.Net.IPAddress targetIp;
