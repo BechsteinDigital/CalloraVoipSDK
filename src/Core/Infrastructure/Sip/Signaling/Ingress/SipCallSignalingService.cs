@@ -203,7 +203,6 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
                 HookSessionLifecycle(session);
                 _sessionStartTimes[callId] = DateTimeOffset.UtcNow;
                 _sessionTraceIds[callId] = traceId;
-                OutboundCallStarted?.Invoke(this, new SipIncomingInviteEventArgs(session));
 
                 try
                 {
@@ -212,6 +211,10 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
                             localTag,
                             ct)
                         .ConfigureAwait(false);
+                    // HARD-C3: raise OutboundCallStarted only after the INVITE actually succeeds, and
+                    // exactly once. Firing per attempt (before the transaction) dispatched a session
+                    // that a redirect/retry then disposes, and fired again for each retry target.
+                    OutboundCallStarted?.Invoke(this, new SipIncomingInviteEventArgs(session));
                     return session;
                 }
                 catch (SipFinalResponseException finalResponseEx)
