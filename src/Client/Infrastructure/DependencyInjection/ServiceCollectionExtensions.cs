@@ -3,7 +3,6 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using CalloraVoipSdk.Core.Infrastructure.Audio;
 
 namespace CalloraVoipSdk.DependencyInjection;
 
@@ -31,21 +30,7 @@ public static class ServiceCollectionExtensions
             var options = sp.GetRequiredService<IOptions<SdkOptions>>().Value;
             var loggerFactory = options.LoggerFactory ?? sp.GetService<ILoggerFactory>();
 
-            var configuration = new SdkConfiguration
-            {
-                UserAgent = options.UserAgent,
-                Tls = options.Tls,
-                DefaultTransport = options.DefaultTransport,
-                LoggerFactory = loggerFactory,
-                SrtpPolicy = options.SrtpPolicy,
-                Ice = options.Ice.ToConfiguration(),
-                MaxConcurrentCallsPerLine = options.MaxConcurrentCallsPerLine,
-                AudioDevice = options.AudioDevice ?? SilenceAudioDevice.Instance,
-                EnableAutomaticAudioDeviceSelection = options.EnableAutomaticAudioDeviceSelection,
-                PreferredAudioCodecs = options.PreferredAudioCodecs
-            };
-
-            return new VoipClient(configuration, sp);
+            return new VoipClient(options.ToConfiguration(loggerFactory), sp);
         });
 
         services.TryAddSingleton(sp => (VoipClient)sp.GetRequiredService<IVoipClient>());
