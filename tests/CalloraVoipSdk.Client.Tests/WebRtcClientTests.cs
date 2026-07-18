@@ -29,10 +29,10 @@ public sealed class WebRtcClientTests
     [Fact]
     public async Task Two_peers_negotiate_an_offer_and_answer()
     {
-        // The offerer needs a non-zero media port so its offer advertises a live m-line (the transport
-        // binds on Start, so CreateOffer before that would otherwise emit port 0); the answerer binds an
+        // Early-bind binds the media socket at CreateOffer, so even an ephemeral (port 0) config advertises a
+        // live m-line — no fixed port needed (a fixed port collides on CI). The answerer binds its own
         // ephemeral port when it applies the offer.
-        var offererClient = new WebRtcClient(new WebRtcConfiguration { LocalEndPoint = new IPEndPoint(IPAddress.Loopback, 40200) });
+        var offererClient = new WebRtcClient(new WebRtcConfiguration { LocalEndPoint = new IPEndPoint(IPAddress.Loopback, 0) });
         var answererClient = new WebRtcClient();
         await using var offerer = offererClient.CreatePeer();
         await using var answerer = answererClient.CreatePeer();
