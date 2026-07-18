@@ -20,17 +20,38 @@ public sealed class WebRtcClient : IWebRtcClient
     private readonly WebRtcConfiguration _config;
     private readonly ILoggerFactory _loggerFactory;
     private readonly WebRtcModuleRegistry _modules;
+    private readonly PeerConnectionManager _peers = new();
 
     /// <summary>Creates a client with the given configuration, or all defaults when omitted.</summary>
-    public WebRtcClient(WebRtcConfiguration? config = null)
+    public WebRtcClient(WebRtcConfiguration? config = null) : this(config, services: null)
+    {
+    }
+
+    /// <summary>
+    /// Creates a client and auto-registers every <see cref="IWebRtcClientModule"/> resolvable from
+    /// <paramref name="services"/> (the DI construction path used by <c>AddCalloraWebRtc</c>).
+    /// </summary>
+    internal WebRtcClient(WebRtcConfiguration? config, IServiceProvider? services)
     {
         _config = config ?? new WebRtcConfiguration();
         _loggerFactory = _config.LoggerFactory ?? NullLoggerFactory.Instance;
+
+        // Module registration is the last construction step so OnAttached sees a fully built client.
         _modules = new WebRtcModuleRegistry(this);
+        if (services?.GetService(typeof(IEnumerable<IWebRtcClientModule>)) is IEnumerable<IWebRtcClientModule> injected)
+        {
+            foreach (var module in injected)
+            {
+                _modules.Register(module);
+            }
+        }
     }
 
     /// <inheritdoc />
     public IWebRtcModuleRegistry Modules => _modules;
+
+    /// <inheritdoc />
+    public IPeerConnectionManager Peers => _peers;
 
     /// <inheritdoc />
     public IPeerConnection CreatePeer()
@@ -68,7 +89,9 @@ public sealed class WebRtcClient : IWebRtcClient
             certificate,
             _loggerFactory);
 
-        return new PeerConnection(peer, _loggerFactory.CreateLogger<PeerConnection>());
+        var connection = new PeerConnection(peer, _loggerFactory.CreateLogger<PeerConnection>(), _peers.Untrack);
+        _peers.Track(connection);
+        return connection;
     }
 
     private static IReadOnlyList<SdpCodecDefinition> ResolveCodecs(

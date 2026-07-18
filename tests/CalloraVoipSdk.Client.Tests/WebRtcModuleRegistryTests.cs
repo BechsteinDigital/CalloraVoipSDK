@@ -1,5 +1,7 @@
+using CalloraVoipSdk.DependencyInjection;
 using CalloraVoipSdk.Modules;
 using CalloraVoipSdk.WebRtc;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace CalloraVoipSdk.Client.Tests;
@@ -56,6 +58,20 @@ public sealed class WebRtcModuleRegistryTests
         var rtc = new WebRtcClient();
 
         Assert.Throws<ArgumentNullException>(() => rtc.Modules.Register(null!));
+    }
+
+    [Fact]
+    public void DI_registered_modules_are_auto_attached_to_the_client()
+    {
+        var services = new ServiceCollection();
+        services.AddCalloraWebRtc();
+        services.AddSingleton<IWebRtcClientModule, FakeWebRtcModule>();
+
+        using var provider = services.BuildServiceProvider();
+        var rtc = provider.GetRequiredService<IWebRtcClient>();
+
+        Assert.True(rtc.Modules.TryGet<IFakeWebRtcFeature>(out var feature));
+        Assert.NotNull(feature);
     }
 
     private interface IFakeWebRtcFeature;

@@ -33,7 +33,8 @@ public static class WebRtcServiceCollectionExtensions
             var options = sp.GetRequiredService<IOptions<WebRtcOptions>>().Value;
             var loggerFactory = options.LoggerFactory ?? sp.GetService<ILoggerFactory>();
 
-            return new WebRtcClient(options.ToConfiguration(loggerFactory));
+            // Pass the provider so DI-registered IWebRtcClientModule services are auto-attached.
+            return new WebRtcClient(options.ToConfiguration(loggerFactory), sp);
         });
 
         services.TryAddSingleton(sp => (WebRtcClient)sp.GetRequiredService<IWebRtcClient>());
