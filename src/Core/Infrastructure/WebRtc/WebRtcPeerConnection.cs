@@ -293,7 +293,9 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             // Capture any candidates that trickled in before the session existed under the SAME lock that
             // publishes _session, so a concurrent AddIceCandidateAsync either buffered before this (picked up
             // here) or observes the published session and feeds the check list live — never lost (RFC 8838).
+            // Clear the buffer so a re-offer (a second SetRemoteDescription) does not replay them.
             pendingCandidates = _pendingRemoteCandidates.ToArray();
+            _pendingRemoteCandidates.Clear();
             // Retain the remote track identity (a=msid) so the receiver can group inbound tracks by the
             // remote MediaStream (the W3C RTCTrackEvent.streams semantics).
             var audioMedia = remote.Media.FirstOrDefault(m => string.Equals(m.MediaType, "audio", StringComparison.OrdinalIgnoreCase));

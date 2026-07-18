@@ -104,9 +104,11 @@ internal sealed class IceNominationDriver : IAsyncDisposable
             if (_disposed)
                 return;
             _candidates.Add(new IceNominationCandidateState { Candidate = candidate });
+            // Release inside the gate so the disposed-check and the release are atomic: DisposeAsync disposes
+            // the semaphore only after setting _disposed under this same gate, so a release can never race a
+            // disposed semaphore. Release does not block, so holding the lock is safe.
+            _signal.Release();
         }
-
-        _signal.Release();
     }
 
     private async Task RunAsync(CancellationToken ct)
