@@ -65,6 +65,10 @@ public sealed class BundledMediaSessionTests
         Assert.True(client.SnapshotStats().BytesSent > 0, "client should have sent bytes");
         Assert.True(server.SnapshotStats().PacketsReceived > 0, "server should have received RTP");
         Assert.True(server.SnapshotStats().BytesReceived > 0, "server should have received bytes");
+
+        // Stats video counters (S4): the server received frames including the IDR key frame.
+        Assert.True(server.SnapshotStats().FramesReceived > 0, "server should have received video frames");
+        Assert.True(server.SnapshotStats().KeyFrames > 0, "server should have received the key frame");
     }
 
     // ── harness ──────────────────────────────────────────────────────────────────

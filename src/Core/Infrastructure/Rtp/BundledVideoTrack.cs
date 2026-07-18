@@ -37,9 +37,17 @@ internal sealed class BundledVideoTrack : IDisposable
     // a lost packet is never glued to the next frame).
     private bool _hasDelivered;
     private ushort _lastDeliveredSequence;
+    private long _framesReceived;
+    private long _keyFrames;
 
     /// <summary>Raised with a reassembled encoded frame, its RTP timestamp, and whether it is a key frame.</summary>
     public event Action<byte[], uint, bool>? FrameReceived;
+
+    /// <summary>Total reassembled inbound frames delivered.</summary>
+    public long FramesReceived => Interlocked.Read(ref _framesReceived);
+
+    /// <summary>Total inbound key frames delivered.</summary>
+    public long KeyFrames => Interlocked.Read(ref _keyFrames);
 
     public BundledVideoTrack(
         string mid,
@@ -105,6 +113,12 @@ internal sealed class BundledVideoTrack : IDisposable
 
         if (!_depacketiser.TryProcess(packet.Payload, packet.Timestamp, packet.Marker, out var frame, out var isKeyFrame))
             return;
+
+        Interlocked.Increment(ref _framesReceived);
+        if (isKeyFrame)
+        {
+            Interlocked.Increment(ref _keyFrames);
+        }
 
         try
         {

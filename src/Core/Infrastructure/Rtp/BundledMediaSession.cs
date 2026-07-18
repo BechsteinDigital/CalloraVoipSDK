@@ -148,7 +148,8 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     /// <summary>Point-in-time transport counters aggregated from the outbound and inbound pipelines.</summary>
     public BundledMediaStats SnapshotStats() => new(
         _outbound.PacketsSent, _outbound.BytesSent, _outbound.SuppressedSends,
-        _inbound.RtpPacketsReceived, _inbound.RtpBytesReceived, _inbound.DroppedDatagrams);
+        _inbound.RtpPacketsReceived, _inbound.RtpBytesReceived, _inbound.DroppedDatagrams,
+        _video?.FramesReceived, _video?.KeyFrames);
 
     /// <summary>Starts the shared receive loop, the ICE consent loop, and the DTLS handshake.</summary>
     public async Task StartAsync(CancellationToken cancellationToken = default)

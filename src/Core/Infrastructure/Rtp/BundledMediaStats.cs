@@ -10,4 +10,6 @@ internal readonly record struct BundledMediaStats(
     long SuppressedSends,
     long PacketsReceived,
     long BytesReceived,
-    long DroppedDatagrams);
+    long DroppedDatagrams,
+    long? FramesReceived,
+    long? KeyFrames);

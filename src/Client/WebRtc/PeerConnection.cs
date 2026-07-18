@@ -20,6 +20,7 @@ internal sealed class PeerConnection : IPeerConnection
     private readonly Action<IPeerConnection>? _onDisposed;
     private readonly BitrateMeter _outgoingBitrate = new();
     private readonly BitrateMeter _incomingBitrate = new();
+    private readonly RateMeter _frameRate = new();
     private readonly object _statsSync = new();
     private EventHandler<PeerConnectionState>? _connectionStateChanged;
     private EventHandler<RemoteTrack>? _trackReceived;
@@ -76,12 +77,13 @@ internal sealed class PeerConnection : IPeerConnection
             return new WebRtcStats { ConnectionState = state, IceState = IceConnectionState(state) };
         }
 
-        double? outgoing, incoming;
+        double? outgoing, incoming, framesPerSecond;
         lock (_statsSync)
         {
             var nowTicks = DateTime.UtcNow.Ticks;
             outgoing = _outgoingBitrate.Sample(s.BytesSent, nowTicks);
             incoming = _incomingBitrate.Sample(s.BytesReceived, nowTicks);
+            framesPerSecond = s.FramesReceived is { } frames ? _frameRate.Sample(frames, nowTicks) : null;
         }
 
         return new WebRtcStats
@@ -101,7 +103,10 @@ internal sealed class PeerConnection : IPeerConnection
             IceState = IceConnectionState(state),
             SelectedLocalCandidate = _peer.LocalMediaEndPoint?.ToString(),
             SelectedRemoteCandidate = _peer.RemoteMediaEndPoint?.ToString(),
-            // Quality, video and available-bitrate fields stay null until their slices land.
+            FramesPerSecond = framesPerSecond,
+            KeyFrames = s.KeyFrames,
+            // Quality (loss/jitter/RTT), dropped frames, NACK/PLI/FIR and available-bitrate stay null until
+            // their subsystems (RTCP quality, bundle video feedback, transport-cc) are wired.
         };
     }
 
