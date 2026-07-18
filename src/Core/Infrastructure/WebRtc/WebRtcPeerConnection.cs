@@ -85,9 +85,10 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
 
     /// <summary>
     /// Raised as each local ICE candidate is gathered (RFC 8838 trickle), carrying the RFC 8829
-    /// <c>candidate:</c> line so the app can signal it out-of-band. Today the peer gathers one host
-    /// candidate (the early-bound media endpoint), emitted right after the offer/answer is produced;
-    /// server-reflexive/relay gathering arrives in a later slice.
+    /// <c>candidate:</c> line so the app can signal it out-of-band. The host candidate (the early-bound
+    /// media endpoint) is emitted right after the offer/answer is produced; server-reflexive candidates
+    /// follow from <see cref="GatherCandidatesAsync"/> when STUN servers are configured. Relay (TURN)
+    /// gathering arrives in a later slice.
     /// </summary>
     public event Action<string>? LocalIceCandidateDiscovered;
 
