@@ -9,8 +9,10 @@ namespace CalloraVoipSdk.Core.Infrastructure.Stun.Ice;
 /// It always works on the highest-priority candidate still worth checking, sends an ordinary connectivity
 /// check through the injected <c>check</c> delegate (backed by the receive-loop-matched
 /// <see cref="IceMediaConsentSession.SendCheckAsync"/>), and — when a candidate answers — sends a nominating
-/// check carrying USE-CANDIDATE and reports it through <c>onNominated</c> so the caller redirects the media
-/// send target and consent freshness to it. Nomination is gated on a real answer, never on raw priority.
+/// check carrying USE-CANDIDATE and, once that nominating check is itself confirmed by a success response,
+/// reports the pair through <c>onNominated</c> so the caller redirects the media send target and consent
+/// freshness to it. Nomination is gated on a confirmed USE-CANDIDATE response (RFC 8445 §8.1.1) — never on
+/// raw priority, and never on the ordinary check alone (a lost USE-CANDIDATE is retried, not adopted).
 /// <para>
 /// Candidates that arrive after start (RFC 8838 trickle) are fed in via <see cref="AddCandidate"/> and
 /// checked like any other. If a higher-priority candidate than the current nominee later answers, the driver
@@ -128,21 +130,46 @@ internal sealed class IceNominationDriver : IAsyncDisposable
 
                 if (await _check(next.Candidate.EndPoint, false, ct).ConfigureAwait(false))
                 {
-                    // Validated pair (RFC 8445 §7.2.5). Send the nominating check carrying USE-CANDIDATE
-                    // (§8.1.1) so the controlled peer adopts the same pair; nominate even if that check's
-                    // response is missed (the ordinary check already validated the pair).
-                    await _check(next.Candidate.EndPoint, true, ct).ConfigureAwait(false);
-
-                    lock (_gate)
+                    // Validated pair (RFC 8445 §7.2.5). Nominate with a USE-CANDIDATE check (§8.1.1) and adopt
+                    // the pair only once THAT check gets its own success response: the ordinary check proves the
+                    // path works, but only the nominating check's response proves the controlled peer received
+                    // the USE-CANDIDATE and marked the pair nominated. Adopting on a lost USE-CANDIDATE would let
+                    // the controlling side switch its media/consent target locally while the peer still has no
+                    // nominated pair — so a missed nomination is retried, not adopted.
+                    if (await _check(next.Candidate.EndPoint, true, ct).ConfigureAwait(false))
                     {
-                        _nominatedPriority = next.Candidate.Priority;
-                        next.Done = true;
-                    }
+                        lock (_gate)
+                        {
+                            _nominatedPriority = next.Candidate.Priority;
+                            next.Done = true;
+                        }
 
-                    _logger.LogDebug(
-                        "ICE nominated remote pair {EndPoint} (priority {Priority}) after a connectivity check " +
-                        "(RFC 8445 §7.2.2/§8.1.1).", next.Candidate.EndPoint, next.Candidate.Priority);
-                    RaiseNominated(next.Candidate.EndPoint);
+                        _logger.LogDebug(
+                            "ICE nominated remote pair {EndPoint} (priority {Priority}) after a confirmed " +
+                            "USE-CANDIDATE check (RFC 8445 §7.2.2/§8.1.1).", next.Candidate.EndPoint, next.Candidate.Priority);
+                        RaiseNominated(next.Candidate.EndPoint);
+                    }
+                    else
+                    {
+                        // The path validated but the nominating check was not confirmed (a lost USE-CANDIDATE
+                        // request or its response). Count the attempt and retry the pair (a fresh ordinary check
+                        // then USE-CANDIDATE on the next round) rather than adopting it.
+                        bool exhausted;
+                        lock (_gate)
+                        {
+                            next.Attempts++;
+                            exhausted = next.Attempts >= _maxAttempts;
+                            if (exhausted)
+                                next.Done = true;
+                        }
+
+                        if (exhausted)
+                            _logger.LogDebug(
+                                "ICE nominating (USE-CANDIDATE) check for {EndPoint} was not confirmed after " +
+                                "{Attempts} attempts; abandoning nomination of it.", next.Candidate.EndPoint, _maxAttempts);
+
+                        await _delay(_roundDelay, ct).ConfigureAwait(false);
+                    }
                 }
                 else
                 {
