@@ -31,9 +31,18 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
     WebRTC facades in one chain; each facade owns its own options object.
   - Samples: `examples/CalloraVoipSdk.Sample.WebRtcPeer` (and further WebRTC samples) show connect,
     tracks, taps and DI end-to-end.
+  - **Trickle ICE + early-bind**: `IPeerConnection.LocalIceCandidateDiscovered` /
+    `AddIceCandidateAsync` / `GatherCandidatesAsync` (server-reflexive gathering from configured STUN)
+    and the `IWebRtcTrickleSignaling` channel; `ConnectAsync` drives the trickle choreography when the
+    signalling implements it, and the offer advertises `a=ice-options:trickle`. Early-bind gives even an
+    ephemeral (port 0) client a live offer m-line — a fixed, reachable port is still recommended for NAT
+    reachability without TURN.
+  - **Send-side simulcast** (RFC 8853): `IPeerConnection.SendVideoFrameAsync(rid, …)` sends per-layer
+    frames, negotiated with offerer-side answer confirmation (falls back to a single stream when the
+    answerer does not confirm the rids). The active `rid` is surfaced to `IMediaTap.OnVideo` and to
+    recording (RFC 8852). Receive-side RID demux is a later slice.
   - **Preview status**: the WebRTC surface has not yet been validated against real browsers (Chrome/
-    Firefox); its API may change before it is declared stable. A configured media port is required on
-    both peers until early-bind / trickle ICE lands. Data channels (SCTP), TURN relay and simulcast are
+    Firefox); its API may change before it is declared stable. Data channels (SCTP) and TURN relay are
     not included.
 
 ### Changed

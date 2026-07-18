@@ -1,9 +1,10 @@
 # WebRTC (preview)
 
-> **Preview (v4.6.0).** The WebRTC facade has not yet been validated against real browsers
-> (Chrome/Firefox); its API may change before it is declared stable. Data channels (SCTP), TURN relay
-> and simulcast are not included. A configured media port is required on both peers until early-bind /
-> trickle ICE lands.
+> **Preview (v4.6.0-preview.1).** The WebRTC facade has not yet been validated against real browsers
+> (Chrome/Firefox); its API may change before it is declared stable. Data channels (SCTP) and TURN relay
+> are not included, and simulcast is send-side only (offerer-confirmed; receive-side RID demux is a later
+> slice). Trickle ICE and early-bind have landed: an ephemeral media port yields a live m-line, and a
+> fixed, reachable port is still recommended for NAT reachability without TURN.
 
 The `CalloraVoipSdk.WebRtc` namespace is a signalling-neutral WebRTC peer surface that mirrors the
 four-level design of `VoipClient`. It is **transport-only**: the SDK runs ICE, DTLS-SRTP, BUNDLE and
@@ -35,6 +36,15 @@ await peer.SendAudioAsync(encodedOpusPayload);
 
 Prefer full control? Drive it yourself with the neutral primitives: `CreateOffer()`,
 `SetRemoteDescriptionAsync(sdp)`, `StartAsync()`.
+
+### Trickle ICE
+
+Implement `IWebRtcTrickleSignaling` (it extends `IWebRtcSignaling`) instead of the plain interface and
+`ConnectAsync` trickles candidates automatically: local candidates (host + server-reflexive from
+configured STUN) are signalled as they are gathered, and remote candidates are applied during
+negotiation. Driving signalling yourself? Subscribe to `LocalIceCandidateDiscovered`, call
+`GatherCandidatesAsync()` for server-reflexive candidates, and feed the peer's candidates in with
+`AddIceCandidateAsync(candidate)`.
 
 ## Tracks (the W3C model)
 
@@ -78,6 +88,23 @@ Screen content differs from camera content (higher resolution, lower frame rate,
 *alongside* the camera (two simultaneous video tracks) needs multi-video-track support, which is a
 later slice — today one video track is negotiated per peer. A future `a=content` (RFC 4796) hint to
 flag the track as screen content is optional and not yet emitted.
+
+## Simulcast (send-side)
+
+Send the same video at several resolutions/bitrates so an SFU can forward the layer each viewer can
+afford (RFC 8853). Configure the layer rids on the client, encode each layer yourself (transport-only),
+and send it on its rid:
+
+```csharp
+// Configure simulcast rids on the WebRtcConfiguration, then per frame, per layer:
+await peer.SendVideoFrameAsync("hi", encodedHiRes, rtpTimestamp);
+await peer.SendVideoFrameAsync("lo", encodedLoRes, rtpTimestamp);
+```
+
+The offer advertises the rids; the SDK confirms them against the answer and falls back to a single
+stream when the answerer does not confirm them. The active `rid` is surfaced to `IMediaTap.OnVideo` and
+to recording (RFC 8852). Receiving and demultiplexing a remote peer's simulcast layers by rid is a
+later slice — today simulcast is send-side only.
 
 ## Samples
 
