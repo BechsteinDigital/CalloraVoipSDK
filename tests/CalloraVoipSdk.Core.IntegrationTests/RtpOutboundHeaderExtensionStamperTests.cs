@@ -75,4 +75,47 @@ public sealed class RtpOutboundHeaderExtensionStamperTests
         Assert.Throws<ArgumentException>(
             () => new RtpOutboundHeaderExtensionStamper(null, midExtensionId: 3, mid: "0123456789abcdefg")); // 17 bytes
     }
+
+    [Fact]
+    public void Mid_and_rid_are_both_stamped_on_a_simulcast_encoding()
+    {
+        var stamper = new RtpOutboundHeaderExtensionStamper(
+            transportWideCcExtensionId: null, midExtensionId: 3, mid: "video",
+            ridExtensionId: 6, rid: "hi");
+
+        var ext = stamper.Build(transportCcSequence: null);
+
+        Assert.True(RtpMidHeaderExtension.TryRead(ext, id: 3, out var mid));
+        Assert.Equal("video", mid);
+        Assert.True(RtpRidHeaderExtension.TryRead(ext, id: 6, out var rid));
+        Assert.Equal("hi", rid);
+    }
+
+    [Fact]
+    public void Mid_rid_and_transport_cc_are_all_stamped()
+    {
+        var stamper = new RtpOutboundHeaderExtensionStamper(
+            transportWideCcExtensionId: 5, midExtensionId: 3, mid: "video",
+            ridExtensionId: 6, rid: "lo");
+
+        var ext = stamper.Build(transportCcSequence: 12_345);
+
+        Assert.True(RtpMidHeaderExtension.TryRead(ext, id: 3, out var mid));
+        Assert.Equal("video", mid);
+        Assert.True(RtpRidHeaderExtension.TryRead(ext, id: 6, out var rid));
+        Assert.Equal("lo", rid);
+        Assert.True(OneByteRtpHeaderExtensions.TryReadTransportSequenceNumber(ext, id: 5, out var seq));
+        Assert.Equal(12_345, seq);
+    }
+
+    [Fact]
+    public void Mid_only_output_is_unchanged_when_no_rid_is_configured()
+    {
+        // Regression guard: adding the RID parameter must not alter the MID-only wire bytes.
+        var withoutRid = new RtpOutboundHeaderExtensionStamper(null, midExtensionId: 3, mid: "audio");
+        var explicitNoRid = new RtpOutboundHeaderExtensionStamper(
+            null, midExtensionId: 3, mid: "audio", ridExtensionId: null, rid: null);
+
+        Assert.Equal(withoutRid.Build(null)!.Data.ToArray(), explicitNoRid.Build(null)!.Data.ToArray());
+    }
 }
