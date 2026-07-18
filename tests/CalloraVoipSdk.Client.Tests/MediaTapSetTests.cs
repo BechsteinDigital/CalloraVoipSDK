@@ -36,13 +36,14 @@ public sealed class MediaTapSetTests
         var tap = new RecordingTap();
         set.Attach(tap);
 
-        set.Video(MediaDirection.Inbound, new byte[] { 9 }, 90000, isKeyFrame: true);
+        set.Video(MediaDirection.Outbound, new byte[] { 9 }, 90000, isKeyFrame: true, rid: "hi");
 
-        var (direction, frame, ts, key) = Assert.Single(tap.Video);
-        Assert.Equal(MediaDirection.Inbound, direction);
+        var (direction, frame, ts, key, rid) = Assert.Single(tap.Video);
+        Assert.Equal(MediaDirection.Outbound, direction);
         Assert.Equal(new byte[] { 9 }, frame);
         Assert.Equal(90000u, ts);
         Assert.True(key);
+        Assert.Equal("hi", rid); // the simulcast layer id is surfaced to the tap (RFC 8853)
     }
 
     [Fact]
@@ -78,23 +79,23 @@ public sealed class MediaTapSetTests
         var set = NewSet();
 
         set.Audio(MediaDirection.Outbound, new byte[] { 1 });
-        set.Video(MediaDirection.Outbound, new byte[] { 2 }, rtpTimestamp: 1, isKeyFrame: false);
+        set.Video(MediaDirection.Outbound, new byte[] { 2 }, rtpTimestamp: 1, isKeyFrame: false, rid: null);
         // no throw, nothing to assert beyond reaching here
     }
 
     private sealed class RecordingTap : IMediaTap
     {
         public List<(MediaDirection Direction, byte[] Payload)> Audio { get; } = [];
-        public List<(MediaDirection Direction, byte[] Frame, uint? Timestamp, bool KeyFrame)> Video { get; } = [];
+        public List<(MediaDirection Direction, byte[] Frame, uint? Timestamp, bool KeyFrame, string? Rid)> Video { get; } = [];
 
         public void OnAudio(MediaDirection direction, ReadOnlyMemory<byte> payload) => Audio.Add((direction, payload.ToArray()));
-        public void OnVideo(MediaDirection direction, ReadOnlyMemory<byte> frame, uint? rtpTimestamp, bool isKeyFrame)
-            => Video.Add((direction, frame.ToArray(), rtpTimestamp, isKeyFrame));
+        public void OnVideo(MediaDirection direction, ReadOnlyMemory<byte> frame, uint? rtpTimestamp, bool isKeyFrame, string? rid)
+            => Video.Add((direction, frame.ToArray(), rtpTimestamp, isKeyFrame, rid));
     }
 
     private sealed class ThrowingTap : IMediaTap
     {
         public void OnAudio(MediaDirection direction, ReadOnlyMemory<byte> payload) => throw new InvalidOperationException("boom");
-        public void OnVideo(MediaDirection direction, ReadOnlyMemory<byte> frame, uint? rtpTimestamp, bool isKeyFrame) => throw new InvalidOperationException("boom");
+        public void OnVideo(MediaDirection direction, ReadOnlyMemory<byte> frame, uint? rtpTimestamp, bool isKeyFrame, string? rid) => throw new InvalidOperationException("boom");
     }
 }

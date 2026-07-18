@@ -24,9 +24,9 @@ internal sealed class RecordingTap : IMediaTap
         Interlocked.Increment(ref _frameCount);
     }
 
-    public void OnVideo(MediaDirection direction, ReadOnlyMemory<byte> frame, uint? rtpTimestamp, bool isKeyFrame)
+    public void OnVideo(MediaDirection direction, ReadOnlyMemory<byte> frame, uint? rtpTimestamp, bool isKeyFrame, string? rid)
     {
-        _sink.Write(new RecordedFrame(TrackKind.Video, direction, frame, rtpTimestamp, isKeyFrame));
+        _sink.Write(new RecordedFrame(TrackKind.Video, direction, frame, rtpTimestamp, isKeyFrame, rid));
         Interlocked.Increment(ref _frameCount);
     }
 }

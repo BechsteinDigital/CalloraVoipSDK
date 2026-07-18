@@ -145,13 +145,14 @@ internal sealed class PeerConnection : IPeerConnection
 
     public Task SendVideoFrameAsync(ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default)
     {
-        _taps.Video(MediaDirection.Outbound, encodedFrame, rtpTimestamp, isKeyFrame: false);
+        _taps.Video(MediaDirection.Outbound, encodedFrame, rtpTimestamp, isKeyFrame: false, rid: null);
         return _peer.SendVideoFrameAsync(encodedFrame, rtpTimestamp, cancellationToken);
     }
 
     public Task SendVideoFrameAsync(string rid, ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default)
     {
-        _taps.Video(MediaDirection.Outbound, encodedFrame, rtpTimestamp, isKeyFrame: false);
+        // Tag the outbound tap with the simulcast layer id so a recorder/analytics can separate the layers.
+        _taps.Video(MediaDirection.Outbound, encodedFrame, rtpTimestamp, isKeyFrame: false, rid: rid);
         return _peer.SendVideoFrameAsync(rid, encodedFrame, rtpTimestamp, cancellationToken);
     }
 
@@ -207,7 +208,8 @@ internal sealed class PeerConnection : IPeerConnection
 
     private void OnVideoReceived(byte[] frame, uint rtpTimestamp, bool isKeyFrame)
     {
-        _taps.Video(MediaDirection.Inbound, frame, rtpTimestamp, isKeyFrame);
+        // Inbound RID demux is a later slice; the layer is not yet distinguished on the receive path.
+        _taps.Video(MediaDirection.Inbound, frame, rtpTimestamp, isKeyFrame, rid: null);
         var msid = _peer.RemoteVideoMsid;
         _tracks.DeliverVideoFrame(StreamId(msid), msid?.TrackId, new EncodedFrame(frame, rtpTimestamp, isKeyFrame, presentationTimeUsec: null));
     }

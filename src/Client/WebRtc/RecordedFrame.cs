@@ -7,13 +7,14 @@ namespace CalloraVoipSdk.WebRtc;
 public readonly struct RecordedFrame
 {
     /// <summary>Creates a recorded frame.</summary>
-    public RecordedFrame(TrackKind kind, MediaDirection direction, ReadOnlyMemory<byte> payload, uint? rtpTimestamp, bool isKeyFrame)
+    public RecordedFrame(TrackKind kind, MediaDirection direction, ReadOnlyMemory<byte> payload, uint? rtpTimestamp, bool isKeyFrame, string? rid = null)
     {
         Kind = kind;
         Direction = direction;
         Payload = payload;
         RtpTimestamp = rtpTimestamp;
         IsKeyFrame = isKeyFrame;
+        Rid = rid;
     }
 
     /// <summary>Whether this is an audio or video frame.</summary>
@@ -30,4 +31,11 @@ public readonly struct RecordedFrame
 
     /// <summary>Whether this is a key/intra frame (video). Always <see langword="false"/> for audio.</summary>
     public bool IsKeyFrame { get; }
+
+    /// <summary>
+    /// The simulcast layer id (RFC 8853 <c>a=rid</c>) for an outbound simulcast video frame, so a sink can
+    /// separate the layers; <see langword="null"/> for a single-stream send, for audio, and for inbound
+    /// frames (receive-side RID demux is a later slice).
+    /// </summary>
+    public string? Rid { get; }
 }

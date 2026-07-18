@@ -18,7 +18,10 @@ public interface IMediaTap
     /// <summary>
     /// Observes one video frame in the given <paramref name="direction"/>. <paramref name="rtpTimestamp"/>
     /// is <see langword="null"/> when unknown; <paramref name="isKeyFrame"/> is <see langword="false"/> for
-    /// outbound frames (the send path does not carry the flag).
+    /// outbound frames (the send path does not carry the flag). <paramref name="rid"/> is the simulcast layer
+    /// id (RFC 8853) for an outbound simulcast frame, so a tap can tell the layers apart; it is
+    /// <see langword="null"/> for a single-stream send and for inbound frames (receive-side RID demux is a
+    /// later slice). Richer per-frame metadata (MID/SSRC/track ids) will follow when those are surfaced.
     /// </summary>
-    void OnVideo(MediaDirection direction, ReadOnlyMemory<byte> frame, uint? rtpTimestamp, bool isKeyFrame);
+    void OnVideo(MediaDirection direction, ReadOnlyMemory<byte> frame, uint? rtpTimestamp, bool isKeyFrame, string? rid);
 }
