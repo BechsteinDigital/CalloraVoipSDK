@@ -67,3 +67,6 @@ services
 - `examples/CalloraVoipSdk.Sample.WebRtcPeer` — two peers connect over an in-memory channel, tracks + tap.
 - `examples/CalloraVoipSdk.Sample.WebRtcRecording` — record inbound audio via a media tap.
 - `examples/CalloraVoipSdk.Sample.WebRtcDependencyInjection` — DI + two-facade composition.
+- `examples/CalloraVoipSdk.Sample.WebRtcVideoCall.Web` — a browser video-call website in its simplest
+  form (WebSocket signalling relay + native browser WebRTC, two tabs = two people, peer-to-peer). The
+  SDK media peer is not in the media path here — that is the browser-interop milestone.
