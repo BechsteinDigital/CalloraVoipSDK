@@ -7,7 +7,7 @@ through the `IncomingCall` event (client- or line-level) or the convenience
 ```csharp
 using CalloraVoipSdk.Client;
 
-using var client = new VoipClient(new SdkConfiguration
+using var client = new VoipClient(new VoipConfiguration
 {
     LoggerFactory = loggerFactory,
     UserAgent     = "MySoftphone/1.0"

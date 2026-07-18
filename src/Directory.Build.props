@@ -3,8 +3,9 @@
     <!-- Fallback for local/dev builds; released packages get the version from the git tag via the
          release workflow (/p:Version=X.Y.Z), which drives PackageVersion, AssemblyVersion,
          FileVersion and InformationalVersion together. -->
-    <VersionPrefix>4.5.0</VersionPrefix>
-    <Version Condition="'$(Version)' == ''">$(VersionPrefix)</Version>
+    <VersionPrefix>4.6.0</VersionPrefix>
+    <VersionSuffix Condition="'$(VersionSuffix)' == ''">preview.1</VersionSuffix>
+    <Version Condition="'$(Version)' == ''">$(VersionPrefix)-$(VersionSuffix)</Version>
     <Authors>Bechstein Digital</Authors>
     <Company>Bechstein Digital</Company>
     <Product>CalloraVoipSdk</Product>

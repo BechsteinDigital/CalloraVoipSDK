@@ -6,7 +6,7 @@ re-INVITE.
 
 ## Policy
 
-`SdkConfiguration.SrtpPolicy` sets the default for all calls:
+`VoipConfiguration.SrtpPolicy` sets the default for all calls:
 
 | Value | Behaviour |
 |-------|-----------|
@@ -15,7 +15,7 @@ re-INVITE.
 | `Required` | Only complete calls with SRTP; calls without it fail |
 
 ```csharp
-new SdkConfiguration { SrtpPolicy = SrtpPolicy.Required };
+new VoipConfiguration { SrtpPolicy = SrtpPolicy.Required };
 ```
 
 ## Per-call override

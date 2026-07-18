@@ -5,6 +5,18 @@ The authoritative changelog lives in the repository:
 
 ## Release highlights
 
+### 4.6.0-preview.1 — 2026-07-18
+- **WebRTC facade (preview, transport-only)** in the `CalloraVoipSdk.WebRtc` namespace: a
+  signalling-neutral browser/peer surface mirroring `VoipClient` — `WebRtcClient.CreatePeer()`
+  (ICE, DTLS-SRTP, BUNDLE, RTP/RTCP), an SDK-driven handshake (`peer.ConnectAsync(signalling, role)`),
+  the W3C track model (`TrackReceived` → `RemoteTrack`/`EncodedFrame`), a multi-peer manager
+  (`client.Peers`) and L3 seams (`IMediaTap`, `IWebRtcClientModule`). Transport-only — bring your own
+  codec. See [WebRTC](guides/webrtc.md). **Preview:** not yet browser-validated; API may change; no
+  data channels / TURN / simulcast yet.
+- **BREAKING (from 4.6):** SIP-facade config types renamed — `SdkConfiguration` → `VoipConfiguration`,
+  `SdkOptions` → `VoipOptions`, `AddCallora(...)` → `AddCalloraVoip(...)` (no aliases). `VoipClient` is
+  unchanged. See [`CHANGELOG.md`](https://github.com/BechsteinDigital/CalloraVoipSDK/blob/main/CHANGELOG.md).
+
 ### 4.5.0 — 2026-07-15
 - Public **video** API (transport-only): send/receive encoded frames
   (`client.Media.CreateVideoReceiver()/CreateVideoSender()`, `VideoFrame`), a ready-to-use

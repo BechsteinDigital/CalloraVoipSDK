@@ -6,7 +6,7 @@ does not leak resources.
 ## Inbound media timeout
 
 ```csharp
-new SdkConfiguration { InboundMediaTimeout = TimeSpan.FromSeconds(15) };  // default
+new VoipConfiguration { InboundMediaTimeout = TimeSpan.FromSeconds(15) };  // default
 ```
 
 An answered inbound call that never produces media is torn down after this window — it
@@ -15,7 +15,7 @@ guards against half-open calls that consume a slot but carry no audio.
 ## Hold-silence hangup
 
 ```csharp
-new SdkConfiguration { HangupHeldCallOnMediaSilence = true };
+new VoipConfiguration { HangupHeldCallOnMediaSilence = true };
 ```
 
 Ends held calls that go silent, so a forgotten hold doesn't linger indefinitely.
@@ -23,7 +23,7 @@ Ends held calls that go silent, so a forgotten hold doesn't linger indefinitely.
 ## Concurrency cap
 
 ```csharp
-new SdkConfiguration { MaxConcurrentCallsPerLine = 10 };  // default
+new VoipConfiguration { MaxConcurrentCallsPerLine = 10 };  // default
 ```
 
 Bounds how many simultaneous calls a single line will carry — a backstop against runaway

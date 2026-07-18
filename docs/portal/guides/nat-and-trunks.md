@@ -10,13 +10,13 @@ By default the SDK sends outbound requests over UDP. Enterprise proxies that onl
 or TLS can be served by setting the default transport once:
 
 ```csharp
-using var client = new VoipClient(new SdkConfiguration
+using var client = new VoipClient(new VoipConfiguration
 {
     DefaultTransport = SipTransport.Tls   // Udp (default) / Tcp / Tls / Ws / Wss
 });
 ```
 
-With `AddCallora(...)` use `options.DefaultTransport` or `builder.WithTransport(SipTransport.Tls)`.
+With `AddCalloraVoip(...)` use `options.DefaultTransport` or `builder.WithTransport(SipTransport.Tls)`.
 A `sips:` scheme or an explicit `;transport=` on the target URI still overrides the default per call.
 
 ## Advertised media address
@@ -45,7 +45,7 @@ address with a remapped port breaks media. Non-IP values are ignored.
 ## ICE (opt-in, experimental)
 
 Full ICE (RFC 8445 / RFC 7675) is implemented **opt-in** and is still marked unproven in
-production. Enable it via `SdkConfiguration.Ice`. Treat it as experimental and validate
+production. Enable it via `VoipConfiguration.Ice`. Treat it as experimental and validate
 against your own network before relying on it. Without ICE, plan for a
 media-relaying/SBC path on hostile NAT.
 

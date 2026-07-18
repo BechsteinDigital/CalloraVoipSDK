@@ -82,7 +82,7 @@ If you package your codec behind an `IVideoDevice`, register it in DI and let th
 the call for you — the byte-analog of `AttachDefaultAudioAsync`:
 
 ```csharp
-services.AddCallora(options => { /* … */ });
+services.AddCalloraVoip(options => { /* … */ });
 services.AddSingleton<IVideoDevice, MyVp8VideoDevice>();   // your codec package
 // …
 await client.AttachDefaultVideoAsync(call);   // connects your device on Connected/OnHold

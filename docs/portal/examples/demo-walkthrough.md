@@ -17,14 +17,14 @@ dotnet add package CalloraVoipSdk.Audio.Linux   # or .Windows
 ### 1. SDK Initialization
 
 ```csharp
-using var client = new VoipClient(new SdkConfiguration
+using var client = new VoipClient(new VoipConfiguration
 {
     LoggerFactory = loggerFactory,
     UserAgent     = "CalloraVoipSdk-Demo/1.0",
 });
 ```
 
-`SdkConfiguration` wires up the logger factory and user-agent header. Audio routing is done via convenience APIs (`AttachDefaultAudioAsync`) and stays additive to the manual media API.
+`VoipConfiguration` wires up the logger factory and user-agent header. Audio routing is done via convenience APIs (`AttachDefaultAudioAsync`) and stays additive to the manual media API.
 
 ### 2. Registration
 

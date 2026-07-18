@@ -15,7 +15,25 @@ CalloraVoipSdk is a .NET VoIP SDK (net8.0 / net9.0 / net10.0) for building softp
 It exposes a stable, developer-friendly API through `VoipClient` while keeping transport, media and device internals behind a clean facade — and opens up through a module registry for building products like AI voice agents on top.
 
 📖 **Documentation:** [bechsteindigital.github.io/CalloraVoipSDK](https://bechsteindigital.github.io/CalloraVoipSDK/)
-🧪 **Examples:** [`examples/`](examples) — runnable console samples (BasicCalling, Dialer, Transfer, CustomAudio, VideoCalling)
+🧪 **Examples:** [`examples/`](examples) — runnable console samples (BasicCalling, Dialer, Transfer, CustomAudio, VideoCalling, WebRtcPeer, WebRtcRecording, WebRtcDependencyInjection)
+
+## What's new in 4.6 (preview)
+
+- **WebRTC facade (preview, transport-only)** — a signalling-neutral browser/peer surface in the
+  `CalloraVoipSdk.WebRtc` namespace that mirrors the four-level design of `VoipClient`:
+  `WebRtcClient.CreatePeer()` → `IPeerConnection` (ICE, DTLS-SRTP, BUNDLE, RTP/RTCP), a signalling
+  happy path (`peer.ConnectAsync(signalling, role)`), the W3C track model (`TrackReceived` →
+  `RemoteTrack`/`EncodedFrame`), a multi-peer manager (`client.Peers`), and L3 seams (`IMediaTap`,
+  `IWebRtcClientModule`). The app owns signalling and the codec — the SDK moves bytes, it never
+  encodes/decodes. See the `WebRtc*` samples. **Preview:** not yet browser-validated (Chrome/Firefox),
+  API may change; no data channels / TURN / simulcast yet.
+
+> **Breaking change in 4.6** — the SIP-facade configuration types were renamed so each facade owns a
+> facade-scoped name (parallel to `WebRtcConfiguration`/`WebRtcOptions`/`AddCalloraWebRtc`):
+> `SdkConfiguration` → `VoipConfiguration`, `SdkOptions` → `VoipOptions`, `AddCallora(...)` →
+> `AddCalloraVoip(...)`. There are no compatibility aliases — rename these three symbols at your call
+> sites. `VoipClient` and all other public types are unchanged; behaviour is identical. See
+> [`CHANGELOG.md`](CHANGELOG.md).
 
 ## Why CalloraVoipSdk
 
@@ -47,10 +65,10 @@ Available in the repository today:
 - Media stack: RTP sessions, sender, receiver, `MediaConnector`, cross-connect
 - Media encryption: SRTP via SDES (RFC 4568) as both caller and callee, encrypted/authenticated
   RTCP via SRTCP (RFC 3711 §3.4), a configurable per-call policy
-  (`SdkConfiguration.SrtpPolicy`: Disabled / Optional / Required), re-keying on re-INVITE, and the
+  (`VoipConfiguration.SrtpPolicy`: Disabled / Optional / Required), re-keying on re-INVITE, and the
   negotiated suite name / SRTCP status readable on `ICall.MediaParameters`
 - Transport selection: choose the default outbound SIP transport
-  (`SdkConfiguration.DefaultTransport`: UDP / TCP / TLS / WS / WSS; default UDP)
+  (`VoipConfiguration.DefaultTransport`: UDP / TCP / TLS / WS / WSS; default UDP)
 - Custom outbound headers (`DialOptions.CustomHeaders`, injection-guarded) and read-only remote
   identity on inbound calls (`ICall.RemoteAssertedIdentity` / `ICall.Diversion`)
 - Per-call observability: ICE state + selected candidate pair (`ICall.IceSnapshot`) and raw
@@ -67,7 +85,11 @@ Available in the repository today:
   The SDK never encodes/decodes — bring your own VP8/H.264 codec
 - Module registry (`client.Modules`) as the extension point for separately shipped
   feature modules
-- Configurable audio codec preference (`SdkConfiguration.PreferredAudioCodecs`)
+- **WebRTC facade (preview, `CalloraVoipSdk.WebRtc`)**: signalling-neutral browser/peer connections
+  (`WebRtcClient.CreatePeer()`), an SDK-driven handshake (`peer.ConnectAsync(signalling, role)`), the
+  W3C track model (`TrackReceived`/`RemoteTrack`/`EncodedFrame`), a multi-peer manager (`client.Peers`)
+  and L3 media taps/modules — transport-only, bring your own codec (see [What's new in 4.6](#whats-new-in-46-preview))
+- Configurable audio codec preference (`VoipConfiguration.PreferredAudioCodecs`)
 - RTCP quality metrics with measured values: local/remote jitter, packet loss and
   round-trip time from SR/RR (LSR/DLSR); RFC 3611 XR-tolerant compound decoding
 - Linux audio devices via `CalloraVoipSdk.Audio.Linux`
@@ -179,7 +201,7 @@ using var loggerFactory = LoggerFactory.Create(b => b
     .AddConsole()
     .SetMinimumLevel(LogLevel.Information));
 
-using var client = new VoipClient(new SdkConfiguration
+using var client = new VoipClient(new VoipConfiguration
 {
     LoggerFactory = loggerFactory,
     UserAgent = "MySoftphone/1.0",
@@ -357,7 +379,7 @@ using var bridge = client.Media.CreateConnector().CrossConnect(aRx, aTx, bRx, bT
 ### 7. Pin the audio codec
 
 ```csharp
-using var client = new VoipClient(new SdkConfiguration
+using var client = new VoipClient(new VoipConfiguration
 {
     UserAgent = "MyVoiceBot/1.0",
     // Order = preference. Offers/answers only include the listed codecs (plus DTMF
@@ -403,7 +425,7 @@ packages. A module implements `IVoipClientModule`, gets attached to the client a
 then resolvable by any interface it implements:
 
 ```csharp
-// Register (or inject via DI as IVoipClientModule before AddCallora):
+// Register (or inject via DI as IVoipClientModule before AddCalloraVoip):
 client.Modules.Register(new MyRecordingModule());
 
 // Resolve anywhere:
