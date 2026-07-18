@@ -135,10 +135,15 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         get { lock (_sync) { return _localDescription; } }
     }
 
-    /// <summary>The bound local media endpoint of the shared transport, or null before a session is built.</summary>
+    /// <summary>
+    /// The bound local media endpoint. Early-bind binds the media socket at <see cref="CreateOffer"/> /
+    /// <see cref="SetRemoteDescriptionAsync"/> — before the session exists — so this exposes the bound
+    /// socket's endpoint in that window and the transport's endpoint once the session is built. Null only
+    /// before the socket is bound.
+    /// </summary>
     public IPEndPoint? LocalMediaEndPoint
     {
-        get { lock (_sync) { return _session?.LocalEndPoint; } }
+        get { lock (_sync) { return _session?.LocalEndPoint ?? _mediaSocket?.Client.LocalEndPoint as IPEndPoint; } }
     }
 
     /// <summary>The selected remote media endpoint of the shared transport, or null before one is set.</summary>
@@ -451,7 +456,15 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         foreach (var server in _options.IceServers)
         {
             if (server.Type != IceServerType.Stun)
+            {
+                // Only STUN server-reflexive gathering is wired today; TURN relay gathering + the relay
+                // media data-path are not yet supported (a later slice). Surface the skip instead of
+                // silently ignoring a configured TURN server.
+                _logger.LogDebug(
+                    "Skipping ICE server {Host} of type {Type}: only STUN gathering is supported; TURN relay is not yet wired.",
+                    server.Host, server.Type);
                 continue;
+            }
 
             var reflexive = await _stunProbe
                 .TryGetServerReflexiveEndPointAsync(local, server, socket, cancellationToken)

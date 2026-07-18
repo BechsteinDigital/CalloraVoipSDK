@@ -43,6 +43,21 @@ public sealed class WebRtcTrickleTests
     }
 
     [Fact]
+    public async Task LocalMediaEndPoint_is_available_after_CreateOffer_binds_the_socket()
+    {
+        // Early-bind binds the media socket at CreateOffer, before a session exists — LocalMediaEndPoint must
+        // expose the real bound endpoint in that window (previously it stayed null until the session was built).
+        var rtc = new WebRtcClient();
+        await using var peer = rtc.CreatePeer();
+
+        Assert.Null(peer.LocalMediaEndPoint);   // nothing bound yet
+        peer.CreateOffer();
+
+        Assert.NotNull(peer.LocalMediaEndPoint);
+        Assert.True(peer.LocalMediaEndPoint!.Port > 0);
+    }
+
+    [Fact]
     public async Task GatherCandidatesAsync_without_ice_servers_gathers_host_only()
     {
         // Zero-config peer: no STUN servers → GatherCandidatesAsync is a no-op, only the host candidate
