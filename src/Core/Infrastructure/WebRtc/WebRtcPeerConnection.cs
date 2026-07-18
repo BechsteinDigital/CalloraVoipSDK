@@ -1,5 +1,6 @@
 using System.Linq;
 using System.Net;
+using System.Net.Sockets;
 using CalloraVoipSdk.Core.Infrastructure.Dtls;
 using CalloraVoipSdk.Core.Infrastructure.Rtp;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Models;
@@ -25,7 +26,10 @@ namespace CalloraVoipSdk.Core.Infrastructure.WebRtc;
 /// <see cref="SetRemoteDescriptionAsync"/>, <see cref="StartAsync"/> — is a single ordered sequence
 /// and must be driven by one caller at a time, mirroring the W3C signalling-state serialisation; the
 /// internal <c>_sync</c> gate protects the shared fields but does not make out-of-order concurrent
-/// signalling meaningful. The media hot path (<see cref="SendAudioAsync"/>/<see cref="SendVideoFrameAsync"/>)
+/// signalling meaningful. <see cref="DisposeAsync"/> is part of that same single-caller ordering: it must
+/// not race an in-flight <see cref="SetRemoteDescriptionAsync"/>, which builds the media session and hands
+/// the pre-bound socket over to it — disposing concurrently could tear down the peer between the bind and
+/// the hand-over and orphan or double-dispose the socket. The media hot path (<see cref="SendAudioAsync"/>/<see cref="SendVideoFrameAsync"/>)
 /// is hardened against a concurrent <see cref="DisposeAsync"/> (HARD-C6): each send holds a drain lease so
 /// dispose waits for in-flight sends before tearing down the media session, and a send begun after
 /// dispose throws <see cref="ObjectDisposedException"/>.
@@ -59,6 +63,8 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     private SdpSessionDescription? _localOfferModel;
     private BundledMediaSession? _session;
     private readonly SendDrainGate _sendGate = new();
+    private UdpClient? _mediaSocket;
+    private bool _socketHandedOver;
 
     /// <summary>Raised when the connection state changes (RFC 8829 <c>connectionstatechange</c>).</summary>
     public event Action<WebRtcConnectionState>? ConnectionStateChanged;
@@ -167,8 +173,9 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     /// </summary>
     public string CreateOffer()
     {
+        var local = EnsureLocalMediaEndPoint();
         var offerModel = _negotiator.CreateOffer(
-            _options.LocalEndPoint, _options.AudioCodecs, SdpMediaDirection.SendRecv, MediaOptions());
+            local, _options.AudioCodecs, SdpMediaDirection.SendRecv, MediaOptions(local));
         var offerSdp = _serializer.Serialize(offerModel);
         lock (_sync)
         {
@@ -225,8 +232,9 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         else
         {
             // Answerer: the remote description is the offer; negotiate our answer.
+            var local = EnsureLocalMediaEndPoint();
             var result = _negotiator.NegotiateAnswer(
-                remote, _options.LocalEndPoint, _options.AudioCodecs, SdpMediaDirection.SendRecv, MediaOptions());
+                remote, local, _options.AudioCodecs, SdpMediaDirection.SendRecv, MediaOptions(local));
             if (!result.Success || result.Answer is null)
             {
                 TransitionTo(WebRtcConnectionState.Failed);
@@ -241,7 +249,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         // BUNDLE group). A non-bundle exchange yields no session — the local description is still
         // returned, but the peer has no transport (logged), which StartAsync then surfaces.
         var session = WebRtcSessionFactory.TryCreate(
-            remote, localModel, _options, _handshaker, _certificate, _loggerFactory);
+            remote, localModel, _options, _handshaker, _certificate, _loggerFactory, _mediaSocket);
         if (session is null)
             _logger.LogWarning("The remote description did not negotiate a BUNDLE media session; no transport was built.");
 
@@ -250,6 +258,9 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             _remoteDescription = remoteSdp;
             _localDescription = localSdp;
             _session = session;
+            // The transport now owns the pre-bound socket (if a session was built); DisposeAsync must not
+            // dispose it again.
+            _socketHandedOver = session is not null;
             // Retain the remote track identity (a=msid) so the receiver can group inbound tracks by the
             // remote MediaStream (the W3C RTCTrackEvent.streams semantics).
             var audioMedia = remote.Media.FirstOrDefault(m => string.Equals(m.MediaType, "audio", StringComparison.OrdinalIgnoreCase));
@@ -357,7 +368,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
 
     // WebRTC is always BUNDLE + rtcp-mux (RFC 8843 / RFC 8834); the DTLS identity and ICE credentials
     // come from the local configuration. Used for both the offer and the answer.
-    private SdpMediaOptions MediaOptions() => new()
+    private SdpMediaOptions MediaOptions(IPEndPoint local) => new()
     {
         Dtls = _options.Dtls,
         Ice = new SdpIceParameters
@@ -365,14 +376,22 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             Ufrag = _options.Ice.Ufrag,
             Pwd = _options.Ice.Pwd,
             Options = _options.Ice.Options,
-            // Advertise our media address as a host candidate (RFC 8839) so the peer can reach us; a
-            // browser only sends media once ICE succeeds against our candidates. Skipped when no fixed
-            // port is configured (the ephemeral bound port is not known until the transport binds).
-            Candidates = _options.LocalEndPoint.Port > 0
-                ? [LocalHostCandidate(), .. _options.Ice.Candidates]
-                : _options.Ice.Candidates,
+            // Advertise our bound media address as a host candidate (RFC 8839) so the peer can reach us.
+            // Early-bind gives us the real ephemeral port before the session exists, so a host candidate is
+            // always emitted (no more zero-port disabled offer).
+            Candidates = [LocalHostCandidate(local), .. _options.Ice.Candidates],
         },
-        Video = _options.Video,
+        // All BUNDLE m-lines share the one bound transport port (the video m-line's own port is nominal).
+        Video = _options.Video is { } video
+            ? new SdpVideoMediaOptions
+            {
+                Port = local.Port,
+                Codecs = video.Codecs,
+                Crypto = video.Crypto,
+                Candidates = video.Candidates,
+                HeaderExtensionUris = video.HeaderExtensionUris,
+            }
+            : null,
         AudioMsid = new SdpMsid { StreamId = _mediaStreamId, TrackId = _audioTrackId },
         VideoMsid = _options.Video is not null
             ? new SdpMsid { StreamId = _mediaStreamId, TrackId = _videoTrackId }
@@ -381,16 +400,36 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         RtcpMux = true,
     };
 
-    // A host ICE candidate for the local media endpoint (RFC 8445 §5.1.2.1 priority: host type-pref 126,
-    // local-pref 65535, RTP component 1). rtcp-mux shares component 1, so no RTCP candidate is needed.
-    private SdpIceCandidate LocalHostCandidate() => new()
+    // Binds the shared media socket up front (Trickle-ICE early-bind) so the offer/answer advertise the real
+    // ephemeral port and a host candidate before the session (transport) exists — fixing the zero-port
+    // disabled offer. The transport takes ownership at session build; if the peer is disposed before that,
+    // DisposeAsync disposes the socket.
+    private IPEndPoint EnsureLocalMediaEndPoint()
+    {
+        lock (_sync)
+        {
+            if (_mediaSocket is null)
+            {
+                var socket = new UdpClient(AddressFamily.InterNetwork);
+                socket.Client.ReceiveBufferSize = 8192;
+                socket.Client.Bind(_options.LocalEndPoint);
+                _mediaSocket = socket;
+            }
+
+            return (IPEndPoint)_mediaSocket.Client.LocalEndPoint!;
+        }
+    }
+
+    // A host ICE candidate for the bound local media endpoint (RFC 8445 §5.1.2.1 priority: host type-pref
+    // 126, local-pref 65535, RTP component 1). rtcp-mux shares component 1, so no RTCP candidate is needed.
+    private static SdpIceCandidate LocalHostCandidate(IPEndPoint local) => new()
     {
         Foundation = "1",
         Component = 1,
         Transport = "udp",
         Priority = (126L << 24) | (65535L << 8) | 255L,
-        Address = _options.LocalEndPoint.Address.ToString(),
-        Port = _options.LocalEndPoint.Port,
+        Address = local.Address.ToString(),
+        Port = local.Port,
         Type = "host",
     };
 
@@ -417,7 +456,17 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         BundledMediaSession? session;
-        lock (_sync) { session = _session; _session = null; }
+        UdpClient? orphanSocket;
+        lock (_sync)
+        {
+            session = _session;
+            _session = null;
+            // If the early-bound socket was never handed to a transport, this peer still owns it and must
+            // dispose it; once handed over, the session/transport owns it. Null it out so a second dispose
+            // never double-disposes.
+            orphanSocket = _socketHandedOver ? null : _mediaSocket;
+            _mediaSocket = null;
+        }
 
         TransitionTo(WebRtcConnectionState.Closed);
 
@@ -429,5 +478,6 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         await _sendGate.BeginDrainAsync().ConfigureAwait(false);
         if (session is not null)
             await session.DisposeAsync().ConfigureAwait(false);
+        orphanSocket?.Dispose();
     }
 }

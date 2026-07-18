@@ -35,7 +35,8 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IAsyncDisp
     public BundledMediaTransport(
         BundledMediaTransportOptions options,
         BundledInboundPipeline inbound,
-        ILogger<BundledMediaTransport> logger)
+        ILogger<BundledMediaTransport> logger,
+        UdpClient? socket = null)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(options.LocalEndPoint);
@@ -44,9 +45,19 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IAsyncDisp
         _localEndPoint  = options.LocalEndPoint;
         _remoteEndPoint = options.RemoteEndPoint;
 
-        _udp = new UdpClient(AddressFamily.InterNetwork);
-        _udp.Client.ReceiveBufferSize = ReceiveBufferSize;
-        _udp.Client.Bind(_localEndPoint);
+        if (socket is not null)
+        {
+            // Reuse a socket the peer bound early (Trickle-ICE early-bind), so the offer could advertise
+            // the real ephemeral port before this session existed. The transport owns it from here on and
+            // disposes it like a self-bound socket.
+            _udp = socket;
+        }
+        else
+        {
+            _udp = new UdpClient(AddressFamily.InterNetwork);
+            _udp.Client.ReceiveBufferSize = ReceiveBufferSize;
+            _udp.Client.Bind(_localEndPoint);
+        }
     }
 
     /// <summary>The endpoint the shared socket is bound to (the actual port after an ephemeral bind).</summary>

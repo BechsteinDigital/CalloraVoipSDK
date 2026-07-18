@@ -154,9 +154,10 @@ public sealed class WebRtcPeerConnectionTests
     }
 
     [Fact]
-    public void CreateOffer_advertises_a_host_ice_candidate_for_the_local_endpoint()
+    public async Task CreateOffer_advertises_a_host_ice_candidate_for_the_local_endpoint()
     {
-        var offer = PeerAt(40100).CreateOffer();
+        await using var peer = PeerAt(40100);   // early-bind holds a socket, so dispose the peer
+        var offer = peer.CreateOffer();
 
         var audio = new SdpSessionParser().Parse(offer).Media.Single(m => m.MediaType == "audio");
         var candidate = Assert.Single(audio.Candidates.Where(c => c.Type == "host"));
@@ -167,12 +168,18 @@ public sealed class WebRtcPeerConnectionTests
     }
 
     [Fact]
-    public void A_peer_without_a_fixed_port_advertises_no_host_candidate()
+    public async Task A_peer_without_a_fixed_port_early_binds_and_advertises_a_real_host_candidate()
     {
-        var offer = PeerAt(0).CreateOffer(); // ephemeral bind — the real port is unknown until the transport binds
+        // Early-bind (Trickle-ICE slice 1): the peer binds its media socket before the offer, so an
+        // ephemeral (port-0) configuration still advertises the real port + host candidate.
+        await using var peer = PeerAt(0);
+        var offer = peer.CreateOffer();
 
         var audio = new SdpSessionParser().Parse(offer).Media.Single(m => m.MediaType == "audio");
-        Assert.DoesNotContain(audio.Candidates, c => c.Type == "host");
+        var candidate = Assert.Single(audio.Candidates.Where(c => c.Type == "host"));
+        Assert.Equal("127.0.0.1", candidate.Address);
+        Assert.True(candidate.Port > 0, "early-bind should advertise the real ephemeral port");
+        Assert.True(audio.Port > 0, "the audio m-line carries the real port, not a disabled zero port");
     }
 
     [Fact]
@@ -186,6 +193,7 @@ public sealed class WebRtcPeerConnectionTests
 
         Assert.NotNull(audio.Msid);
         Assert.NotNull(video.Msid);
+        Assert.True(video.Port > 0, "early-bind carries the real bound port on the video m-line too");
         Assert.Equal(audio.Msid!.StreamId, video.Msid!.StreamId);   // one MediaStream (RFC 8830)
         Assert.NotEqual(audio.Msid.TrackId, video.Msid.TrackId);     // distinct tracks
 

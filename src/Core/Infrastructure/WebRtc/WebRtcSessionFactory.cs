@@ -1,3 +1,4 @@
+using System.Net.Sockets;
 using CalloraVoipSdk.Core.Infrastructure.Dtls;
 using CalloraVoipSdk.Core.Infrastructure.Rtp;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
@@ -33,7 +34,8 @@ internal static class WebRtcSessionFactory
         WebRtcPeerOptions options,
         IDtlsSrtpHandshaker handshaker,
         DtlsCertificate certificate,
-        ILoggerFactory loggerFactory)
+        ILoggerFactory loggerFactory,
+        UdpClient? preBoundSocket = null)
     {
         ArgumentNullException.ThrowIfNull(remoteDescription);
         ArgumentNullException.ThrowIfNull(localDescription);
@@ -85,6 +87,7 @@ internal static class WebRtcSessionFactory
         var sessionOptions = new BundledMediaSessionOptions
         {
             LocalEndPoint = options.LocalEndPoint,
+            PreBoundSocket = preBoundSocket,
             RemoteEndPoint = remoteEndPoint,
             MidExtensionId = midExtensionId.Value,
             Audio = audioTrack,
