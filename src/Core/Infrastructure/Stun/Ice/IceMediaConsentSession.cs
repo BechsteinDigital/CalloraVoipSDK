@@ -117,7 +117,7 @@ internal sealed class IceMediaConsentSession : IAsyncDisposable
         _registry.TryComplete(datagram.Slice(8, 12));
     }
 
-    private Task<bool> SendConsentCheckAsync(CancellationToken ct) => SendCheckAsync(Volatile.Read(ref _remoteEndPoint), ct);
+    private Task<bool> SendConsentCheckAsync(CancellationToken ct) => SendCheckAsync(Volatile.Read(ref _remoteEndPoint), useCandidate: false, ct);
 
     /// <summary>
     /// Sends one connectivity check to <paramref name="target"/> and returns <see langword="true"/>
@@ -127,9 +127,9 @@ internal sealed class IceMediaConsentSession : IAsyncDisposable
     /// sending so a fast response is not missed.
     /// </summary>
     /// <param name="target">The address to send the check to.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <param name="useCandidate">Whether to carry USE-CANDIDATE — a controlling agent's nominating check (RFC 8445 §8.1.1).</param>
-    internal async Task<bool> SendCheckAsync(IPEndPoint target, CancellationToken ct, bool useCandidate = false)
+    /// <param name="ct">Cancellation token.</param>
+    internal async Task<bool> SendCheckAsync(IPEndPoint target, bool useCandidate, CancellationToken ct)
     {
         var (datagram, transactionId) = IceConsentCheckBuilder.Build(
             _codec, _localUfrag, _remoteUfrag, _remotePassword, _priority, _controlling, _tieBreaker, useCandidate);

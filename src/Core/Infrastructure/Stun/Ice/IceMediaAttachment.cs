@@ -71,7 +71,7 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
         {
             _nominationDriver = new IceNominationDriver(
                 parameters.RemoteCandidates,
-                (target, useCandidate, ct) => _consent.SendCheckAsync(target, ct, useCandidate),
+                _consent.SendCheckAsync,
                 Nominate,
                 loggerFactory);
         }
@@ -102,7 +102,7 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
     {
         try
         {
-            var confirmed = await _consent!.SendCheckAsync(source, CancellationToken.None).ConfigureAwait(false);
+            var confirmed = await _consent!.SendCheckAsync(source, useCandidate: false, CancellationToken.None).ConfigureAwait(false);
             _logger.LogDebug("ICE triggered check to {Source} {Result}.", source, confirmed ? "confirmed" : "unanswered");
         }
         catch (Exception ex)

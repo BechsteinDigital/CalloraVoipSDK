@@ -88,66 +88,56 @@ internal sealed class IceNominationDriver : IAsyncDisposable
 
     private async Task RunAsync(CancellationToken ct)
     {
-        var ordered = _candidates.OrderByDescending(c => c.Priority).ToArray();
-
-        for (var round = 0; round < _maxRounds && !ct.IsCancellationRequested; round++)
+        // One guard around the whole loop: cancellation ends it quietly, and an unexpected fault in the
+        // injected check delegate is contained here (logged) rather than propagating out of the background
+        // task and re-surfacing on DisposeAsync's await. Either way the initial remote is kept.
+        try
         {
-            foreach (var candidate in ordered)
+            var ordered = _candidates.OrderByDescending(c => c.Priority).ToArray();
+
+            for (var round = 0; round < _maxRounds && !ct.IsCancellationRequested; round++)
             {
-                bool answered;
-                try
+                foreach (var candidate in ordered)
                 {
-                    answered = await _check(candidate.EndPoint, false, ct).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) when (ct.IsCancellationRequested)
-                {
-                    return;
-                }
+                    if (!await _check(candidate.EndPoint, false, ct).ConfigureAwait(false))
+                        continue;
 
-                if (!answered)
-                    continue;
-
-                // Highest-priority valid pair (visited priority-first). Send a nominating check carrying
-                // USE-CANDIDATE (RFC 8445 §8.1.1) so the controlled peer adopts the same pair, then report
-                // it. The pair is already validated by the ordinary check above, so nominate even if the
-                // nominating check's response is missed.
-                try
-                {
+                    // Highest-priority valid pair (visited priority-first). Send a nominating check carrying
+                    // USE-CANDIDATE (RFC 8445 §8.1.1) so the controlled peer adopts the same pair, then report
+                    // it. The pair is already validated by the ordinary check above, so nominate even if the
+                    // nominating check's response is missed.
                     await _check(candidate.EndPoint, true, ct).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) when (ct.IsCancellationRequested)
-                {
+
+                    _logger.LogDebug(
+                        "ICE nominated remote pair {EndPoint} after a connectivity check (RFC 8445 §7.2.2/§8.1.1).",
+                        candidate.EndPoint);
+                    try
+                    {
+                        _onNominated(candidate.EndPoint);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Unhandled exception in ICE nomination handler.");
+                    }
+
                     return;
                 }
 
-                _logger.LogDebug(
-                    "ICE nominated remote pair {EndPoint} after a connectivity check (RFC 8445 §7.2.2/§8.1.1).",
-                    candidate.EndPoint);
-                try
-                {
-                    _onNominated(candidate.EndPoint);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Unhandled exception in ICE nomination handler.");
-                }
-
-                return;
-            }
-
-            try
-            {
                 await _delay(_roundDelay, ct).ConfigureAwait(false);
             }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
-            {
-                return;
-            }
-        }
 
-        _logger.LogWarning(
-            "ICE connectivity checks confirmed no candidate pair after {Rounds} rounds; keeping the initial remote " +
-            "(the symmetric transport still latches the peer's source).", _maxRounds);
+            _logger.LogWarning(
+                "ICE connectivity checks confirmed no candidate pair after {Rounds} rounds; keeping the initial " +
+                "remote (the symmetric transport still latches the peer's source).", _maxRounds);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // Disposed / cancelled — stop quietly.
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "ICE nomination driver loop failed unexpectedly; keeping the initial remote.");
+        }
     }
 
     /// <summary>Cancels the loop and awaits its completion. Idempotent.</summary>
