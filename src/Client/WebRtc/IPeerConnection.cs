@@ -33,7 +33,9 @@ public interface IPeerConnection : IAsyncDisposable
     /// <summary>
     /// Raised as each local ICE candidate is gathered (RFC 8838 trickle), carrying the RFC 8829
     /// <c>candidate:</c> line so the app can signal it to the peer out-of-band. Pair with
-    /// <see cref="AddIceCandidateAsync"/> on the remote side. Today one host candidate is gathered.
+    /// <see cref="AddIceCandidateAsync"/> on the remote side. The host candidate is surfaced at offer/answer
+    /// time; server-reflexive candidates follow from <see cref="GatherCandidatesAsync"/> when STUN servers
+    /// are configured.
     /// </summary>
     event EventHandler<string>? LocalIceCandidateDiscovered;
 

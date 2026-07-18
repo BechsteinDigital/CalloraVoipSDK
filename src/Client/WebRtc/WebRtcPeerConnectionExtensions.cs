@@ -18,8 +18,10 @@ public static class WebRtcPeerConnectionExtensions
     /// </summary>
     /// <remarks>
     /// Subscribe to <see cref="IPeerConnection.TrackReceived"/> <em>before</em> calling this so inbound
-    /// tracks are not missed. As the offerer, configure a reachable media port on the client (an ephemeral
-    /// port yields a disabled offer m-line until early-bind/trickle ICE lands — see ADR-012).
+    /// tracks are not missed. Early-bind gives even an ephemeral (port 0) client a live offer m-line; a
+    /// fixed, reachable media port is still recommended for NAT reachability without TURN. When
+    /// <paramref name="signalling"/> also implements <see cref="IWebRtcTrickleSignaling"/>, local candidates
+    /// (host + server-reflexive) trickle out and remote candidates are applied during negotiation (ADR-012).
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="peer"/> or <paramref name="signalling"/> is null.</exception>
     /// <exception cref="WebRtcConnectException">The connection failed or was closed during negotiation.</exception>

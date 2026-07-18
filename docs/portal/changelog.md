@@ -11,8 +11,10 @@ The authoritative changelog lives in the repository:
   (ICE, DTLS-SRTP, BUNDLE, RTP/RTCP), an SDK-driven handshake (`peer.ConnectAsync(signalling, role)`),
   the W3C track model (`TrackReceived` → `RemoteTrack`/`EncodedFrame`), a multi-peer manager
   (`client.Peers`) and L3 seams (`IMediaTap`, `IWebRtcClientModule`). Transport-only — bring your own
-  codec. See [WebRTC](guides/webrtc.md). **Preview:** not yet browser-validated; API may change; no
-  data channels / TURN / simulcast yet.
+  codec. See [WebRTC](guides/webrtc.md). Includes trickle ICE + early-bind (an ephemeral media port
+  yields a live m-line) and send-side simulcast (RFC 8853, offerer-confirmed; receive-side RID demux is
+  a later slice). **Preview:** not yet browser-validated; API may change; no data channels (SCTP) or
+  TURN relay yet.
 - **BREAKING (from 4.6):** SIP-facade config types renamed — `SdkConfiguration` → `VoipConfiguration`,
   `SdkOptions` → `VoipOptions`, `AddCallora(...)` → `AddCalloraVoip(...)` (no aliases). `VoipClient` is
   unchanged. See [`CHANGELOG.md`](https://github.com/BechsteinDigital/CalloraVoipSDK/blob/main/CHANGELOG.md).

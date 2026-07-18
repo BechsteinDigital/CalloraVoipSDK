@@ -25,8 +25,10 @@ It exposes a stable, developer-friendly API through `VoipClient` while keeping t
   happy path (`peer.ConnectAsync(signalling, role)`), the W3C track model (`TrackReceived` →
   `RemoteTrack`/`EncodedFrame`), a multi-peer manager (`client.Peers`), and L3 seams (`IMediaTap`,
   `IWebRtcClientModule`). The app owns signalling and the codec — the SDK moves bytes, it never
-  encodes/decodes. See the `WebRtc*` samples. **Preview:** not yet browser-validated (Chrome/Firefox),
-  API may change; no data channels / TURN / simulcast yet.
+  encodes/decodes. Trickle ICE + early-bind (an ephemeral media port yields a live m-line) and
+  send-side simulcast (RFC 8853, offerer-confirmed; receive-side RID demux is a later slice) are
+  included. See the `WebRtc*` samples. **Preview:** not yet browser-validated (Chrome/Firefox),
+  API may change; no data channels (SCTP) or TURN relay yet.
 
 > **Breaking change in 4.6** — the SIP-facade configuration types were renamed so each facade owns a
 > facade-scoped name (parallel to `WebRtcConfiguration`/`WebRtcOptions`/`AddCalloraWebRtc`):
