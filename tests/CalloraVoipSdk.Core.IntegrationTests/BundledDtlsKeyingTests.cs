@@ -144,7 +144,10 @@ public sealed class BundledDtlsKeyingTests
         serverKeying.Start();
 
         // While the DTLS filter points at the stale endpoint, the server's flights are dropped: nothing keys.
-        using (var blocked = new CancellationTokenSource(TimeSpan.FromSeconds(1.5)))
+        // A short window suffices to prove the block (the server answers the ClientHello within milliseconds
+        // and the client drops it) and stays far inside the DTLS retransmit budget, so the handshake is still
+        // alive to complete once the filter is corrected below.
+        using (var blocked = new CancellationTokenSource(TimeSpan.FromMilliseconds(800)))
         {
             while (!blocked.IsCancellationRequested)
             {
