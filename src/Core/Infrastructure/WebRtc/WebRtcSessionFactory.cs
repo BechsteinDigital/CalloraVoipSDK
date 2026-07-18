@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Sockets;
 using CalloraVoipSdk.Core.Infrastructure.Dtls;
 using CalloraVoipSdk.Core.Infrastructure.Rtp;
@@ -26,8 +27,17 @@ internal static class WebRtcSessionFactory
     /// when the descriptions are not a keyed BUNDLE session (no audio, no sdes:mid, or no DTLS
     /// fingerprint) — WebRTC media is DTLS-SRTP over one BUNDLE group.
     /// </summary>
+    // Host-candidate priority (RFC 8445 §5.1.2.1: type pref 126, local pref 65535, component 1). Used only
+    // as the ordering weight for a remote endpoint taken from the m-line address (no a=candidate priority).
+    private const long DefaultCandidatePriority = (126L << 24) | (65535L << 8) | 255L;
+
     /// <param name="localDescription">This peer's description (the offer if offering, else the answer).</param>
     /// <param name="remoteDescription">The other peer's description (the answer if we offered, else the offer).</param>
+    /// <param name="iceControlling">
+    /// Whether this peer holds the ICE controlling role (RFC 8445 §6.1.1) — the offerer. The controlling
+    /// agent drives connectivity checks and USE-CANDIDATE nomination; the controlled agent (answerer) adopts
+    /// the nominated pair from the peer's check.
+    /// </param>
     public static BundledMediaSession? TryCreate(
         SdpSessionDescription remoteDescription,
         SdpSessionDescription localDescription,
@@ -35,7 +45,8 @@ internal static class WebRtcSessionFactory
         IDtlsSrtpHandshaker handshaker,
         DtlsCertificate certificate,
         ILoggerFactory loggerFactory,
-        UdpClient? preBoundSocket = null)
+        UdpClient? preBoundSocket = null,
+        bool iceControlling = false)
     {
         ArgumentNullException.ThrowIfNull(remoteDescription);
         ArgumentNullException.ThrowIfNull(localDescription);
@@ -60,6 +71,13 @@ internal static class WebRtcSessionFactory
         var remoteEndPoint = WebRtcRemoteEndPoint.Resolve(remoteAudio, remoteDescription.ConnectionAddress);
         if (remoteEndPoint is null)
             return null;
+
+        // The remote candidates the controlling agent runs connectivity checks against (RFC 8445 §7.2.2/§8).
+        // Falls back to the resolved endpoint when the peer advertised no a=candidate (m-line address style),
+        // so nomination still validates the one reachable pair.
+        var remoteCandidates = RemoteCandidates(remoteAudio);
+        if (remoteCandidates.Count == 0)
+            remoteCandidates = [new IceRemoteCandidate(remoteEndPoint, DefaultCandidatePriority)];
 
         // DTLS-SRTP (WebRTC is DTLS only): the peer's fingerprint, and our role from both a=setup values
         // (RFC 5763 §5 / RFC 4145: the active side is the client).
@@ -115,11 +133,14 @@ internal static class WebRtcSessionFactory
             Ice = new IceMediaParameters(
                 remoteEndPoint,
                 IceEnabled: true,
-                IceControlling: false,
+                IceControlling: iceControlling,
                 LocalIceUfrag: options.Ice.Ufrag,
                 LocalIcePwd: options.Ice.Pwd,
                 RemoteIceUfrag: remoteAudio.IceUfrag,
-                RemoteIcePwd: remoteAudio.IcePwd),
+                RemoteIcePwd: remoteAudio.IcePwd)
+            {
+                RemoteCandidates = remoteCandidates,
+            },
         };
 
         return new BundledMediaSession(sessionOptions, handshaker, certificate, loggerFactory);
@@ -195,6 +216,19 @@ internal static class WebRtcSessionFactory
         var mid = media.Extensions.FirstOrDefault(e => string.Equals(e.Uri, RtpHeaderExtensionUris.Mid, StringComparison.Ordinal));
         return mid is not null && mid.Id is >= 1 and <= 14 ? (byte)mid.Id : null;
     }
+
+    // The usable remote candidates for connectivity checks (RFC 8839): component-1 UDP candidates with a
+    // parseable address and real port, paired with their priority so the nomination driver checks the
+    // highest-priority pair first (RFC 8445 §7.2.2).
+    private static IReadOnlyList<IceRemoteCandidate> RemoteCandidates(SdpMediaDescription remoteAudio) =>
+        remoteAudio.Candidates
+            .Where(c => c.Component == 1 // RTP; rtcp-mux shares it (RFC 8843)
+                        && c.Transport.Equals("udp", Ci)
+                        && c.Port > 0
+                        && c.Priority >= 0
+                        && IPAddress.TryParse(c.Address, out _))
+            .Select(c => new IceRemoteCandidate(new IPEndPoint(IPAddress.Parse(c.Address), c.Port), c.Priority))
+            .ToArray();
 
     // RFC 3550 §5.1: a random 32-bit SSRC. NextInt64 covers the full [1, 2^32-1] range (Next(1, int.MaxValue)
     // would leave the upper half of the SSRC space unused).

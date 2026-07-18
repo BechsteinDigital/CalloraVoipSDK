@@ -28,6 +28,11 @@ internal sealed class BundledIceControl : IAsyncDisposable
     /// <param name="onConsentLost">Invoked when consent freshness expires (RFC 7675).</param>
     /// <param name="onConnectivityDegraded">Invoked on a transient consent miss.</param>
     /// <param name="onConnectivityRecovered">Invoked when consent recovers after a degrade.</param>
+    /// <param name="onPairNominated">
+    /// Invoked with the nominated remote endpoint once ICE connectivity checks select a pair (RFC 8445 §8),
+    /// so the transport points its send target at the checked pair (typically
+    /// <see cref="BundledMediaTransport.SetRemoteEndPoint"/>).
+    /// </param>
     public BundledIceControl(
         IceMediaParameters parameters,
         BundledInboundPipeline inbound,
@@ -35,11 +40,13 @@ internal sealed class BundledIceControl : IAsyncDisposable
         ILoggerFactory loggerFactory,
         Action? onConsentLost = null,
         Action? onConnectivityDegraded = null,
-        Action? onConnectivityRecovered = null)
+        Action? onConnectivityRecovered = null,
+        Action<IPEndPoint>? onPairNominated = null)
     {
         _inbound = inbound ?? throw new ArgumentNullException(nameof(inbound));
         _attachment = new IceMediaAttachment(
-            parameters, sendRaw, loggerFactory, onConsentLost, onConnectivityDegraded, onConnectivityRecovered);
+            parameters, sendRaw, loggerFactory, onConsentLost, onConnectivityDegraded, onConnectivityRecovered,
+            onPairNominated);
 
         _inbound.StunPacketReceived += _attachment.OnStunPacketReceived;
     }

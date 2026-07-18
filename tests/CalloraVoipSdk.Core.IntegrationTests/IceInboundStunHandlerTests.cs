@@ -144,7 +144,8 @@ public sealed class IceInboundStunHandlerTests
         var handler = NewHandler(session, IceRole.Controlled, tieBreaker: 1);
 
         var nominated = 0;
-        handler.PairNominated += () => Interlocked.Increment(ref nominated);
+        IPEndPoint? nominatedSource = null;
+        handler.PairNominated += source => { nominatedSource = source; Interlocked.Increment(ref nominated); };
         session.StunPacketReceived += handler.OnStunPacketReceived;
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
@@ -159,5 +160,7 @@ public sealed class IceInboundStunHandlerTests
         var response = Codec.Decode(reply.Buffer);
         Assert.Equal(StunMessageClass.SuccessResponse, response!.MessageClass);
         Assert.Equal(1, Volatile.Read(ref nominated));
+        // The controlled agent adopts the source of the USE-CANDIDATE check as the nominated remote.
+        Assert.Equal(new IPEndPoint(IPAddress.Loopback, peerPort), nominatedSource);
     }
 }

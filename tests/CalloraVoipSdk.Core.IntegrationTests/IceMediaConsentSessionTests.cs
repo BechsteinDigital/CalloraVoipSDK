@@ -85,6 +85,44 @@ public sealed class IceMediaConsentSessionTests
         Assert.True(checks >= 3);
     }
 
+    [Fact]
+    public async Task Nominate_redirects_consent_checks_to_the_new_remote()
+    {
+        var clock = new MutableClock(DateTimeOffset.UnixEpoch);
+        var newRemote = new IPEndPoint(IPAddress.Loopback, 6000);
+        var sawNewRemote = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        IceMediaConsentSession? session = null;
+
+        ValueTask SendRaw(ReadOnlyMemory<byte> datagram, IPEndPoint destination, CancellationToken ct)
+        {
+            // Answer so the session stays fresh regardless of target.
+            var response = new byte[20];
+            datagram.Span.Slice(8, 12).CopyTo(response.AsSpan(8));
+            session!.OnStunResponse(response);
+            if (destination.Equals(newRemote))
+                sawNewRemote.TrySetResult();
+            return ValueTask.CompletedTask;
+        }
+
+        session = new IceMediaConsentSession(
+            new StunMessageCodec(), SendRaw, Remote,
+            localUfrag: "localU", remoteUfrag: "peerU", remotePassword: "peerPwd",
+            priority: 1u, controlling: true, tieBreaker: 1,
+            onConsentLost: () => { },
+            loggerFactory: NullLoggerFactory.Instance,
+            policy: new IceConsentFreshnessPolicy(TimeSpan.FromSeconds(5)),
+            checkTimeout: TimeSpan.FromSeconds(1),
+            utcNow: () => clock.Now,
+            delay: (_, ct) => { clock.Advance(TimeSpan.FromSeconds(1)); return Task.Delay(1, ct); },
+            nextRandom: () => 0.5);
+
+        session.Start();
+        session.Nominate(newRemote); // RFC 8445 §8: consent follows the nominated pair
+
+        await sawNewRemote.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await session.DisposeAsync();
+    }
+
     private sealed class MutableClock
     {
         private long _ticks;
