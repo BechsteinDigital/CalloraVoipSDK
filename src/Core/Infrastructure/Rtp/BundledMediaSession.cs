@@ -142,6 +142,9 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     /// <summary>Whether this bundle carries a video track.</summary>
     public bool HasVideo => _video is not null;
 
+    /// <summary>The remote media endpoint the shared transport sends to, or null before one is set.</summary>
+    public IPEndPoint? RemoteEndPoint => _transport.RemoteEndPoint;
+
     /// <summary>Point-in-time transport counters aggregated from the outbound and inbound pipelines.</summary>
     public BundledMediaStats SnapshotStats() => new(
         _outbound.PacketsSent, _outbound.BytesSent, _outbound.SuppressedSends,

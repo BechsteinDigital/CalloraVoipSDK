@@ -52,6 +52,9 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IAsyncDisp
     /// <summary>The endpoint the shared socket is bound to (the actual port after an ephemeral bind).</summary>
     public IPEndPoint LocalEndPoint => (IPEndPoint)_udp.Client.LocalEndPoint!;
 
+    /// <summary>The remote endpoint outbound datagrams are sent to, or null before one is set.</summary>
+    public IPEndPoint? RemoteEndPoint => Volatile.Read(ref _remoteEndPoint);
+
     /// <summary>
     /// Points sends at a (new) remote endpoint — the ICE-nominated pair, or the peer address once known.
     /// Read atomically by the send path.

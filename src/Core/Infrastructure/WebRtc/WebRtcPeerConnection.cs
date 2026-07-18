@@ -116,6 +116,12 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         get { lock (_sync) { return _session?.LocalEndPoint; } }
     }
 
+    /// <summary>The selected remote media endpoint of the shared transport, or null before one is set.</summary>
+    public IPEndPoint? RemoteMediaEndPoint
+    {
+        get { lock (_sync) { return _session?.RemoteEndPoint; } }
+    }
+
     /// <summary>
     /// The remote peer's audio-track identity (a=msid, RFC 8830) from the applied remote description, or
     /// null before one is applied or when the remote advertised no audio msid. This is the remote stream's
