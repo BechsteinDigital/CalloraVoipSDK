@@ -262,38 +262,29 @@ public sealed class WebRtcPeerConnectionTests
     }
 
     [Fact]
-    public async Task A_trickled_remote_candidate_becomes_the_send_target()
+    public async Task A_trickled_candidate_does_not_blindly_become_the_send_target()
     {
         await using var peer = Peer(Pcmu);
-        // Trickles in before the session exists (RFC 8838): buffered, applied on session build.
+        // Trickles in before the session exists (RFC 8838): buffered, handed to the connectivity-check list on
+        // session build. It must NOT become the send target by raw priority — only a passed check nominates it
+        // (proven end to end in IceMediaAttachmentNominationTests). Unchecked here, the target stays resolved.
         await peer.AddIceCandidateAsync("candidate:9 1 udp 2130706431 127.0.0.1 55123 typ host");
 
         await peer.SetRemoteDescriptionAsync(WebRtcOffer());
 
-        Assert.Equal(new IPEndPoint(IPAddress.Loopback, 55123), peer.RemoteMediaEndPoint);
+        Assert.Equal(new IPEndPoint(IPAddress.Loopback, 5000), peer.RemoteMediaEndPoint);
     }
 
     [Fact]
-    public async Task A_candidate_trickled_after_negotiation_is_applied_live()
+    public async Task A_candidate_trickled_after_negotiation_is_accepted_for_checking()
     {
         await using var peer = Peer(Pcmu);
         await peer.SetRemoteDescriptionAsync(WebRtcOffer());   // session built first
 
+        // Accepted live into the check list (no throw); not applied as the send target without a passed check.
         await peer.AddIceCandidateAsync("candidate:9 1 udp 2130706431 127.0.0.1 56000 typ host");
 
-        Assert.Equal(new IPEndPoint(IPAddress.Loopback, 56000), peer.RemoteMediaEndPoint);
-    }
-
-    [Fact]
-    public async Task A_lower_priority_trickled_candidate_does_not_override_a_higher_one()
-    {
-        await using var peer = Peer(Pcmu);
-        await peer.AddIceCandidateAsync("candidate:1 1 udp 2130706431 127.0.0.1 40001 typ host"); // high
-        await peer.AddIceCandidateAsync("candidate:2 1 udp 100 127.0.0.1 40002 typ host");         // low
-
-        await peer.SetRemoteDescriptionAsync(WebRtcOffer());
-
-        Assert.Equal(new IPEndPoint(IPAddress.Loopback, 40001), peer.RemoteMediaEndPoint);
+        Assert.Equal(new IPEndPoint(IPAddress.Loopback, 5000), peer.RemoteMediaEndPoint);
     }
 
     [Fact]

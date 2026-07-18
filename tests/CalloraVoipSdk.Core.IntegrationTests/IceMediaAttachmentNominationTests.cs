@@ -25,16 +25,19 @@ public sealed class IceMediaAttachmentNominationTests
         IceMediaAttachment? answerer = null;
 
         // Cross-wire: each attachment's raw send delivers to the other's receive hook, tagged with the
-        // sender's address (the in-memory STUN wire).
+        // sender's address. Delivered asynchronously (Task.Run) to mimic a real UDP socket — the receive loop
+        // runs on its own thread — rather than synchronous re-entrancy, a test artifact production never has.
         ValueTask OffererSend(ReadOnlyMemory<byte> dg, IPEndPoint dst, CancellationToken ct)
         {
-            answerer!.OnStunPacketReceived(dg.ToArray(), offererAddr);
+            var copy = dg.ToArray();
+            _ = Task.Run(() => answerer!.OnStunPacketReceived(copy, offererAddr));
             return ValueTask.CompletedTask;
         }
 
         ValueTask AnswererSend(ReadOnlyMemory<byte> dg, IPEndPoint dst, CancellationToken ct)
         {
-            offerer!.OnStunPacketReceived(dg.ToArray(), answererAddr);
+            var copy = dg.ToArray();
+            _ = Task.Run(() => offerer!.OnStunPacketReceived(copy, answererAddr));
             return ValueTask.CompletedTask;
         }
 
@@ -69,6 +72,54 @@ public sealed class IceMediaAttachmentNominationTests
             // the offerer's USE-CANDIDATE check. Both converge on the real pair.
             Assert.Equal(answererAddr, offererPick);
             Assert.Equal(offererAddr, answererPick);
+        }
+    }
+
+    [Fact]
+    public async Task A_trickled_remote_candidate_is_checked_and_nominated_end_to_end()
+    {
+        var offererAddr = new IPEndPoint(IPAddress.Loopback, 50011);
+        var answererAddr = new IPEndPoint(IPAddress.Loopback, 50012);
+
+        IceMediaAttachment? offerer = null;
+        IceMediaAttachment? answerer = null;
+
+        ValueTask OffererSend(ReadOnlyMemory<byte> dg, IPEndPoint dst, CancellationToken ct)
+        {
+            var copy = dg.ToArray();
+            _ = Task.Run(() => answerer!.OnStunPacketReceived(copy, offererAddr));
+            return ValueTask.CompletedTask;
+        }
+
+        ValueTask AnswererSend(ReadOnlyMemory<byte> dg, IPEndPoint dst, CancellationToken ct)
+        {
+            var copy = dg.ToArray();
+            _ = Task.Run(() => offerer!.OnStunPacketReceived(copy, answererAddr));
+            return ValueTask.CompletedTask;
+        }
+
+        // The controlling agent starts with NO seed candidates — the answerer's candidate only arrives via
+        // trickle (RFC 8838) after start.
+        var offererParams = new IceMediaParameters(
+            answererAddr, IceEnabled: true, IceControlling: true,
+            LocalIceUfrag: "offr", LocalIcePwd: "offrPassword", RemoteIceUfrag: "answ", RemoteIcePwd: "answPassword");
+
+        var answererParams = new IceMediaParameters(
+            offererAddr, IceEnabled: true, IceControlling: false,
+            LocalIceUfrag: "answ", LocalIcePwd: "answPassword", RemoteIceUfrag: "offr", RemoteIcePwd: "offrPassword");
+
+        var offererNominated = new TaskCompletionSource<IPEndPoint>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        await using (answerer = new IceMediaAttachment(answererParams, AnswererSend, NullLoggerFactory.Instance))
+        await using (offerer = new IceMediaAttachment(
+            offererParams, OffererSend, NullLoggerFactory.Instance,
+            onPairNominated: ep => offererNominated.TrySetResult(ep)))
+        {
+            answerer.Start();
+            offerer.Start();
+            offerer.AddRemoteCandidate(new IceRemoteCandidate(answererAddr, Priority: 100)); // trickle after start
+
+            Assert.Equal(answererAddr, await offererNominated.Task.WaitAsync(TimeSpan.FromSeconds(5)));
         }
     }
 }

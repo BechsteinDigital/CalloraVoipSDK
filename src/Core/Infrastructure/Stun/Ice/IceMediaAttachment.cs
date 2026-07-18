@@ -24,7 +24,10 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
     private readonly Action? _onConnectivityDegraded;
     private readonly Action? _onConnectivityRecovered;
     private readonly Action<IPEndPoint>? _onPairNominated;
-    private int _nominated;
+    // The last pair actually nominated (null until the first nomination), used to skip redundant
+    // re-nominations. Distinct from _nominatedRemote, which starts at the initial resolved remote for
+    // triggered-check deduplication — so the first nomination fires even when it lands on that same remote.
+    private IPEndPoint? _lastNominated;
     private readonly ILogger<IceMediaAttachment> _logger;
 
     /// <summary>
@@ -66,8 +69,9 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
             parameters, sendRaw, OnConsentLost, loggerFactory, _onConnectivityDegraded, _onConnectivityRecovered);
 
         // The controlling agent drives candidate-pair checks and regular nomination (RFC 8445 §7.2.2/§8.1.1);
-        // it needs the consent session's shared-socket check primitive and at least one remote candidate.
-        if (_consent is not null && parameters.IceControlling && parameters.RemoteCandidates.Count > 0)
+        // it needs the consent session's shared-socket check primitive. Built even with an empty seed so
+        // candidates that only arrive via trickle (RFC 8838, AddRemoteCandidate) are still checked.
+        if (_consent is not null && parameters.IceControlling)
         {
             _nominationDriver = new IceNominationDriver(
                 parameters.RemoteCandidates,
@@ -125,12 +129,23 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
         _nominationDriver?.Start();
     }
 
-    // Nominates a checked/adopted remote pair (RFC 8445 §8), exactly once: redirects consent freshness onto
-    // it and reports it so the transport send target follows. Funnelled from both the controlling driver and
-    // the controlled agent's inbound USE-CANDIDATE, so it is idempotent by design.
+    /// <summary>
+    /// Adds a remote candidate discovered after negotiation (RFC 8838 trickle) to the connectivity-check
+    /// list, so it is checked (and possibly nominated) rather than trusted by raw priority. No-op on a
+    /// controlled agent — which has no driver and adopts the pair the controlling peer nominates — or when
+    /// ICE is inactive.
+    /// </summary>
+    /// <param name="candidate">The trickled remote candidate.</param>
+    public void AddRemoteCandidate(IceRemoteCandidate candidate) => _nominationDriver?.AddCandidate(candidate);
+
+    // Nominates a checked/adopted remote pair (RFC 8445 §8): redirects consent freshness onto it and reports
+    // it so the transport send target and DTLS follow. Funnelled from both the controlling driver (which can
+    // re-nominate onto a higher-priority working pair) and the controlled agent's inbound USE-CANDIDATE. A
+    // no-op re-nomination to the pair already in effect is skipped (redundant redirect / log spam).
     private void Nominate(IPEndPoint remoteEndPoint)
     {
-        if (Interlocked.Exchange(ref _nominated, 1) != 0)
+        var previous = Interlocked.Exchange(ref _lastNominated, remoteEndPoint);
+        if (remoteEndPoint.Equals(previous))
             return;
 
         Volatile.Write(ref _nominatedRemote, remoteEndPoint);

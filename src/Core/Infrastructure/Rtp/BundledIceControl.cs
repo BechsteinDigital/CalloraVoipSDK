@@ -57,6 +57,13 @@ internal sealed class BundledIceControl : IAsyncDisposable
     /// <summary>Starts the consent-freshness loop (no-op when consent is inactive).</summary>
     public void Start() => _attachment.Start();
 
+    /// <summary>
+    /// Adds a trickled remote candidate (RFC 8838) to the connectivity-check list, so the controlling agent
+    /// checks and possibly nominates it. No-op on a controlled agent or when ICE is inactive.
+    /// </summary>
+    /// <param name="candidate">The trickled remote candidate.</param>
+    public void AddRemoteCandidate(IceRemoteCandidate candidate) => _attachment.AddRemoteCandidate(candidate);
+
     /// <summary>Detaches from the inbound STUN feed and disposes the consent session.</summary>
     public async ValueTask DisposeAsync()
     {

@@ -69,11 +69,10 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     private UdpClient? _mediaSocket;
     private bool _socketHandedOver;
     private bool _started;
-    // Trickle ICE (RFC 8838): the best remote candidate applied so far as the send target, buffered until
-    // the session exists. Highest-priority-wins; the symmetric transport latches the peer's real source on
-    // the first received packet regardless.
-    private IPEndPoint? _pendingRemoteCandidate;
-    private long _appliedRemotePriority = long.MinValue;
+    // Trickle ICE (RFC 8838): remote candidates that arrived before the session (and its connectivity-check
+    // list) existed, buffered and handed to the session on build. Post-session candidates go straight to the
+    // check list. Guarded by _sync.
+    private readonly List<(IPEndPoint Endpoint, long Priority)> _pendingRemoteCandidates = [];
 
     /// <summary>Raised when the connection state changes (RFC 8829 <c>connectionstatechange</c>).</summary>
     public event Action<WebRtcConnectionState>? ConnectionStateChanged;
@@ -282,7 +281,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         if (session is null)
             _logger.LogWarning("The remote description did not negotiate a BUNDLE media session; no transport was built.");
 
-        IPEndPoint? pendingCandidate;
+        (IPEndPoint Endpoint, long Priority)[] pendingCandidates;
         lock (_sync)
         {
             _remoteDescription = remoteSdp;
@@ -291,10 +290,12 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             // The transport now owns the pre-bound socket (if a session was built); DisposeAsync must not
             // dispose it again.
             _socketHandedOver = session is not null;
-            // Capture any candidate that trickled in before the session existed under the SAME lock that
-            // publishes _session, so a concurrent AddIceCandidateAsync either wrote it before this (picked
-            // up here) or observes the published session and applies it live — never lost in a gap (RFC 8838).
-            pendingCandidate = _pendingRemoteCandidate;
+            // Capture any candidates that trickled in before the session existed under the SAME lock that
+            // publishes _session, so a concurrent AddIceCandidateAsync either buffered before this (picked up
+            // here) or observes the published session and feeds the check list live — never lost (RFC 8838).
+            // Clear the buffer so a re-offer (a second SetRemoteDescription) does not replay them.
+            pendingCandidates = _pendingRemoteCandidates.ToArray();
+            _pendingRemoteCandidates.Clear();
             // Retain the remote track identity (a=msid) so the receiver can group inbound tracks by the
             // remote MediaStream (the W3C RTCTrackEvent.streams semantics).
             var audioMedia = remote.Media.FirstOrDefault(m => string.Equals(m.MediaType, "audio", StringComparison.OrdinalIgnoreCase));
@@ -310,8 +311,8 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         if (session is not null)
         {
             WireSession(session);
-            if (pendingCandidate is not null)
-                session.SetRemoteEndPoint(pendingCandidate);
+            foreach (var candidate in pendingCandidates)
+                session.AddRemoteCandidate(candidate.Endpoint, candidate.Priority);
         }
 
         TransitionTo(WebRtcConnectionState.Connecting);
@@ -400,11 +401,12 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     }
 
     /// <summary>
-    /// Applies a remote ICE candidate that trickled in out-of-band (RFC 8838), given as an RFC 8829
-    /// <c>candidate:</c> line. The highest-priority component-1 UDP candidate becomes the transport's send
-    /// target (buffered until the session is built); the symmetric transport still latches the peer's real
-    /// source address on the first received packet. A malformed or unusable candidate is ignored. This is
-    /// candidate application, not full RFC 8445 multi-pair connectivity checking (a later slice).
+    /// Adds a remote ICE candidate that trickled in out-of-band (RFC 8838), given as an RFC 8829
+    /// <c>candidate:</c> line, to the connectivity-check list. The controlling agent runs a real RFC 8445
+    /// §7.2.2 check against it and nominates it only if it answers and beats the current pair — candidates
+    /// are never trusted by raw priority. Buffered until the session is built, then fed live. A malformed or
+    /// unusable candidate is ignored. On a controlled agent (answerer) this is a no-op: it adopts the pair
+    /// the controlling peer nominates via its USE-CANDIDATE check.
     /// </summary>
     public Task AddIceCandidateAsync(string candidate, CancellationToken cancellationToken = default)
     {
@@ -420,14 +422,17 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         BundledMediaSession? session;
         lock (_sync)
         {
-            if (parsed.Priority <= _appliedRemotePriority)
-                return Task.CompletedTask; // keep the higher-priority target already applied
-            _appliedRemotePriority = parsed.Priority;
-            _pendingRemoteCandidate = parsed.Endpoint;
             session = _session;
+            if (session is null)
+            {
+                // Buffer until the session (and its check list) exist, under the same lock that publishes
+                // _session so a concurrent SetRemoteDescription cannot lose it (RFC 8838).
+                _pendingRemoteCandidates.Add((parsed.Endpoint, parsed.Priority));
+                return Task.CompletedTask;
+            }
         }
 
-        session?.SetRemoteEndPoint(parsed.Endpoint);
+        session.AddRemoteCandidate(parsed.Endpoint, parsed.Priority);
         return Task.CompletedTask;
     }
 
