@@ -25,4 +25,26 @@ internal sealed record BundledTrackConfig
 
     /// <summary>The video codec name ("H264"/"VP8") for a video m-line, or null for an audio m-line.</summary>
     public string? VideoCodecName { get; init; }
+
+    /// <summary>
+    /// Send-side simulcast encodings for a video m-line (RFC 8853): each names an <c>a=rid</c> layer
+    /// carried on its own SSRC under the shared MID. Empty for a non-simulcast track — the single stream
+    /// then uses <see cref="Ssrc"/> / <see cref="PayloadType"/> directly. All layers share the codec and
+    /// payload type; only the SSRC and RID differ.
+    /// </summary>
+    public IReadOnlyList<BundledVideoEncoding> Encodings { get; init; } = [];
+}
+
+/// <summary>
+/// One send-side simulcast encoding of a video m-line (RFC 8853 / RFC 8851): an <c>a=rid</c> layer id and
+/// the SSRC its RTP stream is carried on. The RID is stamped per packet (RFC 8852) so the peer can
+/// associate the SSRC with the encoding.
+/// </summary>
+internal sealed record BundledVideoEncoding
+{
+    /// <summary>The <c>a=rid</c> layer id (e.g. <c>hi</c>, <c>mid</c>, <c>lo</c>).</summary>
+    public required string Rid { get; init; }
+
+    /// <summary>The synchronisation source carrying this encoding's RTP stream.</summary>
+    public required uint Ssrc { get; init; }
 }

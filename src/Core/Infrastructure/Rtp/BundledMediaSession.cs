@@ -90,10 +90,32 @@ internal sealed class BundledMediaSession : IAsyncDisposable
 
         if (options.Video is { } video)
         {
-            _outbound.RegisterTrack(video.Mid, BuildOutboundTrack(options, video));
-            _video = new BundledVideoTrack(
-                video.Mid, video.VideoCodecName ?? throw new ArgumentException("A video track must name its codec.", nameof(options)),
-                video.PayloadType, _outbound, options.VideoReorderDepth, loggerFactory.CreateLogger<BundledVideoTrack>());
+            var codecName = video.VideoCodecName
+                ?? throw new ArgumentException("A video track must name its codec.", nameof(options));
+
+            if (video.Encodings.Count > 0)
+            {
+                // Send-side simulcast (RFC 8853): one outbound RTP stream per a=rid layer under the shared
+                // MID, each on its own SSRC with the negotiated RID header extension (RFC 8852) stamped.
+                var ridExtensionId = options.RidExtensionId ?? throw new ArgumentException(
+                    "A simulcast video track needs a negotiated RID header-extension id.", nameof(options));
+                foreach (var encoding in video.Encodings)
+                    _outbound.RegisterTrack(video.Mid, encoding.Rid,
+                        BuildEncodingTrack(options, video.Mid, encoding.Ssrc, video.PayloadType, encoding.Rid, ridExtensionId));
+
+                _video = new BundledVideoTrack(
+                    video.Mid, codecName, video.PayloadType,
+                    video.Encodings.Select(e => e.Rid).ToArray(),
+                    _outbound, options.VideoReorderDepth, loggerFactory.CreateLogger<BundledVideoTrack>());
+            }
+            else
+            {
+                _outbound.RegisterTrack(video.Mid, BuildOutboundTrack(options, video));
+                _video = new BundledVideoTrack(
+                    video.Mid, codecName, video.PayloadType, _outbound, options.VideoReorderDepth,
+                    loggerFactory.CreateLogger<BundledVideoTrack>());
+            }
+
             _video.FrameReceived += (frame, timestamp, isKeyFrame) => VideoFrameReceived?.Invoke(frame, timestamp, isKeyFrame);
             router.RegisterTrack(video.Mid, _video.OnRtpPacket);
         }
@@ -133,6 +155,16 @@ internal sealed class BundledMediaSession : IAsyncDisposable
             new RtpOutboundHeaderExtensionStamper(transportWideCcExtensionId: null, options.MidExtensionId, track.Mid),
             options.InitialSequenceNumber, options.InitialTimestamp);
 
+    // One simulcast encoding's outbound stream: its own SSRC, the shared video payload type, and a stamper
+    // that marks every packet with the MID and this encoding's RID (RFC 8852). Video packets carry an
+    // explicit frame timestamp, so the timestamp cursor never advances (samplesPerPacket: 0).
+    private static BundledOutboundTrack BuildEncodingTrack(
+        BundledMediaSessionOptions options, string mid, uint ssrc, byte payloadType, string rid, byte ridExtensionId) =>
+        new(ssrc, payloadType, samplesPerPacket: 0,
+            new RtpOutboundHeaderExtensionStamper(
+                transportWideCcExtensionId: null, options.MidExtensionId, mid, ridExtensionId, rid),
+            options.InitialSequenceNumber, options.InitialTimestamp);
+
     /// <summary>The endpoint the shared socket is bound to (the actual port after an ephemeral bind).</summary>
     public IPEndPoint LocalEndPoint => _transport.LocalEndPoint;
 
@@ -141,6 +173,12 @@ internal sealed class BundledMediaSession : IAsyncDisposable
 
     /// <summary>Whether this bundle carries a video track.</summary>
     public bool HasVideo => _video is not null;
+
+    /// <summary>Whether the video track sends multiple simulcast encodings (RFC 8853).</summary>
+    public bool VideoIsSimulcast => _video?.IsSimulcast ?? false;
+
+    /// <summary>The configured simulcast <c>a=rid</c> layer ids, or empty when not simulcasting.</summary>
+    public IReadOnlyCollection<string> VideoSendRids => _video?.SendRids ?? [];
 
     /// <summary>The remote media endpoint the shared transport sends to, or null before one is set.</summary>
     public IPEndPoint? RemoteEndPoint => _transport.RemoteEndPoint;
@@ -163,11 +201,19 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     public ValueTask SendAudioAsync(ReadOnlyMemory<byte> payload, bool marker = false, CancellationToken cancellationToken = default)
         => _outbound.SendAsync(_audioMid, payload, marker, cancellationToken: cancellationToken);
 
-    /// <summary>Packetises and sends one encoded video frame on the video track.</summary>
-    /// <exception cref="InvalidOperationException">This bundle has no video track.</exception>
+    /// <summary>Packetises and sends one encoded video frame on the (non-simulcast) video track.</summary>
+    /// <exception cref="InvalidOperationException">This bundle has no video track, or it is simulcast.</exception>
     public Task SendVideoFrameAsync(ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default)
         => _video is { } video
             ? video.SendFrameAsync(encodedFrame, rtpTimestamp, cancellationToken)
+            : throw new InvalidOperationException("This bundle has no video track.");
+
+    /// <summary>Packetises and sends one encoded video frame on a simulcast <paramref name="rid"/> layer (RFC 8853).</summary>
+    /// <exception cref="InvalidOperationException">This bundle has no video track.</exception>
+    /// <exception cref="ArgumentException">No encoding is configured for <paramref name="rid"/>.</exception>
+    public Task SendVideoFrameAsync(string rid, ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default)
+        => _video is { } video
+            ? video.SendFrameAsync(rid, encodedFrame, rtpTimestamp, cancellationToken)
             : throw new InvalidOperationException("This bundle has no video track.");
 
     /// <summary>

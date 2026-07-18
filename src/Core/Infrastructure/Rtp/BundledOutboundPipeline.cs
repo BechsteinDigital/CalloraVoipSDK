@@ -22,8 +22,9 @@ namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
 /// </summary>
 internal sealed class BundledOutboundPipeline
 {
-    private readonly ConcurrentDictionary<string, BundledOutboundTrack> _tracksByMid =
-        new(StringComparer.Ordinal);
+    // Routed by (MID, RID): a non-simulcast m-line registers one track under (mid, null); a simulcast
+    // m-line (RFC 8853) registers one track per a=rid layer under (mid, rid), each with its own SSRC.
+    private readonly ConcurrentDictionary<TrackKey, BundledOutboundTrack> _tracks = new();
     private readonly IRtpPacketCodec _codec;
     private readonly IBundledDatagramSender _sender;
     private readonly ILogger<BundledOutboundPipeline> _logger;
@@ -56,19 +57,34 @@ internal sealed class BundledOutboundPipeline
     public long BytesSent => Interlocked.Read(ref _bytesSent);
 
     /// <summary>
-    /// Registers the outbound track for one m-line's MID.
+    /// Registers the non-simulcast outbound track for one m-line's MID.
     /// </summary>
     /// <exception cref="InvalidOperationException">A track is already registered for <paramref name="mid"/>.</exception>
-    public void RegisterTrack(string mid, BundledOutboundTrack track)
+    public void RegisterTrack(string mid, BundledOutboundTrack track) => RegisterTrack(mid, rid: null, track);
+
+    /// <summary>
+    /// Registers the outbound track for one m-line's MID and simulcast <paramref name="rid"/> layer
+    /// (RFC 8853); a <see langword="null"/> <paramref name="rid"/> is the non-simulcast single stream.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">A track is already registered for that MID/RID.</exception>
+    public void RegisterTrack(string mid, string? rid, BundledOutboundTrack track)
     {
         ArgumentException.ThrowIfNullOrEmpty(mid);
         ArgumentNullException.ThrowIfNull(track);
-        if (!_tracksByMid.TryAdd(mid, track))
-            throw new InvalidOperationException($"An outbound track is already registered for MID '{mid}'.");
+        if (!_tracks.TryAdd(new TrackKey(mid, rid), track))
+            throw new InvalidOperationException(
+                $"An outbound track is already registered for MID '{mid}'{(rid is null ? "" : $" RID '{rid}'")}.");
     }
 
-    /// <summary>Removes the track for a MID. Returns <see langword="false"/> when none was registered.</summary>
-    public bool UnregisterTrack(string mid) => _tracksByMid.TryRemove(mid, out _);
+    /// <summary>Removes every track (all RID layers) for a MID. Returns <see langword="false"/> when none was registered.</summary>
+    public bool UnregisterTrack(string mid)
+    {
+        var removed = false;
+        foreach (var key in _tracks.Keys)
+            if (string.Equals(key.Mid, mid, StringComparison.Ordinal))
+                removed |= _tracks.TryRemove(key, out _);
+        return removed;
+    }
 
     /// <summary>
     /// Installs the shared outbound SRTP context once the DTLS-SRTP handshake has derived the key. Until
@@ -89,37 +105,44 @@ internal sealed class BundledOutboundPipeline
         ReadOnlyMemory<byte> payload,
         bool marker = false,
         byte? payloadTypeOverride = null,
+        string? rid = null,
         CancellationToken cancellationToken = default)
     {
-        var track = ResolveTrack(mid);
+        var track = ResolveTrack(mid, rid);
         var payloadType = payloadTypeOverride ?? track.DefaultPayloadType;
         return SendCoreAsync(mid, track, payload, marker, payloadType, timestampOverride: null, advanceTimestamp: true, cancellationToken);
     }
 
     /// <summary>
-    /// Sends one packet on the given MID's track with an explicit timestamp and without advancing the
-    /// track's timestamp cursor — for video frames whose packets share one frame-level timestamp.
+    /// Sends one packet on the given MID's track (optionally a simulcast <paramref name="rid"/> layer) with
+    /// an explicit timestamp and without advancing the track's timestamp cursor — for video frames whose
+    /// packets share one frame-level timestamp.
     /// </summary>
-    /// <exception cref="InvalidOperationException">No track is registered for <paramref name="mid"/>.</exception>
+    /// <exception cref="InvalidOperationException">No track is registered for that MID/RID.</exception>
     public ValueTask SendTimestampedAsync(
         string mid,
         ReadOnlyMemory<byte> payload,
         bool marker,
         byte payloadType,
         uint timestamp,
+        string? rid = null,
         CancellationToken cancellationToken = default)
     {
-        var track = ResolveTrack(mid);
+        var track = ResolveTrack(mid, rid);
         return SendCoreAsync(mid, track, payload, marker, payloadType, timestampOverride: timestamp, advanceTimestamp: false, cancellationToken);
     }
 
-    private BundledOutboundTrack ResolveTrack(string mid)
+    private BundledOutboundTrack ResolveTrack(string mid, string? rid)
     {
         ArgumentException.ThrowIfNullOrEmpty(mid);
-        if (!_tracksByMid.TryGetValue(mid, out var track))
-            throw new InvalidOperationException($"No outbound track is registered for MID '{mid}'.");
+        if (!_tracks.TryGetValue(new TrackKey(mid, rid), out var track))
+            throw new InvalidOperationException(
+                $"No outbound track is registered for MID '{mid}'{(rid is null ? "" : $" RID '{rid}'")}.");
         return track;
     }
+
+    // The routing key for an outbound track: the m-line MID and, for simulcast, the a=rid layer.
+    private readonly record struct TrackKey(string Mid, string? Rid);
 
     private async ValueTask SendCoreAsync(
         string mid,
