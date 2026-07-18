@@ -62,6 +62,23 @@ services
 `IWebRtcClient.Peers` tracks live peers; `IWebRtcClient.Modules` registers facade plugins
 (programmatically or auto-attached from DI as `IWebRtcClientModule` services).
 
+## Screen sharing
+
+Screen sharing needs no separate API: it is just video. Capture the screen with your platform's
+API, encode the frames with your codec (transport-only — the SDK never encodes), and send them on the
+peer's video track exactly like camera frames:
+
+```csharp
+// EnableVideo on the client, then feed screen-captured encoded frames instead of camera frames.
+await peer.SendVideoFrameAsync(encodedScreenFrame, rtpTimestamp);
+```
+
+Screen content differs from camera content (higher resolution, lower frame rate, "detail" over
+"motion") — size your encoder accordingly; the SDK moves the bytes unchanged. Sharing the screen
+*alongside* the camera (two simultaneous video tracks) needs multi-video-track support, which is a
+later slice — today one video track is negotiated per peer. A future `a=content` (RFC 4796) hint to
+flag the track as screen content is optional and not yet emitted.
+
 ## Samples
 
 - `examples/CalloraVoipSdk.Sample.WebRtcPeer` — two peers connect over an in-memory channel, tracks + tap.
