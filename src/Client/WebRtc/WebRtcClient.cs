@@ -1,9 +1,12 @@
 using System.Security.Cryptography;
+using CalloraVoipSdk.Core.Application.Ports.Connectivity;
 using CalloraVoipSdk.Core.Infrastructure.Dtls;
 using CalloraVoipSdk.Core.Infrastructure.Sdp;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Models;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.OfferAnswer;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Parsing;
+using CalloraVoipSdk.Core.Infrastructure.Stun.Client;
+using CalloraVoipSdk.Core.Infrastructure.Stun.Wire;
 using CalloraVoipSdk.Core.Infrastructure.WebRtc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -80,7 +83,15 @@ public sealed class WebRtcClient : IWebRtcClient
                 Fingerprint = certificate.Fingerprint.Value,
             },
             Ice = new SdpIceParameters { Ufrag = GenerateUfrag(), Pwd = GeneratePassword() },
+            IceServers = _config.IceServers,
         };
+
+        // A STUN probe is built only when servers are configured — a zero-config peer gathers host-only.
+        var stunProbe = _config.IceServers.Count > 0
+            ? new StunIceProbe(
+                new StunClient(new StunMessageCodec(), _loggerFactory.CreateLogger<StunClient>()),
+                _loggerFactory)
+            : null;
 
         var peer = new WebRtcPeerConnection(
             options,
@@ -89,7 +100,8 @@ public sealed class WebRtcClient : IWebRtcClient
             new SdpSessionSerializer(),
             new DtlsSrtpHandshaker(_loggerFactory.CreateLogger<DtlsSrtpHandshaker>()),
             certificate,
-            _loggerFactory);
+            _loggerFactory,
+            stunProbe);
 
         var connection = new PeerConnection(peer, _loggerFactory.CreateLogger<PeerConnection>(), _peers.Untrack);
         _peers.Track(connection);

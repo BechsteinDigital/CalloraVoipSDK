@@ -42,6 +42,23 @@ public sealed class WebRtcTrickleTests
         await peer.AddIceCandidateAsync("candidate:1 1 udp 2130706431 127.0.0.1 51111 typ host");
     }
 
+    [Fact]
+    public async Task GatherCandidatesAsync_without_ice_servers_gathers_host_only()
+    {
+        // Zero-config peer: no STUN servers → GatherCandidatesAsync is a no-op, only the host candidate
+        // was emitted by CreateOffer.
+        var rtc = new WebRtcClient();
+        await using var peer = rtc.CreatePeer();
+        var candidates = new List<string>();
+        peer.LocalIceCandidateDiscovered += (_, c) => candidates.Add(c);
+
+        peer.CreateOffer();
+        await peer.GatherCandidatesAsync();
+
+        Assert.Contains(candidates, c => c.Contains("typ host", StringComparison.Ordinal));
+        Assert.DoesNotContain(candidates, c => c.Contains("typ srflx", StringComparison.Ordinal));
+    }
+
     // Extracts the port of an "m=<media> <port> ..." line, e.g. "m=audio 51234 UDP/TLS/RTP/SAVPF 111" -> 51234.
     private static int MediaPort(string sdp, string media)
         => sdp.Split('\n')

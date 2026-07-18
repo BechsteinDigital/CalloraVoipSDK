@@ -1,6 +1,8 @@
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using CalloraVoipSdk;
+using CalloraVoipSdk.Core.Application.Ports.Connectivity;
 using CalloraVoipSdk.Core.Infrastructure.Dtls;
 using CalloraVoipSdk.Core.Infrastructure.Rtp;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Models;
@@ -43,6 +45,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     private readonly ISdpSessionSerializer _serializer;
     private readonly IDtlsSrtpHandshaker _handshaker;
     private readonly DtlsCertificate _certificate;
+    private readonly IIceStunProbe? _stunProbe;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<WebRtcPeerConnection> _logger;
     private readonly object _sync = new();
@@ -65,6 +68,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     private readonly SendDrainGate _sendGate = new();
     private UdpClient? _mediaSocket;
     private bool _socketHandedOver;
+    private bool _started;
     // Trickle ICE (RFC 8838): the best remote candidate applied so far as the send target, buffered until
     // the session exists. Highest-priority-wins; the symmetric transport latches the peer's real source on
     // the first received packet regardless.
@@ -95,7 +99,8 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         ISdpSessionSerializer serializer,
         IDtlsSrtpHandshaker handshaker,
         DtlsCertificate certificate,
-        ILoggerFactory loggerFactory)
+        ILoggerFactory loggerFactory,
+        IIceStunProbe? stunProbe = null)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
         ArgumentNullException.ThrowIfNull(options.LocalEndPoint);
@@ -107,6 +112,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
         _handshaker = handshaker ?? throw new ArgumentNullException(nameof(handshaker));
         _certificate = certificate ?? throw new ArgumentNullException(nameof(certificate));
+        _stunProbe = stunProbe;
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
         _logger = loggerFactory.CreateLogger<WebRtcPeerConnection>();
     }
@@ -316,7 +322,13 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     public Task StartAsync(CancellationToken cancellationToken = default)
     {
         BundledMediaSession? session;
-        lock (_sync) { session = _session; }
+        lock (_sync)
+        {
+            session = _session;
+            // The transport's receive loop now owns the media socket — candidate gathering (which shares
+            // that socket) must not run after this point.
+            _started = true;
+        }
         if (session is null)
             throw new InvalidOperationException("Apply a BUNDLE remote description before starting the peer.");
 
@@ -412,6 +424,41 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Gathers server-reflexive ICE candidates (RFC 8445 §5.1.1) by querying each configured STUN server
+    /// through the pre-bound media socket, emitting every discovered candidate on
+    /// <see cref="LocalIceCandidateDiscovered"/> (RFC 8838 trickle). No-op without a STUN probe or servers.
+    /// Call after the offer/answer is produced and BEFORE <see cref="StartAsync"/> — the query shares the
+    /// media socket, which the transport's receive loop takes over once started.
+    /// </summary>
+    public async Task GatherCandidatesAsync(CancellationToken cancellationToken = default)
+    {
+        if (_stunProbe is null || _options.IceServers.Count == 0)
+            return;
+
+        var local = EnsureLocalMediaEndPoint();
+        Socket socket;
+        lock (_sync)
+        {
+            if (_started)
+                throw new InvalidOperationException(
+                    "Cannot gather ICE candidates after StartAsync — the media socket is owned by the transport's receive loop.");
+            socket = _mediaSocket!.Client;
+        }
+
+        foreach (var server in _options.IceServers)
+        {
+            if (server.Type != IceServerType.Stun)
+                continue;
+
+            var reflexive = await _stunProbe
+                .TryGetServerReflexiveEndPointAsync(local, server, socket, cancellationToken)
+                .ConfigureAwait(false);
+            if (reflexive is not null)
+                RaiseCandidate(ServerReflexiveCandidate(reflexive, local));
+        }
+    }
+
     // Parses an RFC 8829 candidate string ("candidate:…", tolerating a leading "a=") into a component-1
     // UDP endpoint and its priority, or null when malformed/unusable (wrong component/transport, no port,
     // unparseable address).
@@ -435,15 +482,18 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     }
 
     // Emits the local host candidate for the bound endpoint as an RFC 8829 candidate string (trickle).
-    private void RaiseLocalCandidate(IPEndPoint local)
+    private void RaiseLocalCandidate(IPEndPoint local) => RaiseCandidate(LocalHostCandidate(local));
+
+    // Emits a gathered local candidate as an RFC 8829 candidate string on the trickle event.
+    private void RaiseCandidate(SdpIceCandidate candidate)
     {
         if (LocalIceCandidateDiscovered is not { } handler)
             return;
 
-        var candidate = "candidate:" + LocalHostCandidate(local).Serialize();
+        var line = "candidate:" + candidate.Serialize();
         try
         {
-            handler(candidate);
+            handler(line);
         }
         catch (Exception ex)
         {
@@ -550,6 +600,21 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         Address = local.Address.ToString(),
         Port = local.Port,
         Type = "host",
+    };
+
+    // A server-reflexive candidate for the STUN-discovered public endpoint (RFC 8445 §5.1.2.1 priority:
+    // srflx type-pref 100, local-pref 65535, RTP component 1). raddr/rport carry the local base (host).
+    private static SdpIceCandidate ServerReflexiveCandidate(IPEndPoint reflexive, IPEndPoint host) => new()
+    {
+        Foundation = "2",
+        Component = 1,
+        Transport = "udp",
+        Priority = (100L << 24) | (65535L << 8) | 255L,
+        Address = reflexive.Address.ToString(),
+        Port = reflexive.Port,
+        Type = "srflx",
+        RelatedAddress = host.Address.ToString(),
+        RelatedPort = host.Port,
     };
 
     private void TransitionTo(WebRtcConnectionState next)

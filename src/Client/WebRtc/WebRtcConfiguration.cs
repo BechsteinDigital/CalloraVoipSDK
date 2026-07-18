@@ -1,5 +1,6 @@
 using System.Net;
 using System.Security.Cryptography.X509Certificates;
+using CalloraVoipSdk;
 using Microsoft.Extensions.Logging;
 
 namespace CalloraVoipSdk.WebRtc;
@@ -36,6 +37,14 @@ public sealed class WebRtcConfiguration
     /// <see cref="EnableVideo"/>. This peer must be the offerer for the simulcast to be advertised.
     /// </summary>
     public IReadOnlyList<string> SimulcastLayers { get; init; } = [];
+
+    /// <summary>
+    /// STUN/TURN servers for gathering server-reflexive ICE candidates (RFC 8445 §5.1.1). Empty (default)
+    /// gathers only the host candidate. STUN entries are queried through the media socket when the app calls
+    /// <see cref="IPeerConnection.GatherCandidatesAsync"/> — the discovered candidates surface on
+    /// <see cref="IPeerConnection.LocalIceCandidateDiscovered"/> to trickle out (RFC 8838).
+    /// </summary>
+    public IReadOnlyList<IceServerConfiguration> IceServers { get; init; } = [];
 
     /// <summary>
     /// DTLS-SRTP identity for the peer's certificate/fingerprint (must carry an exportable ECDSA P-256

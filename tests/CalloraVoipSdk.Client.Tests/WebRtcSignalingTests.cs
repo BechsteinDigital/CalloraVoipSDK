@@ -112,6 +112,7 @@ public sealed class WebRtcSignalingTests
         public string CreateOffer() { OfferCreated = true; return "OFFER"; }
 
         public Task AddIceCandidateAsync(string candidate, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task GatherCandidatesAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
 
         public Task<string> SetRemoteDescriptionAsync(string remoteSdp, CancellationToken cancellationToken = default)
         {

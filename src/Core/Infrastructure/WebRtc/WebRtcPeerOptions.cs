@@ -1,4 +1,5 @@
 using System.Net;
+using CalloraVoipSdk;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Models;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.OfferAnswer;
 
@@ -26,4 +27,11 @@ internal sealed record WebRtcPeerOptions
 
     /// <summary>Local ICE credentials and candidates for the shared 5-tuple (RFC 8839).</summary>
     public required SdpIceParameters Ice { get; init; }
+
+    /// <summary>
+    /// STUN/TURN servers used to gather server-reflexive candidates (RFC 8445 §5.1.1). Empty gathers only
+    /// the host candidate. STUN entries are queried through the pre-bound media socket during
+    /// <see cref="WebRtcPeerConnection.GatherCandidatesAsync"/>.
+    /// </summary>
+    public IReadOnlyList<IceServerConfiguration> IceServers { get; init; } = [];
 }
