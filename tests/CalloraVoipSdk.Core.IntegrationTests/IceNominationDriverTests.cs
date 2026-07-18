@@ -124,6 +124,60 @@ public sealed class IceNominationDriverTests
     }
 
     [Fact]
+    public async Task Does_not_nominate_until_the_use_candidate_check_is_confirmed()
+    {
+        // The ordinary check validates the path, but the nominating (USE-CANDIDATE) check's response is lost
+        // the first two times — the pair must NOT be adopted until that nominating check is itself confirmed
+        // (RFC 8445 §8.1.1), so the driver retries the nomination rather than switching locally.
+        var target = Ep(5402);
+        var useCandidateAttempts = 0;
+        var nominated = new TaskCompletionSource<IPEndPoint>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        Func<IPEndPoint, bool, CancellationToken, Task<bool>> check = (_, useCandidate, _) =>
+        {
+            if (!useCandidate)
+                return Task.FromResult(true);                     // the path always works
+            var attempt = Interlocked.Increment(ref useCandidateAttempts);
+            return Task.FromResult(attempt >= 3);                 // USE-CANDIDATE confirmed only on the 3rd try
+        };
+
+        await using var driver = new IceNominationDriver(
+            [new IceRemoteCandidate(target, Priority: 100)],
+            check,
+            ep => nominated.TrySetResult(ep),
+            NullLoggerFactory.Instance,
+            maxAttempts: 5,
+            roundDelay: TimeSpan.FromMilliseconds(1));
+
+        driver.Start();
+
+        Assert.Equal(target, await nominated.Task.WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.True(Volatile.Read(ref useCandidateAttempts) >= 3); // it retried the nominating check until confirmed
+    }
+
+    [Fact]
+    public async Task Does_not_nominate_when_the_use_candidate_check_is_never_confirmed()
+    {
+        // The path validates but the nominating check is never confirmed: the controlling side must not switch
+        // its target locally, and the candidate is abandoned after its attempt budget (no phantom nomination).
+        var target = Ep(5502);
+        var nominatedCount = 0;
+        await using (var driver = new IceNominationDriver(
+            [new IceRemoteCandidate(target, 100)],
+            (_, useCandidate, _) => Task.FromResult(!useCandidate), // ordinary check true, USE-CANDIDATE never confirmed
+            _ => Interlocked.Increment(ref nominatedCount),
+            NullLoggerFactory.Instance,
+            maxAttempts: 3,
+            roundDelay: TimeSpan.FromMilliseconds(1)))
+        {
+            driver.Start();
+            await Task.Delay(200); // let the candidate exhaust its attempts
+        }
+
+        Assert.Equal(0, Volatile.Read(ref nominatedCount));
+    }
+
+    [Fact]
     public async Task Does_not_nominate_when_no_candidate_answers()
     {
         var nominatedCount = 0;
