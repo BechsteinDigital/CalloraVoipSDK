@@ -247,6 +247,68 @@ public sealed class WebRtcPeerConnectionTests
 
     // ── harness ──────────────────────────────────────────────────────────────────
 
+    [Fact]
+    public async Task CreateOffer_emits_a_local_host_candidate_for_trickle()
+    {
+        await using var peer = Peer(Pcmu);
+        string? emitted = null;
+        peer.LocalIceCandidateDiscovered += c => emitted = c;
+
+        peer.CreateOffer();
+
+        Assert.NotNull(emitted);
+        Assert.StartsWith("candidate:", emitted, StringComparison.Ordinal);
+        Assert.Contains("typ host", emitted, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_trickled_remote_candidate_becomes_the_send_target()
+    {
+        await using var peer = Peer(Pcmu);
+        // Trickles in before the session exists (RFC 8838): buffered, applied on session build.
+        await peer.AddIceCandidateAsync("candidate:9 1 udp 2130706431 127.0.0.1 55123 typ host");
+
+        await peer.SetRemoteDescriptionAsync(WebRtcOffer());
+
+        Assert.Equal(new IPEndPoint(IPAddress.Loopback, 55123), peer.RemoteMediaEndPoint);
+    }
+
+    [Fact]
+    public async Task A_candidate_trickled_after_negotiation_is_applied_live()
+    {
+        await using var peer = Peer(Pcmu);
+        await peer.SetRemoteDescriptionAsync(WebRtcOffer());   // session built first
+
+        await peer.AddIceCandidateAsync("candidate:9 1 udp 2130706431 127.0.0.1 56000 typ host");
+
+        Assert.Equal(new IPEndPoint(IPAddress.Loopback, 56000), peer.RemoteMediaEndPoint);
+    }
+
+    [Fact]
+    public async Task A_lower_priority_trickled_candidate_does_not_override_a_higher_one()
+    {
+        await using var peer = Peer(Pcmu);
+        await peer.AddIceCandidateAsync("candidate:1 1 udp 2130706431 127.0.0.1 40001 typ host"); // high
+        await peer.AddIceCandidateAsync("candidate:2 1 udp 100 127.0.0.1 40002 typ host");         // low
+
+        await peer.SetRemoteDescriptionAsync(WebRtcOffer());
+
+        Assert.Equal(new IPEndPoint(IPAddress.Loopback, 40001), peer.RemoteMediaEndPoint);
+    }
+
+    [Fact]
+    public async Task A_malformed_or_non_rtp_trickled_candidate_is_ignored()
+    {
+        await using var peer = Peer(Pcmu);
+        await peer.AddIceCandidateAsync("not-a-candidate");                                  // malformed
+        await peer.AddIceCandidateAsync("candidate:1 2 udp 100 127.0.0.1 40003 typ host");   // component 2 (RTCP)
+
+        await peer.SetRemoteDescriptionAsync(WebRtcOffer());
+
+        // No usable trickle → the send target is the description-resolved endpoint (offer m-line).
+        Assert.Equal(new IPEndPoint(IPAddress.Loopback, 5000), peer.RemoteMediaEndPoint);
+    }
+
     private static WebRtcPeerConnection PeerAt(int localPort) =>
         new(new WebRtcPeerOptions
             {

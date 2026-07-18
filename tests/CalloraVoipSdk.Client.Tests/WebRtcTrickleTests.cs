@@ -23,6 +23,25 @@ public sealed class WebRtcTrickleTests
         Assert.Contains("a=candidate:", offer, StringComparison.Ordinal);   // a host candidate is emitted
     }
 
+    [Fact]
+    public async Task The_public_peer_emits_a_local_candidate_and_accepts_a_trickled_one()
+    {
+        // Trickle-ICE slice 2 (RFC 8838): the peer surfaces its local candidate and applies a remote one
+        // through the public IPeerConnection.
+        var rtc = new WebRtcClient();
+        await using var peer = rtc.CreatePeer();
+        string? emitted = null;
+        peer.LocalIceCandidateDiscovered += (_, c) => emitted = c;
+
+        peer.CreateOffer();
+        Assert.NotNull(emitted);
+        Assert.StartsWith("candidate:", emitted, StringComparison.Ordinal);
+
+        // A malformed candidate is ignored (no throw); a well-formed one is accepted.
+        await peer.AddIceCandidateAsync("garbage");
+        await peer.AddIceCandidateAsync("candidate:1 1 udp 2130706431 127.0.0.1 51111 typ host");
+    }
+
     // Extracts the port of an "m=<media> <port> ..." line, e.g. "m=audio 51234 UDP/TLS/RTP/SAVPF 111" -> 51234.
     private static int MediaPort(string sdp, string media)
         => sdp.Split('\n')

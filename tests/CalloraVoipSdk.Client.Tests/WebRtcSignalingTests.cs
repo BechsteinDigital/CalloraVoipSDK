@@ -107,8 +107,11 @@ public sealed class WebRtcSignalingTests
 
         public event EventHandler<PeerConnectionState>? ConnectionStateChanged;
         public event EventHandler<RemoteTrack>? TrackReceived { add { } remove { } }
+        public event EventHandler<string>? LocalIceCandidateDiscovered { add { } remove { } }
 
         public string CreateOffer() { OfferCreated = true; return "OFFER"; }
+
+        public Task AddIceCandidateAsync(string candidate, CancellationToken cancellationToken = default) => Task.CompletedTask;
 
         public Task<string> SetRemoteDescriptionAsync(string remoteSdp, CancellationToken cancellationToken = default)
         {

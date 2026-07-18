@@ -24,6 +24,7 @@ internal sealed class PeerConnection : IPeerConnection
     private readonly object _statsSync = new();
     private EventHandler<PeerConnectionState>? _connectionStateChanged;
     private EventHandler<RemoteTrack>? _trackReceived;
+    private EventHandler<string>? _localIceCandidateDiscovered;
 
     public PeerConnection(WebRtcPeerConnection peer, ILogger<PeerConnection> logger, Action<IPeerConnection>? onDisposed = null)
     {
@@ -36,6 +37,7 @@ internal sealed class PeerConnection : IPeerConnection
         _peer.ConnectionStateChanged += OnInternalStateChanged;
         _peer.AudioReceived += OnAudioReceived;
         _peer.VideoFrameReceived += OnVideoReceived;
+        _peer.LocalIceCandidateDiscovered += OnLocalIceCandidate;
     }
 
     public PeerConnectionState State => Map(_peer.State);
@@ -54,7 +56,16 @@ internal sealed class PeerConnection : IPeerConnection
         remove => _trackReceived -= value;
     }
 
+    public event EventHandler<string>? LocalIceCandidateDiscovered
+    {
+        add => _localIceCandidateDiscovered += value;
+        remove => _localIceCandidateDiscovered -= value;
+    }
+
     public string CreateOffer() => _peer.CreateOffer();
+
+    public Task AddIceCandidateAsync(string candidate, CancellationToken cancellationToken = default)
+        => _peer.AddIceCandidateAsync(candidate, cancellationToken);
 
     public async Task<string> SetRemoteDescriptionAsync(string remoteSdp, CancellationToken cancellationToken = default)
     {
@@ -146,6 +157,7 @@ internal sealed class PeerConnection : IPeerConnection
         _peer.ConnectionStateChanged -= OnInternalStateChanged;
         _peer.AudioReceived -= OnAudioReceived;
         _peer.VideoFrameReceived -= OnVideoReceived;
+        _peer.LocalIceCandidateDiscovered -= OnLocalIceCandidate;
         try
         {
             await _peer.DisposeAsync().ConfigureAwait(false);
@@ -177,6 +189,9 @@ internal sealed class PeerConnection : IPeerConnection
 
     private void OnInternalStateChanged(WebRtcConnectionState state)
         => _connectionStateChanged?.Invoke(this, Map(state));
+
+    private void OnLocalIceCandidate(string candidate)
+        => _localIceCandidateDiscovered?.Invoke(this, candidate);
 
     // Inbound media is projected onto the W3C track model via the RemoteTrackSet: the remote a=msid names
     // the track, and the set raises TrackReceived once per kind before the first frame flows.
