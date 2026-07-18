@@ -36,7 +36,7 @@ else
     password = Prompt("Passwort");
 }
 
-using var client = new VoipClient(new SdkConfiguration
+using var client = new VoipClient(new VoipConfiguration
 {
     LoggerFactory = loggerFactory,
     UserAgent = "CalloraVoipSdk-Transfer/1.0",

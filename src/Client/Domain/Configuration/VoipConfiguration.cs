@@ -11,7 +11,7 @@ namespace CalloraVoipSdk;
 /// Top-level SDK configuration: identity, transport security, logging, media/codec behavior, and
 /// call-lifecycle timeouts. Supplied once when constructing or registering the SDK.
 /// </summary>
-public sealed class SdkConfiguration
+public sealed class VoipConfiguration
 {
     /// <summary>Value sent in the SIP <c>User-Agent</c> header; defaults to <c>CalloraVoipSdk/1.0</c>.</summary>
     public string         UserAgent              { get; init; } = "CalloraVoipSdk/1.0";
@@ -32,9 +32,9 @@ public sealed class SdkConfiguration
 
     /// <summary>
     /// Legacy advanced dependency provider for replacing internal runtime services.
-    /// Prefer <c>AddCallora(...)</c> with <see cref="DependencyInjection.CalloraBuilder"/> overrides.
+    /// Prefer <c>AddCalloraVoip(...)</c> with <see cref="DependencyInjection.CalloraBuilder"/> overrides.
     /// </summary>
-    [Obsolete("Use AddCallora(...)/CalloraBuilder overrides. SdkConfiguration.Services will be removed after v1.0.", false)]
+    [Obsolete("Use AddCalloraVoip(...)/CalloraBuilder overrides. VoipConfiguration.Services will be removed after v1.0.", false)]
     public IServiceProvider? Services            { get; init; }
     /// <summary>Default media-encryption policy for calls; defaults to <see cref="SrtpPolicy.Optional"/>. Overridable per call via <c>DialOptions.UseSrtp</c>.</summary>
     public SrtpPolicy     SrtpPolicy             { get; init; } = SrtpPolicy.Optional;

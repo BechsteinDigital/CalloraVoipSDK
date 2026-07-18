@@ -9,7 +9,7 @@ namespace CalloraVoipSdk.Client.Tests;
 /// </summary>
 public sealed class VoipClientDisposeTests
 {
-    private static SdkConfiguration TestConfiguration() => new()
+    private static VoipConfiguration TestConfiguration() => new()
     {
         UserAgent = "CalloraVoipSdk.Client.Tests/1.0",
         EnableAutomaticAudioDeviceSelection = false,

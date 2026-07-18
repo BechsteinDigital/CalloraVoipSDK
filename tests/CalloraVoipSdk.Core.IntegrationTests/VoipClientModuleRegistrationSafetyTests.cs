@@ -22,7 +22,7 @@ public sealed class VoipClientModuleRegistrationSafetyTests
         var factory = new RecordingTransportFactory();
 
         var services = new ServiceCollection();
-        services.AddCallora(options =>
+        services.AddCalloraVoip(options =>
         {
             options.UserAgent = "CalloraVoipSdk.Core.IntegrationTests/1.0";
             options.EnableAutomaticAudioDeviceSelection = false;

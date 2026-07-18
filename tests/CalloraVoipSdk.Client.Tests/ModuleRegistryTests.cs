@@ -10,7 +10,7 @@ namespace CalloraVoipSdk.Client.Tests;
 /// </summary>
 public sealed class ModuleRegistryTests
 {
-    private static SdkConfiguration TestConfiguration() => new()
+    private static VoipConfiguration TestConfiguration() => new()
     {
         UserAgent = "CalloraVoipSdk.Client.Tests/1.0",
         EnableAutomaticAudioDeviceSelection = false,
@@ -71,7 +71,7 @@ public sealed class ModuleRegistryTests
     public void Modules_registered_in_di_are_resolvable_on_client()
     {
         var services = new ServiceCollection();
-        services.AddCallora(options =>
+        services.AddCalloraVoip(options =>
         {
             options.UserAgent = "CalloraVoipSdk.Client.Tests/1.0";
             options.EnableAutomaticAudioDeviceSelection = false;

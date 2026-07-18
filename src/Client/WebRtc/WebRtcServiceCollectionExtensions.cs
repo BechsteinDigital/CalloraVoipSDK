@@ -8,9 +8,9 @@ namespace CalloraVoipSdk.DependencyInjection;
 
 /// <summary>
 /// Dependency-injection entrypoint for the WebRTC facade. Standalone counterpart to
-/// <see cref="ServiceCollectionExtensions.AddCallora"/>: a pure-WebRTC host calls only
+/// <see cref="ServiceCollectionExtensions.AddCalloraVoip"/>: a pure-WebRTC host calls only
 /// <see cref="AddCalloraWebRtc"/>; a host that wants both facades chains
-/// <c>AddCallora(...).AddWebRtc(...)</c> (ADR-012, two-facade composition).
+/// <c>AddCalloraVoip(...).AddWebRtc(...)</c> (ADR-012, two-facade composition).
 /// </summary>
 public static class WebRtcServiceCollectionExtensions
 {

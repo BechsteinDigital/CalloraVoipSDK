@@ -6,7 +6,7 @@ using Xunit;
 namespace CalloraVoipSdk.Core.IntegrationTests;
 
 /// <summary>
-/// Pins CORE-016: the consumer-selected <see cref="SdkConfiguration.DefaultTransport"/> reaches the
+/// Pins CORE-016: the consumer-selected <see cref="VoipConfiguration.DefaultTransport"/> reaches the
 /// SIP transport factory that drives outbound transport, and the default stays UDP.
 /// </summary>
 public sealed class SipTransportSelectionTests
@@ -27,11 +27,11 @@ public sealed class SipTransportSelectionTests
         Assert.Equal(SipTransportProtocol.Udp, factory.LastDefaultTransport);
     }
 
-    private static RecordingTransportFactory BuildClientAndCaptureTransport(Action<SdkOptions> configure)
+    private static RecordingTransportFactory BuildClientAndCaptureTransport(Action<VoipOptions> configure)
     {
         var factory = new RecordingTransportFactory();
         var services = new ServiceCollection();
-        services.AddCallora(options =>
+        services.AddCalloraVoip(options =>
         {
             options.UserAgent = "transport-selection-test/1.0";
             options.EnableAutomaticAudioDeviceSelection = false;

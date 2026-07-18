@@ -17,7 +17,7 @@ namespace CalloraVoipSdk.Client.Tests;
 /// </summary>
 public sealed class DefaultVideoConvenienceFacadeTests
 {
-    private static SdkConfiguration TestConfiguration() => new()
+    private static VoipConfiguration TestConfiguration() => new()
     {
         UserAgent = "CalloraVoipSdk.Client.Tests/1.0",
         EnableAutomaticAudioDeviceSelection = false,
@@ -38,7 +38,7 @@ public sealed class DefaultVideoConvenienceFacadeTests
     {
         var device = new FakeVideoDevice();
         var services = new ServiceCollection();
-        services.AddCallora(options =>
+        services.AddCalloraVoip(options =>
         {
             options.UserAgent = "CalloraVoipSdk.Client.Tests/1.0";
             options.EnableAutomaticAudioDeviceSelection = false;

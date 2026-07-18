@@ -6,12 +6,12 @@ using Xunit;
 namespace CalloraVoipSdk.Client.Tests;
 
 /// <summary>
-/// Mapping gate for <see cref="SdkOptions"/> → <see cref="SdkConfiguration"/> (HARD-E4). The
+/// Mapping gate for <see cref="VoipOptions"/> → <see cref="VoipConfiguration"/> (HARD-E4). The
 /// host-facing options must carry every configurable media/security feature onto the runtime
 /// configuration; a missing field silently pins the consumer to a default they cannot override
-/// through <c>AddCallora(...)</c>.
+/// through <c>AddCalloraVoip(...)</c>.
 /// </summary>
-public sealed class SdkOptionsMappingTests
+public sealed class VoipOptionsMappingTests
 {
     [Fact]
     public void Maps_the_previously_unconfigurable_features_onto_the_configuration()
@@ -20,7 +20,7 @@ public sealed class SdkOptionsMappingTests
         using var dtlsCertificate = new CertificateRequest("CN=map", ecdsa, HashAlgorithmName.SHA256)
             .CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(30));
 
-        var options = new SdkOptions
+        var options = new VoipOptions
         {
             OfferDtlsSrtp = true,
             EnableVideo = true,
@@ -45,8 +45,8 @@ public sealed class SdkOptionsMappingTests
     [Fact]
     public void Unset_features_fall_through_to_the_configuration_defaults()
     {
-        var config = new SdkOptions().ToConfiguration(loggerFactory: null);
-        var configurationDefaults = new SdkConfiguration();
+        var config = new VoipOptions().ToConfiguration(loggerFactory: null);
+        var configurationDefaults = new VoipConfiguration();
 
         Assert.False(config.OfferDtlsSrtp);
         Assert.False(config.EnableVideo);

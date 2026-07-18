@@ -7,12 +7,12 @@ namespace CalloraVoipSdk.WebRtc;
 /// <summary>
 /// Host-facing, mutable options for the WebRTC facade, consumed by <c>AddCalloraWebRtc(...)</c> — the
 /// dependency-injection counterpart to the immutable <see cref="WebRtcConfiguration"/> (mirrors how
-/// <c>SdkOptions</c> backs <c>SdkConfiguration</c> for the SIP facade).
+/// <c>VoipOptions</c> backs <c>VoipConfiguration</c> for the SIP facade).
 /// </summary>
 /// <remarks>
-/// This is the WebRTC facade's <em>own</em> option surface: a sibling of the SIP <c>SdkOptions</c>, not a
+/// This is the WebRTC facade's <em>own</em> option surface: a sibling of the SIP <c>VoipOptions</c>, not a
 /// section nested inside it. A pure-WebRTC host therefore never carries SIP settings, and the two facades
-/// meet only at the composition layer (<c>AddCallora(...).AddWebRtc(...)</c>). See ADR-012.
+/// meet only at the composition layer (<c>AddCalloraVoip(...).AddWebRtc(...)</c>). See ADR-012.
 /// </remarks>
 public sealed class WebRtcOptions
 {
