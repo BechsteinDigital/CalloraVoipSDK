@@ -132,8 +132,9 @@ internal sealed class BundledMediaSession : IAsyncDisposable
             onConsentLost: () => MediaConsentLost?.Invoke(),
             onConnectivityDegraded: () => MediaConnectivityDegraded?.Invoke(),
             onConnectivityRecovered: () => MediaConnectivityRecovered?.Invoke(),
-            // A nominated ICE pair (RFC 8445 §8) becomes the transport's send target.
-            onPairNominated: _transport.SetRemoteEndPoint);
+            // A nominated ICE pair (RFC 8445 §8) becomes the transport's send target AND the DTLS remote,
+            // so the DTLS handshake's inbound source filter follows the connectivity-checked pair.
+            onPairNominated: OnPairNominated);
 
         _audioSsrc = options.Audio.Ssrc;
     }
@@ -190,6 +191,15 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     /// Thread-safe; the symmetric transport still latches the peer's real source on the next received packet.
     /// </summary>
     public void SetRemoteEndPoint(IPEndPoint remoteEndPoint) => _transport.SetRemoteEndPoint(remoteEndPoint);
+
+    // A connectivity-checked ICE nomination (RFC 8445 §8) redirects the whole 5-tuple onto the nominated
+    // pair: the transport's send target and the DTLS association's inbound source filter both follow it, so
+    // the handshake completes against the checked candidate rather than the initial SDP endpoint.
+    private void OnPairNominated(IPEndPoint remoteEndPoint)
+    {
+        _transport.SetRemoteEndPoint(remoteEndPoint);
+        _dtls.SetRemoteEndPoint(remoteEndPoint);
+    }
 
     /// <summary>Point-in-time transport counters aggregated from the outbound and inbound pipelines.</summary>
     public BundledMediaStats SnapshotStats() => new(
