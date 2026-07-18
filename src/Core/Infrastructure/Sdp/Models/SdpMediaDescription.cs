@@ -83,6 +83,16 @@ internal sealed class SdpMediaDescription
     public IReadOnlyList<SdpExtmap> Extensions { get; init; } = [];
 
     // -------------------------------------------------------------------------
+    // Simulcast (RFC 8851 rid / RFC 8853 simulcast)
+    // -------------------------------------------------------------------------
+
+    /// <summary>RTP stream identifiers naming this section's encodings (<c>a=rid</c>, RFC 8851).</summary>
+    public IReadOnlyList<SdpRid> Rids { get; init; } = [];
+
+    /// <summary>Simulcast stream declaration (<c>a=simulcast</c>, RFC 8853); <see langword="null"/> when absent.</summary>
+    public SdpSimulcast? Simulcast { get; init; }
+
+    // -------------------------------------------------------------------------
     // ICE (RFC 8839)
     // -------------------------------------------------------------------------
 

@@ -204,6 +204,19 @@ internal sealed class SdpSessionParser : ISdpSessionParser
                 current.Msid = SdpMsid.TryParse(attrValue);
                 break;
 
+            // --- Simulcast (RFC 8851 rid / RFC 8853 simulcast) ---
+            case "rid" when current is not null:
+            {
+                var rid = SdpRid.TryParse(attrValue);
+                if (rid is not null)
+                    current.Rids.Add(rid);
+                break;
+            }
+
+            case "simulcast" when current is not null:
+                current.Simulcast = SdpSimulcast.TryParse(attrValue);
+                break;
+
             // --- BUNDLE group (RFC 5888) ---
             case "group" when current is null && !string.IsNullOrWhiteSpace(attrValue):
                 sessionGroup = attrValue.Trim();

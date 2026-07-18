@@ -113,6 +113,12 @@ internal sealed class SdpSessionSerializer : ISdpSessionSerializer
         foreach (var extmap in media.Extensions)
             sb.AppendLine($"a=extmap:{extmap.Serialize()}");
 
+        // Simulcast: rid lines then the simulcast declaration (RFC 8851 / RFC 8853)
+        foreach (var rid in media.Rids)
+            sb.AppendLine($"a=rid:{rid.Serialize()}");
+        if (media.Simulcast is not null)
+            sb.AppendLine($"a=simulcast:{media.Simulcast.Serialize()}");
+
         // Direction
         AppendDirection(sb, media.Direction);
 

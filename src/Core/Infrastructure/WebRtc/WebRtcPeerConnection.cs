@@ -29,7 +29,7 @@ namespace CalloraVoipSdk.Core.Infrastructure.WebRtc;
 /// signalling meaningful. <see cref="DisposeAsync"/> is part of that same single-caller ordering: it must
 /// not race an in-flight <see cref="SetRemoteDescriptionAsync"/>, which builds the media session and hands
 /// the pre-bound socket over to it — disposing concurrently could tear down the peer between the bind and
-/// the hand-over and orphan or double-dispose the socket. The media hot path (<see cref="SendAudioAsync"/>/<see cref="SendVideoFrameAsync"/>)
+/// the hand-over and orphan or double-dispose the socket. The media hot path (<see cref="SendAudioAsync"/>/<see cref="SendVideoFrameAsync(System.ReadOnlyMemory{byte}, uint, System.Threading.CancellationToken)"/>)
 /// is hardened against a concurrent <see cref="DisposeAsync"/> (HARD-C6): each send holds a drain lease so
 /// dispose waits for in-flight sends before tearing down the media session, and a send begun after
 /// dispose throws <see cref="ObjectDisposedException"/>.
@@ -333,6 +333,26 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Packetises and sends one encoded video frame on a simulcast <paramref name="rid"/> layer (RFC 8853).
+    /// The layer must have been offered via the peer's configured simulcast rids.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No BUNDLE media session, or the bundle has no video track.</exception>
+    /// <exception cref="ArgumentException">No encoding is configured for <paramref name="rid"/>.</exception>
+    /// <exception cref="ObjectDisposedException">The peer is disposing or disposed.</exception>
+    public async Task SendVideoFrameAsync(string rid, ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default)
+    {
+        var session = AcquireSendLease();
+        try
+        {
+            await session.SendVideoFrameAsync(rid, encodedFrame, rtpTimestamp, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _sendGate.Exit();
+        }
+    }
+
     // Takes a drain lease for one send and returns the live session. The lease keeps DisposeAsync from
     // disposing the session until the send's Exit; a send begun after dispose is refused. Callers MUST
     // Exit the gate (the send methods do so in a finally) once the returned session is no longer used.
@@ -390,6 +410,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
                 Crypto = video.Crypto,
                 Candidates = video.Candidates,
                 HeaderExtensionUris = video.HeaderExtensionUris,
+                SimulcastSendRids = video.SimulcastSendRids,
             }
             : null,
         AudioMsid = new SdpMsid { StreamId = _mediaStreamId, TrackId = _audioTrackId },

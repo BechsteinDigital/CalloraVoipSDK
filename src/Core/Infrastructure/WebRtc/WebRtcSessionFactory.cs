@@ -84,12 +84,30 @@ internal static class WebRtcSessionFactory
 
         var videoTrack = TryBuildVideoTrack(localDescription, audioSsrc);
 
+        // A simulcast video track (RFC 8853) needs the negotiated RID header-extension id (RFC 8852) to
+        // stamp each layer's RID on outbound packets; without it in our own description we cannot key the
+        // encodings, so the exchange is not a usable simulcast session.
+        byte? ridExtensionId = null;
+        if (videoTrack is { Encodings.Count: > 0 })
+        {
+            var localVideo = localDescription.Media.FirstOrDefault(m => m.MediaType.Equals("video", Ci));
+            ridExtensionId = RidExtensionId(localVideo);
+            if (ridExtensionId is null)
+            {
+                loggerFactory.CreateLogger(typeof(WebRtcSessionFactory)).LogWarning(
+                    "Simulcast video is configured but the local description carries no RID header-extension id " +
+                    "(a=extmap … sdes:rtp-stream-id); cannot key the simulcast encodings — no session built.");
+                return null;
+            }
+        }
+
         var sessionOptions = new BundledMediaSessionOptions
         {
             LocalEndPoint = options.LocalEndPoint,
             PreBoundSocket = preBoundSocket,
             RemoteEndPoint = remoteEndPoint,
             MidExtensionId = midExtensionId.Value,
+            RidExtensionId = ridExtensionId,
             Audio = audioTrack,
             Video = videoTrack,
             DtlsIsClient = dtlsIsClient,
@@ -119,6 +137,30 @@ internal static class WebRtcSessionFactory
         if (codec is null)
             return null;
 
+        // Send-side simulcast (RFC 8853): one encoding per a=rid … send, each on its own SSRC distinct
+        // from audio and every other layer.
+        var sendRids = video.Rids.Where(r => r.Direction.Equals("send", Ci)).Select(r => r.Id).ToArray();
+        if (sendRids.Length > 0)
+        {
+            var used = new HashSet<uint> { audioSsrc };
+            var encodings = new List<BundledVideoEncoding>(sendRids.Length);
+            foreach (var rid in sendRids)
+            {
+                var ssrc = NewSsrc(used);
+                used.Add(ssrc);
+                encodings.Add(new BundledVideoEncoding { Rid = rid, Ssrc = ssrc });
+            }
+
+            return new BundledTrackConfig
+            {
+                Mid = video.Mid,
+                Ssrc = encodings[0].Ssrc, // primary; per-layer SSRCs carry the actual sends
+                PayloadType = (byte)codec.PayloadType,
+                VideoCodecName = codec.Name,
+                Encodings = encodings,
+            };
+        }
+
         return new BundledTrackConfig
         {
             Mid = video.Mid,
@@ -126,6 +168,14 @@ internal static class WebRtcSessionFactory
             PayloadType = (byte)codec.PayloadType,
             VideoCodecName = codec.Name,
         };
+    }
+
+    // The negotiated RID header-extension id (RFC 8852) on a media section, or null when absent — required
+    // to stamp a simulcast layer's RID on outbound packets. Mirrors <see cref="MidExtensionId"/>.
+    private static byte? RidExtensionId(SdpMediaDescription? media)
+    {
+        var rid = media?.Extensions.FirstOrDefault(e => string.Equals(e.Uri, RtpHeaderExtensionUris.Rid, StringComparison.Ordinal));
+        return rid is not null && rid.Id is >= 1 and <= 14 ? (byte)rid.Id : null;
     }
 
     // Local DTLS role from both a=setup values (RFC 4145 §4 / RFC 5763 §5): a concrete local role wins;
@@ -146,14 +196,27 @@ internal static class WebRtcSessionFactory
         return mid is not null && mid.Id is >= 1 and <= 14 ? (byte)mid.Id : null;
     }
 
+    // RFC 3550 §5.1: a random 32-bit SSRC. NextInt64 covers the full [1, 2^32-1] range (Next(1, int.MaxValue)
+    // would leave the upper half of the SSRC space unused).
     private static uint NewSsrc(uint? distinctFrom = null)
     {
         uint ssrc;
         do
         {
-            ssrc = (uint)Random.Shared.Next(1, int.MaxValue);
+            ssrc = (uint)Random.Shared.NextInt64(1, (long)uint.MaxValue + 1);
         }
         while (ssrc == distinctFrom);
+        return ssrc;
+    }
+
+    private static uint NewSsrc(ISet<uint> distinctFrom)
+    {
+        uint ssrc;
+        do
+        {
+            ssrc = (uint)Random.Shared.NextInt64(1, (long)uint.MaxValue + 1);
+        }
+        while (distinctFrom.Contains(ssrc));
         return ssrc;
     }
 }

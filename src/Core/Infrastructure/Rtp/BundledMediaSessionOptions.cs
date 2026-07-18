@@ -28,6 +28,13 @@ internal sealed record BundledMediaSessionOptions
     /// <summary>The negotiated MID header-extension id (<c>a=extmap … sdes:mid</c>).</summary>
     public required byte MidExtensionId { get; init; }
 
+    /// <summary>
+    /// The negotiated RID header-extension id (<c>a=extmap … sdes:rtp-stream-id</c>, RFC 8852), or
+    /// <see langword="null"/> when no simulcast encoding is configured. Required to stamp the RID on a
+    /// simulcast video track's outbound packets.
+    /// </summary>
+    public byte? RidExtensionId { get; init; }
+
     /// <summary>The audio m-line configuration.</summary>
     public required BundledTrackConfig Audio { get; init; }
 

@@ -135,6 +135,12 @@ internal sealed class PeerConnection : IPeerConnection
         return _peer.SendVideoFrameAsync(encodedFrame, rtpTimestamp, cancellationToken);
     }
 
+    public Task SendVideoFrameAsync(string rid, ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default)
+    {
+        _taps.Video(MediaDirection.Outbound, encodedFrame, rtpTimestamp, isKeyFrame: false);
+        return _peer.SendVideoFrameAsync(rid, encodedFrame, rtpTimestamp, cancellationToken);
+    }
+
     public async ValueTask DisposeAsync()
     {
         _peer.ConnectionStateChanged -= OnInternalStateChanged;
