@@ -13,9 +13,13 @@ public interface IWebRtcClient
     /// </summary>
     IPeerConnection CreatePeer();
 
+    /// <summary>The registry of peer connections currently open on this client (L2 multi-peer manager).</summary>
+    IPeerConnectionManager Peers { get; }
+
     /// <summary>
     /// The registry of optional facade extensions contributed by separate packages (L3 plugin seam);
-    /// register modules programmatically via <see cref="IWebRtcModuleRegistry.Register"/>.
+    /// register modules programmatically via <see cref="IWebRtcModuleRegistry.Register"/>, or register
+    /// <see cref="IWebRtcClientModule"/> services before <c>AddCalloraWebRtc</c> to have them auto-attached.
     /// </summary>
     IWebRtcModuleRegistry Modules { get; }
 }

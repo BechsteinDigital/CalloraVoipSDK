@@ -16,14 +16,16 @@ internal sealed class PeerConnection : IPeerConnection
     private readonly WebRtcPeerConnection _peer;
     private readonly RemoteTrackSet _tracks;
     private readonly MediaTapSet _taps;
+    private readonly Action<IPeerConnection>? _onDisposed;
     private EventHandler<PeerConnectionState>? _connectionStateChanged;
     private EventHandler<RemoteTrack>? _trackReceived;
 
-    public PeerConnection(WebRtcPeerConnection peer, ILogger<PeerConnection> logger)
+    public PeerConnection(WebRtcPeerConnection peer, ILogger<PeerConnection> logger, Action<IPeerConnection>? onDisposed = null)
     {
         ArgumentNullException.ThrowIfNull(peer);
         ArgumentNullException.ThrowIfNull(logger);
         _peer = peer;
+        _onDisposed = onDisposed;
         _tracks = new RemoteTrackSet(track => _trackReceived?.Invoke(this, track));
         _taps = new MediaTapSet(logger);
         _peer.ConnectionStateChanged += OnInternalStateChanged;
@@ -75,6 +77,7 @@ internal sealed class PeerConnection : IPeerConnection
         _peer.AudioReceived -= OnAudioReceived;
         _peer.VideoFrameReceived -= OnVideoReceived;
         await _peer.DisposeAsync().ConfigureAwait(false);
+        _onDisposed?.Invoke(this);
     }
 
     private void OnInternalStateChanged(WebRtcConnectionState state)
