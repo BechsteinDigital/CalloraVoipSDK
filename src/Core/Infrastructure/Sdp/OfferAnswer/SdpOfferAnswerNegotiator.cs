@@ -89,6 +89,16 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             // RTX repair streams (RFC 4588 §8.1): one rtx payload type per video codec,
             // appended to the m-line with an apt fmtp binding it to the original.
             var (rtxCodecs, rtxFmtp) = VideoCodecCatalog.BuildRtx(video.Codecs);
+
+            // Send-side simulcast (RFC 8853): one a=rid per layer (send) restricted to the primary codec's
+            // payload type, plus a=simulcast:send. The RID header extension (RFC 8852) is offered before
+            // the app's own extensions so it gets a low one-byte id alongside MID.
+            var simulcast = video.SimulcastSendRids;
+            var videoExtmapUris = simulcast.Count > 0
+                ? BundledExtmapUris([RtpHeaderExtensionUris.Rid, .. video.HeaderExtensionUris])
+                : BundledExtmapUris(video.HeaderExtensionUris);
+            var (rids, simulcastDeclaration) = BuildSimulcast(simulcast, video.Codecs);
+
             mediaLines.Add(new SdpMediaDescription
             {
                 MediaType = "video",
@@ -111,9 +121,11 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
                 IceOptions = ice?.Options,
                 Candidates = video.Candidates,
                 // RTP header extensions (RFC 8285 §5): the offer assigns one-byte ids to the
-                // supported URIs (the MID SDES extension first under BUNDLE, then transport-wide-cc
-                // for congestion control, etc.) — MID keeps the same id as the audio m-line.
-                Extensions = BuildOfferExtmaps(BundledExtmapUris(video.HeaderExtensionUris)),
+                // supported URIs (the MID SDES extension first under BUNDLE, the RID extension next
+                // for simulcast, then transport-wide-cc, etc.) — MID keeps the same id as the audio m-line.
+                Extensions = BuildOfferExtmaps(videoExtmapUris),
+                Rids = rids,
+                Simulcast = simulcastDeclaration,
                 Fingerprint = dtls is not null
                     ? new SdpFingerprint { Algorithm = dtls.Algorithm, Value = dtls.Fingerprint }
                     : null,
@@ -565,6 +577,22 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
         for (var i = 0; i < uris.Count && i < OneByteMaxExtensionId; i++)
             extmaps.Add(new SdpExtmap { Id = i + 1, Uri = uris[i] });
         return extmaps;
+    }
+
+    // Send-side simulcast (RFC 8853): one a=rid per layer with direction "send", restricted to the primary
+    // (first, non-RTX) video codec's payload type, plus one a=simulcast:send listing the layer ids in
+    // order. Empty when no simulcast layer is configured (a single-stream video m-line).
+    private static (IReadOnlyList<SdpRid> Rids, SdpSimulcast? Simulcast) BuildSimulcast(
+        IReadOnlyList<string> sendRids, IReadOnlyList<SdpCodecDefinition> videoCodecs)
+    {
+        if (sendRids.Count == 0)
+            return ([], null);
+
+        var primaryPt = videoCodecs[0].PayloadType;
+        var rids = sendRids
+            .Select(rid => new SdpRid { Id = rid, Direction = "send", Restrictions = $"pt={primaryPt}" })
+            .ToArray();
+        return (rids, new SdpSimulcast { Send = sendRids });
     }
 
     // The answer echoes the MID SDES extension (RFC 9143) whenever the offer advertised it: adding the

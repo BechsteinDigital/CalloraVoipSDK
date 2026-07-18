@@ -26,6 +26,7 @@ internal static class WebRtcOptionsMapping
             AudioCodecs = options.AudioCodecs,
             EnableVideo = options.EnableVideo,
             VideoCodecs = options.VideoCodecs,
+            SimulcastLayers = options.SimulcastLayers,
             DtlsCertificate = options.DtlsCertificate,
             LoggerFactory = options.LoggerFactory ?? loggerFactory,
         };

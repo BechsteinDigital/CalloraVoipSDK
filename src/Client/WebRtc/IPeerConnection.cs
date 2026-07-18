@@ -5,7 +5,7 @@ namespace CalloraVoipSdk.WebRtc;
 /// <summary>
 /// A signalling-neutral WebRTC peer connection: the app owns the signalling channel (WebSocket/HTTP/
 /// Callora) and exchanges SDP through it, while this peer runs ICE, DTLS-SRTP, BUNDLE and the RTP/RTCP
-/// transport. Encoded media flows through <see cref="SendAudioAsync"/>/<see cref="SendVideoFrameAsync"/>
+/// transport. Encoded media flows through <see cref="SendAudioAsync"/>/<see cref="SendVideoFrameAsync(System.ReadOnlyMemory{byte}, uint, System.Threading.CancellationToken)"/>
 /// — the SDK is transport-only, so the app owns the codec. The central per-connection abstraction of the
 /// WebRTC facade, mirroring the SIP <c>ICall</c>.
 /// </summary>
@@ -47,6 +47,13 @@ public interface IPeerConnection : IAsyncDisposable
 
     /// <summary>Packetises and sends one already-encoded video frame on the peer's video track.</summary>
     Task SendVideoFrameAsync(ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Packetises and sends one already-encoded video frame on a simulcast <paramref name="rid"/> layer
+    /// (RFC 8853). The layer must be one of the configured simulcast rids; the app encodes each layer at
+    /// its own resolution/bitrate and calls this once per layer per frame.
+    /// </summary>
+    Task SendVideoFrameAsync(string rid, ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Attaches an <see cref="IMediaTap"/> that observes the encoded media flowing through this peer in both

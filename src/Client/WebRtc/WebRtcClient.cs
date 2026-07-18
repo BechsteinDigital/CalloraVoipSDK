@@ -71,6 +71,7 @@ public sealed class WebRtcClient : IWebRtcClient
                 {
                     Port = _config.LocalEndPoint.Port,
                     Codecs = ResolveVideoCodecs(_config.VideoCodecs),
+                    SimulcastSendRids = _config.SimulcastLayers,
                 }
                 : null,
             Dtls = new SdpDtlsParameters

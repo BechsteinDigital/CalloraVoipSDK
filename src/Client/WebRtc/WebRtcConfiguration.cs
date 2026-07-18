@@ -29,6 +29,15 @@ public sealed class WebRtcConfiguration
     public IReadOnlyList<string> VideoCodecs { get; init; } = ["H264"];
 
     /// <summary>
+    /// Send-side simulcast layers to offer (RFC 8853), by <c>a=rid</c> id in send order, e.g.
+    /// <c>["hi", "mid", "lo"]</c>. Empty (default) offers a single video stream. When set, the app sends
+    /// each layer's encoded frames via <see cref="IPeerConnection.SendVideoFrameAsync(string, System.ReadOnlyMemory{byte}, uint, System.Threading.CancellationToken)"/>
+    /// — the SDK packetises each on its own SSRC with the RID header extension (RFC 8852). Requires
+    /// <see cref="EnableVideo"/>. This peer must be the offerer for the simulcast to be advertised.
+    /// </summary>
+    public IReadOnlyList<string> SimulcastLayers { get; init; } = [];
+
+    /// <summary>
     /// DTLS-SRTP identity for the peer's certificate/fingerprint (must carry an exportable ECDSA P-256
     /// private key); <see langword="null"/> generates a fresh ephemeral identity per peer — the WebRTC
     /// privacy default.

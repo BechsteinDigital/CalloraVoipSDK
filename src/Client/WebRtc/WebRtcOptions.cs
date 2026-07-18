@@ -28,6 +28,9 @@ public sealed class WebRtcOptions
     /// <summary>Video codecs to offer when <see cref="EnableVideo"/> is set. See <see cref="WebRtcConfiguration.VideoCodecs"/>. Default: H264.</summary>
     public IReadOnlyList<string> VideoCodecs { get; set; } = ["H264"];
 
+    /// <summary>Send-side simulcast layers to offer, by <c>a=rid</c> id. See <see cref="WebRtcConfiguration.SimulcastLayers"/>. Default: none.</summary>
+    public IReadOnlyList<string> SimulcastLayers { get; set; } = [];
+
     /// <summary>
     /// DTLS-SRTP identity certificate for the peer (ECDSA P-256 with an exportable private key);
     /// <see langword="null"/> generates a fresh per-peer identity. See <see cref="WebRtcConfiguration.DtlsCertificate"/>.

@@ -34,9 +34,9 @@ internal sealed class BundledVideoTrack : IDisposable
     private readonly ILogger<BundledVideoTrack> _logger;
 
     // The non-simulcast single stream (RID null), or null when this is a simulcast track.
-    private readonly SendEncoding? _single;
+    private readonly BundledVideoSendEncoding? _single;
     // The simulcast layers keyed by a=rid, or empty for a non-simulcast track.
-    private readonly IReadOnlyDictionary<string, SendEncoding> _layers;
+    private readonly IReadOnlyDictionary<string, BundledVideoSendEncoding> _layers;
 
     // RTP payload budget: MTU minus RTP/SRTP/extension overhead (mirrors the single-stream video path).
     private const int MaxRtpPayloadSize = 1200;
@@ -61,7 +61,7 @@ internal sealed class BundledVideoTrack : IDisposable
     public bool IsSimulcast => _layers.Count > 0;
 
     /// <summary>The configured simulcast <c>a=rid</c> layer ids (empty for a non-simulcast track).</summary>
-    public IReadOnlyCollection<string> SendRids => (IReadOnlyCollection<string>)_layers.Keys;
+    public IReadOnlyCollection<string> SendRids => _layers.Keys.ToArray();
 
     /// <summary>Builds a non-simulcast video track (one RTP stream on the video MID).</summary>
     public BundledVideoTrack(
@@ -81,8 +81,8 @@ internal sealed class BundledVideoTrack : IDisposable
         var (packetiser, depacketiser) = VideoPayloadFormat.Create(codecName);
         _depacketiser = depacketiser;
         _reorderBuffer = new VideoReorderBuffer(reorderWindowDepth);
-        _single = new SendEncoding(rid: null, payloadType, packetiser);
-        _layers = new Dictionary<string, SendEncoding>(StringComparer.Ordinal);
+        _single = new BundledVideoSendEncoding(rid: null, payloadType, packetiser);
+        _layers = new Dictionary<string, BundledVideoSendEncoding>(StringComparer.Ordinal);
     }
 
     /// <summary>
@@ -112,11 +112,11 @@ internal sealed class BundledVideoTrack : IDisposable
         _depacketiser = VideoPayloadFormat.Create(codecName).Depacketiser;
         _reorderBuffer = new VideoReorderBuffer(reorderWindowDepth);
 
-        var layers = new Dictionary<string, SendEncoding>(rids.Count, StringComparer.Ordinal);
+        var layers = new Dictionary<string, BundledVideoSendEncoding>(rids.Count, StringComparer.Ordinal);
         foreach (var rid in rids)
         {
             ArgumentException.ThrowIfNullOrEmpty(rid);
-            if (!layers.TryAdd(rid, new SendEncoding(rid, payloadType, VideoPayloadFormat.Create(codecName).Packetiser)))
+            if (!layers.TryAdd(rid, new BundledVideoSendEncoding(rid, payloadType, VideoPayloadFormat.Create(codecName).Packetiser)))
                 throw new ArgumentException($"Duplicate simulcast rid '{rid}'.", nameof(rids));
         }
         _layers = layers;
@@ -148,7 +148,7 @@ internal sealed class BundledVideoTrack : IDisposable
         return SendOnEncodingAsync(encoding, encodedFrame, rtpTimestamp, ct);
     }
 
-    private async Task SendOnEncodingAsync(SendEncoding encoding, ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken ct)
+    private async Task SendOnEncodingAsync(BundledVideoSendEncoding encoding, ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken ct)
     {
         var payloads = encoding.Packetiser.Packetise(encodedFrame, MaxRtpPayloadSize);
 
@@ -207,25 +207,17 @@ internal sealed class BundledVideoTrack : IDisposable
         }
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Releases the per-encoding send locks. Like the single-stream video path, this must not race an
+    /// in-flight <see cref="SendFrameAsync(System.ReadOnlyMemory{byte}, uint, System.Threading.CancellationToken)"/>:
+    /// the owning peer drains in-flight sends before tearing the session down (WebRtcPeerConnection's send
+    /// gate, HARD-C6), so a send never observes a disposed semaphore.
+    /// </summary>
     public void Dispose()
     {
         FrameReceived = null;
         _single?.Dispose();
         foreach (var layer in _layers.Values)
             layer.Dispose();
-    }
-
-    // One outbound RTP stream of this video track: a non-simulcast single stream (RID null) or one
-    // simulcast a=rid layer. Owns the layer's stateful packetiser and a send lock that serialises whole
-    // frames on that stream.
-    private sealed class SendEncoding(string? rid, byte payloadType, IVideoPacketiser packetiser) : IDisposable
-    {
-        public string? Rid { get; } = rid;
-        public byte PayloadType { get; } = payloadType;
-        public IVideoPacketiser Packetiser { get; } = packetiser;
-        public SemaphoreSlim SendSync { get; } = new(1, 1);
-
-        public void Dispose() => SendSync.Dispose();
     }
 }

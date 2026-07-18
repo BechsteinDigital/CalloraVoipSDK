@@ -68,6 +68,13 @@ internal sealed class SdpVideoMediaOptions
     /// negotiator assigns one-byte ids in an offer and echoes the offered ids in an answer.
     /// </summary>
     public IReadOnlyList<string> HeaderExtensionUris { get; init; } = [];
+
+    /// <summary>
+    /// Send-side simulcast layer ids (RFC 8853) to advertise on the video m-line as <c>a=rid … send</c>
+    /// plus <c>a=simulcast:send …</c>. Empty offers a single video stream. When non-empty, the offer also
+    /// carries the RID header extension (RFC 8852) so each layer's SSRC is per-packet identifiable.
+    /// </summary>
+    public IReadOnlyList<string> SimulcastSendRids { get; init; } = [];
 }
 
 /// <summary>

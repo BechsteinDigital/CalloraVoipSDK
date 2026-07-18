@@ -24,7 +24,7 @@ internal sealed class BundledOutboundPipeline
 {
     // Routed by (MID, RID): a non-simulcast m-line registers one track under (mid, null); a simulcast
     // m-line (RFC 8853) registers one track per a=rid layer under (mid, rid), each with its own SSRC.
-    private readonly ConcurrentDictionary<TrackKey, BundledOutboundTrack> _tracks = new();
+    private readonly ConcurrentDictionary<BundledOutboundTrackKey, BundledOutboundTrack> _tracks = new();
     private readonly IRtpPacketCodec _codec;
     private readonly IBundledDatagramSender _sender;
     private readonly ILogger<BundledOutboundPipeline> _logger;
@@ -71,7 +71,7 @@ internal sealed class BundledOutboundPipeline
     {
         ArgumentException.ThrowIfNullOrEmpty(mid);
         ArgumentNullException.ThrowIfNull(track);
-        if (!_tracks.TryAdd(new TrackKey(mid, rid), track))
+        if (!_tracks.TryAdd(new BundledOutboundTrackKey(mid, rid), track))
             throw new InvalidOperationException(
                 $"An outbound track is already registered for MID '{mid}'{(rid is null ? "" : $" RID '{rid}'")}.");
     }
@@ -135,14 +135,11 @@ internal sealed class BundledOutboundPipeline
     private BundledOutboundTrack ResolveTrack(string mid, string? rid)
     {
         ArgumentException.ThrowIfNullOrEmpty(mid);
-        if (!_tracks.TryGetValue(new TrackKey(mid, rid), out var track))
+        if (!_tracks.TryGetValue(new BundledOutboundTrackKey(mid, rid), out var track))
             throw new InvalidOperationException(
                 $"No outbound track is registered for MID '{mid}'{(rid is null ? "" : $" RID '{rid}'")}.");
         return track;
     }
-
-    // The routing key for an outbound track: the m-line MID and, for simulcast, the a=rid layer.
-    private readonly record struct TrackKey(string Mid, string? Rid);
 
     private async ValueTask SendCoreAsync(
         string mid,
