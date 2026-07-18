@@ -53,6 +53,8 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     private string? _remoteDescription;
     private SdpMsid? _remoteAudioMsid;
     private SdpMsid? _remoteVideoMsid;
+    private bool _hasRemoteAudio;
+    private bool _hasRemoteVideo;
     private string? _localDescription;
     private SdpSessionDescription? _localOfferModel;
     private BundledMediaSession? _session;
@@ -128,6 +130,22 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     public SdpMsid? RemoteVideoMsid
     {
         get { lock (_sync) { return _remoteVideoMsid; } }
+    }
+
+    /// <summary>
+    /// Whether the applied remote description contains an audio media line — i.e. the remote will send an
+    /// audio track (independent of whether it carries an a=msid). Lets the receiver materialise the track
+    /// from the description rather than waiting for the first frame.
+    /// </summary>
+    public bool HasRemoteAudio
+    {
+        get { lock (_sync) { return _hasRemoteAudio; } }
+    }
+
+    /// <summary>Whether the applied remote description contains a video media line. See <see cref="HasRemoteAudio"/>.</summary>
+    public bool HasRemoteVideo
+    {
+        get { lock (_sync) { return _hasRemoteVideo; } }
     }
 
     /// <summary>
@@ -222,8 +240,12 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             _session = session;
             // Retain the remote track identity (a=msid) so the receiver can group inbound tracks by the
             // remote MediaStream (the W3C RTCTrackEvent.streams semantics).
-            _remoteAudioMsid = remote.Media.FirstOrDefault(m => string.Equals(m.MediaType, "audio", StringComparison.OrdinalIgnoreCase))?.Msid;
-            _remoteVideoMsid = remote.Media.FirstOrDefault(m => string.Equals(m.MediaType, "video", StringComparison.OrdinalIgnoreCase))?.Msid;
+            var audioMedia = remote.Media.FirstOrDefault(m => string.Equals(m.MediaType, "audio", StringComparison.OrdinalIgnoreCase));
+            var videoMedia = remote.Media.FirstOrDefault(m => string.Equals(m.MediaType, "video", StringComparison.OrdinalIgnoreCase));
+            _hasRemoteAudio = audioMedia is not null;
+            _hasRemoteVideo = videoMedia is not null;
+            _remoteAudioMsid = audioMedia?.Msid;
+            _remoteVideoMsid = videoMedia?.Msid;
         }
 
         // Publish _session before wiring its event handlers, so a state-transition callback can never

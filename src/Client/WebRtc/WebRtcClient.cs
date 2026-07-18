@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using CalloraVoipSdk.Core.Infrastructure.Dtls;
+using CalloraVoipSdk.Core.Infrastructure.Sdp;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Models;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.OfferAnswer;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Parsing;
@@ -69,7 +70,7 @@ public sealed class WebRtcClient : IWebRtcClient
                 ? new SdpVideoMediaOptions
                 {
                     Port = _config.LocalEndPoint.Port,
-                    Codecs = ResolveCodecs(_config.VideoCodecs, WebRtcCodecCatalog.Video),
+                    Codecs = ResolveVideoCodecs(_config.VideoCodecs),
                 }
                 : null,
             Dtls = new SdpDtlsParameters
@@ -99,15 +100,31 @@ public sealed class WebRtcClient : IWebRtcClient
         Func<string, SdpCodecDefinition> resolve)
         => names.Select(resolve).ToArray();
 
+    // Video goes through the mature VideoCodecCatalog: it assigns distinct payload types (VP8=96, H264=97),
+    // and the negotiator adds the matching RTX repair codecs, fmtp and RTCP feedback. Unknown names fail
+    // fast, consistent with the audio path.
+    private static IReadOnlyList<SdpCodecDefinition> ResolveVideoCodecs(IReadOnlyList<string> names)
+    {
+        foreach (var name in names)
+        {
+            if (!VideoCodecCatalog.IsSupported(name))
+            {
+                throw new ArgumentException($"Unknown WebRTC video codec '{name}'.", nameof(names));
+            }
+        }
+
+        return VideoCodecCatalog.Resolve(names);
+    }
+
     // RFC 8445 §5.1.2 style credentials: an ICE ufrag/pwd generated fresh per peer.
     private static string GenerateUfrag() => Convert.ToHexString(RandomNumberGenerator.GetBytes(4));
     private static string GeneratePassword() => Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
 }
 
 /// <summary>
-/// Maps WebRTC codec names to their wire definitions with the standard payload types (RFC 3551 static
-/// PTs; Opus/H.264/VP8 on their conventional dynamic PTs). Transport-only: the SDK packetises, the app
-/// owns the codec.
+/// Maps WebRTC audio codec names to their wire definitions with the standard payload types (RFC 3551
+/// static PTs; Opus on its conventional dynamic PT). Video codecs are resolved through the shared
+/// <see cref="VideoCodecCatalog"/> instead. Transport-only: the SDK packetises, the app owns the codec.
 /// </summary>
 internal static class WebRtcCodecCatalog
 {
@@ -118,12 +135,5 @@ internal static class WebRtcCodecCatalog
         "pcma" => new SdpCodecDefinition { PayloadType = 8, Name = "PCMA", ClockRate = 8000 },
         "g722" => new SdpCodecDefinition { PayloadType = 9, Name = "G722", ClockRate = 8000 },
         _ => throw new ArgumentException($"Unknown WebRTC audio codec '{name}'.", nameof(name)),
-    };
-
-    public static SdpCodecDefinition Video(string name) => name.Trim().ToUpperInvariant() switch
-    {
-        "H264" => new SdpCodecDefinition { PayloadType = 96, Name = "H264", ClockRate = 90000 },
-        "VP8" => new SdpCodecDefinition { PayloadType = 96, Name = "VP8", ClockRate = 90000 },
-        _ => throw new ArgumentException($"Unknown WebRTC video codec '{name}'.", nameof(name)),
     };
 }

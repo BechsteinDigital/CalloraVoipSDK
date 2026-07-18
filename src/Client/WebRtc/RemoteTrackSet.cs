@@ -1,18 +1,16 @@
 namespace CalloraVoipSdk.WebRtc;
 
 /// <summary>
-/// Projects the peer's flat inbound audio/video callbacks onto the W3C per-track model: the first frame of
-/// each kind materialises its <see cref="RemoteTrack"/> and raises the track-received callback once, before
-/// that first frame is delivered on the track — so a handler that subscribes to
-/// <see cref="RemoteTrack.FrameReceived"/> synchronously still catches every frame.
+/// Projects the peer's inbound media onto the W3C per-track model. A track is materialised — and its
+/// track-received callback raised exactly once — either when the remote description is applied (the W3C
+/// <c>ontrack</c> point) or, as a fallback, on the first frame of that kind. Materialising up front lets a
+/// handler subscribe to <see cref="RemoteTrack.FrameReceived"/> before any media arrives.
 /// </summary>
 /// <remarks>
 /// Precondition: inbound frames are delivered <em>serially</em> — the peer's transport dispatches every
 /// <c>AudioReceived</c>/<c>VideoFrameReceived</c> from a single receive loop. The lock guarantees exactly
-/// one track per kind and exactly one callback under any interleaving, but the "first frame after the
-/// callback returns" ordering only holds because deliveries are not concurrent: a hypothetical second
-/// concurrent first-frame could raise before the materialising caller's subscriber attaches. Any future
-/// multi-threaded inbound path must preserve serial delivery per peer or revisit this.
+/// one track per kind and exactly one callback under any interleaving. Once tracks are materialised from the
+/// remote description, frame delivery simply routes to the existing track.
 /// </remarks>
 internal sealed class RemoteTrackSet
 {
@@ -27,8 +25,8 @@ internal sealed class RemoteTrackSet
         _onTrackReceived = onTrackReceived;
     }
 
-    /// <summary>Delivers one inbound audio frame, materialising the audio track on first use.</summary>
-    public void DeliverAudioFrame(string? streamId, string? trackId, EncodedFrame frame)
+    /// <summary>Materialises the audio track (raising the callback once) without delivering a frame.</summary>
+    public RemoteTrack EnsureAudioTrack(string? streamId, string? trackId)
     {
         RemoteTrack? created = null;
         RemoteTrack track;
@@ -42,11 +40,11 @@ internal sealed class RemoteTrackSet
             track = _audio;
         }
         if (created is not null) _onTrackReceived(created);
-        track.RaiseFrame(frame);
+        return track;
     }
 
-    /// <summary>Delivers one inbound video frame, materialising the video track on first use.</summary>
-    public void DeliverVideoFrame(string? streamId, string? trackId, EncodedFrame frame)
+    /// <summary>Materialises the video track (raising the callback once) without delivering a frame.</summary>
+    public RemoteTrack EnsureVideoTrack(string? streamId, string? trackId)
     {
         RemoteTrack? created = null;
         RemoteTrack track;
@@ -60,6 +58,14 @@ internal sealed class RemoteTrackSet
             track = _video;
         }
         if (created is not null) _onTrackReceived(created);
-        track.RaiseFrame(frame);
+        return track;
     }
+
+    /// <summary>Delivers one inbound audio frame, materialising the audio track first if not already present.</summary>
+    public void DeliverAudioFrame(string? streamId, string? trackId, EncodedFrame frame)
+        => EnsureAudioTrack(streamId, trackId).RaiseFrame(frame);
+
+    /// <summary>Delivers one inbound video frame, materialising the video track first if not already present.</summary>
+    public void DeliverVideoFrame(string? streamId, string? trackId, EncodedFrame frame)
+        => EnsureVideoTrack(streamId, trackId).RaiseFrame(frame);
 }
