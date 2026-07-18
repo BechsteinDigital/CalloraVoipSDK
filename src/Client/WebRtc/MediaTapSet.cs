@@ -44,13 +44,13 @@ internal sealed class MediaTapSet
         }
     }
 
-    public void Video(MediaDirection direction, ReadOnlyMemory<byte> frame, uint? rtpTimestamp, bool isKeyFrame)
+    public void Video(MediaDirection direction, ReadOnlyMemory<byte> frame, uint? rtpTimestamp, bool isKeyFrame, string? rid)
     {
         foreach (var tap in _taps)
         {
             try
             {
-                tap.OnVideo(direction, frame, rtpTimestamp, isKeyFrame);
+                tap.OnVideo(direction, frame, rtpTimestamp, isKeyFrame, rid);
             }
             catch (Exception ex)
             {

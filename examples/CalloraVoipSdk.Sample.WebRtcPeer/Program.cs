@@ -58,7 +58,7 @@ internal sealed class FrameCounterTap : IMediaTap
         }
     }
 
-    public void OnVideo(MediaDirection direction, ReadOnlyMemory<byte> frame, uint? rtpTimestamp, bool isKeyFrame)
+    public void OnVideo(MediaDirection direction, ReadOnlyMemory<byte> frame, uint? rtpTimestamp, bool isKeyFrame, string? rid)
     {
     }
 }

@@ -18,7 +18,7 @@ public sealed class WebRtcRecordingTests
         var tap = new RecordingTap(sink);
 
         tap.OnAudio(MediaDirection.Inbound, new byte[] { 1, 2 });
-        tap.OnVideo(MediaDirection.Outbound, new byte[] { 3 }, rtpTimestamp: 90000, isKeyFrame: true);
+        tap.OnVideo(MediaDirection.Outbound, new byte[] { 3 }, rtpTimestamp: 90000, isKeyFrame: true, rid: "hi");
 
         Assert.Equal(2, tap.FrameCount);
         Assert.Equal(2, sink.Frames.Count);
@@ -32,6 +32,7 @@ public sealed class WebRtcRecordingTests
         Assert.Equal(MediaDirection.Outbound, sink.Frames[1].Direction);
         Assert.Equal(90000u, sink.Frames[1].RtpTimestamp);
         Assert.True(sink.Frames[1].IsKeyFrame);
+        Assert.Equal("hi", sink.Frames[1].Rid); // the simulcast layer id reaches the recording sink
     }
 
     [Fact]
@@ -79,7 +80,7 @@ public sealed class WebRtcRecordingTests
         public void Write(in RecordedFrame frame)
         {
             // Copy the payload — it is only valid for the duration of this call.
-            Frames.Add(new RecordedFrame(frame.Kind, frame.Direction, frame.Payload.ToArray(), frame.RtpTimestamp, frame.IsKeyFrame));
+            Frames.Add(new RecordedFrame(frame.Kind, frame.Direction, frame.Payload.ToArray(), frame.RtpTimestamp, frame.IsKeyFrame, frame.Rid));
         }
 
         public ValueTask CompleteAsync(CancellationToken cancellationToken = default)
@@ -95,7 +96,7 @@ public sealed class WebRtcRecordingTests
         public bool TapDetached { get; private set; }
 
         public void PushAudio(MediaDirection direction, byte[] payload) => _tap?.OnAudio(direction, payload);
-        public void PushVideo(MediaDirection direction, byte[] frame, uint? ts, bool isKeyFrame) => _tap?.OnVideo(direction, frame, ts, isKeyFrame);
+        public void PushVideo(MediaDirection direction, byte[] frame, uint? ts, bool isKeyFrame, string? rid = null) => _tap?.OnVideo(direction, frame, ts, isKeyFrame, rid);
 
         public IDisposable AttachMediaTap(IMediaTap tap)
         {

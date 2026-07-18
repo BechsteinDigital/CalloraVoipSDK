@@ -55,7 +55,7 @@ internal sealed class AudioRecorder : IMediaTap
         Interlocked.Increment(ref _frames);
     }
 
-    public void OnVideo(MediaDirection direction, ReadOnlyMemory<byte> frame, uint? rtpTimestamp, bool isKeyFrame)
+    public void OnVideo(MediaDirection direction, ReadOnlyMemory<byte> frame, uint? rtpTimestamp, bool isKeyFrame, string? rid)
     {
     }
 }
