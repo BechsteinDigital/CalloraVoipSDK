@@ -70,6 +70,29 @@ public sealed class WebRtcPeerToPeerTests
         AssertSameNalUnits(frame, await videoAtAnswerer.Task.WaitAsync(TimeSpan.FromSeconds(5)));
     }
 
+    [Fact]
+    public async Task Peers_converge_on_each_others_media_endpoint_after_nomination()
+    {
+        var (offerer, answerer) = await ConnectPeersAsync();
+        await using var offererLease = offerer;
+        await using var answererLease = answerer;
+
+        var offererConnected = Connected(offerer);
+        var answererConnected = Connected(answerer);
+
+        await offerer.StartAsync();  // offerer is the ICE controlling agent — its nomination driver runs
+        await answerer.StartAsync();
+
+        await Task.WhenAll(offererConnected, answererConnected).WaitAsync(TimeSpan.FromSeconds(20));
+
+        // The offerer's connectivity-check nomination (RFC 8445 §7/§8) and the symmetric latch converge each
+        // transport on the peer's actual bound media endpoint — not a placeholder or a stale candidate.
+        Assert.NotNull(offerer.RemoteMediaEndPoint);
+        Assert.NotNull(answerer.RemoteMediaEndPoint);
+        Assert.Equal(answerer.LocalMediaEndPoint, offerer.RemoteMediaEndPoint);
+        Assert.Equal(offerer.LocalMediaEndPoint, answerer.RemoteMediaEndPoint);
+    }
+
     // ── harness ──────────────────────────────────────────────────────────────────
 
     private static Task Connected(WebRtcPeerConnection peer)

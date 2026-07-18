@@ -21,6 +21,14 @@ internal sealed record IceMediaParameters(
     string? RemoteIceUfrag,
     string? RemoteIcePwd)
 {
+    /// <summary>
+    /// The remote candidates the controlling agent runs connectivity checks against to nominate a pair
+    /// (RFC 8445 §7.2.2/§8). Empty runs no candidate-pair checking — consent stays on
+    /// <see cref="RemoteEndPoint"/> and the symmetric transport latches the peer's source. The audio/video
+    /// projections leave it empty; the WebRTC path populates it from the peer's <c>a=candidate</c> lines.
+    /// </summary>
+    public IReadOnlyList<IceRemoteCandidate> RemoteCandidates { get; init; } = [];
+
     /// <summary>Projects the audio/session-level ICE parameters onto the audio media 5-tuple.</summary>
     public static IceMediaParameters FromCall(CallMediaParameters parameters)
     {

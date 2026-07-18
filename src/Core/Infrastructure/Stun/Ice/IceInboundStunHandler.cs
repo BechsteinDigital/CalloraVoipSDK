@@ -69,10 +69,11 @@ internal sealed class IceInboundStunHandler
     public IceRole Role => (IceRole)Volatile.Read(ref _role);
 
     /// <summary>
-    /// Raised when an inbound check with USE-CANDIDATE nominates the pair and this agent is the
-    /// controlled one (RFC 8445 §7.3.1.5). Fires on the transport receive-loop thread.
+    /// Raised with the sender's address when an inbound check with USE-CANDIDATE nominates the pair and
+    /// this agent is the controlled one (RFC 8445 §7.3.1.5) — the controlled agent adopts that source as
+    /// the nominated remote. Fires on the transport receive-loop thread.
     /// </summary>
-    public event Action? PairNominated;
+    public event Action<IPEndPoint>? PairNominated;
 
     /// <summary>
     /// Raised with the sender's address when an inbound check is authenticated and accepted, so the
@@ -104,7 +105,7 @@ internal sealed class IceInboundStunHandler
 
         if (result.NominatePair)
         {
-            try { PairNominated?.Invoke(); }
+            try { PairNominated?.Invoke(source); }
             catch (Exception ex) { _logger.LogError(ex, "Unhandled exception in ICE PairNominated handler."); }
         }
 

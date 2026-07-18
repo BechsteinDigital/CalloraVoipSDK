@@ -25,6 +25,10 @@ internal static class IceConsentCheckBuilder
     /// <param name="priority">PRIORITY carried in the check (RFC 8445 §7.2.2).</param>
     /// <param name="controlling">Whether this agent holds the controlling role.</param>
     /// <param name="tieBreaker">This agent's 64-bit tie-breaker.</param>
+    /// <param name="useCandidate">
+    /// Whether to carry USE-CANDIDATE — a nominating check by the controlling agent (RFC 8445 §8.1.1).
+    /// Consent-freshness checks leave it <see langword="false"/>.
+    /// </param>
     public static (byte[] Datagram, byte[] TransactionId) Build(
         IStunMessageCodec codec,
         string localUfrag,
@@ -32,7 +36,8 @@ internal static class IceConsentCheckBuilder
         string remotePassword,
         uint priority,
         bool controlling,
-        ulong tieBreaker)
+        ulong tieBreaker,
+        bool useCandidate = false)
     {
         ArgumentNullException.ThrowIfNull(codec);
 
@@ -42,7 +47,7 @@ internal static class IceConsentCheckBuilder
         {
             new UsernameAttribute { Value = $"{remoteUfrag}:{localUfrag}" },
         };
-        attributes.AddRange(StunIceCheckAttributes.Build(priority, controlling, tieBreaker, useCandidate: false));
+        attributes.AddRange(StunIceCheckAttributes.Build(priority, controlling, tieBreaker, useCandidate));
 
         var request = new StunMessage
         {

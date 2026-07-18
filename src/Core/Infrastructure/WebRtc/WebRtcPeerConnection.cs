@@ -269,9 +269,11 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
 
         // Build the shared media transport from the two descriptions (WebRTC is DTLS-SRTP over one
         // BUNDLE group). A non-bundle exchange yields no session — the local description is still
-        // returned, but the peer has no transport (logged), which StartAsync then surfaces.
+        // returned, but the peer has no transport (logged), which StartAsync then surfaces. The offerer
+        // (a local offer was created) holds the ICE controlling role (RFC 8445 §6.1.1).
         var session = WebRtcSessionFactory.TryCreate(
-            remote, localModel, _options, _handshaker, _certificate, _loggerFactory, _mediaSocket);
+            remote, localModel, _options, _handshaker, _certificate, _loggerFactory, _mediaSocket,
+            iceControlling: pendingOffer is not null);
         if (session is null)
             _logger.LogWarning("The remote description did not negotiate a BUNDLE media session; no transport was built.");
 

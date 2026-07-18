@@ -18,7 +18,10 @@ internal sealed class IceMediaConsentSession : IAsyncDisposable
 {
     private readonly IStunMessageCodec _codec;
     private readonly Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask> _sendRaw;
-    private readonly IPEndPoint _remoteEndPoint;
+    // The nominated remote consent checks target. Mutable: ICE nomination (RFC 8445 §8) can redirect
+    // consent freshness onto a newly selected pair. Accessed via Volatile — written from the nomination
+    // path, read from the consent loop.
+    private IPEndPoint _remoteEndPoint;
     private readonly string _localUfrag;
     private readonly string _remoteUfrag;
     private readonly string _remotePassword;
@@ -90,6 +93,18 @@ internal sealed class IceMediaConsentSession : IAsyncDisposable
     public void Start() => _monitor.Start();
 
     /// <summary>
+    /// Redirects consent freshness onto a newly nominated ICE pair (RFC 8445 §8): subsequent consent
+    /// checks are sent to <paramref name="remoteEndPoint"/> instead of the pair the session started on.
+    /// Thread-safe.
+    /// </summary>
+    /// <param name="remoteEndPoint">The nominated remote endpoint to run consent against.</param>
+    public void Nominate(IPEndPoint remoteEndPoint)
+    {
+        ArgumentNullException.ThrowIfNull(remoteEndPoint);
+        Volatile.Write(ref _remoteEndPoint, remoteEndPoint);
+    }
+
+    /// <summary>
     /// Feeds an inbound STUN response (demuxed off the media socket) to the transaction matcher,
     /// confirming the consent check it answers. Non-matching datagrams are ignored.
     /// </summary>
@@ -102,20 +117,22 @@ internal sealed class IceMediaConsentSession : IAsyncDisposable
         _registry.TryComplete(datagram.Slice(8, 12));
     }
 
-    private Task<bool> SendConsentCheckAsync(CancellationToken ct) => SendCheckAsync(_remoteEndPoint, ct);
+    private Task<bool> SendConsentCheckAsync(CancellationToken ct) => SendCheckAsync(Volatile.Read(ref _remoteEndPoint), ct);
 
     /// <summary>
     /// Sends one connectivity check to <paramref name="target"/> and returns <see langword="true"/>
     /// when a matching response arrives within the check timeout. Shared by consent checks (to the
-    /// nominated remote) and triggered checks (back to the source of an inbound check,
-    /// RFC 8445 §7.3.1.4). Registers the transaction before sending so a fast response is not missed.
+    /// nominated remote), triggered checks (back to the source of an inbound check, RFC 8445 §7.3.1.4),
+    /// and nomination checks (candidate-pair checking, RFC 8445 §7.2.2). Registers the transaction before
+    /// sending so a fast response is not missed.
     /// </summary>
     /// <param name="target">The address to send the check to.</param>
     /// <param name="ct">Cancellation token.</param>
-    internal async Task<bool> SendCheckAsync(IPEndPoint target, CancellationToken ct)
+    /// <param name="useCandidate">Whether to carry USE-CANDIDATE — a controlling agent's nominating check (RFC 8445 §8.1.1).</param>
+    internal async Task<bool> SendCheckAsync(IPEndPoint target, CancellationToken ct, bool useCandidate = false)
     {
         var (datagram, transactionId) = IceConsentCheckBuilder.Build(
-            _codec, _localUfrag, _remoteUfrag, _remotePassword, _priority, _controlling, _tieBreaker);
+            _codec, _localUfrag, _remoteUfrag, _remotePassword, _priority, _controlling, _tieBreaker, useCandidate);
 
         var pending = _registry.AwaitResponseAsync(transactionId, _checkTimeout, ct);
         try

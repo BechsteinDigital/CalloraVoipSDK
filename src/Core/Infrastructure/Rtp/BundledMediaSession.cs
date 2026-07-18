@@ -131,7 +131,9 @@ internal sealed class BundledMediaSession : IAsyncDisposable
             options.Ice, _inbound, _transport.SendToAsync, loggerFactory,
             onConsentLost: () => MediaConsentLost?.Invoke(),
             onConnectivityDegraded: () => MediaConnectivityDegraded?.Invoke(),
-            onConnectivityRecovered: () => MediaConnectivityRecovered?.Invoke());
+            onConnectivityRecovered: () => MediaConnectivityRecovered?.Invoke(),
+            // A nominated ICE pair (RFC 8445 §8) becomes the transport's send target.
+            onPairNominated: _transport.SetRemoteEndPoint);
 
         _audioSsrc = options.Audio.Ssrc;
     }
