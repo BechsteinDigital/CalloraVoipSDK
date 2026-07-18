@@ -75,6 +75,62 @@ public sealed class TurnRelayChannelTests
         Assert.Empty(recovered);
     }
 
+    [Fact]
+    public void TryUnwrap_rejects_an_empty_datagram()
+    {
+        var channel = new TurnRelayChannel(Relay, Channel);
+
+        Assert.False(channel.TryUnwrap(ReadOnlySpan<byte>.Empty, Relay, out var recovered));
+        Assert.Empty(recovered);
+    }
+
+    [Fact]
+    public void TryUnwrap_rejects_channel_data_whose_declared_length_overruns_the_payload()
+    {
+        var channel = new TurnRelayChannel(Relay, Channel);
+        // Valid channel number (0x4001), but the declared length (0x00FF) exceeds the two payload bytes present.
+        var overlong = new byte[] { 0x40, 0x01, 0x00, 0xFF, 0xAA, 0xBB };
+
+        Assert.False(channel.TryUnwrap(overlong, Relay, out var recovered));
+        Assert.Empty(recovered);
+    }
+
+    [Fact]
+    public void TryUnwrap_accepts_relayed_data_from_an_ipv4_mapped_ipv6_source()
+    {
+        // A dual-stack socket can surface the relay's IPv4 address as ::ffff:203.0.113.7 — the source
+        // filter must treat that as the same host, not drop every relayed frame.
+        var channel = new TurnRelayChannel(Relay, Channel);
+        var media = new byte[] { 7, 7, 7 };
+        var framed = channel.Wrap(media);
+        var mappedSource = new IPEndPoint(Relay.Address.MapToIPv6(), Relay.Port);
+
+        Assert.True(channel.TryUnwrap(framed, mappedSource, out var recovered));
+        Assert.Equal(media, recovered);
+    }
+
+    [Theory]
+    [InlineData(0x4000)]
+    [InlineData(0x7FFF)]
+    public void Constructor_accepts_the_inclusive_channel_range_boundaries(int channelNumber)
+    {
+        var channel = new TurnRelayChannel(Relay, (ushort)channelNumber);
+
+        Assert.Equal((ushort)channelNumber, channel.ChannelNumber);
+    }
+
+    [Fact]
+    public void Wrap_then_unwrap_round_trips_on_the_top_channel_boundary()
+    {
+        var channel = new TurnRelayChannel(Relay, 0x7FFF);
+        var media = new byte[] { 1, 2, 3, 4, 5 };
+
+        var framed = channel.Wrap(media);
+
+        Assert.True(channel.TryUnwrap(framed, Relay, out var recovered));
+        Assert.Equal(media, recovered);
+    }
+
     [Theory]
     [InlineData(0x3FFF)]
     [InlineData(0x8000)]

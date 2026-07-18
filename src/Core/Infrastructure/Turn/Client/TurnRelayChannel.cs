@@ -66,7 +66,10 @@ internal sealed class TurnRelayChannel
     /// the channel binding, so it is not returned.
     /// </summary>
     /// <param name="datagram">The raw inbound datagram from the socket.</param>
-    /// <param name="source">The datagram's source endpoint.</param>
+    /// <param name="source">
+    /// The datagram's source endpoint. An IPv4-mapped-IPv6 form of the relay address (as a dual-stack
+    /// socket may surface it) is treated as equal to a plain IPv4 relay endpoint.
+    /// </param>
     /// <param name="payload">The recovered inner media payload, or an empty array when this returns false.</param>
     /// <returns>
     /// <see langword="true"/> when the datagram is relayed traffic for this channel; <see langword="false"/>
@@ -78,7 +81,7 @@ internal sealed class TurnRelayChannel
         payload = Array.Empty<byte>();
 
         ArgumentNullException.ThrowIfNull(source);
-        if (!source.Equals(_relayServer))
+        if (!SameEndPoint(source, _relayServer))
             return false;
 
         if (!TurnChannelDataCodec.TryParse(datagram, out var channel, out var data) || channel != _channelNumber)
@@ -87,4 +90,14 @@ internal sealed class TurnRelayChannel
         payload = data;
         return true;
     }
+
+    // An IPv4 relay endpoint and an IPv4-mapped-IPv6 source (::ffff:a.b.c.d — how a dual-stack socket can
+    // surface the same host) denote the same peer. Canonicalise both addresses before comparing so the
+    // source filter neither drops genuine relayed traffic on a dual-stack socket nor lets a different host
+    // through (mapping is a lossless, host-preserving transform).
+    private static bool SameEndPoint(IPEndPoint a, IPEndPoint b)
+        => a.Port == b.Port && Canonical(a.Address).Equals(Canonical(b.Address));
+
+    private static IPAddress Canonical(IPAddress address)
+        => address.IsIPv4MappedToIPv6 ? address.MapToIPv4() : address;
 }
