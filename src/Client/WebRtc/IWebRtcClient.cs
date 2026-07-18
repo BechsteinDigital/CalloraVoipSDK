@@ -2,8 +2,8 @@ namespace CalloraVoipSdk.WebRtc;
 
 /// <summary>
 /// The WebRTC peer facade — the happy-path entry point for building signalling-neutral peer
-/// connections. Mirrors the SIP <c>IVoipClient</c>; the advanced manager tier (peer registry, media,
-/// quality) and the signalling-adapter convenience are added in later slices (ADR-012).
+/// connections. Mirrors the SIP <c>IVoipClient</c>; the advanced peer-registry manager tier is added in a
+/// later slice (ADR-012).
 /// </summary>
 public interface IWebRtcClient
 {
@@ -12,4 +12,10 @@ public interface IWebRtcClient
     /// endpoint. The caller drives signalling and disposes the returned peer.
     /// </summary>
     IPeerConnection CreatePeer();
+
+    /// <summary>
+    /// The registry of optional facade extensions contributed by separate packages (L3 plugin seam);
+    /// register modules programmatically via <see cref="IWebRtcModuleRegistry.Register"/>.
+    /// </summary>
+    IWebRtcModuleRegistry Modules { get; }
 }

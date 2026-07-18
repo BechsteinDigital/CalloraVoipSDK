@@ -120,7 +120,14 @@ public sealed class WebRtcSignalingTests
 
         public ValueTask SendAudioAsync(ReadOnlyMemory<byte> payload, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
         public Task SendVideoFrameAsync(ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public IDisposable AttachMediaTap(IMediaTap tap) => NoopDisposable.Instance;
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+
+        private sealed class NoopDisposable : IDisposable
+        {
+            public static readonly NoopDisposable Instance = new();
+            public void Dispose() { }
+        }
 
         private void Raise(PeerConnectionState state)
         {
