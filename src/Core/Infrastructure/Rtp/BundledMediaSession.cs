@@ -183,6 +183,12 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     /// <summary>The remote media endpoint the shared transport sends to, or null before one is set.</summary>
     public IPEndPoint? RemoteEndPoint => _transport.RemoteEndPoint;
 
+    /// <summary>
+    /// Points the shared transport at a new remote media endpoint (a trickled ICE candidate, RFC 8838).
+    /// Thread-safe; the symmetric transport still latches the peer's real source on the next received packet.
+    /// </summary>
+    public void SetRemoteEndPoint(IPEndPoint remoteEndPoint) => _transport.SetRemoteEndPoint(remoteEndPoint);
+
     /// <summary>Point-in-time transport counters aggregated from the outbound and inbound pipelines.</summary>
     public BundledMediaStats SnapshotStats() => new(
         _outbound.PacketsSent, _outbound.BytesSent, _outbound.SuppressedSends,

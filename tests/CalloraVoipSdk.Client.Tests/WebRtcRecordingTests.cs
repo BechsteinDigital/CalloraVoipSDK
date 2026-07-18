@@ -110,7 +110,9 @@ public sealed class WebRtcRecordingTests
         public IPEndPoint? LocalMediaEndPoint => null;
         public event EventHandler<PeerConnectionState>? ConnectionStateChanged { add { } remove { } }
         public event EventHandler<RemoteTrack>? TrackReceived { add { } remove { } }
+        public event EventHandler<string>? LocalIceCandidateDiscovered { add { } remove { } }
         public string CreateOffer() => string.Empty;
+        public Task AddIceCandidateAsync(string candidate, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<string> SetRemoteDescriptionAsync(string remoteSdp, CancellationToken cancellationToken = default) => Task.FromResult(string.Empty);
         public Task StartAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
         public ValueTask SendAudioAsync(ReadOnlyMemory<byte> payload, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;

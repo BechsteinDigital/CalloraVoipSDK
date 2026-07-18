@@ -30,8 +30,22 @@ public interface IPeerConnection : IAsyncDisposable
     /// </summary>
     event EventHandler<RemoteTrack>? TrackReceived;
 
+    /// <summary>
+    /// Raised as each local ICE candidate is gathered (RFC 8838 trickle), carrying the RFC 8829
+    /// <c>candidate:</c> line so the app can signal it to the peer out-of-band. Pair with
+    /// <see cref="AddIceCandidateAsync"/> on the remote side. Today one host candidate is gathered.
+    /// </summary>
+    event EventHandler<string>? LocalIceCandidateDiscovered;
+
     /// <summary>Produces a local WebRTC offer (BUNDLE, DTLS-SRTP, ICE, rtcp-mux) for the app to signal out.</summary>
     string CreateOffer();
+
+    /// <summary>
+    /// Applies a remote ICE candidate that trickled in out-of-band (RFC 8838), as an RFC 8829
+    /// <c>candidate:</c> line. The highest-priority component-1 UDP candidate becomes the send target;
+    /// a malformed or unusable candidate is ignored.
+    /// </summary>
+    Task AddIceCandidateAsync(string candidate, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Applies a remote SDP. When this peer is the answerer, returns the local answer SDP to signal back;

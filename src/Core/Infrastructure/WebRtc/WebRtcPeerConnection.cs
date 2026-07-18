@@ -65,6 +65,11 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     private readonly SendDrainGate _sendGate = new();
     private UdpClient? _mediaSocket;
     private bool _socketHandedOver;
+    // Trickle ICE (RFC 8838): the best remote candidate applied so far as the send target, buffered until
+    // the session exists. Highest-priority-wins; the symmetric transport latches the peer's real source on
+    // the first received packet regardless.
+    private IPEndPoint? _pendingRemoteCandidate;
+    private long _appliedRemotePriority = long.MinValue;
 
     /// <summary>Raised when the connection state changes (RFC 8829 <c>connectionstatechange</c>).</summary>
     public event Action<WebRtcConnectionState>? ConnectionStateChanged;
@@ -74,6 +79,14 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
 
     /// <summary>Raised with each reassembled inbound video frame (frame, RTP timestamp, is-key-frame).</summary>
     public event Action<byte[], uint, bool>? VideoFrameReceived;
+
+    /// <summary>
+    /// Raised as each local ICE candidate is gathered (RFC 8838 trickle), carrying the RFC 8829
+    /// <c>candidate:</c> line so the app can signal it out-of-band. Today the peer gathers one host
+    /// candidate (the early-bound media endpoint), emitted right after the offer/answer is produced;
+    /// server-reflexive/relay gathering arrives in a later slice.
+    /// </summary>
+    public event Action<string>? LocalIceCandidateDiscovered;
 
     public WebRtcPeerConnection(
         WebRtcPeerOptions options,
@@ -183,6 +196,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             _localDescription = offerSdp;
         }
 
+        RaiseLocalCandidate(local);
         return offerSdp;
     }
 
@@ -223,6 +237,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
 
         SdpSessionDescription localModel;
         string localSdp;
+        IPEndPoint? answererLocal = null;
         if (pendingOffer is not null)
         {
             // Offerer: the remote description is the answer; our offer is the local description.
@@ -233,6 +248,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         {
             // Answerer: the remote description is the offer; negotiate our answer.
             var local = EnsureLocalMediaEndPoint();
+            answererLocal = local;
             var result = _negotiator.NegotiateAnswer(
                 remote, local, _options.AudioCodecs, SdpMediaDirection.SendRecv, MediaOptions(local));
             if (!result.Success || result.Answer is null)
@@ -253,6 +269,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         if (session is null)
             _logger.LogWarning("The remote description did not negotiate a BUNDLE media session; no transport was built.");
 
+        IPEndPoint? pendingCandidate;
         lock (_sync)
         {
             _remoteDescription = remoteSdp;
@@ -261,6 +278,10 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             // The transport now owns the pre-bound socket (if a session was built); DisposeAsync must not
             // dispose it again.
             _socketHandedOver = session is not null;
+            // Capture any candidate that trickled in before the session existed under the SAME lock that
+            // publishes _session, so a concurrent AddIceCandidateAsync either wrote it before this (picked
+            // up here) or observes the published session and applies it live — never lost in a gap (RFC 8838).
+            pendingCandidate = _pendingRemoteCandidate;
             // Retain the remote track identity (a=msid) so the receiver can group inbound tracks by the
             // remote MediaStream (the W3C RTCTrackEvent.streams semantics).
             var audioMedia = remote.Media.FirstOrDefault(m => string.Equals(m.MediaType, "audio", StringComparison.OrdinalIgnoreCase));
@@ -274,9 +295,15 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         // Publish _session before wiring its event handlers, so a state-transition callback can never
         // fire against a peer that has not yet recorded the session it belongs to (HARD-C6).
         if (session is not null)
+        {
             WireSession(session);
+            if (pendingCandidate is not null)
+                session.SetRemoteEndPoint(pendingCandidate);
+        }
 
         TransitionTo(WebRtcConnectionState.Connecting);
+        if (answererLocal is not null)
+            RaiseLocalCandidate(answererLocal);
         return Task.FromResult(localSdp);
     }
 
@@ -350,6 +377,77 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         finally
         {
             _sendGate.Exit();
+        }
+    }
+
+    /// <summary>
+    /// Applies a remote ICE candidate that trickled in out-of-band (RFC 8838), given as an RFC 8829
+    /// <c>candidate:</c> line. The highest-priority component-1 UDP candidate becomes the transport's send
+    /// target (buffered until the session is built); the symmetric transport still latches the peer's real
+    /// source address on the first received packet. A malformed or unusable candidate is ignored. This is
+    /// candidate application, not full RFC 8445 multi-pair connectivity checking (a later slice).
+    /// </summary>
+    public Task AddIceCandidateAsync(string candidate, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(candidate);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (ParseTrickleCandidate(candidate) is not { } parsed)
+        {
+            _logger.LogDebug("Ignoring an unusable trickled ICE candidate.");
+            return Task.CompletedTask;
+        }
+
+        BundledMediaSession? session;
+        lock (_sync)
+        {
+            if (parsed.Priority <= _appliedRemotePriority)
+                return Task.CompletedTask; // keep the higher-priority target already applied
+            _appliedRemotePriority = parsed.Priority;
+            _pendingRemoteCandidate = parsed.Endpoint;
+            session = _session;
+        }
+
+        session?.SetRemoteEndPoint(parsed.Endpoint);
+        return Task.CompletedTask;
+    }
+
+    // Parses an RFC 8829 candidate string ("candidate:…", tolerating a leading "a=") into a component-1
+    // UDP endpoint and its priority, or null when malformed/unusable (wrong component/transport, no port,
+    // unparseable address).
+    private static (IPEndPoint Endpoint, long Priority)? ParseTrickleCandidate(string candidate)
+    {
+        var value = candidate.Trim();
+        if (value.StartsWith("a=", StringComparison.Ordinal))
+            value = value[2..];
+        if (value.StartsWith("candidate:", StringComparison.Ordinal))
+            value = value["candidate:".Length..];
+
+        if (SdpIceCandidate.TryParse(value) is not { } parsed
+            || parsed.Component != 1
+            || !parsed.Transport.Equals("udp", StringComparison.OrdinalIgnoreCase)
+            || parsed.Port <= 0
+            || parsed.Priority < 0 // RFC 8445 priority is a 31-bit unsigned; a negative value is malformed
+            || !IPAddress.TryParse(parsed.Address, out var ip))
+            return null;
+
+        return (new IPEndPoint(ip, parsed.Port), parsed.Priority);
+    }
+
+    // Emits the local host candidate for the bound endpoint as an RFC 8829 candidate string (trickle).
+    private void RaiseLocalCandidate(IPEndPoint local)
+    {
+        if (LocalIceCandidateDiscovered is not { } handler)
+            return;
+
+        var candidate = "candidate:" + LocalHostCandidate(local).Serialize();
+        try
+        {
+            handler(candidate);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled exception in WebRTC LocalIceCandidateDiscovered handler.");
         }
     }
 
