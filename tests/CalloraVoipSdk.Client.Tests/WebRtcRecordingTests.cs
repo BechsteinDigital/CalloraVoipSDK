@@ -103,6 +103,8 @@ public sealed class WebRtcRecordingTests
             return new Detacher(this);
         }
 
+        public WebRtcStats GetStats() => new() { ConnectionState = State };
+
         public PeerConnectionState State => PeerConnectionState.Connected;
         public string? LocalDescription => null;
         public IPEndPoint? LocalMediaEndPoint => null;

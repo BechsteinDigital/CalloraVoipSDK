@@ -53,4 +53,10 @@ public interface IPeerConnection : IAsyncDisposable
     /// directions (L3 recording/analytics/AI seam). Dispose the returned handle to detach.
     /// </summary>
     IDisposable AttachMediaTap(IMediaTap tap);
+
+    /// <summary>
+    /// Takes a statistics snapshot for this peer (the SDK's <c>getStats</c>). Bitrates are derived per call,
+    /// so poll periodically (e.g. once per second) for meaningful rate values.
+    /// </summary>
+    WebRtcStats GetStats();
 }

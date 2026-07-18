@@ -30,6 +30,8 @@ internal sealed class BundledOutboundPipeline
 
     private ISrtpContext? _outboundSrtp;
     private long _suppressedSends;
+    private long _packetsSent;
+    private long _bytesSent;
 
     /// <summary>Raised after a packet has actually been sent, so an RTX buffer (RFC 4588) can retain it.</summary>
     public event Action<RtpPacket>? PacketSent;
@@ -46,6 +48,12 @@ internal sealed class BundledOutboundPipeline
 
     /// <summary>Sends suppressed because no outbound SRTP context was installed yet (fail-closed).</summary>
     public long SuppressedSends => Interlocked.Read(ref _suppressedSends);
+
+    /// <summary>Total RTP packets actually sent (after SRTP protection) across all tracks.</summary>
+    public long PacketsSent => Interlocked.Read(ref _packetsSent);
+
+    /// <summary>Total bytes of protected RTP datagrams sent across all tracks.</summary>
+    public long BytesSent => Interlocked.Read(ref _bytesSent);
 
     /// <summary>
     /// Registers the outbound track for one m-line's MID.
@@ -149,6 +157,8 @@ internal sealed class BundledOutboundPipeline
         }
 
         await _sender.SendAsync(datagram, cancellationToken).ConfigureAwait(false);
+        Interlocked.Increment(ref _packetsSent);
+        Interlocked.Add(ref _bytesSent, datagram.Length);
 
         try
         {

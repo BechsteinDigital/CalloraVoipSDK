@@ -20,6 +20,7 @@ internal sealed class BundledMediaSession : IAsyncDisposable
 {
     private readonly BundledMediaTransport _transport;
     private readonly BundledOutboundPipeline _outbound;
+    private readonly BundledInboundPipeline _inbound;
     private readonly BundledDtlsKeying _dtls;
     private readonly BundledIceControl _ice;
     private readonly BundledVideoTrack? _video;
@@ -75,12 +76,12 @@ internal sealed class BundledMediaSession : IAsyncDisposable
             BundledRtpDemultiplexerFactory.Create(options.MidExtensionId, payloadTypesByMid));
         router.RegisterTrack(options.Audio.Mid, RaiseAudioReceived);
 
-        var inbound = new BundledInboundPipeline(
+        _inbound = new BundledInboundPipeline(
             router, new RtpPacketCodec(), loggerFactory.CreateLogger<BundledInboundPipeline>());
 
         _transport = new BundledMediaTransport(
             new BundledMediaTransportOptions { LocalEndPoint = options.LocalEndPoint, RemoteEndPoint = options.RemoteEndPoint },
-            inbound, loggerFactory.CreateLogger<BundledMediaTransport>());
+            _inbound, loggerFactory.CreateLogger<BundledMediaTransport>());
 
         // Outbound: a per-track sender for each m-line, stamping its MID.
         _outbound = new BundledOutboundPipeline(
@@ -100,12 +101,12 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         // One shared DTLS association keys every track; one shared ICE agent keeps the group alive.
         _dtls = new BundledDtlsKeying(
             options.DtlsIsClient, options.RemoteEndPoint, options.RemoteFingerprint,
-            handshaker, certificate, inbound, _outbound, _transport,
+            handshaker, certificate, _inbound, _outbound, _transport,
             onHandshakeFailed: () => HandshakeFailed?.Invoke(), loggerFactory,
             onKeysInstalled: () => Connected?.Invoke());
 
         _ice = new BundledIceControl(
-            options.Ice, inbound, _transport.SendToAsync, loggerFactory,
+            options.Ice, _inbound, _transport.SendToAsync, loggerFactory,
             onConsentLost: () => MediaConsentLost?.Invoke(),
             onConnectivityDegraded: () => MediaConnectivityDegraded?.Invoke(),
             onConnectivityRecovered: () => MediaConnectivityRecovered?.Invoke());
@@ -140,6 +141,11 @@ internal sealed class BundledMediaSession : IAsyncDisposable
 
     /// <summary>Whether this bundle carries a video track.</summary>
     public bool HasVideo => _video is not null;
+
+    /// <summary>Point-in-time transport counters aggregated from the outbound and inbound pipelines.</summary>
+    public BundledMediaStats SnapshotStats() => new(
+        _outbound.PacketsSent, _outbound.BytesSent, _outbound.SuppressedSends,
+        _inbound.RtpPacketsReceived, _inbound.RtpBytesReceived, _inbound.DroppedDatagrams);
 
     /// <summary>Starts the shared receive loop, the ICE consent loop, and the DTLS handshake.</summary>
     public async Task StartAsync(CancellationToken cancellationToken = default)

@@ -59,6 +59,12 @@ public sealed class BundledMediaSessionTests
         Assert.Equal(
             AnnexBParser.ParseNalUnits(videoFrame).Select(n => n.ToArray()),
             AnnexBParser.ParseNalUnits(await video.Task.WaitAsync(TimeSpan.FromSeconds(5))).Select(n => n.ToArray()));
+
+        // Stats counters (S1) reflect the exchanged media.
+        Assert.True(client.SnapshotStats().PacketsSent > 0, "client should have sent RTP");
+        Assert.True(client.SnapshotStats().BytesSent > 0, "client should have sent bytes");
+        Assert.True(server.SnapshotStats().PacketsReceived > 0, "server should have received RTP");
+        Assert.True(server.SnapshotStats().BytesReceived > 0, "server should have received bytes");
     }
 
     // ── harness ──────────────────────────────────────────────────────────────────
