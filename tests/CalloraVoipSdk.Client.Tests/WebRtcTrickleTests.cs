@@ -58,6 +58,18 @@ public sealed class WebRtcTrickleTests
     }
 
     [Fact]
+    public async Task Offer_advertises_ice_options_trickle()
+    {
+        // RFC 8838/8840: the peer supports trickle, so the offer announces it.
+        var rtc = new WebRtcClient();
+        await using var peer = rtc.CreatePeer();
+
+        var offer = peer.CreateOffer();
+
+        Assert.Contains("a=ice-options:trickle", offer, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task GatherCandidatesAsync_without_ice_servers_gathers_host_only()
     {
         // Zero-config peer: no STUN servers → GatherCandidatesAsync is a no-op, only the host candidate
