@@ -51,8 +51,12 @@ internal sealed class PeerConnection : IPeerConnection
 
     public string CreateOffer() => _peer.CreateOffer();
 
-    public Task<string> SetRemoteDescriptionAsync(string remoteSdp, CancellationToken cancellationToken = default)
-        => _peer.SetRemoteDescriptionAsync(remoteSdp, cancellationToken);
+    public async Task<string> SetRemoteDescriptionAsync(string remoteSdp, CancellationToken cancellationToken = default)
+    {
+        var localDescription = await _peer.SetRemoteDescriptionAsync(remoteSdp, cancellationToken).ConfigureAwait(false);
+        MaterializeRemoteTracks();
+        return localDescription;
+    }
 
     public Task StartAsync(CancellationToken cancellationToken = default)
         => _peer.StartAsync(cancellationToken);
@@ -76,8 +80,33 @@ internal sealed class PeerConnection : IPeerConnection
         _peer.ConnectionStateChanged -= OnInternalStateChanged;
         _peer.AudioReceived -= OnAudioReceived;
         _peer.VideoFrameReceived -= OnVideoReceived;
-        await _peer.DisposeAsync().ConfigureAwait(false);
-        _onDisposed?.Invoke(this);
+        try
+        {
+            await _peer.DisposeAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+            // Untrack from the peer manager even if the inner dispose throws, so a failed teardown
+            // never leaves a dead peer registered.
+            _onDisposed?.Invoke(this);
+        }
+    }
+
+    // W3C ontrack semantics: materialise the remote tracks the moment the remote description is applied
+    // (before any media flows), so a handler can subscribe to FrameReceived up front. Later frames route to
+    // the already-created track. Falls back to first-frame materialisation if a description was not applied.
+    private void MaterializeRemoteTracks()
+    {
+        if (_peer.HasRemoteAudio)
+        {
+            var msid = _peer.RemoteAudioMsid;
+            _tracks.EnsureAudioTrack(StreamId(msid), msid?.TrackId);
+        }
+        if (_peer.HasRemoteVideo)
+        {
+            var msid = _peer.RemoteVideoMsid;
+            _tracks.EnsureVideoTrack(StreamId(msid), msid?.TrackId);
+        }
     }
 
     private void OnInternalStateChanged(WebRtcConnectionState state)
