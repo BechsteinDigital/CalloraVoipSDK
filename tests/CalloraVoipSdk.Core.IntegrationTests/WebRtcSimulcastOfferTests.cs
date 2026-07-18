@@ -151,7 +151,15 @@ public sealed class WebRtcSimulcastOfferTests
         var lines = new SdpSessionSerializer().Serialize(PlainRemoteAnswer())
             .Replace("\r\n", "\n").Split('\n').ToList();
         var videoIdx = lines.FindIndex(l => l.StartsWith("m=video ", StringComparison.Ordinal));
-        var inject = new List<string> { "a=extmap:9 " + RtpHeaderExtensionUris.Rid };
+
+        // Pick a RID extmap id (1..14) not already used, so the injected extension never collides.
+        var usedIds = lines
+            .Where(l => l.StartsWith("a=extmap:", StringComparison.Ordinal))
+            .Select(l => l["a=extmap:".Length..].Split(' ')[0])
+            .ToHashSet(StringComparer.Ordinal);
+        var ridId = Enumerable.Range(1, 14).First(i => !usedIds.Contains(i.ToString()));
+
+        var inject = new List<string> { $"a=extmap:{ridId} {RtpHeaderExtensionUris.Rid}" };
         inject.AddRange(recvRids.Select(r => $"a=rid:{r} recv"));
         inject.Add("a=simulcast:recv " + string.Join(';', recvRids));
         lines.InsertRange(videoIdx + 1, inject);

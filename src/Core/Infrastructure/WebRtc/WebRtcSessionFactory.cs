@@ -209,6 +209,15 @@ internal static class WebRtcSessionFactory
     // The subset of our offered send RIDs the remote answer confirmed as recv (RFC 8853): it must echo the
     // RID header extension (RFC 8852) — else it cannot demux the layers — and list the RID as recv via
     // a=simulcast:recv and/or an a=rid … recv line. Our offered order is preserved.
+    //
+    // Role assumption: this confirmation is only meaningful for the OFFERER, where localSendRids come from our
+    // offer and remoteDescription is the peer's answer. The answerer's local description carries no a=rid send
+    // today (answerer-side simulcast is a separate follow-up), so this is never reached on the answerer path.
+    //
+    // Limitation (RFC 8853 §5.1): comma-separated alternatives within one simulcast stream (e.g.
+    // "recv hi,mid") are matched verbatim, so an alternative token never equals a bare send RID and that layer
+    // is treated as unconfirmed — a safe conservative fallback (we never stamp a RID the peer did not confirm).
+    // Splitting alternatives is deferred (their either/or semantics must not be flattened into "both").
     private static IReadOnlyList<string> ConfirmedSimulcastRids(
         IReadOnlyList<string> localSendRids, SdpSessionDescription remoteDescription)
     {
