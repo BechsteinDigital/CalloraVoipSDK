@@ -18,7 +18,7 @@ public sealed class WebRtcFacadeCorrectnessTests
         {
             EnableVideo = true,
             VideoCodecs = ["H264", "VP8"],
-            LocalEndPoint = new IPEndPoint(IPAddress.Loopback, 40221),
+            LocalEndPoint = new IPEndPoint(IPAddress.Loopback, 0), // ephemeral: early-bind gives a live m-line; a fixed port collides on CI
         });
         await using var peer = rtc.CreatePeer();
 
@@ -68,7 +68,7 @@ public sealed class WebRtcFacadeCorrectnessTests
         var offererClient = new WebRtcClient(new WebRtcConfiguration
         {
             EnableVideo = true,
-            LocalEndPoint = new IPEndPoint(IPAddress.Loopback, 40222),
+            LocalEndPoint = new IPEndPoint(IPAddress.Loopback, 0), // ephemeral: early-bind gives a live m-line; a fixed port collides on CI
         });
         var answererClient = new WebRtcClient();
         await using var offerer = offererClient.CreatePeer();
