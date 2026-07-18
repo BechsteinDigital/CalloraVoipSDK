@@ -25,4 +25,12 @@ internal static class RtpHeaderExtensionUris
     /// <c>a=extmap</c>; the resolver matches it Ordinal.
     /// </summary>
     internal const string Mid = "urn:ietf:params:rtp-hdrext:sdes:mid";
+
+    /// <summary>
+    /// RTP stream identification (RID) SDES header extension (RFC 8852). Carries an encoding's
+    /// <c>a=rid</c> id per packet so a receiver can associate a simulcast stream's SSRC with its
+    /// <c>a=rid</c> encoding (RFC 8851 / RFC 8853) before the SSRC is otherwise known. This is the exact
+    /// URN browsers/libwebrtc negotiate via <c>a=extmap</c>; the resolver matches it Ordinal.
+    /// </summary>
+    internal const string Rid = "urn:ietf:params:rtp-hdrext:sdes:rtp-stream-id";
 }

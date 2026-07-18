@@ -42,6 +42,8 @@ internal sealed class MediaBuilder
     public List<SdpIceCandidate> Candidates { get; } = [];
     public List<SdpCryptoAttribute> Crypto { get; } = [];
     public List<SdpExtmap> Extensions { get; } = [];
+    public List<SdpRid> Rids { get; } = [];
+    public SdpSimulcast? Simulcast { get; set; }
 
     public SdpMediaDescription Build(SdpMediaDirection sessionDirection, string fallbackConnectionAddress) =>
         new()
@@ -71,6 +73,8 @@ internal sealed class MediaBuilder
             Candidates = Candidates.AsReadOnly(),
             Crypto = Crypto.AsReadOnly(),
             Extensions = Extensions.AsReadOnly(),
+            Rids = Rids.AsReadOnly(),
+            Simulcast = Simulcast,
             Fingerprint = Fingerprint,
             DtlsSetup = DtlsSetup
         };
