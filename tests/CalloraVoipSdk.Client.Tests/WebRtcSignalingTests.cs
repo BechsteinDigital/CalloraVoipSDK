@@ -83,6 +83,12 @@ public sealed class WebRtcSignalingTests
 
         Assert.Equal(PeerConnectionState.Connected, offerer.State);
         Assert.Equal(PeerConnectionState.Connected, answerer.State);
+
+        // Stats S2: a connected peer reports the ICE state and the selected (local ↔ remote) endpoints.
+        var stats = offerer.GetStats();
+        Assert.Equal("connected", stats.IceState);
+        Assert.NotNull(stats.SelectedLocalCandidate);
+        Assert.NotNull(stats.SelectedRemoteCandidate);
     }
 
     // ── fakes ──────────────────────────────────────────────────────────────────

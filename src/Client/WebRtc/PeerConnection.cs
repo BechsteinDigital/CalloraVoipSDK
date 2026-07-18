@@ -73,7 +73,7 @@ internal sealed class PeerConnection : IPeerConnection
         if (_peer.GetStats() is not { } s)
         {
             // No media session yet: report the state with zero counters, not fabricated values.
-            return new WebRtcStats { ConnectionState = state };
+            return new WebRtcStats { ConnectionState = state, IceState = IceConnectionState(state) };
         }
 
         double? outgoing, incoming;
@@ -95,9 +95,28 @@ internal sealed class PeerConnection : IPeerConnection
             DroppedDatagrams = s.DroppedDatagrams,
             OutgoingBitrateBps = outgoing,
             IncomingBitrateBps = incoming,
-            // Quality, video, ICE and available-bitrate fields stay null until their slices land.
+            // ICE: the bundle uses single-candidate selection (no full pairing), so the "selected pair" is
+            // the bound local endpoint and the resolved remote endpoint; the state is derived from
+            // connectivity (ICE consent + DTLS drive the peer state).
+            IceState = IceConnectionState(state),
+            SelectedLocalCandidate = _peer.LocalMediaEndPoint?.ToString(),
+            SelectedRemoteCandidate = _peer.RemoteMediaEndPoint?.ToString(),
+            // Quality, video and available-bitrate fields stay null until their slices land.
         };
     }
+
+    // A W3C RTCIceConnectionState-style label derived from the peer's connectivity (the bundle's media path
+    // is gated on ICE consent + DTLS; it does not run a separate multi-pair ICE checklist).
+    private static string IceConnectionState(PeerConnectionState state) => state switch
+    {
+        PeerConnectionState.New          => "new",
+        PeerConnectionState.Connecting   => "checking",
+        PeerConnectionState.Connected    => "connected",
+        PeerConnectionState.Disconnected => "disconnected",
+        PeerConnectionState.Failed       => "failed",
+        PeerConnectionState.Closed       => "closed",
+        _ => "closed",
+    };
 
     public ValueTask SendAudioAsync(ReadOnlyMemory<byte> payload, CancellationToken cancellationToken = default)
     {

@@ -2,9 +2,9 @@ namespace CalloraVoipSdk.WebRtc;
 
 /// <summary>
 /// A point-in-time statistics snapshot for a peer connection (the SDK's <c>getStats</c>). Transport
-/// counters and derived bitrates are populated today; quality, video and ICE-selection metrics are added in
-/// later slices and read <see langword="null"/> until then — a null value means "not yet measured", never a
-/// fabricated zero.
+/// counters, derived bitrates and the ICE state/selected pair are populated today; quality, video and
+/// congestion-control metrics are added in later slices and read <see langword="null"/> until then — a null
+/// value means "not yet measured", never a fabricated zero.
 /// </summary>
 public sealed class WebRtcStats
 {
@@ -70,15 +70,19 @@ public sealed class WebRtcStats
     /// <summary>Full Intra Request (FIR) messages, or <see langword="null"/> until video feedback metrics are wired.</summary>
     public long? FirCount { get; init; }
 
-    // ── ICE — populated by a later slice ─────────────────────────────────────────────
+    // ── ICE ──────────────────────────────────────────────────────────────────────────
 
-    /// <summary>The ICE agent state, or <see langword="null"/> until ICE stats are wired.</summary>
+    /// <summary>
+    /// A W3C <c>RTCIceConnectionState</c>-style label (new/checking/connected/disconnected/failed/closed)
+    /// derived from the peer's connectivity — the bundle uses single-candidate selection, not a separate
+    /// ICE-checklist FSM.
+    /// </summary>
     public string? IceState { get; init; }
 
-    /// <summary>The selected local ICE candidate, or <see langword="null"/> until ICE stats are wired.</summary>
+    /// <summary>The selected local candidate (the bound local media endpoint), or <see langword="null"/> before the transport binds.</summary>
     public string? SelectedLocalCandidate { get; init; }
 
-    /// <summary>The selected remote ICE candidate, or <see langword="null"/> until ICE stats are wired.</summary>
+    /// <summary>The selected remote candidate (the resolved remote media endpoint), or <see langword="null"/> before one is set.</summary>
     public string? SelectedRemoteCandidate { get; init; }
 
     // ── Congestion control — populated by a later slice ──────────────────────────────

@@ -34,7 +34,9 @@ public sealed class WebRtcStatsTests
         Assert.Null(stats.OutgoingBitrateBps);           // no session yet
         Assert.Null(stats.PacketLoss);                   // RTCP quality — later slice
         Assert.Null(stats.FramesPerSecond);              // video metrics — later slice
-        Assert.Null(stats.IceState);                     // ICE stats — later slice
+        Assert.Equal("new", stats.IceState);             // derived from connectivity (S2)
+        Assert.Null(stats.SelectedLocalCandidate);       // no bound endpoint yet
+        Assert.Null(stats.SelectedRemoteCandidate);
         Assert.Null(stats.AvailableOutgoingBitrateBps);  // transport-cc — later slice
     }
 }
