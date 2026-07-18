@@ -152,7 +152,8 @@ internal sealed class IceNominationDriver : IAsyncDisposable
                     else
                     {
                         // The path validated but the nominating check was not confirmed (a lost USE-CANDIDATE
-                        // request or its response). Count the attempt and retry the pair rather than adopting it.
+                        // request or its response). Count the attempt and retry the pair (a fresh ordinary check
+                        // then USE-CANDIDATE on the next round) rather than adopting it.
                         bool exhausted;
                         lock (_gate)
                         {
