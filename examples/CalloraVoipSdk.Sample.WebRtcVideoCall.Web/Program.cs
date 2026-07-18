@@ -19,6 +19,7 @@ app.UseWebSockets();
 
 // One global two-peer room. Every message from one peer is relayed verbatim to the other.
 var peers = new ConcurrentDictionary<Guid, WebSocket>();
+var gate = new object();
 
 app.Map("/ws", async context =>
 {
@@ -30,12 +31,24 @@ app.Map("/ws", async context =>
 
     using var socket = await context.WebSockets.AcceptWebSocketAsync();
     var id = Guid.NewGuid();
-    peers[id] = socket;
 
-    // The second peer to join initiates the offer (keeps the handshake deterministic).
-    if (peers.Count == 2)
+    // Join and pick the initiator atomically: when this connection completes the room, tell exactly ONE
+    // peer (the one that was already here) to create the offer. Doing this under a lock avoids the race
+    // where both handlers observe count == 2 and both start — which would make two offerers (glare) and
+    // the handshake would never complete.
+    WebSocket? initiator = null;
+    lock (gate)
     {
-        await SendAsync(socket, "{\"type\":\"start\"}");
+        peers[id] = socket;
+        if (peers.Count == 2)
+        {
+            initiator = peers.First(peer => peer.Key != id).Value;
+        }
+    }
+
+    if (initiator is not null)
+    {
+        await SendAsync(initiator, "{\"type\":\"start\"}");
     }
 
     var buffer = new byte[64 * 1024];   // SDP/ICE messages are small; one frame is enough for this demo
