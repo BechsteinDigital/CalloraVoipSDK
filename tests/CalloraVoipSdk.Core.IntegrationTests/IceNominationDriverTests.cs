@@ -5,14 +5,27 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace CalloraVoipSdk.Core.IntegrationTests;
 
 /// <summary>
-/// The controlling agent's ICE candidate-pair check/nomination driver (RFC 8445 §7.2.2/§8.1.1): it visits
-/// remote candidates highest-priority first, nominates the first that answers a connectivity check (so
-/// nomination is gated on real reachability, not blind priority), carries USE-CANDIDATE on the nominating
-/// check, and does nothing when no candidate answers or the set is empty.
+/// The controlling agent's dynamic ICE candidate-pair check/nomination driver (RFC 8445 §7.2.2/§8.1.1,
+/// RFC 8838 trickle): it nominates the highest-priority candidate that actually answers a connectivity check
+/// (never blind priority), carries USE-CANDIDATE on the nominating check, accepts candidates trickled in
+/// after start, re-nominates onto a higher-priority working pair, and never downgrades onto a lower-priority
+/// one. Empty sets and non-answering candidates are handled without nominating.
 /// </summary>
 public sealed class IceNominationDriverTests
 {
     private static IPEndPoint Ep(int port) => new(IPAddress.Loopback, port);
+
+    // A check delegate that answers only for endpoints in the reachable set; records the USE-CANDIDATE targets.
+    private static Func<IPEndPoint, bool, CancellationToken, Task<bool>> Reachable(
+        ISet<IPEndPoint> reachable, List<IPEndPoint> useCandidateTargets)
+    {
+        return (target, useCandidate, _) =>
+        {
+            if (useCandidate)
+                lock (useCandidateTargets) useCandidateTargets.Add(target);
+            return Task.FromResult(reachable.Contains(target));
+        };
+    }
 
     [Fact]
     public async Task Nominates_the_highest_priority_candidate_that_answers_a_check()
@@ -22,17 +35,9 @@ public sealed class IceNominationDriverTests
         var nominated = new TaskCompletionSource<IPEndPoint>(TaskCreationOptions.RunContinuationsAsynchronously);
         var useCandidateTargets = new List<IPEndPoint>();
 
-        Task<bool> Check(IPEndPoint target, bool useCandidate, CancellationToken ct)
-        {
-            if (useCandidate)
-                lock (useCandidateTargets) useCandidateTargets.Add(target);
-            // Only the reachable (lower-priority) candidate answers; the higher-priority one black-holes.
-            return Task.FromResult(target.Equals(reachable));
-        }
-
         await using var driver = new IceNominationDriver(
             [new IceRemoteCandidate(unreachableHigher, Priority: 200), new IceRemoteCandidate(reachable, Priority: 100)],
-            Check,
+            Reachable(new HashSet<IPEndPoint> { reachable }, useCandidateTargets),
             ep => nominated.TrySetResult(ep),
             NullLoggerFactory.Instance,
             roundDelay: TimeSpan.FromMilliseconds(1));
@@ -40,9 +45,82 @@ public sealed class IceNominationDriverTests
         driver.Start();
 
         var winner = await nominated.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        Assert.Equal(reachable, winner);                             // checked reachability, not blind priority
+        Assert.Equal(reachable, winner);                              // checked reachability, not blind priority
         Assert.Contains(reachable, useCandidateTargets);             // nominating check carried USE-CANDIDATE (§8.1.1)
         Assert.DoesNotContain(unreachableHigher, useCandidateTargets); // the black hole is never nominated
+    }
+
+    [Fact]
+    public async Task A_trickled_candidate_added_after_start_is_checked_and_nominated()
+    {
+        var trickled = Ep(5102);
+        var nominated = new TaskCompletionSource<IPEndPoint>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        await using var driver = new IceNominationDriver(
+            [], // nothing to check at start
+            Reachable(new HashSet<IPEndPoint> { trickled }, []),
+            ep => nominated.TrySetResult(ep),
+            NullLoggerFactory.Instance,
+            roundDelay: TimeSpan.FromMilliseconds(5));
+
+        driver.Start();
+        driver.AddCandidate(new IceRemoteCandidate(trickled, Priority: 100)); // RFC 8838 trickle after start
+
+        Assert.Equal(trickled, await nominated.Task.WaitAsync(TimeSpan.FromSeconds(5)));
+    }
+
+    [Fact]
+    public async Task A_higher_priority_trickled_candidate_re_nominates()
+    {
+        var low = Ep(5202);
+        var high = Ep(5201);
+        var nominations = new List<IPEndPoint>();
+        var reNominated = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        await using var driver = new IceNominationDriver(
+            [new IceRemoteCandidate(low, Priority: 100)],
+            Reachable(new HashSet<IPEndPoint> { low, high }, []),
+            ep => { lock (nominations) { nominations.Add(ep); if (ep.Equals(high)) reNominated.TrySetResult(); } },
+            NullLoggerFactory.Instance,
+            roundDelay: TimeSpan.FromMilliseconds(5));
+
+        driver.Start();
+        // Let the low pair be nominated first, then trickle a higher-priority working pair.
+        await Task.Delay(50);
+        driver.AddCandidate(new IceRemoteCandidate(high, Priority: 200));
+
+        await reNominated.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        lock (nominations)
+        {
+            Assert.Equal(low, nominations[0]);      // highest-priority working pair known at the time
+            Assert.Equal(high, nominations[^1]);    // upgraded onto the higher-priority working pair (§8)
+        }
+    }
+
+    [Fact]
+    public async Task A_lower_priority_trickled_candidate_does_not_override_a_working_pair()
+    {
+        var high = Ep(5301);
+        var low = Ep(5302);
+        var nominations = new List<IPEndPoint>();
+        var firstNominated = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        await using var driver = new IceNominationDriver(
+            [new IceRemoteCandidate(high, Priority: 200)],
+            Reachable(new HashSet<IPEndPoint> { high, low }, []),
+            ep => { lock (nominations) { nominations.Add(ep); } firstNominated.TrySetResult(); },
+            NullLoggerFactory.Instance,
+            roundDelay: TimeSpan.FromMilliseconds(5));
+
+        driver.Start();
+        await firstNominated.Task.WaitAsync(TimeSpan.FromSeconds(5)); // high nominated
+        driver.AddCandidate(new IceRemoteCandidate(low, Priority: 100)); // lower priority, even though reachable
+        await Task.Delay(150); // give the driver time to (not) act on it
+
+        lock (nominations)
+        {
+            Assert.Equal(new[] { high }, nominations); // never downgraded onto the lower-priority pair
+        }
     }
 
     [Fact]
@@ -54,11 +132,11 @@ public sealed class IceNominationDriverTests
             (_, _, _) => Task.FromResult(false),
             _ => Interlocked.Increment(ref nominatedCount),
             NullLoggerFactory.Instance,
-            maxRounds: 3,
+            maxAttempts: 3,
             roundDelay: TimeSpan.FromMilliseconds(1)))
         {
             driver.Start();
-            await Task.Delay(200); // let the bounded loop exhaust its rounds
+            await Task.Delay(200); // let the candidate exhaust its attempts
         }
 
         Assert.Equal(0, Volatile.Read(ref nominatedCount));

@@ -3,6 +3,7 @@ using CalloraVoipSdk.Core.Infrastructure.Dtls;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Session;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Wire;
+using CalloraVoipSdk.Core.Infrastructure.Stun.Ice;
 using Microsoft.Extensions.Logging;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
@@ -191,6 +192,16 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     /// Thread-safe; the symmetric transport still latches the peer's real source on the next received packet.
     /// </summary>
     public void SetRemoteEndPoint(IPEndPoint remoteEndPoint) => _transport.SetRemoteEndPoint(remoteEndPoint);
+
+    /// <summary>
+    /// Adds a trickled remote ICE candidate (RFC 8838) to the connectivity-check list instead of trusting it
+    /// by raw priority: the controlling agent checks it and, if it answers and beats the current pair,
+    /// nominates it (redirecting the transport send target and DTLS). No-op on a controlled agent or without ICE.
+    /// </summary>
+    /// <param name="remoteEndPoint">The candidate's transport address.</param>
+    /// <param name="priority">The candidate's ICE priority (RFC 8445 §5.1.2.1), used to order checks.</param>
+    public void AddRemoteCandidate(IPEndPoint remoteEndPoint, long priority)
+        => _ice.AddRemoteCandidate(new IceRemoteCandidate(remoteEndPoint, priority));
 
     // A connectivity-checked ICE nomination (RFC 8445 §8) redirects the whole 5-tuple onto the nominated
     // pair: the transport's send target and the DTLS association's inbound source filter both follow it, so
