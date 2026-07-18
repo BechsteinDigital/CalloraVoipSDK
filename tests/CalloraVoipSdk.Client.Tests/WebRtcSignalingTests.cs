@@ -67,11 +67,11 @@ public sealed class WebRtcSignalingTests
     [Fact]
     public async Task Two_peers_connect_through_an_in_memory_signalling_channel()
     {
-        // Both peers need a configured media port so their offer AND answer advertise a live m-line: the
-        // transport binds on Start, so an ephemeral (port-0) side would emit a disabled m-line the other
-        // peer rejects (the documented early-bind/trickle-ICE follow-up, ADR-012).
-        var offererClient = new WebRtcClient(new WebRtcConfiguration { LocalEndPoint = new IPEndPoint(IPAddress.Loopback, 40211) });
-        var answererClient = new WebRtcClient(new WebRtcConfiguration { LocalEndPoint = new IPEndPoint(IPAddress.Loopback, 40212) });
+        // Early-bind (Trickle-ICE slice 1): both peers bind their media socket before creating the
+        // offer/answer, so a default (port-0) configuration advertises the real ephemeral port and connects
+        // — no fixed port needed anymore.
+        var offererClient = new WebRtcClient();
+        var answererClient = new WebRtcClient();
         await using var offerer = offererClient.CreatePeer();
         await using var answerer = answererClient.CreatePeer();
         var (offererChannel, answererChannel) = InMemorySignalling.Pair();

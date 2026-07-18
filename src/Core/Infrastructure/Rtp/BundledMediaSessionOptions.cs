@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Sockets;
 using CalloraVoipSdk.Core.Infrastructure.Dtls;
 using CalloraVoipSdk.Core.Infrastructure.Stun.Ice;
 
@@ -13,6 +14,13 @@ internal sealed record BundledMediaSessionOptions
 {
     /// <summary>The local endpoint the shared UDP socket binds to.</summary>
     public required IPEndPoint LocalEndPoint { get; init; }
+
+    /// <summary>
+    /// A socket the caller already bound (Trickle-ICE early-bind), reused instead of binding a new one so
+    /// the offer could advertise the real ephemeral port before the session existed; <see langword="null"/>
+    /// binds a fresh socket. The session takes ownership and disposes it.
+    /// </summary>
+    public UdpClient? PreBoundSocket { get; init; }
 
     /// <summary>The peer endpoint media, DTLS, and consent checks are sent to.</summary>
     public required IPEndPoint RemoteEndPoint { get; init; }

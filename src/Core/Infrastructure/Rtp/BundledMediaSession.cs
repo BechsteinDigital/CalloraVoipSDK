@@ -81,7 +81,7 @@ internal sealed class BundledMediaSession : IAsyncDisposable
 
         _transport = new BundledMediaTransport(
             new BundledMediaTransportOptions { LocalEndPoint = options.LocalEndPoint, RemoteEndPoint = options.RemoteEndPoint },
-            _inbound, loggerFactory.CreateLogger<BundledMediaTransport>());
+            _inbound, loggerFactory.CreateLogger<BundledMediaTransport>(), options.PreBoundSocket);
 
         // Outbound: a per-track sender for each m-line, stamping its MID.
         _outbound = new BundledOutboundPipeline(
