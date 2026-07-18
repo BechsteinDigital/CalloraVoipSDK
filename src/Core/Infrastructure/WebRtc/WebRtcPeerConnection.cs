@@ -300,8 +300,8 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             // remote MediaStream (the W3C RTCTrackEvent.streams semantics).
             var audioMedia = remote.Media.FirstOrDefault(m => string.Equals(m.MediaType, "audio", StringComparison.OrdinalIgnoreCase));
             var videoMedia = remote.Media.FirstOrDefault(m => string.Equals(m.MediaType, "video", StringComparison.OrdinalIgnoreCase));
-            _hasRemoteAudio = audioMedia is not null;
-            _hasRemoteVideo = videoMedia is not null;
+            _hasRemoteAudio = RemoteSends(audioMedia);
+            _hasRemoteVideo = RemoteSends(videoMedia);
             _remoteAudioMsid = audioMedia?.Msid;
             _remoteVideoMsid = videoMedia?.Msid;
         }
@@ -418,10 +418,11 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             // Distinguish an mDNS (.local) candidate — which we cannot resolve yet — from a genuinely
             // malformed one, so the gap is visible in diagnostics rather than looking like a parse error.
             // Full ICE still nominates a reachable pair from the peer's other (host/srflx) candidates.
-            _logger.LogDebug(
-                candidate.Contains(".local", StringComparison.OrdinalIgnoreCase)
-                    ? "Ignoring an mDNS (.local) trickled ICE candidate — mDNS resolution is not yet supported; relying on the peer's other candidates."
-                    : "Ignoring an unusable trickled ICE candidate.");
+            // Two constant templates (not a ternary), so the logging analyzer (CA2254) stays satisfied.
+            if (candidate.Contains(".local", StringComparison.OrdinalIgnoreCase))
+                _logger.LogDebug("Ignoring an mDNS (.local) trickled ICE candidate — mDNS resolution is not yet supported; relying on the peer's other candidates.");
+            else
+                _logger.LogDebug("Ignoring an unusable trickled ICE candidate.");
             return Task.CompletedTask;
         }
 
@@ -614,6 +615,12 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             return (IPEndPoint)_mediaSocket.Client.LocalEndPoint!;
         }
     }
+
+    // A remote m-line yields an inbound track only when it is enabled (port != 0) and the remote's negotiated
+    // direction includes sending (sendrecv/sendonly). A disabled, inactive, or recvonly m-line never delivers
+    // media to us (RFC 8829 / RFC 3264 directionality), so it must not materialise a phantom remote track.
+    private static bool RemoteSends(SdpMediaDescription? media)
+        => media is { Disabled: false, Direction: SdpMediaDirection.SendRecv or SdpMediaDirection.SendOnly };
 
     // A host ICE candidate for the bound local media endpoint (RFC 8445 §5.1.2.1 priority: host type-pref
     // 126, local-pref 65535, RTP component 1). rtcp-mux shares component 1, so no RTCP candidate is needed.
