@@ -82,7 +82,9 @@ public sealed class WebRtcClient : IWebRtcClient
                 Algorithm = certificate.Fingerprint.Algorithm,
                 Fingerprint = certificate.Fingerprint.Value,
             },
-            Ice = new SdpIceParameters { Ufrag = GenerateUfrag(), Pwd = GeneratePassword() },
+            // Advertise trickle support (RFC 8838/8840 a=ice-options:trickle) so a peer knows candidates may
+            // arrive after the offer/answer; the SDK gathers host+srflx and supports out-of-band trickle.
+            Ice = new SdpIceParameters { Ufrag = GenerateUfrag(), Pwd = GeneratePassword(), Options = "trickle" },
             IceServers = _config.IceServers,
         };
 

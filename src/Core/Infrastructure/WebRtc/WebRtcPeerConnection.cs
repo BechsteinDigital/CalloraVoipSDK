@@ -415,7 +415,13 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
 
         if (ParseTrickleCandidate(candidate) is not { } parsed)
         {
-            _logger.LogDebug("Ignoring an unusable trickled ICE candidate.");
+            // Distinguish an mDNS (.local) candidate — which we cannot resolve yet — from a genuinely
+            // malformed one, so the gap is visible in diagnostics rather than looking like a parse error.
+            // Full ICE still nominates a reachable pair from the peer's other (host/srflx) candidates.
+            _logger.LogDebug(
+                candidate.Contains(".local", StringComparison.OrdinalIgnoreCase)
+                    ? "Ignoring an mDNS (.local) trickled ICE candidate — mDNS resolution is not yet supported; relying on the peer's other candidates."
+                    : "Ignoring an unusable trickled ICE candidate.");
             return Task.CompletedTask;
         }
 

@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+
 namespace CalloraVoipSdk.WebRtc;
 
 /// <summary>
@@ -49,6 +51,12 @@ public static class WebRtcPeerConnectionExtensions
             }
         }
 
+        var trickle = signalling as IWebRtcTrickleSignaling;
+        using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var localCandidates = new ConcurrentQueue<string>();
+        void OnLocalCandidate(object? sender, string candidate) => localCandidates.Enqueue(candidate);
+        Task? candidatePump = null;
+
         peer.ConnectionStateChanged += OnStateChanged;
         try
         {
@@ -67,6 +75,23 @@ public static class WebRtcPeerConnectionExtensions
                 await signalling.SendDescriptionAsync(answer, cancellationToken).ConfigureAwait(false);
             }
 
+            // RFC 8838 trickle: only when the app supplies a trickle channel — otherwise the offer/answer
+            // candidates are all that is exchanged. The host candidate already rode the SDP; gathering adds
+            // server-reflexive candidates, which must run BEFORE StartAsync (it shares the media socket).
+            if (trickle is not null)
+            {
+                // Apply remote candidates as they arrive, concurrently with the rest of the handshake.
+                candidatePump = PumpRemoteCandidatesAsync(peer, trickle, established, connectCts.Token);
+
+                peer.LocalIceCandidateDiscovered += OnLocalCandidate;
+                await peer.GatherCandidatesAsync(connectCts.Token).ConfigureAwait(false);
+                peer.LocalIceCandidateDiscovered -= OnLocalCandidate;
+
+                while (localCandidates.TryDequeue(out var candidate))
+                    await trickle.SendCandidateAsync(candidate, connectCts.Token).ConfigureAwait(false);
+                await trickle.SendEndOfCandidatesAsync(connectCts.Token).ConfigureAwait(false);
+            }
+
             await peer.StartAsync(cancellationToken).ConfigureAwait(false);
 
             using (cancellationToken.Register(() => established.TrySetCanceled(cancellationToken)))
@@ -77,6 +102,38 @@ public static class WebRtcPeerConnectionExtensions
         finally
         {
             peer.ConnectionStateChanged -= OnStateChanged;
+            peer.LocalIceCandidateDiscovered -= OnLocalCandidate; // no-op if never added / already removed
+            await connectCts.CancelAsync().ConfigureAwait(false);
+            if (candidatePump is not null)
+                await candidatePump.ConfigureAwait(false); // the pump observes cancellation internally and never throws out
+        }
+    }
+
+    // Applies remote ICE candidates as they trickle in (RFC 8838) until the remote signals end-of-candidates
+    // (a null line, RFC 8840) or the connection resolves. A signalling-channel failure surfaces through the
+    // establishment wait, but only if the connection has not already been established (TrySetException no-ops
+    // once Connected won the race), so a late channel error never masks a working connection.
+    private static async Task PumpRemoteCandidatesAsync(
+        IPeerConnection peer, IWebRtcTrickleSignaling trickle, TaskCompletionSource established, CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                var candidate = await trickle.ReceiveCandidateAsync(cancellationToken).ConfigureAwait(false);
+                if (candidate is null)
+                    break; // remote end-of-candidates
+                await peer.AddIceCandidateAsync(candidate, cancellationToken).ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // The connection resolved or the caller cancelled — stop polling.
+        }
+        catch (Exception ex)
+        {
+            established.TrySetException(
+                new WebRtcConnectException("The signalling channel failed while trickling ICE candidates.", ex));
         }
     }
 }
