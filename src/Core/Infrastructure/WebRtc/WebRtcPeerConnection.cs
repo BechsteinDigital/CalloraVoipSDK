@@ -148,6 +148,12 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         get { lock (_sync) { return _hasRemoteVideo; } }
     }
 
+    /// <summary>Cumulative transport counters for the media session, or null before a session is built.</summary>
+    public BundledMediaStats? GetStats()
+    {
+        lock (_sync) { return _session?.SnapshotStats(); }
+    }
+
     /// <summary>
     /// Creates a local WebRTC offer (RFC 8829 createOffer + setLocalDescription): BUNDLE, DTLS-SRTP,
     /// rtcp-mux, and the sdes:mid extension. It becomes <see cref="LocalDescription"/>; apply the peer's

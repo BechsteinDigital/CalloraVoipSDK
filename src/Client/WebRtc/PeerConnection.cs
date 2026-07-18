@@ -1,4 +1,5 @@
 using System.Net;
+using CalloraVoipSdk.Core.Infrastructure.Rtp;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Models;
 using CalloraVoipSdk.Core.Infrastructure.WebRtc;
 using Microsoft.Extensions.Logging;
@@ -17,6 +18,9 @@ internal sealed class PeerConnection : IPeerConnection
     private readonly RemoteTrackSet _tracks;
     private readonly MediaTapSet _taps;
     private readonly Action<IPeerConnection>? _onDisposed;
+    private readonly BitrateMeter _outgoingBitrate = new();
+    private readonly BitrateMeter _incomingBitrate = new();
+    private readonly object _statsSync = new();
     private EventHandler<PeerConnectionState>? _connectionStateChanged;
     private EventHandler<RemoteTrack>? _trackReceived;
 
@@ -62,6 +66,38 @@ internal sealed class PeerConnection : IPeerConnection
         => _peer.StartAsync(cancellationToken);
 
     public IDisposable AttachMediaTap(IMediaTap tap) => _taps.Attach(tap);
+
+    public WebRtcStats GetStats()
+    {
+        var state = Map(_peer.State);
+        if (_peer.GetStats() is not { } s)
+        {
+            // No media session yet: report the state with zero counters, not fabricated values.
+            return new WebRtcStats { ConnectionState = state };
+        }
+
+        double? outgoing, incoming;
+        lock (_statsSync)
+        {
+            var nowTicks = DateTime.UtcNow.Ticks;
+            outgoing = _outgoingBitrate.Sample(s.BytesSent, nowTicks);
+            incoming = _incomingBitrate.Sample(s.BytesReceived, nowTicks);
+        }
+
+        return new WebRtcStats
+        {
+            ConnectionState = state,
+            PacketsSent = s.PacketsSent,
+            BytesSent = s.BytesSent,
+            PacketsReceived = s.PacketsReceived,
+            BytesReceived = s.BytesReceived,
+            SuppressedSends = s.SuppressedSends,
+            DroppedDatagrams = s.DroppedDatagrams,
+            OutgoingBitrateBps = outgoing,
+            IncomingBitrateBps = incoming,
+            // Quality, video, ICE and available-bitrate fields stay null until their slices land.
+        };
+    }
 
     public ValueTask SendAudioAsync(ReadOnlyMemory<byte> payload, CancellationToken cancellationToken = default)
     {

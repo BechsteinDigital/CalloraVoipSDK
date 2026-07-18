@@ -29,6 +29,8 @@ internal sealed class BundledInboundPipeline
     private ISrtpContext? _inboundSrtp;
     private ISrtcpContext? _inboundSrtcp;
     private long _droppedDatagrams;
+    private long _rtpPacketsReceived;
+    private long _rtpBytesReceived;
 
     /// <summary>Raised with an independent copy of a STUN datagram and its source for the ICE layer.</summary>
     public event Action<byte[], IPEndPoint>? StunPacketReceived;
@@ -56,6 +58,12 @@ internal sealed class BundledInboundPipeline
     /// <see cref="BundledTrackRouter.DroppedPackets"/>.
     /// </summary>
     public long DroppedDatagrams => Interlocked.Read(ref _droppedDatagrams);
+
+    /// <summary>Total RTP packets received and successfully SRTP-decrypted (before track routing).</summary>
+    public long RtpPacketsReceived => Interlocked.Read(ref _rtpPacketsReceived);
+
+    /// <summary>Total bytes of decrypted inbound RTP packets.</summary>
+    public long RtpBytesReceived => Interlocked.Read(ref _rtpBytesReceived);
 
     /// <summary>
     /// Installs the shared inbound SRTP and SRTCP contexts once the DTLS-SRTP handshake has derived
@@ -198,6 +206,8 @@ internal sealed class BundledInboundPipeline
             return;
         }
 
+        Interlocked.Increment(ref _rtpPacketsReceived);
+        Interlocked.Add(ref _rtpBytesReceived, plain.Length);
         RtpPacketReceived(plain, source);
     }
 
