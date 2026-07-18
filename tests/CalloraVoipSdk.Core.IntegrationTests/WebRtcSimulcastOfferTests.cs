@@ -1,8 +1,10 @@
 using System.Net;
 using CalloraVoipSdk.Core.Infrastructure.Dtls;
+using CalloraVoipSdk.Core.Infrastructure.Rtp;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Models;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.OfferAnswer;
+using CalloraVoipSdk.Core.Infrastructure.Sdp.Parsing;
 using CalloraVoipSdk.Core.Infrastructure.WebRtc;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -55,29 +57,48 @@ public sealed class WebRtcSimulcastOfferTests
     }
 
     [Fact]
-    public async Task The_session_factory_builds_one_keyed_encoding_per_rid_on_distinct_ssrcs()
+    public async Task The_session_factory_builds_one_keyed_encoding_per_confirmed_rid_on_distinct_ssrcs()
     {
         var local = SimulcastOffer(["hi", "mid", "lo"]);
-        var remote = PlainRemoteAnswer();
+        var remote = ConfirmingRemoteAnswer(["hi", "mid", "lo"]); // the answer confirms all recv RIDs
 
-        var options = new WebRtcPeerOptions
-        {
-            LocalEndPoint = new IPEndPoint(IPAddress.Loopback, 0),
-            AudioCodecs = Pcmu,
-            Video = new SdpVideoMediaOptions { Port = 6002, Codecs = H264, SimulcastSendRids = ["hi", "mid", "lo"] },
-            Dtls = new SdpDtlsParameters { Algorithm = "sha-256", Fingerprint = "11:22:33" },
-            Ice = new SdpIceParameters { Ufrag = "localU", Pwd = "localpassword1234567890" },
-        };
-
-        var session = WebRtcSessionFactory.TryCreate(
-            remote, local, options,
-            new DtlsSrtpHandshaker(NullLogger<DtlsSrtpHandshaker>.Instance),
-            DtlsCertificate.GenerateEcdsaP256(), NullLoggerFactory.Instance);
+        var session = BuildSession(local, remote, ["hi", "mid", "lo"]);
 
         Assert.NotNull(session);
         await using var _ = session;
         Assert.True(session!.VideoIsSimulcast);
         Assert.Equal(["hi", "mid", "lo"], session.VideoSendRids.OrderBy(r => r switch { "hi" => 0, "mid" => 1, _ => 2 }));
+    }
+
+    [Fact]
+    public async Task Simulcast_falls_back_to_a_single_stream_when_the_answer_does_not_confirm()
+    {
+        // RFC 8853: the offer advertises simulcast, but the plain answer confirms no recv RIDs / RID
+        // extension — the session must not stamp RIDs the peer cannot demux, so it sends a single stream.
+        var local = SimulcastOffer(["hi", "mid", "lo"]);
+        var remote = PlainRemoteAnswer();
+
+        var session = BuildSession(local, remote, ["hi", "mid", "lo"]);
+
+        Assert.NotNull(session);
+        await using var _ = session;
+        Assert.False(session!.VideoIsSimulcast);
+        Assert.Empty(session.VideoSendRids);
+    }
+
+    [Fact]
+    public async Task Only_the_rids_the_answer_confirms_are_activated()
+    {
+        // The answer accepts only "hi" and "lo" (drops "mid") — only those two layers are keyed.
+        var local = SimulcastOffer(["hi", "mid", "lo"]);
+        var remote = ConfirmingRemoteAnswer(["hi", "lo"]);
+
+        var session = BuildSession(local, remote, ["hi", "mid", "lo"]);
+
+        Assert.NotNull(session);
+        await using var _ = session;
+        Assert.True(session!.VideoIsSimulcast);
+        Assert.Equal(["hi", "lo"], session.VideoSendRids.OrderBy(r => r switch { "hi" => 0, _ => 1 }));
     }
 
     [Fact]
@@ -104,6 +125,45 @@ public sealed class WebRtcSimulcastOfferTests
         await using var _ = session;
         Assert.False(session!.VideoIsSimulcast);
         Assert.Empty(session.VideoSendRids);
+    }
+
+    // Builds the bundle session from a negotiated exchange for the given locally-offered simulcast layers.
+    private static BundledMediaSession? BuildSession(
+        SdpSessionDescription local, SdpSessionDescription remote, IReadOnlyList<string> simulcastSendRids) =>
+        WebRtcSessionFactory.TryCreate(
+            remote, local,
+            new WebRtcPeerOptions
+            {
+                LocalEndPoint = new IPEndPoint(IPAddress.Loopback, 0),
+                AudioCodecs = Pcmu,
+                Video = new SdpVideoMediaOptions { Port = 6002, Codecs = H264, SimulcastSendRids = simulcastSendRids },
+                Dtls = new SdpDtlsParameters { Algorithm = "sha-256", Fingerprint = "11:22:33" },
+                Ice = new SdpIceParameters { Ufrag = "localU", Pwd = "localpassword1234567890" },
+            },
+            new DtlsSrtpHandshaker(NullLogger<DtlsSrtpHandshaker>.Instance),
+            DtlsCertificate.GenerateEcdsaP256(), NullLoggerFactory.Instance);
+
+    // A peer answer that ACCEPTS simulcast: it echoes the RID header extension (RFC 8852) and lists the recv
+    // RIDs (RFC 8853, a=rid recv + a=simulcast:recv). Built by injecting those lines into a plain answer's
+    // video section (round-tripped through the serializer/parser, which cover these attributes).
+    private static SdpSessionDescription ConfirmingRemoteAnswer(IReadOnlyList<string> recvRids)
+    {
+        var lines = new SdpSessionSerializer().Serialize(PlainRemoteAnswer())
+            .Replace("\r\n", "\n").Split('\n').ToList();
+        var videoIdx = lines.FindIndex(l => l.StartsWith("m=video ", StringComparison.Ordinal));
+
+        // Pick a RID extmap id (1..14) not already used, so the injected extension never collides.
+        var usedIds = lines
+            .Where(l => l.StartsWith("a=extmap:", StringComparison.Ordinal))
+            .Select(l => l["a=extmap:".Length..].Split(' ')[0])
+            .ToHashSet(StringComparer.Ordinal);
+        var ridId = Enumerable.Range(1, 14).First(i => !usedIds.Contains(i.ToString()));
+
+        var inject = new List<string> { $"a=extmap:{ridId} {RtpHeaderExtensionUris.Rid}" };
+        inject.AddRange(recvRids.Select(r => $"a=rid:{r} recv"));
+        inject.Add("a=simulcast:recv " + string.Join(';', recvRids));
+        lines.InsertRange(videoIdx + 1, inject);
+        return new SdpSessionParser().Parse(string.Join("\r\n", lines));
     }
 
     // Our local offer with the given simulcast layers (empty = single stream).

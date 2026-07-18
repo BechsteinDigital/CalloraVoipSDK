@@ -100,7 +100,7 @@ internal static class WebRtcSessionFactory
             SamplesPerPacket = clockRate * 20 / 1000, // 20 ms frames
         };
 
-        var videoTrack = TryBuildVideoTrack(localDescription, audioSsrc);
+        var videoTrack = TryBuildVideoTrack(localDescription, remoteDescription, audioSsrc, loggerFactory);
 
         // A simulcast video track (RFC 8853) needs the negotiated RID header-extension id (RFC 8852) to
         // stamp each layer's RID on outbound packets; without it in our own description we cannot key the
@@ -146,7 +146,11 @@ internal static class WebRtcSessionFactory
         return new BundledMediaSession(sessionOptions, handshaker, certificate, loggerFactory);
     }
 
-    private static BundledTrackConfig? TryBuildVideoTrack(SdpSessionDescription localDescription, uint audioSsrc)
+    private static BundledTrackConfig? TryBuildVideoTrack(
+        SdpSessionDescription localDescription,
+        SdpSessionDescription remoteDescription,
+        uint audioSsrc,
+        ILoggerFactory loggerFactory)
     {
         // Gated by the MID (grouped into the bundle), not the placeholder port under ICE.
         var video = localDescription.Media.FirstOrDefault(m => m.MediaType.Equals("video", Ci));
@@ -158,28 +162,39 @@ internal static class WebRtcSessionFactory
         if (codec is null)
             return null;
 
-        // Send-side simulcast (RFC 8853): one encoding per a=rid … send, each on its own SSRC distinct
-        // from audio and every other layer.
+        // Send-side simulcast (RFC 8853) only activates for the layers the remote ANSWER confirmed as recv
+        // (and only if it echoed the RID header extension, RFC 8852) — never for our offered layers alone.
+        // Stamping RIDs the peer cannot demux would break its reception; an unconfirmed offer falls back to a
+        // single stream.
         var sendRids = video.Rids.Where(r => r.Direction.Equals("send", Ci)).Select(r => r.Id).ToArray();
         if (sendRids.Length > 0)
         {
-            var used = new HashSet<uint> { audioSsrc };
-            var encodings = new List<BundledVideoEncoding>(sendRids.Length);
-            foreach (var rid in sendRids)
+            var confirmedRids = ConfirmedSimulcastRids(sendRids, remoteDescription);
+            if (confirmedRids.Count > 0)
             {
-                var ssrc = NewSsrc(used);
-                used.Add(ssrc);
-                encodings.Add(new BundledVideoEncoding { Rid = rid, Ssrc = ssrc });
+                var used = new HashSet<uint> { audioSsrc };
+                var encodings = new List<BundledVideoEncoding>(confirmedRids.Count);
+                foreach (var rid in confirmedRids)
+                {
+                    var ssrc = NewSsrc(used);
+                    used.Add(ssrc);
+                    encodings.Add(new BundledVideoEncoding { Rid = rid, Ssrc = ssrc });
+                }
+
+                return new BundledTrackConfig
+                {
+                    Mid = video.Mid,
+                    Ssrc = encodings[0].Ssrc, // primary; per-layer SSRCs carry the actual sends
+                    PayloadType = (byte)codec.PayloadType,
+                    VideoCodecName = codec.Name,
+                    Encodings = encodings,
+                };
             }
 
-            return new BundledTrackConfig
-            {
-                Mid = video.Mid,
-                Ssrc = encodings[0].Ssrc, // primary; per-layer SSRCs carry the actual sends
-                PayloadType = (byte)codec.PayloadType,
-                VideoCodecName = codec.Name,
-                Encodings = encodings,
-            };
+            loggerFactory.CreateLogger(typeof(WebRtcSessionFactory)).LogInformation(
+                "Simulcast was offered (a=rid send {Layers}) but the remote answer confirmed no matching recv " +
+                "RIDs with the RID header extension (RFC 8852/8853); falling back to a single video stream.",
+                string.Join(",", sendRids));
         }
 
         return new BundledTrackConfig
@@ -189,6 +204,35 @@ internal static class WebRtcSessionFactory
             PayloadType = (byte)codec.PayloadType,
             VideoCodecName = codec.Name,
         };
+    }
+
+    // The subset of our offered send RIDs the remote answer confirmed as recv (RFC 8853): it must echo the
+    // RID header extension (RFC 8852) — else it cannot demux the layers — and list the RID as recv via
+    // a=simulcast:recv and/or an a=rid … recv line. Our offered order is preserved.
+    //
+    // Role assumption: this confirmation is only meaningful for the OFFERER, where localSendRids come from our
+    // offer and remoteDescription is the peer's answer. The answerer's local description carries no a=rid send
+    // today (answerer-side simulcast is a separate follow-up), so this is never reached on the answerer path.
+    //
+    // Limitation (RFC 8853 §5.1): comma-separated alternatives within one simulcast stream (e.g.
+    // "recv hi,mid") are matched verbatim, so an alternative token never equals a bare send RID and that layer
+    // is treated as unconfirmed — a safe conservative fallback (we never stamp a RID the peer did not confirm).
+    // Splitting alternatives is deferred (their either/or semantics must not be flattened into "both").
+    private static IReadOnlyList<string> ConfirmedSimulcastRids(
+        IReadOnlyList<string> localSendRids, SdpSessionDescription remoteDescription)
+    {
+        var remoteVideo = remoteDescription.Media.FirstOrDefault(m => m.MediaType.Equals("video", Ci));
+        if (remoteVideo is null || RidExtensionId(remoteVideo) is null)
+            return [];
+
+        var remoteRecv = new HashSet<string>(StringComparer.Ordinal);
+        if (remoteVideo.Simulcast?.Recv is { } recvList)
+            foreach (var id in recvList)
+                remoteRecv.Add(id);
+        foreach (var rid in remoteVideo.Rids.Where(r => r.Direction.Equals("recv", Ci)))
+            remoteRecv.Add(rid.Id);
+
+        return localSendRids.Where(remoteRecv.Contains).ToArray();
     }
 
     // The negotiated RID header-extension id (RFC 8852) on a media section, or null when absent — required
