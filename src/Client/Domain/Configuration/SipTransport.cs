@@ -2,7 +2,7 @@ namespace CalloraVoipSdk;
 
 /// <summary>
 /// Default SIP signaling transport a consumer selects via
-/// <see cref="SdkConfiguration.DefaultTransport"/>. Determines which transport the SDK uses for
+/// <see cref="VoipConfiguration.DefaultTransport"/>. Determines which transport the SDK uses for
 /// outbound requests and its advertised local contact when a target URI does not force a transport
 /// (for example via a <c>sips:</c> scheme or <c>;transport=</c> parameter). All five transports
 /// are listened on regardless; this only selects the default for outbound routing.

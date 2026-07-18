@@ -6,7 +6,7 @@ structured logs across signaling, media and registration.
 ## Enable logging
 
 ```csharp
-using var client = new VoipClient(new SdkConfiguration
+using var client = new VoipClient(new VoipConfiguration
 {
     LoggerFactory = loggerFactory   // your ILoggerFactory
 });

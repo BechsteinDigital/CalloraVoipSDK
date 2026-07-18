@@ -129,14 +129,14 @@ public sealed class VoipClient : IVoipClient
     /// <summary>
     /// Creates a new SDK client using explicit configuration and optional DI service overrides.
     /// </summary>
-    public VoipClient(SdkConfiguration? config = null)
+    public VoipClient(VoipConfiguration? config = null)
         : this(config, null)
     {
     }
 
-    internal VoipClient(SdkConfiguration? config, IServiceProvider? services)
+    internal VoipClient(VoipConfiguration? config, IServiceProvider? services)
     {
-        config ??= new SdkConfiguration();
+        config ??= new VoipConfiguration();
 #pragma warning disable CS0618
         services ??= config.Services;
 #pragma warning restore CS0618

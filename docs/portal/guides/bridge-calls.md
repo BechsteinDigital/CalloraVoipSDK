@@ -21,14 +21,14 @@ leaves the other intact.
 
 ## Bridge audio format
 
-`SdkConfiguration.BridgeAudioFormat` controls how bridged audio is handled:
+`VoipConfiguration.BridgeAudioFormat` controls how bridged audio is handled:
 
 - `Passthrough` (default) — forward frames without re-encoding when the legs are
   compatible (lowest overhead).
 - transcoding formats — mix/convert when the two legs negotiated different codecs.
 
 ```csharp
-new SdkConfiguration { BridgeAudioFormat = BridgeAudioFormat.Passthrough };
+new VoipConfiguration { BridgeAudioFormat = BridgeAudioFormat.Passthrough };
 ```
 
 ## Conference recording / playback

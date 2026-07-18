@@ -5,7 +5,7 @@ namespace CalloraVoipSdk;
 /// <summary>
 /// Thread-safe registry resolving optional SDK modules by their feature contract.
 /// Modules are contributed by separate packages either through dependency injection
-/// (register <see cref="IVoipClientModule"/> services before <c>AddCallora</c>) or
+/// (register <see cref="IVoipClientModule"/> services before <c>AddCalloraVoip</c>) or
 /// programmatically via <see cref="Register"/>.
 /// </summary>
 public sealed class ModuleRegistry : IModuleRegistry

@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CalloraVoipSdk — Simplest WebRTC Video Call</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2rem; background: #111; color: #eee; }
+    h1 { font-size: 1.2rem; }
+    #videos { display: flex; gap: 1rem; flex-wrap: wrap; }
+    video { width: 360px; max-width: 45vw; background: #000; border-radius: 8px; }
+    figcaption { font-size: .85rem; color: #aaa; }
+    button { padding: .6rem 1rem; font-size: 1rem; border-radius: 6px; border: 0; cursor: pointer; }
+    #status { margin-top: 1rem; color: #8ab; }
+    p.hint { color: #999; font-size: .85rem; max-width: 40rem; }
+  </style>
+</head>
+<body>
+  <h1>Simplest WebRTC video call — two browsers, peer-to-peer</h1>
+  <p class="hint">Open this page in <strong>two tabs</strong> (or two devices on the same network) and click
+  “Join” in both. The .NET host only relays signalling (SDP/ICE) over WebSocket; the media flows
+  peer-to-peer between the browsers.</p>
+  <button id="join">Join</button>
+  <div id="status">Not connected.</div>
+  <div id="videos">
+    <figure><video id="local" autoplay playsinline muted></video><figcaption>You</figcaption></figure>
+    <figure><video id="remote" autoplay playsinline></video><figcaption>Peer</figcaption></figure>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

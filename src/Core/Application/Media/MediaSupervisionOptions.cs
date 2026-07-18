@@ -2,7 +2,7 @@ namespace CalloraVoipSdk.Core.Application.Media;
 
 /// <summary>
 /// Runtime supervision thresholds for active media sessions. Defaults preserve the
-/// established behavior; a caller may tune them via <c>SdkConfiguration</c>.
+/// established behavior; a caller may tune them via <c>VoipConfiguration</c>.
 /// </summary>
 internal sealed record MediaSupervisionOptions
 {

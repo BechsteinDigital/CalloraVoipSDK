@@ -45,7 +45,7 @@ Console.WriteLine();
 VoipClient client;
 try
 {
-    client = new VoipClient(new SdkConfiguration
+    client = new VoipClient(new VoipConfiguration
     {
         LoggerFactory = loggerFactory,
         UserAgent = "CalloraVoipSdk-Switchboard/1.0",

@@ -41,24 +41,24 @@ public sealed class CalloraBuilder
     public CalloraBuilder WithIce(Action<IceOptions> configure)
     {
         ArgumentNullException.ThrowIfNull(configure);
-        _services.PostConfigure<SdkOptions>(options => configure(options.Ice));
+        _services.PostConfigure<VoipOptions>(options => configure(options.Ice));
         return this;
     }
 
     /// <summary>
     /// Sets the default SIP signaling transport for outbound requests
-    /// (see <see cref="SdkConfiguration.DefaultTransport"/>).
+    /// (see <see cref="VoipConfiguration.DefaultTransport"/>).
     /// </summary>
     public CalloraBuilder WithTransport(SipTransport transport)
     {
-        _services.PostConfigure<SdkOptions>(options => options.DefaultTransport = transport);
+        _services.PostConfigure<VoipOptions>(options => options.DefaultTransport = transport);
         return this;
     }
 
     /// <summary>
     /// Composes the WebRTC facade onto the same host (ADR-012, two-facade composition). Equivalent to a
     /// standalone <see cref="WebRtcServiceCollectionExtensions.AddCalloraWebRtc"/>, letting a host
-    /// configure both facades in one chain: <c>AddCallora(...).AddWebRtc(...)</c>. Returns the WebRTC
+    /// configure both facades in one chain: <c>AddCalloraVoip(...).AddWebRtc(...)</c>. Returns the WebRTC
     /// builder so WebRTC-specific overrides continue the chain.
     /// </summary>
     public CalloraWebRtcBuilder AddWebRtc(Action<WebRtcOptions>? configure = null)

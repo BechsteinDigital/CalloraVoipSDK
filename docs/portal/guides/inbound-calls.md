@@ -40,7 +40,7 @@ a `CallActionResult` for foreseeable outcomes.
 
 ## Guarding inbound media
 
-Set `SdkConfiguration.InboundMediaTimeout` (default 15 s) so answered calls that never
+Set `VoipConfiguration.InboundMediaTimeout` (default 15 s) so answered calls that never
 produce media are torn down instead of lingering. For held calls that go silent,
 `HangupHeldCallOnMediaSilence` ends them automatically.
 

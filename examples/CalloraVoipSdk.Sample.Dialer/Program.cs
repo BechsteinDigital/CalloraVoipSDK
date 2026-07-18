@@ -47,7 +47,7 @@ if (targets.Count == 0)
     return 1;
 }
 
-using var client = new VoipClient(new SdkConfiguration
+using var client = new VoipClient(new VoipConfiguration
 {
     LoggerFactory = loggerFactory,
     UserAgent = "CalloraVoipSdk-Dialer/1.0",

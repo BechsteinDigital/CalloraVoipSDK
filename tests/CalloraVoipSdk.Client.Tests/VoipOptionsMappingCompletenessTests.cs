@@ -5,54 +5,54 @@ using Xunit;
 namespace CalloraVoipSdk.Client.Tests;
 
 /// <summary>
-/// Drift guard for the <see cref="SdkOptions"/> → <see cref="SdkConfiguration"/> mapping (HARD-G-follow-up,
+/// Drift guard for the <see cref="VoipOptions"/> → <see cref="VoipConfiguration"/> mapping (HARD-G-follow-up,
 /// Client F2/F3). The mapping claims "every configurable option is carried across"; these reflection
 /// tests fail the day a new option is added without a matching configuration property or without the
 /// mapping copying it — the silent-default trap the explicit mapping test cannot catch for future fields.
 /// </summary>
-public sealed class SdkOptionsMappingCompletenessTests
+public sealed class VoipOptionsMappingCompletenessTests
 {
     // LoggerFactory is intentionally sourced from the resolved factory argument, not from the options
     // instance; the value sweep also skips the non-1:1 fields (nested Ice, defaulted AudioDevice, and
-    // the reference types the sweep does not synthesize) — those are covered by SdkOptionsMappingTests.
+    // the reference types the sweep does not synthesize) — those are covered by VoipOptionsMappingTests.
     private static readonly HashSet<string> SweepExclusions = new(StringComparer.Ordinal)
     {
-        nameof(SdkOptions.LoggerFactory),
-        nameof(SdkOptions.Ice),
-        nameof(SdkOptions.AudioDevice),
-        nameof(SdkOptions.Tls),
-        nameof(SdkOptions.DtlsCertificate),
-        nameof(SdkOptions.PreferredAudioCodecs),
-        nameof(SdkOptions.PreferredVideoCodecs),
+        nameof(VoipOptions.LoggerFactory),
+        nameof(VoipOptions.Ice),
+        nameof(VoipOptions.AudioDevice),
+        nameof(VoipOptions.Tls),
+        nameof(VoipOptions.DtlsCertificate),
+        nameof(VoipOptions.PreferredAudioCodecs),
+        nameof(VoipOptions.PreferredVideoCodecs),
     };
 
     [Fact]
     public void Every_option_has_a_matching_configuration_property()
     {
-        var configProps = typeof(SdkConfiguration)
+        var configProps = typeof(VoipConfiguration)
             .GetProperties(BindingFlags.Public | BindingFlags.Instance)
             .Select(p => p.Name)
             .ToHashSet(StringComparer.Ordinal);
 
-        var missing = typeof(SdkOptions)
+        var missing = typeof(VoipOptions)
             .GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .Where(p => p.Name != nameof(SdkOptions.LoggerFactory))
+            .Where(p => p.Name != nameof(VoipOptions.LoggerFactory))
             .Select(p => p.Name)
             .Where(name => !configProps.Contains(name))
             .ToList();
 
         Assert.True(
             missing.Count == 0,
-            $"SdkOptions properties without a matching SdkConfiguration property (mapping drift): {string.Join(", ", missing)}");
+            $"VoipOptions properties without a matching VoipConfiguration property (mapping drift): {string.Join(", ", missing)}");
     }
 
     [Fact]
     public void Every_scalar_option_is_carried_onto_the_configuration()
     {
-        var options = new SdkOptions();
+        var options = new VoipOptions();
         var swept = new List<PropertyInfo>();
 
-        foreach (var prop in typeof(SdkOptions).GetProperties(BindingFlags.Public | BindingFlags.Instance))
+        foreach (var prop in typeof(VoipOptions).GetProperties(BindingFlags.Public | BindingFlags.Instance))
         {
             if (SweepExclusions.Contains(prop.Name) || !prop.CanWrite)
                 continue;
@@ -70,7 +70,7 @@ public sealed class SdkOptionsMappingCompletenessTests
         Assert.NotEmpty(swept);
         foreach (var prop in swept)
         {
-            var configProp = typeof(SdkConfiguration).GetProperty(prop.Name);
+            var configProp = typeof(VoipConfiguration).GetProperty(prop.Name);
             Assert.NotNull(configProp);
             Assert.Equal(prop.GetValue(options), configProp!.GetValue(config));
         }

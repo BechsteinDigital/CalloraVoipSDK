@@ -250,7 +250,7 @@ internal sealed class SdkConvenienceOrchestrator : IDisposable
 
         if (_videoDevice is null)
             throw new InvalidOperationException(
-                "No video codec device is registered. Supply one via SdkConfiguration or dependency injection " +
+                "No video codec device is registered. Supply one via VoipConfiguration or dependency injection " +
                 "(IVideoDevice); the SDK core is transport-only and ships no codec.");
 
         // Convenience flow is optimized for one active default video route.

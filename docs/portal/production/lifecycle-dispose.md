@@ -6,7 +6,7 @@ exactly once on shutdown.
 ## Construction
 
 ```csharp
-using var client = new VoipClient(new SdkConfiguration { /* … */ });
+using var client = new VoipClient(new VoipConfiguration { /* … */ });
 ```
 
 `using` (or an explicit `Dispose()`) guarantees teardown. The client is not meant to be

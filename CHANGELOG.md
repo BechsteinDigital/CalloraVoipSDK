@@ -6,6 +6,49 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
 
 ## [Unreleased]
 
+## [4.6.0-preview.1] - 2026-07-18
+
+### Added
+- **Public WebRTC facade (preview, transport-only)** — a signalling-neutral browser/peer surface that
+  mirrors the four-level design of `VoipClient`, in the `CalloraVoipSdk.WebRtc` namespace:
+  - **`WebRtcClient` / `IWebRtcClient`** (Level 1): zero-config `new WebRtcClient()` or DI via
+    `AddCalloraWebRtc(...)`. `CreatePeer()` returns an `IPeerConnection` that runs ICE, DTLS-SRTP,
+    BUNDLE and RTP/RTCP internally. The app owns signalling and the codec — the SDK packetises and
+    moves bytes, it never encodes or decodes.
+  - **Signalling happy path**: `IPeerConnection.ConnectAsync(IWebRtcSignaling, WebRtcRole)` drives the
+    full RFC 8829 offer/answer over an app-owned channel and completes when connected — the WebRTC
+    counterpart to `DialAndWaitUntilConnectedAsync`. The neutral primitives (`CreateOffer`,
+    `SetRemoteDescriptionAsync`, `StartAsync`) remain for callers that drive signalling themselves.
+  - **W3C track model**: `IPeerConnection.TrackReceived` surfaces inbound media as `RemoteTrack`
+    (`Kind`, `StreamId` = remote `a=msid`, `TrackId`) carrying `EncodedFrame` (payload, RTP timestamp,
+    key-frame flag, presentation-time seam). Grouping by `StreamId` keeps a participant's audio and
+    video together; per-track delivery keeps them separable.
+  - **L2 multi-peer manager**: `IWebRtcClient.Peers` tracks the live peer connections.
+  - **L3 extension seams**: `IMediaTap` + `IPeerConnection.AttachMediaTap` observe media in both
+    directions (recording/analytics/AI); `IWebRtcClientModule` + `IWebRtcClient.Modules` register
+    facade plugins (programmatically or auto-attached from DI).
+  - **Two-facade composition**: `AddCalloraVoip(sip => …).AddWebRtc(rtc => …)` configures the SIP and
+    WebRTC facades in one chain; each facade owns its own options object.
+  - Samples: `examples/CalloraVoipSdk.Sample.WebRtcPeer` (and further WebRTC samples) show connect,
+    tracks, taps and DI end-to-end.
+  - **Preview status**: the WebRTC surface has not yet been validated against real browsers (Chrome/
+    Firefox); its API may change before it is declared stable. A configured media port is required on
+    both peers until early-bind / trickle ICE lands. Data channels (SCTP), TURN relay and simulcast are
+    not included.
+
+### Changed
+- **BREAKING (from 4.6): SIP-facade configuration types renamed** so each facade owns a facade-scoped
+  name (parallel to `WebRtcConfiguration` / `WebRtcOptions` / `AddCalloraWebRtc`) and the `Callora*`
+  names are freed for the upcoming composition layer:
+  - `SdkConfiguration` → `VoipConfiguration`
+  - `SdkOptions` → `VoipOptions`
+  - `AddCallora(...)` → `AddCalloraVoip(...)`
+
+  There are no compatibility aliases. **Migration**: rename these three symbols at your call sites
+  (e.g. `services.AddCallora(o => …)` → `services.AddCalloraVoip(o => …)`; `new SdkConfiguration { … }`
+  → `new VoipConfiguration { … }`). `VoipClient` and all other public types are unchanged; behaviour is
+  identical.
+
 ## [4.5.0] - 2026-07-15
 
 ### Added

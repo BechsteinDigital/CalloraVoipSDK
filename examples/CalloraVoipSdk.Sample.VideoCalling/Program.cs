@@ -46,7 +46,7 @@ else
     target = Prompt("Ziel, z.B. sip:100@pbx");
 }
 
-using var client = new VoipClient(new SdkConfiguration
+using var client = new VoipClient(new VoipConfiguration
 {
     LoggerFactory = loggerFactory,
     UserAgent = "CalloraVoipSdk-VideoCalling/1.0",

@@ -8,7 +8,7 @@ namespace CalloraVoipSdk.Client.Tests;
 /// <summary>
 /// The WebRTC facade's DI entrypoint (ADR-012, step 3): <see cref="WebRtcServiceCollectionExtensions.AddCalloraWebRtc"/>
 /// registers a usable <see cref="IWebRtcClient"/> from mutable <see cref="WebRtcOptions"/>, mirroring the SIP
-/// <c>AddCallora</c>. The two facades <em>compose</em> (<c>AddCallora(...).AddWebRtc(...)</c>) rather than
+/// <c>AddCalloraVoip</c>. The two facades <em>compose</em> (<c>AddCalloraVoip(...).AddWebRtc(...)</c>) rather than
 /// sharing one configuration object. Exercised through the public surface only.
 /// </summary>
 public sealed class WebRtcDependencyInjectionTests
@@ -62,11 +62,11 @@ public sealed class WebRtcDependencyInjectionTests
     }
 
     [Fact]
-    public async Task AddCallora_then_AddWebRtc_composes_both_facades()
+    public async Task AddCalloraVoip_then_AddWebRtc_composes_both_facades()
     {
         var services = new ServiceCollection();
         services
-            .AddCallora(options =>
+            .AddCalloraVoip(options =>
             {
                 options.UserAgent = "CalloraVoipSdk.Client.Tests/1.0";
                 options.EnableAutomaticAudioDeviceSelection = false;

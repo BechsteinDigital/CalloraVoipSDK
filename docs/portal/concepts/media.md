@@ -62,7 +62,7 @@ operate on a bridge. Details: [Recording/playback](../guides/recording-playback.
 
 ## Codecs and encryption
 
-Codec preference is set once via `SdkConfiguration.PreferredAudioCodecs`; SRTP/SRTCP is
+Codec preference is set once via `VoipConfiguration.PreferredAudioCodecs`; SRTP/SRTCP is
 negotiated automatically per `SrtpPolicy`. Neither changes the media-primitive API — you
 work with `MediaFrame`s whose payload is encoded in the negotiated codec (decode/encode it
 yourself); SRTP/SRTCP and transport stay transparent.

@@ -9,7 +9,7 @@ Set the SDK's logging to **`Trace`** to capture the full SIP exchange, including
 bodies:
 
 ```csharp
-new SdkConfiguration { LoggerFactory = loggerFactory };  // factory configured at Trace
+new VoipConfiguration { LoggerFactory = loggerFactory };  // factory configured at Trace
 ```
 
 The trace shows REGISTER/INVITE/200/ACK/BYE and, crucially, the `c=`/`m=`/`a=` SDP lines

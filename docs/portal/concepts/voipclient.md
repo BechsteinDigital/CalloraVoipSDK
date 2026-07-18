@@ -6,7 +6,7 @@ It implements `IDisposable` — construct one per application (or per tenant) an
 it on shutdown.
 
 ```csharp
-using var client = new VoipClient(new SdkConfiguration { /* … */ });
+using var client = new VoipClient(new VoipConfiguration { /* … */ });
 ```
 
 ## Sub-facades
@@ -39,7 +39,7 @@ The client also carries the high-level verbs most apps need directly:
 
 ## Configuration
 
-`SdkConfiguration` is an immutable (`init`-only) options record:
+`VoipConfiguration` is an immutable (`init`-only) options record:
 
 | Property | Default | Meaning |
 |----------|---------|---------|

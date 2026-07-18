@@ -9,7 +9,7 @@ below maps to a real `VoipClient` method.
 ```csharp
 using CalloraVoipSdk.Client;
 
-using var client = new VoipClient(new SdkConfiguration
+using var client = new VoipClient(new VoipConfiguration
 {
     LoggerFactory = loggerFactory,
     UserAgent     = "MySoftphone/1.0"

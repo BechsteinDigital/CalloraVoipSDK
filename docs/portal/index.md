@@ -35,6 +35,7 @@ and intelligent decision logic.
 | Media cross-connect / bridge | ✅ Production-ready |
 | Per-call media tap (frame receivers/senders for bots and streaming) | ✅ Production-ready |
 | Encoded video: send/receive, transport-cc bitrate recommendation, keyframe feedback ([transport-only](guides/video-calls.md)) | ✅ New in v4.5.0 |
+| WebRTC facade: peer connections, SDK-driven signalling, W3C tracks, media taps ([transport-only](guides/webrtc.md)) | 🧪 Preview in v4.6.0 (not browser-validated) |
 | Module registry (`client.Modules`) as plugin extension point | ✅ Production-ready |
 | Configurable audio codec preference | ✅ Production-ready |
 | DTMF send/receive (RFC 4733) | ✅ Production-ready |
@@ -74,7 +75,7 @@ Interested in early access? Contact [info@bechstein.digital](mailto:info@bechste
 ## Quickstart
 
 ```csharp
-using var client = new VoipClient(new SdkConfiguration
+using var client = new VoipClient(new VoipConfiguration
 {
     LoggerFactory = loggerFactory,
     UserAgent = "MySoftphone/1.0"

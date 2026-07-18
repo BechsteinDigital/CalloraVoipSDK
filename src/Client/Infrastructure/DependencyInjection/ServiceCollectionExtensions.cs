@@ -14,12 +14,12 @@ public static class ServiceCollectionExtensions
     /// <summary>
     /// Registers CalloraVoipSdk with options-based configuration.
     /// </summary>
-    public static CalloraBuilder AddCallora(this IServiceCollection services, Action<SdkOptions>? configure = null)
+    public static CalloraBuilder AddCalloraVoip(this IServiceCollection services, Action<VoipOptions>? configure = null)
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        services.AddOptions<SdkOptions>().ValidateOnStart();
-        services.TryAddEnumerable(ServiceDescriptor.Singleton<IValidateOptions<SdkOptions>, SdkOptionsValidator>());
+        services.AddOptions<VoipOptions>().ValidateOnStart();
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IValidateOptions<VoipOptions>, VoipOptionsValidator>());
         if (configure is not null)
         {
             services.Configure(configure);
@@ -27,7 +27,7 @@ public static class ServiceCollectionExtensions
 
         services.TryAddSingleton<IVoipClient>(sp =>
         {
-            var options = sp.GetRequiredService<IOptions<SdkOptions>>().Value;
+            var options = sp.GetRequiredService<IOptions<VoipOptions>>().Value;
             var loggerFactory = options.LoggerFactory ?? sp.GetService<ILoggerFactory>();
 
             return new VoipClient(options.ToConfiguration(loggerFactory), sp);

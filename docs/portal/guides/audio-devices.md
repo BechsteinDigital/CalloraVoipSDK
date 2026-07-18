@@ -51,7 +51,7 @@ Wire format is chosen by SDP negotiation. Bias it with an ordered list once at
 construction:
 
 ```csharp
-new SdkConfiguration
+new VoipConfiguration
 {
     PreferredAudioCodecs = new[] { "OPUS", "G722", "PCMU", "PCMA" }
 };

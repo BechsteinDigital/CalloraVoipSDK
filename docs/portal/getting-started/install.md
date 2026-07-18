@@ -26,12 +26,12 @@ receivers/senders (see the [Media tap guide](../guides/media-tap.md)) or a silen
 ## First `VoipClient`
 
 The client is the single entry point. Construct it with an optional
-[`SdkConfiguration`](../concepts/voipclient.md) and dispose it when you shut down.
+[`VoipConfiguration`](../concepts/voipclient.md) and dispose it when you shut down.
 
 ```csharp
 using CalloraVoipSdk.Client;
 
-using var client = new VoipClient(new SdkConfiguration
+using var client = new VoipClient(new VoipConfiguration
 {
     LoggerFactory = loggerFactory,   // optional; wire your ILoggerFactory for diagnostics
     UserAgent     = "MySoftphone/1.0"

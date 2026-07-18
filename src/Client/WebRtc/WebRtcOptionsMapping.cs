@@ -6,7 +6,7 @@ namespace CalloraVoipSdk.DependencyInjection;
 /// <summary>
 /// Projects the host-facing <see cref="WebRtcOptions"/> onto the immutable <see cref="WebRtcConfiguration"/>.
 /// Kept a pure function so the option-to-configuration mapping is unit-testable independently of the DI
-/// container (mirrors <c>SdkOptionsMapping</c> for the SIP facade).
+/// container (mirrors <c>VoipOptionsMapping</c> for the SIP facade).
 /// </summary>
 internal static class WebRtcOptionsMapping
 {

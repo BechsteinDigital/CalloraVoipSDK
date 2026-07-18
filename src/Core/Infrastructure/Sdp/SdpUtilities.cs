@@ -29,7 +29,7 @@ internal static class SdpUtilities
     ];
 
     // Codecs the SDK implements but does not offer by default — selectable via
-    // SdkConfiguration.PreferredAudioCodecs. Opus per RFC 7587: the encoding is always
+    // VoipConfiguration.PreferredAudioCodecs. Opus per RFC 7587: the encoding is always
     // announced as opus/48000/2 (dynamic PT), regardless of the operating mode.
     private static readonly IReadOnlyList<SdpCodecDefinition> OptInCodecs =
     [
