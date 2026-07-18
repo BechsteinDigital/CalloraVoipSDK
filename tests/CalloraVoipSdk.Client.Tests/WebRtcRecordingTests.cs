@@ -114,6 +114,7 @@ public sealed class WebRtcRecordingTests
         public string CreateOffer() => string.Empty;
         public Task AddIceCandidateAsync(string candidate, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<string> SetRemoteDescriptionAsync(string remoteSdp, CancellationToken cancellationToken = default) => Task.FromResult(string.Empty);
+        public Task GatherCandidatesAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task StartAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
         public ValueTask SendAudioAsync(ReadOnlyMemory<byte> payload, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
         public Task SendVideoFrameAsync(ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default) => Task.CompletedTask;

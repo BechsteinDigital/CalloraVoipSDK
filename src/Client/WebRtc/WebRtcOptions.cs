@@ -1,5 +1,6 @@
 using System.Net;
 using System.Security.Cryptography.X509Certificates;
+using CalloraVoipSdk;
 using Microsoft.Extensions.Logging;
 
 namespace CalloraVoipSdk.WebRtc;
@@ -30,6 +31,9 @@ public sealed class WebRtcOptions
 
     /// <summary>Send-side simulcast layers to offer, by <c>a=rid</c> id. See <see cref="WebRtcConfiguration.SimulcastLayers"/>. Default: none.</summary>
     public IReadOnlyList<string> SimulcastLayers { get; set; } = [];
+
+    /// <summary>STUN/TURN servers for server-reflexive candidate gathering. See <see cref="WebRtcConfiguration.IceServers"/>. Default: none.</summary>
+    public IReadOnlyList<IceServerConfiguration> IceServers { get; set; } = [];
 
     /// <summary>
     /// DTLS-SRTP identity certificate for the peer (ECDSA P-256 with an exportable private key);

@@ -53,6 +53,16 @@ public interface IPeerConnection : IAsyncDisposable
     /// </summary>
     Task<string> SetRemoteDescriptionAsync(string remoteSdp, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Gathers server-reflexive ICE candidates (RFC 8445 §5.1.1) from the configured STUN servers, each
+    /// surfaced on <see cref="LocalIceCandidateDiscovered"/> to trickle out (RFC 8838). No-op when no STUN
+    /// servers are configured. Call after producing the offer/answer and before <see cref="StartAsync"/>
+    /// (the query shares the media socket the transport takes over once started; calling it after
+    /// <see cref="StartAsync"/> throws). On loopback (the STUN server on the same host) the reflexive
+    /// address equals the host candidate; redundant-candidate pruning (RFC 8445 §5.4) is a later slice.
+    /// </summary>
+    Task GatherCandidatesAsync(CancellationToken cancellationToken = default);
+
     /// <summary>Starts the media transport (ICE connectivity, DTLS handshake, receive loop).</summary>
     Task StartAsync(CancellationToken cancellationToken = default);
 

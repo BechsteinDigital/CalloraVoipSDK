@@ -74,6 +74,9 @@ internal sealed class PeerConnection : IPeerConnection
         return localDescription;
     }
 
+    public Task GatherCandidatesAsync(CancellationToken cancellationToken = default)
+        => _peer.GatherCandidatesAsync(cancellationToken);
+
     public Task StartAsync(CancellationToken cancellationToken = default)
         => _peer.StartAsync(cancellationToken);
 
