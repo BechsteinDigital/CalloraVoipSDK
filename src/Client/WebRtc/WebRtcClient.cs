@@ -19,13 +19,18 @@ public sealed class WebRtcClient : IWebRtcClient
 {
     private readonly WebRtcConfiguration _config;
     private readonly ILoggerFactory _loggerFactory;
+    private readonly WebRtcModuleRegistry _modules;
 
     /// <summary>Creates a client with the given configuration, or all defaults when omitted.</summary>
     public WebRtcClient(WebRtcConfiguration? config = null)
     {
         _config = config ?? new WebRtcConfiguration();
         _loggerFactory = _config.LoggerFactory ?? NullLoggerFactory.Instance;
+        _modules = new WebRtcModuleRegistry(this);
     }
+
+    /// <inheritdoc />
+    public IWebRtcModuleRegistry Modules => _modules;
 
     /// <inheritdoc />
     public IPeerConnection CreatePeer()
@@ -63,7 +68,7 @@ public sealed class WebRtcClient : IWebRtcClient
             certificate,
             _loggerFactory);
 
-        return new PeerConnection(peer);
+        return new PeerConnection(peer, _loggerFactory.CreateLogger<PeerConnection>());
     }
 
     private static IReadOnlyList<SdpCodecDefinition> ResolveCodecs(

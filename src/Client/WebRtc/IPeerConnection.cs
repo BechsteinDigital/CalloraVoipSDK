@@ -47,4 +47,10 @@ public interface IPeerConnection : IAsyncDisposable
 
     /// <summary>Packetises and sends one already-encoded video frame on the peer's video track.</summary>
     Task SendVideoFrameAsync(ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Attaches an <see cref="IMediaTap"/> that observes the encoded media flowing through this peer in both
+    /// directions (L3 recording/analytics/AI seam). Dispose the returned handle to detach.
+    /// </summary>
+    IDisposable AttachMediaTap(IMediaTap tap);
 }

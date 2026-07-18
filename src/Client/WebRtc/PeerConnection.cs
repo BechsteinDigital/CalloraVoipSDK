@@ -1,27 +1,31 @@
 using System.Net;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Models;
 using CalloraVoipSdk.Core.Infrastructure.WebRtc;
+using Microsoft.Extensions.Logging;
 
 namespace CalloraVoipSdk.WebRtc;
 
 /// <summary>
 /// Surfaces the internal <see cref="WebRtcPeerConnection"/> as the public <see cref="IPeerConnection"/>,
-/// mapping the internal state enum and its <see cref="Action{T}"/> events onto the public contract, and
-/// projecting inbound media onto the W3C track model (<see cref="TrackReceived"/>). Owns the peer and
-/// disposes it.
+/// mapping the internal state enum and its <see cref="Action{T}"/> events onto the public contract,
+/// projecting inbound media onto the W3C track model (<see cref="TrackReceived"/>), and fanning both
+/// directions out to attached L3 media taps. Owns the peer and disposes it.
 /// </summary>
 internal sealed class PeerConnection : IPeerConnection
 {
     private readonly WebRtcPeerConnection _peer;
     private readonly RemoteTrackSet _tracks;
+    private readonly MediaTapSet _taps;
     private EventHandler<PeerConnectionState>? _connectionStateChanged;
     private EventHandler<RemoteTrack>? _trackReceived;
 
-    public PeerConnection(WebRtcPeerConnection peer)
+    public PeerConnection(WebRtcPeerConnection peer, ILogger<PeerConnection> logger)
     {
         ArgumentNullException.ThrowIfNull(peer);
+        ArgumentNullException.ThrowIfNull(logger);
         _peer = peer;
         _tracks = new RemoteTrackSet(track => _trackReceived?.Invoke(this, track));
+        _taps = new MediaTapSet(logger);
         _peer.ConnectionStateChanged += OnInternalStateChanged;
         _peer.AudioReceived += OnAudioReceived;
         _peer.VideoFrameReceived += OnVideoReceived;
@@ -51,11 +55,19 @@ internal sealed class PeerConnection : IPeerConnection
     public Task StartAsync(CancellationToken cancellationToken = default)
         => _peer.StartAsync(cancellationToken);
 
+    public IDisposable AttachMediaTap(IMediaTap tap) => _taps.Attach(tap);
+
     public ValueTask SendAudioAsync(ReadOnlyMemory<byte> payload, CancellationToken cancellationToken = default)
-        => _peer.SendAudioAsync(payload, cancellationToken);
+    {
+        _taps.Audio(MediaDirection.Outbound, payload);
+        return _peer.SendAudioAsync(payload, cancellationToken);
+    }
 
     public Task SendVideoFrameAsync(ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default)
-        => _peer.SendVideoFrameAsync(encodedFrame, rtpTimestamp, cancellationToken);
+    {
+        _taps.Video(MediaDirection.Outbound, encodedFrame, rtpTimestamp, isKeyFrame: false);
+        return _peer.SendVideoFrameAsync(encodedFrame, rtpTimestamp, cancellationToken);
+    }
 
     public async ValueTask DisposeAsync()
     {
@@ -72,12 +84,14 @@ internal sealed class PeerConnection : IPeerConnection
     // the track, and the set raises TrackReceived once per kind before the first frame flows.
     private void OnAudioReceived(byte[] payload)
     {
+        _taps.Audio(MediaDirection.Inbound, payload);
         var msid = _peer.RemoteAudioMsid;
         _tracks.DeliverAudioFrame(StreamId(msid), msid?.TrackId, new EncodedFrame(payload, rtpTimestamp: null, isKeyFrame: false, presentationTimeUsec: null));
     }
 
     private void OnVideoReceived(byte[] frame, uint rtpTimestamp, bool isKeyFrame)
     {
+        _taps.Video(MediaDirection.Inbound, frame, rtpTimestamp, isKeyFrame);
         var msid = _peer.RemoteVideoMsid;
         _tracks.DeliverVideoFrame(StreamId(msid), msid?.TrackId, new EncodedFrame(frame, rtpTimestamp, isKeyFrame, presentationTimeUsec: null));
     }
