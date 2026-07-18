@@ -300,6 +300,28 @@ public sealed class WebRtcPeerConnectionTests
         Assert.Equal(new IPEndPoint(IPAddress.Loopback, 5000), peer.RemoteMediaEndPoint);
     }
 
+    [Fact]
+    public async Task A_recvonly_remote_offer_materialises_no_inbound_audio_track()
+    {
+        await using var peer = Peer(Pcmu);
+
+        // The remote offers audio recvonly — it will only receive, never send to us — so there is no inbound
+        // audio track to materialise (RFC 8829 / RFC 3264 directionality), even though an audio m-line exists.
+        await peer.SetRemoteDescriptionAsync(WebRtcOffer(SdpMediaDirection.RecvOnly));
+
+        Assert.False(peer.HasRemoteAudio);
+    }
+
+    [Fact]
+    public async Task A_sendrecv_remote_offer_materialises_an_inbound_audio_track()
+    {
+        await using var peer = Peer(Pcmu);
+
+        await peer.SetRemoteDescriptionAsync(WebRtcOffer(SdpMediaDirection.SendRecv));
+
+        Assert.True(peer.HasRemoteAudio); // the remote will send — the inbound track is real
+    }
+
     private static WebRtcPeerConnection PeerAt(int localPort) =>
         new(new WebRtcPeerOptions
             {
@@ -330,9 +352,10 @@ public sealed class WebRtcPeerConnectionTests
             NullLoggerFactory.Instance);
 
     // A remote WebRTC offer (BUNDLE + DTLS + ICE + video), built with the negotiator and serialized.
-    private static string WebRtcOffer() => new SdpSessionSerializer().Serialize(
+    // The audio direction is parameterised so a recvonly/inactive offer (the remote will not send) can be built.
+    private static string WebRtcOffer(SdpMediaDirection audioDirection = SdpMediaDirection.SendRecv) => new SdpSessionSerializer().Serialize(
         new SdpOfferAnswerNegotiator().CreateOffer(
-            new IPEndPoint(IPAddress.Loopback, 5000), Pcmu, SdpMediaDirection.SendRecv,
+            new IPEndPoint(IPAddress.Loopback, 5000), Pcmu, audioDirection,
             new SdpMediaOptions
             {
                 Bundle = true,
