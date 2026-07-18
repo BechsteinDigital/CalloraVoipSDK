@@ -16,7 +16,12 @@ namespace CalloraVoipSdk.Core.Infrastructure.Dtls;
 internal sealed class DtlsMediaAttachment : IAsyncDisposable
 {
     private readonly bool _isClient;
-    private readonly IPEndPoint _remoteEndPoint;
+    // The peer media endpoint DTLS records are exchanged with and the source inbound records are accepted
+    // from. Mutable: a bundled transport whose ICE agent nominates (or re-nominates) a different candidate
+    // pair updates it via UpdateRemoteEndPoint so the strict inbound source filter follows the nominated
+    // remote. Accessed via Volatile — written from the nomination path, read on the receive loop. The SIP
+    // path never updates it (fixed nominated remote), so its strict behaviour is unchanged.
+    private IPEndPoint _remoteEndPoint;
     private readonly DtlsFingerprint _expectedRemoteFingerprint;
     private readonly IDtlsSrtpHandshaker _handshaker;
     private readonly DtlsCertificate _certificate;
@@ -188,20 +193,33 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
     }
 
     /// <summary>
+    /// Updates the peer media endpoint DTLS records are accepted from and sent to, so the inbound source
+    /// filter follows an ICE nomination or re-nomination (RFC 8445 §8) onto a different candidate pair.
+    /// Thread-safe. The SIP path leaves it fixed at the negotiated remote.
+    /// </summary>
+    /// <param name="remoteEndPoint">The nominated remote endpoint DTLS now runs against.</param>
+    public void UpdateRemoteEndPoint(IPEndPoint remoteEndPoint)
+    {
+        ArgumentNullException.ThrowIfNull(remoteEndPoint);
+        Volatile.Write(ref _remoteEndPoint, remoteEndPoint);
+    }
+
+    /// <summary>
     /// Inbound DTLS records demultiplexed off the RTP socket (RFC 5764 §5.1.2). Records
-    /// from any source other than the negotiated remote media endpoint are dropped —
-    /// an off-path sender must not be able to feed the handshake. Deliberate trade-off:
-    /// a peer whose NAT rewrites the source port (the symmetric-RTP scenario) will not
-    /// complete the handshake against this strict filter; relaxing it safely (the
-    /// fingerprint already authenticates the peer) is tracked as follow-up work.
+    /// from any source other than the current remote media endpoint are dropped — an
+    /// off-path sender must not be able to feed the handshake. The remote endpoint follows
+    /// ICE nomination via <see cref="UpdateRemoteEndPoint"/>, so switching to a
+    /// connectivity-checked candidate pair keeps the handshake flowing; the fingerprint
+    /// remains the authentication boundary (RFC 5763 §6.7.1).
     /// </summary>
     public void OnDtlsPacketReceived(byte[] datagram, IPEndPoint source)
     {
-        if (!_remoteEndPoint.Equals(source))
+        var remote = Volatile.Read(ref _remoteEndPoint);
+        if (!remote.Equals(source))
         {
             _logger.LogDebug(
-                "Dropping DTLS record from unexpected source {Source}; negotiated remote is {Remote}.",
-                source, _remoteEndPoint);
+                "Dropping DTLS record from unexpected source {Source}; current remote is {Remote}.",
+                source, remote);
             return;
         }
 
@@ -266,9 +284,10 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
 
     private async Task SendOutboundAsync(byte[] datagram)
     {
+        var remote = Volatile.Read(ref _remoteEndPoint);
         try
         {
-            await _sendRaw(datagram, _remoteEndPoint, _lifetimeToken).ConfigureAwait(false);
+            await _sendRaw(datagram, remote, _lifetimeToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -277,7 +296,7 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to send DTLS record to {Remote}.", _remoteEndPoint);
+            _logger.LogWarning(ex, "Failed to send DTLS record to {Remote}.", remote);
         }
     }
 

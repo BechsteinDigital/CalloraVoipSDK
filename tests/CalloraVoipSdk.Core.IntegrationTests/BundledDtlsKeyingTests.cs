@@ -109,6 +109,70 @@ public sealed class BundledDtlsKeyingTests
         Assert.False(serverAudio.Task.IsCompleted); // no frame ever decrypted — media stayed blocked
     }
 
+    [Fact]
+    public async Task Dtls_inbound_filter_follows_ice_renomination_to_a_different_source()
+    {
+        var clientCert = DtlsCertificate.GenerateEcdsaP256();
+        var serverCert = DtlsCertificate.GenerateEcdsaP256();
+
+        var clientInbound = InboundPipeline(out _);
+        var serverInbound = InboundPipeline(out var serverAudio);
+
+        await using var clientTransport = Transport(clientInbound);
+        await using var serverTransport = Transport(serverInbound);
+        clientTransport.SetRemoteEndPoint(serverTransport.LocalEndPoint);
+        serverTransport.SetRemoteEndPoint(clientTransport.LocalEndPoint);
+
+        var clientOutbound = Outbound(clientTransport);
+        var serverOutbound = Outbound(serverTransport);
+
+        // The client's DTLS keying starts pointed at a STALE endpoint (an initial SDP candidate that is not
+        // the working pair), so its strict inbound source filter drops the server's handshake flights — the
+        // exact pre-nomination state the earlier tests never reproduce (there initial == working). The send
+        // side already targets the real server via the transport, so only the inbound filter is wrong.
+        var stale = new IPEndPoint(IPAddress.Loopback, 1); // never an ephemeral bind → differs from the server
+        await using var clientKeying = Keying(
+            isClient: true, stale, serverCert.Fingerprint, clientCert,
+            clientInbound, clientOutbound, clientTransport);
+        await using var serverKeying = Keying(
+            isClient: false, clientTransport.LocalEndPoint, clientCert.Fingerprint, serverCert,
+            serverInbound, serverOutbound, serverTransport);
+
+        await clientTransport.StartAsync();
+        await serverTransport.StartAsync();
+        clientKeying.Start();
+        serverKeying.Start();
+
+        // While the DTLS filter points at the stale endpoint, the server's flights are dropped: nothing keys.
+        // A short window suffices to prove the block (the server answers the ClientHello within milliseconds
+        // and the client drops it) and stays far inside the DTLS retransmit budget, so the handshake is still
+        // alive to complete once the filter is corrected below.
+        using (var blocked = new CancellationTokenSource(TimeSpan.FromMilliseconds(800)))
+        {
+            while (!blocked.IsCancellationRequested)
+            {
+                await clientOutbound.SendAsync("audio", new byte[] { 1, 2, 3 });
+                try { await Task.Delay(20, blocked.Token); }
+                catch (OperationCanceledException) { break; }
+            }
+        }
+        Assert.False(serverAudio.Task.IsCompleted); // blocked by the stale DTLS source filter
+
+        // ICE nominates the real pair → the DTLS filter follows it (the fix) → the handshake completes.
+        clientKeying.SetRemoteEndPoint(serverTransport.LocalEndPoint);
+
+        using var overall = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        while (!serverAudio.Task.IsCompleted)
+        {
+            overall.Token.ThrowIfCancellationRequested();
+            await clientOutbound.SendAsync("audio", new byte[] { 1, 2, 3 });
+            await Task.Delay(20, overall.Token);
+        }
+
+        var audio = await serverAudio.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(new byte[] { 1, 2, 3 }, audio.Payload.ToArray());
+    }
+
     // ── harness ──────────────────────────────────────────────────────────────────
 
     private static BundledMediaTransport Transport(BundledInboundPipeline inbound) =>

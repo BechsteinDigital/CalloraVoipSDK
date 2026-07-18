@@ -61,6 +61,13 @@ internal sealed class BundledDtlsKeying : IAsyncDisposable
     public void Start(CancellationToken cancellationToken = default) => _attachment.Start(cancellationToken);
 
     /// <summary>
+    /// Points the shared DTLS association at a newly nominated remote (RFC 8445 §8), so its inbound source
+    /// filter accepts the connectivity-checked candidate pair instead of the initial SDP endpoint.
+    /// </summary>
+    /// <param name="remoteEndPoint">The nominated remote endpoint.</param>
+    public void SetRemoteEndPoint(IPEndPoint remoteEndPoint) => _attachment.UpdateRemoteEndPoint(remoteEndPoint);
+
+    /// <summary>
     /// Detaches from the inbound DTLS feed and disposes the association (close_notify, key zeroing).
     /// </summary>
     public async ValueTask DisposeAsync()
