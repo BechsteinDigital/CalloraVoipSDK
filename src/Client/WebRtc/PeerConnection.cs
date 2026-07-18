@@ -151,6 +151,9 @@ internal sealed class PeerConnection : IPeerConnection
 
     public Task SendVideoFrameAsync(string rid, ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default)
     {
+        // A blank rid on the simulcast overload would reach the tap as a layer id indistinguishable from the
+        // single-stream null contract — reject it up front so the tap's rid is always a real layer or null.
+        ArgumentException.ThrowIfNullOrWhiteSpace(rid);
         // Tag the outbound tap with the simulcast layer id so a recorder/analytics can separate the layers.
         _taps.Video(MediaDirection.Outbound, encodedFrame, rtpTimestamp, isKeyFrame: false, rid: rid);
         return _peer.SendVideoFrameAsync(rid, encodedFrame, rtpTimestamp, cancellationToken);
