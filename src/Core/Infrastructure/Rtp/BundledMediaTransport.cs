@@ -30,7 +30,7 @@ namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
 /// RTP/RTCP all traverse the one bound channel uniformly and the DTLS/ICE layers above compose unchanged.
 /// A channel already known up front may instead be supplied via <see cref="BundledMediaTransportOptions.Relay"/>.
 /// </summary>
-internal sealed class BundledMediaTransport : IBundledDatagramSender, IAsyncDisposable
+internal sealed class BundledMediaTransport : IBundledDatagramSender, IRelayControlTransport, IAsyncDisposable
 {
     private const int ReceiveBufferSize = 8192;
 
