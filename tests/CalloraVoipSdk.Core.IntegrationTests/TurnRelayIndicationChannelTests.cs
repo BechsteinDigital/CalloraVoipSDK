@@ -104,6 +104,23 @@ public sealed class TurnRelayIndicationChannelTests
         Assert.False(relay.TryUnwrap(noData, RelayServer, out _, out _));
     }
 
+    [Fact]
+    public void TryUnwrap_rejects_a_data_indication_missing_the_peer_address()
+    {
+        var codec = new StunMessageCodec();
+        var relay = new TurnRelayIndicationChannel(codec, RelayServer);
+
+        var noPeer = codec.Encode(new StunMessage
+        {
+            MessageClass = StunMessageClass.Indication,
+            MessageMethod = (StunMessageMethod)(ushort)TurnMessageMethod.Data,
+            TransactionId = NewTransactionId(),
+            Attributes = [TurnAttributeMapper.Encode(new TurnDataAttribute { Value = new byte[] { 7, 8 } })],
+        });
+
+        Assert.False(relay.TryUnwrap(noPeer, RelayServer, out _, out _));
+    }
+
     private static byte[] DataIndication(IStunMessageCodec codec, IPEndPoint peer, byte[] payload)
     {
         var txId = NewTransactionId();

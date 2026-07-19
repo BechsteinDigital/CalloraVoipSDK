@@ -92,15 +92,9 @@ internal sealed class TurnRelayIndicationChannel
         if (!RelayEndPoint.SameEndPoint(source, _relayServer))
             return false;
 
-        StunMessage? decoded;
-        try
-        {
-            decoded = _codec.Decode(datagram.ToArray());
-        }
-        catch (Exception)
-        {
-            return false;
-        }
+        // The STUN codec returns null for anything it cannot decode — the same contract the media receive
+        // loop and TurnClientTransport rely on — so a malformed datagram surfaces as null, not an exception.
+        var decoded = _codec.Decode(datagram.ToArray());
 
         if (decoded is null
             || decoded.MessageClass != StunMessageClass.Indication
