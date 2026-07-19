@@ -54,4 +54,64 @@ public sealed class CalloraWebRtcBuilder
         _services.PostConfigure<WebRtcOptions>(options => options.LoggerFactory = loggerFactory);
         return this;
     }
+
+    /// <summary>
+    /// Adds a STUN server for server-reflexive (srflx) candidate gathering (RFC 8445). Accumulates with any
+    /// servers already configured; see <see cref="WebRtcOptions.IceServers"/>.
+    /// </summary>
+    /// <param name="host">The STUN server hostname or IP address.</param>
+    /// <param name="port">Optional explicit port; the STUN default is used when null.</param>
+    public CalloraWebRtcBuilder WithStunServer(string host, int? port = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(host);
+        return AddIceServer(new IceServerConfiguration { Type = IceServerType.Stun, Host = host, Port = port });
+    }
+
+    /// <summary>
+    /// Adds a TURN server for relay candidate gathering (RFC 8656), with the long-term credentials the
+    /// allocation authenticates with. Accumulates with any servers already configured. Only UDP TURN is used for
+    /// relay gathering today; a non-UDP entry is ignored by the gatherer until TCP/TLS TURN lands.
+    /// </summary>
+    /// <param name="host">The TURN server hostname or IP address.</param>
+    /// <param name="username">The long-term credential username.</param>
+    /// <param name="password">The long-term credential password.</param>
+    /// <param name="port">Optional explicit port; the TURN default (3478) is used when null.</param>
+    /// <param name="transport">The transport to reach the server on; defaults to UDP.</param>
+    public CalloraWebRtcBuilder WithTurnServer(
+        string host, string username, string password, int? port = null, IceTransport transport = IceTransport.Udp)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(host);
+        ArgumentException.ThrowIfNullOrWhiteSpace(username);
+        ArgumentException.ThrowIfNullOrWhiteSpace(password);
+        return AddIceServer(new IceServerConfiguration
+        {
+            Type = IceServerType.Turn,
+            Host = host,
+            Port = port,
+            Transport = transport,
+            Username = username,
+            Password = password,
+        });
+    }
+
+    /// <summary>
+    /// Adds one or more fully-specified ICE servers (STUN/TURN), accumulating with any already configured.
+    /// </summary>
+    /// <param name="servers">The ICE server entries to add.</param>
+    public CalloraWebRtcBuilder WithIceServers(params IceServerConfiguration[] servers)
+    {
+        ArgumentNullException.ThrowIfNull(servers);
+        foreach (var server in servers)
+            ArgumentNullException.ThrowIfNull(server);
+
+        _services.PostConfigure<WebRtcOptions>(options => options.IceServers = [.. options.IceServers, .. servers]);
+        return this;
+    }
+
+    // Appends one ICE server to the accumulated list (PostConfigure runs after the caller's own configuration).
+    private CalloraWebRtcBuilder AddIceServer(IceServerConfiguration server)
+    {
+        _services.PostConfigure<WebRtcOptions>(options => options.IceServers = [.. options.IceServers, server]);
+        return this;
+    }
 }

@@ -1,6 +1,7 @@
 using CalloraVoipSdk.DependencyInjection;
 using CalloraVoipSdk.WebRtc;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace CalloraVoipSdk.Client.Tests;
@@ -59,6 +60,40 @@ public sealed class WebRtcDependencyInjectionTests
 
         Assert.Contains("m=video", offer, StringComparison.Ordinal);
         Assert.Contains("VP8", offer, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WithTurnServer_adds_a_turn_server_with_long_term_credentials()
+    {
+        var services = new ServiceCollection();
+        services.AddCalloraWebRtc().WithTurnServer("turn.example.com", "user", "secret", port: 3478);
+
+        using var provider = services.BuildServiceProvider();
+        var options = provider.GetRequiredService<IOptions<WebRtcOptions>>().Value;
+
+        var turn = Assert.Single(options.IceServers);
+        Assert.Equal(IceServerType.Turn, turn.Type);
+        Assert.Equal("turn.example.com", turn.Host);
+        Assert.Equal(3478, turn.Port);
+        Assert.Equal("user", turn.Username);
+        Assert.Equal("secret", turn.Password);
+        Assert.Equal(IceTransport.Udp, turn.Transport);
+    }
+
+    [Fact]
+    public void Ice_server_builder_methods_accumulate()
+    {
+        var services = new ServiceCollection();
+        services.AddCalloraWebRtc()
+            .WithStunServer("stun.example.com")
+            .WithTurnServer("turn.example.com", "user", "secret");
+
+        using var provider = services.BuildServiceProvider();
+        var servers = provider.GetRequiredService<IOptions<WebRtcOptions>>().Value.IceServers;
+
+        Assert.Equal(2, servers.Count);
+        Assert.Contains(servers, s => s.Type == IceServerType.Stun && s.Host == "stun.example.com");
+        Assert.Contains(servers, s => s.Type == IceServerType.Turn && s.Host == "turn.example.com");
     }
 
     [Fact]
