@@ -164,8 +164,9 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IAsyncDisp
         if (_relayServer is not null)
         {
             // Relay mode, but the channel is not bound yet (allocation still in progress) — suppress media
-            // rather than send it unframed to the relay server, which would drop it.
-            _logger.LogDebug("Suppressing outbound datagram on {LocalEndPoint}: relay channel not bound yet.", _localEndPoint);
+            // rather than send it unframed to the relay server, which would drop it. Trace-level: this can
+            // fire per ICE retransmit during the (brief) allocation window.
+            _logger.LogTrace("Suppressing outbound datagram on {LocalEndPoint}: relay channel not bound yet.", _localEndPoint);
             return;
         }
 
@@ -203,8 +204,8 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IAsyncDisp
         if (_relayServer is not null)
         {
             // Relay mode, channel not bound yet — an ICE check to the peer cannot go out unframed. Suppress
-            // it; ICE will retransmit once the channel is bound.
-            _logger.LogDebug("Suppressing targeted datagram on {LocalEndPoint}: relay channel not bound yet.", _localEndPoint);
+            // it; ICE will retransmit once the channel is bound. Trace-level: fires per ICE retransmit.
+            _logger.LogTrace("Suppressing targeted datagram on {LocalEndPoint}: relay channel not bound yet.", _localEndPoint);
             return;
         }
 

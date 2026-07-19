@@ -293,6 +293,24 @@ public sealed class BundledMediaTransportRelayTests
     }
 
     [Fact]
+    public void A_relay_server_that_disagrees_with_the_supplied_channel_server_throws()
+    {
+        var serverA = new IPEndPoint(IPAddress.Loopback, 3478);
+        var serverB = new IPEndPoint(IPAddress.Loopback, 5349);
+        var channelForB = new TurnRelayChannel(serverB, ChannelNumber);
+
+        Assert.Throws<ArgumentException>(() => new BundledMediaTransport(
+            new BundledMediaTransportOptions
+            {
+                LocalEndPoint = Loopback(),
+                RemoteEndPoint = new IPEndPoint(IPAddress.Loopback, 9999),
+                RelayServer = serverA,
+                Relay = channelForB,
+            },
+            InboundPipeline(_ => { }), NullLogger<BundledMediaTransport>.Instance));
+    }
+
+    [Fact]
     public void A_relay_server_only_transport_requires_a_remote_endpoint()
     {
         // Relay mode keyed by RelayServer alone (no channel yet) still needs the peer for source attribution.
