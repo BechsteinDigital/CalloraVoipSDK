@@ -171,6 +171,35 @@ public sealed class BundledMediaTransportRelayTests
     }
 
     [Fact]
+    public async Task A_stun_datagram_from_a_non_relay_source_is_not_routed_to_the_control_callback()
+    {
+        using var relayServer = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        var relayEndPoint = (IPEndPoint)relayServer.Client.LocalEndPoint!;
+        var channel = new TurnRelayChannel(relayEndPoint, ChannelNumber);
+
+        var controlFired = false;
+        await using var transport = new BundledMediaTransport(
+            new BundledMediaTransportOptions
+            {
+                LocalEndPoint = Loopback(),
+                RemoteEndPoint = new IPEndPoint(IPAddress.Loopback, 9999),
+                Relay = channel,
+                OnRelayControl = _ => controlFired = true,
+            },
+            InboundPipeline(_ => { }), NullLogger<BundledMediaTransport>.Instance);
+        await transport.StartAsync();
+
+        // A well-formed STUN response, but from a source that is not the relay server: an off-path attempt to
+        // forge a TURN control response (e.g. a spoofed Allocate Success). The source filter must drop it.
+        using var attacker = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        var forged = StunMessage(0x01, 0x03); // Allocate success response
+        await attacker.SendAsync(forged, forged.Length, transport.LocalEndPoint);
+
+        await Task.Delay(300);
+        Assert.False(controlFired); // rejected by IsFromRelay before reaching the control callback
+    }
+
+    [Fact]
     public void A_relay_transport_requires_a_remote_endpoint()
     {
         // A relay channel is bound to one peer, so relayed inbound must be attributable to it — the transport
