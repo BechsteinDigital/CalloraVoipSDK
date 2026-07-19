@@ -27,6 +27,7 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     private readonly BundledVideoTrack? _video;
     private readonly string _audioMid;
     private readonly uint _audioSsrc;
+    private readonly bool _audioSendEnabled;
     private readonly ILogger<BundledMediaSession> _logger;
 
     /// <summary>Raised with each decrypted inbound audio RTP packet.</summary>
@@ -63,6 +64,7 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(loggerFactory);
 
         _audioMid = options.Audio.Mid;
+        _audioSendEnabled = options.AudioSendEnabled;
         _logger = loggerFactory.CreateLogger<BundledMediaSession>();
 
         // Inbound: demux the shared socket by the negotiated m-lines' payload types, route each MID.
@@ -178,6 +180,13 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     /// <summary>Whether this bundle carries a video track.</summary>
     public bool HasVideo => _video is not null;
 
+    /// <summary>
+    /// Whether outbound audio is sent. False when the negotiated directions do not carry audio from this peer
+    /// to the remote (a send-only/inactive remote answer, or a local side that does not send); the audio
+    /// m-line still anchors the transport and inbound audio is still received.
+    /// </summary>
+    public bool AudioSendEnabled => _audioSendEnabled;
+
     /// <summary>Whether the video track sends multiple simulcast encodings (RFC 8853).</summary>
     public bool VideoIsSimulcast => _video?.IsSimulcast ?? false;
 
@@ -226,9 +235,15 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         _dtls.Start(cancellationToken);
     }
 
-    /// <summary>Sends one audio RTP payload on the audio track (suppressed until DTLS keys the transport).</summary>
+    /// <summary>
+    /// Sends one audio RTP payload on the audio track (suppressed until DTLS keys the transport). A no-op when
+    /// the negotiation did not enable outbound audio (<see cref="AudioSendEnabled"/> is false) — the remote
+    /// will not receive it, so nothing is streamed even if the caller keeps feeding audio.
+    /// </summary>
     public ValueTask SendAudioAsync(ReadOnlyMemory<byte> payload, bool marker = false, CancellationToken cancellationToken = default)
-        => _outbound.SendAsync(_audioMid, payload, marker, cancellationToken: cancellationToken);
+        => _audioSendEnabled
+            ? _outbound.SendAsync(_audioMid, payload, marker, cancellationToken: cancellationToken)
+            : default;
 
     /// <summary>Packetises and sends one encoded video frame on the (non-simulcast) video track.</summary>
     /// <exception cref="InvalidOperationException">This bundle has no video track, or it is simulcast.</exception>

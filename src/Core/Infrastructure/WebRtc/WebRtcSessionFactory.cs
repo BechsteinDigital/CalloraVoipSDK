@@ -100,6 +100,16 @@ internal static class WebRtcSessionFactory
             SamplesPerPacket = clockRate * 20 / 1000, // 20 ms frames
         };
 
+        // Outbound audio follows the negotiated direction (RFC 3264): this peer sends AND the remote receives.
+        // Unlike video, audio is not dropped when it is not sent — the audio m-line anchors the bundle transport
+        // (ICE/DTLS) and inbound audio is still received — so the session suppresses outbound audio instead.
+        var audioSendEnabled = LocalSends(localAudio) && RemoteReceives(remoteAudio);
+        if (!audioSendEnabled)
+            loggerFactory.CreateLogger(typeof(WebRtcSessionFactory)).LogInformation(
+                "Audio is negotiated but not for sending from this peer (local direction {LocalDirection}; remote " +
+                "direction {RemoteDirection}); outbound audio is suppressed (the audio m-line still anchors the " +
+                "bundle transport and inbound audio is still received).", localAudio.Direction, remoteAudio.Direction);
+
         var videoTrack = TryBuildVideoTrack(localDescription, remoteDescription, audioSsrc, loggerFactory);
 
         // A simulcast video track (RFC 8853) needs the negotiated RID header-extension id (RFC 8852) to
@@ -127,6 +137,7 @@ internal static class WebRtcSessionFactory
             MidExtensionId = midExtensionId.Value,
             RidExtensionId = ridExtensionId,
             Audio = audioTrack,
+            AudioSendEnabled = audioSendEnabled,
             Video = videoTrack,
             DtlsIsClient = dtlsIsClient,
             RemoteFingerprint = new DtlsFingerprint { Algorithm = fingerprint.Algorithm, Value = fingerprint.Value },
