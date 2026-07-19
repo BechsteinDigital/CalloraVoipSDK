@@ -323,6 +323,94 @@ public sealed class BundledMediaTransportRelayTests
             InboundPipeline(_ => { }), NullLogger<BundledMediaTransport>.Instance));
     }
 
+    [Fact]
+    public async Task EnterRelayMode_transitions_a_direct_transport_suppressing_sends_until_a_channel_binds()
+    {
+        using var peer = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        using var relayServer = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        var relayEndPoint = (IPEndPoint)relayServer.Client.LocalEndPoint!;
+        var peerEndPoint = (IPEndPoint)peer.Client.LocalEndPoint!;
+
+        await using var transport = new BundledMediaTransport(
+            new BundledMediaTransportOptions { LocalEndPoint = Loopback(), RemoteEndPoint = peerEndPoint },
+            InboundPipeline(_ => { }), NullLogger<BundledMediaTransport>.Instance);
+        await transport.StartAsync();
+
+        // Direct mode: a datagram goes straight to the peer.
+        await transport.SendAsync(new byte[] { 1, 2, 3 }, CancellationToken.None);
+        var direct = await peer.ReceiveAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(new byte[] { 1, 2, 3 }, direct.Buffer);
+
+        // Runtime transition to relay mode (a relay ICE pair was nominated): sends are now suppressed until a
+        // channel is bound — neither the peer nor the relay server sees them (media must not go out unframed).
+        transport.EnterRelayMode(relayEndPoint, onControl: null);
+        await transport.SendAsync(new byte[] { 4, 5, 6 }, CancellationToken.None);
+        await Task.Delay(200);
+        Assert.Equal(0, relayServer.Available);
+        Assert.Equal(0, peer.Available);
+
+        // Bind the channel: subsequent sends are framed as ChannelData to the relay server.
+        transport.SetRelayChannel(new TurnRelayChannel(relayEndPoint, ChannelNumber));
+        await transport.SendAsync(new byte[] { 7, 8, 9 }, CancellationToken.None);
+        var relayed = await relayServer.ReceiveAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.True(TurnChannelDataCodec.TryParse(relayed.Buffer, out var channelNumber, out _));
+        Assert.Equal(ChannelNumber, channelNumber);
+    }
+
+    [Fact]
+    public async Task After_EnterRelayMode_a_relay_server_control_response_is_surfaced_to_the_callback()
+    {
+        using var relayServer = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        var relayEndPoint = (IPEndPoint)relayServer.Client.LocalEndPoint!;
+
+        var controlTcs = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var transport = new BundledMediaTransport(
+            new BundledMediaTransportOptions
+            {
+                LocalEndPoint = Loopback(),
+                RemoteEndPoint = new IPEndPoint(IPAddress.Loopback, 9999),
+            },
+            InboundPipeline(_ => { }), NullLogger<BundledMediaTransport>.Instance);
+        await transport.StartAsync();
+
+        // The control sink is supplied at transition: a ChannelBind response rides the same 5-tuple back.
+        transport.EnterRelayMode(relayEndPoint, onControl: m => controlTcs.TrySetResult(m.ToArray()));
+
+        var response = StunMessage(0x01, 0x09); // ChannelBind success response
+        await relayServer.SendAsync(response, response.Length, transport.LocalEndPoint);
+
+        Assert.Equal(response, await controlTcs.Task.WaitAsync(TimeSpan.FromSeconds(5)));
+    }
+
+    [Fact]
+    public async Task EnterRelayMode_requires_a_remote_endpoint()
+    {
+        // A relay channel is bound to one peer, so relayed inbound must be attributable to it — the transition
+        // must not run without the peer (the nominated remote), else the relay server would be mistaken for it.
+        await using var transport = new BundledMediaTransport(
+            new BundledMediaTransportOptions { LocalEndPoint = Loopback() },
+            InboundPipeline(_ => { }), NullLogger<BundledMediaTransport>.Instance);
+
+        Assert.Throws<InvalidOperationException>(() =>
+            transport.EnterRelayMode(new IPEndPoint(IPAddress.Loopback, 3478), onControl: null));
+    }
+
+    [Fact]
+    public async Task EnterRelayMode_is_rejected_when_already_in_relay_mode()
+    {
+        await using var transport = new BundledMediaTransport(
+            new BundledMediaTransportOptions
+            {
+                LocalEndPoint = Loopback(),
+                RemoteEndPoint = new IPEndPoint(IPAddress.Loopback, 9999),
+                RelayServer = new IPEndPoint(IPAddress.Loopback, 3478),
+            },
+            InboundPipeline(_ => { }), NullLogger<BundledMediaTransport>.Instance);
+
+        Assert.Throws<InvalidOperationException>(() =>
+            transport.EnterRelayMode(new IPEndPoint(IPAddress.Loopback, 5349), onControl: null));
+    }
+
     // ── harness (mirrors BundledMediaTransportTests) ─────────────────────────────
 
     private static TaskCompletionSource<RtpPacket> Tcs() =>

@@ -37,8 +37,12 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IRelayCont
     private readonly BundledInboundPipeline _inbound;
     private readonly ILogger<BundledMediaTransport> _logger;
     private readonly IPEndPoint _localEndPoint;
-    private readonly IPEndPoint? _relayServer;
-    private readonly Action<ReadOnlyMemory<byte>>? _onRelayControl;
+    // The whole-socket relay mode discriminator (RFC 8656 §11–12): non-null routes every send/receive through the
+    // TURN server. Set at construction for a relay-mode transport, or once at runtime via EnterRelayMode when a
+    // relay ICE pair is nominated on a formerly-direct transport. Mutable → read via Volatile on every path (the
+    // receive loop reads it concurrently with the nomination thread that flips it).
+    private IPEndPoint? _relayServer;
+    private Action<ReadOnlyMemory<byte>>? _onRelayControl;
     private readonly UdpClient _udp;
 
     private IRelayDatagramChannel? _relay;
@@ -128,12 +132,41 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IRelayCont
     public void SetRelayChannel(IRelayDatagramChannel channel)
     {
         ArgumentNullException.ThrowIfNull(channel);
-        if (_relayServer is null)
+        if (Volatile.Read(ref _relayServer) is not { } relayServer)
             throw new InvalidOperationException("SetRelayChannel is only valid on a relay-mode transport.");
-        if (!RelayEndPoint.SameEndPoint(channel.RelayServer, _relayServer))
+        if (!RelayEndPoint.SameEndPoint(channel.RelayServer, relayServer))
             throw new ArgumentException("The relay channel is bound to a different TURN server.", nameof(channel));
 
         Volatile.Write(ref _relay, channel);
+    }
+
+    /// <summary>
+    /// Transitions a <em>direct-mode</em> transport into whole-socket relay mode at runtime (RFC 8656 §11–12),
+    /// once a relay ICE pair has been nominated: subsequent sends are suppressed until <see cref="SetRelayChannel"/>
+    /// binds a channel, then every datagram (STUN/DTLS/RTP/RTCP) is framed as ChannelData to
+    /// <paramref name="relayServer"/> and inbound datagrams are unwrapped from it — the peer is reached through the
+    /// relay, not directly. The nominated peer must already be the transport's remote endpoint (relayed inbound is
+    /// attributed to it). The per-pair indication path used during checking (<see cref="SetIndicationRelay"/>) goes
+    /// dormant — the relay-mode receive branch supersedes it — so its channel is left untouched. Call at most once
+    /// and only on a transport not already in relay mode; the control sink is published before the mode flips so a
+    /// control response arriving the instant the mode changes still has a sink.
+    /// </summary>
+    /// <param name="relayServer">The TURN server the allocation lives on.</param>
+    /// <param name="onControl">Sink for the relay server's non-ChannelData STUN control responses (ChannelBind/Refresh).</param>
+    /// <exception cref="InvalidOperationException">Already in relay mode, or no remote endpoint (bound peer) is set.</exception>
+    public void EnterRelayMode(IPEndPoint relayServer, Action<ReadOnlyMemory<byte>>? onControl)
+    {
+        ArgumentNullException.ThrowIfNull(relayServer);
+        if (Volatile.Read(ref _relayServer) is not null)
+            throw new InvalidOperationException("The transport is already in relay mode.");
+        if (Volatile.Read(ref _remoteEndPoint) is null)
+            throw new InvalidOperationException(
+                "EnterRelayMode requires a remote endpoint — the bound peer relayed inbound traffic is attributed to.");
+
+        // Publish the control sink before flipping the mode discriminator (the receive loop's gate), so observing
+        // relay mode implies the sink is visible too.
+        Volatile.Write(ref _onRelayControl, onControl);
+        Volatile.Write(ref _relayServer, relayServer);
     }
 
     /// <summary>
@@ -155,7 +188,7 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IRelayCont
         Action<ReadOnlyMemory<byte>>? onControl = null)
     {
         ArgumentNullException.ThrowIfNull(indicationRelay);
-        if (_relayServer is not null)
+        if (Volatile.Read(ref _relayServer) is not null)
             throw new InvalidOperationException(
                 "SetIndicationRelay is for direct-mode transports; this transport runs the whole-socket relay mode.");
 
@@ -196,7 +229,7 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IRelayCont
             return;
         }
 
-        if (_relayServer is not null)
+        if (Volatile.Read(ref _relayServer) is not null)
         {
             // Relay mode, but the channel is not bound yet (allocation still in progress) — suppress media
             // rather than send it unframed to the relay server, which would drop it. Trace-level: this can
@@ -236,7 +269,7 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IRelayCont
             return;
         }
 
-        if (_relayServer is not null)
+        if (Volatile.Read(ref _relayServer) is not null)
         {
             // Relay mode, channel not bound yet — an ICE check to the peer cannot go out unframed. Suppress
             // it; ICE will retransmit once the channel is bound. Trace-level: fires per ICE retransmit.
@@ -256,7 +289,7 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IRelayCont
     /// <exception cref="InvalidOperationException">The transport is not in relay mode.</exception>
     public async ValueTask SendControlAsync(ReadOnlyMemory<byte> request, CancellationToken cancellationToken)
     {
-        if (_relayServer is not { } relayServer)
+        if (Volatile.Read(ref _relayServer) is not { } relayServer)
             throw new InvalidOperationException("SendControlAsync is only valid on a relay-mode transport.");
 
         await _udp.SendAsync(request, relayServer, cancellationToken).ConfigureAwait(false);
@@ -316,11 +349,11 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IRelayCont
     // mode passes through unchanged.
     private void DeliverInbound(ReadOnlySpan<byte> datagram, IPEndPoint source)
     {
-        if (_relayServer is { } relayServer)
+        if (Volatile.Read(ref _relayServer) is { } relayServer)
         {
             // Data path: once a channel is bound, ChannelData for it is media. Present the bound peer as the
-            // source (guaranteed set for a relay transport by the constructor) so the pipeline's STUN/ICE and
-            // source-filtered paths see the peer, never the TURN server the datagram physically arrived from.
+            // source (guaranteed set for a relay transport by the constructor / EnterRelayMode) so the pipeline's
+            // STUN/ICE and source-filtered paths see the peer, never the TURN server it physically arrived from.
             if (Volatile.Read(ref _relay) is { } relay && relay.TryUnwrap(datagram, source, out var payload))
             {
                 _inbound.ProcessInboundDatagram(payload, Volatile.Read(ref _remoteEndPoint) ?? source);
@@ -331,7 +364,7 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IRelayCont
             // the TURN control plane — STUN Allocate/Permission/ChannelBind/Refresh responses (and
             // Data-Indications) that ride the same 5-tuple. Hand them to the control callback to match by
             // transaction id; the transport stays agnostic. Anything else did not come through the relay.
-            if (_onRelayControl is { } onControl
+            if (Volatile.Read(ref _onRelayControl) is { } onControl
                 && RelayEndPoint.SameEndPoint(source, relayServer)
                 && MediaPacketClassifier.Classify(datagram) == MediaPacketKind.Stun)
             {
