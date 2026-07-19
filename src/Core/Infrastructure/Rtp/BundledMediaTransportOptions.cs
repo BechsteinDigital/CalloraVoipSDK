@@ -1,4 +1,5 @@
 using System.Net;
+using CalloraVoipSdk.Core.Infrastructure.Common.Relay;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
 
@@ -17,4 +18,13 @@ internal sealed class BundledMediaTransportOptions
     /// address is not known yet (ICE will supply it). Sends are suppressed while it is null.
     /// </summary>
     public IPEndPoint? RemoteEndPoint { get; init; }
+
+    /// <summary>
+    /// When set, the transport runs in TURN relay mode: every outbound datagram is framed as ChannelData to
+    /// the relay server and every inbound datagram is unwrapped from it (RFC 8656 §11–12), so STUN checks,
+    /// DTLS flights and RTP/RTCP all traverse the one bound channel. <see langword="null"/> is direct
+    /// (host/srflx) transport. Obtaining the channel (allocation, permission, channel-bind, refresh) is a
+    /// later slice; this option is the seam the data path plugs into.
+    /// </summary>
+    public IRelayDatagramChannel? Relay { get; init; }
 }
