@@ -96,16 +96,6 @@ internal sealed class TurnRelayChannel : IRelayDatagramChannel
     public bool IsFromRelay(IPEndPoint source)
     {
         ArgumentNullException.ThrowIfNull(source);
-        return SameEndPoint(source, _relayServer);
+        return RelayEndPoint.SameEndPoint(source, _relayServer);
     }
-
-    // An IPv4 relay endpoint and an IPv4-mapped-IPv6 source (::ffff:a.b.c.d — how a dual-stack socket can
-    // surface the same host) denote the same peer. Canonicalise both addresses before comparing so the
-    // source filter neither drops genuine relayed traffic on a dual-stack socket nor lets a different host
-    // through (mapping is a lossless, host-preserving transform).
-    private static bool SameEndPoint(IPEndPoint a, IPEndPoint b)
-        => a.Port == b.Port && Canonical(a.Address).Equals(Canonical(b.Address));
-
-    private static IPAddress Canonical(IPAddress address)
-        => address.IsIPv4MappedToIPv6 ? address.MapToIPv4() : address;
 }

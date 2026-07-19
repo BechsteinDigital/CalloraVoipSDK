@@ -20,11 +20,20 @@ internal sealed class BundledMediaTransportOptions
     public IPEndPoint? RemoteEndPoint { get; init; }
 
     /// <summary>
-    /// When set, the transport runs in TURN relay mode: every outbound datagram is framed as ChannelData to
-    /// the relay server and every inbound datagram is unwrapped from it (RFC 8656 §11–12), so STUN checks,
-    /// DTLS flights and RTP/RTCP all traverse the one bound channel. <see langword="null"/> is direct
-    /// (host/srflx) transport. Obtaining the channel (allocation, permission, channel-bind, refresh) is a
-    /// later slice; this option is the seam the data path plugs into.
+    /// The TURN relay server's transport address. When set, the transport runs in relay mode: TURN control
+    /// requests can be sent (<see cref="BundledMediaTransport.SendControlAsync"/>) and control responses from
+    /// this address are surfaced via <see cref="OnRelayControl"/>, even before a channel is bound — this is
+    /// the control phase during which the allocation is established. <see langword="null"/> is direct
+    /// (host/srflx) transport. If only <see cref="Relay"/> is supplied, the server address is taken from it.
+    /// </summary>
+    public IPEndPoint? RelayServer { get; init; }
+
+    /// <summary>
+    /// The bound relay channel. When set, every outbound datagram is framed as ChannelData to the relay
+    /// server and every inbound one is unwrapped from it (RFC 8656 §11–12), so STUN checks, DTLS flights and
+    /// RTP/RTCP all traverse the one bound channel. It may be supplied up front (the channel is already
+    /// known) or installed after the channel-bind via <see cref="BundledMediaTransport.SetRelayChannel"/>
+    /// once the allocation completes; until then, in relay mode, outbound media is suppressed.
     /// </summary>
     public IRelayDatagramChannel? Relay { get; init; }
 
