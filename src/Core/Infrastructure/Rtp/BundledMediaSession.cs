@@ -46,6 +46,11 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     private int _relayTransitionStarted;
     private Task? _relayTransitionTask;
     private readonly CancellationTokenSource _relayTransitionCts = new();
+    // Set once the transition actually SUCCEEDED (channel installed) — not merely started, so a failed ChannelBind
+    // (transition abandoned, media back on the checked path) still lets a later nomination re-point the transport.
+    // Once set, the transport is relay-committed to the bound peer: a later relay→direct re-nomination must not
+    // re-point its remote (the bound channel forwards to the relay peer; re-pointing would mis-attribute inbound).
+    private int _relayTransitioned;
 
     /// <summary>Raised with each decrypted inbound audio RTP packet.</summary>
     public event Action<RtpPacket>? AudioReceived;
@@ -297,9 +302,17 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     // the handshake completes against the checked candidate rather than the initial SDP endpoint.
     private void OnPairNominated(IPEndPoint remoteEndPoint)
     {
+        // Once the relay data path is committed the transport is bound to the relay peer; a later re-nomination
+        // (e.g. a direct path that only recovered after relay won) must not re-point the transport, or inbound
+        // ChannelData — unwrapped and attributed to _remoteEndPoint — would be mis-sourced. Stay on the relay pair.
+        if (Volatile.Read(ref _relayTransitioned) != 0)
+            return;
         _transport.SetRemoteEndPoint(remoteEndPoint);
         _dtls.SetRemoteEndPoint(remoteEndPoint);
     }
+
+    /// <summary>Test seam: whether the transport has switched onto the relay data path (RFC 8656 ChannelData).</summary>
+    internal bool RelayDataPathActive => Volatile.Read(ref _relayTransitioned) != 0;
 
     // A relay pair won ICE: switch the transport onto the relay data path (RFC 8656). Runs on the driver thread
     // right after OnPairNominated has already pointed the transport's remote and DTLS at the peer (the
@@ -324,8 +337,14 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         try
         {
             var channel = await bindChannel(peer, _relayTransitionCts.Token).ConfigureAwait(false);
+            // Re-assert the relay peer as the transport remote right before the flip, in case a direct
+            // re-nomination re-pointed it during the (sub-second) ChannelBind — the bound channel forwards to
+            // this peer, and inbound ChannelData is attributed to it.
+            _transport.SetRemoteEndPoint(peer);
             _transport.EnterRelayMode(binding.Indication.RelayServer, binding.OnControl);
             _transport.SetRelayChannel(channel);
+            // Commit: from here a later re-nomination must not re-point the transport (see OnPairNominated).
+            Volatile.Write(ref _relayTransitioned, 1);
             _logger.LogInformation(
                 "Relay data path activated for the nominated relay pair: media now flows as ChannelData through the " +
                 "TURN server (RFC 8656 §11–12).");
