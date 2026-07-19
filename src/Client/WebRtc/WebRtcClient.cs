@@ -7,6 +7,7 @@ using CalloraVoipSdk.Core.Infrastructure.Sdp.OfferAnswer;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Parsing;
 using CalloraVoipSdk.Core.Infrastructure.Stun.Client;
 using CalloraVoipSdk.Core.Infrastructure.Stun.Wire;
+using CalloraVoipSdk.Core.Infrastructure.Turn.Client;
 using CalloraVoipSdk.Core.Infrastructure.WebRtc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -95,6 +96,13 @@ public sealed class WebRtcClient : IWebRtcClient
                 _loggerFactory)
             : null;
 
+        // A TURN allocation probe is built only when a UDP TURN server is configured; it gathers a relay
+        // candidate on the media socket during GatherCandidatesAsync (RFC 8656). The probe serves UDP relay
+        // over the media socket only, so a TCP/TLS-only TURN config needs no probe; STUN-only stays host+srflx.
+        var turnProbe = _config.IceServers.Any(s => s.Type == IceServerType.Turn && s.Transport == IceTransport.Udp)
+            ? new TurnAllocationProbe(new StunMessageCodec(), _loggerFactory)
+            : null;
+
         var peer = new WebRtcPeerConnection(
             options,
             new SdpOfferAnswerNegotiator(),
@@ -103,7 +111,8 @@ public sealed class WebRtcClient : IWebRtcClient
             new DtlsSrtpHandshaker(_loggerFactory.CreateLogger<DtlsSrtpHandshaker>()),
             certificate,
             _loggerFactory,
-            stunProbe);
+            stunProbe,
+            turnProbe);
 
         var connection = new PeerConnection(peer, _loggerFactory.CreateLogger<PeerConnection>(), _peers.Untrack);
         _peers.Track(connection);

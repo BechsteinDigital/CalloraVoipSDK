@@ -8,6 +8,9 @@ using CalloraVoipSdk.Core.Infrastructure.Rtp;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Models;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.OfferAnswer;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Parsing;
+using CalloraVoipSdk.Core.Infrastructure.Stun.Auth;
+using CalloraVoipSdk.Core.Infrastructure.Stun.Client;
+using CalloraVoipSdk.Core.Infrastructure.Turn.Client;
 using Microsoft.Extensions.Logging;
 
 namespace CalloraVoipSdk.Core.Infrastructure.WebRtc;
@@ -46,6 +49,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     private readonly IDtlsSrtpHandshaker _handshaker;
     private readonly DtlsCertificate _certificate;
     private readonly IIceStunProbe? _stunProbe;
+    private readonly TurnAllocationProbe? _turnProbe;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<WebRtcPeerConnection> _logger;
     private readonly object _sync = new();
@@ -69,6 +73,11 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     private UdpClient? _mediaSocket;
     private bool _socketHandedOver;
     private bool _started;
+    // The relay allocation gathered on the media socket (RFC 8656), retained so the relay coordinator can
+    // adopt it post-Start without re-allocating: the allocation is keyed to the socket's 5-tuple, which
+    // survives the hand-over to the transport. Holds the first successful allocation and its TURN server.
+    // Guarded by _sync.
+    private (IPEndPoint ServerEndPoint, TurnAllocateResult Allocation)? _gatheredRelay;
     // Trickle ICE (RFC 8838): remote candidates that arrived before the session (and its connectivity-check
     // list) existed, buffered and handed to the session on build. Post-session candidates go straight to the
     // check list. Guarded by _sync.
@@ -87,8 +96,8 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     /// Raised as each local ICE candidate is gathered (RFC 8838 trickle), carrying the RFC 8829
     /// <c>candidate:</c> line so the app can signal it out-of-band. The host candidate (the early-bound
     /// media endpoint) is emitted right after the offer/answer is produced; server-reflexive candidates
-    /// follow from <see cref="GatherCandidatesAsync"/> when STUN servers are configured. Relay (TURN)
-    /// gathering arrives in a later slice.
+    /// follow from <see cref="GatherCandidatesAsync"/> when STUN servers are configured, and relay (TURN)
+    /// candidates when a UDP TURN server is configured and its allocation on the media socket succeeds.
     /// </summary>
     public event Action<string>? LocalIceCandidateDiscovered;
 
@@ -100,7 +109,8 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         IDtlsSrtpHandshaker handshaker,
         DtlsCertificate certificate,
         ILoggerFactory loggerFactory,
-        IIceStunProbe? stunProbe = null)
+        IIceStunProbe? stunProbe = null,
+        TurnAllocationProbe? turnProbe = null)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
         ArgumentNullException.ThrowIfNull(options.LocalEndPoint);
@@ -113,6 +123,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         _handshaker = handshaker ?? throw new ArgumentNullException(nameof(handshaker));
         _certificate = certificate ?? throw new ArgumentNullException(nameof(certificate));
         _stunProbe = stunProbe;
+        _turnProbe = turnProbe;
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
         _logger = loggerFactory.CreateLogger<WebRtcPeerConnection>();
     }
@@ -150,6 +161,18 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     public IPEndPoint? RemoteMediaEndPoint
     {
         get { lock (_sync) { return _session?.RemoteEndPoint; } }
+    }
+
+    /// <summary>
+    /// The TURN relay allocation gathered on the media socket during <see cref="GatherCandidatesAsync"/>
+    /// (its TURN server endpoint and the allocation — relayed endpoint, lifetime, effective realm/nonce
+    /// credentials), or null when no relay was gathered. Retained so the relay coordinator can adopt the
+    /// allocation post-Start without re-allocating: it is keyed to the media socket's 5-tuple, which is
+    /// preserved across the hand-over to the transport. The full relay data path is wired in a later slice.
+    /// </summary>
+    internal (IPEndPoint ServerEndPoint, TurnAllocateResult Allocation)? GatheredRelayAllocation
+    {
+        get { lock (_sync) { return _gatheredRelay; } }
     }
 
     /// <summary>
@@ -445,15 +468,18 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     }
 
     /// <summary>
-    /// Gathers server-reflexive ICE candidates (RFC 8445 §5.1.1) by querying each configured STUN server
-    /// through the pre-bound media socket, emitting every discovered candidate on
-    /// <see cref="LocalIceCandidateDiscovered"/> (RFC 8838 trickle). No-op without a STUN probe or servers.
-    /// Call after the offer/answer is produced and BEFORE <see cref="StartAsync"/> — the query shares the
-    /// media socket, which the transport's receive loop takes over once started.
+    /// Gathers server-reflexive (RFC 8445 §5.1.1) and relay (RFC 8656) ICE candidates through the pre-bound
+    /// media socket, emitting every discovered candidate on <see cref="LocalIceCandidateDiscovered"/> (RFC
+    /// 8838 trickle). STUN servers yield srflx candidates (needs a STUN probe); UDP TURN servers yield a
+    /// relay candidate when the allocation on the media socket succeeds (needs a TURN probe), and the
+    /// allocation is retained for later coordinator adoption (<see cref="GatheredRelayAllocation"/>). No-op
+    /// without matching probes or servers. Call after the offer/answer is produced and BEFORE
+    /// <see cref="StartAsync"/> — the queries share the media socket, which the transport's receive loop
+    /// takes over once started.
     /// </summary>
     public async Task GatherCandidatesAsync(CancellationToken cancellationToken = default)
     {
-        if (_stunProbe is null || _options.IceServers.Count == 0)
+        if (_options.IceServers.Count == 0)
             return;
 
         var local = EnsureLocalMediaEndPoint();
@@ -466,25 +492,85 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             socket = _mediaSocket!.Client;
         }
 
+        // Sequential per server: each gathering step temporarily runs its own receive loop on the shared
+        // media socket, so they must not overlap (nor overlap the transport's post-Start loop).
         foreach (var server in _options.IceServers)
         {
-            if (server.Type != IceServerType.Stun)
+            switch (server.Type)
             {
-                // Only STUN server-reflexive gathering is wired today; TURN relay gathering + the relay
-                // media data-path are not yet supported (a later slice). Surface the skip instead of
-                // silently ignoring a configured TURN server.
-                _logger.LogDebug(
-                    "Skipping ICE server {Host} of type {Type}: only STUN gathering is supported; TURN relay is not yet wired.",
-                    server.Host, server.Type);
-                continue;
+                case IceServerType.Stun:
+                    await GatherServerReflexiveAsync(server, local, socket, cancellationToken).ConfigureAwait(false);
+                    break;
+                case IceServerType.Turn:
+                    await GatherRelayAsync(server, local, socket, cancellationToken).ConfigureAwait(false);
+                    break;
+                default:
+                    _logger.LogDebug("Skipping ICE server {Host} of unsupported type {Type}.", server.Host, server.Type);
+                    break;
             }
-
-            var reflexive = await _stunProbe
-                .TryGetServerReflexiveEndPointAsync(local, server, socket, cancellationToken)
-                .ConfigureAwait(false);
-            if (reflexive is not null)
-                RaiseCandidate(ServerReflexiveCandidate(reflexive, local));
         }
+    }
+
+    // Queries one STUN server for the server-reflexive endpoint and emits an srflx candidate on success.
+    // No-op without a STUN probe (a peer configured with STUN servers but no probe gathers host-only).
+    private async Task GatherServerReflexiveAsync(
+        IceServerConfiguration server, IPEndPoint local, Socket socket, CancellationToken ct)
+    {
+        if (_stunProbe is null)
+            return;
+
+        var reflexive = await _stunProbe
+            .TryGetServerReflexiveEndPointAsync(local, server, socket, ct)
+            .ConfigureAwait(false);
+        if (reflexive is not null)
+            RaiseCandidate(ServerReflexiveCandidate(reflexive, local));
+    }
+
+    // Allocates a TURN relay on the media socket and emits a relay candidate on success, retaining the first
+    // allocation for later coordinator adoption. No-op without a TURN probe. Only UDP TURN is gathered over
+    // the media socket — TCP/TLS TURN needs its own connection (a later slice) — and a failed allocation is
+    // simply no relay candidate (as with a failed srflx query), never a throw.
+    private async Task GatherRelayAsync(
+        IceServerConfiguration server, IPEndPoint local, Socket socket, CancellationToken ct)
+    {
+        if (_turnProbe is null)
+        {
+            _logger.LogDebug(
+                "Skipping TURN server {Host}: no TURN allocation probe is configured, so no relay candidate is gathered.",
+                server.Host);
+            return;
+        }
+
+        if (server.Transport != IceTransport.Udp)
+        {
+            _logger.LogDebug(
+                "Skipping TURN server {Host} with transport {Transport}: relay gathering runs over the UDP media socket only.",
+                server.Host, server.Transport);
+            return;
+        }
+
+        var serverEndPoint = await ResolveTurnServerEndPointAsync(server, socket.AddressFamily, ct).ConfigureAwait(false);
+        if (serverEndPoint is null)
+        {
+            _logger.LogDebug(
+                "Skipping TURN server {Host}: no address resolved in the media socket's family {Family}.",
+                server.Host, socket.AddressFamily);
+            return;
+        }
+
+        var allocation = await _turnProbe
+            .TryAllocateAsync(socket, serverEndPoint, BuildTurnCredentials(server), lifetimeSeconds: null, ct)
+            .ConfigureAwait(false);
+        if (allocation is null)
+            return;
+
+        // Retain the first successful allocation for the relay coordinator to adopt post-Start; further
+        // successes still emit a candidate but do not replace the retained one.
+        lock (_sync)
+            _gatheredRelay ??= (serverEndPoint, allocation);
+
+        // raddr/rport carry the mapped (server-reflexive) base the server reported, else the host base.
+        RaiseCandidate(RelayCandidate(allocation.RelayedEndPoint, allocation.MappedEndPoint ?? local));
     }
 
     // Parses an RFC 8829 candidate string ("candidate:…", tolerating a leading "a=") into a component-1
@@ -650,6 +736,47 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         RelatedAddress = host.Address.ToString(),
         RelatedPort = host.Port,
     };
+
+    // A relay candidate for the TURN-allocated relayed endpoint (RFC 8445 §5.1.2.1 priority: relay type-pref
+    // 0, local-pref 65535, RTP component 1). raddr/rport carry the base the relay relates to (RFC 8839): the
+    // server-reflexive address from the Allocate response when present, else the local host base.
+    private static SdpIceCandidate RelayCandidate(IPEndPoint relayed, IPEndPoint relatedBase) => new()
+    {
+        Foundation = "3",
+        Component = 1,
+        Transport = "udp",
+        Priority = (0L << 24) | (65535L << 8) | 255L,
+        Address = relayed.Address.ToString(),
+        Port = relayed.Port,
+        Type = "relay",
+        RelatedAddress = relatedBase.Address.ToString(),
+        RelatedPort = relatedBase.Port,
+    };
+
+    // Long-term TURN credentials from the configured username/password, or null for an open server. A
+    // bootstrap realm (the server host, replaced by the server's real realm on the 401 challenge, and never
+    // put on the wire — the first Allocate is unauthenticated) marks the credentials long-term so the
+    // allocation runs the RFC 5389 §10.2 challenge flow. That flow yields the effective realm/nonce the relay
+    // coordinator needs to adopt the allocation without re-challenging; short-term credentials skip it.
+    private static StunCredentials? BuildTurnCredentials(IceServerConfiguration server)
+        => string.IsNullOrWhiteSpace(server.Username) || string.IsNullOrWhiteSpace(server.Password)
+            ? null
+            : new StunCredentials { Username = server.Username, Password = server.Password, Realm = server.Host };
+
+    // Resolves the TURN server's transport address in the media socket's address family (RFC 8656 default
+    // port 3478), or null when no address in that family resolves — a mismatched family would fail the send.
+    private static async Task<IPEndPoint?> ResolveTurnServerEndPointAsync(
+        IceServerConfiguration server, AddressFamily addressFamily, CancellationToken ct)
+    {
+        const int defaultTurnPort = 3478;
+        var port = server.Port ?? defaultTurnPort;
+        if (IPAddress.TryParse(server.Host, out var ip))
+            return new IPEndPoint(ip, port);
+
+        var addresses = await Dns.GetHostAddressesAsync(server.Host, ct).ConfigureAwait(false);
+        var address = StunIceProbe.PickAddressForFamily(addresses, addressFamily);
+        return address is null ? null : new IPEndPoint(address, port);
+    }
 
     private void TransitionTo(WebRtcConnectionState next)
     {
