@@ -32,4 +32,11 @@ internal sealed class TurnAllocateResult
     /// RFC 8016 mobility ticket returned by the server, when requested/supported.
     /// </summary>
     public byte[]? MobilityTicket { get; init; }
+
+    /// <summary>
+    /// The RESERVATION-TOKEN returned when the allocation was made with EVEN-PORT (reserve), or
+    /// <see langword="null"/> otherwise. Replay it via <c>TurnAllocateOptions.ReservationToken</c> in a later
+    /// Allocate to claim the reserved companion port (RFC 8656 §7).
+    /// </summary>
+    public ulong? ReservationToken { get; init; }
 }

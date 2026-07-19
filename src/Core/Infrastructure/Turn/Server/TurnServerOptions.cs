@@ -84,4 +84,10 @@ internal sealed class TurnServerOptions
     /// Enables RFC 8016 mobility ticket processing.
     /// </summary>
     public bool EnableMobility { get; init; }
+
+    /// <summary>
+    /// How long a port reserved by an EVEN-PORT (reserve) allocation is held for the follow-up
+    /// RESERVATION-TOKEN allocation before it is released (RFC 8656 §7). Default 30 s.
+    /// </summary>
+    public uint PortReservationLifetimeSeconds { get; init; } = 30;
 }

@@ -37,6 +37,7 @@ internal sealed class TurnServer : IAsyncDisposable
     private readonly TurnTcpExtensionHandler _tcpExtensionHandler;
     private readonly TurnTcpPassiveConnectionService _tcpPassiveConnectionService;
     private readonly TurnAllocateRequestHandler _allocateRequestHandler;
+    private readonly TurnPortReservationStore _reservationStore;
     private readonly X509Certificate2? _tlsServerCertificate;
     private readonly UdpClient? _udp;
     private readonly TcpListener? _tcpListener;
@@ -108,12 +109,15 @@ internal sealed class TurnServer : IAsyncDisposable
             StartRelayTask);
         _refreshHandler = new TurnRefreshRequestHandler(_options, _responseFactory, _mobilityService, _registry);
         _permissionHandler = new TurnPermissionRequestHandler(_options, _responseFactory, _registry);
+        _reservationStore = new TurnPortReservationStore(
+            TimeSpan.FromSeconds(_options.PortReservationLifetimeSeconds), _logger);
         _allocateRequestHandler = new TurnAllocateRequestHandler(
             _options,
             _responseFactory,
             _mobilityService,
             _registry.ReplaceAsync,
             _registry.HasCapacity,
+            _reservationStore,
             _logger);
         _tcpExtensionHandler = new TurnTcpExtensionHandler(
             _registry.Table,
@@ -232,6 +236,7 @@ internal sealed class TurnServer : IAsyncDisposable
         _udp?.Dispose();
         _tcpListener?.Stop();
         await _tcpConnectionBroker.DisposeAsync().ConfigureAwait(false);
+        await _reservationStore.DisposeAsync().ConfigureAwait(false);
         _streamConnectionSlots?.Dispose();
         _udpPacketSlots?.Dispose();
         _registry.Dispose();
