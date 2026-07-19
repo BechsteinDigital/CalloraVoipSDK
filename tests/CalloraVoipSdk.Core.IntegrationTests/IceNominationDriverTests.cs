@@ -107,6 +107,56 @@ public sealed class IceNominationDriverTests
     }
 
     [Fact]
+    public async Task A_local_candidate_added_after_start_is_paired_against_existing_remotes_and_nominated()
+    {
+        var remote = Ep(5802);
+        var nominated = new TaskCompletionSource<IceLocalCandidate>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        // The only local at start never reaches the remote; a local added after Start (the answerer's late
+        // relay path) does — it must be paired against the already-known remote and nominated.
+        var direct = new IceLocalCandidate { Type = "host", Priority = 2_000_000, Check = (_, _, _) => Task.FromResult(false) };
+
+        await using var driver = new IceNominationDriver(
+            [direct],
+            [new IceRemoteCandidate(remote, Priority: 100)],
+            (local, _) => nominated.TrySetResult(local),
+            NullLoggerFactory.Instance,
+            maxAttempts: 3,
+            roundDelay: TimeSpan.FromMilliseconds(1));
+
+        driver.Start();
+        driver.AddLocalCandidate(new IceLocalCandidate { Type = "relay", Priority = 1_000, Check = (_, _, _) => Task.FromResult(true) });
+
+        var winner = await nominated.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal("relay", winner.Type);
+    }
+
+    [Fact]
+    public async Task A_local_candidate_added_after_start_also_pairs_against_later_trickled_remotes()
+    {
+        var trickled = Ep(5902);
+        var nominated = new TaskCompletionSource<IceLocalCandidate>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        // No remotes and only an unreachable direct local at start. Add a relay local, THEN trickle a remote it
+        // reaches — the late local must be in the local set the trickled remote pairs against (both sides of the
+        // cross product retained), else the trickled remote pairs only against the dead direct local.
+        var direct = new IceLocalCandidate { Type = "host", Priority = 2_000_000, Check = (_, _, _) => Task.FromResult(false) };
+
+        await using var driver = new IceNominationDriver(
+            [direct], [],
+            (local, _) => nominated.TrySetResult(local),
+            NullLoggerFactory.Instance,
+            maxAttempts: 3,
+            roundDelay: TimeSpan.FromMilliseconds(5));
+
+        driver.Start();
+        driver.AddLocalCandidate(new IceLocalCandidate { Type = "relay", Priority = 1_000, Check = (t, _, _) => Task.FromResult(t.Equals(trickled)) });
+        driver.AddCandidate(new IceRemoteCandidate(trickled, Priority: 100));
+
+        Assert.Equal("relay", (await nominated.Task.WaitAsync(TimeSpan.FromSeconds(5))).Type);
+    }
+
+    [Fact]
     public async Task A_trickled_candidate_added_after_start_is_checked_and_nominated()
     {
         var trickled = Ep(5102);

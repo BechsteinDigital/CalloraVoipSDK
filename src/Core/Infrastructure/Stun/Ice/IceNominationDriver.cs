@@ -33,7 +33,12 @@ namespace CalloraVoipSdk.Core.Infrastructure.Stun.Ice;
 /// </summary>
 internal sealed class IceNominationDriver : IAsyncDisposable
 {
-    private readonly IReadOnlyList<IceLocalCandidate> _localCandidates;
+    // Local candidates and the remotes seen so far are both mutable (guarded by _gate): a local candidate can
+    // be added after construction (AddLocalCandidate — the answerer's late relay path), and each must pair
+    // against every remote known then plus every remote that trickles in later, so both sides of the cross
+    // product are retained rather than only the formed pairs.
+    private readonly List<IceLocalCandidate> _localCandidates;
+    private readonly List<IceRemoteCandidate> _remotes = [];
     private readonly Action<IceLocalCandidate, IPEndPoint> _onNominated;
     private readonly int _maxAttempts;
     private readonly TimeSpan _roundDelay;
@@ -74,7 +79,8 @@ internal sealed class IceNominationDriver : IAsyncDisposable
         TimeSpan? roundDelay = null,
         Func<TimeSpan, CancellationToken, Task>? delay = null)
     {
-        _localCandidates = localCandidates ?? throw new ArgumentNullException(nameof(localCandidates));
+        ArgumentNullException.ThrowIfNull(localCandidates);
+        _localCandidates = [.. localCandidates];
         ArgumentNullException.ThrowIfNull(remoteCandidates);
         _onNominated = onNominated ?? throw new ArgumentNullException(nameof(onNominated));
         ArgumentNullException.ThrowIfNull(loggerFactory);
@@ -121,20 +127,48 @@ internal sealed class IceNominationDriver : IAsyncDisposable
         }
     }
 
-    // Forms a pair between the remote candidate and every local candidate. Caller holds _gate (or is the
+    /// <summary>
+    /// Adds a local candidate discovered after construction — the answerer's relay send path, whose TURN
+    /// allocation only finished gathering once the session (and this driver) already existed, so it could not
+    /// be seeded like the offerer's relay candidate. It is paired against every remote seen so far and against
+    /// every remote that trickles in later, and connectivity-checked like any other pair (ordered by pair
+    /// priority, so a lower-preference relay is only nominated when no direct pair works). No-op after disposal.
+    /// Safe to call before or after <see cref="Start"/>.
+    /// </summary>
+    /// <param name="candidate">The local candidate (send path) to pair in.</param>
+    public void AddLocalCandidate(IceLocalCandidate candidate)
+    {
+        ArgumentNullException.ThrowIfNull(candidate);
+        lock (_gate)
+        {
+            if (_disposed)
+                return;
+            _localCandidates.Add(candidate);
+            foreach (var remote in _remotes)
+                AddPair(candidate, remote);
+            // Release inside the gate for the same disposed-vs-release atomicity as AddCandidate.
+            _signal.Release();
+        }
+    }
+
+    // Records the remote and forms a pair between it and every local candidate. Caller holds _gate (or is the
     // constructor, before the instance is published).
     private void AddPairsForRemote(IceRemoteCandidate remote)
     {
+        _remotes.Add(remote);
         foreach (var local in _localCandidates)
-        {
-            _pairs.Add(new IceNominationPairState
-            {
-                Local = local,
-                Remote = remote,
-                PairPriority = ComputePairPriority(local.Priority, remote.Priority),
-            });
-        }
+            AddPair(local, remote);
     }
+
+    // Forms one candidate pair (RFC 8445 §6.1.2) at its computed pair priority (§6.1.2.3). Caller holds _gate
+    // (or is the constructor).
+    private void AddPair(IceLocalCandidate local, IceRemoteCandidate remote) =>
+        _pairs.Add(new IceNominationPairState
+        {
+            Local = local,
+            Remote = remote,
+            PairPriority = ComputePairPriority(local.Priority, remote.Priority),
+        });
 
     private async Task RunAsync(CancellationToken ct)
     {

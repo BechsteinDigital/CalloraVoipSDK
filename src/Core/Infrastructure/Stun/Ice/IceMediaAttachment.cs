@@ -32,7 +32,10 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
     private IceNominatedTarget? _lastNominated;
     // The relay local candidate's send path (TURN-framed), or null when no TURN allocation was gathered.
     // Held so a relay nomination can redirect consent freshness through it (RFC 7675 over the allocation).
-    private readonly Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>? _relaySend;
+    // Set at construction (offerer, whose allocation is gathered before the session) or post-construction via
+    // AddRelayLocalCandidate (answerer late adoption). Written on the gather thread, read on the driver loop —
+    // accessed under Volatile so the read sees the store the relay candidate's Check closure was built with.
+    private Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>? _relaySend;
     private readonly ILogger<IceMediaAttachment> _logger;
 
     /// <summary>
@@ -180,6 +183,39 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
     /// <param name="candidate">The trickled remote candidate.</param>
     public void AddRemoteCandidate(IceRemoteCandidate candidate) => _nominationDriver?.AddCandidate(candidate);
 
+    /// <summary>
+    /// Adds the relay ICE local candidate after construction (RFC 8445 §5.1.1.2) — the answerer path, whose
+    /// TURN allocation only finishes gathering once this attachment already exists, so its relay path could not
+    /// be seeded at construction the way the offerer's is. Stores the relay send path so a later relay
+    /// nomination redirects consent freshness through it, then hands the nomination driver a relay local
+    /// candidate (type preference 0, below host/srflx) paired against every remote — so a relayed pair is
+    /// checked and, if no direct pair works, nominated. No-op on a controlled agent (no driver — it adopts the
+    /// pair the controlling peer nominates) or when consent/ICE is inactive. Call at most once: a connection is
+    /// offerer XOR answerer for a given allocation, and the offerer already seeded its relay candidate.
+    /// </summary>
+    /// <param name="relaySend">
+    /// The relay local candidate's TURN-framed send path — <c>(datagram, remoteTarget, ct)</c>, framing the
+    /// datagram to the remote through the TURN allocation (Send indication, RFC 8656 §10).
+    /// </param>
+    public void AddRelayLocalCandidate(
+        Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask> relaySend)
+    {
+        ArgumentNullException.ThrowIfNull(relaySend);
+        if (_nominationDriver is null || _consent is null)
+            return;
+
+        // Store before handing the candidate to the driver so a relay nomination that fires as soon as the new
+        // pair is checked observes the send path for OnDriverNominated's consent redirect. Volatile pairs with
+        // the read there; the driver's _gate additionally orders the pair's visibility.
+        Volatile.Write(ref _relaySend, relaySend);
+        _nominationDriver.AddLocalCandidate(new IceLocalCandidate
+        {
+            Type = RelayCandidateType,
+            Priority = RelayLocalCandidatePriority,
+            Check = (remote, useCandidate, ct) => _consent.SendCheckVia(relaySend, remote, useCandidate, ct),
+        });
+    }
+
     private const string HostCandidateType = "host";
     private const string RelayCandidateType = "relay";
 
@@ -197,7 +233,7 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
     // candidate nominates over the shared media socket, exactly as before.
     private void OnDriverNominated(IceLocalCandidate local, IPEndPoint remoteEndPoint)
     {
-        var sendVia = local.Type == RelayCandidateType ? _relaySend : null;
+        var sendVia = local.Type == RelayCandidateType ? Volatile.Read(ref _relaySend) : null;
         NominateInternal(remoteEndPoint, sendVia);
     }
 

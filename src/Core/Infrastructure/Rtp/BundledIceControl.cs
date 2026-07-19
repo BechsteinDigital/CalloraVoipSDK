@@ -70,6 +70,18 @@ internal sealed class BundledIceControl : IAsyncDisposable
     /// <param name="candidate">The trickled remote candidate.</param>
     public void AddRemoteCandidate(IceRemoteCandidate candidate) => _attachment.AddRemoteCandidate(candidate);
 
+    /// <summary>
+    /// Adds a relay ICE local candidate after construction (RFC 8445 §5.1.1.2) — the answerer path, whose TURN
+    /// allocation only finished gathering once the session already existed, so the relay path could not be
+    /// supplied to the constructor like the offerer's. The controlling agent then checks the relayed pair
+    /// alongside the direct one and, if no direct pair works, nominates it. No-op on a controlled agent or when
+    /// ICE is inactive. Forwarded to the ICE attachment.
+    /// </summary>
+    /// <param name="relaySend">The relay local candidate's TURN-framed send path (RFC 8656 §10).</param>
+    public void AddRelayLocalCandidate(
+        Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask> relaySend)
+        => _attachment.AddRelayLocalCandidate(relaySend);
+
     /// <summary>Detaches from the inbound STUN feed and disposes the consent session.</summary>
     public async ValueTask DisposeAsync()
     {
