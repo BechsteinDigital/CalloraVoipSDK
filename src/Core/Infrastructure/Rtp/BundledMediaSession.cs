@@ -86,6 +86,15 @@ internal sealed class BundledMediaSession : IAsyncDisposable
             new BundledMediaTransportOptions { LocalEndPoint = options.LocalEndPoint, RemoteEndPoint = options.RemoteEndPoint },
             _inbound, loggerFactory.CreateLogger<BundledMediaTransport>(), options.PreBoundSocket);
 
+        // A relay ICE local candidate rides the same shared socket. Now that the socket exists, the injected
+        // (TURN-aware) factory builds the indication channel + control transactor + relay send path from the
+        // transport's targeted send; the transport unwraps relayed inbound datagrams and feeds control responses
+        // (SetIndicationRelay), and the relay send path becomes the ICE agent's relay candidate below. Null
+        // (no gathered allocation) leaves the transport direct-only.
+        var relayBinding = options.RelayIceBindingFactory?.Invoke(_transport.SendToAsync);
+        if (relayBinding is not null)
+            _transport.SetIndicationRelay(relayBinding.Indication, relayBinding.OnControl);
+
         // Outbound: a per-track sender for each m-line, stamping its MID.
         _outbound = new BundledOutboundPipeline(
             new RtpPacketCodec(), _transport, loggerFactory.CreateLogger<BundledOutboundPipeline>());
@@ -137,7 +146,10 @@ internal sealed class BundledMediaSession : IAsyncDisposable
             onConnectivityRecovered: () => MediaConnectivityRecovered?.Invoke(),
             // A nominated ICE pair (RFC 8445 §8) becomes the transport's send target AND the DTLS remote,
             // so the DTLS handshake's inbound source filter follows the connectivity-checked pair.
-            onPairNominated: OnPairNominated);
+            onPairNominated: OnPairNominated,
+            // The relay send path (when a TURN allocation was gathered) becomes the ICE agent's relay local
+            // candidate — checked alongside the direct one, direct-preferred by pair priority.
+            relaySend: relayBinding?.RelaySend);
 
         _audioSsrc = options.Audio.Ssrc;
     }

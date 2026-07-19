@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using CalloraVoipSdk.Core.Infrastructure.Common.Relay;
 using CalloraVoipSdk.Core.Infrastructure.Dtls;
 using CalloraVoipSdk.Core.Infrastructure.Stun.Ice;
 
@@ -57,6 +58,15 @@ internal sealed record BundledMediaSessionOptions
 
     /// <summary>The ICE view of the shared 5-tuple (credentials, role, nominated remote).</summary>
     public required IceMediaParameters Ice { get; init; }
+
+    /// <summary>
+    /// Builds the relay ICE binding (TURN Send/Data indications + per-peer permissions, RFC 8656) once the
+    /// shared socket exists, enabling a relay ICE local candidate alongside the direct one. <see langword="null"/>
+    /// — the SIP path and any session without a gathered TURN allocation — leaves the transport direct-only.
+    /// Constructed by the TURN-aware composition layer so this Rtp session depends only on the binding
+    /// abstraction, not the TURN module.
+    /// </summary>
+    public RelayIceBindingFactory? RelayIceBindingFactory { get; init; }
 
     /// <summary>Reorder-window depth for the video track (packets); ignored for audio-only.</summary>
     public int VideoReorderDepth { get; init; } = 32;

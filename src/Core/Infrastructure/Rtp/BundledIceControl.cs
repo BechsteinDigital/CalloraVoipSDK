@@ -33,6 +33,11 @@ internal sealed class BundledIceControl : IAsyncDisposable
     /// so the transport points its send target at the checked pair (typically
     /// <see cref="BundledMediaTransport.SetRemoteEndPoint"/>).
     /// </param>
+    /// <param name="relaySend">
+    /// The TURN-framed send path of a relay ICE local candidate (RFC 8656 §10), or <see langword="null"/> when
+    /// no relay allocation was gathered. When supplied, a controlling agent adds a relay local candidate so a
+    /// relayed pair is checked and, if no direct pair works, nominated. Forwarded to the ICE attachment.
+    /// </param>
     public BundledIceControl(
         IceMediaParameters parameters,
         BundledInboundPipeline inbound,
@@ -41,12 +46,13 @@ internal sealed class BundledIceControl : IAsyncDisposable
         Action? onConsentLost = null,
         Action? onConnectivityDegraded = null,
         Action? onConnectivityRecovered = null,
-        Action<IPEndPoint>? onPairNominated = null)
+        Action<IPEndPoint>? onPairNominated = null,
+        Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>? relaySend = null)
     {
         _inbound = inbound ?? throw new ArgumentNullException(nameof(inbound));
         _attachment = new IceMediaAttachment(
             parameters, sendRaw, loggerFactory, onConsentLost, onConnectivityDegraded, onConnectivityRecovered,
-            onPairNominated);
+            onPairNominated, relaySend);
 
         _inbound.StunPacketReceived += _attachment.OnStunPacketReceived;
     }
