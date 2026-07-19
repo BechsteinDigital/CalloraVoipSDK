@@ -25,9 +25,14 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
     private readonly Action? _onConnectivityRecovered;
     private readonly Action<IPEndPoint>? _onPairNominated;
     // The last pair actually nominated (null until the first nomination), used to skip redundant
-    // re-nominations. Distinct from _nominatedRemote, which starts at the initial resolved remote for
-    // triggered-check deduplication — so the first nomination fires even when it lands on that same remote.
-    private IPEndPoint? _lastNominated;
+    // re-nominations. Keyed on the remote endpoint AND its send path, so a switch between the direct and the
+    // relay send path to the same remote still redirects consent rather than being skipped as a no-op.
+    // Distinct from _nominatedRemote, which starts at the initial resolved remote for triggered-check
+    // deduplication — so the first nomination fires even when it lands on that same remote.
+    private IceNominatedTarget? _lastNominated;
+    // The relay local candidate's send path (TURN-framed), or null when no TURN allocation was gathered.
+    // Held so a relay nomination can redirect consent freshness through it (RFC 7675 over the allocation).
+    private readonly Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>? _relaySend;
     private readonly ILogger<IceMediaAttachment> _logger;
 
     /// <summary>
@@ -42,6 +47,14 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
     /// the checked pair (typically the transport's <c>SetRemoteEndPoint</c>). Consent freshness is redirected
     /// internally.
     /// </param>
+    /// <param name="relaySend">
+    /// The TURN-framed send path of a relay local candidate — <c>(datagram, remoteTarget, ct)</c>, which frames
+    /// the datagram to the remote through the TURN allocation (Send indication, RFC 8656 §10). When supplied,
+    /// a controlling agent adds a relay local candidate (type preference 0, below host/srflx) so a relayed pair
+    /// is checked and, if no direct pair works, nominated — at which point consent freshness runs over this
+    /// path. Absent (<see langword="null"/>) when no TURN allocation was gathered — leaving behaviour identical
+    /// to the direct-only path.
+    /// </param>
     public IceMediaAttachment(
         IceMediaParameters parameters,
         Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask> sendRaw,
@@ -49,7 +62,8 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
         Action? onConsentLost = null,
         Action? onConnectivityDegraded = null,
         Action? onConnectivityRecovered = null,
-        Action<IPEndPoint>? onPairNominated = null)
+        Action<IPEndPoint>? onPairNominated = null,
+        Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>? relaySend = null)
     {
         ArgumentNullException.ThrowIfNull(parameters);
         ArgumentNullException.ThrowIfNull(sendRaw);
@@ -60,6 +74,7 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
         _onConnectivityDegraded = onConnectivityDegraded;
         _onConnectivityRecovered = onConnectivityRecovered;
         _onPairNominated = onPairNominated;
+        _relaySend = relaySend;
         _nominatedRemote = parameters.RemoteEndPoint;
         _inbound = parameters.IceEnabled
             ? IceInboundStunHandlerFactory.Create(
@@ -73,18 +88,35 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
         // candidates that only arrive via trickle (RFC 8838, AddRemoteCandidate) are still checked.
         if (_consent is not null && parameters.IceControlling)
         {
-            // One direct local candidate: host and server-reflexive share the media socket's direct send path
-            // (srflx is only the mapped view of the same socket). A relay local candidate — with its own
-            // TURN-framed send path — is added in a later slice; the driver already pairs every local candidate
-            // against every remote and orders by pair priority, so direct-preferred selection falls out.
-            var directCandidate = new IceLocalCandidate
+            // The direct local candidate: host and server-reflexive share the media socket's direct send path
+            // (srflx is only the mapped view of the same socket).
+            var localCandidates = new List<IceLocalCandidate>
             {
-                Type = "host",
-                Priority = HostLocalCandidatePriority,
-                Check = _consent.SendCheckAsync,
+                new()
+                {
+                    Type = HostCandidateType,
+                    Priority = HostLocalCandidatePriority,
+                    Check = _consent.SendCheckAsync,
+                },
             };
+
+            // The relay local candidate, when a TURN allocation was gathered: its checks are framed through the
+            // TURN server via the injected relay send path. The driver pairs every local candidate against every
+            // remote and orders by pair priority (RFC 8445 §6.1.2.3); with type preference 0 the relay pairs sit
+            // below host/srflx, so a relayed pair is only nominated when no direct pair works — direct-preferred
+            // selection falls out for free.
+            if (relaySend is not null)
+            {
+                localCandidates.Add(new IceLocalCandidate
+                {
+                    Type = RelayCandidateType,
+                    Priority = RelayLocalCandidatePriority,
+                    Check = (remote, useCandidate, ct) => _consent.SendCheckVia(relaySend, remote, useCandidate, ct),
+                });
+            }
+
             _nominationDriver = new IceNominationDriver(
-                [directCandidate],
+                localCandidates,
                 parameters.RemoteCandidates,
                 OnDriverNominated,
                 loggerFactory);
@@ -148,28 +180,53 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
     /// <param name="candidate">The trickled remote candidate.</param>
     public void AddRemoteCandidate(IceRemoteCandidate candidate) => _nominationDriver?.AddCandidate(candidate);
 
+    private const string HostCandidateType = "host";
+    private const string RelayCandidateType = "relay";
+
     // RFC 8445 §5.1.2.1 priority of the direct (host) local candidate: type preference 126, full local
-    // preference, RTP component. Its absolute value only matters relative to a relay local candidate (type
-    // preference 0) added in a later slice; with a single local candidate it does not change the check order.
+    // preference, RTP component.
     private const long HostLocalCandidatePriority = ((long)126 << 24) + (65535L << 8) + 255;
 
-    // The controlling driver reports the nominated pair's local candidate and remote endpoint. The direct
-    // candidate nominates exactly as before; a relay local candidate (later slice) will additionally switch
-    // the transport to the relay data path here before redirecting.
-    private void OnDriverNominated(IceLocalCandidate local, IPEndPoint remoteEndPoint) => Nominate(remoteEndPoint);
+    // RFC 8445 §5.1.2.1 priority of the relay local candidate: type preference 0 (below host's 126), full
+    // local preference, RTP component — so relay pairs sit below every direct pair in pair priority and are
+    // only nominated when no host/srflx pair works.
+    private const long RelayLocalCandidatePriority = ((long)0 << 24) + (65535L << 8) + 255;
 
-    // Nominates a checked/adopted remote pair (RFC 8445 §8): redirects consent freshness onto it and reports
-    // it so the transport send target and DTLS follow. Funnelled from both the controlling driver (which can
-    // re-nominate onto a higher-priority working pair) and the controlled agent's inbound USE-CANDIDATE. A
-    // no-op re-nomination to the pair already in effect is skipped (redundant redirect / log spam).
-    private void Nominate(IPEndPoint remoteEndPoint)
+    // The controlling driver reports the nominated pair's local candidate and remote endpoint. A relay
+    // candidate additionally routes consent freshness through the relay send path; a direct (host/srflx)
+    // candidate nominates over the shared media socket, exactly as before.
+    private void OnDriverNominated(IceLocalCandidate local, IPEndPoint remoteEndPoint)
     {
-        var previous = Interlocked.Exchange(ref _lastNominated, remoteEndPoint);
-        if (remoteEndPoint.Equals(previous))
+        var sendVia = local.Type == RelayCandidateType ? _relaySend : null;
+        NominateInternal(remoteEndPoint, sendVia);
+    }
+
+    // Adopts the pair the controlling peer nominates via its inbound USE-CANDIDATE check (RFC 8445 §7.3.1.5).
+    // A controlled agent sends back to the source of the check over the shared media socket, so its nomination
+    // always uses the direct send path.
+    private void Nominate(IPEndPoint remoteEndPoint) => NominateInternal(remoteEndPoint, sendVia: null);
+
+    // Nominates a checked/adopted remote pair (RFC 8445 §8): redirects consent freshness onto it (over the
+    // given send path — relay-framed or direct) and reports it so the transport send target and DTLS follow.
+    // Funnelled from both the controlling driver (which can re-nominate onto a higher-priority working pair)
+    // and the controlled agent's inbound USE-CANDIDATE. A no-op re-nomination to the pair already in effect is
+    // skipped (redundant redirect / log spam).
+    private void NominateInternal(
+        IPEndPoint remoteEndPoint,
+        Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>? sendVia)
+    {
+        var previous = Interlocked.Exchange(ref _lastNominated, new IceNominatedTarget(remoteEndPoint, sendVia));
+        // Skip only a genuine no-op: same remote AND same send path. A relay↔direct switch to the same remote
+        // (same endpoint, different path) must still redirect consent, so it is not treated as redundant.
+        if (previous is not null
+            && previous.Remote.Equals(remoteEndPoint)
+            && ReferenceEquals(previous.Send, sendVia))
+        {
             return;
+        }
 
         Volatile.Write(ref _nominatedRemote, remoteEndPoint);
-        _consent?.Nominate(remoteEndPoint);
+        _consent?.Nominate(remoteEndPoint, sendVia);
         try
         {
             _onPairNominated?.Invoke(remoteEndPoint);
