@@ -24,6 +24,10 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
     private readonly Action? _onConnectivityDegraded;
     private readonly Action? _onConnectivityRecovered;
     private readonly Action<IPEndPoint>? _onPairNominated;
+    // Fires additionally to _onPairNominated when the nominated pair is a relay pair (its send path is relay-
+    // framed), so the caller can switch the transport onto the relay data path (RFC 8656 ChannelBind). Direct
+    // pairs never fire it.
+    private readonly Action<IPEndPoint>? _onRelayPairNominated;
     // The last pair actually nominated (null until the first nomination), used to skip redundant
     // re-nominations. Keyed on the remote endpoint AND its send path, so a switch between the direct and the
     // relay send path to the same remote still redirects consent rather than being skipped as a no-op.
@@ -58,6 +62,12 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
     /// path. Absent (<see langword="null"/>) when no TURN allocation was gathered — leaving behaviour identical
     /// to the direct-only path.
     /// </param>
+    /// <param name="onRelayPairNominated">
+    /// Invoked in addition to <paramref name="onPairNominated"/> only when the nominated pair is a relay pair, so
+    /// the caller can switch the transport onto the relay data path (RFC 8656 ChannelBind). A direct nomination
+    /// never fires it. <see langword="null"/> leaves the relay data path unswitched (checks/consent still run
+    /// relay-framed, but media stays on whatever the transport last targeted).
+    /// </param>
     public IceMediaAttachment(
         IceMediaParameters parameters,
         Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask> sendRaw,
@@ -66,7 +76,8 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
         Action? onConnectivityDegraded = null,
         Action? onConnectivityRecovered = null,
         Action<IPEndPoint>? onPairNominated = null,
-        Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>? relaySend = null)
+        Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>? relaySend = null,
+        Action<IPEndPoint>? onRelayPairNominated = null)
     {
         ArgumentNullException.ThrowIfNull(parameters);
         ArgumentNullException.ThrowIfNull(sendRaw);
@@ -77,6 +88,7 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
         _onConnectivityDegraded = onConnectivityDegraded;
         _onConnectivityRecovered = onConnectivityRecovered;
         _onPairNominated = onPairNominated;
+        _onRelayPairNominated = onRelayPairNominated;
         _relaySend = relaySend;
         _nominatedRemote = parameters.RemoteEndPoint;
         _inbound = parameters.IceEnabled
@@ -270,6 +282,20 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unhandled exception in ICE pair-nominated handler.");
+        }
+
+        // A relay pair (its send path is relay-framed) additionally notifies the caller so it can switch the
+        // transport onto the relay data path (ChannelBind). A direct pair (sendVia null) never does.
+        if (sendVia is not null)
+        {
+            try
+            {
+                _onRelayPairNominated?.Invoke(remoteEndPoint);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unhandled exception in ICE relay-pair-nominated handler.");
+            }
         }
     }
 

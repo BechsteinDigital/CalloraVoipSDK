@@ -295,6 +295,23 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IRelayCont
         await _udp.SendAsync(request, relayServer, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Sends a datagram raw to an explicit target with no relay framing, in either mode. TURN traffic addressed
+    /// to the relay server itself — control transactions (Allocate/CreatePermission/ChannelBind/Refresh) and
+    /// Send indications — must reach the server unframed, never wrapped as ChannelData for the peer, so it must
+    /// bypass the relay-mode ChannelData framing that <see cref="SendToAsync"/> applies to peer-directed sends.
+    /// In direct mode this is identical to <see cref="SendToAsync"/>; the difference matters only once the
+    /// transport has entered relay mode, where the relay control stack must keep talking to the server.
+    /// </summary>
+    /// <param name="datagram">The already-encoded datagram (raw STUN / TURN indication).</param>
+    /// <param name="target">The explicit target (the relay server).</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public async ValueTask SendUnframedAsync(ReadOnlyMemory<byte> datagram, IPEndPoint target, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        await _udp.SendAsync(datagram, target, cancellationToken).ConfigureAwait(false);
+    }
+
     private async Task RunReceiveLoopAsync(CancellationToken cancellationToken)
     {
         _logger.LogDebug("Bundled media receive loop started on {LocalEndPoint}", _localEndPoint);

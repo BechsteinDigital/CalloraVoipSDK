@@ -62,12 +62,23 @@ internal static class WebRtcRelayBinding
             var keepAlive = new TurnAllocationRefreshLoop(
                 control.RefreshAsync, allocation.EffectiveCredentials, allocation.LifetimeSeconds, loggerFactory);
 
+            // ChannelBind the nominated peer (RFC 8656 §11) so media can flow as the compact ChannelData framing
+            // (§12). Runs while the transport is still in direct mode, so the ChannelBind request reaches the
+            // server unframed via the same shared-socket control transactor. One channel per allocation.
+            const ushort relayChannelNumber = 0x4000;
+            async Task<IRelayDatagramChannel> BindChannel(IPEndPoint peer, CancellationToken ct)
+            {
+                await control.ChannelBindAsync(peer, relayChannelNumber, allocation.EffectiveCredentials, ct)
+                    .ConfigureAwait(false);
+                return new TurnRelayChannel(relayServer, relayChannelNumber);
+            }
+
             // OnControlDatagram only matches responses by transaction id (no I/O, no transport reference), so a
             // control datagram arriving after the session is disposed is a harmless no-match. The RelaySend path
             // and the keepalive, by contrast, call the transport's targeted send, so their post-disposal safety
             // relies on the session draining the ICE agent and the keepalive before disposing the transport — a
             // dispose-ordering concern owned by the session, not this producer.
-            return new RelayIceBinding(indication, transactor.OnControlDatagram, sendPath.SendAsync, keepAlive);
+            return new RelayIceBinding(indication, transactor.OnControlDatagram, sendPath.SendAsync, keepAlive, BindChannel);
         };
     }
 }

@@ -37,6 +37,15 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     // disposed — running its teardown Refresh(0) — before the transport it rides. Set from the relay binding at
     // construction (offerer) or via AdoptRelay (answerer); Volatile for the gather→start/dispose cross-thread read.
     private IRelayKeepAlive? _relayKeepAlive;
+    // The relay binding (its ChannelBind seam + relay server), retained so a relay-pair nomination can switch the
+    // transport onto the relay data path. Set from the binding at construction (offerer) or AdoptRelay (answerer).
+    private RelayIceBinding? _relayBinding;
+    // The one-shot direct→relay data-path transition, kicked off on the driver thread when a relay pair is
+    // nominated. Guarded so it runs at most once; cancelled and awaited before the transport is disposed (its
+    // ChannelBind + EnterRelayMode ride the live transport).
+    private int _relayTransitionStarted;
+    private Task? _relayTransitionTask;
+    private readonly CancellationTokenSource _relayTransitionCts = new();
 
     /// <summary>Raised with each decrypted inbound audio RTP packet.</summary>
     public event Action<RtpPacket>? AudioReceived;
@@ -99,7 +108,10 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         // transport's targeted send; the transport unwraps relayed inbound datagrams and feeds control responses
         // (SetIndicationRelay), and the relay send path becomes the ICE agent's relay candidate below. Null
         // (no gathered allocation) leaves the transport direct-only.
-        var relayBinding = options.RelayIceBindingFactory?.Invoke(_transport.SendToAsync);
+        // Unframed send: the relay control stack (control transactions + Send indications) is addressed to the
+        // relay server itself and must reach it raw in both modes — never framed as ChannelData once the
+        // transport enters relay mode.
+        var relayBinding = options.RelayIceBindingFactory?.Invoke(_transport.SendUnframedAsync);
         if (relayBinding is not null)
             _transport.SetIndicationRelay(relayBinding.Indication, relayBinding.OnControl);
 
@@ -157,13 +169,17 @@ internal sealed class BundledMediaSession : IAsyncDisposable
             onPairNominated: OnPairNominated,
             // The relay send path (when a TURN allocation was gathered) becomes the ICE agent's relay local
             // candidate — checked alongside the direct one, direct-preferred by pair priority.
-            relaySend: relayBinding?.RelaySend);
+            relaySend: relayBinding?.RelaySend,
+            // A nominated relay pair additionally switches the transport onto the relay data path (ChannelBind).
+            onRelayPairNominated: OnRelayPairNominated);
 
         _audioSsrc = options.Audio.Ssrc;
         // A relay candidate wired at construction (offerer path) closes the door on a later AdoptRelay.
         _relayWired = relayBinding is not null ? 1 : 0;
         // Its keepalive (if any) is started in StartAsync, once the transport's receive loop is up.
         _relayKeepAlive = relayBinding?.KeepAlive;
+        // Retained so a relay-pair nomination can switch the transport onto the relay data path.
+        _relayBinding = relayBinding;
     }
 
     // Dispatches inbound audio to subscribers on the receive loop; a throwing subscriber must not tear
@@ -256,7 +272,7 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         if (Interlocked.Exchange(ref _relayWired, 1) != 0)
             return;
 
-        var binding = relayIceBindingFactory.Invoke(_transport.SendToAsync);
+        var binding = relayIceBindingFactory.Invoke(_transport.SendUnframedAsync);
         if (binding is null)
         {
             // No allocation after all — release the claim so a later adoption can still wire the relay path.
@@ -266,6 +282,8 @@ internal sealed class BundledMediaSession : IAsyncDisposable
 
         _transport.SetIndicationRelay(binding.Indication, binding.OnControl);
         _ice.AddRelayLocalCandidate(binding.RelaySend);
+        // Retain the binding so a later relay-pair nomination can ChannelBind + switch the transport.
+        Volatile.Write(ref _relayBinding, binding);
 
         // Keep the adopted allocation alive. Started here (idempotent) so an adoption that lands after StartAsync
         // still runs the keepalive; the StartAsync start covers the pre-start case. Starting before the transport
@@ -281,6 +299,46 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     {
         _transport.SetRemoteEndPoint(remoteEndPoint);
         _dtls.SetRemoteEndPoint(remoteEndPoint);
+    }
+
+    // A relay pair won ICE: switch the transport onto the relay data path (RFC 8656). Runs on the driver thread
+    // right after OnPairNominated has already pointed the transport's remote and DTLS at the peer (the
+    // precondition EnterRelayMode needs), so it only kicks off the async transition — at most once — and returns.
+    private void OnRelayPairNominated(IPEndPoint peer)
+    {
+        if (Interlocked.Exchange(ref _relayTransitionStarted, 1) != 0)
+            return;
+        Volatile.Write(ref _relayTransitionTask, Task.Run(() => TransitionToRelayAsync(peer)));
+    }
+
+    // ChannelBind the peer while the transport is still in direct mode (the request reaches the server unframed
+    // via the relay control stack), then flip the transport into relay mode and install the bound channel — media
+    // then flows as ChannelData through the TURN server (RFC 8656 §11–12). A failed ChannelBind leaves media on
+    // the checked path (logged); a disposing session cancels it.
+    private async Task TransitionToRelayAsync(IPEndPoint peer)
+    {
+        var binding = Volatile.Read(ref _relayBinding);
+        if (binding?.BindChannel is not { } bindChannel)
+            return;
+
+        try
+        {
+            var channel = await bindChannel(peer, _relayTransitionCts.Token).ConfigureAwait(false);
+            _transport.EnterRelayMode(binding.Indication.RelayServer, binding.OnControl);
+            _transport.SetRelayChannel(channel);
+            _logger.LogInformation(
+                "Relay data path activated for the nominated relay pair: media now flows as ChannelData through the " +
+                "TURN server (RFC 8656 §11–12).");
+        }
+        catch (OperationCanceledException) when (_relayTransitionCts.IsCancellationRequested)
+        {
+            // Session disposing — abort the transition.
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Failed to switch onto the relay data path after nominating a relay pair; media stays on the checked path.");
+        }
     }
 
     /// <summary>Point-in-time transport counters aggregated from the outbound and inbound pipelines.</summary>
@@ -332,6 +390,12 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         await _ice.DisposeAsync().ConfigureAwait(false);
+        // Drain a relay data-path transition in flight before disposing the transport it rides: the driver is
+        // now stopped (no new transition starts), so cancel and await the running one.
+        await _relayTransitionCts.CancelAsync().ConfigureAwait(false);
+        if (Volatile.Read(ref _relayTransitionTask) is { } transition)
+            await transition.ConfigureAwait(false);
+        _relayTransitionCts.Dispose();
         // Dispose the relay keepalive after ICE (no more relay checks) but before the transport: its teardown
         // Refresh(0) rides the transport's control send, so the transport must still be alive to carry it.
         if (Volatile.Read(ref _relayKeepAlive) is { } keepAlive)

@@ -411,6 +411,34 @@ public sealed class BundledMediaTransportRelayTests
             transport.EnterRelayMode(new IPEndPoint(IPAddress.Loopback, 5349), onControl: null));
     }
 
+    [Fact]
+    public async Task SendUnframedAsync_reaches_the_relay_server_raw_even_in_relay_mode()
+    {
+        using var relayServer = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        var relayEndPoint = (IPEndPoint)relayServer.Client.LocalEndPoint!;
+        var channel = new TurnRelayChannel(relayEndPoint, ChannelNumber);
+
+        await using var transport = new BundledMediaTransport(
+            new BundledMediaTransportOptions
+            {
+                LocalEndPoint = Loopback(),
+                RemoteEndPoint = new IPEndPoint(IPAddress.Loopback, 9999),
+                Relay = channel, // relay mode, channel bound — SendAsync would frame everything as ChannelData
+            },
+            InboundPipeline(_ => { }), NullLogger<BundledMediaTransport>.Instance);
+        await transport.StartAsync();
+
+        // A control transaction (raw STUN) addressed to the relay server must reach it byte-for-byte, NOT wrapped
+        // as ChannelData for the peer — otherwise the relay would forward it to the peer instead of processing it.
+        // This is what keeps the relay control stack (keepalive Refresh, permissions) alive across the transition.
+        var request = StunMessage(0x00, 0x04); // Refresh request
+        await transport.SendUnframedAsync(request, relayEndPoint, CancellationToken.None);
+
+        var atServer = await relayServer.ReceiveAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(request, atServer.Buffer);                                     // raw, byte-for-byte
+        Assert.False(TurnChannelDataCodec.TryParse(atServer.Buffer, out _, out _)); // not framed as ChannelData
+    }
+
     // ── harness (mirrors BundledMediaTransportTests) ─────────────────────────────
 
     private static TaskCompletionSource<RtpPacket> Tcs() =>
