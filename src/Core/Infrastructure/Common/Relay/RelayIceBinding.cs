@@ -13,7 +13,13 @@ namespace CalloraVoipSdk.Core.Infrastructure.Common.Relay;
 /// <param name="Indication">The indication channel used to unwrap inbound relayed Data indications (RFC 8656 §10).</param>
 /// <param name="OnControl">Sink for the relay server's non-Data STUN control responses (CreatePermission/Refresh).</param>
 /// <param name="RelaySend">The relay ICE local candidate's send path — <c>(datagram, remoteTarget, ct)</c>.</param>
+/// <param name="KeepAlive">
+/// The allocation keepalive (RFC 8656 §3.9 Refresh loop) the media session starts once its transport is up and
+/// disposes — running its teardown Refresh(0) — before that transport is torn down. <see langword="null"/> when
+/// the producer supplies no keepalive.
+/// </param>
 internal sealed record RelayIceBinding(
     IRelayIndicationChannel Indication,
     Action<ReadOnlyMemory<byte>> OnControl,
-    Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask> RelaySend);
+    Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask> RelaySend,
+    IRelayKeepAlive? KeepAlive = null);

@@ -4,6 +4,7 @@ using CalloraVoipSdk.Core.Infrastructure.Stun.Attributes;
 using CalloraVoipSdk.Core.Infrastructure.Stun.Auth;
 using CalloraVoipSdk.Core.Infrastructure.Stun.Messages;
 using CalloraVoipSdk.Core.Infrastructure.Stun.Wire;
+using CalloraVoipSdk.Core.Infrastructure.Turn.Attributes;
 using CalloraVoipSdk.Core.Infrastructure.Turn.Client;
 using CalloraVoipSdk.Core.Infrastructure.Turn.Wire;
 using CalloraVoipSdk.Core.Infrastructure.WebRtc;
@@ -78,6 +79,68 @@ public sealed class WebRtcRelayBindingTests
         Assert.True(codec.VerifyIntegrity(permission, authKey),
             "CreatePermission must carry a valid MESSAGE-INTEGRITY derived from the allocation credentials");
     }
+
+    [Fact]
+    public async Task CreateFactory_builds_a_keepalive_that_refreshes_the_allocation_then_deletes_it_on_dispose()
+    {
+        var codec = new StunMessageCodec();
+        var allocation = new TurnAllocateResult
+        {
+            RelayedEndPoint = new IPEndPoint(IPAddress.Parse("198.51.100.9"), 49152),
+            LifetimeSeconds = 2, // refresh cadence = lifetime/2 = 1s, so the loop refreshes without a long wait
+            EffectiveCredentials = new StunCredentials
+            {
+                Username = "user", Password = "pass", Realm = "callora.example", Nonce = "nonce-1"
+            },
+        };
+
+        var factory = WebRtcRelayBinding.CreateFactory(Server, allocation, NullLoggerFactory.Instance);
+
+        var refreshLifetimes = new List<uint>();
+        var firstKeepaliveRefresh = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        RelayIceBinding? binding = null;
+
+        ValueTask TargetedSend(ReadOnlyMemory<byte> datagram, IPEndPoint target, CancellationToken ct)
+        {
+            Assert.Equal(Server, target);
+            var message = codec.Decode(datagram.ToArray());
+            if (message is { MessageClass: StunMessageClass.Request }
+                && (TurnMessageMethod)(ushort)message.MessageMethod == TurnMessageMethod.Refresh)
+            {
+                var requested = TurnAttributeMapper.DecodeLifetime(message)?.Seconds ?? 0;
+                lock (refreshLifetimes) refreshLifetimes.Add(requested);
+                if (requested > 0)
+                    firstKeepaliveRefresh.TrySetResult(); // a keepalive refresh (not the teardown) round-tripped
+                binding!.OnControl(RefreshSuccess(codec, message, requested));
+            }
+
+            return ValueTask.CompletedTask;
+        }
+
+        binding = factory(TargetedSend);
+        Assert.NotNull(binding);
+        Assert.NotNull(binding.KeepAlive);
+
+        binding.KeepAlive.Start();
+        await firstKeepaliveRefresh.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        await binding.KeepAlive.DisposeAsync(); // must issue the teardown Refresh(0)
+
+        lock (refreshLifetimes)
+        {
+            Assert.Contains(2u, refreshLifetimes); // a keepalive refresh requested the allocation lifetime
+            Assert.Contains(0u, refreshLifetimes); // teardown deleted the allocation (Refresh lifetime 0)
+        }
+    }
+
+    private static byte[] RefreshSuccess(IStunMessageCodec codec, StunMessage request, uint lifetime) =>
+        codec.Encode(new StunMessage
+        {
+            MessageClass = StunMessageClass.SuccessResponse,
+            MessageMethod = request.MessageMethod,
+            TransactionId = request.TransactionId,
+            Attributes = new[] { TurnAttributeMapper.Encode(new TurnLifetimeAttribute { Seconds = lifetime }) }
+        });
 
     private static bool IsCreatePermissionFor(IStunMessageCodec codec, byte[] datagram, IPEndPoint peer)
     {

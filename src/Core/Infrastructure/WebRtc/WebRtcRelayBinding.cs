@@ -55,12 +55,19 @@ internal static class WebRtcRelayBinding
                 indication, control, allocation.EffectiveCredentials, targetedSend,
                 loggerFactory.CreateLogger<TurnRelayCandidateSendPath>());
 
+            // The keepalive shares the same authenticated control client (Refresh over the shared socket): the
+            // transactor correlates responses by transaction id, so a Refresh in flight next to a CreatePermission
+            // is fine. It rides the transport's targeted send too, so — like RelaySend — the session must dispose
+            // it (running its teardown Refresh(0)) before it disposes the transport.
+            var keepAlive = new TurnAllocationRefreshLoop(
+                control.RefreshAsync, allocation.EffectiveCredentials, allocation.LifetimeSeconds, loggerFactory);
+
             // OnControlDatagram only matches responses by transaction id (no I/O, no transport reference), so a
-            // control datagram arriving after the session is disposed is a harmless no-match. The RelaySend path,
-            // by contrast, calls the transport's targeted send, so its post-disposal safety relies on the session
-            // draining the ICE agent (which drives relay checks) before disposing the transport — a dispose-ordering
-            // concern owned by the session, not this producer.
-            return new RelayIceBinding(indication, transactor.OnControlDatagram, sendPath.SendAsync);
+            // control datagram arriving after the session is disposed is a harmless no-match. The RelaySend path
+            // and the keepalive, by contrast, call the transport's targeted send, so their post-disposal safety
+            // relies on the session draining the ICE agent and the keepalive before disposing the transport — a
+            // dispose-ordering concern owned by the session, not this producer.
+            return new RelayIceBinding(indication, transactor.OnControlDatagram, sendPath.SendAsync, keepAlive);
         };
     }
 }
