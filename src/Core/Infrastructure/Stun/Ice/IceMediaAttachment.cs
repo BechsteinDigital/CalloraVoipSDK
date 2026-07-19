@@ -73,10 +73,20 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
         // candidates that only arrive via trickle (RFC 8838, AddRemoteCandidate) are still checked.
         if (_consent is not null && parameters.IceControlling)
         {
+            // One direct local candidate: host and server-reflexive share the media socket's direct send path
+            // (srflx is only the mapped view of the same socket). A relay local candidate — with its own
+            // TURN-framed send path — is added in a later slice; the driver already pairs every local candidate
+            // against every remote and orders by pair priority, so direct-preferred selection falls out.
+            var directCandidate = new IceLocalCandidate
+            {
+                Type = "host",
+                Priority = HostLocalCandidatePriority,
+                Check = _consent.SendCheckAsync,
+            };
             _nominationDriver = new IceNominationDriver(
+                [directCandidate],
                 parameters.RemoteCandidates,
-                _consent.SendCheckAsync,
-                Nominate,
+                OnDriverNominated,
                 loggerFactory);
         }
 
@@ -137,6 +147,16 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
     /// </summary>
     /// <param name="candidate">The trickled remote candidate.</param>
     public void AddRemoteCandidate(IceRemoteCandidate candidate) => _nominationDriver?.AddCandidate(candidate);
+
+    // RFC 8445 §5.1.2.1 priority of the direct (host) local candidate: type preference 126, full local
+    // preference, RTP component. Its absolute value only matters relative to a relay local candidate (type
+    // preference 0) added in a later slice; with a single local candidate it does not change the check order.
+    private const long HostLocalCandidatePriority = ((long)126 << 24) + (65535L << 8) + 255;
+
+    // The controlling driver reports the nominated pair's local candidate and remote endpoint. The direct
+    // candidate nominates exactly as before; a relay local candidate (later slice) will additionally switch
+    // the transport to the relay data path here before redirecting.
+    private void OnDriverNominated(IceLocalCandidate local, IPEndPoint remoteEndPoint) => Nominate(remoteEndPoint);
 
     // Nominates a checked/adopted remote pair (RFC 8445 §8): redirects consent freshness onto it and reports
     // it so the transport send target and DTLS follow. Funnelled from both the controlling driver (which can
