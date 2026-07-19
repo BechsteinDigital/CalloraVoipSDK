@@ -59,6 +59,18 @@ public sealed class WebRtcOutboundVideoNegotiationTests
         Assert.False(session!.HasVideo);
     }
 
+    [Fact]
+    public async Task No_outbound_video_track_when_the_remote_rejected_video_with_a_zero_port()
+    {
+        // RFC 3264 §6: a rejected media section carries port 0. The disabled m-line must yield no outbound
+        // video track even though its direction would otherwise permit it.
+        var session = BuildSession(Offer(), RemoteAnswerWithRejectedVideo());
+
+        Assert.NotNull(session);
+        await using var _ = session;
+        Assert.False(session!.HasVideo);
+    }
+
     // Builds the bundle session from a negotiated exchange (this peer offers audio + video send-recv).
     private static BundledMediaSession? BuildSession(SdpSessionDescription local, SdpSessionDescription remote) =>
         WebRtcSessionFactory.TryCreate(
@@ -122,6 +134,19 @@ public sealed class WebRtcOutboundVideoNegotiationTests
                 Ice = new SdpIceParameters { Ufrag = "remoteU", Pwd = "remotepassword1234567890" },
                 Video = new SdpVideoMediaOptions { Port = 5002, Codecs = H264 },
             });
+
+    // The peer's answer that rejected video by zeroing the m=video port (RFC 3264 §6 rejected media).
+    private static SdpSessionDescription RemoteAnswerWithRejectedVideo()
+    {
+        var lines = new SdpSessionSerializer().Serialize(PlainRemoteAnswer())
+            .Replace("\r\n", "\n").Split('\n').ToList();
+        var videoIdx = lines.FindIndex(l => l.StartsWith("m=video ", StringComparison.Ordinal));
+        var parts = lines[videoIdx].Split(' ');
+        parts[1] = "0"; // zero the port -> rejected / disabled m-line
+        lines[videoIdx] = string.Join(' ', parts);
+
+        return new SdpSessionParser().Parse(string.Join("\r\n", lines));
+    }
 
     // The peer's answer with audio only (no video section at all).
     private static SdpSessionDescription AudioOnlyRemoteAnswer() =>
