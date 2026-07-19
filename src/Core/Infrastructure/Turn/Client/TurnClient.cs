@@ -1,6 +1,5 @@
 using System.Net;
 using System.Net.Security;
-using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
 using CalloraVoipSdk.Core.Infrastructure.Stun.Attributes;
 using CalloraVoipSdk.Core.Infrastructure.Stun.Auth;
@@ -18,10 +17,15 @@ namespace CalloraVoipSdk.Core.Infrastructure.Turn.Client;
 /// is intentionally out of scope here; this class provides protocol-accurate building blocks for
 /// Allocate/Refresh/CreatePermission/ChannelBind/Send transactions.
 /// </para>
+/// <para>
+/// Message construction and the long-term-credential challenge/response flow live in the transport-agnostic
+/// <see cref="TurnTransactionEngine"/>; this class binds them to the per-transaction
+/// <see cref="TurnClientTransport"/> (a fresh socket per request).
+/// </para>
 /// </summary>
 internal sealed class TurnClient : ITurnClient
 {
-    private readonly IStunMessageCodec _codec;
+    private readonly TurnTransactionEngine _engine;
     private readonly TurnClientTransport _transport;
     private readonly TurnTcpDataConnectionFactory _tcpDataConnectionFactory;
 
@@ -32,7 +36,7 @@ internal sealed class TurnClient : ITurnClient
     {
         ArgumentNullException.ThrowIfNull(codec);
         ArgumentNullException.ThrowIfNull(logger);
-        _codec = codec;
+        _engine = new TurnTransactionEngine(codec);
         _transport = new TurnClientTransport(codec, logger);
         _tcpDataConnectionFactory = new TurnTcpDataConnectionFactory(codec, logger);
     }
@@ -50,14 +54,11 @@ internal sealed class TurnClient : ITurnClient
         ArgumentNullException.ThrowIfNull(serverEndPoint);
         options ??= new TurnAllocateOptions();
 
-        var (response, effectiveCredentials) = await ExecuteWithAuthAsync(
-                serverEndPoint,
+        var (response, effectiveCredentials) = await _engine.ExecuteWithAuthAsync(
                 TurnMessageMethod.Allocate,
                 transactionId => BuildAllocateAttributes(options, transactionId),
                 credentials,
-                transport,
-                tlsTargetHost,
-                tlsRemoteCertificateValidationCallback,
+                SendVia(serverEndPoint, transport, tlsTargetHost, tlsRemoteCertificateValidationCallback),
                 ct)
             .ConfigureAwait(false);
 
@@ -94,8 +95,7 @@ internal sealed class TurnClient : ITurnClient
     {
         ArgumentNullException.ThrowIfNull(serverEndPoint);
 
-        var (response, effectiveCredentials) = await ExecuteWithAuthAsync(
-                serverEndPoint,
+        var (response, effectiveCredentials) = await _engine.ExecuteWithAuthAsync(
                 TurnMessageMethod.Refresh,
                 _ =>
                 {
@@ -130,9 +130,7 @@ internal sealed class TurnClient : ITurnClient
                     return attributes;
                 },
                 credentials,
-                transport,
-                tlsTargetHost,
-                tlsRemoteCertificateValidationCallback,
+                SendVia(serverEndPoint, transport, tlsTargetHost, tlsRemoteCertificateValidationCallback),
                 ct)
             .ConfigureAwait(false);
 
@@ -157,8 +155,7 @@ internal sealed class TurnClient : ITurnClient
         ArgumentNullException.ThrowIfNull(serverEndPoint);
         ArgumentNullException.ThrowIfNull(peerEndPoint);
 
-        var (_, effectiveCredentials) = await ExecuteWithAuthAsync(
-                serverEndPoint,
+        var (_, effectiveCredentials) = await _engine.ExecuteWithAuthAsync(
                 TurnMessageMethod.CreatePermission,
                 transactionId =>
                 [
@@ -167,9 +164,7 @@ internal sealed class TurnClient : ITurnClient
                         transactionId)
                 ],
                 credentials,
-                transport,
-                tlsTargetHost,
-                tlsRemoteCertificateValidationCallback,
+                SendVia(serverEndPoint, transport, tlsTargetHost, tlsRemoteCertificateValidationCallback),
                 ct)
             .ConfigureAwait(false);
 
@@ -193,8 +188,7 @@ internal sealed class TurnClient : ITurnClient
         if (channelNumber < 0x4000 || channelNumber > 0x7FFF)
             throw new ArgumentOutOfRangeException(nameof(channelNumber), "TURN channel numbers must be in range 0x4000..0x7FFF.");
 
-        var (_, effectiveCredentials) = await ExecuteWithAuthAsync(
-                serverEndPoint,
+        var (_, effectiveCredentials) = await _engine.ExecuteWithAuthAsync(
                 TurnMessageMethod.ChannelBind,
                 transactionId =>
                 [
@@ -204,9 +198,7 @@ internal sealed class TurnClient : ITurnClient
                         transactionId)
                 ],
                 credentials,
-                transport,
-                tlsTargetHost,
-                tlsRemoteCertificateValidationCallback,
+                SendVia(serverEndPoint, transport, tlsTargetHost, tlsRemoteCertificateValidationCallback),
                 ct)
             .ConfigureAwait(false);
 
@@ -226,8 +218,7 @@ internal sealed class TurnClient : ITurnClient
         ArgumentNullException.ThrowIfNull(serverEndPoint);
         ArgumentNullException.ThrowIfNull(peerEndPoint);
 
-        var (response, effectiveCredentials) = await ExecuteWithAuthAsync(
-                serverEndPoint,
+        var (response, effectiveCredentials) = await _engine.ExecuteWithAuthAsync(
                 TurnMessageMethod.Connect,
                 transactionId =>
                 [
@@ -236,9 +227,7 @@ internal sealed class TurnClient : ITurnClient
                         transactionId)
                 ],
                 credentials,
-                transport,
-                tlsTargetHost,
-                tlsRemoteCertificateValidationCallback,
+                SendVia(serverEndPoint, transport, tlsTargetHost, tlsRemoteCertificateValidationCallback),
                 ct)
             .ConfigureAwait(false);
 
@@ -265,8 +254,7 @@ internal sealed class TurnClient : ITurnClient
     {
         ArgumentNullException.ThrowIfNull(serverEndPoint);
 
-        var (_, effectiveCredentials) = await ExecuteWithAuthAsync(
-                serverEndPoint,
+        var (_, effectiveCredentials) = await _engine.ExecuteWithAuthAsync(
                 TurnMessageMethod.ConnectionBind,
                 _ =>
                 [
@@ -276,9 +264,7 @@ internal sealed class TurnClient : ITurnClient
                     })
                 ],
                 credentials,
-                transport,
-                tlsTargetHost,
-                tlsRemoteCertificateValidationCallback,
+                SendVia(serverEndPoint, transport, tlsTargetHost, tlsRemoteCertificateValidationCallback),
                 ct)
             .ConfigureAwait(false);
 
@@ -321,164 +307,16 @@ internal sealed class TurnClient : ITurnClient
         ArgumentNullException.ThrowIfNull(serverEndPoint);
         ArgumentNullException.ThrowIfNull(peerEndPoint);
 
-        await SendIndicationCoreAsync(
-                serverEndPoint,
-                TurnMessageMethod.Send,
-                transactionId =>
-                [
-                    TurnAttributeMapper.Encode(
-                        new TurnXorPeerAddressAttribute { EndPoint = peerEndPoint },
-                        transactionId),
-                    TurnAttributeMapper.Encode(new TurnDataAttribute { Value = payload.ToArray() })
-                ],
-                credentials,
-                transport,
-                tlsTargetHost,
-                tlsRemoteCertificateValidationCallback,
-                ct)
-            .ConfigureAwait(false);
-    }
-
-    // ── Auth flow ────────────────────────────────────────────────────────────
-
-    private async Task<(StunMessage Response, StunCredentials? EffectiveCredentials)> ExecuteWithAuthAsync(
-        IPEndPoint serverEndPoint,
-        TurnMessageMethod method,
-        Func<byte[], IReadOnlyList<StunAttribute>> attributeFactory,
-        StunCredentials? credentials,
-        TurnTransport transport,
-        string? tlsTargetHost,
-        RemoteCertificateValidationCallback? tlsRemoteCertificateValidationCallback,
-        CancellationToken ct)
-    {
-        if (credentials is null || !credentials.IsLongTerm)
-        {
-            var response = await ExecuteRequestCoreAsync(
-                    serverEndPoint,
-                    method,
-                    attributeFactory,
-                    credentials,
-                    transport,
-                    tlsTargetHost,
-                    tlsRemoteCertificateValidationCallback,
-                    ct)
-                .ConfigureAwait(false);
-
-            return (response, ApplyAuthUpdates(response, credentials));
-        }
-
-        var activeCredentials = credentials;
-
-        // Long-term TURN flow starts unauthenticated when REALM/NONCE are not known yet.
-        if (activeCredentials.Realm is null || activeCredentials.Nonce is null)
-        {
-            try
-            {
-                _ = await ExecuteRequestCoreAsync(
-                        serverEndPoint,
-                        method,
-                        attributeFactory,
-                        credentials: null,
-                        transport,
-                        tlsTargetHost,
-                        tlsRemoteCertificateValidationCallback,
-                        ct)
-                    .ConfigureAwait(false);
-            }
-            catch (TurnChallengeException challenge) when (challenge.ErrorCode == 401
-                                                           && challenge.Realm is not null
-                                                           && challenge.Nonce is not null)
-            {
-                activeCredentials = activeCredentials.WithRealmAndNonce(challenge.Realm, challenge.Nonce);
-            }
-        }
-
-        try
-        {
-            var response = await ExecuteRequestCoreAsync(
-                    serverEndPoint,
-                    method,
-                    attributeFactory,
-                    activeCredentials,
-                    transport,
-                    tlsTargetHost,
-                    tlsRemoteCertificateValidationCallback,
-                    ct)
-                .ConfigureAwait(false);
-
-            return (response, ApplyAuthUpdates(response, activeCredentials));
-        }
-        catch (TurnChallengeException staleNonce) when (staleNonce.ErrorCode == 438 && staleNonce.Nonce is not null)
-        {
-            activeCredentials = activeCredentials.WithNonce(staleNonce.Nonce);
-        }
-
-        var finalResponse = await ExecuteRequestCoreAsync(
-                serverEndPoint,
-                method,
-                attributeFactory,
-                activeCredentials,
-                transport,
-                tlsTargetHost,
-                tlsRemoteCertificateValidationCallback,
-                ct)
-            .ConfigureAwait(false);
-
-        return (finalResponse, ApplyAuthUpdates(finalResponse, activeCredentials));
-    }
-
-    // ── Request transport ────────────────────────────────────────────────────
-
-    private async Task<StunMessage> ExecuteRequestCoreAsync(
-        IPEndPoint serverEndPoint,
-        TurnMessageMethod method,
-        Func<byte[], IReadOnlyList<StunAttribute>> attributeFactory,
-        StunCredentials? credentials,
-        TurnTransport transport,
-        string? tlsTargetHost,
-        RemoteCertificateValidationCallback? tlsRemoteCertificateValidationCallback,
-        CancellationToken ct)
-    {
-        var transactionId = CreateTransactionId();
-        var request = BuildMessage(
-            StunMessageClass.Request,
-            method,
-            transactionId,
-            attributeFactory(transactionId),
+        var bytes = _engine.EncodeIndication(
+            TurnMessageMethod.Send,
+            transactionId =>
+            [
+                TurnAttributeMapper.Encode(
+                    new TurnXorPeerAddressAttribute { EndPoint = peerEndPoint },
+                    transactionId),
+                TurnAttributeMapper.Encode(new TurnDataAttribute { Value = payload.ToArray() })
+            ],
             credentials);
-
-        var requestBytes = EncodeMessage(request, credentials);
-
-        return await _transport.SendRequestAsync(
-                serverEndPoint,
-                request,
-                requestBytes,
-                transport,
-                tlsTargetHost,
-                tlsRemoteCertificateValidationCallback,
-                ct)
-            .ConfigureAwait(false);
-    }
-
-    private async Task SendIndicationCoreAsync(
-        IPEndPoint serverEndPoint,
-        TurnMessageMethod method,
-        Func<byte[], IReadOnlyList<StunAttribute>> attributeFactory,
-        StunCredentials? credentials,
-        TurnTransport transport,
-        string? tlsTargetHost,
-        RemoteCertificateValidationCallback? tlsRemoteCertificateValidationCallback,
-        CancellationToken ct)
-    {
-        var transactionId = CreateTransactionId();
-        var indication = BuildMessage(
-            StunMessageClass.Indication,
-            method,
-            transactionId,
-            attributeFactory(transactionId),
-            credentials);
-
-        var bytes = EncodeMessage(indication, credentials);
 
         await _transport.SendIndicationAsync(
                 serverEndPoint,
@@ -490,7 +328,27 @@ internal sealed class TurnClient : ITurnClient
             .ConfigureAwait(false);
     }
 
-    // ── Message construction ────────────────────────────────────────────────
+    // ── Transport binding ─────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Produces the single-round-trip delegate the engine drives, bound to this client's per-transaction
+    /// socket transport (a fresh socket per request) for the given server and transport selectors.
+    /// </summary>
+    private Func<StunMessage, byte[], CancellationToken, Task<StunMessage>> SendVia(
+        IPEndPoint serverEndPoint,
+        TurnTransport transport,
+        string? tlsTargetHost,
+        RemoteCertificateValidationCallback? tlsRemoteCertificateValidationCallback)
+        => (request, requestBytes, ct) => _transport.SendRequestAsync(
+            serverEndPoint,
+            request,
+            requestBytes,
+            transport,
+            tlsTargetHost,
+            tlsRemoteCertificateValidationCallback,
+            ct);
+
+    // ── Method attribute construction ──────────────────────────────────────────
 
     private static IReadOnlyList<StunAttribute> BuildAllocateAttributes(TurnAllocateOptions options, byte[] transactionId)
     {
@@ -559,69 +417,5 @@ internal sealed class TurnClient : ITurnClient
         }
 
         return attributes;
-    }
-
-    private static StunMessage BuildMessage(
-        StunMessageClass messageClass,
-        TurnMessageMethod method,
-        byte[] transactionId,
-        IReadOnlyList<StunAttribute> methodAttributes,
-        StunCredentials? credentials)
-    {
-        var attributes = new List<StunAttribute>();
-        if (credentials is not null)
-        {
-            attributes.Add(new UsernameAttribute { Value = credentials.Username });
-
-            if (credentials.IsLongTerm)
-            {
-                if (credentials.Realm is not null)
-                    attributes.Add(new RealmAttribute { Value = credentials.Realm });
-                if (credentials.Nonce is not null)
-                    attributes.Add(new NonceAttribute { Value = credentials.Nonce });
-            }
-        }
-
-        attributes.AddRange(methodAttributes);
-
-        return new StunMessage
-        {
-            MessageClass = messageClass,
-            MessageMethod = (StunMessageMethod)(ushort)method,
-            TransactionId = transactionId,
-            Attributes = attributes
-        };
-    }
-
-    private byte[] EncodeMessage(StunMessage message, StunCredentials? credentials)
-    {
-        if (credentials is null)
-            return _codec.Encode(message);
-
-        return _codec.EncodeWithIntegrity(message, credentials.DeriveHmacKey(), addFingerprint: false);
-    }
-
-    private static byte[] CreateTransactionId()
-    {
-        var transactionId = new byte[StunWireConstants.TransactionIdLength];
-        RandomNumberGenerator.Fill(transactionId);
-        return transactionId;
-    }
-
-    private static StunCredentials? ApplyAuthUpdates(StunMessage response, StunCredentials? credentials)
-    {
-        if (credentials is null || !credentials.IsLongTerm)
-            return credentials;
-
-        var realm = response.Attributes.OfType<RealmAttribute>().FirstOrDefault()?.Value ?? credentials.Realm;
-        var nonce = response.Attributes.OfType<NonceAttribute>().FirstOrDefault()?.Value ?? credentials.Nonce;
-
-        if (realm is null || nonce is null)
-            return credentials;
-
-        return !string.Equals(realm, credentials.Realm, StringComparison.Ordinal)
-               || !string.Equals(nonce, credentials.Nonce, StringComparison.Ordinal)
-            ? credentials.WithRealmAndNonce(realm, nonce)
-            : credentials;
     }
 }
