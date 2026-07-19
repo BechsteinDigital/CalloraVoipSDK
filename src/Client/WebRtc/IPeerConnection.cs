@@ -68,7 +68,12 @@ public interface IPeerConnection : IAsyncDisposable
     /// <summary>Starts the media transport (ICE connectivity, DTLS handshake, receive loop).</summary>
     Task StartAsync(CancellationToken cancellationToken = default);
 
-    /// <summary>Sends one already-encoded audio RTP payload on the peer's audio track.</summary>
+    /// <summary>
+    /// Sends one already-encoded audio RTP payload on the peer's audio track. A no-op when the negotiated
+    /// directions do not carry outbound audio from this peer (a send-only/inactive remote answer, or a
+    /// recv-only/inactive local side, RFC 3264): the audio m-line still anchors the transport and inbound
+    /// audio is still received, but nothing is streamed to a remote that will not receive it.
+    /// </summary>
     ValueTask SendAudioAsync(ReadOnlyMemory<byte> payload, CancellationToken cancellationToken = default);
 
     /// <summary>Packetises and sends one already-encoded video frame on the peer's video track.</summary>

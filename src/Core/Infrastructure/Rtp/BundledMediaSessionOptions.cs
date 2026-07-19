@@ -38,6 +38,14 @@ internal sealed record BundledMediaSessionOptions
     /// <summary>The audio m-line configuration.</summary>
     public required BundledTrackConfig Audio { get; init; }
 
+    /// <summary>
+    /// Whether outbound audio is sent. The audio m-line always anchors the bundle transport (ICE/DTLS ride
+    /// it) and inbound audio is always received, but a remote that will not receive audio (a send-only or
+    /// inactive answer) or a local side that does not send it must not have audio streamed at it (RFC 3264).
+    /// Defaults to <see langword="true"/>; the SIP path leaves it so.
+    /// </summary>
+    public bool AudioSendEnabled { get; init; } = true;
+
     /// <summary>The video m-line configuration, or null for an audio-only bundle.</summary>
     public BundledTrackConfig? Video { get; init; }
 
