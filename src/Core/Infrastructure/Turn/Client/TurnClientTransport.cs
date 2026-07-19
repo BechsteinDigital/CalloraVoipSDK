@@ -3,7 +3,6 @@ using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Authentication;
 using Microsoft.Extensions.Logging;
-using CalloraVoipSdk.Core.Infrastructure.Stun.Attributes;
 using CalloraVoipSdk.Core.Infrastructure.Stun.Messages;
 using CalloraVoipSdk.Core.Infrastructure.Stun.Wire;
 
@@ -144,7 +143,7 @@ internal sealed class TurnClientTransport
                 continue;
             }
 
-            return ProcessResponse(response, request.MessageMethod);
+            return TurnResponseValidator.Validate(response, request.MessageMethod);
         }
 
         throw new TurnException($"TURN server {serverEndPoint} did not respond after {MaxAttempts} attempts.");
@@ -215,7 +214,7 @@ internal sealed class TurnClientTransport
         if (response is null)
             throw new TurnException($"TURN server {serverEndPoint} did not respond on {(tls ? "TLS" : "TCP")}.");
 
-        return ProcessResponse(response, request.MessageMethod);
+        return TurnResponseValidator.Validate(response, request.MessageMethod);
     }
 
     private async Task SendIndicationStreamAsync(
@@ -275,34 +274,6 @@ internal sealed class TurnClientTransport
             _logger.LogError(ex, "TURN indication send failed");
             throw new TurnException($"TURN indication send failed: {ex.Message}", ex);
         }
-    }
-
-    private static StunMessage ProcessResponse(StunMessage response, StunMessageMethod expectedMethod)
-    {
-        if (response.MessageMethod != expectedMethod)
-            throw new TurnException(
-                $"TURN response method mismatch. Expected 0x{(ushort)expectedMethod:X4}, got 0x{(ushort)response.MessageMethod:X4}.");
-
-        if (response.MessageClass == StunMessageClass.ErrorResponse)
-        {
-            var error = response.Attributes.OfType<ErrorCodeAttribute>().FirstOrDefault();
-            int code = error?.Code ?? 0;
-            string reason = string.IsNullOrWhiteSpace(error?.Reason) ? "(no reason)" : error!.Reason;
-
-            if (code is 401 or 438)
-            {
-                var realm = response.Attributes.OfType<RealmAttribute>().FirstOrDefault()?.Value;
-                var nonce = response.Attributes.OfType<NonceAttribute>().FirstOrDefault()?.Value;
-                throw new TurnChallengeException(code, reason, realm, nonce);
-            }
-
-            throw new TurnException($"TURN error {code}: {reason}");
-        }
-
-        if (response.MessageClass != StunMessageClass.SuccessResponse)
-            throw new TurnException($"TURN unexpected response class: {response.MessageClass}");
-
-        return response;
     }
 
     private async Task<StunMessage?> ReceiveMatchingUdpAsync(
