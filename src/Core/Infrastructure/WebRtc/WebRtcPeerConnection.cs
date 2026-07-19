@@ -299,9 +299,21 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         // BUNDLE group). A non-bundle exchange yields no session — the local description is still
         // returned, but the peer has no transport (logged), which StartAsync then surfaces. The offerer
         // (a local offer was created) holds the ICE controlling role (RFC 8445 §6.1.1).
+        // A relay ICE local candidate is offered only when a TURN allocation was already gathered on this socket
+        // (the offerer gathers between CreateOffer and applying the answer; the answerer binds its socket here
+        // and gathers afterwards, so its allocation is adopted later — a follow-up). The allocation lives on the
+        // same socket the session's transport takes over, so the relay data path rides it.
+        (IPEndPoint ServerEndPoint, TurnAllocateResult Allocation)? gatheredRelay;
+        lock (_sync)
+            gatheredRelay = _gatheredRelay;
+        var relayIceBindingFactory = gatheredRelay is { } relay
+            ? WebRtcRelayBinding.CreateFactory(relay.ServerEndPoint, relay.Allocation, _loggerFactory)
+            : null;
+
         var session = WebRtcSessionFactory.TryCreate(
             remote, localModel, _options, _handshaker, _certificate, _loggerFactory, _mediaSocket,
-            iceControlling: pendingOffer is not null);
+            iceControlling: pendingOffer is not null,
+            relayIceBindingFactory: relayIceBindingFactory);
         if (session is null)
             _logger.LogWarning("The remote description did not negotiate a BUNDLE media session; no transport was built.");
 

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using CalloraVoipSdk.Core.Infrastructure.Common.Relay;
 using CalloraVoipSdk.Core.Infrastructure.Dtls;
 using CalloraVoipSdk.Core.Infrastructure.Rtp;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
@@ -38,6 +39,10 @@ internal static class WebRtcSessionFactory
     /// agent drives connectivity checks and USE-CANDIDATE nomination; the controlled agent (answerer) adopts
     /// the nominated pair from the peer's check.
     /// </param>
+    /// <param name="relayIceBindingFactory">
+    /// Builds the relay ICE binding once the shared socket exists, when a TURN allocation was gathered on it
+    /// (the offerer path); <see langword="null"/> leaves the session direct-only.
+    /// </param>
     public static BundledMediaSession? TryCreate(
         SdpSessionDescription remoteDescription,
         SdpSessionDescription localDescription,
@@ -46,7 +51,8 @@ internal static class WebRtcSessionFactory
         DtlsCertificate certificate,
         ILoggerFactory loggerFactory,
         UdpClient? preBoundSocket = null,
-        bool iceControlling = false)
+        bool iceControlling = false,
+        RelayIceBindingFactory? relayIceBindingFactory = null)
     {
         ArgumentNullException.ThrowIfNull(remoteDescription);
         ArgumentNullException.ThrowIfNull(localDescription);
@@ -152,6 +158,10 @@ internal static class WebRtcSessionFactory
             {
                 RemoteCandidates = remoteCandidates,
             },
+            // Present only when a TURN allocation was gathered on this socket (the offerer path, where gathering
+            // precedes applying the answer). The relay ICE local candidate is then checked alongside the direct
+            // one; absent, the session is direct-only.
+            RelayIceBindingFactory = relayIceBindingFactory,
         };
 
         return new BundledMediaSession(sessionOptions, handshaker, certificate, loggerFactory);
