@@ -534,6 +534,15 @@ internal sealed class TurnServer : IAsyncDisposable
         TurnClientContext context,
         CancellationToken ct)
     {
+        // RFC 5389 §15.5: a present FINGERPRINT must be valid — a mismatch means a corrupted or non-STUN
+        // datagram, so drop it silently before authenticating or dispatching it.
+        if (request.Attributes.Any(a => a.AttributeType == StunAttributeType.Fingerprint)
+            && !_codec.VerifyFingerprint(rawRequest))
+        {
+            _logger.LogDebug("Discarding TURN request: FINGERPRINT mismatch.");
+            return;
+        }
+
         if (!_requestAuthenticator.TryAuthenticateRequest(request, rawRequest, out var authenticatedCredentials, out var challenge))
         {
             if (challenge is not null)

@@ -168,6 +168,16 @@ internal sealed class StunBindingRequestHandler : IStunRequestHandler
     /// <inheritdoc />
     public StunRequestHandlingResult? Handle(StunMessage request, ReadOnlySpan<byte> rawRequest, IPEndPoint sender)
     {
+        // RFC 5389 §15.5: FINGERPRINT is optional, but when present it MUST be valid. A mismatch means the
+        // datagram is corrupted or is not really STUN (e.g. a non-STUN packet demultiplexed on a shared socket),
+        // so discard it silently rather than answering it.
+        if (request.Attributes.Any(a => a.AttributeType == StunAttributeType.Fingerprint)
+            && !_codec.VerifyFingerprint(rawRequest))
+        {
+            _logger.LogDebug("Discarding STUN request from {Sender}: FINGERPRINT mismatch.", sender);
+            return null;
+        }
+
         // RFC 7635 §7: ACCESS-TOKEN is unexpected unless third-party authorization
         // was previously advertised by this server.
         var accessToken = request.Attributes.OfType<AccessTokenAttribute>().FirstOrDefault();
