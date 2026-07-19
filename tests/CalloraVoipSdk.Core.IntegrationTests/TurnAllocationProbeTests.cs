@@ -71,6 +71,41 @@ public sealed class TurnAllocationProbeTests
         await serverLoop;
     }
 
+    [Fact]
+    public async Task TryAllocateAsync_returns_null_when_the_server_is_silent_within_the_gathering_timeout()
+    {
+        var codec = new StunMessageCodec();
+        using var silentServer = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0)); // bound, never responds
+        var serverEndPoint = (IPEndPoint)silentServer.Client.LocalEndPoint!;
+
+        using var media = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        var probe = new TurnAllocationProbe(codec, NullLoggerFactory.Instance, gatheringTimeout: TimeSpan.FromMilliseconds(300));
+        var credentials = new StunCredentials { Username = "user", Password = "pass", Realm = "bootstrap" };
+
+        var result = await probe
+            .TryAllocateAsync(media.Client, serverEndPoint, credentials, lifetimeSeconds: 600, CancellationToken.None)
+            .WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Null(result); // the gathering timeout bounds the attempt — no hang through the full RTO schedule
+    }
+
+    [Fact]
+    public async Task TryAllocateAsync_propagates_caller_cancellation()
+    {
+        var codec = new StunMessageCodec();
+        using var silentServer = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        var serverEndPoint = (IPEndPoint)silentServer.Client.LocalEndPoint!;
+
+        using var media = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        // A long gathering timeout so the caller's cancellation, not the internal timeout, ends the wait.
+        var probe = new TurnAllocationProbe(codec, NullLoggerFactory.Instance, gatheringTimeout: TimeSpan.FromSeconds(30));
+        var credentials = new StunCredentials { Username = "user", Password = "pass", Realm = "bootstrap" };
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => probe.TryAllocateAsync(media.Client, serverEndPoint, credentials, lifetimeSeconds: 600, cts.Token));
+    }
+
     private static async Task RunFakeTurnServerAsync(
         UdpClient server, IStunMessageCodec codec, IPEndPoint relayed, bool succeed, CancellationToken ct)
     {

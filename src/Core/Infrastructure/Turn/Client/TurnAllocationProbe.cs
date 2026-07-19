@@ -27,18 +27,31 @@ internal sealed class TurnAllocationProbe
 {
     private const int ReceiveBufferSize = 4096;
 
+    private static readonly TimeSpan DefaultGatheringTimeout = TimeSpan.FromSeconds(5);
+
     private readonly IStunMessageCodec _codec;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<TurnAllocationProbe> _logger;
+    private readonly TimeSpan _gatheringTimeout;
 
     /// <summary>Creates the probe over the shared STUN wire codec and logger factory.</summary>
-    public TurnAllocationProbe(IStunMessageCodec codec, ILoggerFactory loggerFactory)
+    /// <param name="codec">The STUN wire codec.</param>
+    /// <param name="loggerFactory">Logger factory.</param>
+    /// <param name="gatheringTimeout">
+    /// The overall bound for one allocation attempt; on expiry the probe gives up and returns
+    /// <see langword="null"/> (no relay candidate) rather than hanging through the transactor's full RTO
+    /// schedule against a silent server. Defaults to 5 s. Injectable for tests.
+    /// </param>
+    public TurnAllocationProbe(IStunMessageCodec codec, ILoggerFactory loggerFactory, TimeSpan? gatheringTimeout = null)
     {
         ArgumentNullException.ThrowIfNull(codec);
         ArgumentNullException.ThrowIfNull(loggerFactory);
+        if (gatheringTimeout is { } timeout && timeout <= TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(nameof(gatheringTimeout), "The gathering timeout must be positive.");
         _codec = codec;
         _loggerFactory = loggerFactory;
         _logger = loggerFactory.CreateLogger<TurnAllocationProbe>();
+        _gatheringTimeout = gatheringTimeout ?? DefaultGatheringTimeout;
     }
 
     /// <summary>
@@ -68,11 +81,28 @@ internal sealed class TurnAllocationProbe
             _loggerFactory.CreateLogger<TurnControlTransactor>());
         var control = new TurnRelayControlClient(new TurnTransactionEngine(_codec), transactor);
 
-        using var loopCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        var receiveLoop = RunReceiveLoopAsync(socket, transactor, loopCts.Token);
+        // Bound the whole attempt so a silent server does not hang through the transactor's full RTO schedule.
+        // The internal timeout yields null (no relay candidate); the caller's own cancellation propagates.
+        using var timeoutCts = new CancellationTokenSource(_gatheringTimeout);
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
+        var receiveLoop = RunReceiveLoopAsync(socket, transactor, linkedCts.Token);
         try
         {
-            return await control.AllocateAsync(credentials, lifetimeSeconds, ct).ConfigureAwait(false);
+            return await control.AllocateAsync(credentials, lifetimeSeconds, linkedCts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested)
+        {
+            _logger.LogDebug(
+                "TURN allocation on {Server} did not complete within {Timeout}; no relay candidate gathered.",
+                serverEndPoint, _gatheringTimeout);
+            return null;
+        }
+        catch (TurnChallengeException ex)
+        {
+            _logger.LogDebug(
+                ex, "TURN allocation on {Server} exhausted the auth challenge/retry; no relay candidate gathered.",
+                serverEndPoint);
+            return null;
         }
         catch (TurnException ex)
         {
@@ -81,7 +111,7 @@ internal sealed class TurnAllocationProbe
         }
         finally
         {
-            await loopCts.CancelAsync().ConfigureAwait(false);
+            await linkedCts.CancelAsync().ConfigureAwait(false);
             await receiveLoop.ConfigureAwait(false);
         }
     }
