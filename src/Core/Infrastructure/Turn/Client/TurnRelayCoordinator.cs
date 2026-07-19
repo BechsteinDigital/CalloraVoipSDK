@@ -31,6 +31,12 @@ internal sealed class TurnRelayCoordinator
     /// caller must route the transport's relay-control callback to <see cref="OnControlDatagram"/> for the
     /// response path to close (a construction cycle broken with a capturing lambda at the call site).
     /// </summary>
+    /// <remarks>
+    /// Invariant for the caller: assign the coordinator reference before starting the transport's receive
+    /// loop (<c>StartAsync</c>). The relay-control callback is wired with a capturing lambda over the
+    /// coordinator variable, so the loop must not run — and thus no control datagram may arrive — until the
+    /// variable is assigned, otherwise <see cref="OnControlDatagram"/> would dereference null.
+    /// </remarks>
     /// <param name="transport">The shared media transport's relay control surface.</param>
     /// <param name="relayServer">The TURN server's transport address (must match the transport's relay server).</param>
     /// <param name="codec">The STUN wire codec.</param>

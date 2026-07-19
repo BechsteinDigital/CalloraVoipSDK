@@ -127,6 +127,57 @@ public sealed class TurnRelayCoordinatorTests
         await serverLoop;
     }
 
+    [Fact]
+    public async Task EstablishAsync_leaves_the_data_path_suppressed_when_cancelled_mid_sequence()
+    {
+        var codec = new StunMessageCodec();
+        using var fakeServer = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        var serverEndPoint = (IPEndPoint)fakeServer.Client.LocalEndPoint!;
+        var relayedAddress = new IPEndPoint(IPAddress.Parse("198.51.100.9"), 49152);
+        var channelDataObserved = new TaskCompletionSource<ushort>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var serverCts = new CancellationTokenSource();
+        // Allocate + CreatePermission succeed, but ChannelBind is never answered: EstablishAsync parks
+        // awaiting the ChannelBind response, so cancellation lands mid-sequence.
+        var serverLoop = RunFakeTurnServerAsync(
+            fakeServer, codec, relayedAddress, channelBindSucceeds: true, channelDataObserved, serverCts.Token,
+            dropChannelBind: true);
+
+        var peer = new IPEndPoint(IPAddress.Loopback, 9999);
+        TurnRelayCoordinator relay = null!;
+        await using var transport = new BundledMediaTransport(
+            new BundledMediaTransportOptions
+            {
+                LocalEndPoint = Loopback(),
+                RemoteEndPoint = peer,
+                RelayServer = serverEndPoint,
+                OnRelayControl = m => relay.OnControlDatagram(m),
+            },
+            InboundPipeline(), NullLogger<BundledMediaTransport>.Instance);
+        relay = new TurnRelayCoordinator(transport, serverEndPoint, codec, NullLogger<TurnRelayCoordinator>.Instance);
+        await transport.StartAsync();
+
+        var credentials = new StunCredentials { Username = "user", Password = "pass", Realm = "bootstrap" };
+        using var establishCts = new CancellationTokenSource();
+        var establish = relay.EstablishAsync(peer, ChannelNumber, credentials, lifetimeSeconds: 600, establishCts.Token);
+
+        await Task.Delay(200); // let Allocate + CreatePermission complete; ChannelBind now pending
+        await establishCts.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => establish);
+
+        // Cancelled before the channel-bind completed, so SetRelayChannel was never called: media stays suppressed.
+        var outbound = new BundledOutboundPipeline(
+            new RtpPacketCodec(), transport, NullLogger<BundledOutboundPipeline>.Instance);
+        outbound.RegisterTrack("audio", Track());
+        outbound.InstallOutboundKey(new SrtpContext(Material()));
+        await outbound.SendAsync("audio", new byte[] { 1, 2, 3 });
+
+        await Task.Delay(300);
+        Assert.False(channelDataObserved.Task.IsCompleted);
+
+        serverCts.Cancel();
+        await serverLoop;
+    }
+
     // ── fake TURN server ─────────────────────────────────────────────────────────
 
     private static async Task RunFakeTurnServerAsync(
@@ -135,7 +186,8 @@ public sealed class TurnRelayCoordinatorTests
         IPEndPoint relayedAddress,
         bool channelBindSucceeds,
         TaskCompletionSource<ushort> channelDataObserved,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool dropChannelBind = false)
     {
         while (!ct.IsCancellationRequested)
         {
@@ -164,6 +216,9 @@ public sealed class TurnRelayCoordinatorTests
                 continue;
 
             var method = (TurnMessageMethod)(ushort)request.MessageMethod;
+            if (method == TurnMessageMethod.ChannelBind && dropChannelBind)
+                continue; // never answer ChannelBind — the client parks awaiting the response
+
             var response = method switch
             {
                 TurnMessageMethod.Allocate when !HasUsername(request) =>
