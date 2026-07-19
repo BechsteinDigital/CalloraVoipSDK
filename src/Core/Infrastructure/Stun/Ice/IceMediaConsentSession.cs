@@ -18,10 +18,13 @@ internal sealed class IceMediaConsentSession : IAsyncDisposable
 {
     private readonly IStunMessageCodec _codec;
     private readonly Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask> _sendRaw;
-    // The nominated remote consent checks target. Mutable: ICE nomination (RFC 8445 §8) can redirect
-    // consent freshness onto a newly selected pair. Accessed via Volatile — written from the nomination
-    // path, read from the consent loop.
-    private IPEndPoint _remoteEndPoint;
+    // The nominated pair: the remote endpoint and its send path (null = direct media socket, or a TURN-framed
+    // relay path when a relay pair was nominated). Mutable — ICE nomination (RFC 8445 §8) can redirect consent
+    // freshness onto a newly selected pair, and a relay nomination swaps in the relay send path so freshness
+    // keeps the relayed pair alive (RFC 7675 over the allocation). One immutable value swapped under Volatile
+    // (written from the nomination path, read from the consent loop) so the remote and its send path are always
+    // observed as a consistent snapshot, never torn across two fields.
+    private IceNominatedTarget _nominated;
     private readonly string _localUfrag;
     private readonly string _remoteUfrag;
     private readonly string _remotePassword;
@@ -68,7 +71,7 @@ internal sealed class IceMediaConsentSession : IAsyncDisposable
 
         _codec = codec;
         _sendRaw = sendRaw;
-        _remoteEndPoint = remoteEndPoint;
+        _nominated = new IceNominatedTarget(remoteEndPoint, Send: null);
         _localUfrag = localUfrag;
         _remoteUfrag = remoteUfrag;
         _remotePassword = remotePassword;
@@ -94,14 +97,30 @@ internal sealed class IceMediaConsentSession : IAsyncDisposable
 
     /// <summary>
     /// Redirects consent freshness onto a newly nominated ICE pair (RFC 8445 §8): subsequent consent
-    /// checks are sent to <paramref name="remoteEndPoint"/> instead of the pair the session started on.
+    /// checks are sent to <paramref name="remoteEndPoint"/> over the direct media socket instead of the
+    /// pair the session started on. Thread-safe.
+    /// </summary>
+    /// <param name="remoteEndPoint">The nominated remote endpoint to run consent against.</param>
+    public void Nominate(IPEndPoint remoteEndPoint) => Nominate(remoteEndPoint, sendVia: null);
+
+    /// <summary>
+    /// Redirects consent freshness onto a newly nominated ICE pair (RFC 8445 §8), running subsequent consent
+    /// checks to <paramref name="remoteEndPoint"/> over <paramref name="sendVia"/> — a TURN-framed relay send
+    /// path when a relay pair was nominated, or <see langword="null"/> to use the direct media socket.
     /// Thread-safe.
     /// </summary>
     /// <param name="remoteEndPoint">The nominated remote endpoint to run consent against.</param>
-    public void Nominate(IPEndPoint remoteEndPoint)
+    /// <param name="sendVia">
+    /// The send path consent checks use for the nominated pair, or <see langword="null"/> for the direct
+    /// media socket. Same shape as the raw-send delegate: <c>(datagram, remoteTarget, ct)</c>.
+    /// </param>
+    public void Nominate(
+        IPEndPoint remoteEndPoint,
+        Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>? sendVia)
     {
         ArgumentNullException.ThrowIfNull(remoteEndPoint);
-        Volatile.Write(ref _remoteEndPoint, remoteEndPoint);
+        // A single atomic reference swap: the consent loop always reads the remote and its send path together.
+        Volatile.Write(ref _nominated, new IceNominatedTarget(remoteEndPoint, sendVia));
     }
 
     /// <summary>
@@ -117,27 +136,52 @@ internal sealed class IceMediaConsentSession : IAsyncDisposable
         _registry.TryComplete(datagram.Slice(8, 12));
     }
 
-    private Task<bool> SendConsentCheckAsync(CancellationToken ct) => SendCheckAsync(Volatile.Read(ref _remoteEndPoint), useCandidate: false, ct);
+    private Task<bool> SendConsentCheckAsync(CancellationToken ct)
+    {
+        // One atomic read of the nominated pair — remote and send path are always a consistent snapshot.
+        var nominated = Volatile.Read(ref _nominated);
+        return SendCheckVia(nominated.Send ?? _sendRaw, nominated.Remote, useCandidate: false, ct);
+    }
 
     /// <summary>
-    /// Sends one connectivity check to <paramref name="target"/> and returns <see langword="true"/>
-    /// when a matching response arrives within the check timeout. Shared by consent checks (to the
-    /// nominated remote), triggered checks (back to the source of an inbound check, RFC 8445 §7.3.1.4),
-    /// and nomination checks (candidate-pair checking, RFC 8445 §7.2.2). Registers the transaction before
-    /// sending so a fast response is not missed.
+    /// Sends one connectivity check to <paramref name="target"/> over the direct media socket and returns
+    /// <see langword="true"/> when a matching response arrives within the check timeout. Shared by consent
+    /// checks (to the nominated remote), triggered checks (back to the source of an inbound check,
+    /// RFC 8445 §7.3.1.4), and direct nomination checks (candidate-pair checking, RFC 8445 §7.2.2).
     /// </summary>
     /// <param name="target">The address to send the check to.</param>
     /// <param name="useCandidate">Whether to carry USE-CANDIDATE — a controlling agent's nominating check (RFC 8445 §8.1.1).</param>
     /// <param name="ct">Cancellation token.</param>
-    internal async Task<bool> SendCheckAsync(IPEndPoint target, bool useCandidate, CancellationToken ct)
+    internal Task<bool> SendCheckAsync(IPEndPoint target, bool useCandidate, CancellationToken ct)
+        => SendCheckVia(_sendRaw, target, useCandidate, ct);
+
+    /// <summary>
+    /// Sends one connectivity check to <paramref name="target"/> over <paramref name="send"/> and returns
+    /// <see langword="true"/> when a matching response arrives within the check timeout. The send path is
+    /// injected so a relay local candidate can frame the check through its TURN server (Send indication)
+    /// while direct candidates use the media socket — both correlate their response by the same transaction
+    /// id via <see cref="OnStunResponse"/>, so the matcher is send-path agnostic. Registers the transaction
+    /// before sending so a fast response is not missed.
+    /// </summary>
+    /// <param name="send">The send path — <c>(datagram, remoteTarget, ct)</c>; the direct socket or a relay frame.</param>
+    /// <param name="target">The remote address the check is addressed to.</param>
+    /// <param name="useCandidate">Whether to carry USE-CANDIDATE — a controlling agent's nominating check (RFC 8445 §8.1.1).</param>
+    /// <param name="ct">Cancellation token.</param>
+    internal async Task<bool> SendCheckVia(
+        Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask> send,
+        IPEndPoint target,
+        bool useCandidate,
+        CancellationToken ct)
     {
+        ArgumentNullException.ThrowIfNull(send);
+
         var (datagram, transactionId) = IceConsentCheckBuilder.Build(
             _codec, _localUfrag, _remoteUfrag, _remotePassword, _priority, _controlling, _tieBreaker, useCandidate);
 
         var pending = _registry.AwaitResponseAsync(transactionId, _checkTimeout, ct);
         try
         {
-            await _sendRaw(datagram, target, ct).ConfigureAwait(false);
+            await send(datagram, target, ct).ConfigureAwait(false);
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
