@@ -33,6 +33,7 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IAsyncDisp
     private readonly ILogger<BundledMediaTransport> _logger;
     private readonly IPEndPoint _localEndPoint;
     private readonly IRelayDatagramChannel? _relay;
+    private readonly Action<ReadOnlyMemory<byte>>? _onRelayControl;
     private readonly UdpClient _udp;
 
     private IPEndPoint? _remoteEndPoint;
@@ -53,6 +54,7 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IAsyncDisp
         _localEndPoint  = options.LocalEndPoint;
         _remoteEndPoint = options.RemoteEndPoint;
         _relay          = options.Relay;
+        _onRelayControl = options.OnRelayControl;
 
         // A relay channel is bound to one peer (RFC 8656 channel-bind is per-peer), so the peer is known
         // whenever relay mode is active. Require it: relayed inbound datagrams physically arrive from the
@@ -158,6 +160,21 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IAsyncDisp
         await _udp.SendAsync(datagram, target, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Sends a TURN control request (Allocate / CreatePermission / ChannelBind / Refresh) to the relay
+    /// server on the shared socket, <em>unwrapped</em> — it is addressed to the server itself, not framed as
+    /// data for the peer. Its response arrives on the receive loop and is surfaced via the relay-control
+    /// callback. Only valid in relay mode.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The transport is not in relay mode.</exception>
+    public async ValueTask SendControlAsync(ReadOnlyMemory<byte> request, CancellationToken cancellationToken)
+    {
+        if (_relay is not { } relay)
+            throw new InvalidOperationException("SendControlAsync is only valid on a relay-mode transport.");
+
+        await _udp.SendAsync(request, relay.RelayServer, cancellationToken).ConfigureAwait(false);
+    }
+
     private async Task RunReceiveLoopAsync(CancellationToken cancellationToken)
     {
         _logger.LogDebug("Bundled media receive loop started on {LocalEndPoint}", _localEndPoint);
@@ -215,7 +232,22 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IAsyncDisp
         if (_relay is { } relay)
         {
             if (relay.TryUnwrap(datagram, source, out var payload))
+            {
                 _inbound.ProcessInboundDatagram(payload, Volatile.Read(ref _remoteEndPoint) ?? source);
+                return;
+            }
+
+            // Not ChannelData. From the relay server the remaining traffic is the TURN control plane — STUN
+            // Allocate/Permission/ChannelBind responses (and Data-Indications) that ride the same 5-tuple.
+            // Hand them to the control callback (the allocation orchestrator, a later slice) to match by
+            // transaction id; the transport stays agnostic. Anything else did not come through the relay.
+            if (_onRelayControl is { } onControl
+                && relay.IsFromRelay(source)
+                && MediaPacketClassifier.Classify(datagram) == MediaPacketKind.Stun)
+            {
+                onControl(datagram.ToArray());
+            }
+
             return;
         }
 

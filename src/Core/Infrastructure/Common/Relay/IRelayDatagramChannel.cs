@@ -16,6 +16,13 @@ internal interface IRelayDatagramChannel
     /// <summary>The relay server endpoint that framed datagrams are sent to.</summary>
     IPEndPoint RelayServer { get; }
 
+    /// <summary>
+    /// Whether an inbound datagram's <paramref name="source"/> is this channel's relay server (the same
+    /// dual-stack-robust match <see cref="TryUnwrap"/> applies). Lets a transport route relay-server control
+    /// traffic (TURN responses / Data-Indications) that is not ChannelData.
+    /// </summary>
+    bool IsFromRelay(IPEndPoint source);
+
     /// <summary>Frames a payload for the relay server. The returned datagram is addressed to <see cref="RelayServer"/>.</summary>
     /// <param name="payload">The media/transport bytes to relay.</param>
     /// <returns>The framed datagram to send to the relay server.</returns>

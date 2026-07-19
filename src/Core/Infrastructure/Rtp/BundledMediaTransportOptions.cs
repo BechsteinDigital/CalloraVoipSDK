@@ -27,4 +27,13 @@ internal sealed class BundledMediaTransportOptions
     /// later slice; this option is the seam the data path plugs into.
     /// </summary>
     public IRelayDatagramChannel? Relay { get; init; }
+
+    /// <summary>
+    /// Invoked (relay mode only) with each inbound STUN datagram from the relay server that is not
+    /// ChannelData — the TURN control plane (Allocate/CreatePermission/ChannelBind responses, and
+    /// Data-Indications). The allocation orchestrator matches responses by transaction id and interprets
+    /// Data-Indications; the transport stays agnostic. <see langword="null"/> drops such datagrams (the
+    /// data-only relay wiring of Slice 4b).
+    /// </summary>
+    public Action<ReadOnlyMemory<byte>>? OnRelayControl { get; init; }
 }
