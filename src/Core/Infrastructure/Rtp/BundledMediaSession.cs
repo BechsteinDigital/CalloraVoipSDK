@@ -1,4 +1,5 @@
 using System.Net;
+using CalloraVoipSdk.Core.Infrastructure.Common.Relay;
 using CalloraVoipSdk.Core.Infrastructure.Dtls;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Session;
@@ -29,6 +30,9 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     private readonly uint _audioSsrc;
     private readonly bool _audioSendEnabled;
     private readonly ILogger<BundledMediaSession> _logger;
+    // 0 = no relay candidate wired; 1 = wired (at construction from the options factory, or later via
+    // AdoptRelay). Guards against wiring the relay path twice (a second indication relay / relay candidate).
+    private int _relayWired;
 
     /// <summary>Raised with each decrypted inbound audio RTP packet.</summary>
     public event Action<RtpPacket>? AudioReceived;
@@ -152,6 +156,8 @@ internal sealed class BundledMediaSession : IAsyncDisposable
             relaySend: relayBinding?.RelaySend);
 
         _audioSsrc = options.Audio.Ssrc;
+        // A relay candidate wired at construction (offerer path) closes the door on a later AdoptRelay.
+        _relayWired = relayBinding is not null ? 1 : 0;
     }
 
     // Dispatches inbound audio to subscribers on the receive loop; a throwing subscriber must not tear
@@ -223,6 +229,38 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     /// <param name="priority">The candidate's ICE priority (RFC 8445 §5.1.2.1), used to order checks.</param>
     public void AddRemoteCandidate(IPEndPoint remoteEndPoint, long priority)
         => _ice.AddRemoteCandidate(new IceRemoteCandidate(remoteEndPoint, priority));
+
+    /// <summary>
+    /// Adopts a relay ICE local candidate after the session was already built — the answerer path, whose TURN
+    /// allocation only finished gathering post-construction (the offerer wires its relay at construction via
+    /// <see cref="BundledMediaSessionOptions.RelayIceBindingFactory"/>). Invokes
+    /// <paramref name="relayIceBindingFactory"/> with the shared transport's targeted send to build the relay
+    /// wiring, routes inbound relayed Data indications and the relay server's control responses into the
+    /// transport (<see cref="BundledMediaTransport.SetIndicationRelay"/>), and hands the ICE agent the relay
+    /// send path as a second local candidate — checked alongside the direct one, direct-preferred by pair
+    /// priority (RFC 8445 §6.1.2.3). Idempotent: a no-op once the relay path is already wired (at construction
+    /// or a prior adoption), when the factory yields no binding, or on a controlled agent (no ICE driver).
+    /// Call after the shared socket exists (post-construction) and before <see cref="StartAsync"/>; the check
+    /// list picks the relay pair up live if the loop is already running.
+    /// </summary>
+    /// <param name="relayIceBindingFactory">Builds the relay binding from the transport's targeted send.</param>
+    public void AdoptRelay(RelayIceBindingFactory relayIceBindingFactory)
+    {
+        ArgumentNullException.ThrowIfNull(relayIceBindingFactory);
+        if (Interlocked.Exchange(ref _relayWired, 1) != 0)
+            return;
+
+        var binding = relayIceBindingFactory.Invoke(_transport.SendToAsync);
+        if (binding is null)
+        {
+            // No allocation after all — release the claim so a later adoption can still wire the relay path.
+            Volatile.Write(ref _relayWired, 0);
+            return;
+        }
+
+        _transport.SetIndicationRelay(binding.Indication, binding.OnControl);
+        _ice.AddRelayLocalCandidate(binding.RelaySend);
+    }
 
     // A connectivity-checked ICE nomination (RFC 8445 §8) redirects the whole 5-tuple onto the nominated
     // pair: the transport's send target and the DTLS association's inbound source filter both follow it, so

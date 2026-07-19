@@ -577,12 +577,28 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             return;
 
         // Retain the first successful allocation for the relay coordinator to adopt post-Start; further
-        // successes still emit a candidate but do not replace the retained one.
+        // successes still emit a candidate but do not replace the retained one. When THIS allocation is the
+        // one retained AND a media session already exists — the answerer, which built its session (direct-only,
+        // no gathered allocation yet) before gathering — adopt the relay candidate into it now. The offerer
+        // gathers before applying the answer, so its session does not exist yet here (adoptInto stays null) and
+        // wires the relay at construction from the options factory instead.
+        BundledMediaSession? adoptInto = null;
         lock (_sync)
-            _gatheredRelay ??= (serverEndPoint, allocation);
+        {
+            if (_gatheredRelay is null)
+            {
+                _gatheredRelay = (serverEndPoint, allocation);
+                adoptInto = _session;
+            }
+        }
 
         // raddr/rport carry the mapped (server-reflexive) base the server reported, else the host base.
         RaiseCandidate(RelayCandidate(allocation.RelayedEndPoint, allocation.MappedEndPoint ?? local));
+
+        // Adopt outside the lock: AdoptRelay builds the TURN control stack and takes the ICE driver's own gate,
+        // and needs no _sync-guarded state of ours. AdoptRelay is idempotent, so a session that already wired
+        // a relay (it should not on the answerer, but defensively) is unaffected.
+        adoptInto?.AdoptRelay(WebRtcRelayBinding.CreateFactory(serverEndPoint, allocation, _loggerFactory));
     }
 
     // Parses an RFC 8829 candidate string ("candidate:…", tolerating a leading "a=") into a component-1
