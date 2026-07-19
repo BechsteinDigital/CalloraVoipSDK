@@ -82,7 +82,7 @@ internal sealed class TurnRelayChannel : IRelayDatagramChannel
         payload = Array.Empty<byte>();
 
         ArgumentNullException.ThrowIfNull(source);
-        if (!SameEndPoint(source, _relayServer))
+        if (!IsFromRelay(source))
             return false;
 
         if (!TurnChannelDataCodec.TryParse(datagram, out var channel, out var data) || channel != _channelNumber)
@@ -90,6 +90,13 @@ internal sealed class TurnRelayChannel : IRelayDatagramChannel
 
         payload = data;
         return true;
+    }
+
+    /// <inheritdoc />
+    public bool IsFromRelay(IPEndPoint source)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        return SameEndPoint(source, _relayServer);
     }
 
     // An IPv4 relay endpoint and an IPv4-mapped-IPv6 source (::ffff:a.b.c.d — how a dual-stack socket can

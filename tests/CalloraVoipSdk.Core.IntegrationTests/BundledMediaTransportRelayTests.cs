@@ -97,6 +97,109 @@ public sealed class BundledMediaTransportRelayTests
     }
 
     [Fact]
+    public async Task A_relay_control_request_is_sent_unwrapped_and_its_response_is_surfaced()
+    {
+        using var relayServer = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        var relayEndPoint = (IPEndPoint)relayServer.Client.LocalEndPoint!;
+        var channel = new TurnRelayChannel(relayEndPoint, ChannelNumber);
+
+        var controlTcs = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var transport = new BundledMediaTransport(
+            new BundledMediaTransportOptions
+            {
+                LocalEndPoint = Loopback(),
+                RemoteEndPoint = new IPEndPoint(IPAddress.Loopback, 9999),
+                Relay = channel,
+                OnRelayControl = m => controlTcs.TrySetResult(m.ToArray()),
+            },
+            InboundPipeline(_ => { }), NullLogger<BundledMediaTransport>.Instance);
+        await transport.StartAsync();
+
+        // The TURN control request goes to the server unwrapped (addressed to the server, not framed as peer data).
+        var request = StunMessage(0x00, 0x03);  // Allocate request
+        await transport.SendControlAsync(request, CancellationToken.None);
+
+        var atServer = await relayServer.ReceiveAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(request, atServer.Buffer);
+        Assert.False(TurnChannelDataCodec.TryParse(atServer.Buffer, out _, out _)); // not framed as ChannelData
+
+        // The server's response rides the same 5-tuple back and is surfaced to the control callback.
+        var response = StunMessage(0x01, 0x03);  // Allocate success response
+        await relayServer.SendAsync(response, response.Length, transport.LocalEndPoint);
+
+        Assert.Equal(response, await controlTcs.Task.WaitAsync(TimeSpan.FromSeconds(5)));
+    }
+
+    [Fact]
+    public async Task A_relay_datagram_that_is_neither_channel_data_nor_stun_is_dropped()
+    {
+        using var relayServer = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        var relayEndPoint = (IPEndPoint)relayServer.Client.LocalEndPoint!;
+        var channel = new TurnRelayChannel(relayEndPoint, ChannelNumber);
+
+        var controlFired = false;
+        var audioTcs = Tcs();
+        await using var transport = new BundledMediaTransport(
+            new BundledMediaTransportOptions
+            {
+                LocalEndPoint = Loopback(),
+                RemoteEndPoint = new IPEndPoint(IPAddress.Loopback, 9999),
+                Relay = channel,
+                OnRelayControl = _ => controlFired = true,
+            },
+            InboundPipeline(p => audioTcs.TrySetResult(p)), NullLogger<BundledMediaTransport>.Instance);
+        await transport.StartAsync();
+
+        // From the relay server but neither ChannelData (channel range) nor STUN (magic cookie): junk.
+        var junk = new byte[] { 0xC8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+        await relayServer.SendAsync(junk, junk.Length, transport.LocalEndPoint);
+
+        await Task.Delay(300);
+        Assert.False(controlFired);            // not routed to control
+        Assert.False(audioTcs.Task.IsCompleted); // and not delivered as media
+    }
+
+    [Fact]
+    public async Task SendControlAsync_is_rejected_on_a_direct_transport()
+    {
+        await using var transport = new BundledMediaTransport(
+            new BundledMediaTransportOptions { LocalEndPoint = Loopback() },
+            InboundPipeline(_ => { }), NullLogger<BundledMediaTransport>.Instance);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await transport.SendControlAsync(new byte[] { 1, 2, 3 }, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task A_stun_datagram_from_a_non_relay_source_is_not_routed_to_the_control_callback()
+    {
+        using var relayServer = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        var relayEndPoint = (IPEndPoint)relayServer.Client.LocalEndPoint!;
+        var channel = new TurnRelayChannel(relayEndPoint, ChannelNumber);
+
+        var controlFired = false;
+        await using var transport = new BundledMediaTransport(
+            new BundledMediaTransportOptions
+            {
+                LocalEndPoint = Loopback(),
+                RemoteEndPoint = new IPEndPoint(IPAddress.Loopback, 9999),
+                Relay = channel,
+                OnRelayControl = _ => controlFired = true,
+            },
+            InboundPipeline(_ => { }), NullLogger<BundledMediaTransport>.Instance);
+        await transport.StartAsync();
+
+        // A well-formed STUN response, but from a source that is not the relay server: an off-path attempt to
+        // forge a TURN control response (e.g. a spoofed Allocate Success). The source filter must drop it.
+        using var attacker = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        var forged = StunMessage(0x01, 0x03); // Allocate success response
+        await attacker.SendAsync(forged, forged.Length, transport.LocalEndPoint);
+
+        await Task.Delay(300);
+        Assert.False(controlFired); // rejected by IsFromRelay before reaching the control callback
+    }
+
+    [Fact]
     public void A_relay_transport_requires_a_remote_endpoint()
     {
         // A relay channel is bound to one peer, so relayed inbound must be attributable to it — the transport
@@ -112,6 +215,15 @@ public sealed class BundledMediaTransportRelayTests
 
     private static TaskCompletionSource<RtpPacket> Tcs() =>
         new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    // A minimal 20-byte STUN message (RFC 5389 header): the two type bytes, zero length, the magic cookie,
+    // and a fixed transaction id — enough for MediaPacketClassifier to recognise it as STUN.
+    private static byte[] StunMessage(byte type1, byte type0) =>
+    [
+        type1, type0, 0x00, 0x00,
+        0x21, 0x12, 0xA4, 0x42,
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
+    ];
 
     private static IPEndPoint Loopback() => new(IPAddress.Loopback, 0);
 
