@@ -235,6 +235,19 @@ internal static class TurnAttributeMapper
         };
     }
 
+    /// <summary>Decodes EVEN-PORT from a STUN/TURN message (RFC 8656 §14.6): the high bit is the reserve flag.</summary>
+    public static TurnEvenPortAttribute? DecodeEvenPort(StunMessage message)
+    {
+        var raw = FindRaw(message, TurnAttributeType.EvenPort);
+        if (raw is null || raw.Value.Length < 1)
+            return null;
+
+        return new TurnEvenPortAttribute
+        {
+            ReserveNextPort = (raw.Value.Span[0] & 0x80) != 0
+        };
+    }
+
     /// <summary>Decodes CHANNEL-NUMBER from a STUN/TURN message.</summary>
     public static TurnChannelNumberAttribute? DecodeChannelNumber(StunMessage message)
     {

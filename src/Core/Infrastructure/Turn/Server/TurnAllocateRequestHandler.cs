@@ -20,6 +20,7 @@ internal sealed class TurnAllocateRequestHandler
     private readonly TurnMobilityService _mobilityService;
     private readonly Func<TurnServerAllocation, CancellationToken, Task> _replaceAllocationAsync;
     private readonly Func<string, bool> _hasAllocationCapacity;
+    private readonly TurnPortReservationStore _reservationStore;
     private readonly ILogger<TurnServer> _logger;
 
     /// <summary>
@@ -35,6 +36,7 @@ internal sealed class TurnAllocateRequestHandler
         TurnMobilityService mobilityService,
         Func<TurnServerAllocation, CancellationToken, Task> replaceAllocationAsync,
         Func<string, bool> hasAllocationCapacity,
+        TurnPortReservationStore reservationStore,
         ILogger<TurnServer> logger)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -42,6 +44,7 @@ internal sealed class TurnAllocateRequestHandler
         ArgumentNullException.ThrowIfNull(mobilityService);
         ArgumentNullException.ThrowIfNull(replaceAllocationAsync);
         ArgumentNullException.ThrowIfNull(hasAllocationCapacity);
+        ArgumentNullException.ThrowIfNull(reservationStore);
         ArgumentNullException.ThrowIfNull(logger);
 
         _options = options;
@@ -49,6 +52,7 @@ internal sealed class TurnAllocateRequestHandler
         _mobilityService = mobilityService;
         _replaceAllocationAsync = replaceAllocationAsync;
         _hasAllocationCapacity = hasAllocationCapacity;
+        _reservationStore = reservationStore;
         _logger = logger;
     }
 
@@ -86,6 +90,12 @@ internal sealed class TurnAllocateRequestHandler
             return _responseFactory.BuildErrorResponse(request, 400, "Bad Request", includeAuthAttributes: false);
         }
 
+        var reservationToken = TurnAttributeMapper.DecodeReservationToken(request);
+        var evenPort = TurnAttributeMapper.DecodeEvenPort(request);
+        // RFC 8656 §7.2: EVEN-PORT and RESERVATION-TOKEN cannot be combined in one request.
+        if (evenPort is not null && reservationToken is not null)
+            return _responseFactory.BuildErrorResponse(request, 400, "Bad Request", includeAuthAttributes: false);
+
         var requestedMobilityTicket = TurnAttributeMapper.DecodeMobilityTicket(request);
         if (requestedMobilityTicket is not null && requestedMobilityTicket.Ticket.Length > 0)
             return _responseFactory.BuildErrorResponse(request, 400, "Bad Request", includeAuthAttributes: false);
@@ -116,13 +126,34 @@ internal sealed class TurnAllocateRequestHandler
         UdpClient? relayUdp = null;
         TcpListener? relayTcp = null;
         IPEndPoint relayedEndPoint;
+        ulong? issuedReservationToken = null;
 
         try
         {
             if (requestedTransport.Protocol == TurnRequestedTransportProtocol.Udp)
             {
-                // DONT-FRAGMENT only reaches here for a UDP allocation (TCP + DONT-FRAGMENT was rejected above).
-                relayUdp = CreateRelaySocket(addressFamily, HasRawAttribute(request, TurnAttributeType.DontFragment));
+                // DONT-FRAGMENT, EVEN-PORT and RESERVATION-TOKEN only reach here for a UDP allocation
+                // (all three are rejected above for TCP).
+                var dontFragment = HasRawAttribute(request, TurnAttributeType.DontFragment);
+                if (reservationToken is not null)
+                {
+                    // Claim the odd port reserved by an earlier EVEN-PORT (reserve) allocation (RFC 8656 §7).
+                    relayUdp = _reservationStore.Claim(reservationToken.Token);
+                    if (relayUdp is null)
+                        return _responseFactory.BuildErrorResponse(request, 508, "Insufficient Capacity", includeAuthAttributes: false);
+                }
+                else if (evenPort is not null)
+                {
+                    var (evenSocket, reservedSocket) = CreateEvenPortRelaySockets(addressFamily, evenPort.ReserveNextPort, dontFragment);
+                    relayUdp = evenSocket;
+                    if (reservedSocket is not null)
+                        issuedReservationToken = _reservationStore.Reserve(reservedSocket);
+                }
+                else
+                {
+                    relayUdp = CreateRelaySocket(addressFamily, dontFragment);
+                }
+
                 relayedEndPoint = (IPEndPoint)relayUdp.Client.LocalEndPoint!;
             }
             else
@@ -181,6 +212,14 @@ internal sealed class TurnAllocateRequestHandler
                 Ticket = _mobilityService.IssueTicket(allocation)
             }));
         }
+        if (issuedReservationToken is not null)
+        {
+            // The reserved (odd) port can be claimed by a later Allocate carrying this RESERVATION-TOKEN.
+            responseAttributes.Add(TurnAttributeMapper.Encode(new TurnReservationTokenAttribute
+            {
+                Token = issuedReservationToken.Value
+            }));
+        }
 
         return new StunMessage
         {
@@ -230,6 +269,11 @@ internal sealed class TurnAllocateRequestHandler
     // (RFC 8656 §14) the IPv4 Don't-Fragment bit is set so relayed datagrams are not fragmented in transit;
     // IPv6 never fragments in transit, so the flag is meaningless (and unsettable) there.
     internal static UdpClient CreateRelaySocket(AddressFamily addressFamily, bool dontFragment = false)
+        => BuildRelaySocket(addressFamily, port: 0, dontFragment);
+
+    // Binds a relay UDP socket to an explicit port (0 = ephemeral). DONT-FRAGMENT sets the IPv4 DF bit (RFC 8656
+    // §14); an IPv6 relay uses dual-mode and never fragments in transit.
+    private static UdpClient BuildRelaySocket(AddressFamily addressFamily, int port, bool dontFragment)
     {
         var socket = new UdpClient(addressFamily);
         if (addressFamily == AddressFamily.InterNetworkV6)
@@ -237,12 +281,41 @@ internal sealed class TurnAllocateRequestHandler
         else if (dontFragment)
             socket.Client.DontFragment = true;
 
-        var bindEndPoint = new IPEndPoint(
-            addressFamily == AddressFamily.InterNetworkV6 ? IPAddress.IPv6Any : IPAddress.Any,
-            0);
-
-        socket.Client.Bind(bindEndPoint);
+        var bindAddress = addressFamily == AddressFamily.InterNetworkV6 ? IPAddress.IPv6Any : IPAddress.Any;
+        socket.Client.Bind(new IPEndPoint(bindAddress, port));
         return socket;
+    }
+
+    // Binds an even relayed port (RFC 8656 §7). When reservePair is set it also binds the next (odd) port so it
+    // can be reserved for a follow-up RESERVATION-TOKEN allocation; the two ports must be consecutive and both
+    // free, so it retries with fresh random even ports. Throws (mapped to 508) when no suitable pair is found.
+    internal static (UdpClient Even, UdpClient? Reserved) CreateEvenPortRelaySockets(
+        AddressFamily addressFamily, bool reservePair, bool dontFragment)
+    {
+        const int maxAttempts = 40;
+        for (var attempt = 0; attempt < maxAttempts; attempt++)
+        {
+            // A random even port in the ephemeral range [49152, 65534].
+            var evenPort = 49152 + Random.Shared.Next(0, 8192) * 2;
+            UdpClient? even = null;
+            UdpClient? reserved = null;
+            try
+            {
+                even = BuildRelaySocket(addressFamily, evenPort, dontFragment);
+                if (!reservePair)
+                    return (even, null);
+
+                reserved = BuildRelaySocket(addressFamily, evenPort + 1, dontFragment);
+                return (even, reserved);
+            }
+            catch (SocketException)
+            {
+                even?.Dispose();
+                reserved?.Dispose();
+            }
+        }
+
+        throw new InvalidOperationException("No free even relay port pair for an EVEN-PORT allocation.");
     }
 
     private static TcpListener CreateRelayTcpListener(AddressFamily addressFamily)

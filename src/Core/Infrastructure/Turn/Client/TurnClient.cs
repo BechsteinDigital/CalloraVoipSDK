@@ -71,6 +71,9 @@ internal sealed class TurnClient : ITurnClient
 
         var lifetime = TurnAttributeMapper.DecodeLifetime(response)?.Seconds ?? 0;
         var mobilityTicket = TurnAttributeMapper.DecodeMobilityTicket(response)?.Ticket.ToArray();
+        // Present when the allocation was made with EVEN-PORT (reserve): it can be replayed in a later Allocate
+        // (TurnAllocateOptions.ReservationToken) to claim the reserved companion port (RFC 8656 §7).
+        var reservationToken = TurnAttributeMapper.DecodeReservationToken(response)?.Token;
 
         return new TurnAllocateResult
         {
@@ -78,7 +81,8 @@ internal sealed class TurnClient : ITurnClient
             MappedEndPoint = mapped,
             LifetimeSeconds = lifetime,
             EffectiveCredentials = effectiveCredentials,
-            MobilityTicket = mobilityTicket
+            MobilityTicket = mobilityTicket,
+            ReservationToken = reservationToken
         };
     }
 
