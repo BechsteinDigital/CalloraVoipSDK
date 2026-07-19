@@ -1,4 +1,5 @@
 using System.Net;
+using CalloraVoipSdk.Core.Infrastructure.Common.Relay;
 using CalloraVoipSdk.Core.Infrastructure.Turn.Wire;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Turn.Client;
@@ -20,7 +21,7 @@ namespace CalloraVoipSdk.Core.Infrastructure.Turn.Client;
 /// injecting media by forging ChannelData, mirroring the DTLS/SRTP source discipline elsewhere in the
 /// bundle transport.
 /// </summary>
-internal sealed class TurnRelayChannel
+internal sealed class TurnRelayChannel : IRelayDatagramChannel
 {
     private readonly IPEndPoint _relayServer;
     private readonly ushort _channelNumber;

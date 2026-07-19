@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Net;
 using System.Net.Sockets;
+using CalloraVoipSdk.Core.Infrastructure.Common.Relay;
 using Microsoft.Extensions.Logging;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
@@ -17,6 +18,12 @@ namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
 /// consent loop (B3-3) attach on top through the pipelines' STUN/DTLS events and key installation. The
 /// receive loop is single-threaded and every retained byte is copied downstream (the pipeline copies
 /// STUN/DTLS, SRTP returns fresh arrays), so one pooled buffer is reused across datagrams.
+///
+/// When a <see cref="IRelayDatagramChannel"/> is supplied (TURN relay mode, RFC 8656), the transport frames
+/// every outbound datagram as ChannelData to the relay server and unwraps every inbound one from it, below
+/// the packet demux — so STUN checks, DTLS flights and RTP/RTCP all traverse the one bound channel
+/// uniformly and the DTLS/ICE layers above compose unchanged. Obtaining the channel (allocation, permission,
+/// channel-bind, refresh) is a later slice.
 /// </summary>
 internal sealed class BundledMediaTransport : IBundledDatagramSender, IAsyncDisposable
 {
@@ -25,6 +32,7 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IAsyncDisp
     private readonly BundledInboundPipeline _inbound;
     private readonly ILogger<BundledMediaTransport> _logger;
     private readonly IPEndPoint _localEndPoint;
+    private readonly IRelayDatagramChannel? _relay;
     private readonly UdpClient _udp;
 
     private IPEndPoint? _remoteEndPoint;
@@ -44,6 +52,7 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IAsyncDisp
         _logger  = logger  ?? throw new ArgumentNullException(nameof(logger));
         _localEndPoint  = options.LocalEndPoint;
         _remoteEndPoint = options.RemoteEndPoint;
+        _relay          = options.Relay;
 
         if (socket is not null)
         {
@@ -98,6 +107,15 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IAsyncDisp
     /// <inheritdoc />
     public async ValueTask SendAsync(ReadOnlyMemory<byte> datagram, CancellationToken cancellationToken)
     {
+        if (_relay is { } relay)
+        {
+            // Relay mode: frame as ChannelData and send to the TURN server, which forwards it to the bound
+            // peer (RFC 8656 §11–12). The peer is reached through the relay, not the (suppressed) direct remote.
+            var framed = relay.Wrap(datagram.Span);
+            await _udp.SendAsync(framed, relay.RelayServer, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         if (Volatile.Read(ref _remoteEndPoint) is not { } remote)
         {
             // No peer address yet (pre-ICE) — suppress rather than send to nowhere.
@@ -116,6 +134,16 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IAsyncDisp
     public async ValueTask SendToAsync(ReadOnlyMemory<byte> datagram, IPEndPoint target, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(target);
+
+        if (_relay is { } relay)
+        {
+            // In relay mode the peer is reachable only through the TURN server, so an ICE response / triggered
+            // check to the peer is framed as ChannelData to the relay too (the bound channel carries it).
+            var framed = relay.Wrap(datagram.Span);
+            await _udp.SendAsync(framed, relay.RelayServer, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         await _udp.SendAsync(datagram, target, cancellationToken).ConfigureAwait(false);
     }
 
@@ -134,7 +162,7 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IAsyncDisp
                     var result = await _udp.Client
                         .ReceiveFromAsync(buffer, SocketFlags.None, remoteTemplate, cancellationToken)
                         .ConfigureAwait(false);
-                    _inbound.ProcessInboundDatagram(buffer.AsSpan(0, result.ReceivedBytes), (IPEndPoint)result.RemoteEndPoint);
+                    DeliverInbound(buffer.AsSpan(0, result.ReceivedBytes), (IPEndPoint)result.RemoteEndPoint);
                 }
                 catch (OperationCanceledException)
                 {
@@ -162,6 +190,22 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IAsyncDisp
         }
 
         _logger.LogDebug("Bundled media receive loop stopped on {LocalEndPoint}", _localEndPoint);
+    }
+
+    // Hands one received datagram to the inbound pipeline. In relay mode only datagrams relayed back through
+    // the bound channel are ours: unwrap to the inner payload and present the relayed peer (not the TURN
+    // server) as the source, so the pipeline's STUN/ICE and source-filtered paths see the peer. Anything not
+    // relayed through our channel did not traverse the relay and is dropped. Direct mode passes through.
+    private void DeliverInbound(ReadOnlySpan<byte> datagram, IPEndPoint source)
+    {
+        if (_relay is { } relay)
+        {
+            if (relay.TryUnwrap(datagram, source, out var payload))
+                _inbound.ProcessInboundDatagram(payload, Volatile.Read(ref _remoteEndPoint) ?? source);
+            return;
+        }
+
+        _inbound.ProcessInboundDatagram(datagram, source);
     }
 
     /// <summary>
