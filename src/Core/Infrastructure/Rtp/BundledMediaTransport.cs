@@ -19,11 +19,16 @@ namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
 /// receive loop is single-threaded and every retained byte is copied downstream (the pipeline copies
 /// STUN/DTLS, SRTP returns fresh arrays), so one pooled buffer is reused across datagrams.
 ///
-/// When a <see cref="IRelayDatagramChannel"/> is supplied (TURN relay mode, RFC 8656), the transport frames
-/// every outbound datagram as ChannelData to the relay server and unwraps every inbound one from it, below
-/// the packet demux — so STUN checks, DTLS flights and RTP/RTCP all traverse the one bound channel
-/// uniformly and the DTLS/ICE layers above compose unchanged. Obtaining the channel (allocation, permission,
-/// channel-bind, refresh) is a later slice.
+/// In TURN relay mode (RFC 8656) the transport runs in two phases on the same 5-tuple. A relay server
+/// address (<see cref="BundledMediaTransportOptions.RelayServer"/>) enables the <em>control phase</em>:
+/// <see cref="SendControlAsync"/> sends TURN requests to the server and control responses from it are
+/// surfaced via <see cref="BundledMediaTransportOptions.OnRelayControl"/>, so the allocation can be
+/// established before any channel exists (outbound media is suppressed meanwhile). Once the channel-bind
+/// completes, <see cref="SetRelayChannel"/> installs the <see cref="IRelayDatagramChannel"/> and the
+/// <em>data phase</em> begins: every outbound datagram is framed as ChannelData to the relay server and
+/// every inbound one is unwrapped from it, below the packet demux — so STUN checks, DTLS flights and
+/// RTP/RTCP all traverse the one bound channel uniformly and the DTLS/ICE layers above compose unchanged.
+/// A channel already known up front may instead be supplied via <see cref="BundledMediaTransportOptions.Relay"/>.
 /// </summary>
 internal sealed class BundledMediaTransport : IBundledDatagramSender, IAsyncDisposable
 {
@@ -32,10 +37,11 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IAsyncDisp
     private readonly BundledInboundPipeline _inbound;
     private readonly ILogger<BundledMediaTransport> _logger;
     private readonly IPEndPoint _localEndPoint;
-    private readonly IRelayDatagramChannel? _relay;
+    private readonly IPEndPoint? _relayServer;
     private readonly Action<ReadOnlyMemory<byte>>? _onRelayControl;
     private readonly UdpClient _udp;
 
+    private IRelayDatagramChannel? _relay;
     private IPEndPoint? _remoteEndPoint;
     private Task? _receiveLoop;
     private CancellationTokenSource? _loopCts;
@@ -56,11 +62,21 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IAsyncDisp
         _relay          = options.Relay;
         _onRelayControl = options.OnRelayControl;
 
+        // Relay mode is keyed by the server address, taken from RelayServer or (for a channel supplied up
+        // front) derived from it. When both are given they must agree.
+        _relayServer = options.RelayServer ?? options.Relay?.RelayServer;
+        if (options.RelayServer is not null && options.Relay is not null
+            && !RelayEndPoint.SameEndPoint(options.RelayServer, options.Relay.RelayServer))
+        {
+            throw new ArgumentException(
+                "RelayServer and Relay.RelayServer must refer to the same TURN server.", nameof(options));
+        }
+
         // A relay channel is bound to one peer (RFC 8656 channel-bind is per-peer), so the peer is known
         // whenever relay mode is active. Require it: relayed inbound datagrams physically arrive from the
         // TURN server but must be attributed to that peer (not the server) for the DTLS/ICE source filters
         // above, and there is no correct peer to fabricate otherwise.
-        if (_relay is not null && _remoteEndPoint is null)
+        if (_relayServer is not null && _remoteEndPoint is null)
             throw new ArgumentException(
                 "A relay transport requires a RemoteEndPoint (the bound peer the relay forwards to).", nameof(options));
 
@@ -95,6 +111,25 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IAsyncDisp
         Volatile.Write(ref _remoteEndPoint, remoteEndPoint);
     }
 
+    /// <summary>
+    /// Installs the bound relay channel once the allocation's channel-bind completes, switching the data
+    /// path from suppressed to ChannelData-framed. Valid only in relay mode (a relay server was configured),
+    /// and the channel must belong to that same server. Read atomically by the send and receive paths.
+    /// </summary>
+    /// <param name="channel">The channel produced by the allocation sequence.</param>
+    /// <exception cref="InvalidOperationException">The transport is not in relay mode.</exception>
+    /// <exception cref="ArgumentException"><paramref name="channel"/> is bound to a different server.</exception>
+    public void SetRelayChannel(IRelayDatagramChannel channel)
+    {
+        ArgumentNullException.ThrowIfNull(channel);
+        if (_relayServer is null)
+            throw new InvalidOperationException("SetRelayChannel is only valid on a relay-mode transport.");
+        if (!RelayEndPoint.SameEndPoint(channel.RelayServer, _relayServer))
+            throw new ArgumentException("The relay channel is bound to a different TURN server.", nameof(channel));
+
+        Volatile.Write(ref _relay, channel);
+    }
+
     /// <summary>Starts the shared receive loop. Idempotent per instance; call once after wiring.</summary>
     public Task StartAsync(CancellationToken cancellationToken = default)
     {
@@ -117,12 +152,21 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IAsyncDisp
     /// <inheritdoc />
     public async ValueTask SendAsync(ReadOnlyMemory<byte> datagram, CancellationToken cancellationToken)
     {
-        if (_relay is { } relay)
+        if (Volatile.Read(ref _relay) is { } relay)
         {
             // Relay mode: frame as ChannelData and send to the TURN server, which forwards it to the bound
             // peer (RFC 8656 §11–12). The peer is reached through the relay, not the (suppressed) direct remote.
             var framed = relay.Wrap(datagram.Span);
             await _udp.SendAsync(framed, relay.RelayServer, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        if (_relayServer is not null)
+        {
+            // Relay mode, but the channel is not bound yet (allocation still in progress) — suppress media
+            // rather than send it unframed to the relay server, which would drop it. Trace-level: this can
+            // fire per ICE retransmit during the (brief) allocation window.
+            _logger.LogTrace("Suppressing outbound datagram on {LocalEndPoint}: relay channel not bound yet.", _localEndPoint);
             return;
         }
 
@@ -145,7 +189,7 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IAsyncDisp
     {
         ArgumentNullException.ThrowIfNull(target);
 
-        if (_relay is { } relay)
+        if (Volatile.Read(ref _relay) is { } relay)
         {
             // In relay mode the peer is reachable only through the TURN server, so an ICE response / triggered
             // check to the peer is framed as ChannelData to the relay too. `target` is intentionally not sent
@@ -154,6 +198,14 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IAsyncDisp
             // second allocation/channel — out of scope for the single-channel relay.
             var framed = relay.Wrap(datagram.Span);
             await _udp.SendAsync(framed, relay.RelayServer, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        if (_relayServer is not null)
+        {
+            // Relay mode, channel not bound yet — an ICE check to the peer cannot go out unframed. Suppress
+            // it; ICE will retransmit once the channel is bound. Trace-level: fires per ICE retransmit.
+            _logger.LogTrace("Suppressing targeted datagram on {LocalEndPoint}: relay channel not bound yet.", _localEndPoint);
             return;
         }
 
@@ -169,10 +221,10 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IAsyncDisp
     /// <exception cref="InvalidOperationException">The transport is not in relay mode.</exception>
     public async ValueTask SendControlAsync(ReadOnlyMemory<byte> request, CancellationToken cancellationToken)
     {
-        if (_relay is not { } relay)
+        if (_relayServer is not { } relayServer)
             throw new InvalidOperationException("SendControlAsync is only valid on a relay-mode transport.");
 
-        await _udp.SendAsync(request, relay.RelayServer, cancellationToken).ConfigureAwait(false);
+        await _udp.SendAsync(request, relayServer, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task RunReceiveLoopAsync(CancellationToken cancellationToken)
@@ -229,20 +281,23 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IAsyncDisp
     // mode passes through unchanged.
     private void DeliverInbound(ReadOnlySpan<byte> datagram, IPEndPoint source)
     {
-        if (_relay is { } relay)
+        if (_relayServer is { } relayServer)
         {
-            if (relay.TryUnwrap(datagram, source, out var payload))
+            // Data path: once a channel is bound, ChannelData for it is media. Present the bound peer as the
+            // source (guaranteed set for a relay transport by the constructor) so the pipeline's STUN/ICE and
+            // source-filtered paths see the peer, never the TURN server the datagram physically arrived from.
+            if (Volatile.Read(ref _relay) is { } relay && relay.TryUnwrap(datagram, source, out var payload))
             {
                 _inbound.ProcessInboundDatagram(payload, Volatile.Read(ref _remoteEndPoint) ?? source);
                 return;
             }
 
-            // Not ChannelData. From the relay server the remaining traffic is the TURN control plane — STUN
-            // Allocate/Permission/ChannelBind responses (and Data-Indications) that ride the same 5-tuple.
-            // Hand them to the control callback (the allocation orchestrator, a later slice) to match by
+            // Not our ChannelData (or no channel bound yet). From the relay server the remaining traffic is
+            // the TURN control plane — STUN Allocate/Permission/ChannelBind/Refresh responses (and
+            // Data-Indications) that ride the same 5-tuple. Hand them to the control callback to match by
             // transaction id; the transport stays agnostic. Anything else did not come through the relay.
             if (_onRelayControl is { } onControl
-                && relay.IsFromRelay(source)
+                && RelayEndPoint.SameEndPoint(source, relayServer)
                 && MediaPacketClassifier.Classify(datagram) == MediaPacketKind.Stun)
             {
                 onControl(datagram.ToArray());

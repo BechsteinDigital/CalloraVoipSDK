@@ -211,6 +211,118 @@ public sealed class BundledMediaTransportRelayTests
             InboundPipeline(_ => { }), NullLogger<BundledMediaTransport>.Instance));
     }
 
+    [Fact]
+    public async Task Control_phase_runs_before_a_channel_is_bound_then_installing_it_activates_the_data_path()
+    {
+        using var relayServer = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        var relayEndPoint = (IPEndPoint)relayServer.Client.LocalEndPoint!;
+
+        var controlTcs = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var audioTcs = Tcs();
+        await using var transport = new BundledMediaTransport(
+            new BundledMediaTransportOptions
+            {
+                LocalEndPoint = Loopback(),
+                RemoteEndPoint = new IPEndPoint(IPAddress.Loopback, 9999),
+                RelayServer = relayEndPoint,   // relay mode, control phase — no channel bound yet
+                OnRelayControl = m => controlTcs.TrySetResult(m.ToArray()),
+            },
+            InboundPipeline(p => audioTcs.TrySetResult(p)), NullLogger<BundledMediaTransport>.Instance);
+        await transport.StartAsync();
+
+        var outbound = new BundledOutboundPipeline(
+            new RtpPacketCodec(), transport, NullLogger<BundledOutboundPipeline>.Instance);
+        outbound.RegisterTrack("audio", Track());
+        outbound.InstallOutboundKey(new SrtpContext(Material()));
+
+        // Control phase: an Allocate request reaches the server unwrapped and its response is surfaced,
+        // all before any channel exists.
+        var request = StunMessage(0x00, 0x03);
+        await transport.SendControlAsync(request, CancellationToken.None);
+        var atServer = await relayServer.ReceiveAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(request, atServer.Buffer);
+        var response = StunMessage(0x01, 0x03);
+        await relayServer.SendAsync(response, response.Length, transport.LocalEndPoint);
+        Assert.Equal(response, await controlTcs.Task.WaitAsync(TimeSpan.FromSeconds(5)));
+
+        // Media sent before the channel is bound is suppressed — nothing is framed to the relay server.
+        await outbound.SendAsync("audio", new byte[] { 1, 2, 3 });
+        await Task.Delay(300);
+        Assert.Equal(0, relayServer.Available);
+
+        // Bind the channel: the data path activates and subsequent media is framed as ChannelData.
+        transport.SetRelayChannel(new TurnRelayChannel(relayEndPoint, ChannelNumber));
+        await outbound.SendAsync("audio", new byte[] { 4, 5, 6 });
+        var relayed = await relayServer.ReceiveAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.True(TurnChannelDataCodec.TryParse(relayed.Buffer, out var parsedChannel, out _));
+        Assert.Equal(ChannelNumber, parsedChannel);
+
+        // The relay forwards it back; it is unwrapped, decrypted and routed.
+        await relayServer.SendAsync(relayed.Buffer, relayed.Buffer.Length, transport.LocalEndPoint);
+        var audio = await audioTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(AudioSsrc, audio.Ssrc);
+        Assert.Equal(new byte[] { 4, 5, 6 }, audio.Payload.ToArray());
+    }
+
+    [Fact]
+    public async Task SetRelayChannel_is_rejected_on_a_direct_transport()
+    {
+        await using var transport = new BundledMediaTransport(
+            new BundledMediaTransportOptions { LocalEndPoint = Loopback() },
+            InboundPipeline(_ => { }), NullLogger<BundledMediaTransport>.Instance);
+
+        var channel = new TurnRelayChannel(new IPEndPoint(IPAddress.Loopback, 3478), ChannelNumber);
+        Assert.Throws<InvalidOperationException>(() => transport.SetRelayChannel(channel));
+    }
+
+    [Fact]
+    public async Task SetRelayChannel_rejects_a_channel_bound_to_a_different_server()
+    {
+        var relayServer = new IPEndPoint(IPAddress.Loopback, 3478);
+        await using var transport = new BundledMediaTransport(
+            new BundledMediaTransportOptions
+            {
+                LocalEndPoint = Loopback(),
+                RemoteEndPoint = new IPEndPoint(IPAddress.Loopback, 9999),
+                RelayServer = relayServer,
+            },
+            InboundPipeline(_ => { }), NullLogger<BundledMediaTransport>.Instance);
+
+        var wrongServerChannel = new TurnRelayChannel(new IPEndPoint(IPAddress.Loopback, 5349), ChannelNumber);
+        Assert.Throws<ArgumentException>(() => transport.SetRelayChannel(wrongServerChannel));
+    }
+
+    [Fact]
+    public void A_relay_server_that_disagrees_with_the_supplied_channel_server_throws()
+    {
+        var serverA = new IPEndPoint(IPAddress.Loopback, 3478);
+        var serverB = new IPEndPoint(IPAddress.Loopback, 5349);
+        var channelForB = new TurnRelayChannel(serverB, ChannelNumber);
+
+        Assert.Throws<ArgumentException>(() => new BundledMediaTransport(
+            new BundledMediaTransportOptions
+            {
+                LocalEndPoint = Loopback(),
+                RemoteEndPoint = new IPEndPoint(IPAddress.Loopback, 9999),
+                RelayServer = serverA,
+                Relay = channelForB,
+            },
+            InboundPipeline(_ => { }), NullLogger<BundledMediaTransport>.Instance));
+    }
+
+    [Fact]
+    public void A_relay_server_only_transport_requires_a_remote_endpoint()
+    {
+        // Relay mode keyed by RelayServer alone (no channel yet) still needs the peer for source attribution.
+        Assert.Throws<ArgumentException>(() => new BundledMediaTransport(
+            new BundledMediaTransportOptions
+            {
+                LocalEndPoint = Loopback(),
+                RelayServer = new IPEndPoint(IPAddress.Loopback, 3478),
+            },
+            InboundPipeline(_ => { }), NullLogger<BundledMediaTransport>.Instance));
+    }
+
     // ── harness (mirrors BundledMediaTransportTests) ─────────────────────────────
 
     private static TaskCompletionSource<RtpPacket> Tcs() =>
