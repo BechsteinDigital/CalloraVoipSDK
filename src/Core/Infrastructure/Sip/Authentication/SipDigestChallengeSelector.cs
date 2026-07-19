@@ -95,7 +95,10 @@ internal static class SipDigestChallengeSelector
 
     /// <summary>
     /// Returns a numeric strength score for a Digest algorithm token.
-    /// Higher is stronger. Unknown algorithms score 0 (still usable as fallback).
+    /// Higher is stronger. Only algorithms the authenticator can actually compute score >= 0;
+    /// unsupported algorithms score -1 so the selector never picks a challenge that would fail at
+    /// the hashing step when a weaker but supported challenge is also on offer. This list MUST stay
+    /// in sync with <c>SipDigestAuthentication.TryResolveAlgorithm</c>.
     /// </summary>
     private static int AlgorithmStrength(string algorithm) =>
         algorithm.Trim().ToUpperInvariant() switch
@@ -106,6 +109,6 @@ internal static class SipDigestChallengeSelector
             "SHA-256-SESS"                            => 19,
             "MD5"                                     => 10,
             "MD5-SESS"                                => 9,
-            _                                         => 0
+            _                                         => -1
         };
 }

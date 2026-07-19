@@ -5,6 +5,7 @@ using CalloraVoipSdk.Core.Infrastructure.Sip.Authentication;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Signaling;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Wire;
 using Microsoft.Extensions.Logging.Abstractions;
+using Org.BouncyCastle.Crypto.Digests;
 
 namespace CalloraVoipSdk.Core.IntegrationTests;
 
@@ -38,6 +39,16 @@ public sealed class SipRegistrationDigestRetryTests
 
     private static string HashHexLower(string input, HashAlgorithm algorithm) =>
         Convert.ToHexString(algorithm.ComputeHash(Encoding.UTF8.GetBytes(input))).ToLowerInvariant();
+
+    private static string Sha512_256Hex(string input)
+    {
+        var digest = new Sha512tDigest(256);
+        var bytes = Encoding.UTF8.GetBytes(input);
+        digest.BlockUpdate(bytes, 0, bytes.Length);
+        var output = new byte[digest.GetDigestSize()];
+        digest.DoFinal(output, 0);
+        return Convert.ToHexString(output).ToLowerInvariant();
+    }
 
     private static string? Param(string header, string name)
     {
@@ -92,6 +103,86 @@ public sealed class SipRegistrationDigestRetryTests
         var ha2 = HashHexLower($"REGISTER:{uri}", md5);
         var expected = HashHexLower($"{ha1}:{Nonce}:{nc}:{cnonce}:auth:{ha2}", md5);
         Assert.Equal(expected, Param(authorization, "response"));
+    }
+
+    [Fact]
+    public async Task Register_challenged_with_sha512_256_retries_authenticated_and_succeeds()
+    {
+        // Regression for the RFC 8760 deadlock: the selector picks SHA-512-256 (strongest) and the
+        // authenticator can now actually compute it, so the challenged REGISTER retries and succeeds.
+        var transport = new CapturingSipTransportRuntime
+        {
+            ResponseFactory = req => req.Headers.ContainsKey("Authorization")
+                ? Echo(req, 200, "OK")
+                : Echo(req, 401, "Unauthorized",
+                    ("WWW-Authenticate", $"Digest realm=\"{Realm}\", nonce=\"{Nonce}\", qop=\"auth\", algorithm=SHA-512-256")),
+        };
+        var service = new SipRegistrationService(
+            transport, new SipDigestAuthentication(), NullLoggerFactory.Instance);
+
+        var request = new SipRegistrationRequest
+        {
+            Username = "bob",
+            Password = "zanzibar",
+            Domain = Realm,
+            Port = 5060,
+            Timeout = TimeSpan.FromSeconds(2),
+        };
+
+        var result = await service.RegisterAsync(request);
+
+        Assert.Equal(200, result.StatusCode);
+        Assert.True(result.Authenticated);
+
+        var registers = transport.SnapshotRequests().Where(r => r.Method == "REGISTER").ToList();
+        Assert.Equal(2, registers.Count);
+        var authorization = registers[1].Headers["Authorization"];
+        Assert.Equal("SHA-512-256", Param(authorization, "algorithm"));
+
+        // The retry's digest must follow the RFC 8760 SHA-512/256 formula (qop=auth, no -sess).
+        var cnonce = Param(authorization, "cnonce");
+        var nc = Param(authorization, "nc");
+        var uri = Param(authorization, "uri");
+        var ha1 = Sha512_256Hex($"bob:{Realm}:zanzibar");
+        var ha2 = Sha512_256Hex($"REGISTER:{uri}");
+        var expectedSha = Sha512_256Hex($"{ha1}:{Nonce}:{nc}:{cnonce}:auth:{ha2}");
+        Assert.Equal(expectedSha, Param(authorization, "response"));
+    }
+
+    [Fact]
+    public async Task Register_offered_md5_and_sha512_256_selects_sha512_256_and_succeeds()
+    {
+        // RFC 8760 §2.4 multi-challenge — the exact deadlock CF-001 fixes: the registrar offers BOTH
+        // MD5 and SHA-512-256 in separate WWW-Authenticate rows. The client must pick the strongest
+        // computable one (SHA-512-256) and the authenticated retry must succeed with 200.
+        var md5 = $"Digest realm=\"{Realm}\", nonce=\"{Nonce}\", qop=\"auth\", algorithm=MD5";
+        var sha512 = $"Digest realm=\"{Realm}\", nonce=\"{Nonce}\", qop=\"auth\", algorithm=SHA-512-256";
+        var transport = new CapturingSipTransportRuntime
+        {
+            ResponseFactory = req => req.Headers.ContainsKey("Authorization")
+                ? Echo(req, 200, "OK")
+                : Echo(req, 401, "Unauthorized", ("WWW-Authenticate", $"{md5}\n{sha512}")),
+        };
+        var service = new SipRegistrationService(
+            transport, new SipDigestAuthentication(), NullLoggerFactory.Instance);
+
+        var request = new SipRegistrationRequest
+        {
+            Username = "bob",
+            Password = "zanzibar",
+            Domain = Realm,
+            Port = 5060,
+            Timeout = TimeSpan.FromSeconds(2),
+        };
+
+        var result = await service.RegisterAsync(request);
+
+        Assert.Equal(200, result.StatusCode);
+        Assert.True(result.Authenticated);
+        var registers = transport.SnapshotRequests().Where(r => r.Method == "REGISTER").ToList();
+        Assert.Equal(2, registers.Count);
+        // Picked SHA-512-256 over the co-offered MD5.
+        Assert.Equal("SHA-512-256", Param(registers[1].Headers["Authorization"], "algorithm"));
     }
 
     [Fact]
