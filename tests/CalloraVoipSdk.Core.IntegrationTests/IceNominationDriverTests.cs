@@ -82,6 +82,31 @@ public sealed class IceNominationDriverTests
     }
 
     [Fact]
+    public async Task Lower_priority_local_wins_when_the_higher_priority_local_is_unreachable()
+    {
+        var remote = Ep(5702);
+        var nominated = new TaskCompletionSource<IceLocalCandidate>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        // The higher-priority local never reaches the remote; the lower-priority local does. The higher pair
+        // exhausts its attempts, then the driver falls back to the lower-priority working pair (RFC 8445 §6).
+        var high = new IceLocalCandidate { Type = "host", Priority = 2_000_000, Check = (_, _, _) => Task.FromResult(false) };
+        var low = new IceLocalCandidate { Type = "relay", Priority = 1_000, Check = (_, _, _) => Task.FromResult(true) };
+
+        await using var driver = new IceNominationDriver(
+            [high, low],
+            [new IceRemoteCandidate(remote, Priority: 100)],
+            (local, _) => nominated.TrySetResult(local),
+            NullLoggerFactory.Instance,
+            maxAttempts: 3,
+            roundDelay: TimeSpan.FromMilliseconds(1));
+
+        driver.Start();
+
+        var winner = await nominated.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal("relay", winner.Type);
+    }
+
+    [Fact]
     public async Task A_trickled_candidate_added_after_start_is_checked_and_nominated()
     {
         var trickled = Ep(5102);

@@ -16,7 +16,10 @@ internal sealed class IceNominationPairState
     /// <summary>The pair priority (RFC 8445 §6.1.2.3), ordering which pair is checked next.</summary>
     public required long PairPriority { get; init; }
 
-    /// <summary>How many connectivity checks this pair has been given so far.</summary>
+    /// <summary>
+    /// How many check rounds this pair has been given so far — each failed ordinary check, and each
+    /// ordinary-pass-then-lost-USE-CANDIDATE round, counts one. Bounds the total via <c>maxAttempts</c>.
+    /// </summary>
     public int Attempts { get; set; }
 
     /// <summary>True once the pair is nominated or has exhausted its check attempts.</summary>
