@@ -105,6 +105,49 @@ public sealed class TurnRelayAllocatorTests
     }
 
     [Fact]
+    public async Task EstablishAsync_propagates_an_allocate_error_without_further_requests()
+    {
+        var requests = new List<StunMessage>();
+        var allocator = NewAllocator((codec, transactor) => bytes =>
+        {
+            var request = codec.Decode(bytes.ToArray())!;
+            requests.Add(request);
+            transactor.OnControlDatagram(Error(codec, request, 400, "Bad Request"));
+        });
+
+        await Assert.ThrowsAsync<TurnException>(
+            () => allocator.EstablishAsync(RelayServer, Peer, 0x4001, credentials: null, lifetimeSeconds: null, CancellationToken.None));
+
+        // The sequence stops at the failed Allocate — no Permission/ChannelBind follow.
+        Assert.Single(requests);
+        Assert.Equal(TurnMessageMethod.Allocate, (TurnMessageMethod)(ushort)requests[0].MessageMethod);
+    }
+
+    [Fact]
+    public async Task EstablishAsync_propagates_a_create_permission_error()
+    {
+        var requests = new List<StunMessage>();
+        // Allocate succeeds; CreatePermission is rejected; ChannelBind must never be attempted.
+        var allocator = NewAllocator((codec, transactor) => bytes =>
+        {
+            var request = codec.Decode(bytes.ToArray())!;
+            requests.Add(request);
+            var method = (TurnMessageMethod)(ushort)request.MessageMethod;
+            transactor.OnControlDatagram(method switch
+            {
+                TurnMessageMethod.Allocate => AllocateSuccess(codec, request, Relayed, 600),
+                _ => Error(codec, request, 403, "Forbidden")
+            });
+        });
+
+        await Assert.ThrowsAsync<TurnException>(
+            () => allocator.EstablishAsync(RelayServer, Peer, 0x4001, credentials: null, lifetimeSeconds: null, CancellationToken.None));
+
+        Assert.Equal(TurnMessageMethod.CreatePermission, (TurnMessageMethod)(ushort)requests[^1].MessageMethod);
+        Assert.DoesNotContain(requests, r => (TurnMessageMethod)(ushort)r.MessageMethod == TurnMessageMethod.ChannelBind);
+    }
+
+    [Fact]
     public async Task EstablishAsync_rejects_a_channel_number_outside_the_turn_range()
     {
         var allocator = NewAllocator((_, _) => _ => { /* guard fails before any I/O */ });

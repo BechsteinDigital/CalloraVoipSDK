@@ -57,6 +57,10 @@ internal sealed class TurnRelayAllocator
 
         var allocation = await _control.AllocateAsync(credentials, lifetimeSeconds, ct).ConfigureAwait(false);
 
+        // NOTE(4c-4): once the Allocate succeeds, a failure in a later step leaves the server holding an
+        // orphan allocation until LifetimeSeconds expires. Best-effort teardown (Refresh lifetime=0 on a
+        // partial failure) belongs in the Refresh/Teardown slice, not here.
+
         // Thread the effective credentials (now carrying the server's REALM/NONCE) into the follow-up
         // operations so they authenticate in a single round-trip without re-probing.
         var afterPermission = await _control
