@@ -18,8 +18,15 @@ namespace CalloraVoipSdk.Core.Infrastructure.Common.Relay;
 /// disposes — running its teardown Refresh(0) — before that transport is torn down. <see langword="null"/> when
 /// the producer supplies no keepalive.
 /// </param>
+/// <param name="BindChannel">
+/// Binds a relay channel to the nominated peer (RFC 8656 §11 ChannelBind) and returns the bound data-path
+/// channel, so the media session can switch the transport onto ChannelData once a relay pair wins ICE. Runs
+/// while the transport is still in direct mode (the ChannelBind request reaches the server unframed via the
+/// binding's send path). <see langword="null"/> leaves the session unable to switch to the relay data path.
+/// </param>
 internal sealed record RelayIceBinding(
     IRelayIndicationChannel Indication,
     Action<ReadOnlyMemory<byte>> OnControl,
     Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask> RelaySend,
-    IRelayKeepAlive? KeepAlive = null);
+    IRelayKeepAlive? KeepAlive = null,
+    Func<IPEndPoint, CancellationToken, Task<IRelayDatagramChannel>>? BindChannel = null);

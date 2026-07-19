@@ -120,6 +120,78 @@ public sealed class BundledIceControlRelayTests
         Assert.True(relayChecks >= 1, "the late-adopted relay send path must have been checked");
     }
 
+    [Fact]
+    public async Task A_relay_nomination_fires_the_relay_pair_nominated_callback()
+    {
+        var remote = new IPEndPoint(IPAddress.Loopback, 53003);
+        var pipeline = Pipeline();
+        var relayNominated = new TaskCompletionSource<IPEndPoint>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        ValueTask DirectSend(ReadOnlyMemory<byte> datagram, IPEndPoint target, CancellationToken ct)
+            => throw new SocketException((int)SocketError.NetworkUnreachable);
+
+        ValueTask RelaySend(ReadOnlyMemory<byte> datagram, IPEndPoint target, CancellationToken ct)
+        {
+            var response = new byte[20];
+            response[0] = 0x01; response[1] = 0x01;
+            response[4] = 0x21; response[5] = 0x12; response[6] = 0xA4; response[7] = 0x42;
+            datagram.Span.Slice(8, 12).CopyTo(response.AsSpan(8));
+            _ = Task.Run(() => pipeline.ProcessInboundDatagram(response, target));
+            return ValueTask.CompletedTask;
+        }
+
+        var ice = IceParameters(remote);
+        await using var control = new BundledIceControl(
+            ice, pipeline, DirectSend, NullLoggerFactory.Instance,
+            onPairNominated: _ => { },
+            relaySend: RelaySend,
+            onRelayPairNominated: ep => relayNominated.TrySetResult(ep));
+        control.Start();
+
+        // Direct is dead → the relay pair is nominated → the relay-specific callback fires with the peer, so the
+        // session can switch the transport onto the relay data path (ChannelBind).
+        Assert.Equal(remote, await relayNominated.Task.WaitAsync(TimeSpan.FromSeconds(10)));
+    }
+
+    [Fact]
+    public async Task A_direct_nomination_does_not_fire_the_relay_pair_nominated_callback()
+    {
+        var remote = new IPEndPoint(IPAddress.Loopback, 53004);
+        var pipeline = Pipeline();
+        var nominated = new TaskCompletionSource<IPEndPoint>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var relayFired = 0;
+
+        // The direct path works (echoes checks back), so the direct pair is nominated — the relay-specific
+        // callback must not fire (no relay candidate is even configured here).
+        ValueTask DirectSend(ReadOnlyMemory<byte> datagram, IPEndPoint target, CancellationToken ct)
+        {
+            var response = new byte[20];
+            response[0] = 0x01; response[1] = 0x01;
+            response[4] = 0x21; response[5] = 0x12; response[6] = 0xA4; response[7] = 0x42;
+            datagram.Span.Slice(8, 12).CopyTo(response.AsSpan(8));
+            _ = Task.Run(() => pipeline.ProcessInboundDatagram(response, target));
+            return ValueTask.CompletedTask;
+        }
+
+        var ice = IceParameters(remote);
+        await using var control = new BundledIceControl(
+            ice, pipeline, DirectSend, NullLoggerFactory.Instance,
+            onPairNominated: ep => nominated.TrySetResult(ep),
+            onRelayPairNominated: _ => Interlocked.Increment(ref relayFired));
+        control.Start();
+
+        Assert.Equal(remote, await nominated.Task.WaitAsync(TimeSpan.FromSeconds(10)));
+        await Task.Delay(100); // give any erroneous relay callback a chance to fire
+        Assert.Equal(0, Volatile.Read(ref relayFired));
+    }
+
+    private static IceMediaParameters IceParameters(IPEndPoint remote) =>
+        new(remote, IceEnabled: true, IceControlling: true,
+            LocalIceUfrag: "offr", LocalIcePwd: "offrPassword", RemoteIceUfrag: "answ", RemoteIcePwd: "answPassword")
+        {
+            RemoteCandidates = [new IceRemoteCandidate(remote, Priority: 100)],
+        };
+
     private static BundledInboundPipeline Pipeline()
     {
         var demux = BundledRtpDemultiplexerFactory.Create(3, new Dictionary<string, IReadOnlyCollection<int>>());
