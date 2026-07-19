@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Authentication;
+using Org.BouncyCastle.Crypto.Digests;
 
 namespace CalloraVoipSdk.Core.IntegrationTests;
 
@@ -41,9 +42,21 @@ public sealed class SipDigestAuthenticationTests
         {
             "MD5" => MD5.HashData(bytes),
             "SHA-256" => SHA256.HashData(bytes),
+            "SHA-512-256" => Sha512_256(bytes),
             _ => throw new ArgumentException($"Unsupported algorithm {algorithm}", nameof(algorithm)),
         };
         return Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
+    // SHA-512/256 has no managed .NET primitive; the BouncyCastle digest matches the OpenSSL
+    // reference (verified independently in the no-qop known-answer test above).
+    private static byte[] Sha512_256(byte[] bytes)
+    {
+        var digest = new Sha512tDigest(256);
+        digest.BlockUpdate(bytes, 0, bytes.Length);
+        var output = new byte[digest.GetDigestSize()];
+        digest.DoFinal(output, 0);
+        return output;
     }
 
     [Fact]
@@ -136,6 +149,38 @@ public sealed class SipDigestAuthenticationTests
         AssertSessResponse(header, "SHA-256");
     }
 
+    [Fact]
+    public void No_qop_sha512_256_response_matches_the_reference_digest()
+    {
+        var auth = new SipDigestAuthentication();
+        var challenge = $"Digest realm=\"{Realm}\", nonce=\"{Nonce}\", algorithm=SHA-512-256";
+
+        var ok = auth.TryCreateAuthorizationHeader(
+            challenge, Username, Password, Method, Uri, nonceCount: 1, out var header);
+
+        Assert.True(ok);
+        // Independently computed with the OpenSSL CLI (openssl dgst -sha512-256):
+        // resp = H(H(bob:biloxi.com:zanzibar):nonce:H(REGISTER:sip:biloxi.com)).
+        Assert.Equal(
+            "79d19bef9b0e5eeaf10d730417c43bd1436a2d2c7fdd188e6a982a91e22bfa1b",
+            Param(header, "response"));
+        Assert.Equal("SHA-512-256", Param(header, "algorithm"));
+    }
+
+    [Fact]
+    public void Qop_auth_sha512_256_sess_folds_nonce_and_cnonce_into_ha1()
+    {
+        var auth = new SipDigestAuthentication();
+        var challenge = $"Digest realm=\"{Realm}\", nonce=\"{Nonce}\", qop=\"auth\", algorithm=SHA-512-256-sess";
+
+        var ok = auth.TryCreateAuthorizationHeader(
+            challenge, Username, Password, Method, Uri, nonceCount: 1, out var header);
+
+        Assert.True(ok);
+        Assert.Equal("SHA-512-256-sess", Param(header, "algorithm"));
+        AssertSessResponse(header, "SHA-512-256");
+    }
+
     // RFC 7616 §3.4.2 session variant: HA1 = H(H(user:realm:pass):nonce:cnonce), recomputed here
     // with the cnonce the authenticator emitted, against a qop=auth response.
     private static void AssertSessResponse(string header, string hashAlgorithm)
@@ -171,7 +216,6 @@ public sealed class SipDigestAuthenticationTests
     [InlineData("Digest nonce=\"abc\"")]                              // missing realm
     [InlineData("Digest realm=\"biloxi.com\"")]                      // missing nonce
     [InlineData("Digest realm=\"biloxi.com\", nonce=\"abc\", algorithm=MD6")] // unsupported algorithm
-    [InlineData("Digest realm=\"biloxi.com\", nonce=\"abc\", algorithm=SHA-512-256")] // .NET has no SHA-512/256
     public void Unusable_challenges_are_rejected(string? challenge)
     {
         var auth = new SipDigestAuthentication();

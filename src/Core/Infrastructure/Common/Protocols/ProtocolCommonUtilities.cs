@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using Org.BouncyCastle.Crypto.Digests;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Common.Protocols;
 
@@ -80,8 +81,7 @@ internal static class ProtocolCommonUtilities
         {
             "MD5" => MD5.HashData(bytes),
             "SHA-256" => SHA256.HashData(bytes),
-            "SHA-512-256" => TryComputeHash(bytes, "SHA-512/256"),
-            "SHA-512/256" => TryComputeHash(bytes, "SHA-512/256"),
+            "SHA-512-256" or "SHA-512/256" => Sha512_256(bytes),
             _ => Array.Empty<byte>()
         };
         if (hash.Length == 0)
@@ -92,22 +92,17 @@ internal static class ProtocolCommonUtilities
     }
 
     /// <summary>
-    /// Tries to compute a hash via platform algorithm name and returns empty array when unavailable.
+    /// Computes SHA-512/256 (RFC 8760 / FIPS 180-4 §5.3.6). .NET exposes no managed SHA-512/256
+    /// primitive — it is a distinct algorithm with its own initial hash values, not a truncation of
+    /// SHA-512 — so it is computed with the BouncyCastle digest already referenced for DTLS.
     /// </summary>
-    private static byte[] TryComputeHash(
-        byte[] bytes,
-        string algorithmName)
+    private static byte[] Sha512_256(byte[] bytes)
     {
-        try
-        {
-            using var hash = IncrementalHash.CreateHash(new HashAlgorithmName(algorithmName));
-            hash.AppendData(bytes);
-            return hash.GetHashAndReset();
-        }
-        catch (Exception)
-        {
-            return Array.Empty<byte>();
-        }
+        var digest = new Sha512tDigest(256);
+        digest.BlockUpdate(bytes, 0, bytes.Length);
+        var output = new byte[digest.GetDigestSize()];
+        digest.DoFinal(output, 0);
+        return output;
     }
 
     /// <summary>
