@@ -33,6 +33,10 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     // 0 = no relay candidate wired; 1 = wired (at construction from the options factory, or later via
     // AdoptRelay). Guards against wiring the relay path twice (a second indication relay / relay candidate).
     private int _relayWired;
+    // The relay allocation keepalive (RFC 8656 §3.9), when a relay path was wired: started with the session and
+    // disposed — running its teardown Refresh(0) — before the transport it rides. Set from the relay binding at
+    // construction (offerer) or via AdoptRelay (answerer); Volatile for the gather→start/dispose cross-thread read.
+    private IRelayKeepAlive? _relayKeepAlive;
 
     /// <summary>Raised with each decrypted inbound audio RTP packet.</summary>
     public event Action<RtpPacket>? AudioReceived;
@@ -158,6 +162,8 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         _audioSsrc = options.Audio.Ssrc;
         // A relay candidate wired at construction (offerer path) closes the door on a later AdoptRelay.
         _relayWired = relayBinding is not null ? 1 : 0;
+        // Its keepalive (if any) is started in StartAsync, once the transport's receive loop is up.
+        _relayKeepAlive = relayBinding?.KeepAlive;
     }
 
     // Dispatches inbound audio to subscribers on the receive loop; a throwing subscriber must not tear
@@ -260,6 +266,12 @@ internal sealed class BundledMediaSession : IAsyncDisposable
 
         _transport.SetIndicationRelay(binding.Indication, binding.OnControl);
         _ice.AddRelayLocalCandidate(binding.RelaySend);
+
+        // Keep the adopted allocation alive. Started here (idempotent) so an adoption that lands after StartAsync
+        // still runs the keepalive; the StartAsync start covers the pre-start case. Starting before the transport
+        // receive loop is up is safe — the first refresh is roughly half the allocation lifetime away.
+        Volatile.Write(ref _relayKeepAlive, binding.KeepAlive);
+        binding.KeepAlive?.Start();
     }
 
     // A connectivity-checked ICE nomination (RFC 8445 §8) redirects the whole 5-tuple onto the nominated
@@ -282,6 +294,9 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     {
         await _transport.StartAsync(cancellationToken).ConfigureAwait(false);
         _ice.Start();
+        // Keep a gathered relay allocation alive for the session (RFC 8656 §3.9). Idempotent — AdoptRelay may
+        // already have started it for an answerer.
+        Volatile.Read(ref _relayKeepAlive)?.Start();
         _dtls.Start(cancellationToken);
     }
 
@@ -317,6 +332,10 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         await _ice.DisposeAsync().ConfigureAwait(false);
+        // Dispose the relay keepalive after ICE (no more relay checks) but before the transport: its teardown
+        // Refresh(0) rides the transport's control send, so the transport must still be alive to carry it.
+        if (Volatile.Read(ref _relayKeepAlive) is { } keepAlive)
+            await keepAlive.DisposeAsync().ConfigureAwait(false);
         await _dtls.DisposeAsync().ConfigureAwait(false);
         _video?.Dispose();
         await _transport.DisposeAsync().ConfigureAwait(false);

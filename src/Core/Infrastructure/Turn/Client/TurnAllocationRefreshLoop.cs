@@ -1,3 +1,4 @@
+using CalloraVoipSdk.Core.Infrastructure.Common.Relay;
 using CalloraVoipSdk.Core.Infrastructure.Stun.Auth;
 using Microsoft.Extensions.Logging;
 
@@ -19,7 +20,7 @@ namespace CalloraVoipSdk.Core.Infrastructure.Turn.Client;
 /// composition layer's job.
 /// </para>
 /// </summary>
-internal sealed class TurnAllocationRefreshLoop : IAsyncDisposable
+internal sealed class TurnAllocationRefreshLoop : IRelayKeepAlive
 {
     // RFC 8656 §3.9 default allocation lifetime; used to pace refreshes when the server did not report a
     // concrete granted lifetime (0).
