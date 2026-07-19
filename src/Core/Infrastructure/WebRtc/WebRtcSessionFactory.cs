@@ -157,6 +157,22 @@ internal static class WebRtcSessionFactory
         if (video is null || string.IsNullOrEmpty(video.Mid))
             return null;
 
+        // Build an outbound video track only when both sides negotiated it for sending (RFC 8829/3264):
+        // this peer sends (send-recv/send-only) AND the remote will receive (enabled, send-recv/recv-only).
+        // A remote that rejected video (port 0), made it inactive, or is send-only must not be streamed to —
+        // the outbound mirror of the inbound port/direction gate. The local m-line's port is an ICE
+        // placeholder, so the local side is gated by direction, not a zero port.
+        var remoteVideo = remoteDescription.Media.FirstOrDefault(m => m.MediaType.Equals("video", Ci));
+        if (!LocalSends(video) || !RemoteReceives(remoteVideo))
+        {
+            loggerFactory.CreateLogger(typeof(WebRtcSessionFactory)).LogInformation(
+                "Video is present locally but not negotiated for sending (local direction {LocalDirection}; " +
+                "remote {RemoteState}); no outbound video track is built.",
+                video.Direction,
+                remoteVideo is null ? "absent" : remoteVideo.Disabled ? "disabled" : remoteVideo.Direction.ToString());
+            return null;
+        }
+
         // The primary video codec (skip the RTX repair codec, RFC 4588).
         var codec = video.Codecs.FirstOrDefault(c => !c.Name.Equals("rtx", Ci));
         if (codec is null)
@@ -260,6 +276,17 @@ internal static class WebRtcSessionFactory
         var mid = media.Extensions.FirstOrDefault(e => string.Equals(e.Uri, RtpHeaderExtensionUris.Mid, StringComparison.Ordinal));
         return mid is not null && mid.Id is >= 1 and <= 14 ? (byte)mid.Id : null;
     }
+
+    // This peer will send media on a section it authored: direction send-recv or send-only (RFC 3264;
+    // the default when no direction attribute is present is send-recv). The local m-line's port is an ICE
+    // placeholder, so the local side is gated by direction, not a zero port.
+    private static bool LocalSends(SdpMediaDescription media)
+        => media.Direction is SdpMediaDirection.SendRecv or SdpMediaDirection.SendOnly;
+
+    // The remote party will receive media on a section it authored: enabled (real port) and direction
+    // send-recv or recv-only (RFC 3264). The outbound counterpart to the inbound RemoteSends gate.
+    private static bool RemoteReceives(SdpMediaDescription? media)
+        => media is { Disabled: false, Direction: SdpMediaDirection.SendRecv or SdpMediaDirection.RecvOnly };
 
     // The usable remote candidates for connectivity checks (RFC 8839): component-1 UDP candidates with a
     // parseable address and real port, paired with their priority so the nomination driver checks the
