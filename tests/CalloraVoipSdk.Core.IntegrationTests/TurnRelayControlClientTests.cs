@@ -30,12 +30,15 @@ public sealed class TurnRelayControlClientTests
         var codec = new StunMessageCodec();
         var engine = new TurnTransactionEngine(codec);
         var requests = new List<StunMessage>();
+        var rawRequests = new List<byte[]>();
         int sends = 0;
         TurnControlTransactor transactor = null!;
         Task Send(ReadOnlyMemory<byte> bytes, CancellationToken ct)
         {
             sends++;
-            var request = codec.Decode(bytes.ToArray())!;
+            var raw = bytes.ToArray();
+            rawRequests.Add(raw);
+            var request = codec.Decode(raw)!;
             requests.Add(request);
             transactor.OnControlDatagram(sends == 1
                 ? Challenge401(codec, request, "callora.example", "nonce-1")
@@ -55,6 +58,11 @@ public sealed class TurnRelayControlClientTests
         Assert.True(HasUsername(requests[1]));
         Assert.Equal("callora.example", RealmOf(requests[1]));
         Assert.Equal("nonce-1", NonceOf(requests[1]));
+        // The retry must be genuinely MESSAGE-INTEGRITY-authenticated with the long-term key derived from
+        // the server's realm — verify against the raw bytes, not just the presence of a USERNAME.
+        var authKey = credentials.WithRealmAndNonce("callora.example", "nonce-1").DeriveHmacKey();
+        Assert.True(codec.VerifyIntegrity(rawRequests[1], authKey), "authenticated retry must carry a valid MESSAGE-INTEGRITY");
+        Assert.False(codec.VerifyIntegrity(rawRequests[0], authKey), "unauthenticated probe must not carry MESSAGE-INTEGRITY");
         Assert.Equal(Relayed, result.RelayedEndPoint);
         Assert.Equal(600u, result.LifetimeSeconds);
         Assert.Equal("callora.example", result.EffectiveCredentials?.Realm);
