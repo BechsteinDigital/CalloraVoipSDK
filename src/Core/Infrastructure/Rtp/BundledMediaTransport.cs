@@ -42,6 +42,12 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IRelayCont
     private readonly UdpClient _udp;
 
     private IRelayDatagramChannel? _relay;
+    // The per-pair relay indication path (RFC 8656 §10), active in direct mode only: relayed Data indications
+    // from its server are unwrapped to the inner payload + peer, and the server's control responses go to the
+    // control callback. Independent of the whole-socket relay mode above (_relayServer) — mutually exclusive.
+    // Read via Volatile from the receive loop.
+    private IRelayIndicationChannel? _indicationRelay;
+    private Action<ReadOnlyMemory<byte>>? _onIndicationControl;
     private IPEndPoint? _remoteEndPoint;
     private Task? _receiveLoop;
     private CancellationTokenSource? _loopCts;
@@ -128,6 +134,35 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IRelayCont
             throw new ArgumentException("The relay channel is bound to a different TURN server.", nameof(channel));
 
         Volatile.Write(ref _relay, channel);
+    }
+
+    /// <summary>
+    /// Enables the per-pair TURN relay indication path (RFC 8656 §10) on a <em>direct-mode</em> transport, so a
+    /// relay ICE local candidate can send connectivity checks to several remote candidates over one allocation
+    /// (framed as Send indications) while the direct host/srflx candidate keeps using the socket directly.
+    /// Inbound: Data indications from <paramref name="indicationRelay"/>'s server are unwrapped to the inner
+    /// payload and the peer they were relayed from (presented as the source to the pipeline); other STUN from
+    /// the server (CreatePermission/Refresh responses) is handed to <paramref name="onControl"/> to match by
+    /// transaction id; relay-server traffic never reaches the media pipeline as a direct peer. Typically
+    /// called before <see cref="StartAsync"/> (the allocation is adopted before the loop runs), but safe to
+    /// call after: both fields are published under Volatile and read atomically by the receive loop.
+    /// </summary>
+    /// <param name="indicationRelay">The indication channel (relay server + framing).</param>
+    /// <param name="onControl">Sink for the relay server's non-Data STUN control responses, or null to drop them.</param>
+    /// <exception cref="InvalidOperationException">The transport runs the whole-socket relay mode (mutually exclusive).</exception>
+    public void SetIndicationRelay(
+        IRelayIndicationChannel indicationRelay,
+        Action<ReadOnlyMemory<byte>>? onControl = null)
+    {
+        ArgumentNullException.ThrowIfNull(indicationRelay);
+        if (_relayServer is not null)
+            throw new InvalidOperationException(
+                "SetIndicationRelay is for direct-mode transports; this transport runs the whole-socket relay mode.");
+
+        // Publish the control callback before the channel (the receive loop's gate), so observing the channel
+        // implies the callback is visible too.
+        Volatile.Write(ref _onIndicationControl, onControl);
+        Volatile.Write(ref _indicationRelay, indicationRelay);
     }
 
     /// <summary>Starts the shared receive loop. Idempotent per instance; call once after wiring.</summary>
@@ -304,6 +339,39 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IRelayCont
             }
 
             return;
+        }
+
+        // Direct mode. When a per-pair relay indication path is active (a relay ICE local candidate is being
+        // checked), datagrams from its relay server are the relayed control/data plane and must not be treated
+        // as direct peer traffic; everything else is a direct (host/srflx) peer datagram.
+        if (Volatile.Read(ref _indicationRelay) is { } indication)
+        {
+            if (indication.TryUnwrap(datagram, source, out var peer, out var inner) && peer is not null)
+            {
+                // A relayed Data indication: the inner payload came from `peer` through the server. Present the
+                // peer as the source so the ICE/DTLS layers see the peer, never the TURN server it arrived from.
+                _inbound.ProcessInboundDatagram(inner, peer);
+                return;
+            }
+
+            if (indication.IsFromRelay(source))
+            {
+                // From the relay server but not a Data indication: a TURN control response
+                // (CreatePermission/Refresh). Match it by transaction id via the control callback, or drop it —
+                // it is never direct peer media, so it must not reach the media pipeline.
+                if (Volatile.Read(ref _onIndicationControl) is { } onControl
+                    && MediaPacketClassifier.Classify(datagram) == MediaPacketKind.Stun)
+                {
+                    onControl(datagram.ToArray());
+                }
+                else
+                {
+                    _logger.LogTrace(
+                        "Dropping non-control datagram from relay server on {LocalEndPoint}.", _localEndPoint);
+                }
+
+                return;
+            }
         }
 
         _inbound.ProcessInboundDatagram(datagram, source);

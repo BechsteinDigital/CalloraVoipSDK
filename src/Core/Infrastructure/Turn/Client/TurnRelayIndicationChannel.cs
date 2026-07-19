@@ -25,7 +25,7 @@ namespace CalloraVoipSdk.Core.Infrastructure.Turn.Client;
 /// relay server's exact 5-tuple.
 /// </para>
 /// </summary>
-internal sealed class TurnRelayIndicationChannel
+internal sealed class TurnRelayIndicationChannel : IRelayIndicationChannel
 {
     private readonly IStunMessageCodec _codec;
     private readonly IPEndPoint _relayServer;
@@ -43,6 +43,13 @@ internal sealed class TurnRelayIndicationChannel
 
     /// <summary>The relay server's endpoint; framed datagrams from <see cref="Wrap"/> are sent here.</summary>
     public IPEndPoint RelayServer => _relayServer;
+
+    /// <inheritdoc />
+    public bool IsFromRelay(IPEndPoint source)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        return RelayEndPoint.SameEndPoint(source, _relayServer);
+    }
 
     /// <summary>
     /// Frames <paramref name="payload"/> as a Send indication addressed to <paramref name="peer"/>. The
