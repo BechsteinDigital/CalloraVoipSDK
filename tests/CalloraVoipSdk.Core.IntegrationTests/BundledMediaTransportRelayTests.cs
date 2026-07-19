@@ -77,7 +77,12 @@ public sealed class BundledMediaTransportRelayTests
 
         var audioTcs = Tcs();
         await using var transport = new BundledMediaTransport(
-            new BundledMediaTransportOptions { LocalEndPoint = Loopback(), Relay = channel },
+            new BundledMediaTransportOptions
+            {
+                LocalEndPoint = Loopback(),
+                RemoteEndPoint = new IPEndPoint(IPAddress.Loopback, 9999),
+                Relay = channel,
+            },
             InboundPipeline(p => audioTcs.TrySetResult(p)), NullLogger<BundledMediaTransport>.Instance);
         await transport.StartAsync();
 
@@ -89,6 +94,18 @@ public sealed class BundledMediaTransportRelayTests
 
         await Task.Delay(300);
         Assert.False(audioTcs.Task.IsCompleted); // nothing reached the sink
+    }
+
+    [Fact]
+    public void A_relay_transport_requires_a_remote_endpoint()
+    {
+        // A relay channel is bound to one peer, so relayed inbound must be attributable to it — the transport
+        // must not be built in relay mode without the peer (else the relay server would be mistaken for it).
+        var channel = new TurnRelayChannel(new IPEndPoint(IPAddress.Loopback, 3478), ChannelNumber);
+
+        Assert.Throws<ArgumentException>(() => new BundledMediaTransport(
+            new BundledMediaTransportOptions { LocalEndPoint = Loopback(), Relay = channel },
+            InboundPipeline(_ => { }), NullLogger<BundledMediaTransport>.Instance));
     }
 
     // ── harness (mirrors BundledMediaTransportTests) ─────────────────────────────

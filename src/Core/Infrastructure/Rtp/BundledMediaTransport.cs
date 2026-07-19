@@ -54,6 +54,14 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IAsyncDisp
         _remoteEndPoint = options.RemoteEndPoint;
         _relay          = options.Relay;
 
+        // A relay channel is bound to one peer (RFC 8656 channel-bind is per-peer), so the peer is known
+        // whenever relay mode is active. Require it: relayed inbound datagrams physically arrive from the
+        // TURN server but must be attributed to that peer (not the server) for the DTLS/ICE source filters
+        // above, and there is no correct peer to fabricate otherwise.
+        if (_relay is not null && _remoteEndPoint is null)
+            throw new ArgumentException(
+                "A relay transport requires a RemoteEndPoint (the bound peer the relay forwards to).", nameof(options));
+
         if (socket is not null)
         {
             // Reuse a socket the peer bound early (Trickle-ICE early-bind), so the offer could advertise
@@ -138,7 +146,10 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IAsyncDisp
         if (_relay is { } relay)
         {
             // In relay mode the peer is reachable only through the TURN server, so an ICE response / triggered
-            // check to the peer is framed as ChannelData to the relay too (the bound channel carries it).
+            // check to the peer is framed as ChannelData to the relay too. `target` is intentionally not sent
+            // to directly: the one bound channel carries every send to the bound peer (a different candidate
+            // of the same peer still arrives via the relay). Reaching a genuinely different peer would need a
+            // second allocation/channel — out of scope for the single-channel relay.
             var framed = relay.Wrap(datagram.Span);
             await _udp.SendAsync(framed, relay.RelayServer, cancellationToken).ConfigureAwait(false);
             return;
@@ -193,9 +204,12 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IAsyncDisp
     }
 
     // Hands one received datagram to the inbound pipeline. In relay mode only datagrams relayed back through
-    // the bound channel are ours: unwrap to the inner payload and present the relayed peer (not the TURN
-    // server) as the source, so the pipeline's STUN/ICE and source-filtered paths see the peer. Anything not
-    // relayed through our channel did not traverse the relay and is dropped. Direct mode passes through.
+    // the bound channel are ours: unwrap to the inner payload and present the relayed peer as the source, so
+    // the pipeline's STUN/ICE and source-filtered paths see the peer — never the TURN server the datagram
+    // physically arrived from. The peer is the transport's remote endpoint (guaranteed set for a relay
+    // transport by the constructor); the `?? source` is unreachable in relay mode and only a defensive
+    // fallback. Anything not relayed through our channel did not traverse the relay and is dropped. Direct
+    // mode passes through unchanged.
     private void DeliverInbound(ReadOnlySpan<byte> datagram, IPEndPoint source)
     {
         if (_relay is { } relay)
