@@ -121,7 +121,8 @@ internal sealed class TurnAllocateRequestHandler
         {
             if (requestedTransport.Protocol == TurnRequestedTransportProtocol.Udp)
             {
-                relayUdp = CreateRelaySocket(addressFamily);
+                // DONT-FRAGMENT only reaches here for a UDP allocation (TCP + DONT-FRAGMENT was rejected above).
+                relayUdp = CreateRelaySocket(addressFamily, HasRawAttribute(request, TurnAttributeType.DontFragment));
                 relayedEndPoint = (IPEndPoint)relayUdp.Client.LocalEndPoint!;
             }
             else
@@ -225,11 +226,16 @@ internal sealed class TurnAllocateRequestHandler
             .Any(attribute => attribute.RawAttributeType == (ushort)type);
     }
 
-    private static UdpClient CreateRelaySocket(AddressFamily addressFamily)
+    // Creates and binds the relay UDP socket for an allocation. When the client asked for DONT-FRAGMENT
+    // (RFC 8656 §14) the IPv4 Don't-Fragment bit is set so relayed datagrams are not fragmented in transit;
+    // IPv6 never fragments in transit, so the flag is meaningless (and unsettable) there.
+    internal static UdpClient CreateRelaySocket(AddressFamily addressFamily, bool dontFragment = false)
     {
         var socket = new UdpClient(addressFamily);
         if (addressFamily == AddressFamily.InterNetworkV6)
             socket.Client.DualMode = true;
+        else if (dontFragment)
+            socket.Client.DontFragment = true;
 
         var bindEndPoint = new IPEndPoint(
             addressFamily == AddressFamily.InterNetworkV6 ? IPAddress.IPv6Any : IPAddress.Any,
