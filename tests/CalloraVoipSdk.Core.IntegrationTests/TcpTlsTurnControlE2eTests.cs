@@ -73,6 +73,18 @@ public sealed class TcpTlsTurnControlE2eTests
     {
         using var rsa = RSA.Create(2048);
         var request = new CertificateRequest("CN=localhost", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
-        return request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1));
+        using var ephemeral = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1));
+
+        // CreateSelfSigned hands back a certificate whose private key is ephemeral. On Windows (SChannel) such a
+        // key cannot back a server-side SslStream handshake — AuthenticateAsServerAsync aborts and the client
+        // observes an unexpected EOF — whereas on Linux (OpenSSL) it works directly. Round-tripping through a PFX
+        // export/import associates the key with a container SChannel accepts for server authentication, which is
+        // also the shape a real deployment gets when it loads its certificate from a PFX or the certificate store.
+        var pfx = ephemeral.Export(X509ContentType.Pfx);
+#if NET9_0_OR_GREATER
+        return X509CertificateLoader.LoadPkcs12(pfx, password: null);
+#else
+        return new X509Certificate2(pfx);
+#endif
     }
 }
