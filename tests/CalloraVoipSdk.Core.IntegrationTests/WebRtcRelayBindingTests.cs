@@ -133,6 +133,59 @@ public sealed class WebRtcRelayBindingTests
         }
     }
 
+    [Fact]
+    public async Task CreateFactory_builds_a_keepalive_that_refreshes_installed_permissions()
+    {
+        var codec = new StunMessageCodec();
+        var allocation = new TurnAllocateResult
+        {
+            RelayedEndPoint = new IPEndPoint(IPAddress.Parse("198.51.100.9"), 49152),
+            LifetimeSeconds = 600, // allocation refresh cadence = 300s — will not fire during the test
+            EffectiveCredentials = new StunCredentials
+            {
+                Username = "user", Password = "pass", Realm = "callora.example", Nonce = "nonce-1"
+            },
+        };
+
+        // Permission lifetime 2s → refresh cadence 1s, so the loop re-installs the peer without a long wait.
+        var factory = WebRtcRelayBinding.CreateFactory(
+            Server, allocation, NullLoggerFactory.Instance, permissionLifetimeSeconds: 2);
+
+        var permissionCount = 0;
+        var refreshed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        RelayIceBinding? binding = null;
+        ValueTask TargetedSend(ReadOnlyMemory<byte> datagram, IPEndPoint target, CancellationToken ct)
+        {
+            var message = codec.Decode(datagram.ToArray());
+            if (message is { MessageClass: StunMessageClass.Request } && IsCreatePermissionFor(codec, datagram.ToArray(), Peer))
+            {
+                if (Interlocked.Increment(ref permissionCount) >= 2)
+                    refreshed.TrySetResult(); // the install (1) plus at least one keepalive refresh (2+)
+                binding!.OnControl(EmptySuccess(codec, message));
+            }
+            else if (message is { MessageClass: StunMessageClass.Request }
+                && (TurnMessageMethod)(ushort)message.MessageMethod == TurnMessageMethod.Refresh)
+            {
+                binding!.OnControl(RefreshSuccess(codec, message, TurnAttributeMapper.DecodeLifetime(message)?.Seconds ?? 0));
+            }
+
+            return ValueTask.CompletedTask;
+        }
+
+        binding = factory(TargetedSend);
+        Assert.NotNull(binding);
+
+        // Install a permission for the peer via a relay send (the ICE checking-phase path), then start the
+        // keepalive: the permission refresh loop must re-issue CreatePermission for the known peer.
+        await binding.RelaySend(new byte[] { 1 }, Peer, CancellationToken.None); // CreatePermission #1 (install)
+
+        binding.KeepAlive!.Start();
+        await refreshed.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await binding.KeepAlive.DisposeAsync();
+
+        Assert.True(Volatile.Read(ref permissionCount) >= 2); // installed once, then refreshed at least once
+    }
+
     private static byte[] RefreshSuccess(IStunMessageCodec codec, StunMessage request, uint lifetime) =>
         codec.Encode(new StunMessage
         {

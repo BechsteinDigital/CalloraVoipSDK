@@ -30,11 +30,16 @@ internal static class WebRtcRelayBinding
     /// <param name="relayServer">The TURN server's transport address the allocation lives on.</param>
     /// <param name="allocation">The gathered allocation (its effective credentials prime the control operations).</param>
     /// <param name="loggerFactory">Logger factory.</param>
+    /// <param name="permissionLifetimeSeconds">
+    /// The TURN permission lifetime (RFC 8656 §9 default 300 s) the permission refresh loop is paced against; it
+    /// refreshes at half this value.
+    /// </param>
     /// <returns>A factory the media session invokes once the shared socket exists.</returns>
     public static RelayIceBindingFactory CreateFactory(
         IPEndPoint relayServer,
         TurnAllocateResult allocation,
-        ILoggerFactory loggerFactory)
+        ILoggerFactory loggerFactory,
+        uint permissionLifetimeSeconds = 300)
     {
         ArgumentNullException.ThrowIfNull(relayServer);
         ArgumentNullException.ThrowIfNull(allocation);
@@ -59,8 +64,18 @@ internal static class WebRtcRelayBinding
             // transactor correlates responses by transaction id, so a Refresh in flight next to a CreatePermission
             // is fine. It rides the transport's targeted send too, so — like RelaySend — the session must dispose
             // it (running its teardown Refresh(0)) before it disposes the transport.
-            var keepAlive = new TurnAllocationRefreshLoop(
+            var allocationKeepAlive = new TurnAllocationRefreshLoop(
                 control.RefreshAsync, allocation.EffectiveCredentials, allocation.LifetimeSeconds, loggerFactory);
+
+            // Alongside the allocation refresh, keep the per-peer permissions alive (RFC 8656 §9): a permission
+            // lapses ~5 min after it was installed, so a long-lived relay path would start dropping inbound
+            // datagrams. This loop re-installs every peer the send path knows about (over the same credential
+            // gate) and has no teardown — a permission lapses on its own. Both loops run through the session's
+            // single keepalive seam, disposed (permission first, then the allocation teardown) before the transport.
+            var permissionKeepAlive = new TurnPermissionRefreshLoop(
+                sendPath.RefreshInstalledPermissionsAsync, loggerFactory, permissionLifetimeSeconds);
+
+            var keepAlive = new CompositeRelayKeepAlive(allocationKeepAlive, permissionKeepAlive);
 
             // ChannelBind the nominated peer (RFC 8656 §11) so media can flow as the compact ChannelData framing
             // (§12). Runs while the transport is still in direct mode, so the ChannelBind request reaches the
