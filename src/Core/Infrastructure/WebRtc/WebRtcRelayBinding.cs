@@ -34,12 +34,17 @@ internal static class WebRtcRelayBinding
     /// The TURN permission lifetime (RFC 8656 §9 default 300 s) the permission refresh loop is paced against; it
     /// refreshes at half this value.
     /// </param>
+    /// <param name="channelLifetimeSeconds">
+    /// The TURN channel binding lifetime (RFC 8656 §12 default 600 s) the channel rebind loop is paced against; it
+    /// re-binds at half this value.
+    /// </param>
     /// <returns>A factory the media session invokes once the shared socket exists.</returns>
     public static RelayIceBindingFactory CreateFactory(
         IPEndPoint relayServer,
         TurnAllocateResult allocation,
         ILoggerFactory loggerFactory,
-        uint permissionLifetimeSeconds = 300)
+        uint permissionLifetimeSeconds = 300,
+        uint channelLifetimeSeconds = 600)
     {
         ArgumentNullException.ThrowIfNull(relayServer);
         ArgumentNullException.ThrowIfNull(allocation);
@@ -81,11 +86,21 @@ internal static class WebRtcRelayBinding
             // (§12). Runs while the transport is still in direct mode, so the ChannelBind request reaches the
             // server unframed via the same shared-socket control transactor. One channel per allocation.
             const ushort relayChannelNumber = 0x4000;
-            async Task<IRelayDatagramChannel> BindChannel(IPEndPoint peer, CancellationToken ct)
+            async Task<RelayChannelBinding> BindChannel(IPEndPoint peer, CancellationToken ct)
             {
-                await control.ChannelBindAsync(peer, relayChannelNumber, allocation.EffectiveCredentials, ct)
-                    .ConfigureAwait(false);
-                return new TurnRelayChannel(relayServer, relayChannelNumber);
+                var rotated = await control.ChannelBindAsync(peer, relayChannelNumber, allocation.EffectiveCredentials, ct)
+                    .ConfigureAwait(false) ?? allocation.EffectiveCredentials;
+                var channel = new TurnRelayChannel(relayServer, relayChannelNumber);
+
+                // Keep the channel binding alive (RFC 8656 §12): re-bind the same peer and channel at half the
+                // channel lifetime, seeded with the credentials the initial bind left primed. The re-bind rides the
+                // same control transactor (SendUnframedAsync), so its ChannelBind reaches the server unframed even
+                // after the transport has switched onto the relay data path.
+                var rebind = new TurnChannelRebindLoop(
+                    (creds, rebindCt) => control.ChannelBindAsync(peer, relayChannelNumber, creds, rebindCt),
+                    rotated, loggerFactory, channelLifetimeSeconds);
+
+                return new RelayChannelBinding(channel, rebind);
             }
 
             // OnControlDatagram only matches responses by transaction id (no I/O, no transport reference), so a
