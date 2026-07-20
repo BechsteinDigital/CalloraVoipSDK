@@ -150,6 +150,103 @@ public sealed class TurnRelayCandidateSendPathTests
         Assert.Equal(16, sentCount);
     }
 
+    [Fact]
+    public async Task RefreshInstalledPermissionsAsync_re_issues_create_permission_for_every_known_peer()
+    {
+        var codec = new StunMessageCodec();
+        var permissionRequests = new List<StunMessage>();
+        TurnControlTransactor transactor = null!;
+        Task Send(ReadOnlyMemory<byte> bytes, CancellationToken ct)
+        {
+            var request = codec.Decode(bytes.ToArray())!;
+            if ((TurnMessageMethod)(ushort)request.MessageMethod == TurnMessageMethod.CreatePermission)
+                permissionRequests.Add(request);
+            transactor.OnControlDatagram(EmptySuccess(codec, request));
+            return Task.CompletedTask;
+        }
+        transactor = new TurnControlTransactor(codec, Send, NullLogger<TurnControlTransactor>.Instance, FastRto, maxAttempts: 3);
+        var control = new TurnRelayControlClient(new TurnTransactionEngine(codec), transactor);
+
+        var sendPath = new TurnRelayCandidateSendPath(
+            new TurnRelayIndicationChannel(codec, RelayServer), control, PrimedCredentials(),
+            (_, _, _) => ValueTask.CompletedTask, NullLogger<TurnRelayCandidateSendPath>.Instance);
+
+        var check = new byte[] { 1 };
+        await sendPath.SendAsync(check, PeerA, CancellationToken.None);
+        await sendPath.SendAsync(check, PeerB, CancellationToken.None);
+        Assert.Equal(2, permissionRequests.Count); // one install per distinct peer IP
+
+        await sendPath.RefreshInstalledPermissionsAsync(CancellationToken.None);
+
+        // Every known peer got a fresh CreatePermission — one per peer, not per send.
+        Assert.Equal(4, permissionRequests.Count);
+        Assert.Contains(permissionRequests.Skip(2), r => PeerOf(r).Address.Equals(PeerA.Address));
+        Assert.Contains(permissionRequests.Skip(2), r => PeerOf(r).Address.Equals(PeerB.Address));
+    }
+
+    [Fact]
+    public async Task RefreshInstalledPermissionsAsync_is_a_no_op_when_no_permission_is_installed()
+    {
+        var codec = new StunMessageCodec();
+        var permissionRequests = 0;
+        TurnControlTransactor transactor = null!;
+        Task Send(ReadOnlyMemory<byte> bytes, CancellationToken ct)
+        {
+            var request = codec.Decode(bytes.ToArray())!;
+            if ((TurnMessageMethod)(ushort)request.MessageMethod == TurnMessageMethod.CreatePermission)
+                permissionRequests++;
+            transactor.OnControlDatagram(EmptySuccess(codec, request));
+            return Task.CompletedTask;
+        }
+        transactor = new TurnControlTransactor(codec, Send, NullLogger<TurnControlTransactor>.Instance, FastRto, maxAttempts: 3);
+        var control = new TurnRelayControlClient(new TurnTransactionEngine(codec), transactor);
+
+        var sendPath = new TurnRelayCandidateSendPath(
+            new TurnRelayIndicationChannel(codec, RelayServer), control, PrimedCredentials(),
+            (_, _, _) => ValueTask.CompletedTask, NullLogger<TurnRelayCandidateSendPath>.Instance);
+
+        await sendPath.RefreshInstalledPermissionsAsync(CancellationToken.None);
+
+        Assert.Equal(0, permissionRequests); // nothing installed → nothing to refresh
+    }
+
+    [Fact]
+    public async Task RefreshInstalledPermissionsAsync_keeps_a_peer_whose_refresh_fails_so_the_next_cycle_retries_it()
+    {
+        var codec = new StunMessageCodec();
+        var permissionAttempts = 0;
+        TurnControlTransactor transactor = null!;
+        Task Send(ReadOnlyMemory<byte> bytes, CancellationToken ct)
+        {
+            var request = codec.Decode(bytes.ToArray())!;
+            if ((TurnMessageMethod)(ushort)request.MessageMethod == TurnMessageMethod.CreatePermission)
+            {
+                permissionAttempts++;
+                // install succeeds (1), the first refresh fails (2), the second refresh succeeds (3).
+                transactor.OnControlDatagram(permissionAttempts == 2
+                    ? Error(codec, request, 400, "Bad Request")
+                    : EmptySuccess(codec, request));
+            }
+            return Task.CompletedTask;
+        }
+        transactor = new TurnControlTransactor(codec, Send, NullLogger<TurnControlTransactor>.Instance, FastRto, maxAttempts: 3);
+        var control = new TurnRelayControlClient(new TurnTransactionEngine(codec), transactor);
+
+        var sendPath = new TurnRelayCandidateSendPath(
+            new TurnRelayIndicationChannel(codec, RelayServer), control, PrimedCredentials(),
+            (_, _, _) => ValueTask.CompletedTask, NullLogger<TurnRelayCandidateSendPath>.Instance);
+
+        await sendPath.SendAsync(new byte[] { 1 }, PeerA, CancellationToken.None); // install (attempt 1)
+
+        // A refresh whose CreatePermission fails must NOT throw and must keep the peer cached.
+        await sendPath.RefreshInstalledPermissionsAsync(CancellationToken.None); // attempt 2 (fails, swallowed)
+
+        // The peer is still known, so the next refresh re-attempts it — and succeeds.
+        await sendPath.RefreshInstalledPermissionsAsync(CancellationToken.None); // attempt 3 (succeeds)
+
+        Assert.Equal(3, permissionAttempts);
+    }
+
     private static StunCredentials PrimedCredentials() =>
         new() { Username = "user", Password = "pass", Realm = "callora.example", Nonce = "nonce-1" };
 

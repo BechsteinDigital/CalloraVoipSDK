@@ -89,6 +89,52 @@ internal sealed class TurnRelayCandidateSendPath
         await _rawSend(framed, _indication.RelayServer, ct).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Re-issues CreatePermission (RFC 8656 §9) for every peer IP a permission is currently installed for, so a
+    /// long-lived relay path does not lose its permissions after their ~5-minute lifetime and start dropping
+    /// inbound datagrams. Runs under the same gate that serialises installs, so a refresh cannot interleave with
+    /// an install and lose the server's rotated NONCE. A peer whose refresh fails keeps its cached entry — unlike
+    /// an install, which drops it — so the next cycle re-attempts it rather than tearing down a peer whose media
+    /// may still be flowing. Intended to be driven periodically by <see cref="TurnPermissionRefreshLoop"/>.
+    /// </summary>
+    /// <param name="ct">Cancellation token; cancels the gate wait and stops between peers.</param>
+    public async Task RefreshInstalledPermissionsAsync(CancellationToken ct)
+    {
+        IPAddress[] peers = [.. _permissions.Keys];
+        if (peers.Length == 0)
+            return;
+
+        await _permissionGate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            foreach (var peer in peers)
+            {
+                ct.ThrowIfCancellationRequested();
+                try
+                {
+                    var effective = await _control
+                        .CreatePermissionAsync(new IPEndPoint(peer, 0), _credentials, ct)
+                        .ConfigureAwait(false);
+                    if (effective is not null)
+                        _credentials = effective;
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(
+                        ex, "TURN permission refresh for peer {Peer} failed; keeping it for the next cycle.", peer);
+                }
+            }
+        }
+        finally
+        {
+            _permissionGate.Release();
+        }
+    }
+
     // The permission task is shared across concurrent checks to the same peer, so it runs under
     // CancellationToken.None (self-bounded by the transactor's RTO schedule) — a single caller's cancellation
     // must not cancel a permission others depend on. Each caller instead observes its own token via WaitAsync,
