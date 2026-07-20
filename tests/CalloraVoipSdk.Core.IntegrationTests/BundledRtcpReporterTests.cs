@@ -263,19 +263,16 @@ public sealed class BundledRtcpReporterTests
     }
 
     [Fact]
-    public async Task More_than_31_reception_blocks_pack_across_sender_reports_and_the_overflow_defers()
+    public async Task More_than_31_reception_blocks_page_across_a_sender_report_and_extra_receiver_reports()
     {
-        // One sending SSRC but 40 inbound sources: a single SR carries at most 31 blocks (the 5-bit RC field),
-        // so this interval emits the first 31 and defers the remaining 9 to the next report.
+        // One sending SSRC but 40 inbound sources: an SR/RR carries at most 31 blocks (the 5-bit RC field), so
+        // the SR takes the first 31 and an additional Receiver Report in the SAME compound carries the remaining
+        // 9 — every source reported this interval (CF-004d), no fraction-lost baseline silently dropped.
         var senders = new List<BundledSenderReportInfo>
         {
             new(Ssrc: 0x0A0A0A0A, PacketCount: 1, OctetCount: 100, LastRtpTimestamp: 1000),
         };
-        var receptionBlocks = Enumerable.Range(0, 40)
-            .Select(i => new BundledReceptionReportBlock(
-                Ssrc: (uint)(0x1000 + i), FractionLost: 0, CumulativePacketsLost: 0,
-                ExtendedHighestSequenceNumber: (uint)i, InterarrivalJitter: 0, LastSr: 0, DelaySinceLastSr: 0))
-            .ToList();
+        var receptionBlocks = FortyDistinctBlocks();
 
         var sent = new List<byte[]>();
         var oneTick = new OneShotDelay();
@@ -295,12 +292,96 @@ public sealed class BundledRtcpReporterTests
 
         var packets = new RtcpPacketCodec().Decode(Assert.Single(sent));
         var sr = Assert.Single(packets.OfType<RtcpSenderReport>());
-        Assert.Equal(31, sr.ReportBlocks.Count); // capped at the RC-field limit; the other 9 defer to next interval
+        Assert.Equal(31, sr.ReportBlocks.Count); // capped at the RC-field limit
 
-        // The 31 carried are the FIRST 31 sources (0x1000..0x101E) — packed in order, no gaps.
-        for (var i = 0; i < 31; i++)
-            Assert.Equal((uint)(0x1000 + i), sr.ReportBlocks[i].Ssrc);
+        // All 40 sources appear across the SR + overflow RR(s), in order, none dropped.
+        var reported = packets.OfType<RtcpSenderReport>().SelectMany(p => p.ReportBlocks)
+            .Concat(packets.OfType<RtcpReceiverReport>().SelectMany(p => p.ReportBlocks))
+            .Select(b => b.Ssrc)
+            .ToList();
+        Assert.Equal(Enumerable.Range(0, 40).Select(i => (uint)(0x1000 + i)), reported);
     }
+
+    [Fact]
+    public async Task Receive_only_more_than_31_blocks_page_across_multiple_receiver_reports()
+    {
+        // No sender, 40 inbound sources → two Receiver Reports (31 + 9) in one compound, both keyed by the
+        // local SSRC; all 40 reported (CF-004d), none dropped.
+        var receptionBlocks = FortyDistinctBlocks();
+
+        var sent = new List<byte[]>();
+        var oneTick = new OneShotDelay();
+        await using var reporter = new BundledRtcpReporter(
+            () => Array.Empty<BundledSenderReportInfo>(),
+            () => receptionBlocks,
+            localSsrc: 0x0C0C0C0C,
+            (rtcp, _) => { sent.Add(rtcp.ToArray()); return ValueTask.CompletedTask; },
+            new RtcpPacketCodec(),
+            Cname,
+            NullLoggerFactory.Instance,
+            delay: oneTick.WaitAsync,
+            utcNow: () => DateTimeOffset.UtcNow);
+
+        reporter.Start();
+        await oneTick.WaitForFirstTickConsumed();
+
+        var packets = new RtcpPacketCodec().Decode(Assert.Single(sent));
+        Assert.Empty(packets.OfType<RtcpSenderReport>());
+
+        var rrs = packets.OfType<RtcpReceiverReport>().ToList();
+        Assert.Equal(2, rrs.Count);
+        Assert.Equal(31, rrs[0].ReportBlocks.Count);
+        Assert.Equal(9, rrs[1].ReportBlocks.Count);
+        Assert.All(rrs, rr => Assert.Equal(0x0C0C0C0Cu, rr.Ssrc));
+
+        var reported = rrs.SelectMany(rr => rr.ReportBlocks).Select(b => b.Ssrc).ToList();
+        Assert.Equal(Enumerable.Range(0, 40).Select(i => (uint)(0x1000 + i)), reported);
+    }
+
+    [Fact]
+    public async Task Exactly_31_blocks_emit_one_report_and_32_emit_a_second_with_the_remainder()
+    {
+        // Boundary of the 31-per-report page: exactly 31 → one RR, no spurious empty overflow RR; 32 → a second
+        // RR carrying the single remainder block.
+        var thirtyOne = (await ReceiveOnlyReportAsync(31)).OfType<RtcpReceiverReport>().ToList();
+        Assert.Equal(31, Assert.Single(thirtyOne).ReportBlocks.Count);
+
+        var thirtyTwo = (await ReceiveOnlyReportAsync(32)).OfType<RtcpReceiverReport>().ToList();
+        Assert.Equal(2, thirtyTwo.Count);
+        Assert.Equal(31, thirtyTwo[0].ReportBlocks.Count);
+        Assert.Equal(1, thirtyTwo[1].ReportBlocks.Count);
+    }
+
+    private static async Task<IReadOnlyList<RtcpPacket>> ReceiveOnlyReportAsync(int blockCount)
+    {
+        var blocks = Enumerable.Range(0, blockCount)
+            .Select(i => new BundledReceptionReportBlock(
+                Ssrc: (uint)(0x2000 + i), FractionLost: 0, CumulativePacketsLost: 0,
+                ExtendedHighestSequenceNumber: (uint)i, InterarrivalJitter: 0, LastSr: 0, DelaySinceLastSr: 0))
+            .ToList();
+        var sent = new List<byte[]>();
+        var oneTick = new OneShotDelay();
+        await using var reporter = new BundledRtcpReporter(
+            () => Array.Empty<BundledSenderReportInfo>(),
+            () => blocks,
+            localSsrc: 0x0D0D0D0D,
+            (rtcp, _) => { sent.Add(rtcp.ToArray()); return ValueTask.CompletedTask; },
+            new RtcpPacketCodec(),
+            Cname,
+            NullLoggerFactory.Instance,
+            delay: oneTick.WaitAsync,
+            utcNow: () => DateTimeOffset.UtcNow);
+
+        reporter.Start();
+        await oneTick.WaitForFirstTickConsumed();
+        return new RtcpPacketCodec().Decode(Assert.Single(sent));
+    }
+
+    private static List<BundledReceptionReportBlock> FortyDistinctBlocks() => Enumerable.Range(0, 40)
+        .Select(i => new BundledReceptionReportBlock(
+            Ssrc: (uint)(0x1000 + i), FractionLost: 0, CumulativePacketsLost: 0,
+            ExtendedHighestSequenceNumber: (uint)i, InterarrivalJitter: 0, LastSr: 0, DelaySinceLastSr: 0))
+        .ToList();
 
     [Fact]
     public async Task Dispose_after_reporting_sends_a_teardown_bye_for_the_sending_ssrc()
