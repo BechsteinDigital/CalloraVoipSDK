@@ -82,12 +82,17 @@ internal sealed class TurnChannelRebindLoop : IRelayKeepAlive
 
     private async Task RunAsync(CancellationToken ct)
     {
+        // The next wait: the full interval after a successful re-bind, the short backoff after a failure. Retrying
+        // after only the backoff keeps the second attempt inside the channel binding lifetime — waiting a full
+        // interval again would push it past the 10-minute expiry, defeating the lifetime/2 cadence.
+        var nextDelay = _interval;
         while (!ct.IsCancellationRequested)
         {
             try
             {
-                await _delay(_interval, ct).ConfigureAwait(false);
+                await _delay(nextDelay, ct).ConfigureAwait(false);
                 _credentials = await _rebind(_credentials, ct).ConfigureAwait(false) ?? _credentials;
+                nextDelay = _interval;
                 _logger.LogDebug("TURN channel re-bound.");
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -97,18 +102,11 @@ internal sealed class TurnChannelRebindLoop : IRelayKeepAlive
             }
             catch (Exception ex)
             {
-                // A single failed re-bind must not abandon the channel: retry after a bounded backoff so a
-                // transient error is survived. The binding still has roughly its remaining lifetime; a
-                // persistently failing server lets it lapse, which ICE/consent then surface.
+                // A single failed re-bind must not abandon the channel: back off briefly and retry (the binding
+                // still has roughly its remaining lifetime); a persistently failing server lets it lapse, which
+                // ICE/consent then surface.
+                nextDelay = _retryBackoff;
                 _logger.LogWarning(ex, "TURN channel rebind failed; retrying after {Backoff}.", _retryBackoff);
-                try
-                {
-                    await _delay(_retryBackoff, ct).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) when (ct.IsCancellationRequested)
-                {
-                    return;
-                }
             }
         }
     }

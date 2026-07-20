@@ -22,7 +22,7 @@ internal sealed class TurnPermissionRefreshLoop : IRelayKeepAlive
     // RFC 8656 §9 permission lifetime; used to pace the refresh cadence.
     private const uint DefaultPermissionLifetimeSeconds = 300;
 
-    private readonly Func<CancellationToken, Task> _refresh;
+    private readonly Func<CancellationToken, Task<bool>> _refresh;
     private readonly TimeSpan _interval;
     private readonly Func<TimeSpan, CancellationToken, Task> _delay;
     private readonly TimeSpan _retryBackoff;
@@ -34,7 +34,9 @@ internal sealed class TurnPermissionRefreshLoop : IRelayKeepAlive
 
     /// <summary>Creates the permission refresh loop.</summary>
     /// <param name="refresh">
-    /// The refresh operation — re-installs all currently known peer permissions. Production binds it to
+    /// The refresh operation — re-installs all currently known peer permissions and returns whether every peer
+    /// succeeded (<see langword="false"/> shortens the next wait to the backoff so a failed peer is re-attempted
+    /// well inside its lifetime). Production binds it to
     /// <see cref="TurnRelayCandidateSendPath.RefreshInstalledPermissionsAsync"/>.
     /// </param>
     /// <param name="loggerFactory">Logger factory.</param>
@@ -44,7 +46,7 @@ internal sealed class TurnPermissionRefreshLoop : IRelayKeepAlive
     /// </param>
     /// <param name="delay">The delay primitive; injectable for deterministic tests.</param>
     public TurnPermissionRefreshLoop(
-        Func<CancellationToken, Task> refresh,
+        Func<CancellationToken, Task<bool>> refresh,
         ILoggerFactory loggerFactory,
         uint permissionLifetimeSeconds = DefaultPermissionLifetimeSeconds,
         Func<TimeSpan, CancellationToken, Task>? delay = null)
@@ -74,13 +76,27 @@ internal sealed class TurnPermissionRefreshLoop : IRelayKeepAlive
 
     private async Task RunAsync(CancellationToken ct)
     {
+        // The next wait: the full interval after a fully successful refresh, the short backoff after a failure
+        // (a thrown error OR a partial per-peer failure signalled by a false result). Retrying after only the
+        // backoff keeps the second attempt inside the permission lifetime — waiting a full interval again would
+        // push it past the ~5-minute expiry, defeating the lifetime/2 cadence.
+        var nextDelay = _interval;
         while (!ct.IsCancellationRequested)
         {
             try
             {
-                await _delay(_interval, ct).ConfigureAwait(false);
-                await _refresh(ct).ConfigureAwait(false);
-                _logger.LogDebug("TURN permissions refreshed.");
+                await _delay(nextDelay, ct).ConfigureAwait(false);
+                if (await _refresh(ct).ConfigureAwait(false))
+                {
+                    nextDelay = _interval;
+                    _logger.LogDebug("TURN permissions refreshed.");
+                }
+                else
+                {
+                    nextDelay = _retryBackoff;
+                    _logger.LogWarning(
+                        "At least one TURN permission refresh failed; retrying after {Backoff}.", _retryBackoff);
+                }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -89,18 +105,11 @@ internal sealed class TurnPermissionRefreshLoop : IRelayKeepAlive
             }
             catch (Exception ex)
             {
-                // A single failed refresh must not abandon the permissions: retry after a bounded backoff so a
-                // transient error is survived. The permissions still have roughly their remaining lifetime; a
-                // persistently failing server lets them lapse, which ICE/consent then surface.
+                // A single failed refresh must not abandon the permissions: back off briefly and retry (the
+                // permissions still have roughly their remaining lifetime); a persistently failing server lets
+                // them lapse, which ICE/consent then surface.
+                nextDelay = _retryBackoff;
                 _logger.LogWarning(ex, "TURN permission refresh failed; retrying after {Backoff}.", _retryBackoff);
-                try
-                {
-                    await _delay(_retryBackoff, ct).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) when (ct.IsCancellationRequested)
-                {
-                    return;
-                }
             }
         }
     }
