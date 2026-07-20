@@ -44,6 +44,7 @@ public sealed class WebRtcStatsTests
         Assert.Equal(0, stats.BytesReceived);
         Assert.Null(stats.OutgoingBitrateBps);           // no session yet
         Assert.Null(stats.PacketLoss);                   // RTCP quality — later slice
+        Assert.Null(stats.JitterMs);                     // no inbound media → no clock established yet
         Assert.Null(stats.FramesPerSecond);              // no video track yet
         Assert.Null(stats.KeyFrames);                    // no video track yet
         Assert.Null(stats.FramesDropped);                // frame-drop accounting — deferred

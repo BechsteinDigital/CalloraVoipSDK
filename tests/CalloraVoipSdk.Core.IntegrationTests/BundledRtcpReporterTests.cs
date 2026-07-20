@@ -435,6 +435,75 @@ public sealed class BundledRtcpReporterTests
         Assert.Empty(sent);
     }
 
+    [Fact]
+    public async Task A_sender_report_extrapolates_the_rtp_timestamp_onto_the_report_instant()
+    {
+        // A 48 kHz audio track sent its last packet 2 seconds before this report (a pause/DTX). The SR's RTP
+        // timestamp must correspond to the REPORT instant, not the last packet: lastRtpTs + 2 s × 48000.
+        var lastSentAt = new DateTimeOffset(2026, 7, 20, 0, 0, 0, TimeSpan.Zero);
+        var reportInstant = lastSentAt.AddSeconds(2);
+        const uint lastRtpTs = 1_000_000;
+        const uint clockRate = 48000;
+        var expectedRtpTs = unchecked(lastRtpTs + 2 * clockRate);
+
+        var senders = new List<BundledSenderReportInfo>
+        {
+            new(Ssrc: 0x0A0A0A0A, PacketCount: 100, OctetCount: 16000,
+                LastRtpTimestamp: lastRtpTs, LastRtpTimestampAtUtc: lastSentAt, ClockRate: clockRate),
+        };
+
+        var sent = new List<byte[]>();
+        var oneTick = new OneShotDelay();
+        await using var reporter = new BundledRtcpReporter(
+            () => senders,
+            Array.Empty<BundledReceptionReportBlock>,
+            localSsrc: 0x0A0A0A0A,
+            (rtcp, _) => { sent.Add(rtcp.ToArray()); return ValueTask.CompletedTask; },
+            new RtcpPacketCodec(),
+            Cname,
+            NullLoggerFactory.Instance,
+            delay: oneTick.WaitAsync,
+            utcNow: () => reportInstant);
+
+        reporter.Start();
+        await oneTick.WaitForFirstTickConsumed();
+
+        var sr = Assert.Single(new RtcpPacketCodec().Decode(Assert.Single(sent)).OfType<RtcpSenderReport>());
+        Assert.Equal(ToNtp(reportInstant), sr.NtpTimestamp);
+        // Extrapolated, NOT the raw last-sent timestamp.
+        Assert.Equal(expectedRtpTs, sr.RtpTimestamp);
+        Assert.NotEqual(lastRtpTs, sr.RtpTimestamp);
+    }
+
+    [Fact]
+    public async Task Without_a_clock_rate_the_sender_report_uses_the_raw_last_rtp_timestamp()
+    {
+        // The legacy 4-arg snapshot (no clock rate / send instant) must keep the old behaviour: raw last timestamp.
+        var senders = new List<BundledSenderReportInfo>
+        {
+            new(Ssrc: 0x0A0A0A0A, PacketCount: 10, OctetCount: 1600, LastRtpTimestamp: 7777),
+        };
+
+        var sent = new List<byte[]>();
+        var oneTick = new OneShotDelay();
+        await using var reporter = new BundledRtcpReporter(
+            () => senders,
+            Array.Empty<BundledReceptionReportBlock>,
+            localSsrc: 0x0A0A0A0A,
+            (rtcp, _) => { sent.Add(rtcp.ToArray()); return ValueTask.CompletedTask; },
+            new RtcpPacketCodec(),
+            Cname,
+            NullLoggerFactory.Instance,
+            delay: oneTick.WaitAsync,
+            utcNow: () => new DateTimeOffset(2026, 7, 20, 0, 0, 0, TimeSpan.Zero));
+
+        reporter.Start();
+        await oneTick.WaitForFirstTickConsumed();
+
+        var sr = Assert.Single(new RtcpPacketCodec().Decode(Assert.Single(sent)).OfType<RtcpSenderReport>());
+        Assert.Equal(7777u, sr.RtpTimestamp);
+    }
+
     private static uint ToMiddle32(ulong ntpTimestamp) => (uint)((ntpTimestamp >> 16) & 0xFFFFFFFF);
 
     private static ulong ToNtp(DateTimeOffset timestamp)

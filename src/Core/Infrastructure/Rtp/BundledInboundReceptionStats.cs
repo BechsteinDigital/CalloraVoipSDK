@@ -26,12 +26,34 @@ internal sealed class BundledInboundReceptionStats
     private readonly ConcurrentDictionary<uint, BundledSourceReceptionState> _sources = new();
     private readonly Func<DateTimeOffset> _utcNow;
 
+    // The primary audio source and its negotiated clock rate (Hz): that SSRC's reception state is seeded with
+    // the negotiated rate so its §A.8 jitter is exact (not inferred) and convertible to milliseconds. Other
+    // SSRCs (e.g. an inbound video source) are created without a negotiated rate and fall back to inference —
+    // per-SSRC negotiated clocks are CF-004f.
+    private readonly uint _audioSsrc;
+    private readonly uint _audioClockRate;
+
     /// <summary>
     /// Creates the reception tracker.
     /// </summary>
     /// <param name="utcNow">The wall clock read for arrival times (jitter, DLSR); injectable for tests.</param>
-    public BundledInboundReceptionStats(Func<DateTimeOffset>? utcNow = null)
-        => _utcNow = utcNow ?? (() => DateTimeOffset.UtcNow);
+    /// <param name="audioSsrc">
+    /// The local peer's negotiated inbound audio SSRC, or 0 when not known. Reserved: the inbound audio source's
+    /// SSRC is chosen by the remote and not known ahead of the first packet, so <paramref name="audioClockRate"/>
+    /// is applied to whichever source first delivers RTP (the audio stream, in an audio-first bundle) rather than
+    /// keyed by this value today. Retained for a future per-SSRC clock map (CF-004f).
+    /// </param>
+    /// <param name="audioClockRate">
+    /// The negotiated audio RTP clock rate (Hz), or 0 when unknown. Seeds the primary audio source's §A.8 jitter
+    /// so it is exact under network jitter (the per-pair inference is not) and convertible to milliseconds.
+    /// </param>
+    public BundledInboundReceptionStats(
+        Func<DateTimeOffset>? utcNow = null, uint audioSsrc = 0, uint audioClockRate = 0)
+    {
+        _utcNow = utcNow ?? (() => DateTimeOffset.UtcNow);
+        _audioSsrc = audioSsrc;
+        _audioClockRate = audioClockRate;
+    }
 
     /// <summary>
     /// Records one inbound RTP packet against its source SSRC, updating that source's sequence tracking
@@ -43,9 +65,17 @@ internal sealed class BundledInboundReceptionStats
     /// <param name="rtpTimestamp">The packet's RTP timestamp (for the §A.8 transit estimate).</param>
     public void RecordRtp(uint ssrc, ushort sequenceNumber, uint rtpTimestamp)
     {
-        var state = _sources.GetOrAdd(ssrc, static _ => new BundledSourceReceptionState());
+        var state = GetOrAddSource(ssrc);
         state.RecordRtp(sequenceNumber, rtpTimestamp, _utcNow());
     }
+
+    // The negotiated audio clock seeds only the first source created — in an audio-first bundle that is the
+    // inbound audio stream (its SSRC is the remote's choice, unknown before its first packet). Any later source
+    // (e.g. video) is created without a negotiated rate and infers it. Racing GetOrAdd factories can both build a
+    // state, but the loser is discarded by the dictionary; a rate handed to a discarded state is harmless.
+    private BundledSourceReceptionState GetOrAddSource(uint ssrc)
+        => _sources.GetOrAdd(ssrc, _ =>
+            _sources.IsEmpty ? new BundledSourceReceptionState(_audioClockRate) : new BundledSourceReceptionState());
 
     /// <summary>
     /// Records that a Sender Report was received from <paramref name="senderSsrc"/>, capturing the LSR (the
@@ -57,7 +87,7 @@ internal sealed class BundledInboundReceptionStats
     /// <param name="senderReportNtpTimestamp">The 64-bit NTP timestamp carried in the SR.</param>
     public void RecordSenderReport(uint senderSsrc, ulong senderReportNtpTimestamp)
     {
-        var state = _sources.GetOrAdd(senderSsrc, static _ => new BundledSourceReceptionState());
+        var state = GetOrAddSource(senderSsrc);
         state.RecordSenderReport(ToMiddle32Bits(senderReportNtpTimestamp), _utcNow());
     }
 
@@ -78,6 +108,27 @@ internal sealed class BundledInboundReceptionStats
         }
 
         return blocks;
+    }
+
+    /// <summary>
+    /// The current local receive-side interarrival jitter in milliseconds (RFC 3550 §A.8), or
+    /// <see langword="null"/> before any source has an established clock rate. This is our own inbound jitter —
+    /// the browser <c>getStats</c> inbound-rtp jitter — distinct from the peer-reported jitter that rides the
+    /// reception report blocks in RTP units. When several inbound sources are active the maximum is returned (the
+    /// worst stream), a simple aggregation for the single scalar the stats surface exposes today; per-SSRC jitter
+    /// is CF-004f. The primary audio source's value is exact (seeded with the negotiated clock); an inferred-clock
+    /// source contributes once its clock settles.
+    /// </summary>
+    public double? SnapshotJitterMs()
+    {
+        double? worst = null;
+        foreach (var state in _sources.Values)
+        {
+            if (state.SnapshotJitterMs() is { } ms && (worst is null || ms > worst))
+                worst = ms;
+        }
+
+        return worst;
     }
 
     // RFC 3550 §6.4.1: LSR is the middle 32 bits of the sender's 64-bit NTP timestamp.

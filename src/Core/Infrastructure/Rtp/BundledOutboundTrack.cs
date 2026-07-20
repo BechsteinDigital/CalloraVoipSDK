@@ -20,6 +20,8 @@ internal sealed class BundledOutboundTrack
     private readonly uint _ssrc;
     private readonly byte _defaultPayloadType;
     private readonly int _samplesPerPacket;
+    private readonly uint _clockRate;
+    private readonly Func<DateTimeOffset> _utcNow;
     private readonly RtpOutboundHeaderExtensionStamper _stamper;
     private readonly object _sendSync = new();
 
@@ -28,10 +30,13 @@ internal sealed class BundledOutboundTrack
 
     // Cumulative RTCP Sender Report counters for this SSRC (RFC 3550 §6.4.1), advanced under _sendSync
     // after each packet the pipeline actually sent: total packets, total payload octets (excluding RTP
-    // headers), and the RTP timestamp of the last sent packet. The reporter reads them via a snapshot.
+    // headers), the RTP timestamp of the last sent packet, and the wall-clock instant that timestamp was
+    // assigned (CF-004e — lets the reporter extrapolate the SR's RTP timestamp onto the report instant across a
+    // send pause/DTX). The reporter reads them via a snapshot.
     private long _senderPacketCount;
     private long _senderOctetCount;
     private uint _lastRtpTimestamp;
+    private DateTimeOffset _lastRtpTimestampAtUtc;
     private bool _hasSent;
 
     /// <summary>
@@ -39,13 +44,26 @@ internal sealed class BundledOutboundTrack
     /// seed the RTP cursors (RFC 3550 §5.1 recommends random starting values — the caller supplies them
     /// so the track stays deterministic and testable).
     /// </summary>
+    /// <param name="ssrc">The stream's synchronisation source.</param>
+    /// <param name="defaultPayloadType">The default RTP payload type used when a send does not override it.</param>
+    /// <param name="samplesPerPacket">The RTP timestamp increment per cursor-advancing packet.</param>
+    /// <param name="stamper">The header-extension stamper (MID, RID, transport-cc).</param>
+    /// <param name="initialSequenceNumber">The initial RTP sequence number (RFC 3550 §5.1).</param>
+    /// <param name="initialTimestamp">The initial RTP timestamp cursor (RFC 3550 §5.1).</param>
+    /// <param name="clockRate">
+    /// The track's RTP clock rate (Hz), used by the reporter to extrapolate the SR's RTP timestamp onto the
+    /// report instant (CF-004e). Zero disables that extrapolation (the last sent timestamp is used as-is).
+    /// </param>
+    /// <param name="utcNow">The wall clock read to timestamp each send; injectable for deterministic tests.</param>
     public BundledOutboundTrack(
         uint ssrc,
         byte defaultPayloadType,
         int samplesPerPacket,
         RtpOutboundHeaderExtensionStamper stamper,
         ushort initialSequenceNumber,
-        uint initialTimestamp)
+        uint initialTimestamp,
+        uint clockRate = 0,
+        Func<DateTimeOffset>? utcNow = null)
     {
         ArgumentNullException.ThrowIfNull(stamper);
         ArgumentOutOfRangeException.ThrowIfNegative(samplesPerPacket);
@@ -53,6 +71,8 @@ internal sealed class BundledOutboundTrack
         _ssrc               = ssrc;
         _defaultPayloadType = defaultPayloadType;
         _samplesPerPacket   = samplesPerPacket;
+        _clockRate          = clockRate;
+        _utcNow             = utcNow ?? (() => DateTimeOffset.UtcNow);
         _stamper            = stamper;
         _sequenceNumber     = initialSequenceNumber;
         _timestamp          = initialTimestamp;
@@ -95,7 +115,8 @@ internal sealed class BundledOutboundTrack
         {
             if (!_hasSent)
                 return null;
-            return new BundledSenderReportInfo(_ssrc, _senderPacketCount, _senderOctetCount, _lastRtpTimestamp);
+            return new BundledSenderReportInfo(
+                _ssrc, _senderPacketCount, _senderOctetCount, _lastRtpTimestamp, _lastRtpTimestampAtUtc, _clockRate);
         }
     }
 
@@ -112,6 +133,9 @@ internal sealed class BundledOutboundTrack
             _senderPacketCount++;
             _senderOctetCount += payloadOctetCount;
             _lastRtpTimestamp = rtpTimestamp;
+            // Capture the wall clock alongside the RTP timestamp so the reporter can extrapolate the SR's RTP
+            // timestamp onto the report instant (CF-004e). Read under the send lock so the pair stays consistent.
+            _lastRtpTimestampAtUtc = _utcNow();
             _hasSent = true;
         }
     }

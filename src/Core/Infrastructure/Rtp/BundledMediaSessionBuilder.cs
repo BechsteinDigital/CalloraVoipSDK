@@ -110,6 +110,7 @@ internal static class BundledMediaSessionBuilder
                 Ssrc = audioSsrc,
                 PayloadType = (byte)audio.PayloadType,
                 SamplesPerPacket = audio.SamplesPerPacket,
+                ClockRate = audio.ClockRate, // negotiated audio clock (CF-004e: §A.8 jitter + SR RTP extrapolation)
             },
             Video = videoTrack,
             DtlsIsClient = audio.DtlsIsClient,

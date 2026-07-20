@@ -125,6 +125,9 @@ internal sealed class PeerConnection : IPeerConnection
             IncomingBitrateBps = incoming,
             PacketLoss = quality?.RemotePacketLossFraction,
             RoundTripTimeMs = quality?.RoundTripTimeMs,
+            // Local receive-side interarrival jitter in ms (RFC 3550 §A.8), converted with the negotiated audio
+            // clock rate; null until an inbound clock is established (CF-004e).
+            JitterMs = quality?.JitterMs,
             // ICE: the bundle uses single-candidate selection (no full pairing), so the "selected pair" is
             // the bound local endpoint and the resolved remote endpoint; the state is derived from
             // connectivity (ICE consent + DTLS drive the peer state).
@@ -133,8 +136,8 @@ internal sealed class PeerConnection : IPeerConnection
             SelectedRemoteCandidate = _peer.RemoteMediaEndPoint?.ToString(),
             FramesPerSecond = framesPerSecond,
             KeyFrames = s.KeyFrames,
-            // Jitter (needs the per-stream clock rate to express in ms), dropped frames, NACK/PLI/FIR and
-            // available-bitrate stay null until their subsystems (bundle video feedback, transport-cc) are wired.
+            // Dropped frames, NACK/PLI/FIR and available-bitrate stay null until their subsystems (bundle video
+            // feedback, transport-cc) are wired.
         };
     }
 

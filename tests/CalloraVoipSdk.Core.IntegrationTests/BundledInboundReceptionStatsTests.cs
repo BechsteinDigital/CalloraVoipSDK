@@ -191,6 +191,71 @@ public sealed class BundledInboundReceptionStatsTests
         Assert.Equal((uint)0x3344_5566, block.LastSr);
     }
 
+    [Fact]
+    public void Jitter_ms_uses_the_negotiated_clock_rate_when_supplied()
+    {
+        var start = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var clock = new StepClock(start);
+        // 8 kHz negotiated (audioClockRate: 8000); the audio source is the first one created, so it is seeded.
+        var stats = new BundledInboundReceptionStats(clock.Now, audioSsrc: SsrcA, audioClockRate: 8000);
+
+        // Nominal 20 ms cadence (RTP +160 per packet at 8 kHz), but every second arrival is 10 ms late, so the
+        // transit alternates 0 / +10 ms = 0 / +80 RTP units. With the negotiated clock the §A.8 estimate settles
+        // toward a small, well-defined jitter, and the ms conversion is jitterRtpUnits × 1000 / 8000.
+        var rtp = 0u;
+        for (var i = 0; i < 200; i++)
+        {
+            stats.RecordRtp(SsrcA, (ushort)(1 + i), rtp);
+            clock.Advance(TimeSpan.FromMilliseconds(i % 2 == 0 ? 20 : 30));
+            rtp += 160;
+        }
+
+        var block = Assert.Single(stats.SnapshotReportBlocks());
+        var jitterMs = stats.SnapshotJitterMs();
+        Assert.NotNull(jitterMs);
+        // The ms value converts the smoothed §A.8 jitter with the 8 kHz clock (J × 1000 / 8000). The wire block
+        // carries the SAME jitter truncated to an integer RTP unit, so the ms value agrees with the wire value's
+        // ms equivalent to within one RTP unit's worth of milliseconds (1000/8000 = 0.125 ms).
+        var wireJitterMs = block.InterarrivalJitter * 1000.0 / 8000.0;
+        Assert.Equal(wireJitterMs, jitterMs.Value, tolerance: 1000.0 / 8000.0);
+        // A ±10 ms transit swing settles well under 10 ms of smoothed jitter — a plausible, non-trivial value.
+        Assert.InRange(jitterMs.Value, 0.01, 10.0);
+    }
+
+    [Fact]
+    public void Jitter_ms_is_null_before_any_rtp_is_received()
+    {
+        var stats = new BundledInboundReceptionStats(audioSsrc: SsrcA, audioClockRate: 48000);
+        Assert.Null(stats.SnapshotJitterMs());
+    }
+
+    [Fact]
+    public void Jitter_ms_falls_back_to_the_inferred_clock_when_no_rate_is_negotiated()
+    {
+        var start = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var clock = new StepClock(start);
+        // No negotiated rate (default 0) → the clock is inferred from the first usable packet pair.
+        var stats = new BundledInboundReceptionStats(clock.Now);
+
+        // First pair at a clean 20 ms / +160 RTP cadence establishes the inferred 8 kHz clock.
+        stats.RecordRtp(SsrcA, 1, rtpTimestamp: 0);
+        clock.Advance(TimeSpan.FromMilliseconds(20));
+        stats.RecordRtp(SsrcA, 2, rtpTimestamp: 160);
+
+        // Then jitter the arrivals so the estimate is non-zero and a ms value is produced against the inferred clock.
+        var rtp = 160u;
+        for (var i = 0; i < 40; i++)
+        {
+            clock.Advance(TimeSpan.FromMilliseconds(i % 2 == 0 ? 5 : 35));
+            rtp += 160;
+            stats.RecordRtp(SsrcA, (ushort)(3 + i), rtp);
+        }
+
+        var jitterMs = stats.SnapshotJitterMs();
+        Assert.NotNull(jitterMs);
+        Assert.True(jitterMs.Value > 0, "An inferred clock must still yield a positive jitter-ms once it settles.");
+    }
+
     private sealed class StepClock(DateTimeOffset start)
     {
         private DateTimeOffset _now = start;
