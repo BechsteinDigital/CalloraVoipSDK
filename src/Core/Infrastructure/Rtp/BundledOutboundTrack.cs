@@ -77,6 +77,13 @@ internal sealed class BundledOutboundTrack
     public uint LastRtpTimestamp { get { lock (_sendSync) return _lastRtpTimestamp; } }
 
     /// <summary>
+    /// The track's current outbound timestamp cursor (the timestamp the next cursor-advancing media packet
+    /// would carry). Read under the track lock so it is consistent with a concurrent send. Used to stamp an
+    /// out-of-band RFC 4733 telephone-event so the event shares the audio stream's timestamp clock.
+    /// </summary>
+    public uint CurrentTimestamp { get { lock (_sendSync) return _timestamp; } }
+
+    /// <summary>
     /// Atomically snapshots this track's Sender Report counters (RFC 3550 §6.4.1) under a single lock, so the
     /// packet count, octet count, and last RTP timestamp are consistent with one another (reading them through
     /// the individual properties would take the lock four separate times and could tear a report across a

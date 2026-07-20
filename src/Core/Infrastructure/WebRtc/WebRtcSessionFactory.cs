@@ -97,6 +97,21 @@ internal static class WebRtcSessionFactory
             return null;
         var clockRate = audioCodec.ClockRate > 0 ? audioCodec.ClockRate : 8000;
 
+        // RFC 4733 telephone-event (DTMF): capture the negotiated event payload type instead of discarding it,
+        // preferring the event line whose clock matches the audio codec (some offers list one per clock, e.g.
+        // 101/48000 for Opus and 113/8000 for G.711) and falling back to any offered event line. Null when the
+        // peer did not offer/accept telephone-event — the session then rejects DTMF sends. The event line's own
+        // clock rate is retained (RFC 4733 §2.1: it shares the audio stream's timestamp clock) for duration
+        // conversion independent of the primary codec's clock.
+        var telephoneEvent = ResolveTelephoneEvent(localAudio.Codecs, clockRate);
+        // Defense-in-depth: a well-formed SDP offer never assigns the same dynamic payload type to two formats,
+        // but a malformed/hostile offer could list telephone-event on the audio codec's own PT. Were that
+        // accepted, every inbound audio packet would match the telephone-event PT and be swallowed by the DTMF
+        // reassembly path instead of delivered as audio. Drop the collision (→ no telephone-event) so audio
+        // always wins its own payload type.
+        if (telephoneEvent is not null && telephoneEvent.PayloadType == audioCodec.PayloadType)
+            telephoneEvent = null;
+
         var audioSsrc = NewSsrc();
         var audioTrack = new BundledTrackConfig
         {
@@ -104,6 +119,8 @@ internal static class WebRtcSessionFactory
             Ssrc = audioSsrc,
             PayloadType = (byte)audioCodec.PayloadType,
             SamplesPerPacket = clockRate * 20 / 1000, // 20 ms frames
+            TelephoneEventPayloadType = telephoneEvent?.PayloadType,
+            TelephoneEventClockRate = telephoneEvent?.ClockRate is > 0 and { } teClock ? teClock : 8000,
         };
 
         // Outbound audio follows the negotiated direction (RFC 3264): this peer sends AND the remote receives.
@@ -165,6 +182,27 @@ internal static class WebRtcSessionFactory
         };
 
         return new BundledMediaSession(sessionOptions, handshaker, certificate, loggerFactory);
+    }
+
+    // The negotiated RFC 4733 telephone-event line from the audio codec list, preferring the one whose clock
+    // matches the primary audio codec (RFC 4733 §2.1: the event stream shares the audio stream's timestamp
+    // clock; offers may list one line per clock), else the first offered event line. Null when none is present.
+    // Mirrors the SIP path's ResolveTelephoneEventPayloadType (SdpUtilities) so both paths negotiate DTMF alike.
+    private static SdpCodecDefinition? ResolveTelephoneEvent(IReadOnlyList<SdpCodecDefinition> codecs, int preferredClockRate)
+    {
+        SdpCodecDefinition? firstMatch = null;
+        foreach (var codec in codecs)
+        {
+            if (!codec.Name.Equals("telephone-event", Ci) || codec.PayloadType is < 0 or > 127)
+                continue;
+
+            if (codec.ClockRate == preferredClockRate)
+                return codec;
+
+            firstMatch ??= codec;
+        }
+
+        return firstMatch;
     }
 
     private static BundledTrackConfig? TryBuildVideoTrack(

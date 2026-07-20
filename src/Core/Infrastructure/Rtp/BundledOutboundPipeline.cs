@@ -208,6 +208,14 @@ internal sealed class BundledOutboundPipeline
         return SendCoreAsync(mid, track, payload, marker, payloadType, timestampOverride: timestamp, advanceTimestamp: false, cancellationToken);
     }
 
+    /// <summary>
+    /// The current outbound RTP timestamp cursor of the (non-simulcast) track registered for
+    /// <paramref name="mid"/>, so an out-of-band RFC 4733 telephone-event can be stamped on the audio
+    /// stream's clock (RFC 4733 §2.1).
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No track is registered for <paramref name="mid"/>.</exception>
+    public uint GetTrackTimestamp(string mid) => ResolveTrack(mid, rid: null).CurrentTimestamp;
+
     private BundledOutboundTrack ResolveTrack(string mid, string? rid)
     {
         ArgumentException.ThrowIfNullOrEmpty(mid);

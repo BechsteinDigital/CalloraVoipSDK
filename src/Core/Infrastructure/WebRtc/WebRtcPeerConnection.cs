@@ -93,6 +93,13 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     public event Action<byte[], uint, bool>? VideoFrameReceived;
 
     /// <summary>
+    /// Raised once per fully received inbound DTMF tone (RFC 4733 telephone-event), carrying the tone code
+    /// (0–15) and the tone duration in milliseconds. Telephone-event packets are consumed here and never
+    /// surfaced as audio on <see cref="AudioReceived"/>.
+    /// </summary>
+    public event Action<byte, int>? DtmfReceived;
+
+    /// <summary>
     /// Raised as each local ICE candidate is gathered (RFC 8838 trickle), carrying the RFC 8829
     /// <c>candidate:</c> line so the app can signal it out-of-band. The host candidate (the early-bound
     /// media endpoint) is emitted right after the offer/answer is produced; server-reflexive candidates
@@ -447,6 +454,26 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     }
 
     /// <summary>
+    /// Sends one out-of-band DTMF tone (RFC 4733 telephone-event) on the peer's audio track (suppressed until
+    /// the handshake keys the transport). The tone shares the audio stream's RTP timestamp clock.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The tone code exceeds 15, or the duration is below the RFC 4733 floor.</exception>
+    /// <exception cref="InvalidOperationException">No BUNDLE media session, or telephone-event was not negotiated.</exception>
+    /// <exception cref="ObjectDisposedException">The peer is disposing or disposed.</exception>
+    public async Task SendDtmfAsync(byte toneCode, int durationMs = 160, CancellationToken cancellationToken = default)
+    {
+        var session = AcquireSendLease();
+        try
+        {
+            await session.SendDtmfAsync(toneCode, durationMs, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _sendGate.Exit();
+        }
+    }
+
+    /// <summary>
     /// Adds a remote ICE candidate that trickled in out-of-band (RFC 8838), given as an RFC 8829
     /// <c>candidate:</c> line, to the connectivity-check list. The controlling agent runs a real RFC 8445
     /// §7.2.2 check against it and nominates it only if it answers and beats the current pair — candidates
@@ -684,6 +711,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         session.MediaConnectivityRecovered += () => TransitionTo(WebRtcConnectionState.Connected);
         session.AudioReceived += packet => AudioReceived?.Invoke(packet.Payload.ToArray());
         session.VideoFrameReceived += (frame, timestamp, isKeyFrame) => VideoFrameReceived?.Invoke(frame, timestamp, isKeyFrame);
+        session.DtmfReceived += (toneCode, durationMs) => DtmfReceived?.Invoke(toneCode, durationMs);
     }
 
     // WebRTC is always BUNDLE + rtcp-mux (RFC 8843 / RFC 8834); the DTLS identity and ICE credentials

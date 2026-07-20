@@ -25,6 +25,7 @@ internal sealed class PeerConnection : IPeerConnection
     private EventHandler<PeerConnectionState>? _connectionStateChanged;
     private EventHandler<RemoteTrack>? _trackReceived;
     private EventHandler<string>? _localIceCandidateDiscovered;
+    private EventHandler<DtmfTone>? _dtmfReceived;
 
     public PeerConnection(WebRtcPeerConnection peer, ILogger<PeerConnection> logger, Action<IPeerConnection>? onDisposed = null)
     {
@@ -38,6 +39,7 @@ internal sealed class PeerConnection : IPeerConnection
         _peer.AudioReceived += OnAudioReceived;
         _peer.VideoFrameReceived += OnVideoReceived;
         _peer.LocalIceCandidateDiscovered += OnLocalIceCandidate;
+        _peer.DtmfReceived += OnDtmfReceived;
     }
 
     public PeerConnectionState State => Map(_peer.State);
@@ -60,6 +62,12 @@ internal sealed class PeerConnection : IPeerConnection
     {
         add => _localIceCandidateDiscovered += value;
         remove => _localIceCandidateDiscovered -= value;
+    }
+
+    public event EventHandler<DtmfTone>? DtmfReceived
+    {
+        add => _dtmfReceived += value;
+        remove => _dtmfReceived -= value;
     }
 
     public string CreateOffer() => _peer.CreateOffer();
@@ -165,12 +173,16 @@ internal sealed class PeerConnection : IPeerConnection
         return _peer.SendVideoFrameAsync(rid, encodedFrame, rtpTimestamp, cancellationToken);
     }
 
+    public Task SendDtmfAsync(byte toneCode, int durationMs = 160, CancellationToken cancellationToken = default)
+        => _peer.SendDtmfAsync(toneCode, durationMs, cancellationToken);
+
     public async ValueTask DisposeAsync()
     {
         _peer.ConnectionStateChanged -= OnInternalStateChanged;
         _peer.AudioReceived -= OnAudioReceived;
         _peer.VideoFrameReceived -= OnVideoReceived;
         _peer.LocalIceCandidateDiscovered -= OnLocalIceCandidate;
+        _peer.DtmfReceived -= OnDtmfReceived;
         try
         {
             await _peer.DisposeAsync().ConfigureAwait(false);
@@ -205,6 +217,9 @@ internal sealed class PeerConnection : IPeerConnection
 
     private void OnLocalIceCandidate(string candidate)
         => _localIceCandidateDiscovered?.Invoke(this, candidate);
+
+    private void OnDtmfReceived(byte toneCode, int durationMs)
+        => _dtmfReceived?.Invoke(this, new DtmfTone(toneCode, durationMs));
 
     // Inbound media is projected onto the W3C track model via the RemoteTrackSet: the remote a=msid names
     // the track, and the set raises TrackReceived once per kind before the first frame flows.
