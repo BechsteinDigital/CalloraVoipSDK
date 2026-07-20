@@ -24,58 +24,74 @@ namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
 internal sealed class BundledInboundReceptionStats
 {
     private readonly ConcurrentDictionary<uint, BundledSourceReceptionState> _sources = new();
+    // The negotiated media parameters resolved per SSRC (kind, mid, clock) the first time that SSRC delivers a
+    // packet — remembered so the per-SSRC jitter snapshot can attribute each inbound remote SSRC to a track.
+    private readonly ConcurrentDictionary<uint, BundledInboundSourceKind> _sourceKinds = new();
     private readonly Func<DateTimeOffset> _utcNow;
 
-    // The primary audio source and its negotiated clock rate (Hz): that SSRC's reception state is seeded with
-    // the negotiated rate so its §A.8 jitter is exact (not inferred) and convertible to milliseconds. Other
-    // SSRCs (e.g. an inbound video source) are created without a negotiated rate and fall back to inference —
-    // per-SSRC negotiated clocks are CF-004f.
-    private readonly uint _audioSsrc;
-    private readonly uint _audioClockRate;
+    // The negotiated inbound media clock/kind/mid keyed by RTP payload type (RFC 3550 §A.8 needs the clock; the
+    // kind/mid attribute the source to a track). The inbound SSRC is the remote's choice and unknown before its
+    // first packet, so the exact negotiated clock is applied by matching the packet's payload type — the audio PT
+    // seeds the audio clock, the video PT seeds 90 kHz — rather than by SSRC or by arrival order. This closes the
+    // CF-004e video-first gap where the audio clock was handed to whichever source arrived first.
+    private readonly IReadOnlyDictionary<byte, BundledInboundClockDescriptor> _clockByPayloadType;
 
     /// <summary>
     /// Creates the reception tracker.
     /// </summary>
     /// <param name="utcNow">The wall clock read for arrival times (jitter, DLSR); injectable for tests.</param>
-    /// <param name="audioSsrc">
-    /// The local peer's negotiated inbound audio SSRC, or 0 when not known. Reserved: the inbound audio source's
-    /// SSRC is chosen by the remote and not known ahead of the first packet, so <paramref name="audioClockRate"/>
-    /// is applied to whichever source first delivers RTP (the audio stream, in an audio-first bundle) rather than
-    /// keyed by this value today. Retained for a future per-SSRC clock map (CF-004f).
-    /// </param>
-    /// <param name="audioClockRate">
-    /// The negotiated audio RTP clock rate (Hz), or 0 when unknown. Seeds the primary audio source's §A.8 jitter
-    /// so it is exact under network jitter (the per-pair inference is not) and convertible to milliseconds.
+    /// <param name="clockByPayloadType">
+    /// The negotiated inbound clock/kind/MID keyed by RTP payload type, or <see langword="null"/> for none. A
+    /// source's exact §A.8 clock (and its track attribution) is applied by matching the first packet's payload
+    /// type against this map — the inbound SSRC is the remote's choice and not known ahead of its first packet, so
+    /// payload type is the reliable discriminator. A payload type not in the map (or a null map) falls back to
+    /// inferring the clock from the first usable packet pair, with an unknown kind.
     /// </param>
     public BundledInboundReceptionStats(
-        Func<DateTimeOffset>? utcNow = null, uint audioSsrc = 0, uint audioClockRate = 0)
+        Func<DateTimeOffset>? utcNow = null,
+        IReadOnlyDictionary<byte, BundledInboundClockDescriptor>? clockByPayloadType = null)
     {
         _utcNow = utcNow ?? (() => DateTimeOffset.UtcNow);
-        _audioSsrc = audioSsrc;
-        _audioClockRate = audioClockRate;
+        _clockByPayloadType = clockByPayloadType ?? new Dictionary<byte, BundledInboundClockDescriptor>();
     }
 
     /// <summary>
     /// Records one inbound RTP packet against its source SSRC, updating that source's sequence tracking
     /// (RFC 3550 §A.1), loss counters (§A.3), and interarrival jitter (§A.8). Called on the receive loop
-    /// after SRTP-unprotect and RTP decode.
+    /// after SRTP-unprotect and RTP decode. The first packet for an SSRC resolves that source's negotiated
+    /// clock and track kind/MID from <paramref name="payloadType"/>.
     /// </summary>
     /// <param name="ssrc">The packet's synchronisation source.</param>
     /// <param name="sequenceNumber">The packet's RTP sequence number.</param>
     /// <param name="rtpTimestamp">The packet's RTP timestamp (for the §A.8 transit estimate).</param>
-    public void RecordRtp(uint ssrc, ushort sequenceNumber, uint rtpTimestamp)
+    /// <param name="payloadType">The packet's RTP payload type, matched against the negotiated clock map.</param>
+    public void RecordRtp(uint ssrc, ushort sequenceNumber, uint rtpTimestamp, byte payloadType = 0)
     {
-        var state = GetOrAddSource(ssrc);
+        var state = GetOrAddSource(ssrc, payloadType);
         state.RecordRtp(sequenceNumber, rtpTimestamp, _utcNow());
     }
 
-    // The negotiated audio clock seeds only the first source created — in an audio-first bundle that is the
-    // inbound audio stream (its SSRC is the remote's choice, unknown before its first packet). Any later source
-    // (e.g. video) is created without a negotiated rate and infers it. Racing GetOrAdd factories can both build a
-    // state, but the loser is discarded by the dictionary; a rate handed to a discarded state is harmless.
-    private BundledSourceReceptionState GetOrAddSource(uint ssrc)
+    // A source seen only via an SR (before any RTP) has no payload type to resolve the negotiated clock from.
+    private const int NoPayloadType = -1;
+
+    // The negotiated clock/kind for the packet's payload type seeds the source the first time its SSRC is seen —
+    // an audio PT seeds the audio clock, a video PT seeds 90 kHz, keyed by payload type (not arrival order). A PT
+    // absent from the map (or NoPayloadType from an SR) creates an inferred-clock, unknown-kind source. Racing
+    // GetOrAdd factories can both build a state, but the loser is discarded by the dictionary; a rate handed to a
+    // discarded state is harmless.
+    private BundledSourceReceptionState GetOrAddSource(uint ssrc, int payloadType)
         => _sources.GetOrAdd(ssrc, _ =>
-            _sources.IsEmpty ? new BundledSourceReceptionState(_audioClockRate) : new BundledSourceReceptionState());
+        {
+            if (payloadType != NoPayloadType &&
+                _clockByPayloadType.TryGetValue((byte)payloadType, out var descriptor))
+            {
+                _sourceKinds.TryAdd(ssrc, new BundledInboundSourceKind(descriptor.Kind, descriptor.Mid));
+                return new BundledSourceReceptionState(descriptor.ClockRate);
+            }
+
+            _sourceKinds.TryAdd(ssrc, new BundledInboundSourceKind(BundledStreamKind.Unknown, Mid: null));
+            return new BundledSourceReceptionState();
+        });
 
     /// <summary>
     /// Records that a Sender Report was received from <paramref name="senderSsrc"/>, capturing the LSR (the
@@ -87,7 +103,9 @@ internal sealed class BundledInboundReceptionStats
     /// <param name="senderReportNtpTimestamp">The 64-bit NTP timestamp carried in the SR.</param>
     public void RecordSenderReport(uint senderSsrc, ulong senderReportNtpTimestamp)
     {
-        var state = GetOrAddSource(senderSsrc);
+        // An SR carries no payload type; a source seen only via its SR is created with an inferred clock and an
+        // unknown kind until its first RTP packet (which resolves the negotiated clock/kind by payload type).
+        var state = GetOrAddSource(senderSsrc, NoPayloadType);
         state.RecordSenderReport(ToMiddle32Bits(senderReportNtpTimestamp), _utcNow());
     }
 
@@ -115,9 +133,9 @@ internal sealed class BundledInboundReceptionStats
     /// <see langword="null"/> before any source has an established clock rate. This is our own inbound jitter —
     /// the browser <c>getStats</c> inbound-rtp jitter — distinct from the peer-reported jitter that rides the
     /// reception report blocks in RTP units. When several inbound sources are active the maximum is returned (the
-    /// worst stream), a simple aggregation for the single scalar the stats surface exposes today; per-SSRC jitter
-    /// is CF-004f. The primary audio source's value is exact (seeded with the negotiated clock); an inferred-clock
-    /// source contributes once its clock settles.
+    /// worst stream), the session-aggregate scalar the stats surface exposes; the per-SSRC breakdown is
+    /// <see cref="SnapshotJitterMsPerSsrc"/> (CF-004f). A source whose payload type matched a negotiated clock is
+    /// exact; an inferred-clock source contributes once its clock settles.
     /// </summary>
     public double? SnapshotJitterMs()
     {
@@ -131,9 +149,79 @@ internal sealed class BundledInboundReceptionStats
         return worst;
     }
 
+    /// <summary>
+    /// Snapshots the local receive-side interarrival jitter (RFC 3550 §A.8) per inbound remote SSRC — one entry
+    /// per source that has an established clock — each carrying its jitter in milliseconds and the kind/MID
+    /// resolved from the first packet's payload type. The SSRC is the remote's choice; its track kind/MID is
+    /// derived from the negotiated payload-type map (audio PT → audio, video PT → video), which is exact when the
+    /// payload type is unambiguous. A source seen only via an SR (no RTP), or one whose payload type was not in
+    /// the negotiated map, reports <see cref="BundledStreamKind.Unknown"/> with a null MID.
+    /// </summary>
+    public IReadOnlyList<BundledInboundSsrcJitter> SnapshotJitterMsPerSsrc()
+    {
+        var result = new List<BundledInboundSsrcJitter>(_sources.Count);
+        foreach (var (ssrc, state) in _sources)
+        {
+            if (state.SnapshotJitterMs() is not { } ms)
+                continue; // no established clock yet — no jitter to attribute.
+
+            var kind = _sourceKinds.TryGetValue(ssrc, out var k)
+                ? k
+                : new BundledInboundSourceKind(BundledStreamKind.Unknown, Mid: null);
+            result.Add(new BundledInboundSsrcJitter(ssrc, kind.Kind, kind.Mid, ms));
+        }
+
+        return result;
+    }
+
     // RFC 3550 §6.4.1: LSR is the middle 32 bits of the sender's 64-bit NTP timestamp.
     private static uint ToMiddle32Bits(ulong ntpTimestamp) => (uint)((ntpTimestamp >> 16) & 0xFFFFFFFF);
 }
+
+/// <summary>
+/// The media kind of a BUNDLE stream (RFC 8843), used to attribute a per-SSRC quality metric to audio or video.
+/// <see cref="Unknown"/> is used when the kind could not be resolved (an inbound source whose payload type was
+/// not in the negotiated map, or one seen only via an RTCP Sender Report before any RTP).
+/// </summary>
+internal enum BundledStreamKind
+{
+    /// <summary>The kind is not known (unmapped payload type, or SR-only source before RTP).</summary>
+    Unknown = 0,
+
+    /// <summary>An audio stream.</summary>
+    Audio = 1,
+
+    /// <summary>A video stream.</summary>
+    Video = 2,
+}
+
+/// <summary>
+/// The negotiated inbound media parameters for a given RTP payload type: the clock rate seeded into a source's
+/// §A.8 jitter and the track kind/MID the source is attributed to. Built from the negotiated track configuration
+/// and keyed by payload type because the inbound SSRC is the remote's choice, unknown before its first packet.
+/// </summary>
+/// <param name="ClockRate">The negotiated RTP clock rate (Hz) for this payload type.</param>
+/// <param name="Kind">The media kind (audio/video) this payload type belongs to.</param>
+/// <param name="Mid">The MID of the track this payload type belongs to, or <see langword="null"/> when unknown.</param>
+internal readonly record struct BundledInboundClockDescriptor(uint ClockRate, BundledStreamKind Kind, string? Mid);
+
+/// <summary>
+/// The resolved kind/MID of one inbound source, remembered from the first packet's payload type so the per-SSRC
+/// jitter snapshot can attribute the source to a track.
+/// </summary>
+/// <param name="Kind">The media kind (audio/video/unknown) of the source.</param>
+/// <param name="Mid">The MID the source is attributed to, or <see langword="null"/> when unknown.</param>
+internal readonly record struct BundledInboundSourceKind(BundledStreamKind Kind, string? Mid);
+
+/// <summary>
+/// The local receive-side interarrival jitter (RFC 3550 §A.8) of one inbound remote SSRC, in milliseconds, with
+/// the track kind/MID resolved from the first packet's payload type.
+/// </summary>
+/// <param name="Ssrc">The inbound (remote) synchronisation source.</param>
+/// <param name="Kind">The media kind (audio/video/unknown) of the source.</param>
+/// <param name="Mid">The MID the source is attributed to, or <see langword="null"/> when unknown.</param>
+/// <param name="JitterMs">The source's §A.8 interarrival jitter in milliseconds.</param>
+internal readonly record struct BundledInboundSsrcJitter(uint Ssrc, BundledStreamKind Kind, string? Mid, double JitterMs);
 
 /// <summary>
 /// A snapshot of one inbound source's reception quality (RFC 3550 §6.4.1), captured by

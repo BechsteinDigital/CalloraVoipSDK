@@ -112,6 +112,10 @@ internal sealed class PeerConnection : IPeerConnection
         // media. Null until the peer has echoed a matching report, so early snapshots report null, not a zero.
         var quality = _peer.GetQuality();
 
+        // Per-stream breakdown (CF-004f): outbound RTT/loss per our sending SSRC folded by MID, inbound jitter
+        // per remote source. Projected onto the public per-stream type; the scalars above stay the worst-of.
+        var mediaStreams = MapStreamQuality(_peer.GetStreamQuality());
+
         return new WebRtcStats
         {
             ConnectionState = state,
@@ -128,6 +132,7 @@ internal sealed class PeerConnection : IPeerConnection
             // Local receive-side interarrival jitter in ms (RFC 3550 §A.8), converted with the negotiated audio
             // clock rate; null until an inbound clock is established (CF-004e).
             JitterMs = quality?.JitterMs,
+            MediaStreams = mediaStreams,
             // ICE: the bundle uses single-candidate selection (no full pairing), so the "selected pair" is
             // the bound local endpoint and the resolved remote endpoint; the state is derived from
             // connectivity (ICE consent + DTLS drive the peer state).
@@ -140,6 +145,37 @@ internal sealed class PeerConnection : IPeerConnection
             // feedback, transport-cc) are wired.
         };
     }
+
+    // Projects the internal per-stream quality (CF-004f) onto the public per-stream stats type: the media kind
+    // enum maps to the W3C-style "audio"/"video" label ("unknown" for an unattributed inbound source).
+    private static IReadOnlyList<WebRtcMediaStreamStats> MapStreamQuality(IReadOnlyList<BundledStreamQuality> streams)
+    {
+        if (streams.Count == 0)
+            return [];
+
+        var result = new List<WebRtcMediaStreamStats>(streams.Count);
+        foreach (var s in streams)
+        {
+            result.Add(new WebRtcMediaStreamStats
+            {
+                Mid = s.Mid,
+                Ssrc = s.Ssrc,
+                Kind = KindLabel(s.Kind),
+                PacketLoss = s.PacketLoss,
+                JitterMs = s.JitterMs,
+                RoundTripTimeMs = s.RoundTripTimeMs,
+            });
+        }
+
+        return result;
+    }
+
+    private static string KindLabel(BundledStreamKind kind) => kind switch
+    {
+        BundledStreamKind.Audio => "audio",
+        BundledStreamKind.Video => "video",
+        _ => "unknown",
+    };
 
     // A W3C RTCIceConnectionState-style label derived from the peer's connectivity (the bundle's media path
     // is gated on ICE consent + DTLS; it does not run a separate multi-pair ICE checklist).

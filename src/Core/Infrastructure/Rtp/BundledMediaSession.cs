@@ -37,6 +37,10 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     private readonly string _audioMid;
     private readonly uint _audioSsrc;
     private readonly bool _audioSendEnabled;
+    // Our local sending SSRCs mapped to the track they belong to (MID + kind), so a per-SSRC outbound quality
+    // snapshot (RTT/loss keyed per our sending SSRC) can be attributed to a stream. Audio SSRC → audio MID;
+    // each video/simulcast-encoding SSRC → video MID. Read-only after construction.
+    private readonly IReadOnlyDictionary<uint, BundledOutboundStreamIdentity> _outboundStreamIdentity;
     // RFC 4733 telephone-event (DTMF): the negotiated event payload type on the audio track (null when the
     // peer did not offer/accept telephone-event — DTMF sends then throw) and the event clock rate used to
     // convert durations to/from RTP units (RFC 4733 §2.1: it shares the audio stream's timestamp clock).
@@ -143,11 +147,10 @@ internal sealed class BundledMediaSession : IAsyncDisposable
 
         // Per-SSRC inbound reception statistics (RFC 3550 §6.4.1) feed the periodic RTCP report blocks: the
         // inbound pipeline records each decoded RTP packet, and inbound SRs feed LSR/DLSR (subscribed below).
-        // The negotiated audio clock seeds the primary audio source's §A.8 jitter so it is exact (not inferred)
-        // and convertible to milliseconds for the quality snapshot (CF-004e).
-        _receptionStats = new BundledInboundReceptionStats(
-            audioSsrc: options.Audio.Ssrc,
-            audioClockRate: options.Audio.ClockRate > 0 ? (uint)options.Audio.ClockRate : 0u);
+        // The negotiated clock/kind is applied per inbound source by matching the first packet's payload type
+        // (the inbound SSRC is the remote's choice), so audio gets its exact §A.8 clock and video gets 90 kHz
+        // regardless of arrival order, and each source is attributed to its track (CF-004f).
+        _receptionStats = new BundledInboundReceptionStats(clockByPayloadType: BuildInboundClockMap(options));
         // Consumes the reception blocks the peer returns about our outbound streams to derive RTT and the loss
         // the peer sees (RFC 3550 §6.4.1): fed by the reporter's SR send instants and by inbound RR/SR blocks.
         _outboundQuality = new BundledOutboundQualityTracker();
@@ -250,6 +253,7 @@ internal sealed class BundledMediaSession : IAsyncDisposable
             onSenderReportSent: _outboundQuality.RecordLocalSenderReport);
 
         _audioSsrc = options.Audio.Ssrc;
+        _outboundStreamIdentity = BuildOutboundStreamIdentity(options);
         // A relay candidate wired at construction (offerer path) closes the door on a later AdoptRelay.
         _relayWired = relayBinding is not null ? 1 : 0;
         // Its keepalive (if any) is started in StartAsync, once the transport's receive loop is up.
@@ -397,6 +401,57 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     // clock (from the track config); video uses the fixed 90 kHz RTP clock (RFC 3551 §5) — the bundle video
     // track config does not carry a per-codec rate, and all supported video codecs (H.264/VP8) run at 90 kHz.
     private const uint VideoRtpClockRate = 90000;
+
+    // Maps each negotiated inbound payload type to its clock/kind/MID so the reception stats can seed an inbound
+    // source's exact §A.8 clock (and attribute it to a track) by matching the first packet's payload type — the
+    // inbound SSRC is the remote's choice, unknown ahead of time. Audio uses its negotiated codec clock; video
+    // uses 90 kHz (RFC 3551 §5). The RFC 4733 telephone-event PT shares the audio clock but is DTMF, not media —
+    // it is left out (no inbound reception stream is attributed to it).
+    private static IReadOnlyDictionary<byte, BundledInboundClockDescriptor> BuildInboundClockMap(
+        BundledMediaSessionOptions options)
+    {
+        var map = new Dictionary<byte, BundledInboundClockDescriptor>
+        {
+            [options.Audio.PayloadType] = new BundledInboundClockDescriptor(
+                options.Audio.ClockRate > 0 ? (uint)options.Audio.ClockRate : 0u,
+                BundledStreamKind.Audio,
+                options.Audio.Mid),
+        };
+        if (options.Video is { } video)
+        {
+            // A shared video PT can already be present (e.g. audio and video negotiated the same number is not
+            // possible in practice, but guard anyway); the video entry wins for the video MID.
+            map[video.PayloadType] = new BundledInboundClockDescriptor(VideoRtpClockRate, BundledStreamKind.Video, video.Mid);
+        }
+
+        return map;
+    }
+
+    // Maps each of our local sending SSRCs to the track (MID + kind) it belongs to, so a per-SSRC outbound
+    // quality snapshot (RTT/loss keyed per our sending SSRC) can be attributed to a stream. Audio SSRC → audio
+    // MID; a single video SSRC or each simulcast encoding's SSRC → video MID.
+    private static IReadOnlyDictionary<uint, BundledOutboundStreamIdentity> BuildOutboundStreamIdentity(
+        BundledMediaSessionOptions options)
+    {
+        var map = new Dictionary<uint, BundledOutboundStreamIdentity>
+        {
+            [options.Audio.Ssrc] = new BundledOutboundStreamIdentity(options.Audio.Mid, BundledStreamKind.Audio),
+        };
+        if (options.Video is { } video)
+        {
+            if (video.Encodings.Count > 0)
+            {
+                foreach (var encoding in video.Encodings)
+                    map[encoding.Ssrc] = new BundledOutboundStreamIdentity(video.Mid, BundledStreamKind.Video);
+            }
+            else
+            {
+                map[video.Ssrc] = new BundledOutboundStreamIdentity(video.Mid, BundledStreamKind.Video);
+            }
+        }
+
+        return map;
+    }
 
     private static BundledOutboundTrack BuildOutboundTrack(BundledMediaSessionOptions options, BundledTrackConfig track) =>
         new(track.Ssrc, track.PayloadType, track.SamplesPerPacket,
@@ -580,6 +635,78 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     /// </summary>
     public BundledMediaQuality SnapshotQuality() =>
         _outboundQuality.Snapshot() with { JitterMs = _receptionStats.SnapshotJitterMs() };
+
+    /// <summary>
+    /// Point-in-time derived quality per media stream (CF-004f). Two families of metric are folded together by
+    /// MID:
+    /// <list type="bullet">
+    /// <item><description>
+    /// RTT and the loss the peer reports on our media (RFC 3550 §6.4.1) are per <em>our sending</em> SSRC — each
+    /// is attributed to its track (audio/video MID) via the negotiated outbound SSRC map. A simulcast MID folds
+    /// its encodings' SSRCs into one video entry, taking the worst RTT/loss across them.
+    /// </description></item>
+    /// <item><description>
+    /// The local receive-side interarrival jitter (RFC 3550 §A.8) is per <em>remote inbound</em> SSRC — attributed
+    /// to a track by matching the first packet's payload type (audio PT → audio, video PT → video). An inbound
+    /// source whose payload type was not negotiated, or seen only via an RTCP SR, has an unknown kind and is
+    /// reported under its own SSRC with a null MID.
+    /// </description></item>
+    /// </list>
+    /// The two directions do not share an SSRC (ours vs the remote's), so an entry carries RTT/loss (outbound) or
+    /// jitter (inbound) depending on which direction it describes; a MID with both directions active folds them
+    /// into one entry. Every metric is <see langword="null"/> until it is available.
+    /// </summary>
+    public IReadOnlyList<BundledStreamQuality> SnapshotStreamQuality()
+    {
+        // Fold outbound (per our sending SSRC) and inbound (per remote SSRC) into per-stream entries. Streams with
+        // a known MID are keyed by MID so both directions of a track land in one entry; an unknown-kind inbound
+        // source (no negotiated PT match) is keyed by its own SSRC so it is still surfaced, honestly, on its own.
+        var byMid = new Dictionary<string, BundledStreamQualityAccumulator>(StringComparer.Ordinal);
+        var unkeyed = new List<BundledStreamQuality>();
+
+        foreach (var outbound in _outboundQuality.SnapshotPerSsrc())
+        {
+            if (!_outboundStreamIdentity.TryGetValue(outbound.Ssrc, out var identity))
+                continue; // a report about an SSRC we do not send (should not happen) — do not fabricate a stream.
+
+            var acc = GetOrAddMid(byMid, identity.Mid, identity.Kind, outbound.Ssrc);
+            acc.MergeOutbound(outbound.RoundTripTimeMs, outbound.RemotePacketLossFraction);
+        }
+
+        foreach (var inbound in _receptionStats.SnapshotJitterMsPerSsrc())
+        {
+            if (inbound.Mid is { } mid)
+            {
+                var acc = GetOrAddMid(byMid, mid, inbound.Kind, inbound.Ssrc);
+                acc.MergeInboundJitter(inbound.JitterMs);
+            }
+            else
+            {
+                // No MID resolvable (unmapped payload type / SR-only source): surface it on its own SSRC with the
+                // kind we could derive — the honest limit of inbound remote-SSRC attribution.
+                unkeyed.Add(new BundledStreamQuality(
+                    Mid: null, inbound.Ssrc, inbound.Kind, PacketLoss: null, JitterMs: inbound.JitterMs, RoundTripTimeMs: null));
+            }
+        }
+
+        var result = new List<BundledStreamQuality>(byMid.Count + unkeyed.Count);
+        foreach (var acc in byMid.Values)
+            result.Add(acc.ToStreamQuality());
+        result.AddRange(unkeyed);
+        return result;
+    }
+
+    private static BundledStreamQualityAccumulator GetOrAddMid(
+        Dictionary<string, BundledStreamQualityAccumulator> byMid, string mid, BundledStreamKind kind, uint ssrc)
+    {
+        if (!byMid.TryGetValue(mid, out var acc))
+        {
+            acc = new BundledStreamQualityAccumulator(mid, ssrc, kind);
+            byMid[mid] = acc;
+        }
+
+        return acc;
+    }
 
     /// <summary>Starts the shared receive loop, the ICE consent loop, and the DTLS handshake.</summary>
     public async Task StartAsync(CancellationToken cancellationToken = default)

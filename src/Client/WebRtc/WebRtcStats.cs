@@ -43,23 +43,38 @@ public sealed class WebRtcStats
 
     /// <summary>
     /// Fraction of our outbound packets the peer reports lost (0..1) via its RTCP reception report
-    /// (RFC 3550 §6.4.1), or <see langword="null"/> until the peer has reported on our media.
+    /// (RFC 3550 §6.4.1), or <see langword="null"/> until the peer has reported on our media. This is the
+    /// session aggregate — the worst (maximum) loss across our sending streams; the per-stream breakdown is in
+    /// <see cref="MediaStreams"/>.
     /// </summary>
     public double? PacketLoss { get; init; }
 
     /// <summary>
     /// Our local receive-side interarrival jitter in milliseconds (RFC 3550 §A.8) — the WebRTC
     /// <c>getStats</c> inbound-rtp jitter — or <see langword="null"/> until an inbound clock rate is established
-    /// (no media received yet). Converted from RTP timestamp units with the negotiated audio clock rate. When
-    /// several inbound sources are active the worst is reported; per-SSRC jitter is a later slice.
+    /// (no media received yet). Converted from RTP timestamp units with the negotiated clock rate. This is the
+    /// session aggregate — the worst (maximum) across inbound sources; the per-stream breakdown is in
+    /// <see cref="MediaStreams"/>.
     /// </summary>
     public double? JitterMs { get; init; }
 
     /// <summary>
     /// Round-trip time in milliseconds derived from the peer's echoed LSR/DLSR (RFC 3550 §6.4.1), or
-    /// <see langword="null"/> until a report block echoing one of our Sender Reports has arrived.
+    /// <see langword="null"/> until a report block echoing one of our Sender Reports has arrived. This is the
+    /// session aggregate — the worst (maximum) RTT across our sending streams; the per-stream breakdown is in
+    /// <see cref="MediaStreams"/>.
     /// </summary>
     public double? RoundTripTimeMs { get; init; }
+
+    /// <summary>
+    /// Per-media-stream quality (CF-004f): one entry per audio/video track (folded by MID) carrying the RTT and
+    /// loss the peer reports on our outbound stream plus our local receive-side jitter for that track's remote
+    /// inbound source, and one entry per remote inbound source whose payload type could not be attributed to a
+    /// track. Empty until a session is built or a per-stream metric is available. The scalar
+    /// <see cref="RoundTripTimeMs"/>/<see cref="PacketLoss"/>/<see cref="JitterMs"/> are the worst-of aggregate
+    /// across these streams.
+    /// </summary>
+    public IReadOnlyList<WebRtcMediaStreamStats> MediaStreams { get; init; } = [];
 
     // ── Video — populated by a later slice ───────────────────────────────────────────
 
