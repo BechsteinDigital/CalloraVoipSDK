@@ -1,4 +1,5 @@
 using System.Net;
+using CalloraVoipSdk.Core.Application.Media.Rtcp;
 using CalloraVoipSdk.Core.Application.Media.Rtcp.Packets;
 using CalloraVoipSdk.Core.Application.Media.Rtcp.Wire;
 using CalloraVoipSdk.Core.Infrastructure.Common.Relay;
@@ -211,7 +212,8 @@ internal sealed class BundledMediaSession : IAsyncDisposable
             options.Audio.Ssrc,
             _outbound.SendRtcpAsync,
             _rtcpCodec,
-            $"voipsdk-{Environment.MachineName}",
+            // Opaque per-session CNAME (RFC 7022) — never the machine name (privacy/correlation); overridable.
+            options.Cname ?? RtcpCname.NewOpaque(),
             loggerFactory,
             // Record each emitted SR's LSR + send instant so a peer's echoed report yields RTT (RFC 3550 §6.4.1).
             onSenderReportSent: _outboundQuality.RecordLocalSenderReport);

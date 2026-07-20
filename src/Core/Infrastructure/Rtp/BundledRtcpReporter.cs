@@ -31,8 +31,10 @@ namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
 /// Patterned on the TURN allocation refresh loop: the clock and delay are injected so the loop is
 /// deterministically testable, <see cref="Start"/> is idempotent and thread-safe, and
 /// <see cref="DisposeAsync"/> cancels and awaits the loop. A tick that throws is logged and the loop
-/// continues — one failed report must not stop reporting for the session. There is no teardown packet
-/// (unlike an allocation refresh); the session's DTLS BYE/close handles shutdown.
+/// continues — one failed report must not stop reporting for the session. The interval is not fixed: it is
+/// recomputed after each report by <see cref="RtcpTransmissionInterval"/> (RFC 3550 §6.2/§6.3.1 — randomised,
+/// member-scaled). On disposal, once at least one report has gone out, a best-effort RTCP BYE announces our
+/// departure (RFC 3550 §6.6) over the same fail-closed SRTCP path, before the transport it rides is torn down.
 /// </para>
 /// </summary>
 internal sealed class BundledRtcpReporter : IAsyncDisposable
@@ -42,6 +44,13 @@ internal sealed class BundledRtcpReporter : IAsyncDisposable
     // RFC 3550 §6.4.1: an SR or RR carries at most 31 reception report blocks (the 5-bit RC field).
     private const int MaxReportBlocksPerReport = 31;
 
+    // RFC 3550 §6.2: RTCP bandwidth (bits/s) governing the transmission interval — conventionally ~5% of the
+    // session bandwidth. This default keeps the Tmin floor dominant for a 1:1 bundle while still scaling the
+    // interval up for larger groups; the exact value only becomes visible once membership grows.
+    private const double DefaultRtcpBandwidthBitsPerSecond = 5000.0;
+    // §6.3.3: seeds the running average RTCP compound size until the first report measures a real one.
+    private const double InitialAverageRtcpSizeBytes = 128.0;
+
     private readonly Func<IReadOnlyList<BundledSenderReportInfo>> _snapshotSenderReports;
     private readonly Func<IReadOnlyList<BundledReceptionReportBlock>> _snapshotReceptionBlocks;
     private readonly uint _localSsrc;
@@ -50,6 +59,7 @@ internal sealed class BundledRtcpReporter : IAsyncDisposable
     private readonly IRtcpPacketCodec _codec;
     private readonly string _cname;
     private readonly TimeSpan _interval;
+    private readonly RtcpTransmissionInterval _intervalCalculator;
     private readonly Func<TimeSpan, CancellationToken, Task> _delay;
     private readonly Func<DateTimeOffset> _utcNow;
     private readonly ILogger<BundledRtcpReporter> _logger;
@@ -58,6 +68,12 @@ internal sealed class BundledRtcpReporter : IAsyncDisposable
 
     private Task? _loop;
     private bool _disposed;
+
+    // Loop-thread-only interval state (RFC 3550 §6.3): the running average RTCP compound size, the next
+    // scheduled interval, and whether any report has gone out (gates the teardown BYE, §6.6).
+    private double _averageRtcpSize = InitialAverageRtcpSizeBytes;
+    private TimeSpan _nextInterval;
+    private bool _hasReported;
 
     /// <summary>
     /// Creates the reporter over a BUNDLE session's outbound send path.
@@ -107,6 +123,7 @@ internal sealed class BundledRtcpReporter : IAsyncDisposable
         _interval = interval is { } explicitInterval && explicitInterval > TimeSpan.Zero
             ? explicitInterval
             : DefaultInterval;
+        _intervalCalculator = new RtcpTransmissionInterval(_interval, DefaultRtcpBandwidthBitsPerSecond);
         _delay = delay ?? Task.Delay;
         _utcNow = utcNow ?? (() => DateTimeOffset.UtcNow);
         _logger = loggerFactory.CreateLogger<BundledRtcpReporter>();
@@ -128,11 +145,13 @@ internal sealed class BundledRtcpReporter : IAsyncDisposable
 
     private async Task RunAsync(CancellationToken ct)
     {
+        // RFC 3550 §6.2: the first report waits half Tmin; every later interval is recomputed after its report.
+        _nextInterval = _intervalCalculator.Compute(members: 1, senders: 0, weSent: false, _averageRtcpSize, initial: true);
         while (!ct.IsCancellationRequested)
         {
             try
             {
-                await _delay(_interval, ct).ConfigureAwait(false);
+                await _delay(_nextInterval, ct).ConfigureAwait(false);
                 await SendReportAsync(ct).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -156,9 +175,19 @@ internal sealed class BundledRtcpReporter : IAsyncDisposable
         var receptionBlocks = ToReportBlocks(_snapshotReceptionBlocks());
         var senders = _snapshotSenderReports();
 
-        // Nothing to report: no track has sent and no inbound source is being received.
+        // RFC 3550 §6.2 membership estimate for the interval calculation: self plus each distinct inbound
+        // source, with our sending tracks and every inbound source counting as senders.
+        var members = 1 + receptionBlocks.Count;
+        var senderCount = senders.Count + receptionBlocks.Count;
+        var weSent = senders.Count > 0;
+
+        // Nothing to report: no track has sent and no inbound source is being received. Still reschedule so the
+        // loop keeps ticking and starts reporting as soon as media flows.
         if (senders.Count == 0 && receptionBlocks.Count == 0)
+        {
+            _nextInterval = _intervalCalculator.Compute(members, senderCount, weSent, _averageRtcpSize, initial: false);
             return;
+        }
 
         var now = _utcNow();
         var ntp = ToNtpTimestamp(now);
@@ -180,6 +209,12 @@ internal sealed class BundledRtcpReporter : IAsyncDisposable
 
         var datagram = _codec.Encode(packets);
         await _sendRtcp(datagram, ct).ConfigureAwait(false);
+
+        // RFC 3550 §6.3.3: fold the sent size into the running average, record that we have reported (gates the
+        // teardown BYE), and schedule the next interval from the observed membership.
+        _averageRtcpSize += (datagram.Length - _averageRtcpSize) / 16.0;
+        _hasReported = true;
+        _nextInterval = _intervalCalculator.Compute(members, senderCount, weSent, _averageRtcpSize, initial: false);
     }
 
     // One Sender Report per sending SSRC (RFC 3550 §6.4.1). The reception blocks are attached to the SRs,
@@ -255,9 +290,9 @@ internal sealed class BundledRtcpReporter : IAsyncDisposable
     }
 
     /// <summary>
-    /// Cancels the reporting loop and awaits it. Idempotent. Sends no teardown packet (the session's DTLS
-    /// close handles shutdown); must run before the transport the reporter's send rides is disposed — a
-    /// composition-layer ordering concern.
+    /// Cancels the reporting loop, awaits it, then sends a best-effort teardown BYE (RFC 3550 §6.6, only if we
+    /// reported before). Idempotent. Must run before the transport the reporter's send rides is disposed — a
+    /// composition-layer ordering concern — so the BYE is still keyed and transported.
     /// </summary>
     public async ValueTask DisposeAsync()
     {
@@ -273,7 +308,42 @@ internal sealed class BundledRtcpReporter : IAsyncDisposable
         await _cts.CancelAsync().ConfigureAwait(false);
         if (loop is not null)
             await loop.ConfigureAwait(false);
+        await SendGoodbyeAsync().ConfigureAwait(false);
         _cts.Dispose();
+    }
+
+    // RFC 3550 §6.6: announce our departure with a BYE for the SSRC(s) we were using. Sent after the loop has
+    // stopped (no concurrent report) but while the transport/SRTCP is still up — the session disposes the
+    // reporter before DTLS/transport. Only when we actually reported before (a member that never announced
+    // itself must not BYE). Best-effort and fail-closed like every report; failure is logged, never thrown.
+    private async ValueTask SendGoodbyeAsync()
+    {
+        if (!_hasReported)
+            return;
+
+        try
+        {
+            var senders = _snapshotSenderReports();
+            IReadOnlyList<uint> sources = senders.Count > 0
+                ? senders.Select(s => s.Ssrc).ToArray()
+                : [_localSsrc];
+
+            // §6.1: a compound must begin with an SR/RR and carry a CNAME; at teardown we lead with an empty RR
+            // for our SSRC, the SDES CNAME, then the BYE.
+            var packets = new List<RtcpPacket>
+            {
+                new RtcpReceiverReport { Ssrc = _localSsrc, ReportBlocks = [] },
+                new RtcpSdesPacket { Chunks = [SdesChunk(_localSsrc)] },
+                new RtcpByePacket { Sources = sources, Reason = "leaving" },
+            };
+
+            var datagram = _codec.Encode(packets);
+            await _sendRtcp(datagram, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Bundled RTCP BYE on teardown could not be sent (best-effort).");
+        }
     }
 
     // RFC 3550 §6.4.1 NTP timestamp: seconds since 1 January 1900 in the upper 32 bits, the 2^-32 fraction
