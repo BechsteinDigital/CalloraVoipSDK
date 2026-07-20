@@ -76,4 +76,10 @@ internal sealed record BundledMediaSessionOptions
 
     /// <summary>Initial RTP timestamp for the outbound tracks.</summary>
     public uint InitialTimestamp { get; init; }
+
+    /// <summary>
+    /// An explicit RTCP SDES CNAME (RFC 3550 §6.5.1) for the session, or <see langword="null"/> to generate a
+    /// random opaque per-session CNAME (RFC 7022). Never defaults to the machine name (privacy/correlation).
+    /// </summary>
+    public string? Cname { get; init; }
 }

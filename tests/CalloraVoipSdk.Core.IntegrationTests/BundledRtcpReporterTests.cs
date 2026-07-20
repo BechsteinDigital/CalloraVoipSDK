@@ -302,6 +302,58 @@ public sealed class BundledRtcpReporterTests
             Assert.Equal((uint)(0x1000 + i), sr.ReportBlocks[i].Ssrc);
     }
 
+    [Fact]
+    public async Task Dispose_after_reporting_sends_a_teardown_bye_for_the_sending_ssrc()
+    {
+        var senders = new List<BundledSenderReportInfo>
+        {
+            new(Ssrc: 0x0A0A0A0A, PacketCount: 1, OctetCount: 100, LastRtpTimestamp: 1000),
+        };
+        var sent = new List<byte[]>();
+        var oneTick = new OneShotDelay();
+        var reporter = new BundledRtcpReporter(
+            () => senders,
+            Array.Empty<BundledReceptionReportBlock>,
+            localSsrc: 0x0A0A0A0A,
+            (rtcp, _) => { sent.Add(rtcp.ToArray()); return ValueTask.CompletedTask; },
+            new RtcpPacketCodec(),
+            Cname,
+            NullLoggerFactory.Instance,
+            delay: oneTick.WaitAsync,
+            utcNow: () => DateTimeOffset.UtcNow);
+
+        reporter.Start();
+        await oneTick.WaitForFirstTickConsumed(); // one SR report went out → we have reported
+        await reporter.DisposeAsync();
+
+        // The teardown compound (last datagram) is RFC 3550 §6.1-shaped: leading RR + SDES/CNAME + BYE.
+        var teardown = new RtcpPacketCodec().Decode(sent[^1]);
+        Assert.Contains(teardown, p => p is RtcpReceiverReport);
+        var bye = Assert.Single(teardown.OfType<RtcpByePacket>());
+        Assert.Equal(0x0A0A0A0Au, Assert.Single(bye.Sources));
+        var sdes = Assert.Single(teardown.OfType<RtcpSdesPacket>());
+        Assert.Equal(Cname, Assert.Single(sdes.Chunks.Single().Items, i => i.ItemType == RtcpSdesItemType.CName).Value);
+    }
+
+    [Fact]
+    public async Task Dispose_without_ever_reporting_sends_no_bye()
+    {
+        var sent = new List<byte[]>();
+        var reporter = new BundledRtcpReporter(
+            () => Array.Empty<BundledSenderReportInfo>(),
+            Array.Empty<BundledReceptionReportBlock>,
+            localSsrc: 0x0C0C0C0C,
+            (rtcp, _) => { sent.Add(rtcp.ToArray()); return ValueTask.CompletedTask; },
+            new RtcpPacketCodec(),
+            Cname,
+            NullLoggerFactory.Instance);
+
+        // Never started → never reported: a member that never announced itself must not send a BYE.
+        await reporter.DisposeAsync();
+
+        Assert.Empty(sent);
+    }
+
     private static uint ToMiddle32(ulong ntpTimestamp) => (uint)((ntpTimestamp >> 16) & 0xFFFFFFFF);
 
     private static ulong ToNtp(DateTimeOffset timestamp)

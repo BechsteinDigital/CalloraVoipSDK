@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Sockets;
 using Microsoft.Extensions.Logging;
 using CalloraVoipSdk.Core.Domain.Calls;
+using CalloraVoipSdk.Core.Application.Media.Rtcp;
 using CalloraVoipSdk.Core.Application.Media.Rtcp.Packets;
 using CalloraVoipSdk.Core.Application.Media.Rtcp.Wire;
 
@@ -72,7 +73,8 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
         _remoteRtcpEndPoint = ResolveRemoteRtcpEndPoint(mediaParameters);
         _rtcpMux = mediaParameters.RtcpMux;
         _clockRate = Math.Max(mediaParameters.ClockRate, 1);
-        _cname = $"voipsdk-{Environment.MachineName}";
+        // Opaque per-session CNAME (RFC 7022) — never the machine name (privacy/correlation).
+        _cname = RtcpCname.NewOpaque();
         _logger = loggerFactory.CreateLogger<CallRtcpQualityMonitor>();
         _codec = codec ?? throw new ArgumentNullException(nameof(codec));
         _sendInterval = sendInterval is { } explicitInterval && explicitInterval > TimeSpan.Zero
