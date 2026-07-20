@@ -129,6 +129,39 @@ public sealed class TurnAllocationRefreshLoopTests
     }
 
     [Fact]
+    public async Task A_failed_refresh_retries_after_the_backoff_not_another_full_interval()
+    {
+        // Regression for the retry-timing bug: after a failure the retry must wait only the 5 s backoff, not
+        // another full half-lifetime interval that would push the second attempt past the allocation expiry.
+        var delays = new List<TimeSpan>();
+        var calls = 0;
+        var retried = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        Task<TurnRefreshResult> Refresh(StunCredentials? creds, uint lifetime, CancellationToken ct)
+        {
+            if (Interlocked.Increment(ref calls) == 1)
+                throw new InvalidOperationException("transient");
+            retried.TrySetResult();
+            return Task.FromResult(new TurnRefreshResult { LifetimeSeconds = 200, EffectiveCredentials = creds });
+        }
+
+        var loop = new TurnAllocationRefreshLoop(
+            Refresh, Creds("n1"), grantedLifetimeSeconds: 200, NullLoggerFactory.Instance,
+            delay: ImmediateThenBlock(immediate: 2, delays));
+        loop.Start();
+
+        await retried.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        lock (delays)
+        {
+            Assert.Equal(TimeSpan.FromSeconds(100), delays[0]); // first refresh at half of the 200 s lifetime
+            Assert.Equal(TimeSpan.FromSeconds(5), delays[1]);   // retry waits ONLY the backoff
+        }
+
+        await loop.DisposeAsync();
+    }
+
+    [Fact]
     public async Task Tears_down_the_allocation_even_when_never_started()
     {
         var calls = new List<uint>();

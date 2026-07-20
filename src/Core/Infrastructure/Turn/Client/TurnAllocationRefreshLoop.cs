@@ -99,11 +99,15 @@ internal sealed class TurnAllocationRefreshLoop : IRelayKeepAlive
 
     private async Task RunAsync(CancellationToken ct)
     {
+        // The next wait: half the granted lifetime after a successful refresh, the short backoff after a failure.
+        // Retrying after only the backoff keeps the second attempt inside the allocation lifetime — waiting a full
+        // half-lifetime again would push it past the expiry, defeating the RFC 8656 §3.9 keepalive cadence.
+        var nextDelay = RefreshDelay(_grantedLifetimeSeconds);
         while (!ct.IsCancellationRequested)
         {
             try
             {
-                await _delay(RefreshDelay(_grantedLifetimeSeconds), ct).ConfigureAwait(false);
+                await _delay(nextDelay, ct).ConfigureAwait(false);
                 var result = await _refresh(_credentials, _requestedLifetimeSeconds, ct).ConfigureAwait(false);
                 _credentials = result.EffectiveCredentials ?? _credentials;
                 _grantedLifetimeSeconds = result.LifetimeSeconds;
@@ -118,6 +122,7 @@ internal sealed class TurnAllocationRefreshLoop : IRelayKeepAlive
                     return;
                 }
 
+                nextDelay = RefreshDelay(_grantedLifetimeSeconds);
                 _logger.LogDebug(
                     "TURN allocation refreshed; granted lifetime {Lifetime}s.", result.LifetimeSeconds);
             }
@@ -128,19 +133,12 @@ internal sealed class TurnAllocationRefreshLoop : IRelayKeepAlive
             }
             catch (Exception ex)
             {
-                // A single failed refresh must not abandon the allocation: retry after a bounded backoff so a
+                // A single failed refresh must not abandon the allocation: back off briefly and retry so a
                 // transient error (packet loss, brief server hiccup) is survived. The allocation still has
                 // roughly its remaining lifetime; a persistently failing server lets it expire, which ICE/consent
                 // then surface.
+                nextDelay = _retryBackoff;
                 _logger.LogWarning(ex, "TURN allocation refresh failed; retrying after {Backoff}.", _retryBackoff);
-                try
-                {
-                    await _delay(_retryBackoff, ct).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) when (ct.IsCancellationRequested)
-                {
-                    return;
-                }
             }
         }
     }

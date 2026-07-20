@@ -86,6 +86,37 @@ public sealed class TurnChannelRebindLoopTests
     }
 
     [Fact]
+    public async Task A_failed_rebind_retries_after_the_backoff_not_another_full_interval()
+    {
+        // Regression for the retry-timing bug: after a failure at t=300 s the retry must wait only the 5 s backoff
+        // (→ t=305 s), NOT another full 300 s interval (→ t=605 s, past the 600 s channel expiry).
+        var delays = new List<TimeSpan>();
+        var calls = 0;
+        var retried = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        Task<StunCredentials?> Rebind(StunCredentials? creds, CancellationToken ct)
+        {
+            if (Interlocked.Increment(ref calls) == 1)
+                throw new InvalidOperationException("transient");
+            retried.TrySetResult();
+            return Task.FromResult<StunCredentials?>(creds);
+        }
+
+        await using var loop = new TurnChannelRebindLoop(
+            Rebind, Creds("n1"), NullLoggerFactory.Instance, channelLifetimeSeconds: 600,
+            delay: ImmediateThenBlock(immediate: 2, delays));
+        loop.Start();
+
+        await retried.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        lock (delays)
+        {
+            Assert.Equal(TimeSpan.FromSeconds(300), delays[0]); // first re-bind at half of the 600 s lifetime
+            Assert.Equal(TimeSpan.FromSeconds(5), delays[1]);   // retry waits ONLY the backoff
+        }
+    }
+
+    [Fact]
     public async Task Dispose_stops_the_loop_and_issues_no_teardown()
     {
         var calls = 0;

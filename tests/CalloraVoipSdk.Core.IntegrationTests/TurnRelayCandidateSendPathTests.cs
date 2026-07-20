@@ -176,7 +176,7 @@ public sealed class TurnRelayCandidateSendPathTests
         await sendPath.SendAsync(check, PeerB, CancellationToken.None);
         Assert.Equal(2, permissionRequests.Count); // one install per distinct peer IP
 
-        await sendPath.RefreshInstalledPermissionsAsync(CancellationToken.None);
+        Assert.True(await sendPath.RefreshInstalledPermissionsAsync(CancellationToken.None));
 
         // Every known peer got a fresh CreatePermission — one per peer, not per send.
         Assert.Equal(4, permissionRequests.Count);
@@ -205,7 +205,7 @@ public sealed class TurnRelayCandidateSendPathTests
             new TurnRelayIndicationChannel(codec, RelayServer), control, PrimedCredentials(),
             (_, _, _) => ValueTask.CompletedTask, NullLogger<TurnRelayCandidateSendPath>.Instance);
 
-        await sendPath.RefreshInstalledPermissionsAsync(CancellationToken.None);
+        Assert.True(await sendPath.RefreshInstalledPermissionsAsync(CancellationToken.None)); // no peers → success
 
         Assert.Equal(0, permissionRequests); // nothing installed → nothing to refresh
     }
@@ -238,11 +238,12 @@ public sealed class TurnRelayCandidateSendPathTests
 
         await sendPath.SendAsync(new byte[] { 1 }, PeerA, CancellationToken.None); // install (attempt 1)
 
-        // A refresh whose CreatePermission fails must NOT throw and must keep the peer cached.
-        await sendPath.RefreshInstalledPermissionsAsync(CancellationToken.None); // attempt 2 (fails, swallowed)
+        // A refresh whose CreatePermission fails must NOT throw, must keep the peer cached, and must report the
+        // failure (false) so the driving loop retries sooner instead of waiting a full cycle.
+        Assert.False(await sendPath.RefreshInstalledPermissionsAsync(CancellationToken.None)); // attempt 2 (fails)
 
-        // The peer is still known, so the next refresh re-attempts it — and succeeds.
-        await sendPath.RefreshInstalledPermissionsAsync(CancellationToken.None); // attempt 3 (succeeds)
+        // The peer is still known, so the next refresh re-attempts it — and succeeds (true).
+        Assert.True(await sendPath.RefreshInstalledPermissionsAsync(CancellationToken.None)); // attempt 3 (succeeds)
 
         Assert.Equal(3, permissionAttempts);
     }

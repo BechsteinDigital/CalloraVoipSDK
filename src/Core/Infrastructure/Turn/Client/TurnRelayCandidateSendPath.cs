@@ -94,19 +94,25 @@ internal sealed class TurnRelayCandidateSendPath
     /// long-lived relay path does not lose its permissions after their ~5-minute lifetime and start dropping
     /// inbound datagrams. Runs under the same gate that serialises installs, so a refresh cannot interleave with
     /// an install and lose the server's rotated NONCE. A peer whose refresh fails keeps its cached entry — unlike
-    /// an install, which drops it — so the next cycle re-attempts it rather than tearing down a peer whose media
-    /// may still be flowing. Intended to be driven periodically by <see cref="TurnPermissionRefreshLoop"/>.
+    /// an install, which drops it — but the failure is reported to the caller so the driving
+    /// <see cref="TurnPermissionRefreshLoop"/> retries after a short backoff rather than waiting a full cycle
+    /// (which would land at the lifetime expiry). Intended to be driven periodically by that loop.
     /// </summary>
     /// <param name="ct">Cancellation token; cancels the gate wait and stops between peers.</param>
-    public async Task RefreshInstalledPermissionsAsync(CancellationToken ct)
+    /// <returns>
+    /// <see langword="true"/> when every known peer was re-permissioned; <see langword="false"/> when at least one
+    /// peer failed (kept cached), so the loop shortens its next wait to the backoff.
+    /// </returns>
+    public async Task<bool> RefreshInstalledPermissionsAsync(CancellationToken ct)
     {
         IPAddress[] peers = [.. _permissions.Keys];
         if (peers.Length == 0)
-            return;
+            return true;
 
         await _permissionGate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
+            var allSucceeded = true;
             foreach (var peer in peers)
             {
                 ct.ThrowIfCancellationRequested();
@@ -124,10 +130,12 @@ internal sealed class TurnRelayCandidateSendPath
                 }
                 catch (Exception ex)
                 {
+                    allSucceeded = false;
                     _logger.LogDebug(
-                        ex, "TURN permission refresh for peer {Peer} failed; keeping it for the next cycle.", peer);
+                        ex, "TURN permission refresh for peer {Peer} failed; kept cached, retried sooner.", peer);
                 }
             }
+            return allSucceeded;
         }
         finally
         {
