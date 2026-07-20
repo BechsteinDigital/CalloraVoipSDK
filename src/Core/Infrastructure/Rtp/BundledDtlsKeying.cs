@@ -11,7 +11,8 @@ namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
 /// data path: inbound DTLS records demultiplexed by the <see cref="BundledInboundPipeline"/> feed the
 /// handshake, its records go out through the transport, and on completion the four derived contexts are
 /// installed into both pipelines — the shared inbound SRTP/SRTCP into the receive path and the shared
-/// outbound SRTP into the send path — at which point their fail-closed guards open and media flows.
+/// outbound SRTP/SRTCP into the send path — at which point their fail-closed guards open and media (and,
+/// via the outbound SRTCP context, periodic Sender Reports, RFC 3550 §6.4) can flow.
 /// </summary>
 internal sealed class BundledDtlsKeying : IAsyncDisposable
 {
@@ -49,6 +50,7 @@ internal sealed class BundledDtlsKeying : IAsyncDisposable
             {
                 inbound.InstallInboundKeys(inboundSrtp, inboundSrtcp);
                 outbound.InstallOutboundKey(outboundSrtp);
+                outbound.InstallOutboundRtcpKey(outboundSrtcp); // enables periodic Sender Reports (RFC 3550 §6.4)
                 onKeysInstalled?.Invoke(); // media can now flow (RFC 5763: keys derived from the handshake)
             },
             onHandshakeFailed: onHandshakeFailed,

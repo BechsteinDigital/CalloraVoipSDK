@@ -26,6 +26,14 @@ internal sealed class BundledOutboundTrack
     private ushort _sequenceNumber;
     private uint _timestamp;
 
+    // Cumulative RTCP Sender Report counters for this SSRC (RFC 3550 §6.4.1), advanced under _sendSync
+    // after each packet the pipeline actually sent: total packets, total payload octets (excluding RTP
+    // headers), and the RTP timestamp of the last sent packet. The reporter reads them via a snapshot.
+    private long _senderPacketCount;
+    private long _senderOctetCount;
+    private uint _lastRtpTimestamp;
+    private bool _hasSent;
+
     /// <summary>
     /// Creates a track. <paramref name="initialSequenceNumber"/> and <paramref name="initialTimestamp"/>
     /// seed the RTP cursors (RFC 3550 §5.1 recommends random starting values — the caller supplies them
@@ -55,6 +63,35 @@ internal sealed class BundledOutboundTrack
 
     /// <summary>The default RTP payload type used when a send does not override it.</summary>
     public byte DefaultPayloadType => _defaultPayloadType;
+
+    /// <summary>Total RTP packets this track has actually sent (RFC 3550 §6.4.1 sender's packet count).</summary>
+    public long SenderPacketCount { get { lock (_sendSync) return _senderPacketCount; } }
+
+    /// <summary>Total RTP payload octets sent, excluding headers (RFC 3550 §6.4.1 sender's octet count).</summary>
+    public long SenderOctetCount { get { lock (_sendSync) return _senderOctetCount; } }
+
+    /// <summary>Whether this track has sent at least one packet (so a Sender Report is warranted).</summary>
+    public bool HasSent { get { lock (_sendSync) return _hasSent; } }
+
+    /// <summary>The RTP timestamp of the last packet this track sent (0 before the first send).</summary>
+    public uint LastRtpTimestamp { get { lock (_sendSync) return _lastRtpTimestamp; } }
+
+    /// <summary>
+    /// Records that one packet with <paramref name="payloadOctetCount"/> payload octets and RTP timestamp
+    /// <paramref name="rtpTimestamp"/> was actually sent, advancing this track's Sender Report counters
+    /// (RFC 3550 §6.4.1). The pipeline calls it after a successful send. Thread-safe under the track lock.
+    /// </summary>
+    public void RecordSent(int payloadOctetCount, uint rtpTimestamp)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(payloadOctetCount);
+        lock (_sendSync)
+        {
+            _senderPacketCount++;
+            _senderOctetCount += payloadOctetCount;
+            _lastRtpTimestamp = rtpTimestamp;
+            _hasSent = true;
+        }
+    }
 
     /// <summary>
     /// Builds the next RTP packet for this track: assigns the sequence number and timestamp, stamps the

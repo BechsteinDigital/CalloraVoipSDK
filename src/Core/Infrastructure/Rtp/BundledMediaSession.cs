@@ -1,6 +1,7 @@
 using System.Net;
 using CalloraVoipSdk.Core.Infrastructure.Common.Relay;
 using CalloraVoipSdk.Core.Infrastructure.Dtls;
+using CalloraVoipSdk.Core.Infrastructure.Rtcp.Wire;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Session;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Wire;
@@ -25,6 +26,7 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     private readonly BundledInboundPipeline _inbound;
     private readonly BundledDtlsKeying _dtls;
     private readonly BundledIceControl _ice;
+    private readonly BundledRtcpReporter _rtcpReporter;
     private readonly BundledVideoTrack? _video;
     private readonly string _audioMid;
     private readonly uint _audioSsrc;
@@ -182,6 +184,17 @@ internal sealed class BundledMediaSession : IAsyncDisposable
             relaySend: relayBinding?.RelaySend,
             // A nominated relay pair additionally switches the transport onto the relay data path (ChannelBind).
             onRelayPairNominated: OnRelayPairNominated);
+
+        // Periodic RTCP Sender Reports for the active outbound streams (RFC 3550 §6.4): reads the outbound
+        // pipeline's per-SSRC SR counters and sends over its fail-closed SRTCP send path. The CNAME mirrors the
+        // SIP-path monitor so both report the same canonical name. Started in StartAsync (early ticks are
+        // suppressed until DTLS installs the outbound SRTCP key); disposed before the transport it rides.
+        _rtcpReporter = new BundledRtcpReporter(
+            _outbound.SnapshotSenderReports,
+            _outbound.SendRtcpAsync,
+            new RtcpPacketCodec(),
+            $"voipsdk-{Environment.MachineName}",
+            loggerFactory);
 
         _audioSsrc = options.Audio.Ssrc;
         // A relay candidate wired at construction (offerer path) closes the door on a later AdoptRelay.
@@ -386,6 +399,9 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         // Keep a gathered relay allocation alive for the session (RFC 8656 §3.9). Idempotent — AdoptRelay may
         // already have started it for an answerer.
         Volatile.Read(ref _relayKeepAlive)?.Start();
+        // Start emitting periodic Sender Reports (RFC 3550 §6.4). Its SRTCP send fails closed until the DTLS
+        // handshake below installs the outbound SRTCP key, so an early start just suppresses the first ticks.
+        _rtcpReporter.Start();
         _dtls.Start(cancellationToken);
     }
 
@@ -436,6 +452,9 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         // Refresh(0) rides the transport's control send, so the transport must still be alive to carry it.
         if (Volatile.Read(ref _relayKeepAlive) is { } keepAlive)
             await keepAlive.DisposeAsync().ConfigureAwait(false);
+        // Stop the periodic Sender Reports before the transport it rides is torn down (its SRTCP send goes
+        // through the transport), and before DTLS zeroes the outbound SRTCP key.
+        await _rtcpReporter.DisposeAsync().ConfigureAwait(false);
         await _dtls.DisposeAsync().ConfigureAwait(false);
         _video?.Dispose();
         await _transport.DisposeAsync().ConfigureAwait(false);

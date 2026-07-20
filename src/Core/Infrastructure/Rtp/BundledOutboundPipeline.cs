@@ -30,9 +30,12 @@ internal sealed class BundledOutboundPipeline
     private readonly ILogger<BundledOutboundPipeline> _logger;
 
     private ISrtpContext? _outboundSrtp;
+    private ISrtcpContext? _outboundSrtcp;
     private long _suppressedSends;
     private long _packetsSent;
     private long _bytesSent;
+    private long _rtcpPacketsSent;
+    private long _rtcpSuppressedSends;
 
     /// <summary>Raised after a packet has actually been sent, so an RTX buffer (RFC 4588) can retain it.</summary>
     public event Action<RtpPacket>? PacketSent;
@@ -55,6 +58,12 @@ internal sealed class BundledOutboundPipeline
 
     /// <summary>Total bytes of protected RTP datagrams sent across all tracks.</summary>
     public long BytesSent => Interlocked.Read(ref _bytesSent);
+
+    /// <summary>Total protected SRTCP datagrams sent (RFC 3550 §6.4 Sender Reports, SDES).</summary>
+    public long RtcpPacketsSent => Interlocked.Read(ref _rtcpPacketsSent);
+
+    /// <summary>RTCP sends suppressed because no outbound SRTCP context was installed yet (fail-closed).</summary>
+    public long RtcpSuppressedSends => Interlocked.Read(ref _rtcpSuppressedSends);
 
     /// <summary>
     /// Registers the non-simulcast outbound track for one m-line's MID.
@@ -94,6 +103,69 @@ internal sealed class BundledOutboundPipeline
     {
         ArgumentNullException.ThrowIfNull(srtp);
         Volatile.Write(ref _outboundSrtp, srtp);
+    }
+
+    /// <summary>
+    /// Installs the shared outbound SRTCP context derived by the same DTLS-SRTP handshake (RFC 3711 §3.4).
+    /// Until then every RTCP send (Sender Reports, SDES) fails closed. The one context serves every SSRC's
+    /// RTCP under the shared key and carries its own SRTCP index.
+    /// </summary>
+    public void InstallOutboundRtcpKey(ISrtcpContext srtcp)
+    {
+        ArgumentNullException.ThrowIfNull(srtcp);
+        Volatile.Write(ref _outboundSrtcp, srtcp);
+    }
+
+    /// <summary>
+    /// Protects a plaintext RTCP compound packet with the shared outbound SRTCP context and sends it over the
+    /// shared 5-tuple (RFC 3550 §6, RFC 3711 §3.4). Fails closed: until <see cref="InstallOutboundRtcpKey"/>
+    /// supplies the key — or if the context is disposed mid-send during teardown — the packet is suppressed
+    /// and counted, never leaving as plaintext.
+    /// </summary>
+    public async ValueTask SendRtcpAsync(ReadOnlyMemory<byte> rtcp, CancellationToken cancellationToken)
+    {
+        if (Volatile.Read(ref _outboundSrtcp) is not { } outboundSrtcp)
+        {
+            Interlocked.Increment(ref _rtcpSuppressedSends);
+            _logger.LogDebug("Suppressing outbound RTCP: no SRTCP context installed yet.");
+            return;
+        }
+
+        byte[] datagram;
+        try
+        {
+            datagram = outboundSrtcp.ProtectRtcp(rtcp.Span);
+        }
+        catch (ObjectDisposedException)
+        {
+            // A send racing transport teardown after the context owner zeroed the keys — suppress the
+            // packet; never fall through to an unprotected RTCP send.
+            Interlocked.Increment(ref _rtcpSuppressedSends);
+            _logger.LogDebug("Suppressing outbound RTCP: SRTCP context disposed during teardown.");
+            return;
+        }
+
+        await _sender.SendAsync(datagram, cancellationToken).ConfigureAwait(false);
+        Interlocked.Increment(ref _rtcpPacketsSent);
+    }
+
+    /// <summary>
+    /// Snapshots the per-SSRC Sender Report counters (RFC 3550 §6.4.1) of every track that has sent at least
+    /// one packet, for the periodic RTCP reporter to build Sender Reports from. Tracks that have not sent are
+    /// omitted (no SR is due for them).
+    /// </summary>
+    public IReadOnlyList<BundledSenderReportInfo> SnapshotSenderReports()
+    {
+        var reports = new List<BundledSenderReportInfo>();
+        foreach (var track in _tracks.Values)
+        {
+            if (!track.HasSent)
+                continue;
+            reports.Add(new BundledSenderReportInfo(
+                track.Ssrc, track.SenderPacketCount, track.SenderOctetCount, track.LastRtpTimestamp));
+        }
+
+        return reports;
     }
 
     /// <summary>
@@ -179,6 +251,9 @@ internal sealed class BundledOutboundPipeline
         await _sender.SendAsync(datagram, cancellationToken).ConfigureAwait(false);
         Interlocked.Increment(ref _packetsSent);
         Interlocked.Add(ref _bytesSent, datagram.Length);
+        // Advance this track's Sender Report counters (RFC 3550 §6.4.1): the octet count is the RTP payload
+        // only, not the SRTP-protected datagram length; the RTP timestamp is the one just sent.
+        track.RecordSent(payload.Length, packet.Timestamp);
 
         try
         {
