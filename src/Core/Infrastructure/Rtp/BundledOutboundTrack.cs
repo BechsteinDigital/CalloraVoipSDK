@@ -77,6 +77,22 @@ internal sealed class BundledOutboundTrack
     public uint LastRtpTimestamp { get { lock (_sendSync) return _lastRtpTimestamp; } }
 
     /// <summary>
+    /// Atomically snapshots this track's Sender Report counters (RFC 3550 §6.4.1) under a single lock, so the
+    /// packet count, octet count, and last RTP timestamp are consistent with one another (reading them through
+    /// the individual properties would take the lock four separate times and could tear a report across a
+    /// concurrent send). Returns <see langword="null"/> when the track has not sent yet — no SR is due for it.
+    /// </summary>
+    public BundledSenderReportInfo? Snapshot()
+    {
+        lock (_sendSync)
+        {
+            if (!_hasSent)
+                return null;
+            return new BundledSenderReportInfo(_ssrc, _senderPacketCount, _senderOctetCount, _lastRtpTimestamp);
+        }
+    }
+
+    /// <summary>
     /// Records that one packet with <paramref name="payloadOctetCount"/> payload octets and RTP timestamp
     /// <paramref name="rtpTimestamp"/> was actually sent, advancing this track's Sender Report counters
     /// (RFC 3550 §6.4.1). The pipeline calls it after a successful send. Thread-safe under the track lock.

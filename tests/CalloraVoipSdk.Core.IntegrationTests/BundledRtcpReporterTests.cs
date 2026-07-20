@@ -31,6 +31,8 @@ public sealed class BundledRtcpReporterTests
         var oneTick = new OneShotDelay();
         await using var reporter = new BundledRtcpReporter(
             () => snapshot,
+            Array.Empty<BundledReceptionReportBlock>,
+            localSsrc: 0x0A0A0A0A,
             (rtcp, _) => { sent.Add(rtcp.ToArray()); return ValueTask.CompletedTask; },
             new RtcpPacketCodec(),
             Cname,
@@ -76,6 +78,8 @@ public sealed class BundledRtcpReporterTests
         var oneTick = new OneShotDelay();
         await using var reporter = new BundledRtcpReporter(
             () => Array.Empty<BundledSenderReportInfo>(),
+            Array.Empty<BundledReceptionReportBlock>,
+            localSsrc: 0x0C0C0C0C,
             (rtcp, _) => { sent.Add(rtcp.ToArray()); return ValueTask.CompletedTask; },
             new RtcpPacketCodec(),
             Cname,
@@ -95,6 +99,8 @@ public sealed class BundledRtcpReporterTests
         var oneTick = new OneShotDelay();
         var reporter = new BundledRtcpReporter(
             () => Array.Empty<BundledSenderReportInfo>(),
+            Array.Empty<BundledReceptionReportBlock>,
+            localSsrc: 0x0C0C0C0C,
             (_, _) => ValueTask.CompletedTask,
             new RtcpPacketCodec(),
             Cname,
@@ -107,6 +113,115 @@ public sealed class BundledRtcpReporterTests
         // Disposal cancels the delay the loop is now awaiting and awaits the loop to completion.
         await reporter.DisposeAsync();
         await reporter.DisposeAsync(); // idempotent
+    }
+
+    [Fact]
+    public async Task A_sending_endpoint_emits_a_sender_report_carrying_the_inbound_reception_blocks()
+    {
+        var senders = new List<BundledSenderReportInfo>
+        {
+            new(Ssrc: 0x0A0A0A0A, PacketCount: 42, OctetCount: 6720, LastRtpTimestamp: 5000),
+        };
+        var receptionBlocks = new List<BundledReceptionReportBlock>
+        {
+            new(Ssrc: 0xDEAD_BEEF, FractionLost: 12, CumulativePacketsLost: 3,
+                ExtendedHighestSequenceNumber: 0x0001_2345, InterarrivalJitter: 77,
+                LastSr: 0x3344_5566, DelaySinceLastSr: 131072),
+        };
+
+        var sent = new List<byte[]>();
+        var oneTick = new OneShotDelay();
+        await using var reporter = new BundledRtcpReporter(
+            () => senders,
+            () => receptionBlocks,
+            localSsrc: 0x0A0A0A0A,
+            (rtcp, _) => { sent.Add(rtcp.ToArray()); return ValueTask.CompletedTask; },
+            new RtcpPacketCodec(),
+            Cname,
+            NullLoggerFactory.Instance,
+            delay: oneTick.WaitAsync,
+            utcNow: () => DateTimeOffset.UtcNow);
+
+        reporter.Start();
+        await oneTick.WaitForFirstTickConsumed();
+
+        var packets = new RtcpPacketCodec().Decode(Assert.Single(sent));
+        Assert.Empty(packets.OfType<RtcpReceiverReport>()); // a sender uses SR, not RR
+
+        var sr = Assert.Single(packets.OfType<RtcpSenderReport>());
+        Assert.Equal(0x0A0A0A0Au, sr.Ssrc);
+        var block = Assert.Single(sr.ReportBlocks);
+        Assert.Equal(0xDEAD_BEEFu, block.Ssrc);
+        Assert.Equal(12, block.FractionLost);
+        Assert.Equal(3, block.CumulativePacketsLost);
+        Assert.Equal(0x0001_2345u, block.ExtendedHighestSeq);
+        Assert.Equal(77u, block.Jitter);
+        Assert.Equal(0x3344_5566u, block.LastSr);
+        Assert.Equal(131072u, block.DelaySinceLastSr);
+    }
+
+    [Fact]
+    public async Task A_receive_only_endpoint_emits_a_receiver_report_with_the_reception_blocks()
+    {
+        var receptionBlocks = new List<BundledReceptionReportBlock>
+        {
+            new(Ssrc: 0xDEAD_BEEF, FractionLost: 5, CumulativePacketsLost: 1,
+                ExtendedHighestSequenceNumber: 200, InterarrivalJitter: 9,
+                LastSr: 0, DelaySinceLastSr: 0),
+        };
+
+        var sent = new List<byte[]>();
+        var oneTick = new OneShotDelay();
+        await using var reporter = new BundledRtcpReporter(
+            () => Array.Empty<BundledSenderReportInfo>(), // never sent → receive-only
+            () => receptionBlocks,
+            localSsrc: 0x0C0C0C0C,
+            (rtcp, _) => { sent.Add(rtcp.ToArray()); return ValueTask.CompletedTask; },
+            new RtcpPacketCodec(),
+            Cname,
+            NullLoggerFactory.Instance,
+            delay: oneTick.WaitAsync,
+            utcNow: () => DateTimeOffset.UtcNow);
+
+        reporter.Start();
+        await oneTick.WaitForFirstTickConsumed();
+
+        var packets = new RtcpPacketCodec().Decode(Assert.Single(sent));
+        Assert.Empty(packets.OfType<RtcpSenderReport>()); // receive-only uses RR, not SR
+
+        var rr = Assert.Single(packets.OfType<RtcpReceiverReport>());
+        Assert.Equal(0x0C0C0C0Cu, rr.Ssrc);
+        var block = Assert.Single(rr.ReportBlocks);
+        Assert.Equal(0xDEAD_BEEFu, block.Ssrc);
+        Assert.Equal(5, block.FractionLost);
+        Assert.Equal(200u, block.ExtendedHighestSeq);
+
+        // The compound still carries the CNAME (RFC 3550 §6.5) keyed by the local SSRC.
+        var sdes = Assert.Single(packets.OfType<RtcpSdesPacket>());
+        var chunk = Assert.Single(sdes.Chunks, c => c.Ssrc == 0x0C0C0C0C);
+        Assert.Equal(Cname, Assert.Single(chunk.Items, i => i.ItemType == RtcpSdesItemType.CName).Value);
+    }
+
+    [Fact]
+    public async Task Nothing_is_emitted_when_there_is_no_sending_track_and_no_inbound_source()
+    {
+        var sent = new List<byte[]>();
+        var oneTick = new OneShotDelay();
+        await using var reporter = new BundledRtcpReporter(
+            () => Array.Empty<BundledSenderReportInfo>(),
+            () => Array.Empty<BundledReceptionReportBlock>(),
+            localSsrc: 0x0C0C0C0C,
+            (rtcp, _) => { sent.Add(rtcp.ToArray()); return ValueTask.CompletedTask; },
+            new RtcpPacketCodec(),
+            Cname,
+            NullLoggerFactory.Instance,
+            delay: oneTick.WaitAsync,
+            utcNow: () => DateTimeOffset.UtcNow);
+
+        reporter.Start();
+        await oneTick.WaitForFirstTickConsumed();
+
+        Assert.Empty(sent);
     }
 
     private static ulong ToNtp(DateTimeOffset timestamp)

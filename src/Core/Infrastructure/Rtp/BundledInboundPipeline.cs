@@ -24,6 +24,7 @@ internal sealed class BundledInboundPipeline
 {
     private readonly BundledTrackRouter _router;
     private readonly IRtpPacketCodec _rtpCodec;
+    private readonly BundledInboundReceptionStats? _receptionStats;
     private readonly ILogger<BundledInboundPipeline> _logger;
 
     private ISrtpContext? _inboundSrtp;
@@ -41,14 +42,24 @@ internal sealed class BundledInboundPipeline
     /// <summary>Raised with a decrypted (or plain, pre-keying this never fires) RTCP compound packet.</summary>
     public event Action<byte[]>? ControlPacketReceived;
 
+    /// <param name="router">Routes each decoded RTP packet to the owning m-line's track sink.</param>
+    /// <param name="rtpCodec">Decodes the plaintext RTP after SRTP-unprotect.</param>
+    /// <param name="logger">Logger.</param>
+    /// <param name="receptionStats">
+    /// Optional per-SSRC inbound reception tracker (RFC 3550 §6.4.1). When supplied, every successfully
+    /// SRTP-decrypted, decoded RTP packet is recorded against its SSRC so the periodic RTCP reporter can build
+    /// reception report blocks. Null leaves reception tracking off (behaviour-preserving).
+    /// </param>
     public BundledInboundPipeline(
         BundledTrackRouter router,
         IRtpPacketCodec rtpCodec,
-        ILogger<BundledInboundPipeline> logger)
+        ILogger<BundledInboundPipeline> logger,
+        BundledInboundReceptionStats? receptionStats = null)
     {
         _router   = router   ?? throw new ArgumentNullException(nameof(router));
         _rtpCodec = rtpCodec ?? throw new ArgumentNullException(nameof(rtpCodec));
         _logger   = logger   ?? throw new ArgumentNullException(nameof(logger));
+        _receptionStats = receptionStats;
     }
 
     /// <summary>
@@ -225,6 +236,11 @@ internal sealed class BundledInboundPipeline
             _logger.LogDebug("Dropping undecodable RTP packet from {Source}: {Message}", source, ex.Message);
             return;
         }
+
+        // Record per-SSRC reception statistics (RFC 3550 §6.4.1) for the periodic RTCP reporter: sequence
+        // tracking, loss, and interarrival jitter, keyed by this packet's SSRC. Done before routing so a
+        // throwing track sink cannot skip the accounting; a null tracker leaves reception reporting off.
+        _receptionStats?.RecordRtp(packet.Ssrc, packet.SequenceNumber, packet.Timestamp);
 
         // The router resolves the packet's MID (SSRC latch / MID header ext / payload type) and hands
         // it to the owning track's sink, or drops+counts it on its own DroppedPackets counter.
