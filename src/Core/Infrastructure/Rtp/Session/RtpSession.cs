@@ -4,6 +4,9 @@ using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
+using CalloraVoipSdk.Core.Application.Media.Rtcp.Packets;
+using CalloraVoipSdk.Core.Application.Media.Rtcp.Wire;
+using CalloraVoipSdk.Core.Infrastructure.Rtcp.Wire;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Wire;
 using CalloraVoipSdk.Core.Infrastructure.Srtp.Context;
@@ -25,7 +28,15 @@ internal sealed class RtpSession : IRtpSession
     private readonly object _sendSync = new();
 
     private readonly UdpClient _udp;
-    private readonly uint _ssrc;
+
+    // Our synchronisation source (RFC 3550 §5). Mutable: on an SSRC collision (§8.2) we send a BYE for the
+    // old value and adopt a fresh one. Read on the receive loop, senders, and the SR snapshot — accessed via
+    // Volatile / under _sendSync so the swap publishes atomically with the re-seeded sequence + timestamp.
+    private uint _ssrc;
+
+    // Stateless RTCP wire codec used to build the collision BYE (RFC 3550 §6.6). Direct instantiation matches
+    // the established pattern for these leaf wire codecs (e.g. BundledMediaSession's RtcpPacketCodec).
+    private readonly IRtcpPacketCodec _rtcpCodec = new RtcpPacketCodec();
 
     // One sequence validator per observed SSRC, accessed only on the single receive loop thread.
     // Capped and LRU-evicted so a peer spoofing a stream of distinct SSRCs cannot grow this table
@@ -220,7 +231,7 @@ internal sealed class RtpSession : IRtpSession
     }
 
     /// <summary>Local synchronization source (RFC 3550 §5.1) — used as the sender SSRC of RTCP feedback.</summary>
-    internal uint LocalSsrc => _ssrc;
+    internal uint LocalSsrc => Volatile.Read(ref _ssrc);
 
     /// <summary>Number of distinct inbound SSRCs currently tracked (test/diagnostic seam).</summary>
     internal int TrackedSsrcCount => _validators.Count;
@@ -392,7 +403,7 @@ internal sealed class RtpSession : IRtpSession
         var packetsSent = Interlocked.Read(ref _packetsSent);
         var octetsSent = Interlocked.Read(ref _octetsSent);
         return new RtpSenderStatisticsSnapshot(
-            LocalSsrc: _ssrc,
+            LocalSsrc: Volatile.Read(ref _ssrc),
             SenderPacketCount: ClampToUInt32(packetsSent),
             SenderOctetCount: ClampToUInt32(octetsSent),
             LastSentRtpTimestamp: unchecked((uint)Volatile.Read(ref _lastSentTimestamp)),
@@ -622,12 +633,10 @@ internal sealed class RtpSession : IRtpSession
             _logger.LogDebug("RTP symmetric latch: sending media to observed source {Source}.", source);
         }
 
-        // SSRC collision detection (RFC 3550 §8.2)
-        if (packet.Ssrc == _ssrc)
+        // SSRC collision detection + resolution (RFC 3550 §8.2): a third party is transmitting with our SSRC.
+        if (packet.Ssrc == Volatile.Read(ref _ssrc))
         {
-            _logger.LogWarning("SSRC collision detected (SSRC={Ssrc:X8})", _ssrc);
-            try { SsrcCollisionDetected?.Invoke(this, EventArgs.Empty); }
-            catch (Exception ex) { _logger.LogError(ex, "Unhandled exception in SsrcCollisionDetected handler"); }
+            ResolveSsrcCollision(packet.Ssrc);
             return;
         }
 
@@ -697,6 +706,63 @@ internal sealed class RtpSession : IRtpSession
             "RTP validator table reached {Max} SSRCs; evicted least-recently-active SSRC={Ssrc:X8}.",
             MaxTrackedSsrcs,
             evictKey);
+    }
+
+    // RFC 3550 §8.2: a third party is transmitting with our SSRC. Send a best-effort RTCP BYE for the
+    // departing SSRC, then adopt a fresh one with a re-seeded sequence number and timestamp so our outbound
+    // stream is unambiguous again. Runs on the receive loop (same thread as all _validators access); the
+    // sequence/timestamp/SSRC swap takes _sendSync so a concurrent send observes a consistent triple.
+    private void ResolveSsrcCollision(uint collidingSsrc)
+    {
+        var oldSsrc = collidingSsrc; // equals the current _ssrc at the point of detection
+
+        uint newSsrc;
+        do
+        {
+            newSsrc = (uint)Random.Shared.Next();
+        }
+        while (newSsrc == oldSsrc || _validators.ContainsKey(newSsrc));
+
+        lock (_sendSync)
+        {
+            // A new source identity restarts the sequence and timestamp offsets (RFC 3550 §5.1 / §8.2).
+            _sequenceNumber = (ushort)Random.Shared.Next(ushort.MaxValue);
+            _timestamp = (uint)Random.Shared.Next();
+            _ssrc = newSsrc;
+        }
+
+        _logger.LogWarning(
+            "SSRC collision (SSRC={Old:X8}): adopting new SSRC={New:X8} and sending RTCP BYE for the old one (RFC 3550 §8.2).",
+            oldSsrc, newSsrc);
+
+        // Best-effort BYE for the departing SSRC over the fail-closed SRTCP control send, fired off the
+        // receive loop so a slow or failed send never stalls inbound processing (failures are logged, not thrown).
+        _ = SendCollisionByeAsync(oldSsrc);
+
+        try
+        {
+            SsrcCollisionDetected?.Invoke(this, EventArgs.Empty);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled exception in SsrcCollisionDetected handler");
+        }
+    }
+
+    // Encodes and sends an RTCP BYE announcing the departing SSRC is leaving (RFC 3550 §6.6 / §8.2), over the
+    // same fail-closed SRTCP control path as SR/RR. Best-effort: any failure is logged, never propagated.
+    private async Task SendCollisionByeAsync(uint departingSsrc)
+    {
+        try
+        {
+            var bye = new RtcpByePacket { Sources = new[] { departingSsrc }, Reason = "ssrc collision" };
+            var datagram = _rtcpCodec.Encode(new RtcpPacket[] { bye });
+            await SendControlAsync(datagram).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to send RTCP BYE for departing SSRC={Ssrc:X8} after a collision.", departingSsrc);
+        }
     }
 
     // Decrypts a secondary-stream datagram with its own SRTP context and dispatches it,
@@ -805,10 +871,14 @@ internal sealed class RtpSession : IRtpSession
 
         ushort sequenceNumber;
         uint timestamp;
+        uint ssrc;
         ushort? transportCcSequence = null;
 
         lock (_sendSync)
         {
+            // Read the SSRC under the same lock the collision reseed takes, so a mid-send SSRC swap
+            // (RFC 3550 §8.2) never pairs a new SSRC with the old sequence/timestamp.
+            ssrc = _ssrc;
             sequenceNumber = _sequenceNumber;
             timestamp = timestampOverride ?? _timestamp;
 
@@ -833,7 +903,7 @@ internal sealed class RtpSession : IRtpSession
             Marker = marker,
             SequenceNumber = sequenceNumber,
             Timestamp = timestamp,
-            Ssrc = _ssrc,
+            Ssrc = ssrc,
             Payload = payload,
             // Stamp the header extension (transport-cc, and MID on a BUNDLE transport) before SRTP:
             // RFC 3711 authenticates but does not encrypt the header extension, so the receiver reads
