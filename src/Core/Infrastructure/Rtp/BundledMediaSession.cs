@@ -1,4 +1,6 @@
 using System.Net;
+using CalloraVoipSdk.Core.Application.Media.Rtcp.Packets;
+using CalloraVoipSdk.Core.Application.Media.Rtcp.Wire;
 using CalloraVoipSdk.Core.Infrastructure.Common.Relay;
 using CalloraVoipSdk.Core.Infrastructure.Dtls;
 using CalloraVoipSdk.Core.Infrastructure.Rtcp.Wire;
@@ -27,6 +29,8 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     private readonly BundledDtlsKeying _dtls;
     private readonly BundledIceControl _ice;
     private readonly BundledRtcpReporter _rtcpReporter;
+    private readonly BundledInboundReceptionStats _receptionStats;
+    private readonly IRtcpPacketCodec _rtcpCodec;
     private readonly BundledVideoTrack? _video;
     private readonly string _audioMid;
     private readonly uint _audioSsrc;
@@ -108,8 +112,16 @@ internal sealed class BundledMediaSession : IAsyncDisposable
             BundledRtpDemultiplexerFactory.Create(options.MidExtensionId, payloadTypesByMid));
         router.RegisterTrack(options.Audio.Mid, RaiseAudioReceived);
 
+        // Per-SSRC inbound reception statistics (RFC 3550 §6.4.1) feed the periodic RTCP report blocks: the
+        // inbound pipeline records each decoded RTP packet, and inbound SRs feed LSR/DLSR (subscribed below).
+        _receptionStats = new BundledInboundReceptionStats();
+        _rtcpCodec = new RtcpPacketCodec();
+
         _inbound = new BundledInboundPipeline(
-            router, new RtpPacketCodec(), loggerFactory.CreateLogger<BundledInboundPipeline>());
+            router, new RtpPacketCodec(), loggerFactory.CreateLogger<BundledInboundPipeline>(), _receptionStats);
+        // Inbound Sender Reports carry the LSR the peer needs echoed back: decode each decrypted compound and
+        // record every SR's middle-32 NTP bits + arrival time per sender SSRC (RFC 3550 §6.4.1).
+        _inbound.ControlPacketReceived += OnControlPacketReceived;
 
         _transport = new BundledMediaTransport(
             new BundledMediaTransportOptions { LocalEndPoint = options.LocalEndPoint, RemoteEndPoint = options.RemoteEndPoint },
@@ -191,8 +203,10 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         // suppressed until DTLS installs the outbound SRTCP key); disposed before the transport it rides.
         _rtcpReporter = new BundledRtcpReporter(
             _outbound.SnapshotSenderReports,
+            _receptionStats.SnapshotReportBlocks,
+            options.Audio.Ssrc,
             _outbound.SendRtcpAsync,
-            new RtcpPacketCodec(),
+            _rtcpCodec,
             $"voipsdk-{Environment.MachineName}",
             loggerFactory);
 
@@ -216,6 +230,29 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unhandled exception in bundled audio AudioReceived handler.");
+        }
+    }
+
+    // Decodes an inbound decrypted RTCP compound and records every Sender Report's LSR (middle 32 NTP bits)
+    // and arrival per sender SSRC (RFC 3550 §6.4.1), so the next report echoes LSR/DLSR back for RTT. Runs on
+    // the receive loop; a malformed compound must not tear it down, so decode failures are swallowed with a log.
+    private void OnControlPacketReceived(byte[] rtcp)
+    {
+        IReadOnlyList<RtcpPacket> packets;
+        try
+        {
+            packets = _rtcpCodec.Decode(rtcp);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException)
+        {
+            _logger.LogDebug(ex, "Ignoring undecodable inbound RTCP compound on the bundle path.");
+            return;
+        }
+
+        foreach (var packet in packets)
+        {
+            if (packet is RtcpSenderReport senderReport)
+                _receptionStats.RecordSenderReport(senderReport.Ssrc, senderReport.NtpTimestamp);
         }
     }
 

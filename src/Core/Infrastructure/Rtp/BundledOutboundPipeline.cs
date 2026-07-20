@@ -144,6 +144,10 @@ internal sealed class BundledOutboundPipeline
             _logger.LogDebug("Suppressing outbound RTCP: SRTCP context disposed during teardown.");
             return;
         }
+        // Any other ProtectRtcp fault (a cryptographic/argument error) is deliberately NOT caught here: it
+        // propagates to the periodic reporter's catch-all, which logs and retries next interval. The invariant
+        // that matters is met either way — the send only ever happens on a successfully protected datagram, so
+        // no plaintext RTCP can leave. Only the disposed-context race is suppressed silently, as a teardown.
 
         await _sender.SendAsync(datagram, cancellationToken).ConfigureAwait(false);
         Interlocked.Increment(ref _rtcpPacketsSent);
@@ -159,10 +163,10 @@ internal sealed class BundledOutboundPipeline
         var reports = new List<BundledSenderReportInfo>();
         foreach (var track in _tracks.Values)
         {
-            if (!track.HasSent)
-                continue;
-            reports.Add(new BundledSenderReportInfo(
-                track.Ssrc, track.SenderPacketCount, track.SenderOctetCount, track.LastRtpTimestamp));
+            // One lock per track: the four counters are captured atomically so a concurrent send cannot tear
+            // the packet/octet/timestamp trio across the report (fixes the prior four-separate-lock read).
+            if (track.Snapshot() is { } info)
+                reports.Add(info);
         }
 
         return reports;

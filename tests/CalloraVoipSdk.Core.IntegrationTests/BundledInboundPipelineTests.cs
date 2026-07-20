@@ -154,6 +154,33 @@ public sealed class BundledInboundPipelineTests
         Assert.Equal(1, harness.Pipeline.DroppedDatagrams);
     }
 
+    [Fact]
+    public void Decrypted_rtp_is_recorded_in_the_per_ssrc_reception_stats()
+    {
+        var stats = new BundledInboundReceptionStats();
+        var harness = new Harness(receptionStats: stats);
+        var sender = new SrtpContext(Material());
+
+        // Audio 1,2,3 clean; video 1 then 3 (skip 2 = one lost of two expected in the interval).
+        foreach (ushort seq in new ushort[] { 1, 2, 3 })
+            harness.Pipeline.ProcessInboundDatagram(
+                sender.Protect(Rtp(AudioSsrc, AudioPayloadType, seq, payload: [1, 2, 3])), Peer);
+        foreach (ushort seq in new ushort[] { 1, 3 })
+            harness.Pipeline.ProcessInboundDatagram(
+                sender.Protect(Rtp(VideoSsrc, VideoPayloadType, seq, payload: [9, 8])), Peer);
+
+        var blocks = stats.SnapshotReportBlocks();
+        Assert.Equal(2, blocks.Count);
+
+        var audio = blocks.Single(b => b.Ssrc == AudioSsrc);
+        Assert.Equal(0, audio.CumulativePacketsLost);
+        Assert.Equal(3u, audio.ExtendedHighestSequenceNumber);
+
+        var video = blocks.Single(b => b.Ssrc == VideoSsrc);
+        Assert.Equal(1, video.CumulativePacketsLost);
+        Assert.Equal(3u, video.ExtendedHighestSequenceNumber);
+    }
+
     private sealed class Harness
     {
         public BundledInboundPipeline Pipeline { get; }
@@ -161,7 +188,7 @@ public sealed class BundledInboundPipelineTests
         public List<RtpPacket> Audio { get; } = [];
         public List<RtpPacket> Video { get; } = [];
 
-        public Harness(bool installKeys = true)
+        public Harness(bool installKeys = true, BundledInboundReceptionStats? receptionStats = null)
         {
             var demux = BundledRtpDemultiplexerFactory.Create(
                 midExtensionId: 0,
@@ -175,7 +202,7 @@ public sealed class BundledInboundPipelineTests
             Router.RegisterTrack("video", Video.Add);
 
             Pipeline = new BundledInboundPipeline(
-                Router, new RtpPacketCodec(), NullLogger<BundledInboundPipeline>.Instance);
+                Router, new RtpPacketCodec(), NullLogger<BundledInboundPipeline>.Instance, receptionStats);
 
             if (installKeys)
                 Pipeline.InstallInboundKeys(new SrtpContext(Material()), new SrtcpContext(Material()));

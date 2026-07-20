@@ -5,17 +5,25 @@ using Microsoft.Extensions.Logging;
 namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
 
 /// <summary>
-/// Periodically emits RTCP Sender Reports for a BUNDLE media session's active outbound streams
-/// (RFC 3550 §6.4). A background loop, every <c>interval</c>, snapshots each sending track's SR counters
-/// (<see cref="BundledOutboundPipeline.SnapshotSenderReports"/>) and builds one compound RTCP packet — a
-/// <see cref="RtcpSenderReport"/> per SSRC that has sent, followed by a single SDES packet carrying the
-/// session CNAME for every reporting SSRC (RFC 3550 §6.5, every compound RTCP packet must carry a CNAME) —
-/// then protects and sends it via the outbound pipeline's SRTCP send path. When no track has sent yet,
-/// nothing is emitted.
+/// Periodically emits RTCP reports for a BUNDLE media session (RFC 3550 §6.4). A background loop, every
+/// <c>interval</c>, snapshots each sending track's SR counters
+/// (<see cref="BundledOutboundPipeline.SnapshotSenderReports"/>) and the per-SSRC inbound reception
+/// statistics (<see cref="BundledInboundReceptionStats.SnapshotReportBlocks"/>), then builds one compound
+/// RTCP packet and sends it via the outbound pipeline's fail-closed SRTCP send path.
 /// <para>
-/// This slice sends Sender Reports and SDES only. Receiver Reports (reception statistics for inbound
-/// streams) and the derived round-trip time are a later slice, so the Sender Reports carry no report
-/// blocks. The send path fails closed until the DTLS-SRTP handshake installs the outbound SRTCP key, so
+/// The compound's first packet carries the reception report blocks (one per active inbound SSRC:
+/// fraction-lost, cumulative-lost, extended-highest-seq, interarrival jitter, LSR, DLSR — RFC 3550 §6.4.1):
+/// when this endpoint is sending, a <see cref="RtcpSenderReport"/> per sending SSRC carries those blocks
+/// (the first SR carries them all, distributing across SRs if the count exceeds the 31-block SR limit);
+/// when this endpoint only receives, a single <see cref="RtcpReceiverReport"/> (RFC 3550 §6.4.2) carries
+/// them. Either way a single SDES packet with the session CNAME follows (RFC 3550 §6.5 — every compound
+/// RTCP packet must carry a CNAME). When there is nothing to say (no sending track and no inbound source),
+/// nothing is emitted.
+/// </para>
+/// <para>
+/// This slice sends valid report blocks and the LSR/DLSR needed for the peer to compute round-trip time.
+/// Consuming inbound report blocks to compute our own RTT and publish a public quality snapshot is a later
+/// slice. The send path fails closed until the DTLS-SRTP handshake installs the outbound SRTCP key, so
 /// starting the reporter before keying is safe — the early ticks are simply suppressed.
 /// </para>
 /// <para>
@@ -30,7 +38,12 @@ internal sealed class BundledRtcpReporter : IAsyncDisposable
 {
     private static readonly TimeSpan DefaultInterval = TimeSpan.FromSeconds(5);
 
+    // RFC 3550 §6.4.1: an SR or RR carries at most 31 reception report blocks (the 5-bit RC field).
+    private const int MaxReportBlocksPerReport = 31;
+
     private readonly Func<IReadOnlyList<BundledSenderReportInfo>> _snapshotSenderReports;
+    private readonly Func<IReadOnlyList<BundledReceptionReportBlock>> _snapshotReceptionBlocks;
+    private readonly uint _localSsrc;
     private readonly Func<ReadOnlyMemory<byte>, CancellationToken, ValueTask> _sendRtcp;
     private readonly IRtcpPacketCodec _codec;
     private readonly string _cname;
@@ -48,6 +61,14 @@ internal sealed class BundledRtcpReporter : IAsyncDisposable
     /// Creates the reporter over a BUNDLE session's outbound send path.
     /// </summary>
     /// <param name="snapshotSenderReports">Snapshots the sending tracks' SR counters (RFC 3550 §6.4.1).</param>
+    /// <param name="snapshotReceptionBlocks">
+    /// Snapshots the per-SSRC inbound reception report blocks (RFC 3550 §6.4.1). Stateful — each call advances
+    /// the fraction-lost interval baseline — so the reporter calls it exactly once per emitted report.
+    /// </param>
+    /// <param name="localSsrc">
+    /// The SSRC that owns a Receiver Report (RFC 3550 §6.4.2) when this endpoint is receive-only. A Sender
+    /// Report keys itself by each sending SSRC instead, so this only labels the RR.
+    /// </param>
     /// <param name="sendRtcp">Protects and sends a plaintext RTCP compound packet (fail-closed SRTCP send path).</param>
     /// <param name="codec">Encodes the compound RTCP packet to the wire (RFC 3550 §6).</param>
     /// <param name="cname">The session canonical name emitted in the SDES CNAME item (RFC 3550 §6.5.1).</param>
@@ -57,6 +78,8 @@ internal sealed class BundledRtcpReporter : IAsyncDisposable
     /// <param name="utcNow">The wall clock read for the SR NTP timestamp; injectable for deterministic tests.</param>
     public BundledRtcpReporter(
         Func<IReadOnlyList<BundledSenderReportInfo>> snapshotSenderReports,
+        Func<IReadOnlyList<BundledReceptionReportBlock>> snapshotReceptionBlocks,
+        uint localSsrc,
         Func<ReadOnlyMemory<byte>, CancellationToken, ValueTask> sendRtcp,
         IRtcpPacketCodec codec,
         string cname,
@@ -66,6 +89,8 @@ internal sealed class BundledRtcpReporter : IAsyncDisposable
         Func<DateTimeOffset>? utcNow = null)
     {
         _snapshotSenderReports = snapshotSenderReports ?? throw new ArgumentNullException(nameof(snapshotSenderReports));
+        _snapshotReceptionBlocks = snapshotReceptionBlocks ?? throw new ArgumentNullException(nameof(snapshotReceptionBlocks));
+        _localSsrc = localSsrc;
         _sendRtcp = sendRtcp ?? throw new ArgumentNullException(nameof(sendRtcp));
         _codec = codec ?? throw new ArgumentNullException(nameof(codec));
         _cname = cname ?? throw new ArgumentNullException(nameof(cname));
@@ -117,16 +142,57 @@ internal sealed class BundledRtcpReporter : IAsyncDisposable
 
     private async ValueTask SendReportAsync(CancellationToken ct)
     {
+        // Capture reception blocks exactly once per report: the snapshot advances each source's fraction-lost
+        // interval baseline (RFC 3550 §A.3), so it must run whether or not this endpoint is also sending.
+        var receptionBlocks = ToReportBlocks(_snapshotReceptionBlocks());
         var senders = _snapshotSenderReports();
-        if (senders.Count == 0)
-            return; // no track has sent yet — nothing to report
+
+        // Nothing to report: no track has sent and no inbound source is being received.
+        if (senders.Count == 0 && receptionBlocks.Count == 0)
+            return;
 
         var ntp = ToNtpTimestamp(_utcNow());
-        var packets = new List<RtcpPacket>(senders.Count + 1);
-        var chunks = new List<RtcpSdesChunk>(senders.Count);
+        var packets = new List<RtcpPacket>(Math.Max(senders.Count, 1) + 1);
+        var sdesChunks = new List<RtcpSdesChunk>();
 
+        if (senders.Count > 0)
+        {
+            BuildSenderReports(senders, receptionBlocks, ntp, packets, sdesChunks);
+        }
+        else
+        {
+            // Receive-only: a single Receiver Report (RFC 3550 §6.4.2) keyed by the local SSRC carries the blocks.
+            packets.Add(new RtcpReceiverReport { Ssrc = _localSsrc, ReportBlocks = receptionBlocks });
+            sdesChunks.Add(SdesChunk(_localSsrc));
+        }
+
+        packets.Add(new RtcpSdesPacket { Chunks = sdesChunks });
+
+        var datagram = _codec.Encode(packets);
+        await _sendRtcp(datagram, ct).ConfigureAwait(false);
+    }
+
+    // One Sender Report per sending SSRC (RFC 3550 §6.4.1). The reception blocks are attached to the SRs,
+    // packed 31-per-report (the RC field limit) so a session receiving more than 31 sources still emits every
+    // block; the first SR takes the first 31, the next SR the following 31, and so on. Any block left over
+    // after the SRs are full (more inbound sources than 31×senders) is dropped this interval and reported the
+    // next — an edge case far outside a normal BUNDLE session's stream count.
+    private void BuildSenderReports(
+        IReadOnlyList<BundledSenderReportInfo> senders,
+        IReadOnlyList<RtcpReportBlock> receptionBlocks,
+        ulong ntp,
+        List<RtcpPacket> packets,
+        List<RtcpSdesChunk> sdesChunks)
+    {
+        var blockOffset = 0;
         foreach (var sender in senders)
         {
+            var take = Math.Min(MaxReportBlocksPerReport, receptionBlocks.Count - blockOffset);
+            IReadOnlyList<RtcpReportBlock> blocks = take > 0
+                ? receptionBlocks.Skip(blockOffset).Take(take).ToArray()
+                : [];
+            blockOffset += take;
+
             packets.Add(new RtcpSenderReport
             {
                 Ssrc = sender.Ssrc,
@@ -136,19 +202,40 @@ internal sealed class BundledRtcpReporter : IAsyncDisposable
                 // and, in practice, well within range — wrap deliberately as the RFC's counters do.
                 SenderPacketCount = unchecked((uint)sender.PacketCount),
                 SenderOctetCount = unchecked((uint)sender.OctetCount),
-                ReportBlocks = [], // reception report blocks are a later slice (RR/RTT)
+                ReportBlocks = blocks,
             });
-            chunks.Add(new RtcpSdesChunk
+            sdesChunks.Add(SdesChunk(sender.Ssrc));
+        }
+    }
+
+    private RtcpSdesChunk SdesChunk(uint ssrc) => new()
+    {
+        Ssrc = ssrc,
+        Items = [new RtcpSdesItem { ItemType = RtcpSdesItemType.CName, Value = _cname }],
+    };
+
+    private static IReadOnlyList<RtcpReportBlock> ToReportBlocks(IReadOnlyList<BundledReceptionReportBlock> blocks)
+    {
+        if (blocks.Count == 0)
+            return [];
+
+        var result = new RtcpReportBlock[blocks.Count];
+        for (var i = 0; i < blocks.Count; i++)
+        {
+            var b = blocks[i];
+            result[i] = new RtcpReportBlock
             {
-                Ssrc = sender.Ssrc,
-                Items = [new RtcpSdesItem { ItemType = RtcpSdesItemType.CName, Value = _cname }],
-            });
+                Ssrc = b.Ssrc,
+                FractionLost = b.FractionLost,
+                CumulativePacketsLost = b.CumulativePacketsLost,
+                ExtendedHighestSeq = b.ExtendedHighestSequenceNumber,
+                Jitter = b.InterarrivalJitter,
+                LastSr = b.LastSr,
+                DelaySinceLastSr = b.DelaySinceLastSr,
+            };
         }
 
-        packets.Add(new RtcpSdesPacket { Chunks = chunks });
-
-        var datagram = _codec.Encode(packets);
-        await _sendRtcp(datagram, ct).ConfigureAwait(false);
+        return result;
     }
 
     /// <summary>
