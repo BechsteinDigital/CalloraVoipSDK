@@ -214,6 +214,16 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     }
 
     /// <summary>
+    /// RTCP-derived outbound quality (round-trip time and the loss the peer reports on our media, RFC 3550
+    /// §6.4.1), or null before a session is built. Both metrics inside read null until a matching RTCP report
+    /// has been echoed by the peer.
+    /// </summary>
+    public BundledMediaQuality? GetQuality()
+    {
+        lock (_sync) { return _session?.SnapshotQuality(); }
+    }
+
+    /// <summary>
     /// Creates a local WebRTC offer (RFC 8829 createOffer + setLocalDescription): BUNDLE, DTLS-SRTP,
     /// rtcp-mux, and the sdes:mid extension. It becomes <see cref="LocalDescription"/>; apply the peer's
     /// answer with <see cref="SetRemoteDescriptionAsync"/> to establish media.

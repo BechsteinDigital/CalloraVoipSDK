@@ -224,6 +224,86 @@ public sealed class BundledRtcpReporterTests
         Assert.Empty(sent);
     }
 
+    [Fact]
+    public async Task Each_emitted_sender_report_publishes_its_lsr_and_send_instant_for_rtt()
+    {
+        var senders = new List<BundledSenderReportInfo>
+        {
+            new(Ssrc: 0x0A0A0A0A, PacketCount: 42, OctetCount: 6720, LastRtpTimestamp: 5000),
+            new(Ssrc: 0x0B0B0B0B, PacketCount: 7, OctetCount: 1400, LastRtpTimestamp: 90000),
+        };
+        var now = new DateTimeOffset(2026, 7, 20, 0, 0, 0, TimeSpan.Zero);
+        var expectedMiddle32 = ToMiddle32(ToNtp(now));
+
+        var emitted = new List<(uint Ssrc, uint Middle32, DateTimeOffset SentAt)>();
+        var oneTick = new OneShotDelay();
+        await using var reporter = new BundledRtcpReporter(
+            () => senders,
+            Array.Empty<BundledReceptionReportBlock>,
+            localSsrc: 0x0A0A0A0A,
+            (_, _) => ValueTask.CompletedTask,
+            new RtcpPacketCodec(),
+            Cname,
+            NullLoggerFactory.Instance,
+            delay: oneTick.WaitAsync,
+            utcNow: () => now,
+            onSenderReportSent: (ssrc, middle32, sentAt) => emitted.Add((ssrc, middle32, sentAt)));
+
+        reporter.Start();
+        await oneTick.WaitForFirstTickConsumed();
+
+        Assert.Equal(2, emitted.Count);
+        Assert.All(emitted, e =>
+        {
+            Assert.Equal(expectedMiddle32, e.Middle32);
+            Assert.Equal(now, e.SentAt);
+        });
+        Assert.Contains(emitted, e => e.Ssrc == 0x0A0A0A0A);
+        Assert.Contains(emitted, e => e.Ssrc == 0x0B0B0B0B);
+    }
+
+    [Fact]
+    public async Task More_than_31_reception_blocks_pack_across_sender_reports_and_the_overflow_defers()
+    {
+        // One sending SSRC but 40 inbound sources: a single SR carries at most 31 blocks (the 5-bit RC field),
+        // so this interval emits the first 31 and defers the remaining 9 to the next report.
+        var senders = new List<BundledSenderReportInfo>
+        {
+            new(Ssrc: 0x0A0A0A0A, PacketCount: 1, OctetCount: 100, LastRtpTimestamp: 1000),
+        };
+        var receptionBlocks = Enumerable.Range(0, 40)
+            .Select(i => new BundledReceptionReportBlock(
+                Ssrc: (uint)(0x1000 + i), FractionLost: 0, CumulativePacketsLost: 0,
+                ExtendedHighestSequenceNumber: (uint)i, InterarrivalJitter: 0, LastSr: 0, DelaySinceLastSr: 0))
+            .ToList();
+
+        var sent = new List<byte[]>();
+        var oneTick = new OneShotDelay();
+        await using var reporter = new BundledRtcpReporter(
+            () => senders,
+            () => receptionBlocks,
+            localSsrc: 0x0A0A0A0A,
+            (rtcp, _) => { sent.Add(rtcp.ToArray()); return ValueTask.CompletedTask; },
+            new RtcpPacketCodec(),
+            Cname,
+            NullLoggerFactory.Instance,
+            delay: oneTick.WaitAsync,
+            utcNow: () => DateTimeOffset.UtcNow);
+
+        reporter.Start();
+        await oneTick.WaitForFirstTickConsumed();
+
+        var packets = new RtcpPacketCodec().Decode(Assert.Single(sent));
+        var sr = Assert.Single(packets.OfType<RtcpSenderReport>());
+        Assert.Equal(31, sr.ReportBlocks.Count); // capped at the RC-field limit; the other 9 defer to next interval
+
+        // The 31 carried are the FIRST 31 sources (0x1000..0x101E) — packed in order, no gaps.
+        for (var i = 0; i < 31; i++)
+            Assert.Equal((uint)(0x1000 + i), sr.ReportBlocks[i].Ssrc);
+    }
+
+    private static uint ToMiddle32(ulong ntpTimestamp) => (uint)((ntpTimestamp >> 16) & 0xFFFFFFFF);
+
     private static ulong ToNtp(DateTimeOffset timestamp)
     {
         var ntpEpoch = new DateTimeOffset(1900, 1, 1, 0, 0, 0, TimeSpan.Zero);
