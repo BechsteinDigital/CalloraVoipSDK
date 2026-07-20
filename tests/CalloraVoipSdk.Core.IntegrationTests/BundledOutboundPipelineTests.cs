@@ -1,4 +1,6 @@
 using System.Net;
+using CalloraVoipSdk.Core.Application.Media.Rtcp.Packets;
+using CalloraVoipSdk.Core.Infrastructure.Rtcp.Wire;
 using CalloraVoipSdk.Core.Infrastructure.Rtp;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Session;
@@ -112,6 +114,55 @@ public sealed class BundledOutboundPipelineTests
 
         Assert.NotNull(sent);
         Assert.Equal(AudioSsrc, sent!.Ssrc);
+    }
+
+    [Fact]
+    public async Task Sending_advances_the_tracks_sender_report_counters()
+    {
+        var (outbound, _) = Outbound();
+        outbound.InstallOutboundKey(new SrtpContext(Material()));
+
+        await outbound.SendAsync("audio", new byte[] { 1, 2, 3 });
+        await outbound.SendAsync("audio", new byte[] { 4, 5 });
+
+        var report = Assert.Single(outbound.SnapshotSenderReports()); // only the sent track reports
+        Assert.Equal(AudioSsrc, report.Ssrc);
+        Assert.Equal(2, report.PacketCount);
+        Assert.Equal(5, report.OctetCount);                       // 3 + 2 payload octets, headers excluded
+        Assert.Equal(InitialTimestamp + 160u, report.LastRtpTimestamp); // 2nd packet's ts (cursor advanced by samplesPerPacket)
+    }
+
+    [Fact]
+    public async Task Rtcp_send_fails_closed_until_the_srtcp_key_is_installed()
+    {
+        var (outbound, sender) = Outbound();
+
+        await outbound.SendRtcpAsync(new byte[] { 0x80, 0xC8, 0, 0 }, CancellationToken.None); // suppressed
+
+        Assert.Empty(sender.Datagrams);
+        Assert.Equal(1, outbound.RtcpSuppressedSends);
+        Assert.Equal(0, outbound.RtcpPacketsSent);
+    }
+
+    [Fact]
+    public async Task Rtcp_send_protects_and_leaves_over_the_shared_socket_after_keying()
+    {
+        var (outbound, sender) = Outbound();
+        var receiver = new SrtcpContext(Material());
+        outbound.InstallOutboundRtcpKey(new SrtcpContext(Material()));
+
+        // A minimal well-formed RTCP compound (an empty Receiver Report) is enough to round-trip through SRTCP.
+        var plaintext = new RtcpPacketCodec().Encode(
+            new[] { new RtcpReceiverReport { Ssrc = AudioSsrc } });
+        await outbound.SendRtcpAsync(plaintext, CancellationToken.None);
+
+        Assert.Equal(1, outbound.RtcpPacketsSent);
+        var protectedDatagram = Assert.Single(sender.Datagrams);
+        Assert.NotEqual(plaintext, protectedDatagram); // it left encrypted, not as plaintext
+
+        // The paired inbound SRTCP context recovers the original compound.
+        var recovered = receiver.UnprotectRtcp(protectedDatagram);
+        Assert.Equal(plaintext, recovered);
     }
 
     [Fact]
