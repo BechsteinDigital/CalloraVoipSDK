@@ -37,7 +37,23 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     private readonly string _audioMid;
     private readonly uint _audioSsrc;
     private readonly bool _audioSendEnabled;
+    // RFC 4733 telephone-event (DTMF): the negotiated event payload type on the audio track (null when the
+    // peer did not offer/accept telephone-event — DTMF sends then throw) and the event clock rate used to
+    // convert durations to/from RTP units (RFC 4733 §2.1: it shares the audio stream's timestamp clock).
+    private readonly int? _telephoneEventPayloadType;
+    private readonly int _telephoneEventClockRate;
     private readonly ILogger<BundledMediaSession> _logger;
+
+    // RFC 4733 inbound DTMF reassembly state. Touched only by RaiseAudioReceived, which runs solely on the
+    // single shared receive loop (the inbound pipeline dispatches sequentially per the transport's one receive
+    // task) — no other thread reads or writes it, so no synchronization is needed. Keep it that way: any new
+    // reader from another thread must add explicit synchronization.
+    private bool _hasPendingDtmfEvent;
+    private uint _pendingDtmfSsrc;
+    private uint _pendingDtmfTimestamp;
+    private byte _pendingDtmfToneCode;
+    private ushort _pendingDtmfDurationRtpUnits;
+    private bool _pendingDtmfCompleted;
     // 0 = no relay candidate wired; 1 = wired (at construction from the options factory, or later via
     // AdoptRelay). Guards against wiring the relay path twice (a second indication relay / relay candidate).
     private int _relayWired;
@@ -67,6 +83,14 @@ internal sealed class BundledMediaSession : IAsyncDisposable
 
     /// <summary>Raised with each decrypted inbound audio RTP packet.</summary>
     public event Action<RtpPacket>? AudioReceived;
+
+    /// <summary>
+    /// Raised once per fully received inbound RFC 4733 telephone-event (DTMF), carrying the tone code (0–15)
+    /// and the reassembled tone duration in milliseconds. Fired on the shared receive loop from the event's
+    /// end-of-event packet; telephone-event packets are consumed here and never surfaced on
+    /// <see cref="AudioReceived"/>.
+    /// </summary>
+    public event Action<byte, int>? DtmfReceived;
 
     /// <summary>Raised with each reassembled inbound video frame (frame, RTP timestamp, is-key-frame).</summary>
     public event Action<byte[], uint, bool>? VideoFrameReceived;
@@ -100,6 +124,9 @@ internal sealed class BundledMediaSession : IAsyncDisposable
 
         _audioMid = options.Audio.Mid;
         _audioSendEnabled = options.AudioSendEnabled;
+        _telephoneEventPayloadType =
+            options.Audio.TelephoneEventPayloadType is >= 0 and <= 127 ? options.Audio.TelephoneEventPayloadType : null;
+        _telephoneEventClockRate = options.Audio.TelephoneEventClockRate > 0 ? options.Audio.TelephoneEventClockRate : 8000;
         _logger = loggerFactory.CreateLogger<BundledMediaSession>();
 
         // Inbound: demux the shared socket by the negotiated m-lines' payload types, route each MID.
@@ -229,8 +256,17 @@ internal sealed class BundledMediaSession : IAsyncDisposable
 
     // Dispatches inbound audio to subscribers on the receive loop; a throwing subscriber must not tear
     // down the shared receive loop (the video path is guarded the same way inside BundledVideoTrack).
+    // RFC 4733 telephone-event packets share the audio MID (same demux key) but are DTMF, not audio: they
+    // are reassembled and surfaced on DtmfReceived, never forwarded to AudioReceived.
     private void RaiseAudioReceived(RtpPacket packet)
     {
+        if (_telephoneEventPayloadType is { } telephoneEventPayloadType
+            && packet.PayloadType == telephoneEventPayloadType)
+        {
+            HandleInboundTelephoneEvent(packet);
+            return;
+        }
+
         try
         {
             AudioReceived?.Invoke(packet);
@@ -238,6 +274,75 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unhandled exception in bundled audio AudioReceived handler.");
+        }
+    }
+
+    /// <summary>
+    /// Test seam: injects one inbound audio-MID RTP packet straight into the audio dispatch path
+    /// (<see cref="RaiseAudioReceived"/>), bypassing the socket/SRTP so the telephone-event reassembly and
+    /// audio/DTMF split can be driven deterministically without a live transport. Not part of the media path.
+    /// </summary>
+    internal void InjectInboundAudioForTest(RtpPacket packet)
+    {
+        ArgumentNullException.ThrowIfNull(packet);
+        RaiseAudioReceived(packet);
+    }
+
+    // Reassembles an inbound RFC 4733 telephone-event stream (RFC 4733 §2.5.1.2): a DTMF tone is carried by a
+    // burst of packets sharing one RTP timestamp with a growing duration, the last marked end-of-event (E-bit).
+    // The complete tone is surfaced once, on the first end-of-event packet, with the reassembled duration.
+    // Mirrors the SIP path (RtpCallMediaSession.HandleInboundTelephoneEvent) so both paths behave alike. Runs
+    // solely on the shared receive loop, so the reassembly state needs no synchronization.
+    private void HandleInboundTelephoneEvent(RtpPacket packet)
+    {
+        if (!RtpTelephoneEventCodec.TryParse(
+                packet.Payload.Span, out var toneCode, out var endOfEvent, out var durationRtpUnits))
+        {
+            _logger.LogDebug(
+                "Ignoring malformed telephone-event RTP payload from SSRC={Ssrc:X8} (payloadLength={PayloadLength}).",
+                packet.Ssrc, packet.Payload.Length);
+            return;
+        }
+
+        if (toneCode > 15)
+        {
+            _logger.LogDebug("Ignoring unsupported telephone-event code {ToneCode}; supported range is 0-15.", toneCode);
+            return;
+        }
+
+        var isSameEvent =
+            _hasPendingDtmfEvent &&
+            _pendingDtmfSsrc == packet.Ssrc &&
+            _pendingDtmfTimestamp == packet.Timestamp &&
+            _pendingDtmfToneCode == toneCode;
+
+        if (!isSameEvent)
+        {
+            _hasPendingDtmfEvent = true;
+            _pendingDtmfSsrc = packet.Ssrc;
+            _pendingDtmfTimestamp = packet.Timestamp;
+            _pendingDtmfToneCode = toneCode;
+            _pendingDtmfDurationRtpUnits = durationRtpUnits;
+            _pendingDtmfCompleted = false;
+        }
+        else if (durationRtpUnits > _pendingDtmfDurationRtpUnits)
+        {
+            _pendingDtmfDurationRtpUnits = durationRtpUnits;
+        }
+
+        if (!endOfEvent || _pendingDtmfCompleted)
+            return;
+
+        _pendingDtmfCompleted = true;
+        var durationMs = RtpTelephoneEventCodec.DurationRtpUnitsToMs(_pendingDtmfDurationRtpUnits, _telephoneEventClockRate);
+
+        try
+        {
+            DtmfReceived?.Invoke(toneCode, durationMs);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled exception in bundled DtmfReceived handler.");
         }
     }
 
@@ -485,6 +590,50 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         => _audioSendEnabled
             ? _outbound.SendAsync(_audioMid, payload, marker, cancellationToken: cancellationToken)
             : default;
+
+    /// <summary>
+    /// Sends one out-of-band DTMF tone as an RFC 4733 telephone-event burst on the audio track: an event-start
+    /// packet (marker set, half the duration) followed by two end-of-event packets (E-bit set, full duration —
+    /// the second a reliability retransmission per RFC 4733 §2.5.1.4), all sharing one RTP timestamp on the
+    /// telephone-event payload type. Fails closed like all bundle sends — suppressed until the DTLS handshake
+    /// keys the transport (never leaves as plaintext).
+    /// </summary>
+    /// <param name="toneCode">The DTMF event code (0–9, 10=*, 11=#, 12–15=A–D per RFC 4733 §3.2).</param>
+    /// <param name="durationMs">The tone duration in milliseconds (at least the RFC 4733 floor).</param>
+    /// <param name="cancellationToken">Cancels the send.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="toneCode"/> exceeds 15, or the duration is below the floor.</exception>
+    /// <exception cref="InvalidOperationException">telephone-event was not negotiated for this session.</exception>
+    public async Task SendDtmfAsync(byte toneCode, int durationMs = 160, CancellationToken cancellationToken = default)
+    {
+        if (toneCode > 15)
+            throw new ArgumentOutOfRangeException(nameof(toneCode), toneCode, "DTMF tone code must be between 0 and 15.");
+        if (durationMs < RtpTelephoneEventCodec.MinDurationMs)
+            throw new ArgumentOutOfRangeException(
+                nameof(durationMs), durationMs, $"DTMF duration must be at least {RtpTelephoneEventCodec.MinDurationMs} ms.");
+
+        var payloadType = _telephoneEventPayloadType
+            ?? throw new InvalidOperationException("RTP telephone-event (DTMF) was not negotiated for this WebRTC session.");
+
+        var durationRtpUnits = RtpTelephoneEventCodec.DurationMsToRtpUnits(durationMs, _telephoneEventClockRate);
+        var startDurationRtpUnits = (ushort)Math.Max(1, durationRtpUnits / 2);
+        // The event shares the audio stream's timestamp clock (RFC 4733 §2.1): stamp the whole burst with the
+        // audio track's current timestamp cursor, without advancing it (SendTimestampedAsync leaves it be).
+        var eventTimestamp = _outbound.GetTrackTimestamp(_audioMid);
+
+        var startPayload = RtpTelephoneEventCodec.BuildPayload(toneCode, endOfEvent: false, durationRtpUnits: startDurationRtpUnits);
+        var endPayload = RtpTelephoneEventCodec.BuildPayload(toneCode, endOfEvent: true, durationRtpUnits: durationRtpUnits);
+
+        await _outbound.SendTimestampedAsync(
+            _audioMid, startPayload, marker: true, payloadType: (byte)payloadType, timestamp: eventTimestamp,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+        await _outbound.SendTimestampedAsync(
+            _audioMid, endPayload, marker: false, payloadType: (byte)payloadType, timestamp: eventTimestamp,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+        // RFC 4733 §2.5.1.4 reliability recommendation: repeat the final (end-of-event) packet.
+        await _outbound.SendTimestampedAsync(
+            _audioMid, endPayload, marker: false, payloadType: (byte)payloadType, timestamp: eventTimestamp,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+    }
 
     /// <summary>Packetises and sends one encoded video frame on the (non-simulcast) video track.</summary>
     /// <exception cref="InvalidOperationException">This bundle has no video track, or it is simulcast.</exception>

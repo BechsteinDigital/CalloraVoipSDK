@@ -112,6 +112,7 @@ public sealed class WebRtcRecordingTests
         public event EventHandler<PeerConnectionState>? ConnectionStateChanged { add { } remove { } }
         public event EventHandler<RemoteTrack>? TrackReceived { add { } remove { } }
         public event EventHandler<string>? LocalIceCandidateDiscovered { add { } remove { } }
+        public event EventHandler<DtmfTone>? DtmfReceived { add { } remove { } }
         public string CreateOffer() => string.Empty;
         public Task AddIceCandidateAsync(string candidate, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<string> SetRemoteDescriptionAsync(string remoteSdp, CancellationToken cancellationToken = default) => Task.FromResult(string.Empty);
@@ -120,6 +121,7 @@ public sealed class WebRtcRecordingTests
         public ValueTask SendAudioAsync(ReadOnlyMemory<byte> payload, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
         public Task SendVideoFrameAsync(ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task SendVideoFrameAsync(string rid, ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task SendDtmfAsync(byte toneCode, int durationMs = 160, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 
         private sealed class Detacher(RecordingFakePeer peer) : IDisposable

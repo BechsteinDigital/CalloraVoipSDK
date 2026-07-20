@@ -108,6 +108,7 @@ public sealed class WebRtcSignalingTests
         public event EventHandler<PeerConnectionState>? ConnectionStateChanged;
         public event EventHandler<RemoteTrack>? TrackReceived { add { } remove { } }
         public event EventHandler<string>? LocalIceCandidateDiscovered { add { } remove { } }
+        public event EventHandler<DtmfTone>? DtmfReceived { add { } remove { } }
 
         public string CreateOffer() { OfferCreated = true; return "OFFER"; }
 
@@ -131,6 +132,7 @@ public sealed class WebRtcSignalingTests
         public ValueTask SendAudioAsync(ReadOnlyMemory<byte> payload, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
         public Task SendVideoFrameAsync(ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task SendVideoFrameAsync(string rid, ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task SendDtmfAsync(byte toneCode, int durationMs = 160, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public IDisposable AttachMediaTap(IMediaTap tap) => NoopDisposable.Instance;
         public WebRtcStats GetStats() => new() { ConnectionState = State };
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;

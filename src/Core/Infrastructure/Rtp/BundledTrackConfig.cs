@@ -23,6 +23,21 @@ internal sealed record BundledTrackConfig
     /// </summary>
     public int SamplesPerPacket { get; init; }
 
+    /// <summary>
+    /// The negotiated RFC 4733 telephone-event (DTMF) payload type for an audio m-line, or
+    /// <see langword="null"/> when the peer did not offer/accept telephone-event. When present the session
+    /// can send and receive out-of-band DTMF on this track; when null, a DTMF send is an error. Ignored for
+    /// a video m-line.
+    /// </summary>
+    public int? TelephoneEventPayloadType { get; init; }
+
+    /// <summary>
+    /// The clock rate (Hz) of the negotiated telephone-event line (RFC 4733 §2.1: the event stream shares the
+    /// audio stream's timestamp clock). Used to convert DTMF durations to/from RTP units independently of the
+    /// primary audio codec's clock rate. Defaults to 8000 Hz (the RFC 4733 default event clock).
+    /// </summary>
+    public int TelephoneEventClockRate { get; init; } = 8000;
+
     /// <summary>The video codec name ("H264"/"VP8") for a video m-line, or null for an audio m-line.</summary>
     public string? VideoCodecName { get; init; }
 

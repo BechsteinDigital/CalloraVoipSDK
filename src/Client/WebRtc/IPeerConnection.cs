@@ -39,6 +39,13 @@ public interface IPeerConnection : IAsyncDisposable
     /// </summary>
     event EventHandler<string>? LocalIceCandidateDiscovered;
 
+    /// <summary>
+    /// Raised once per fully received inbound DTMF tone (RFC 4733 telephone-event). Carries the decoded tone
+    /// and duration; DTMF is not surfaced as audio on the remote audio track. Only fires when the negotiation
+    /// included telephone-event.
+    /// </summary>
+    event EventHandler<DtmfTone>? DtmfReceived;
+
     /// <summary>Produces a local WebRTC offer (BUNDLE, DTLS-SRTP, ICE, rtcp-mux) for the app to signal out.</summary>
     string CreateOffer();
 
@@ -78,6 +85,18 @@ public interface IPeerConnection : IAsyncDisposable
 
     /// <summary>Packetises and sends one already-encoded video frame on the peer's video track.</summary>
     Task SendVideoFrameAsync(ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Sends one out-of-band DTMF tone (RFC 4733 telephone-event) on the peer's audio track. A no-op is not
+    /// possible: telephone-event must have been negotiated, otherwise this throws. The tone is streamed as an
+    /// event burst on the audio stream's RTP clock, suppressed until the DTLS handshake keys the transport.
+    /// </summary>
+    /// <param name="toneCode">The DTMF event code (0–9, 10=*, 11=#, 12–15=A–D per RFC 4733 §3.2).</param>
+    /// <param name="durationMs">The tone duration in milliseconds (default 160; at least the RFC 4733 floor).</param>
+    /// <param name="cancellationToken">Cancels the send.</param>
+    /// <exception cref="ArgumentOutOfRangeException">The tone code exceeds 15, or the duration is below the floor.</exception>
+    /// <exception cref="InvalidOperationException">No media session yet, or telephone-event was not negotiated.</exception>
+    Task SendDtmfAsync(byte toneCode, int durationMs = 160, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Packetises and sends one already-encoded video frame on a simulcast <paramref name="rid"/> layer
