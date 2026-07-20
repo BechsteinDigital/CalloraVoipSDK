@@ -14,11 +14,12 @@ namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
 /// The compound's first packet carries the reception report blocks (one per active inbound SSRC:
 /// fraction-lost, cumulative-lost, extended-highest-seq, interarrival jitter, LSR, DLSR — RFC 3550 §6.4.1):
 /// when this endpoint is sending, a <see cref="RtcpSenderReport"/> per sending SSRC carries those blocks
-/// (the first SR carries them all, distributing across SRs if the count exceeds the 31-block SR limit);
-/// when this endpoint only receives, a single <see cref="RtcpReceiverReport"/> (RFC 3550 §6.4.2) carries
-/// them. Either way a single SDES packet with the session CNAME follows (RFC 3550 §6.5 — every compound
-/// RTCP packet must carry a CNAME). When there is nothing to say (no sending track and no inbound source),
-/// nothing is emitted.
+/// (packed 31 per report, the 5-bit RC-field limit); when this endpoint only receives, a
+/// <see cref="RtcpReceiverReport"/> (RFC 3550 §6.4.2) does. Any blocks beyond what the leading SR(s)/RR hold
+/// go into additional Receiver Reports in the same compound (31 per packet, CF-004d), so every inbound source
+/// is reported each interval and no fraction-lost baseline is silently dropped. A single SDES packet with the
+/// session CNAME follows (RFC 3550 §6.5 — every compound RTCP packet must carry a CNAME). When there is
+/// nothing to say (no sending track and no inbound source), nothing is emitted.
 /// </para>
 /// <para>
 /// This reporter sends valid report blocks and the LSR/DLSR needed for the peer to compute round-trip time,
@@ -194,16 +195,27 @@ internal sealed class BundledRtcpReporter : IAsyncDisposable
         var packets = new List<RtcpPacket>(Math.Max(senders.Count, 1) + 1);
         var sdesChunks = new List<RtcpSdesChunk>();
 
+        int blocksReported;
         if (senders.Count > 0)
         {
-            BuildSenderReports(senders, receptionBlocks, ntp, now, packets, sdesChunks);
+            blocksReported = BuildSenderReports(senders, receptionBlocks, ntp, now, packets, sdesChunks);
         }
         else
         {
-            // Receive-only: a single Receiver Report (RFC 3550 §6.4.2) keyed by the local SSRC carries the blocks.
-            packets.Add(new RtcpReceiverReport { Ssrc = _localSsrc, ReportBlocks = receptionBlocks });
+            // Receive-only: lead with a Receiver Report (RFC 3550 §6.4.2) keyed by the local SSRC, carrying the
+            // first block page (up to 31).
+            var lead = TakeBlockPage(receptionBlocks, 0);
+            packets.Add(new RtcpReceiverReport { Ssrc = _localSsrc, ReportBlocks = lead });
             sdesChunks.Add(SdesChunk(_localSsrc));
+            blocksReported = lead.Count;
         }
+
+        // RFC 3550 §6.1/§6.4.1: a single SR/RR holds at most 31 reception blocks (the 5-bit RC field). Any
+        // blocks the leading SR(s)/RR could not hold go into additional Receiver Reports in the SAME compound,
+        // 31 per packet, so every inbound source is reported this interval. Its fraction-lost baseline was
+        // already advanced by SnapshotReportBlocks, so leaving it out would silently drop that interval's loss.
+        for (var offset = blocksReported; offset < receptionBlocks.Count; offset += MaxReportBlocksPerReport)
+            packets.Add(new RtcpReceiverReport { Ssrc = _localSsrc, ReportBlocks = TakeBlockPage(receptionBlocks, offset) });
 
         packets.Add(new RtcpSdesPacket { Chunks = sdesChunks });
 
@@ -218,11 +230,11 @@ internal sealed class BundledRtcpReporter : IAsyncDisposable
     }
 
     // One Sender Report per sending SSRC (RFC 3550 §6.4.1). The reception blocks are attached to the SRs,
-    // packed 31-per-report (the RC field limit) so a session receiving more than 31 sources still emits every
-    // block; the first SR takes the first 31, the next SR the following 31, and so on. Any block left over
-    // after the SRs are full (more inbound sources than 31×senders) is dropped this interval and reported the
-    // next — an edge case far outside a normal BUNDLE session's stream count.
-    private void BuildSenderReports(
+    // packed 31-per-report (the RC field limit); the first SR takes the first 31, the next SR the following 31,
+    // and so on. Returns the number of reception blocks the SRs carried; any remainder (more inbound sources
+    // than 31×senders) is emitted by the caller as additional Receiver Reports in the same compound (CF-004d),
+    // so no source's fraction-lost interval — already advanced by the snapshot — goes unreported.
+    private int BuildSenderReports(
         IReadOnlyList<BundledSenderReportInfo> senders,
         IReadOnlyList<RtcpReportBlock> receptionBlocks,
         ulong ntp,
@@ -234,11 +246,8 @@ internal sealed class BundledRtcpReporter : IAsyncDisposable
         var blockOffset = 0;
         foreach (var sender in senders)
         {
-            var take = Math.Min(MaxReportBlocksPerReport, receptionBlocks.Count - blockOffset);
-            IReadOnlyList<RtcpReportBlock> blocks = take > 0
-                ? receptionBlocks.Skip(blockOffset).Take(take).ToArray()
-                : [];
-            blockOffset += take;
+            var blocks = TakeBlockPage(receptionBlocks, blockOffset);
+            blockOffset += blocks.Count;
 
             packets.Add(new RtcpSenderReport
             {
@@ -257,6 +266,21 @@ internal sealed class BundledRtcpReporter : IAsyncDisposable
             // derive RTT (RFC 3550 §6.4.1). All SRs in one compound share the same NTP timestamp/send instant.
             _onSenderReportSent?.Invoke(sender.Ssrc, srMiddle32, now);
         }
+
+        return blockOffset;
+    }
+
+    // One page of at most 31 reception blocks (RFC 3550 §6.4.1 RC-field limit) starting at <paramref name="offset"/>.
+    private static IReadOnlyList<RtcpReportBlock> TakeBlockPage(IReadOnlyList<RtcpReportBlock> blocks, int offset)
+    {
+        var count = Math.Min(MaxReportBlocksPerReport, blocks.Count - offset);
+        if (count <= 0)
+            return [];
+
+        var page = new RtcpReportBlock[count];
+        for (var i = 0; i < count; i++)
+            page[i] = blocks[offset + i];
+        return page;
     }
 
     private RtcpSdesChunk SdesChunk(uint ssrc) => new()
