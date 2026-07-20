@@ -39,15 +39,24 @@ public sealed class WebRtcStats
     /// <summary>Incoming bitrate in bits/second since the previous snapshot; <see langword="null"/> on the first snapshot.</summary>
     public double? IncomingBitrateBps { get; init; }
 
-    // ── Quality (RTCP-derived) — populated by a later slice ──────────────────────────
+    // ── Quality (RTCP-derived) ───────────────────────────────────────────────────────
 
-    /// <summary>Fraction of packets lost (0..1), or <see langword="null"/> until RTCP quality is wired.</summary>
+    /// <summary>
+    /// Fraction of our outbound packets the peer reports lost (0..1) via its RTCP reception report
+    /// (RFC 3550 §6.4.1), or <see langword="null"/> until the peer has reported on our media.
+    /// </summary>
     public double? PacketLoss { get; init; }
 
-    /// <summary>Interarrival jitter in milliseconds, or <see langword="null"/> until RTCP quality is wired.</summary>
+    /// <summary>
+    /// Interarrival jitter in milliseconds, or <see langword="null"/> — not yet surfaced on the bundle path
+    /// (the peer-reported jitter is in RTP timestamp units and needs the per-stream clock rate to convert).
+    /// </summary>
     public double? JitterMs { get; init; }
 
-    /// <summary>Round-trip time in milliseconds, or <see langword="null"/> until RTCP quality is wired.</summary>
+    /// <summary>
+    /// Round-trip time in milliseconds derived from the peer's echoed LSR/DLSR (RFC 3550 §6.4.1), or
+    /// <see langword="null"/> until a report block echoing one of our Sender Reports has arrived.
+    /// </summary>
     public double? RoundTripTimeMs { get; init; }
 
     // ── Video — populated by a later slice ───────────────────────────────────────────

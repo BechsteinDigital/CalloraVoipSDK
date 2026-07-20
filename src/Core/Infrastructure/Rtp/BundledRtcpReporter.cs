@@ -21,10 +21,11 @@ namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
 /// nothing is emitted.
 /// </para>
 /// <para>
-/// This slice sends valid report blocks and the LSR/DLSR needed for the peer to compute round-trip time.
-/// Consuming inbound report blocks to compute our own RTT and publish a public quality snapshot is a later
-/// slice. The send path fails closed until the DTLS-SRTP handshake installs the outbound SRTCP key, so
-/// starting the reporter before keying is safe — the early ticks are simply suppressed.
+/// This reporter sends valid report blocks and the LSR/DLSR needed for the peer to compute round-trip time,
+/// and — via <c>onSenderReportSent</c> — publishes each SR's LSR and send instant so the session's outbound
+/// quality tracker can match the peer's echoed report and derive our own RTT (RFC 3550 §6.4.1). The send path
+/// fails closed until the DTLS-SRTP handshake installs the outbound SRTCP key, so starting the reporter before
+/// keying is safe — the early ticks are simply suppressed.
 /// </para>
 /// <para>
 /// Patterned on the TURN allocation refresh loop: the clock and delay are injected so the loop is
@@ -44,6 +45,7 @@ internal sealed class BundledRtcpReporter : IAsyncDisposable
     private readonly Func<IReadOnlyList<BundledSenderReportInfo>> _snapshotSenderReports;
     private readonly Func<IReadOnlyList<BundledReceptionReportBlock>> _snapshotReceptionBlocks;
     private readonly uint _localSsrc;
+    private readonly Action<uint, uint, DateTimeOffset>? _onSenderReportSent;
     private readonly Func<ReadOnlyMemory<byte>, CancellationToken, ValueTask> _sendRtcp;
     private readonly IRtcpPacketCodec _codec;
     private readonly string _cname;
@@ -76,6 +78,11 @@ internal sealed class BundledRtcpReporter : IAsyncDisposable
     /// <param name="interval">The reporting interval; defaults to 5 seconds.</param>
     /// <param name="delay">The delay primitive; injectable for deterministic tests.</param>
     /// <param name="utcNow">The wall clock read for the SR NTP timestamp; injectable for deterministic tests.</param>
+    /// <param name="onSenderReportSent">
+    /// Optional callback invoked for each emitted Sender Report with (sending SSRC, the SR's LSR — the middle 32
+    /// bits of its NTP timestamp — , the wall-clock send instant). Feeds the outbound quality tracker's RTT
+    /// computation (RFC 3550 §6.4.1); null when RTT is not tracked.
+    /// </param>
     public BundledRtcpReporter(
         Func<IReadOnlyList<BundledSenderReportInfo>> snapshotSenderReports,
         Func<IReadOnlyList<BundledReceptionReportBlock>> snapshotReceptionBlocks,
@@ -86,11 +93,13 @@ internal sealed class BundledRtcpReporter : IAsyncDisposable
         ILoggerFactory loggerFactory,
         TimeSpan? interval = null,
         Func<TimeSpan, CancellationToken, Task>? delay = null,
-        Func<DateTimeOffset>? utcNow = null)
+        Func<DateTimeOffset>? utcNow = null,
+        Action<uint, uint, DateTimeOffset>? onSenderReportSent = null)
     {
         _snapshotSenderReports = snapshotSenderReports ?? throw new ArgumentNullException(nameof(snapshotSenderReports));
         _snapshotReceptionBlocks = snapshotReceptionBlocks ?? throw new ArgumentNullException(nameof(snapshotReceptionBlocks));
         _localSsrc = localSsrc;
+        _onSenderReportSent = onSenderReportSent;
         _sendRtcp = sendRtcp ?? throw new ArgumentNullException(nameof(sendRtcp));
         _codec = codec ?? throw new ArgumentNullException(nameof(codec));
         _cname = cname ?? throw new ArgumentNullException(nameof(cname));
@@ -151,13 +160,14 @@ internal sealed class BundledRtcpReporter : IAsyncDisposable
         if (senders.Count == 0 && receptionBlocks.Count == 0)
             return;
 
-        var ntp = ToNtpTimestamp(_utcNow());
+        var now = _utcNow();
+        var ntp = ToNtpTimestamp(now);
         var packets = new List<RtcpPacket>(Math.Max(senders.Count, 1) + 1);
         var sdesChunks = new List<RtcpSdesChunk>();
 
         if (senders.Count > 0)
         {
-            BuildSenderReports(senders, receptionBlocks, ntp, packets, sdesChunks);
+            BuildSenderReports(senders, receptionBlocks, ntp, now, packets, sdesChunks);
         }
         else
         {
@@ -181,9 +191,11 @@ internal sealed class BundledRtcpReporter : IAsyncDisposable
         IReadOnlyList<BundledSenderReportInfo> senders,
         IReadOnlyList<RtcpReportBlock> receptionBlocks,
         ulong ntp,
+        DateTimeOffset now,
         List<RtcpPacket> packets,
         List<RtcpSdesChunk> sdesChunks)
     {
+        var srMiddle32 = ToMiddle32Bits(ntp);
         var blockOffset = 0;
         foreach (var sender in senders)
         {
@@ -205,6 +217,10 @@ internal sealed class BundledRtcpReporter : IAsyncDisposable
                 ReportBlocks = blocks,
             });
             sdesChunks.Add(SdesChunk(sender.Ssrc));
+
+            // Publish this SR's LSR + send instant so the quality tracker can match a peer's echoed report and
+            // derive RTT (RFC 3550 §6.4.1). All SRs in one compound share the same NTP timestamp/send instant.
+            _onSenderReportSent?.Invoke(sender.Ssrc, srMiddle32, now);
         }
     }
 
@@ -272,4 +288,7 @@ internal sealed class BundledRtcpReporter : IAsyncDisposable
         var fraction = (ulong)((totalSeconds - wholeSeconds) * 4_294_967_296.0);
         return (seconds << 32) | fraction;
     }
+
+    // RFC 3550 §6.4.1: the LSR a peer echoes is the middle 32 bits of the sender's 64-bit NTP timestamp.
+    private static uint ToMiddle32Bits(ulong ntpTimestamp) => (uint)((ntpTimestamp >> 16) & 0xFFFFFFFF);
 }

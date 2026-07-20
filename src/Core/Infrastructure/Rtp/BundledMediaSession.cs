@@ -30,6 +30,7 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     private readonly BundledIceControl _ice;
     private readonly BundledRtcpReporter _rtcpReporter;
     private readonly BundledInboundReceptionStats _receptionStats;
+    private readonly BundledOutboundQualityTracker _outboundQuality;
     private readonly IRtcpPacketCodec _rtcpCodec;
     private readonly BundledVideoTrack? _video;
     private readonly string _audioMid;
@@ -115,6 +116,9 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         // Per-SSRC inbound reception statistics (RFC 3550 §6.4.1) feed the periodic RTCP report blocks: the
         // inbound pipeline records each decoded RTP packet, and inbound SRs feed LSR/DLSR (subscribed below).
         _receptionStats = new BundledInboundReceptionStats();
+        // Consumes the reception blocks the peer returns about our outbound streams to derive RTT and the loss
+        // the peer sees (RFC 3550 §6.4.1): fed by the reporter's SR send instants and by inbound RR/SR blocks.
+        _outboundQuality = new BundledOutboundQualityTracker();
         _rtcpCodec = new RtcpPacketCodec();
 
         _inbound = new BundledInboundPipeline(
@@ -208,7 +212,9 @@ internal sealed class BundledMediaSession : IAsyncDisposable
             _outbound.SendRtcpAsync,
             _rtcpCodec,
             $"voipsdk-{Environment.MachineName}",
-            loggerFactory);
+            loggerFactory,
+            // Record each emitted SR's LSR + send instant so a peer's echoed report yields RTT (RFC 3550 §6.4.1).
+            onSenderReportSent: _outboundQuality.RecordLocalSenderReport);
 
         _audioSsrc = options.Audio.Ssrc;
         // A relay candidate wired at construction (offerer path) closes the door on a later AdoptRelay.
@@ -233,11 +239,15 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         }
     }
 
-    // Decodes an inbound decrypted RTCP compound and records every Sender Report's LSR (middle 32 NTP bits)
-    // and arrival per sender SSRC (RFC 3550 §6.4.1), so the next report echoes LSR/DLSR back for RTT. Runs on
-    // the receive loop; a malformed compound must not tear it down, so decode failures are swallowed with a log.
+    // Decodes an inbound decrypted RTCP compound (RFC 3550 §6.4.1). Two directions: every Sender Report's LSR
+    // (middle 32 NTP bits) + arrival is recorded per sender SSRC so our next report echoes LSR/DLSR back for the
+    // peer's RTT; and every report block the peer sends about OUR outbound streams (carried in an inbound SR or
+    // RR) feeds the outbound quality tracker to derive our own RTT and the loss the peer sees. Runs on the
+    // receive loop; a malformed compound must not tear it down, so decode failures are swallowed with a log.
     private void OnControlPacketReceived(byte[] rtcp)
     {
+        var arrival = DateTimeOffset.UtcNow;
+
         IReadOnlyList<RtcpPacket> packets;
         try
         {
@@ -251,9 +261,25 @@ internal sealed class BundledMediaSession : IAsyncDisposable
 
         foreach (var packet in packets)
         {
-            if (packet is RtcpSenderReport senderReport)
-                _receptionStats.RecordSenderReport(senderReport.Ssrc, senderReport.NtpTimestamp);
+            switch (packet)
+            {
+                case RtcpSenderReport senderReport:
+                    _receptionStats.RecordSenderReport(senderReport.Ssrc, senderReport.NtpTimestamp);
+                    RecordRemoteReportBlocks(senderReport.ReportBlocks, arrival);
+                    break;
+                case RtcpReceiverReport receiverReport:
+                    RecordRemoteReportBlocks(receiverReport.ReportBlocks, arrival);
+                    break;
+            }
         }
+    }
+
+    // Feeds the peer's reception report blocks (about our outbound streams) into the outbound quality tracker.
+    private void RecordRemoteReportBlocks(IReadOnlyList<RtcpReportBlock> blocks, DateTimeOffset arrival)
+    {
+        foreach (var block in blocks)
+            _outboundQuality.RecordRemoteReportBlock(
+                block.Ssrc, block.FractionLost, block.LastSr, block.DelaySinceLastSr, arrival);
     }
 
     private static BundledOutboundTrack BuildOutboundTrack(BundledMediaSessionOptions options, BundledTrackConfig track) =>
@@ -427,6 +453,12 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         _outbound.PacketsSent, _outbound.BytesSent, _outbound.SuppressedSends,
         _inbound.RtpPacketsReceived, _inbound.RtpBytesReceived, _inbound.DroppedDatagrams,
         _video?.FramesReceived, _video?.KeyFrames);
+
+    /// <summary>
+    /// Point-in-time RTCP-derived outbound quality (RFC 3550 §6.4.1): the round-trip time and the loss the peer
+    /// reports on our media. Both read <see langword="null"/> until the peer has echoed a matching report.
+    /// </summary>
+    public BundledMediaQuality SnapshotQuality() => _outboundQuality.Snapshot();
 
     /// <summary>Starts the shared receive loop, the ICE consent loop, and the DTLS handshake.</summary>
     public async Task StartAsync(CancellationToken cancellationToken = default)

@@ -100,6 +100,10 @@ internal sealed class PeerConnection : IPeerConnection
             framesPerSecond = s.FramesReceived is { } frames ? _frameRate.Sample(frames, nowTicks) : null;
         }
 
+        // RTCP-derived outbound quality (RFC 3550 §6.4.1): round-trip time and the loss the peer reports on our
+        // media. Null until the peer has echoed a matching report, so early snapshots report null, not a zero.
+        var quality = _peer.GetQuality();
+
         return new WebRtcStats
         {
             ConnectionState = state,
@@ -111,6 +115,8 @@ internal sealed class PeerConnection : IPeerConnection
             DroppedDatagrams = s.DroppedDatagrams,
             OutgoingBitrateBps = outgoing,
             IncomingBitrateBps = incoming,
+            PacketLoss = quality?.RemotePacketLossFraction,
+            RoundTripTimeMs = quality?.RoundTripTimeMs,
             // ICE: the bundle uses single-candidate selection (no full pairing), so the "selected pair" is
             // the bound local endpoint and the resolved remote endpoint; the state is derived from
             // connectivity (ICE consent + DTLS drive the peer state).
@@ -119,8 +125,8 @@ internal sealed class PeerConnection : IPeerConnection
             SelectedRemoteCandidate = _peer.RemoteMediaEndPoint?.ToString(),
             FramesPerSecond = framesPerSecond,
             KeyFrames = s.KeyFrames,
-            // Quality (loss/jitter/RTT), dropped frames, NACK/PLI/FIR and available-bitrate stay null until
-            // their subsystems (RTCP quality, bundle video feedback, transport-cc) are wired.
+            // Jitter (needs the per-stream clock rate to express in ms), dropped frames, NACK/PLI/FIR and
+            // available-bitrate stay null until their subsystems (bundle video feedback, transport-cc) are wired.
         };
     }
 
