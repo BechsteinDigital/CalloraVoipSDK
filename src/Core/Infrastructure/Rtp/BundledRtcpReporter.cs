@@ -253,7 +253,7 @@ internal sealed class BundledRtcpReporter : IAsyncDisposable
             {
                 Ssrc = sender.Ssrc,
                 NtpTimestamp = ntp,
-                RtpTimestamp = sender.LastRtpTimestamp,
+                RtpTimestamp = ExtrapolateRtpTimestamp(sender, now),
                 // The SR counters are 32-bit on the wire (RFC 3550 §6.4.1); the tracked longs are cumulative
                 // and, in practice, well within range — wrap deliberately as the RFC's counters do.
                 SenderPacketCount = unchecked((uint)sender.PacketCount),
@@ -268,6 +268,27 @@ internal sealed class BundledRtcpReporter : IAsyncDisposable
         }
 
         return blockOffset;
+    }
+
+    // RFC 3550 §6.4.1: the SR's RTP timestamp must correspond to the same instant as its NTP timestamp — the
+    // report instant, NOT the last packet sent (which drifts during a send pause/DTX). Extrapolate the last sent
+    // RTP timestamp forward onto the report instant on the track's clock:
+    //   srRtpTs = lastRtpTs + round((reportInstant − lastRtpTsAtUtc) × clockRate)
+    // The add wraps as RTP timestamps do (§5.1). Falls back to the raw last timestamp when no clock rate or send
+    // instant is available (CF-004e) — never worse than the previous behaviour.
+    private static uint ExtrapolateRtpTimestamp(BundledSenderReportInfo sender, DateTimeOffset reportInstant)
+    {
+        if (sender.ClockRate == 0 || sender.LastRtpTimestampAtUtc == default)
+            return sender.LastRtpTimestamp;
+
+        var elapsedSeconds = (reportInstant - sender.LastRtpTimestampAtUtc).TotalSeconds;
+        // A report instant before the last send (clock skew / an out-of-order clock read) would extrapolate
+        // backwards; clamp to the anchor rather than emit a timestamp earlier than the last packet's.
+        if (elapsedSeconds <= 0)
+            return sender.LastRtpTimestamp;
+
+        var advance = (long)Math.Round(elapsedSeconds * sender.ClockRate, MidpointRounding.AwayFromZero);
+        return unchecked(sender.LastRtpTimestamp + (uint)advance);
     }
 
     // One page of at most 31 reception blocks (RFC 3550 §6.4.1 RC-field limit) starting at <paramref name="offset"/>.

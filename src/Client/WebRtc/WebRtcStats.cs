@@ -48,8 +48,10 @@ public sealed class WebRtcStats
     public double? PacketLoss { get; init; }
 
     /// <summary>
-    /// Interarrival jitter in milliseconds, or <see langword="null"/> — not yet surfaced on the bundle path
-    /// (the peer-reported jitter is in RTP timestamp units and needs the per-stream clock rate to convert).
+    /// Our local receive-side interarrival jitter in milliseconds (RFC 3550 §A.8) — the WebRTC
+    /// <c>getStats</c> inbound-rtp jitter — or <see langword="null"/> until an inbound clock rate is established
+    /// (no media received yet). Converted from RTP timestamp units with the negotiated audio clock rate. When
+    /// several inbound sources are active the worst is reported; per-SSRC jitter is a later slice.
     /// </summary>
     public double? JitterMs { get; init; }
 

@@ -15,6 +15,24 @@ internal sealed class BundledSourceReceptionState
 {
     private readonly object _sync = new();
 
+    // The negotiated media clock rate for this source (Hz), 0 when unknown. When known it drives the §A.8
+    // transit estimate directly; when 0 the rate is inferred from the first usable packet pair as a fallback.
+    private readonly uint _negotiatedClockRate;
+
+    /// <summary>
+    /// Creates the reception state for one inbound source.
+    /// </summary>
+    /// <param name="negotiatedClockRate">
+    /// The source's negotiated RTP clock rate (Hz) from the SDP codec, or 0 when it is not known. A known rate
+    /// is used directly for the RFC 3550 §A.8 interarrival jitter (correct under network jitter, which the
+    /// per-pair inference is not); 0 falls back to inferring the rate from the first usable packet pair.
+    /// </param>
+    public BundledSourceReceptionState(uint negotiatedClockRate = 0)
+    {
+        _negotiatedClockRate = negotiatedClockRate;
+        _clockRate = negotiatedClockRate;
+    }
+
     // Sequence / loss tracking (RFC 3550 §A.1 / §A.3), mirrored from InboundRtpStatistics.
     private bool _initialized;
     private ushort _baseSequence;
@@ -115,6 +133,24 @@ internal sealed class BundledSourceReceptionState
         }
     }
 
+    /// <summary>
+    /// The current smoothed interarrival jitter (RFC 3550 §A.8) of this source expressed in milliseconds, or
+    /// <see langword="null"/> before a clock rate is established (no RTP counted, or an inferred rate not yet
+    /// settled). The on-the-wire jitter is in RTP timestamp units; this converts it as
+    /// <c>jitterRtpUnits × 1000 / clockRate</c>, the same conversion the SIP path applies to a peer's reported
+    /// jitter. This is our local receive-side jitter (the browser <c>getStats</c> inbound-rtp jitter), not the
+    /// outbound/RTT metrics.
+    /// </summary>
+    public double? SnapshotJitterMs()
+    {
+        lock (_sync)
+        {
+            if (_clockRate == 0)
+                return null;
+            return _jitter * 1000.0 / _clockRate;
+        }
+    }
+
     private void Reset(ushort firstSequenceNumber)
     {
         _initialized = true;
@@ -127,9 +163,10 @@ internal sealed class BundledSourceReceptionState
     }
 
     // RFC 3550 §A.8 interarrival jitter. D(i-1,i) is the difference of the RTP-timestamp span and the
-    // wall-clock span between two packets, both in RTP units; J += (|D| - J) / 16. The clock rate is inferred
-    // from the first two packets' RTP-timestamp/arrival ratio so no per-codec configuration is needed — a
-    // sane approximation for a smoothed estimate, and correct once the stream's clock is established.
+    // wall-clock span between two packets, both in RTP units; J += (|D| - J) / 16. The clock rate is the
+    // negotiated one (from the SDP codec) when known — correct even under network jitter, which the previous
+    // per-pair inference is not (a jittered first pair would bake a wrong rate into every later estimate). Only
+    // when no rate was negotiated does it fall back to inferring the rate from the first usable packet pair.
     private void UpdateJitter(uint rtpTimestamp, DateTimeOffset arrival)
     {
         if (!_hasTransit)

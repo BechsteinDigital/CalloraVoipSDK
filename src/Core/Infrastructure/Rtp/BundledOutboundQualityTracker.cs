@@ -94,9 +94,10 @@ internal sealed class BundledOutboundQualityTracker
 }
 
 /// <summary>
-/// A snapshot of the RTCP-derived outbound quality of a bundled media session (RFC 3550 §6.4.1): the
-/// round-trip time and the loss the peer reports on our media. Both are <see langword="null"/> until the peer
-/// has returned a matching reception report.
+/// A snapshot of a bundled media session's derived quality: the RTCP outbound metrics (RFC 3550 §6.4.1 —
+/// round-trip time and the loss the peer reports on our media) plus our own local receive-side interarrival
+/// jitter (RFC 3550 §A.8). Every field is <see langword="null"/> until its metric is available: RTT/loss until
+/// the peer returns a matching reception report, jitter until an inbound clock rate is established.
 /// </summary>
 /// <param name="RoundTripTimeMs">
 /// The round-trip time in milliseconds derived from the peer's echoed LSR/DLSR, or <see langword="null"/>
@@ -106,6 +107,12 @@ internal sealed class BundledOutboundQualityTracker
 /// The fraction of our packets the peer reports lost (0..1), or <see langword="null"/> before the peer has
 /// reported on our media.
 /// </param>
+/// <param name="JitterMs">
+/// Our local receive-side interarrival jitter in milliseconds (RFC 3550 §A.8) — the browser
+/// <c>getStats</c> inbound-rtp jitter — or <see langword="null"/> before an inbound clock rate is established.
+/// Aggregated across inbound sources (the worst) for the single scalar surfaced today; per-SSRC is CF-004f.
+/// </param>
 internal readonly record struct BundledMediaQuality(
     double? RoundTripTimeMs,
-    double? RemotePacketLossFraction);
+    double? RemotePacketLossFraction,
+    double? JitterMs = null);

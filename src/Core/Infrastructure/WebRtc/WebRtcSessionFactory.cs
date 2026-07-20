@@ -119,6 +119,7 @@ internal static class WebRtcSessionFactory
             Ssrc = audioSsrc,
             PayloadType = (byte)audioCodec.PayloadType,
             SamplesPerPacket = clockRate * 20 / 1000, // 20 ms frames
+            ClockRate = clockRate, // the negotiated audio clock (CF-004e: §A.8 jitter + SR RTP extrapolation)
             TelephoneEventPayloadType = telephoneEvent?.PayloadType,
             TelephoneEventClockRate = telephoneEvent?.ClockRate is > 0 and { } teClock ? teClock : 8000,
         };

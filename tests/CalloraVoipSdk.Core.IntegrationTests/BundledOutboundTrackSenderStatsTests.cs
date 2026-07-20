@@ -46,6 +46,36 @@ public sealed class BundledOutboundTrackSenderStatsTests
         Assert.Throws<ArgumentOutOfRangeException>(() => track.RecordSent(-1, 0));
     }
 
+    [Fact]
+    public void The_snapshot_carries_the_send_instant_and_clock_rate_for_sr_extrapolation()
+    {
+        var sentAt = new DateTimeOffset(2026, 7, 20, 0, 0, 0, TimeSpan.Zero);
+        var track = new BundledOutboundTrack(
+            ssrc: 0x0A0A0A0A, defaultPayloadType: 0, samplesPerPacket: 160,
+            new RtpOutboundHeaderExtensionStamper(transportWideCcExtensionId: null, MidExtId, "audio"),
+            initialSequenceNumber: 1000, initialTimestamp: 5000,
+            clockRate: 48000, utcNow: () => sentAt);
+
+        track.RecordSent(payloadOctetCount: 160, rtpTimestamp: 5160);
+
+        var snapshot = track.Snapshot();
+        Assert.NotNull(snapshot);
+        Assert.Equal(5160u, snapshot.Value.LastRtpTimestamp);
+        Assert.Equal(sentAt, snapshot.Value.LastRtpTimestampAtUtc);
+        Assert.Equal(48000u, snapshot.Value.ClockRate);
+    }
+
+    [Fact]
+    public void Without_a_clock_the_snapshot_leaves_the_extrapolation_fields_unset()
+    {
+        var track = Track();
+        track.RecordSent(payloadOctetCount: 160, rtpTimestamp: 5160);
+
+        var snapshot = track.Snapshot();
+        Assert.NotNull(snapshot);
+        Assert.Equal(0u, snapshot.Value.ClockRate); // default clockRate → reporter uses the raw last timestamp
+    }
+
     private static BundledOutboundTrack Track() =>
         new(ssrc: 0x0A0A0A0A, defaultPayloadType: 0, samplesPerPacket: 160,
             new RtpOutboundHeaderExtensionStamper(transportWideCcExtensionId: null, MidExtId, "audio"),

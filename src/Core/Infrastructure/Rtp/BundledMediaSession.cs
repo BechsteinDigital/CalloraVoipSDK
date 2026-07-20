@@ -143,7 +143,11 @@ internal sealed class BundledMediaSession : IAsyncDisposable
 
         // Per-SSRC inbound reception statistics (RFC 3550 §6.4.1) feed the periodic RTCP report blocks: the
         // inbound pipeline records each decoded RTP packet, and inbound SRs feed LSR/DLSR (subscribed below).
-        _receptionStats = new BundledInboundReceptionStats();
+        // The negotiated audio clock seeds the primary audio source's §A.8 jitter so it is exact (not inferred)
+        // and convertible to milliseconds for the quality snapshot (CF-004e).
+        _receptionStats = new BundledInboundReceptionStats(
+            audioSsrc: options.Audio.Ssrc,
+            audioClockRate: options.Audio.ClockRate > 0 ? (uint)options.Audio.ClockRate : 0u);
         // Consumes the reception blocks the peer returns about our outbound streams to derive RTT and the loss
         // the peer sees (RFC 3550 §6.4.1): fed by the reporter's SR send instants and by inbound RR/SR blocks.
         _outboundQuality = new BundledOutboundQualityTracker();
@@ -389,10 +393,16 @@ internal sealed class BundledMediaSession : IAsyncDisposable
                 block.Ssrc, block.FractionLost, block.LastSr, block.DelaySinceLastSr, arrival);
     }
 
+    // The RTP clock rate used for the SR RTP-timestamp extrapolation (CF-004e). Audio uses its negotiated codec
+    // clock (from the track config); video uses the fixed 90 kHz RTP clock (RFC 3551 §5) — the bundle video
+    // track config does not carry a per-codec rate, and all supported video codecs (H.264/VP8) run at 90 kHz.
+    private const uint VideoRtpClockRate = 90000;
+
     private static BundledOutboundTrack BuildOutboundTrack(BundledMediaSessionOptions options, BundledTrackConfig track) =>
         new(track.Ssrc, track.PayloadType, track.SamplesPerPacket,
             new RtpOutboundHeaderExtensionStamper(transportWideCcExtensionId: null, options.MidExtensionId, track.Mid),
-            options.InitialSequenceNumber, options.InitialTimestamp);
+            options.InitialSequenceNumber, options.InitialTimestamp,
+            clockRate: track.VideoCodecName is null ? (uint)Math.Max(0, track.ClockRate) : VideoRtpClockRate);
 
     // One simulcast encoding's outbound stream: its own SSRC, the shared video payload type, and a stamper
     // that marks every packet with the MID and this encoding's RID (RFC 8852). Video packets carry an
@@ -402,7 +412,8 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         new(ssrc, payloadType, samplesPerPacket: 0,
             new RtpOutboundHeaderExtensionStamper(
                 transportWideCcExtensionId: null, options.MidExtensionId, mid, ridExtensionId, rid),
-            options.InitialSequenceNumber, options.InitialTimestamp);
+            options.InitialSequenceNumber, options.InitialTimestamp,
+            clockRate: VideoRtpClockRate);
 
     /// <summary>The endpoint the shared socket is bound to (the actual port after an ephemeral bind).</summary>
     public IPEndPoint LocalEndPoint => _transport.LocalEndPoint;
@@ -562,10 +573,13 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         _video?.FramesReceived, _video?.KeyFrames);
 
     /// <summary>
-    /// Point-in-time RTCP-derived outbound quality (RFC 3550 §6.4.1): the round-trip time and the loss the peer
-    /// reports on our media. Both read <see langword="null"/> until the peer has echoed a matching report.
+    /// Point-in-time derived quality: the RTCP outbound metrics (RFC 3550 §6.4.1 — round-trip time and the loss
+    /// the peer reports on our media, both <see langword="null"/> until the peer echoes a matching report) folded
+    /// together with our own local receive-side interarrival jitter (RFC 3550 §A.8, <see langword="null"/> until
+    /// an inbound clock rate is established).
     /// </summary>
-    public BundledMediaQuality SnapshotQuality() => _outboundQuality.Snapshot();
+    public BundledMediaQuality SnapshotQuality() =>
+        _outboundQuality.Snapshot() with { JitterMs = _receptionStats.SnapshotJitterMs() };
 
     /// <summary>Starts the shared receive loop, the ICE consent loop, and the DTLS handshake.</summary>
     public async Task StartAsync(CancellationToken cancellationToken = default)

@@ -24,6 +24,15 @@ internal sealed record BundledTrackConfig
     public int SamplesPerPacket { get; init; }
 
     /// <summary>
+    /// The negotiated RTP timestamp clock rate (Hz) of this m-line's media codec — e.g. 8000 for PCMU/PCMA,
+    /// 48000 for Opus, 90000 for video (RFC 3550 §5.1). It converts RTP-timestamp spans to and from wall-clock
+    /// seconds: the §A.8 interarrival jitter uses it instead of inferring the clock from packet spacing, and the
+    /// Sender Report extrapolates the RTP timestamp from the report instant onto this clock (CF-004e). Defaults
+    /// to 8000 Hz (the narrowband audio default) when the negotiation did not carry an explicit rate.
+    /// </summary>
+    public int ClockRate { get; init; } = 8000;
+
+    /// <summary>
     /// The negotiated RFC 4733 telephone-event (DTMF) payload type for an audio m-line, or
     /// <see langword="null"/> when the peer did not offer/accept telephone-event. When present the session
     /// can send and receive out-of-band DTMF on this track; when null, a DTMF send is an error. Ignored for
