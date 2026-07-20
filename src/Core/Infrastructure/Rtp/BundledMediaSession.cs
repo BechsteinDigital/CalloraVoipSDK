@@ -51,6 +51,11 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     // Once set, the transport is relay-committed to the bound peer: a later relay→direct re-nomination must not
     // re-point its remote (the bound channel forwards to the relay peer; re-pointing would mis-attribute inbound).
     private int _relayTransitioned;
+    // The channel rebind keepalive (RFC 8656 §12), set once the relay data-path transition binds a channel:
+    // started right after SetRelayChannel and disposed — before the transport it rides — in DisposeAsync. The
+    // channel exists only after the transition, so this starts later than the allocation/permission keepalive.
+    // Volatile for the transition-thread write / dispose-thread read.
+    private IRelayKeepAlive? _channelRebind;
 
     /// <summary>Raised with each decrypted inbound audio RTP packet.</summary>
     public event Action<RtpPacket>? AudioReceived;
@@ -336,15 +341,22 @@ internal sealed class BundledMediaSession : IAsyncDisposable
 
         try
         {
-            var channel = await bindChannel(peer, _relayTransitionCts.Token).ConfigureAwait(false);
+            var channelBinding = await bindChannel(peer, _relayTransitionCts.Token).ConfigureAwait(false);
             // Re-assert the relay peer as the transport remote right before the flip, in case a direct
             // re-nomination re-pointed it during the (sub-second) ChannelBind — the bound channel forwards to
             // this peer, and inbound ChannelData is attributed to it.
             _transport.SetRemoteEndPoint(peer);
             _transport.EnterRelayMode(binding.Indication.RelayServer, binding.OnControl);
-            _transport.SetRelayChannel(channel);
+            _transport.SetRelayChannel(channelBinding.Channel);
             // Commit: from here a later re-nomination must not re-point the transport (see OnPairNominated).
             Volatile.Write(ref _relayTransitioned, 1);
+            // Keep the channel binding alive (RFC 8656 §12): start the rebind loop now — the channel exists only
+            // after this transition — and dispose it before the transport it rides (DisposeAsync).
+            if (channelBinding.Rebind is { } channelRebind)
+            {
+                Volatile.Write(ref _channelRebind, channelRebind);
+                channelRebind.Start();
+            }
             _logger.LogInformation(
                 "Relay data path activated for the nominated relay pair: media now flows as ChannelData through the " +
                 "TURN server (RFC 8656 §11–12).");
@@ -415,6 +427,11 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         if (Volatile.Read(ref _relayTransitionTask) is { } transition)
             await transition.ConfigureAwait(false);
         _relayTransitionCts.Dispose();
+        // Dispose the channel rebind loop (RFC 8656 §12) before the allocation keepalive: both ride the
+        // transport's control send (so both must run before the transport is disposed), and the rebind stops
+        // first so it does not re-bind a channel the allocation teardown is about to drop.
+        if (Volatile.Read(ref _channelRebind) is { } channelRebind)
+            await channelRebind.DisposeAsync().ConfigureAwait(false);
         // Dispose the relay keepalive after ICE (no more relay checks) but before the transport: its teardown
         // Refresh(0) rides the transport's control send, so the transport must still be alive to carry it.
         if (Volatile.Read(ref _relayKeepAlive) is { } keepAlive)

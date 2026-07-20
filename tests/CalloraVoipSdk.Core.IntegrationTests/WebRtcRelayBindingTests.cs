@@ -186,6 +186,64 @@ public sealed class WebRtcRelayBindingTests
         Assert.True(Volatile.Read(ref permissionCount) >= 2); // installed once, then refreshed at least once
     }
 
+    [Fact]
+    public async Task BindChannel_returns_a_rebind_that_reissues_channelbind_for_the_same_peer_and_channel()
+    {
+        var codec = new StunMessageCodec();
+        var allocation = new TurnAllocateResult
+        {
+            RelayedEndPoint = new IPEndPoint(IPAddress.Parse("198.51.100.9"), 49152),
+            LifetimeSeconds = 600,
+            EffectiveCredentials = new StunCredentials
+            {
+                Username = "user", Password = "pass", Realm = "callora.example", Nonce = "nonce-1"
+            },
+        };
+
+        // Channel lifetime 2s → re-bind cadence 1s, so the loop re-binds without a long wait.
+        var factory = WebRtcRelayBinding.CreateFactory(
+            Server, allocation, NullLoggerFactory.Instance, channelLifetimeSeconds: 2);
+
+        var channelBinds = new List<StunMessage>();
+        var rebound = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        RelayIceBinding? binding = null;
+        ValueTask TargetedSend(ReadOnlyMemory<byte> datagram, IPEndPoint target, CancellationToken ct)
+        {
+            var message = codec.Decode(datagram.ToArray());
+            if (message is { MessageClass: StunMessageClass.Request }
+                && (TurnMessageMethod)(ushort)message.MessageMethod == TurnMessageMethod.ChannelBind)
+            {
+                lock (channelBinds) channelBinds.Add(message);
+                if (channelBinds.Count >= 2) rebound.TrySetResult();
+                binding!.OnControl(EmptySuccess(codec, message));
+            }
+
+            return ValueTask.CompletedTask;
+        }
+
+        binding = factory(TargetedSend);
+        Assert.NotNull(binding);
+        Assert.NotNull(binding.BindChannel);
+
+        var channelBinding = await binding.BindChannel!(Peer, CancellationToken.None); // initial ChannelBind
+        Assert.NotNull(channelBinding.Rebind);
+
+        channelBinding.Rebind!.Start();
+        await rebound.Task.WaitAsync(TimeSpan.FromSeconds(10)); // the rebind re-issues ChannelBind
+        await channelBinding.Rebind.DisposeAsync();
+
+        // Every ChannelBind (initial + re-binds) targets the same peer and the same channel number 0x4000.
+        lock (channelBinds)
+        {
+            Assert.True(channelBinds.Count >= 2);
+            Assert.All(channelBinds, b =>
+            {
+                Assert.Equal((ushort)0x4000, TurnAttributeMapper.DecodeChannelNumber(b)!.ChannelNumber);
+                Assert.Equal(Peer.Address, TurnAttributeMapper.DecodeXorPeerAddress(b)!.EndPoint.Address);
+            });
+        }
+    }
+
     private static byte[] RefreshSuccess(IStunMessageCodec codec, StunMessage request, uint lifetime) =>
         codec.Encode(new StunMessage
         {
