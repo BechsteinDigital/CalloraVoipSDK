@@ -63,6 +63,22 @@ public sealed class WebRtcPeerLoopbackTests
 
         Assert.Equal(fromCounterpart, await peerGotAudio.Task.WaitAsync(TimeSpan.FromSeconds(5)));
         Assert.Equal(fromPeer, await counterpartGotAudio.Task.WaitAsync(TimeSpan.FromSeconds(5)));
+
+        // Per-stream quality (CF-004f): inbound audio flowed, so the peer surfaces one media stream keyed to the
+        // audio MID with an established §A.8 jitter. The clock/kind were resolved from the inbound packet's PCMU
+        // payload type (not arrival order), so the entry is attributed to audio. Pump a few more packets so the
+        // inbound clock is firmly established before snapshotting.
+        for (var i = 0; i < 5; i++)
+        {
+            await counterpart.SendAudioAsync(fromCounterpart);
+            await Task.Delay(20);
+        }
+
+        var streams = peer.GetStreamQuality();
+        var audioStream = Assert.Single(streams, s => s.Kind == BundledStreamKind.Audio);
+        Assert.Equal("audio", audioStream.Mid);
+        Assert.NotNull(audioStream.JitterMs);
+        Assert.True(audioStream.JitterMs >= 0, "Established inbound audio must report a non-negative §A.8 jitter.");
     }
 
     // ── harness ──────────────────────────────────────────────────────────────────

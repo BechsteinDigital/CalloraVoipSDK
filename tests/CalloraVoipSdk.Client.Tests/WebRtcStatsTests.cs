@@ -53,5 +53,6 @@ public sealed class WebRtcStatsTests
         Assert.Null(stats.SelectedLocalCandidate);       // no bound endpoint yet
         Assert.Null(stats.SelectedRemoteCandidate);
         Assert.Null(stats.AvailableOutgoingBitrateBps);  // transport-cc — later slice
+        Assert.Empty(stats.MediaStreams);                // no session → no per-stream quality (CF-004f)
     }
 }

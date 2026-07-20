@@ -240,7 +240,7 @@ internal sealed class BundledInboundPipeline
         // Record per-SSRC reception statistics (RFC 3550 §6.4.1) for the periodic RTCP reporter: sequence
         // tracking, loss, and interarrival jitter, keyed by this packet's SSRC. Done before routing so a
         // throwing track sink cannot skip the accounting; a null tracker leaves reception reporting off.
-        _receptionStats?.RecordRtp(packet.Ssrc, packet.SequenceNumber, packet.Timestamp);
+        _receptionStats?.RecordRtp(packet.Ssrc, packet.SequenceNumber, packet.Timestamp, packet.PayloadType);
 
         // The router resolves the packet's MID (SSRC latch / MID header ext / payload type) and hands
         // it to the owning track's sink, or drops+counts it on its own DroppedPackets counter.

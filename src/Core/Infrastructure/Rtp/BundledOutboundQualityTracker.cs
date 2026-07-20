@@ -27,8 +27,11 @@ internal sealed class BundledOutboundQualityTracker
     // remote echoes that middle-32 back as a report block's LastSR; matching it lets us compute RTT.
     private readonly Dictionary<uint, (uint Middle32, DateTimeOffset SentAtUtc)> _lastLocalSr = new();
 
-    private double? _roundTripTimeMs;
-    private double? _remotePacketLossFraction;
+    // Per local (sending) SSRC: the most recently derived RTT and the loss the peer last reported on that
+    // stream (RFC 3550 §6.4.1). Keyed per SSRC because a report block is per our sending source — a global
+    // pair would let audio/video/RTX/simulcast overwrite each other (CF-004f). Each entry is null until its
+    // metric arrives; an entry exists only once a report block about that SSRC has been consumed.
+    private readonly Dictionary<uint, (double? RoundTripTimeMs, double? RemotePacketLossFraction)> _perSsrc = new();
 
     /// <summary>
     /// Records that a Sender Report was emitted for <paramref name="ssrc"/>, capturing the LSR the peer will
@@ -64,34 +67,83 @@ internal sealed class BundledOutboundQualityTracker
             if (!_lastLocalSr.TryGetValue(aboutLocalSsrc, out var localSr))
                 return; // not a stream we are sending Sender Reports for — the block is not about our media.
 
-            _remotePacketLossFraction = fractionLost / 256.0;
+            _perSsrc.TryGetValue(aboutLocalSsrc, out var current);
+            var loss = fractionLost / 256.0;
+            var rtt = current.RoundTripTimeMs;
 
             // No SR echoed, or the peer echoed an older SR than the one we last recorded: RTT is not derivable
-            // this interval (matching the SIP path, which also keys RTT off the most recent SR only).
-            if (lastSr == 0 || localSr.Middle32 != lastSr)
-                return;
+            // this interval (matching the SIP path, which also keys RTT off the most recent SR only) — the
+            // previously derived RTT for this SSRC is retained; only the loss is refreshed.
+            if (lastSr != 0 && localSr.Middle32 == lastSr)
+            {
+                var dlsr = TimeSpan.FromSeconds(delaySinceLastSr / 65536.0);
+                var roundTrip = arrivalUtc - localSr.SentAtUtc - dlsr;
+                // A non-positive result means clock skew or a stale/duplicated report — discard it rather than
+                // publish a negative or zero RTT (the prior RTT for this SSRC, if any, is kept).
+                if (roundTrip > TimeSpan.Zero)
+                    rtt = roundTrip.TotalMilliseconds;
+            }
 
-            var dlsr = TimeSpan.FromSeconds(delaySinceLastSr / 65536.0);
-            var roundTrip = arrivalUtc - localSr.SentAtUtc - dlsr;
-            // A non-positive result means clock skew or a stale/duplicated report — discard it rather than
-            // publish a negative or zero RTT.
-            if (roundTrip > TimeSpan.Zero)
-                _roundTripTimeMs = roundTrip.TotalMilliseconds;
+            _perSsrc[aboutLocalSsrc] = (rtt, loss);
         }
     }
 
     /// <summary>
-    /// Snapshots the latest outbound quality: the most recently derived round-trip time and the peer's most
-    /// recently reported loss on our media. Both are <see langword="null"/> until a matching report arrives.
+    /// Snapshots the session-aggregate outbound quality across all our sending SSRCs: the worst (maximum)
+    /// round-trip time and the worst (maximum) loss the peer reports on any of our streams. This is the
+    /// single scalar surfaced to the stats fassade — the per-stream breakdown is <see cref="SnapshotPerSsrc"/>.
+    /// Both are <see langword="null"/> until a matching report arrives for at least one stream.
     /// </summary>
     public BundledMediaQuality Snapshot()
     {
         lock (_sync)
         {
-            return new BundledMediaQuality(_roundTripTimeMs, _remotePacketLossFraction);
+            double? worstRtt = null;
+            double? worstLoss = null;
+            foreach (var (rtt, loss) in _perSsrc.Values)
+            {
+                if (rtt is { } r && (worstRtt is null || r > worstRtt))
+                    worstRtt = r;
+                if (loss is { } l && (worstLoss is null || l > worstLoss))
+                    worstLoss = l;
+            }
+
+            return new BundledMediaQuality(worstRtt, worstLoss);
+        }
+    }
+
+    /// <summary>
+    /// Snapshots the outbound quality per our sending SSRC (RFC 3550 §6.4.1): one entry per stream we have
+    /// consumed a report block for, each carrying the RTT and the loss the peer reports on that specific
+    /// stream. Empty until the peer has reported on at least one of our streams. The caller maps each SSRC to
+    /// its MID/kind via the negotiated track configuration.
+    /// </summary>
+    public IReadOnlyList<BundledOutboundSsrcQuality> SnapshotPerSsrc()
+    {
+        lock (_sync)
+        {
+            var result = new List<BundledOutboundSsrcQuality>(_perSsrc.Count);
+            foreach (var (ssrc, metrics) in _perSsrc)
+                result.Add(new BundledOutboundSsrcQuality(ssrc, metrics.RoundTripTimeMs, metrics.RemotePacketLossFraction));
+
+            return result;
         }
     }
 }
+
+/// <summary>
+/// The RTCP-derived outbound quality of one of our sending SSRCs (RFC 3550 §6.4.1): the round-trip time and
+/// the loss the peer reports on that specific stream. Each field is <see langword="null"/> until its metric
+/// is available — RTT until the peer echoes a matching Sender Report, loss until the peer reports on the
+/// stream (an entry exists only once at least one report block about the SSRC has been consumed).
+/// </summary>
+/// <param name="Ssrc">The local sending synchronisation source this quality describes.</param>
+/// <param name="RoundTripTimeMs">The round-trip time in milliseconds for this stream, or <see langword="null"/>.</param>
+/// <param name="RemotePacketLossFraction">The fraction (0..1) of this stream's packets the peer reports lost, or <see langword="null"/>.</param>
+internal readonly record struct BundledOutboundSsrcQuality(
+    uint Ssrc,
+    double? RoundTripTimeMs,
+    double? RemotePacketLossFraction);
 
 /// <summary>
 /// A snapshot of a bundled media session's derived quality: the RTCP outbound metrics (RFC 3550 §6.4.1 —
@@ -110,7 +162,8 @@ internal sealed class BundledOutboundQualityTracker
 /// <param name="JitterMs">
 /// Our local receive-side interarrival jitter in milliseconds (RFC 3550 §A.8) — the browser
 /// <c>getStats</c> inbound-rtp jitter — or <see langword="null"/> before an inbound clock rate is established.
-/// Aggregated across inbound sources (the worst) for the single scalar surfaced today; per-SSRC is CF-004f.
+/// Aggregated across inbound sources (the worst) for this single scalar; the per-SSRC breakdown is on
+/// <c>BundledInboundReceptionStats.SnapshotJitterMsPerSsrc</c> (CF-004f).
 /// </param>
 internal readonly record struct BundledMediaQuality(
     double? RoundTripTimeMs,

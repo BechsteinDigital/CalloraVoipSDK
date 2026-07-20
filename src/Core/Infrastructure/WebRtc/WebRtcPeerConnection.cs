@@ -231,6 +231,16 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     }
 
     /// <summary>
+    /// RTCP-derived quality per media stream (CF-004f): RTT and the loss the peer reports on our media keyed per
+    /// our sending SSRC and folded onto the audio/video MID, plus our local receive-side jitter (RFC 3550 §A.8)
+    /// per remote inbound source. Empty before a session is built or before any metric is available.
+    /// </summary>
+    public IReadOnlyList<BundledStreamQuality> GetStreamQuality()
+    {
+        lock (_sync) { return _session?.SnapshotStreamQuality() ?? []; }
+    }
+
+    /// <summary>
     /// Creates a local WebRTC offer (RFC 8829 createOffer + setLocalDescription): BUNDLE, DTLS-SRTP,
     /// rtcp-mux, and the sdes:mid extension. It becomes <see cref="LocalDescription"/>; apply the peer's
     /// answer with <see cref="SetRemoteDescriptionAsync"/> to establish media.

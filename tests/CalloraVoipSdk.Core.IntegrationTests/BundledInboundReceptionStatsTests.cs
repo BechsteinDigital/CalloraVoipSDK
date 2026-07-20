@@ -12,6 +12,16 @@ public sealed class BundledInboundReceptionStatsTests
 {
     private const uint SsrcA = 0x0A0A0A0A;
     private const uint SsrcB = 0x0B0B0B0B;
+    private const byte AudioPayloadType = 0;   // PCMU
+    private const byte VideoPayloadType = 96;  // dynamic H.264/VP8
+
+    // The negotiated inbound clock/kind map used by the seeded-clock tests: audio PT → 8 kHz audio, video PT →
+    // 90 kHz video, attributed by payload type (CF-004f) rather than by arrival order.
+    private static Dictionary<byte, BundledInboundClockDescriptor> AudioVideoClockMap(uint audioClockRate = 8000) => new()
+    {
+        [AudioPayloadType] = new BundledInboundClockDescriptor(audioClockRate, BundledStreamKind.Audio, "0"),
+        [VideoPayloadType] = new BundledInboundClockDescriptor(90000, BundledStreamKind.Video, "1"),
+    };
 
     [Fact]
     public void A_perfect_stream_reports_no_loss_and_the_extended_highest_sequence()
@@ -196,8 +206,8 @@ public sealed class BundledInboundReceptionStatsTests
     {
         var start = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
         var clock = new StepClock(start);
-        // 8 kHz negotiated (audioClockRate: 8000); the audio source is the first one created, so it is seeded.
-        var stats = new BundledInboundReceptionStats(clock.Now, audioSsrc: SsrcA, audioClockRate: 8000);
+        // 8 kHz negotiated for the audio payload type; the source is seeded by matching its PT (not arrival order).
+        var stats = new BundledInboundReceptionStats(clock.Now, AudioVideoClockMap());
 
         // Nominal 20 ms cadence (RTP +160 per packet at 8 kHz), but every second arrival is 10 ms late, so the
         // transit alternates 0 / +10 ms = 0 / +80 RTP units. With the negotiated clock the §A.8 estimate settles
@@ -205,7 +215,7 @@ public sealed class BundledInboundReceptionStatsTests
         var rtp = 0u;
         for (var i = 0; i < 200; i++)
         {
-            stats.RecordRtp(SsrcA, (ushort)(1 + i), rtp);
+            stats.RecordRtp(SsrcA, (ushort)(1 + i), rtp, AudioPayloadType);
             clock.Advance(TimeSpan.FromMilliseconds(i % 2 == 0 ? 20 : 30));
             rtp += 160;
         }
@@ -225,8 +235,85 @@ public sealed class BundledInboundReceptionStatsTests
     [Fact]
     public void Jitter_ms_is_null_before_any_rtp_is_received()
     {
-        var stats = new BundledInboundReceptionStats(audioSsrc: SsrcA, audioClockRate: 48000);
+        var stats = new BundledInboundReceptionStats(clockByPayloadType: AudioVideoClockMap(48000));
         Assert.Null(stats.SnapshotJitterMs());
+        Assert.Empty(stats.SnapshotJitterMsPerSsrc());
+    }
+
+    [Fact]
+    public void The_negotiated_clock_is_keyed_by_payload_type_not_arrival_order_so_video_first_still_gets_90khz()
+    {
+        // CF-004e bug: the audio clock was seeded into whichever source arrived first. In a video-first bundle the
+        // video source would then wrongly get the 8 kHz audio clock. Keying by payload type fixes this: the video
+        // source (PT 96) gets 90 kHz and the audio source (PT 0) gets 8 kHz regardless of who arrives first.
+        var start = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var clock = new StepClock(start);
+        var stats = new BundledInboundReceptionStats(clock.Now, AudioVideoClockMap());
+
+        // Video arrives FIRST at 90 kHz / 30 fps: RTP +3000 per frame, arrival +33.333 ms. A constant cadence
+        // means the §A.8 estimate stays ~0, but the clock must be exactly 90 kHz for the ms conversion.
+        var videoRtp = 0u;
+        for (var i = 0; i < 30; i++)
+        {
+            stats.RecordRtp(SsrcB, (ushort)(1 + i), videoRtp, VideoPayloadType);
+            clock.Advance(TimeSpan.FromMilliseconds(1000.0 / 30));
+            videoRtp += 3000;
+        }
+
+        // Then audio (PT 0) at 8 kHz / 20 ms, jittered so it produces a non-zero, clock-dependent ms value.
+        var audioRtp = 0u;
+        for (var i = 0; i < 60; i++)
+        {
+            stats.RecordRtp(SsrcA, (ushort)(1 + i), audioRtp, AudioPayloadType);
+            clock.Advance(TimeSpan.FromMilliseconds(i % 2 == 0 ? 20 : 30));
+            audioRtp += 160;
+        }
+
+        var perSsrc = stats.SnapshotJitterMsPerSsrc();
+        var video = perSsrc.Single(s => s.Ssrc == SsrcB);
+        var audio = perSsrc.Single(s => s.Ssrc == SsrcA);
+
+        // The video source is attributed to video and its wire jitter converts against 90 kHz (≈0 under a
+        // constant cadence): jitter_ms = wireJitter × 1000 / 90000.
+        Assert.Equal(BundledStreamKind.Video, video.Kind);
+        Assert.Equal("1", video.Mid);
+        var videoBlock = stats.SnapshotReportBlocks().Single(b => b.Ssrc == SsrcB);
+        Assert.Equal(videoBlock.InterarrivalJitter * 1000.0 / 90000.0, video.JitterMs, tolerance: 1000.0 / 90000.0);
+
+        // The audio source is attributed to audio and converts against 8 kHz — the video-first arrival did NOT
+        // steal the audio clock, and audio's ms value is a plausible non-trivial jitter.
+        Assert.Equal(BundledStreamKind.Audio, audio.Kind);
+        Assert.Equal("0", audio.Mid);
+        var audioBlock = stats.SnapshotReportBlocks().Single(b => b.Ssrc == SsrcA);
+        Assert.Equal(audioBlock.InterarrivalJitter * 1000.0 / 8000.0, audio.JitterMs, tolerance: 1000.0 / 8000.0);
+        Assert.InRange(audio.JitterMs, 0.01, 10.0);
+    }
+
+    [Fact]
+    public void An_unmapped_payload_type_source_is_reported_with_an_unknown_kind_and_no_mid()
+    {
+        var start = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var clock = new StepClock(start);
+        var stats = new BundledInboundReceptionStats(clock.Now, AudioVideoClockMap());
+
+        // PT 111 is not in the negotiated map → inferred clock, unknown kind, null MID. Feed a clean cadence so
+        // the inferred clock settles and a jitter value is produced.
+        const byte unmappedPt = 111;
+        stats.RecordRtp(SsrcA, 1, rtpTimestamp: 0, unmappedPt);
+        clock.Advance(TimeSpan.FromMilliseconds(20));
+        var rtp = 160u;
+        for (var i = 0; i < 40; i++)
+        {
+            clock.Advance(TimeSpan.FromMilliseconds(i % 2 == 0 ? 5 : 35));
+            stats.RecordRtp(SsrcA, (ushort)(2 + i), rtp, unmappedPt);
+            rtp += 160;
+        }
+
+        var entry = Assert.Single(stats.SnapshotJitterMsPerSsrc());
+        Assert.Equal(SsrcA, entry.Ssrc);
+        Assert.Equal(BundledStreamKind.Unknown, entry.Kind);
+        Assert.Null(entry.Mid);
+        Assert.True(entry.JitterMs > 0);
     }
 
     [Fact]
