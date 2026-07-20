@@ -25,7 +25,7 @@ internal sealed class BundledOutboundQualityTracker
 
     // Per local (sending) SSRC: the middle-32 of the last SR we emitted for it and when it went out. The
     // remote echoes that middle-32 back as a report block's LastSR; matching it lets us compute RTT.
-    private readonly Dictionary<uint, LocalSenderReport> _lastLocalSr = new();
+    private readonly Dictionary<uint, (uint Middle32, DateTimeOffset SentAtUtc)> _lastLocalSr = new();
 
     private double? _roundTripTimeMs;
     private double? _remotePacketLossFraction;
@@ -41,7 +41,7 @@ internal sealed class BundledOutboundQualityTracker
     {
         lock (_sync)
         {
-            _lastLocalSr[ssrc] = new LocalSenderReport(srMiddle32, sentAtUtc);
+            _lastLocalSr[ssrc] = (srMiddle32, sentAtUtc);
         }
     }
 
@@ -91,8 +91,6 @@ internal sealed class BundledOutboundQualityTracker
             return new BundledMediaQuality(_roundTripTimeMs, _remotePacketLossFraction);
         }
     }
-
-    private readonly record struct LocalSenderReport(uint Middle32, DateTimeOffset SentAtUtc);
 }
 
 /// <summary>
