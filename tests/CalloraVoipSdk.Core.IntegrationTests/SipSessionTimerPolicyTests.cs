@@ -108,4 +108,42 @@ public sealed class SipSessionTimerPolicyTests
         Assert.Equal(SipSessionTimerPolicy.MinSessionExpiresSeconds.ToString(), headers["Min-SE"]);
         Assert.Contains("timer", headers["Supported"]);
     }
+
+    // ── CF-047: Min-SE override on a 422 retry (RFC 4028 §5) ─────────────────────
+
+    [Fact]
+    public void Outbound_offer_raises_session_expires_and_min_se_to_a_422_min_se()
+    {
+        var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        // The peer/proxy rejected the 1800 offer with Min-SE 3600 → the retry must offer at least 3600.
+        SipSessionTimerPolicy.ApplyOutboundOfferHeaders(headers, minSessionExpiresOverride: 3600);
+
+        Assert.Equal("3600;refresher=uac", headers["Session-Expires"]);
+        Assert.Equal("3600", headers["Min-SE"]);
+    }
+
+    [Fact]
+    public void Outbound_offer_override_below_the_default_only_raises_min_se()
+    {
+        var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        SipSessionTimerPolicy.ApplyOutboundOfferHeaders(headers, minSessionExpiresOverride: 600);
+
+        Assert.Equal($"{SipSessionTimerPolicy.DefaultSessionExpiresSeconds};refresher=uac", headers["Session-Expires"]);
+        Assert.Equal("600", headers["Min-SE"]);
+    }
+
+    [Theory]
+    [InlineData("3600", true, 3600)]
+    [InlineData("3600;some=param", true, 3600)]
+    [InlineData(null, false, 0)]
+    [InlineData("", false, 0)]
+    [InlineData("0", false, 0)]
+    [InlineData("notanumber", false, 0)]
+    public void TryParseMinSe_reads_the_minimum_interval(string? header, bool expectedOk, int expectedSeconds)
+    {
+        Assert.Equal(expectedOk, SipSessionTimerPolicy.TryParseMinSe(header, out var seconds));
+        Assert.Equal(expectedSeconds, seconds);
+    }
 }
