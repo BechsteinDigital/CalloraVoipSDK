@@ -31,6 +31,8 @@ Der **eigentliche Deliverable** dieser Kampagne ist ein lebendes Register, nicht
 | Fix-Vorschlag | Was zu ändern wäre — **als Vorschlag, nicht ausgeführt** |
 | Schweregrad / Status | dokumentiert / offen |
 
+**Finding-Typen:** `Interop-Abweichung` · `Soak-Leak` · `Media-Defekt` · `Wire-Robustheit` · `Facade-Coupling-Gap` (siehe §4.2).
+
 ## 3. Nicht-Ziele (harte Grenzen)
 
 - **Kein autonomes Bugfixing.** Dieses Paket produziert ausschließlich Tests + Dokumentation. Jeder SDK-Fix ist ein **separates, eigens freigegebenes Paket**.
@@ -49,10 +51,36 @@ docs/audit/INTEROP_SOAK_AUDIT.md     NEU  lebendes Register
 ```
 
 **`InteropHarness`** (protokoll-nah, keine Schichtverletzung, DI, thread-safe by design):
-- **Call-Harness**: zwei SDK-Instanzen (UAC↔UAS) über echten UDP-Loopback, steuerbarer Lebenszyklus (Register → INVITE/200/ACK → RTP-Audio → BYE), beide Enden inspizierbar.
+- **Ebenen-Fixtures**: pro Test-Ebene (§4.1) ein wiederverwendbares Zwei-Enden-Fixture mit Fehlerinjektions-Hooks.
 - **Metrik-Sampler**: RAM/Handles/Threads/Sockets + RTCP-Qualität, mit **Trend-Asserts** statt Momentaufnahme.
 - **Szenario-Bausteine** + **Media-Verifier** (siehe §7).
 - **Audit-Sink**: strukturierter Roh-Befund → Register.
+
+### 4.1 Test-Ebenen (mehrschichtig, nicht nur Facade)
+
+Das Harness setzt bewusst auf **mehreren Ebenen unter der Facade** an — Fehler werden auf der Ebene isoliert, auf der sie entstehen (zeilen-genaue Audit-Analyse). Interop gegen echte Peers bleibt L4; L0–L3 sind Loopback/Fehlerinjektion, deterministisch und CI-fähig.
+
+| Ebene | Kern-Typ(en) | Prüft | Primär für |
+|---|---|---|---|
+| **L4 Facade** | `VoipClient` / `IVoipClient` | ganze Orchestrierung, zwei Instanzen E2E | Interop (Fremd-Stack), Realismus-Soak |
+| **L3 Signaling/Call** | `SipCoreCallChannel`, `ISipCallSession` | SIP-Dialog/Transaktion, 4xx/5xx, CANCEL, re-INVITE, Auth | Fehlerinjektion, Signaling-Soak |
+| **L2 Media** | `RtpCallMediaSession` | RTP/RTCP-Round-Trip, Jitter/Loss/SSRC | Media-Drift-Soak, Round-Trip-Verifikation |
+| **L1 Security** | `SrtpContext` / `SrtcpContext`, DTLS | Verschlüsselung/Replay/Rekey unter Last | Krypto-Korrektheit, Security-Soak |
+| **L0 Wire** | SDP-Offer/Answer, SIP-Transport-Framer (UDP/TCP/TLS) | Parsing/Serialisierung, malformed-Input, Framing | Robustheit/Fuzzing-artig |
+
+Die bestehenden E2E-Integrationstests verdrahten `RtpCallMediaSession` (L2) und `SipCoreCallChannel` (L3) bereits direkt — dieses Muster wird zu wiederverwendbaren Fixtures gehoben. Die exakten L0-Typen (SDP-/Transport-Framer) werden in der Phase-0-Recherche fixiert.
+
+**Non-Happy-Path als erste Klasse:** Jede Ebene bekommt Negativ-/Fehler-Szenarien (Reject 486/603, Auth 401/407, CANCEL vor Answer, Timeout, BYE-Race, malformed SDP, abgelehnte re-INVITEs) — nicht als Nachtrag, sondern als Kern der Matrix.
+
+### 4.2 Facade-Kopplungs-Gaps (mitdokumentieren)
+
+Beim Bau der L0–L3-Fixtures umgehen wir die Facade (`VoipClient`). Dabei wird sichtbar, welche interne Verdrahtung/Orchestrierung die Facade **implizit** leistet, die die Komponenten allein **nicht** mitbringen — also was man manuell nachbauen muss, um sie ohne Facade korrekt zu betreiben (z. B. Media↔Signaling-Kopplung, SDP-Negotiation-Übergabe, Lifecycle-/Dispose-Reihenfolge, DI-Defaults).
+
+Jede solche Lücke wird als Befund `Facade-Coupling-Gap` im Register dokumentiert:
+- **Welche** Verdrahtung fehlt ohne Facade + welche Komponente(n) betroffen (`Datei:Zeile`).
+- **Klasse**: Testbarkeits-, Wiederverwendbarkeits- oder DI-Lücke.
+- **Consumer-Frage**: Könnte ein SDK-Consumer die Komponente ohne `VoipClient` überhaupt korrekt nutzen?
+- **Kein Fix** — nur Dokumentation; ob es geschlossen werden soll, entscheidet ein späteres Paket.
 
 ## 5. Ausführungsstrategie
 
