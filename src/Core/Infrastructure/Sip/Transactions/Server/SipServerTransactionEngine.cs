@@ -93,10 +93,28 @@ internal sealed class SipServerTransactionEngine : ISipServerTransactionEngine
 
         // RFC 3261 §18.2.2: for UDP, route response via Via header parameters
         // (received/rport), not simply the raw packet-source endpoint.
+        var packetSource = remoteEndPoint;
         if (transport == SipTransportProtocol.Udp
             && headers.TryGetValue("Via", out var responseVia))
         {
             remoteEndPoint = SipProtocol.ResolveUdpResponseDestination(responseVia, remoteEndPoint);
+        }
+
+        // RFC 3261 §18.2.1 / RFC 3581 §4 (CF-040): reflect received=/rport= into the outgoing response's top Via
+        // against the actual packet source, centrally for every transaction response — so a UAC behind NAT still
+        // receives responses whose header builder did not reflect (e.g. an ingress OPTIONS 200). Idempotent, so a
+        // Via already reflected upstream is left unchanged; applied after the §18.2.2 destination was derived from
+        // the original Via, so response routing is unaffected.
+        if (headers.TryGetValue("Via", out var outgoingVia))
+        {
+            var reflectedVia = SipProtocol.ReflectViaParameters(outgoingVia, packetSource);
+            if (!string.Equals(reflectedVia, outgoingVia, StringComparison.Ordinal))
+            {
+                headers = new Dictionary<string, string>(headers, StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Via"] = reflectedVia
+                };
+            }
         }
 
         if (!SipServerTransactionKey.TryFromRequest(request, out var key))
