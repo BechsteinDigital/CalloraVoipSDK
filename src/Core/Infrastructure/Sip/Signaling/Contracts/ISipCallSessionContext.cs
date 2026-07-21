@@ -60,9 +60,17 @@ internal interface ISipCallSessionContext
     string RemoteRequestUri { get; }
 
     /// <summary>
-    /// Route set used for in-dialog Route headers.
+    /// Route set used for in-dialog Route headers. Prefers the dialog-established route set (reversed
+    /// Record-Route) and falls back to the preloaded (already §12.2.1.1-planned) initial route set.
     /// </summary>
     IReadOnlyList<string> RouteSet { get; }
+
+    /// <summary>
+    /// The dialog-established route set only (reversed Record-Route), empty when the dialog carries none. Unlike
+    /// <see cref="RouteSet"/> this never falls back to the preloaded initial route set, so it is always the raw
+    /// route set — safe to (re)plan per RFC 3261 §12.2.1.1 without double-rewriting an already-planned set.
+    /// </summary>
+    IReadOnlyList<string> DialogRouteSet { get; }
 
     /// <summary>
     /// Indicates whether session was created from an inbound INVITE.

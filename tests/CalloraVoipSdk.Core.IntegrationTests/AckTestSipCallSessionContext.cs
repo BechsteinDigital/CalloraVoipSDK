@@ -46,6 +46,8 @@ internal sealed class AckTestSipCallSessionContext : ISipCallSessionContext
 
     public IReadOnlyList<string> RouteSet { get; init; } = Array.Empty<string>();
 
+    public IReadOnlyList<string> DialogRouteSet { get; init; } = Array.Empty<string>();
+
     public bool IsInbound => false;
 
     public SipDialogState State { get; private set; } = SipDialogState.Established;

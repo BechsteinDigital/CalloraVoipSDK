@@ -166,7 +166,7 @@ internal sealed class SipCallSessionTransactionService
                 // A 2xx makes the INVITE non-cancellable; clear before the ACK so a failing ACK send
                 // cannot leave a stale CANCEL target once the dialog becomes Established (HARD-C2).
                 _context.ClearActiveInvite();
-                await SendAckAsync(cseq, _context.RemoteEndPoint, ct).ConfigureAwait(false);
+                await SendAckAsync(cseq, ct).ConfigureAwait(false);
 
                 if (TryConsumeCancelledInvite(cseq, out var cancelledInviteReason))
                 {
@@ -453,14 +453,18 @@ internal sealed class SipCallSessionTransactionService
             includeContentType: false);
         SipSessionTimerPolicy.ApplyOutboundOfferHeaders(headers);
 
+        // RFC 3261 §12.2.1.1 (CF-014): route the in-dialog UPDATE via the dialog route set / topmost route.
+        var (requestUri, remoteEndPoint) =
+            await SipInDialogRequestRouting.ApplyInDialogRoutingAsync(_context, headers, ct).ConfigureAwait(false);
+
         var transactionResult = await _clientTransactions.ExecuteAsync(
                 new SipClientTransactionRequest
                 {
                     Method = "UPDATE",
-                    RequestUri = _context.RemoteRequestUri,
+                    RequestUri = requestUri,
                     Headers = headers,
                     Body = null,
-                    RemoteEndPoint = _context.RemoteEndPoint,
+                    RemoteEndPoint = remoteEndPoint,
                     Transport = _context.SignalingTransport,
                     Timeout = _context.Timeout
                 },
@@ -597,14 +601,20 @@ internal sealed class SipCallSessionTransactionService
                     headers[header.Key] = header.Value;
             }
 
+            // RFC 3261 §12.2.1.1 (CF-014): compose the Request-URI + Route header from the dialog route set
+            // (incl. the strict-router rewrite) and resolve the transport next hop from the topmost route,
+            // instead of sending straight to the last response's source socket.
+            var (requestUri, remoteEndPoint) =
+                await SipInDialogRequestRouting.ApplyInDialogRoutingAsync(_context, headers, ct).ConfigureAwait(false);
+
             var transactionResult = await _clientTransactions.ExecuteAsync(
                     new SipClientTransactionRequest
                     {
                         Method = method,
-                        RequestUri = _context.RemoteRequestUri,
+                        RequestUri = requestUri,
                         Headers = headers,
                         Body = body,
-                        RemoteEndPoint = _context.RemoteEndPoint,
+                        RemoteEndPoint = remoteEndPoint,
                         Transport = _context.SignalingTransport,
                         Timeout = _context.Timeout
                     },
@@ -730,7 +740,7 @@ internal sealed class SipCallSessionTransactionService
     /// </summary>
     private async Task SendReliablePrackAsync(
         string rackHeaderValue,
-        IPEndPoint remoteEndPoint,
+        IPEndPoint provisionalSource,
         CancellationToken ct)
     {
         var cseq = _context.NextLocalCSeq();
@@ -744,11 +754,19 @@ internal sealed class SipCallSessionTransactionService
         headers["RAck"] = rackHeaderValue;
         headers["Supported"] = SipCallSessionTransactionUtilities.AppendSupportedToken(headers.TryGetValue("Supported", out var existingSupported) ? existingSupported : null, "100rel");
 
+        // RFC 3262 §4 + RFC 3261 §12.2.1.1 (CF-014): PRACK is an in-dialog request within the early dialog and
+        // follows its route set / topmost route; a direct early dialog is pinned to the exact provisional this
+        // PRACK answers (so a later provisional cannot shift its destination).
+        var (requestUri, remoteEndPoint) =
+            await SipInDialogRequestRouting
+                .ApplyInDialogRoutingAsync(_context, headers, ct, provisionalSource)
+                .ConfigureAwait(false);
+
         var transactionResult = await _clientTransactions.ExecuteAsync(
                 new SipClientTransactionRequest
                 {
                     Method = "PRACK",
-                    RequestUri = _context.RemoteRequestUri,
+                    RequestUri = requestUri,
                     Headers = headers,
                     Body = null,
                     RemoteEndPoint = remoteEndPoint,
@@ -794,7 +812,7 @@ internal sealed class SipCallSessionTransactionService
     /// <summary>
     /// Sends ACK for a completed INVITE transaction.
     /// </summary>
-    private async Task SendAckAsync(int inviteCseq, IPEndPoint remoteEndPoint, CancellationToken ct)
+    private async Task SendAckAsync(int inviteCseq, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(_context.LocalTag))
             throw new InvalidOperationException("Local tag is missing.");
@@ -807,9 +825,15 @@ internal sealed class SipCallSessionTransactionService
             authorizationHeader: null,
             includeContentType: false);
 
+        // RFC 3261 §13.2.2.4 + §12.2.1.1 (CF-014): the 2xx ACK follows the dialog route set and is sent to the
+        // resolved topmost route (or the learned response source for a direct dialog), not blindly to the last
+        // response's source socket.
+        var (requestUri, remoteEndPoint) =
+            await SipInDialogRequestRouting.ApplyInDialogRoutingAsync(_context, headers, ct).ConfigureAwait(false);
+
         await _context.Transport.SendRequestAsync(
                 "ACK",
-                _context.RemoteRequestUri,
+                requestUri,
                 headers,
                 body: null,
                 remoteEndPoint,
