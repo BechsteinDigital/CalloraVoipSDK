@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Sockets;
 using CalloraVoipSdk.Core.Infrastructure.Dtls;
+using CalloraVoipSdk.Core.Infrastructure.Rtp;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packetisation;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Models;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.OfferAnswer;
@@ -91,6 +92,62 @@ public sealed class WebRtcPeerToPeerTests
         Assert.NotNull(answerer.RemoteMediaEndPoint);
         Assert.Equal(answerer.LocalMediaEndPoint, offerer.RemoteMediaEndPoint);
         Assert.Equal(offerer.LocalMediaEndPoint, answerer.RemoteMediaEndPoint);
+    }
+
+    /// <summary>
+    /// The full RTCP quality round trip end to end over real DTLS-SRTP (CF-004g): two peers connect, both send
+    /// audio, their periodic Sender Reports and reception reports flow over the encrypted SRTCP path, and each
+    /// side derives a round-trip time from the peer's echoed LSR/DLSR (RFC 3550 §6.4.1) and a receive-side
+    /// interarrival jitter (§A.8) from the decrypted inbound stream. This exercises the whole quality pipeline
+    /// against a live peer — SR emission and per-SSRC LSR capture, SRTCP protect/unprotect, RR-block
+    /// consumption, and the per-stream fold (CF-004f) — not just the unit-isolated pieces.
+    /// </summary>
+    [Fact]
+    public async Task Rtcp_quality_round_trip_derives_rtt_and_jitter_at_both_peers()
+    {
+        var (offerer, answerer) = await ConnectPeersAsync();
+        await using var offererLease = offerer;
+        await using var answererLease = answerer;
+
+        var offererConnected = Connected(offerer);
+        var answererConnected = Connected(answerer);
+
+        await offerer.StartAsync();
+        await answerer.StartAsync();
+
+        await Task.WhenAll(offererConnected, answererConnected).WaitAsync(TimeSpan.FromSeconds(20));
+
+        var offererAudio = new byte[] { 1, 2, 3, 4 };
+        var answererAudio = new byte[] { 5, 6, 7, 8 };
+
+        // Drive continuous audio both ways so each side keeps emitting Sender Reports and the peer keeps echoing
+        // them back. The RTCP interval is randomised around Tmin (RFC 3550 §6.2/§6.3.1), so a full SR → RR → RTT
+        // round trip spans a few report cycles; budget generously over the default (~5 s) cadence.
+        BundledMediaQuality? offererQuality = null;
+        BundledMediaQuality? answererQuality = null;
+        using var overall = new CancellationTokenSource(TimeSpan.FromSeconds(40));
+        while (offererQuality?.RoundTripTimeMs is null || answererQuality?.RoundTripTimeMs is null)
+        {
+            overall.Token.ThrowIfCancellationRequested();
+            await offerer.SendAudioAsync(offererAudio);
+            await answerer.SendAudioAsync(answererAudio);
+            await Task.Delay(20, overall.Token);
+            offererQuality = offerer.GetQuality();
+            answererQuality = answerer.GetQuality();
+        }
+
+        // RTT was decrypted from the peer's SRTCP reception report and is a real positive latency, both ways.
+        Assert.True(offererQuality!.Value.RoundTripTimeMs > 0);
+        Assert.True(answererQuality!.Value.RoundTripTimeMs > 0);
+
+        // Two report cycles in, plenty of inbound RTP has been decrypted, so the receive-side interarrival
+        // jitter (RFC 3550 §A.8, negotiated 8 kHz clock) is established at both peers as well.
+        Assert.NotNull(offererQuality.Value.JitterMs);
+        Assert.NotNull(answererQuality.Value.JitterMs);
+
+        // The per-stream fold (CF-004f) surfaces that same RTT attributed to the audio track's MID.
+        Assert.Contains(offerer.GetStreamQuality(), s => s.Mid is not null && s.RoundTripTimeMs > 0);
+        Assert.Contains(answerer.GetStreamQuality(), s => s.Mid is not null && s.RoundTripTimeMs > 0);
     }
 
     // ── harness ──────────────────────────────────────────────────────────────────
