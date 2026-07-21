@@ -664,6 +664,7 @@ internal sealed class SipCallSessionTransactionService
                     response.Response,
                     method,
                     body,
+                    requestUri,
                     nonceCounter,
                     authAttempted,
                     out var shouldRetryWithAuth,
@@ -709,6 +710,7 @@ internal sealed class SipCallSessionTransactionService
         SipResponse response,
         string method,
         string? body,
+        string effectiveRequestUri,
         SipNonceCounter nonceCounter,
         bool authAttempted,
         out bool shouldRetryWithAuth,
@@ -737,7 +739,12 @@ internal sealed class SipCallSessionTransactionService
                 _context.AuthUsername,
                 _context.AuthPassword!,
                 method,
-                _context.RemoteRequestUri,
+                // RFC 3261 §22.4 / RFC 2617: digest-uri-value is the request's Request-URI. On a strict-router
+                // rewrite the wire Request-URI is the topmost route, not the dialog remote target, so the digest
+                // must sign the effective Request-URI from the routing plan (computed before auth) — otherwise the
+                // server recomputes over a different URI and the retry is rejected. Loose/direct dialogs leave
+                // this equal to the remote target, so their digest is unchanged (CF-014 finding).
+                effectiveRequestUri,
                 nonceCounter.NextFor(challengeHeader),
                 out var generatedAuthorization,
                 body: body))
