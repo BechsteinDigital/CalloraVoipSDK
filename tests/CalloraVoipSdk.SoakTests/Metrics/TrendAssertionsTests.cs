@@ -5,7 +5,8 @@ namespace CalloraVoipSdk.SoakTests.Metrics;
 public sealed class TrendAssertionsTests
 {
     private static ResourceSample At(long managedBytes) => new(
-        SampleIndex: 0, ManagedBytes: managedBytes, ThreadCount: 10, HandleCount: 100);
+        SampleIndex: 0, ManagedBytes: managedBytes, PrivateMemoryBytes: 0, WorkingSetBytes: 0,
+        ThreadCount: 10, HandleCount: 100, FileDescriptorCount: 0, SocketDescriptorCount: 0);
 
     [Fact]
     public void NoUpwardDrift_FlatSeries_HasNoDrift()
@@ -36,9 +37,9 @@ public sealed class TrendAssertionsTests
         // Startsockel 0 (z. B. HandleCount auf Linux) + minimales Wachstum darf keinen Fehlalarm geben.
         var samples = new[]
         {
-            new ResourceSample(0, ManagedBytes: 0, ThreadCount: 10, HandleCount: 0),
-            new ResourceSample(1, ManagedBytes: 0, ThreadCount: 10, HandleCount: 0),
-            new ResourceSample(2, ManagedBytes: 1, ThreadCount: 10, HandleCount: 0),
+            new ResourceSample(0, ManagedBytes: 0, PrivateMemoryBytes: 0, WorkingSetBytes: 0, ThreadCount: 10, HandleCount: 0, FileDescriptorCount: 0, SocketDescriptorCount: 0),
+            new ResourceSample(1, ManagedBytes: 0, PrivateMemoryBytes: 0, WorkingSetBytes: 0, ThreadCount: 10, HandleCount: 0, FileDescriptorCount: 0, SocketDescriptorCount: 0),
+            new ResourceSample(2, ManagedBytes: 1, PrivateMemoryBytes: 0, WorkingSetBytes: 0, ThreadCount: 10, HandleCount: 0, FileDescriptorCount: 0, SocketDescriptorCount: 0),
         };
 
         var result = TrendAssertions.NoUpwardDrift(samples, s => s.ManagedBytes, toleranceRatio: 0.10);

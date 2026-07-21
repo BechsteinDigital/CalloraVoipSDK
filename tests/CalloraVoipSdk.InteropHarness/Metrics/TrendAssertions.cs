@@ -75,6 +75,58 @@ public static class TrendAssertions
         return new TrendResult(hasDrift, detail);
     }
 
+    /// <summary>
+    /// Least-Squares-Steigung der per <paramref name="selector"/> gewählten Metrik über den
+    /// Sample-Index (x = 0..n-1). Robuster als ein Start-vs-Ende-Vergleich: einmalige Ausreißer
+    /// oder ein einzelner Sockelsprung kippen die Ausgleichsgerade kaum, echte monotone Drift schon.
+    /// Die Reihe MUSS bereits warm gelaufen sein (Kaltstart-Ramp vorher verwerfen), sonst misst
+    /// die Steigung den Warmlauf statt eines Leaks.
+    /// </summary>
+    /// <param name="samples">Chronologische, warm gelaufene Messreihe (mindestens 3 Werte).</param>
+    /// <param name="selector">Extrahiert die zu prüfende Metrik.</param>
+    /// <param name="maxSlopePerSample">Absolute Obergrenze der Steigung in Metrik-Einheiten pro Sample.</param>
+    /// <param name="metricName">Anzeigename der Metrik für die Begründung.</param>
+    public static TrendResult NoUpwardSlope(
+        IReadOnlyList<ResourceSample> samples,
+        Func<ResourceSample, double> selector,
+        double maxSlopePerSample,
+        string metricName)
+    {
+        if (samples.Count < 3)
+            return new TrendResult(false, $"{metricName}: zu wenige Samples ({samples.Count}) für eine Regression.");
+
+        var ys = new double[samples.Count];
+        for (var i = 0; i < samples.Count; i++)
+            ys[i] = selector(samples[i]);
+
+        var slope = LeastSquaresSlope(ys);
+        var hasDrift = slope > maxSlopePerSample;
+        var detail =
+            $"{metricName}: Steigung≈{slope:F1}/Sample (max {maxSlopePerSample:F1}), " +
+            $"Δ={ys[^1] - ys[0]:F0} über {samples.Count} Samples → {(hasDrift ? "DRIFT" : "stabil")}.";
+        return new TrendResult(hasDrift, detail);
+    }
+
+    /// <summary>Ordinary-Least-Squares-Steigung über x = 0..n-1. Liefert 0 bei &lt; 2 Werten.</summary>
+    public static double LeastSquaresSlope(IReadOnlyList<double> ys)
+    {
+        var n = ys.Count;
+        if (n < 2) return 0d;
+
+        double sumX = 0, sumY = 0, sumXX = 0, sumXY = 0;
+        for (var i = 0; i < n; i++)
+        {
+            double x = i;
+            sumX += x;
+            sumY += ys[i];
+            sumXX += x * x;
+            sumXY += x * ys[i];
+        }
+
+        var denom = n * sumXX - sumX * sumX;
+        return denom == 0d ? 0d : (n * sumXY - sumX * sumY) / denom;
+    }
+
     private static long Median(IEnumerable<long> values)
     {
         var ordered = values.OrderBy(v => v).ToArray();
