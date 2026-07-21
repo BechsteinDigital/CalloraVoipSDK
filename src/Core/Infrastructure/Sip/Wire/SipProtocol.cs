@@ -66,7 +66,7 @@ internal static class SipProtocol
             200 => 200,
             300 or 301 or 302 or 305 or 380 => statusCode,
             400 or 401 or 402 or 403 or 404 or 405 or 406 or 407 or 408 or 410
-                or 413 or 414 or 415 or 416 or 420 or 421 or 423
+                or 413 or 414 or 415 or 416 or 420 or 421 or 422 or 423
                 or 480 or 481 or 482 or 483 or 484 or 485 or 486
                 or 487 or 488 or 491 or 493 => statusCode,
             500 or 501 or 502 or 503 or 504 or 505 or 513 => statusCode,

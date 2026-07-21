@@ -26,6 +26,10 @@ internal sealed class SipCallSessionTransactionService
     // should suffice; this mirrors the REGISTER path (SipRegistrationService.maxStaleRetries).
     private const int MaxStaleNonceRetries = 2;
 
+    // RFC 4028 §5: bound how many times a 422 "Session Interval Too Small" may raise the offer and retry, so a
+    // misbehaving peer/proxy cannot loop the INVITE transaction.
+    private const int MaxSessionTimerRetries = 2;
+
     /// <summary>
     /// Creates a transaction service bound to one call session context.
     /// </summary>
@@ -71,6 +75,8 @@ internal sealed class SipCallSessionTransactionService
         var nonceCount = 1;
         var authAttempted = false;
         var staleRetries = 0;
+        var timerRetries = 0;
+        int? sessionIntervalOverride = null;
         string? authorization = null;
         string? authorizationHeaderName = null;
         var reliablePrackSync = new object();
@@ -91,7 +97,7 @@ internal sealed class SipCallSessionTransactionService
                 authorizationHeaderName: authorizationHeaderName,
                 authorizationHeader: authorization,
                 includeContentType: !string.IsNullOrWhiteSpace(body));
-            SipSessionTimerPolicy.ApplyOutboundOfferHeaders(headers);
+            SipSessionTimerPolicy.ApplyOutboundOfferHeaders(headers, sessionIntervalOverride);
             headers["Supported"] = SipCallSessionTransactionUtilities.AppendSupportedToken(headers.TryGetValue("Supported", out var supportedValue) ? supportedValue : null, "100rel");
 
             var transactionResult = await _clientTransactions.ExecuteAsync(
@@ -248,6 +254,23 @@ internal sealed class SipCallSessionTransactionService
                 _context.Logger.LogWarning(
                     "SIP session {CallId}: peer issued more than {Max} stale-nonce INVITE challenges; abandoning digest retry.",
                     _context.CallId, MaxStaleNonceRetries);
+            }
+
+            // RFC 4028 §5/§6: a 422 "Session Interval Too Small" carries the peer/proxy Min-SE. Retry the INVITE
+            // with the offered Session-Expires (and our Min-SE) raised to at least that value; bounded so a
+            // misbehaving peer that keeps rejecting cannot loop the transaction indefinitely.
+            if (finalResponse.Response.StatusCode == 422
+                && timerRetries < MaxSessionTimerRetries
+                && SipSessionTimerPolicy.TryParseMinSe(finalResponse.Response.Header("Min-SE"), out var requiredMinSe)
+                && requiredMinSe > (sessionIntervalOverride ?? SipSessionTimerPolicy.DefaultSessionExpiresSeconds))
+            {
+                timerRetries++;
+                sessionIntervalOverride = requiredMinSe;
+                cseq = _context.NextLocalCSeq();
+                _context.Logger.LogDebug(
+                    "SIP session {CallId}: 422 Session Interval Too Small; retrying INVITE with Session-Expires {MinSe}s.",
+                    _context.CallId, requiredMinSe);
+                continue;
             }
 
             _context.ClearActiveInvite();
