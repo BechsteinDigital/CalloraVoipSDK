@@ -2,6 +2,7 @@ using Xunit;
 
 namespace CalloraVoipSdk.InteropTests.Asterisk;
 
+[Trait("Category", "Interop")]
 public sealed class AsteriskContainerSmokeTests
 {
     [DockerRequiredFact]

@@ -13,6 +13,7 @@ namespace CalloraVoipSdk.InteropTests.Registration;
 /// Prüft, ob der vollständige SIP-Registrierungsablauf (401 Digest-Challenge → 200 OK)
 /// gegen einen realen Asterisk-Server funktioniert.
 /// </summary>
+[Trait("Category", "Interop")]
 public sealed class AsteriskRegisterInteropTests
 {
     [DockerRequiredFact]
