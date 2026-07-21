@@ -202,6 +202,39 @@ public sealed class BundledInboundReceptionStatsTests
     }
 
     [Fact]
+    public void A_source_first_seen_via_its_sender_report_resolves_its_negotiated_kind_and_clock_when_rtp_arrives()
+    {
+        var start = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var clock = new StepClock(start);
+        var stats = new BundledInboundReceptionStats(clock.Now, AudioVideoClockMap());
+
+        // An early SR (before any RTP) creates the source with an UNKNOWN kind and an inferred clock. Before the
+        // CF-004f follow-up the GetOrAdd factory only ran here, so RTP never upgraded the source and it stayed
+        // Unknown/inferred forever.
+        stats.RecordSenderReport(SsrcA, 0x1122_3344_5566_7788UL);
+
+        // The first RTP inter-arrival is deliberately off-cadence (40 ms for a 20 ms / 160-sample stream): a source
+        // left on the per-pair-INFERRED clock bakes a wrong ~4 kHz rate and then reports a large (~20 ms) fake
+        // jitter from the clock mismatch. With the negotiated 8 kHz clock seeded on the first RTP packet the §A.8
+        // transit is measured correctly and, under an otherwise constant cadence, settles to a small value.
+        stats.RecordRtp(SsrcA, 1, rtpTimestamp: 0, AudioPayloadType);
+        clock.Advance(TimeSpan.FromMilliseconds(40)); // off-cadence first gap
+        var rtp = 160u;
+        for (var seq = 2; seq <= 120; seq++)
+        {
+            stats.RecordRtp(SsrcA, (ushort)seq, rtp, AudioPayloadType);
+            clock.Advance(TimeSpan.FromMilliseconds(20)); // nominal 20 ms cadence at 8 kHz
+            rtp += 160;
+        }
+
+        var perSsrc = Assert.Single(stats.SnapshotJitterMsPerSsrc());
+        Assert.Equal(SsrcA, perSsrc.Ssrc);
+        Assert.Equal(BundledStreamKind.Audio, perSsrc.Kind); // resolved from Unknown once RTP arrived (the finding)
+        Assert.Equal("0", perSsrc.Mid);
+        Assert.InRange(perSsrc.JitterMs, 0.0, 5.0); // exact negotiated clock → small jitter, not a clock-mismatch spike
+    }
+
+    [Fact]
     public void Jitter_ms_uses_the_negotiated_clock_rate_when_supplied()
     {
         var start = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
