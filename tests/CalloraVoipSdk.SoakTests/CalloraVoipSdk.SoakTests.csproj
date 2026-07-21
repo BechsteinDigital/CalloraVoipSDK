@@ -24,6 +24,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Core\CalloraVoipSdk.Core.csproj" />
+    <ProjectReference Include="..\CalloraVoipSdk.InteropHarness\CalloraVoipSdk.InteropHarness.csproj" />
   </ItemGroup>
 
 </Project>

@@ -9,3 +9,4 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("CalloraVoipSdk.Client")]
 [assembly: InternalsVisibleTo("CalloraVoipSdk.Audio.Linux")]
 [assembly: InternalsVisibleTo("CalloraVoipSdk.Audio.Windows")]
+[assembly: InternalsVisibleTo("CalloraVoipSdk.InteropHarness")]
