@@ -19,7 +19,8 @@ internal sealed class SipDigestAuthentication : ISipDigestAuthenticator
         string method,
         string requestUri,
         int nonceCount,
-        out string authorizationHeader)
+        out string authorizationHeader,
+        string? body = null)
     {
         authorizationHeader = string.Empty;
         if (string.IsNullOrWhiteSpace(challengeHeader)) return false;
@@ -51,7 +52,21 @@ internal sealed class SipDigestAuthentication : ISipDigestAuthenticator
         if (ha1.Length == 0)
             return false;
 
-        if (!ProtocolCommonUtilities.TryHashHexLower($"{method}:{requestUri}", baseAlgorithm, out var ha2))
+        // RFC 7616 §3.4.3: qop=auth-int folds a hash of the entity body into A2 (H(method:uri:H(body))); qop=auth
+        // and the qop-less legacy form use H(method:uri). A missing body hashes as the empty string.
+        string ha2Input;
+        if (string.Equals(qop, "auth-int", StringComparison.Ordinal))
+        {
+            if (!ProtocolCommonUtilities.TryHashHexLower(body ?? string.Empty, baseAlgorithm, out var bodyHash))
+                return false;
+            ha2Input = $"{method}:{requestUri}:{bodyHash}";
+        }
+        else
+        {
+            ha2Input = $"{method}:{requestUri}";
+        }
+
+        if (!ProtocolCommonUtilities.TryHashHexLower(ha2Input, baseAlgorithm, out var ha2))
             return false;
         var responseInput = qop is null
             ? $"{ha1}:{nonce}:{ha2}"
@@ -106,10 +121,18 @@ internal sealed class SipDigestAuthentication : ISipDigestAuthenticator
     }
 
     /// <summary>
-    /// Chooses a supported qop mode from a server-provided qop list.
+    /// Chooses a supported qop mode from a server-provided qop list (RFC 7616 §3.4). Prefers <c>auth</c> (the
+    /// common, body-independent mode) and falls back to <c>auth-int</c> when the server offers only that; returns
+    /// <see langword="null"/> (legacy qop-less digest) when neither is offered.
     /// </summary>
-    private static string? ChooseQop(string qop) =>
-        ProtocolCommonUtilities.ContainsToken(qop, "auth") ? "auth" : null;
+    private static string? ChooseQop(string qop)
+    {
+        if (ProtocolCommonUtilities.ContainsToken(qop, "auth"))
+            return "auth";
+        if (ProtocolCommonUtilities.ContainsToken(qop, "auth-int"))
+            return "auth-int";
+        return null;
+    }
 
     /// <summary>
     /// Resolves supported digest algorithm and whether "-sess" mode is active.

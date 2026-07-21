@@ -40,6 +40,9 @@ public sealed class SipServerTransactionViaReflectionTests
         var sent = Assert.Single(transport.SnapshotResponses());
         Assert.Contains(";rport=40000", sent.Headers["Via"]);
         Assert.Contains(";received=203.0.113.7", sent.Headers["Via"]);
+        // The DATAGRAM must go to the actual source port (RFC 3581), not the sent-by port 5060: the destination
+        // is derived from the reflected Via, so a bare ;rport routes to the real source port, not 5060.
+        Assert.Equal(new IPEndPoint(IPAddress.Parse("203.0.113.7"), 40000), sent.RemoteEndPoint);
     }
 
     [Fact]
@@ -83,5 +86,6 @@ public sealed class SipServerTransactionViaReflectionTests
         var sent = Assert.Single(transport.SnapshotResponses());
         Assert.Contains(";rport=40000", sent.Headers["Via"]);
         Assert.Contains(";received=203.0.113.7", sent.Headers["Via"]);
+        Assert.Equal(new IPEndPoint(IPAddress.Parse("203.0.113.7"), 40000), sent.RemoteEndPoint);
     }
 }

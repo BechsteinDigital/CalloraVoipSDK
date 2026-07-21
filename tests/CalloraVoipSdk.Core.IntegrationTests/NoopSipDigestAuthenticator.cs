@@ -11,7 +11,8 @@ internal sealed class NoopSipDigestAuthenticator : ISipDigestAuthenticator
         string method,
         string requestUri,
         int nonceCount,
-        out string authorizationHeader)
+        out string authorizationHeader,
+        string? body = null)
     {
         authorizationHeader = string.Empty;
         return false;

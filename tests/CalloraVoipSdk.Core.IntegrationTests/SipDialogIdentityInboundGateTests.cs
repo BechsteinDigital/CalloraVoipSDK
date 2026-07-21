@@ -41,6 +41,37 @@ public sealed class SipDialogIdentityInboundGateTests
         return new SipRequest(method, "sip:us@example.test", headers, string.Empty);
     }
 
+    private static SipRequest InDialogRequestWithoutToTag(string method, string fromTag)
+    {
+        var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Via"] = "SIP/2.0/UDP 192.0.2.1:5060;branch=z9hG4bK-cf013",
+            ["Max-Forwards"] = "70",
+            ["From"] = $"<sip:them@example.test>;tag={fromTag}",
+            ["To"] = "<sip:us@example.test>", // no To-tag at all
+            ["Call-ID"] = CallId,
+            ["CSeq"] = $"2 {method}",
+        };
+        return new SipRequest(method, "sip:us@example.test", headers, string.Empty);
+    }
+
+    [Theory]
+    [InlineData("BYE")]
+    [InlineData("INFO")]
+    [InlineData("NOTIFY")]
+    public async Task A_strictly_in_dialog_method_without_a_to_tag_is_rejected_with_481(string method)
+    {
+        // CF-013 finding: a To-tag-less BYE (or other strictly in-dialog method) must NOT terminate/mutate the
+        // dialog — the method-dependent gate rejects it with 481 rather than treating it as dialog-creating.
+        var (service, engine) = BuildService();
+        var request = InDialogRequestWithoutToTag(method, fromTag: RemoteTag);
+
+        await service.HandleInboundRequestAsync(new IPEndPoint(IPAddress.Loopback, 5060), request, default);
+
+        Assert.Contains(engine.Responses, r => r.StatusCode == 481);
+        Assert.DoesNotContain(engine.Responses, r => r.StatusCode == 200);
+    }
+
     [Fact]
     public async Task A_bye_with_a_foreign_to_tag_is_rejected_with_481()
     {

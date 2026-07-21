@@ -213,7 +213,8 @@ internal sealed class SipCallSessionTransactionService
                         "INVITE",
                         _context.RemoteRequestUri,
                         nonceCounter.NextFor(challengeHeader),
-                        out var generatedAuthorization))
+                        out var generatedAuthorization,
+                        body: body))
                 {
                     authAttempted = true;
                     authorizationHeaderName = nextAuthorizationHeaderName;
@@ -240,7 +241,8 @@ internal sealed class SipCallSessionTransactionService
                         "INVITE",
                         _context.RemoteRequestUri,
                         nonceCounter.NextFor(challengeHeader),
-                        out var generatedAuthorization))
+                        out var generatedAuthorization,
+                        body: body))
                 {
                     staleRetries++;
                     authorizationHeaderName = nextAuthorizationHeaderName;
@@ -661,6 +663,7 @@ internal sealed class SipCallSessionTransactionService
             if (!TryResolveInDialogAuthRetry(
                     response.Response,
                     method,
+                    body,
                     nonceCounter,
                     authAttempted,
                     out var shouldRetryWithAuth,
@@ -705,6 +708,7 @@ internal sealed class SipCallSessionTransactionService
     private bool TryResolveInDialogAuthRetry(
         SipResponse response,
         string method,
+        string? body,
         SipNonceCounter nonceCounter,
         bool authAttempted,
         out bool shouldRetryWithAuth,
@@ -735,7 +739,8 @@ internal sealed class SipCallSessionTransactionService
                 method,
                 _context.RemoteRequestUri,
                 nonceCounter.NextFor(challengeHeader),
-                out var generatedAuthorization))
+                out var generatedAuthorization,
+                body: body))
         {
             return false;
         }
