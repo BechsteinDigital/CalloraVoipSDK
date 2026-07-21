@@ -43,6 +43,34 @@ internal sealed class SipCallSessionInboundService
         if (!string.Equals(request.Header("Call-ID"), _context.CallId, StringComparison.Ordinal))
             return;
 
+        // RFC 3261 §12.2.2 (CF-013): a mid-dialog request (one carrying a To-tag) must match this dialog's full
+        // identity — Call-ID (matched above) plus our local tag (its To-tag) and the remote tag (its From-tag).
+        // A tag mismatch is a request for a different dialog that merely shares the Call-ID (a forked branch, or
+        // a stale/foreign request): reject it with 481 rather than mutate this dialog. ACK takes no response and
+        // CANCEL is matched by transaction (not dialog identity), so both are exempt from the tag gate.
+        if (!string.Equals(request.Method, "CANCEL", StringComparison.Ordinal)
+            && !SipDialogIdentity.Matches(
+                request.Header("To"), request.Header("From"), _context.LocalTag, _context.RemoteTag))
+        {
+            if (!string.Equals(request.Method, "ACK", StringComparison.Ordinal))
+            {
+                var responseTag = _context.LocalTag ?? SipProtocol.NewTag();
+                var mismatchHeaders = _headers.CreateResponseHeadersFromRequest(
+                    request, responseTag, includeContentType: false);
+                await _context.ServerTransactions.SendResponseAsync(
+                        request,
+                        remoteEndPoint,
+                        _context.SignalingTransport,
+                        statusCode: 481,
+                        reasonPhrase: "Call/Transaction Does Not Exist",
+                        mismatchHeaders,
+                        body: null,
+                        ct)
+                    .ConfigureAwait(false);
+            }
+            return;
+        }
+
         _context.RemoteEndPoint = remoteEndPoint;
         _context.TryApplyRemoteAssertedIdentity(
             request.Header("P-Asserted-Identity"),
