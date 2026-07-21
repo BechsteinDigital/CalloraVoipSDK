@@ -104,6 +104,24 @@ internal sealed class BundledOutboundTrack
     public uint CurrentTimestamp { get { lock (_sendSync) return _timestamp; } }
 
     /// <summary>
+    /// Reserves <paramref name="units"/> of timestamp space for an out-of-band burst (an RFC 4733 telephone-event):
+    /// returns the current cursor to stamp the burst with, then advances the cursor past the burst so the next
+    /// event or media packet carries a distinct, monotonically increasing timestamp (RFC 4733 §2.5.1.4).
+    /// Otherwise a following telephone-event reuses the same timestamp and a receiver folds it into this one,
+    /// dropping the repeated tone. Atomic under the track lock so a concurrent send stays cursor-consistent.
+    /// </summary>
+    /// <param name="units">The burst's duration in RTP timestamp units to advance the cursor by.</param>
+    public uint ReserveTimestamp(uint units)
+    {
+        lock (_sendSync)
+        {
+            var reserved = _timestamp;
+            _timestamp += units;
+            return reserved;
+        }
+    }
+
+    /// <summary>
     /// Atomically snapshots this track's Sender Report counters (RFC 3550 §6.4.1) under a single lock, so the
     /// packet count, octet count, and last RTP timestamp are consistent with one another (reading them through
     /// the individual properties would take the lock four separate times and could tear a report across a

@@ -179,6 +179,28 @@ public sealed class BundledOutboundPipelineTests
         Assert.Equal(InitialTimestamp, Decode(sender.Datagrams[1], receiver).Timestamp);
     }
 
+    [Fact]
+    public async Task Reserving_timestamp_space_advances_the_cursor_so_a_following_event_and_media_do_not_collide()
+    {
+        var (outbound, sender) = Outbound();
+        var receiver = new SrtpContext(Material());
+        outbound.InstallOutboundKey(new SrtpContext(Material()));
+
+        const uint eventDuration = 640; // e.g. an 80 ms DTMF event on an 8 kHz clock
+
+        // Two consecutive telephone-event reservations take distinct, monotonically advancing timestamps, so a
+        // following DTMF event is not folded into the previous one by a receiver (RFC 4733 §2.5.1.4).
+        var firstEvent = outbound.ReserveTrackTimestamp("audio", eventDuration);
+        var secondEvent = outbound.ReserveTrackTimestamp("audio", eventDuration);
+        Assert.Equal(InitialTimestamp, firstEvent);
+        Assert.Equal(InitialTimestamp + eventDuration, secondEvent);
+
+        // Media that follows resumes past the reserved event span, not on top of it.
+        await outbound.SendAsync("audio", new byte[] { 1 });
+        Assert.Equal(
+            InitialTimestamp + (2 * eventDuration), Decode(Assert.Single(sender.Datagrams), receiver).Timestamp);
+    }
+
     // ── harness ──────────────────────────────────────────────────────────────────
 
     private static (BundledOutboundPipeline pipeline, CapturingSender sender) Outbound()
