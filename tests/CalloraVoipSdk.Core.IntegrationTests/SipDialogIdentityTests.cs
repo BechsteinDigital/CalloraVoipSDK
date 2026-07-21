@@ -37,4 +37,9 @@ public sealed class SipDialogIdentityTests
     [Fact]
     public void A_to_tag_without_an_assigned_local_tag_is_not_rejected()
         => Assert.True(SipDialogIdentity.Matches(ToWithLocal, FromWithRemote, localTag: null, remoteTag: null));
+
+    [Fact]
+    public void An_empty_to_tag_is_treated_as_dialog_creating_not_a_mismatch()
+        // CF-046: ExtractTag yields null for an empty ";tag=", so the request is not tag-matched (dialog-creating).
+        => Assert.True(SipDialogIdentity.Matches("<sip:us@example.test>;tag=", FromWithRemote, "local-1", "remote-1"));
 }

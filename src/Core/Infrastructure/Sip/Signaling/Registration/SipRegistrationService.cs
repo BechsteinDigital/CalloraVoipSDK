@@ -129,7 +129,7 @@ internal sealed class SipRegistrationService : ISipRegistrationService
         // RFC 3261 §10.2.4: start CSeq from the caller-supplied value for refreshes.
         var cseq = request.StartCSeq > 0 ? request.StartCSeq : 1;
         var authAttempted = false;
-        var nonceCount = 1;
+        var nonceCounter = new SipNonceCounter();
         var effectiveExpiresSeconds = mode is RegisterMode.Register
             ? Math.Max(1, request.ExpiresSeconds)
             : 0;
@@ -350,7 +350,7 @@ internal sealed class SipRegistrationService : ISipRegistrationService
                             password: request.Password,
                             method: "REGISTER",
                             requestUri: requestUri,
-                            nonceCount: nonceCount++,
+                            nonceCount: nonceCounter.NextFor(challengeHeader),
                             out var generatedAuthorization))
                     {
                         authAttempted = true;
@@ -388,7 +388,7 @@ internal sealed class SipRegistrationService : ISipRegistrationService
                             password: request.Password,
                             method: "REGISTER",
                             requestUri: requestUri,
-                            nonceCount: nonceCount++,
+                            nonceCount: nonceCounter.NextFor(challengeHeader),
                             out var generatedAuthorization))
                     {
                         cseq++;

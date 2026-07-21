@@ -72,7 +72,7 @@ internal sealed class SipCallSignalingSubscriptions
         var cseq = 1;
         string? authorizationHeader = null;
         string? authorizationHeaderName = null;
-        var nonceCount = 1;
+        var nonceCounter = new SipNonceCounter();
 
         SipResponse? finalResponse = null;
         IPEndPoint? chosenEndPoint = null;
@@ -117,17 +117,18 @@ internal sealed class SipCallSignalingSubscriptions
 
             if (response.StatusCode == 401 || response.StatusCode == 407)
             {
-                var challengeHeaderName = response.StatusCode == 407 ? "Proxy-Authenticate" : "WWW-Authenticate";
-                var authResultHeaderName = response.StatusCode == 407 ? "Proxy-Authorization" : "Authorization";
-                var challengeHeader = response.Header(challengeHeaderName);
+                // RFC 3261 §22 (CF-043): pick the strongest offered challenge via the shared selector instead of
+                // blindly taking the first WWW-/Proxy-Authenticate header (the selector also resolves the correct
+                // Authorization vs Proxy-Authorization result header for a 401 vs 407).
                 if (!string.IsNullOrWhiteSpace(request.AuthPassword)
+                    && SipDigestChallengeSelector.TrySelect(response, out var challengeHeader, out var authResultHeaderName)
                     && _digestAuthenticator.TryCreateAuthorizationHeader(
                         challengeHeader,
                         request.LocalUsername,
                         request.AuthPassword,
                         "SUBSCRIBE",
                         normalizedRemoteUri,
-                        nonceCount++,
+                        nonceCounter.NextFor(challengeHeader),
                         out authorizationHeader))
                 {
                     authorizationHeaderName = authResultHeaderName;
