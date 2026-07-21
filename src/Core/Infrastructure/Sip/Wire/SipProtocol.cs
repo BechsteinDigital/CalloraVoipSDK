@@ -275,8 +275,14 @@ internal static class SipProtocol
             hasBareRport = afterRport >= topVia.Length || topVia[afterRport] != '=';
         }
 
-        if (!hasBareRport && !ipDiffers)
-            return viaHeader; // nothing to reflect
+        // RFC 3261 §18.2.1: a received= already present (reflected by an upstream layer) must not be duplicated,
+        // so a second application is a no-op — the reflection is idempotent and safe to run at multiple layers
+        // (CF-040: applied both by the response builders and centrally in the server transaction engine).
+        var hasReceived = topVia.IndexOf(";received=", StringComparison.OrdinalIgnoreCase) >= 0;
+        var addReceived = ipDiffers && !hasReceived;
+
+        if (!hasBareRport && !addReceived)
+            return viaHeader; // nothing to reflect (or already reflected)
 
         string updatedTopVia;
         if (hasBareRport)
@@ -284,7 +290,7 @@ internal static class SipProtocol
             // Fill rport=<port> and optionally received=<ip>
             var afterRport = rportIndex + ";rport".Length;
             updatedTopVia = topVia[..afterRport] + "=" + actualPort.ToString()
-                + (ipDiffers ? ";received=" + actualIp : string.Empty)
+                + (addReceived ? ";received=" + actualIp : string.Empty)
                 + topVia[afterRport..];
         }
         else

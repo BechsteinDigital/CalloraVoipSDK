@@ -34,7 +34,7 @@ internal sealed class AckTestSipCallSessionContext : ISipCallSessionContext
 
     public ILogger Logger { get; }
 
-    public ISipServerTransactionEngine ServerTransactions { get; } = new NoopSipServerTransactionEngine();
+    public ISipServerTransactionEngine ServerTransactions { get; init; } = new NoopSipServerTransactionEngine();
 
     public string CallId { get; } = "call-ack-test";
 
