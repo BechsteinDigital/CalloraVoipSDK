@@ -818,10 +818,33 @@ internal sealed class SipCallSessionInboundService
     /// </summary>
     private async Task SendReferNotifyAsync(bool accepted, CancellationToken ct)
     {
+        if (accepted)
+        {
+            // RFC 3515 §2.4.4 / RFC 6665: an accepted REFER creates an implicit subscription. The referee first
+            // reports the referred action is in progress (Subscription-State: active, sipfrag 100 Trying) and then
+            // its completion (Subscription-State: terminated) — not a single terminated NOTIFY. This SDK delegates
+            // the referred INVITE to the application and does not track its transaction, so completion is reported
+            // optimistically as 200 OK once the transfer has been accepted. Per-request progress reporting (real
+            // referred-call status, and the RFC 6665 pending state) is a follow-up requiring a consumer API.
+            await SendReferNotifyMessageAsync("active;expires=60", "SIP/2.0 100 Trying", ct).ConfigureAwait(false);
+            await SendReferNotifyMessageAsync("terminated;reason=noresource", "SIP/2.0 200 OK", ct).ConfigureAwait(false);
+        }
+        else
+        {
+            await SendReferNotifyMessageAsync("terminated;reason=noresource", "SIP/2.0 603 Decline", ct).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Sends one NOTIFY on the REFER implicit subscription with the given Subscription-State and message/sipfrag
+    /// body (RFC 3515 §2.4.5 / RFC 6665). Failures are logged and swallowed so one lost NOTIFY does not abort the
+    /// REFER handling.
+    /// </summary>
+    private async Task SendReferNotifyMessageAsync(string subscriptionState, string sipfrag, CancellationToken ct)
+    {
         try
         {
             var cseq = _context.NextLocalCSeq();
-            var body = accepted ? "SIP/2.0 200 OK" : "SIP/2.0 603 Decline";
             var headers = _headers.CreateDialogRequestHeaders(
                 method: "NOTIFY",
                 cseq: cseq,
@@ -830,7 +853,7 @@ internal sealed class SipCallSessionInboundService
                 authorizationHeader: null,
                 includeContentType: false);
             headers["Event"] = "refer";
-            headers["Subscription-State"] = "terminated;reason=noresource";
+            headers["Subscription-State"] = subscriptionState;
             headers["Content-Type"] = "message/sipfrag;version=2.0";
 
             // RFC 3261 §12.2.1.1 (CF-014): route the in-dialog NOTIFY via the dialog route set / topmost route.
@@ -841,7 +864,7 @@ internal sealed class SipCallSessionInboundService
                     "NOTIFY",
                     requestUri,
                     headers,
-                    body,
+                    sipfrag,
                     remoteEndPoint,
                     _context.SignalingTransport,
                     ct)
@@ -849,7 +872,8 @@ internal sealed class SipCallSessionInboundService
         }
         catch (Exception ex)
         {
-            _context.Logger.LogDebug(ex, "Failed to send REFER NOTIFY on {CallId}.", _context.CallId);
+            _context.Logger.LogDebug(
+                ex, "Failed to send REFER NOTIFY ({State}) on {CallId}.", subscriptionState, _context.CallId);
         }
     }
 
