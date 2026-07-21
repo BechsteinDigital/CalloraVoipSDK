@@ -32,11 +32,26 @@ public sealed class RtpMediaLoopback : IAsyncDisposable
         var portB = FreeUdpPort();
 
         var a = new RtpCallMediaSession(Parameters(portA, portB), NullLoggerFactory.Instance);
-        var b = new RtpCallMediaSession(Parameters(portB, portA), NullLoggerFactory.Instance);
-
-        await b.StartAsync();
-        await a.StartAsync();
-        return new RtpMediaLoopback(a, b);
+        try
+        {
+            var b = new RtpCallMediaSession(Parameters(portB, portA), NullLoggerFactory.Instance);
+            try
+            {
+                await b.StartAsync();
+                await a.StartAsync();
+                return new RtpMediaLoopback(a, b);
+            }
+            catch
+            {
+                await b.DisposeAsync();
+                throw;
+            }
+        }
+        catch
+        {
+            await a.DisposeAsync();
+            throw;
+        }
     }
 
     /// <summary>
@@ -70,8 +85,8 @@ public sealed class RtpMediaLoopback : IAsyncDisposable
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
-        await _a.DisposeAsync();
-        await _b.DisposeAsync();
+        try { await _a.DisposeAsync(); }
+        finally { await _b.DisposeAsync(); }
     }
 
     private static CallMediaParameters Parameters(int localPort, int remotePort) => new()
