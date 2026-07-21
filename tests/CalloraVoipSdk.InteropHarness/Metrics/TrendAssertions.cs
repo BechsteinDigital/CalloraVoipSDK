@@ -28,7 +28,8 @@ public static class TrendAssertions
         var start = Median(samples.Take(bucket).Select(selector));
         var end = Median(samples.Skip(samples.Count - bucket).Select(selector));
 
-        var threshold = start + (long)Math.Ceiling(Math.Abs(start) * toleranceRatio);
+        var tolerance = Math.Max(1L, (long)Math.Ceiling(Math.Abs(start) * toleranceRatio));
+        var threshold = start + tolerance;
         var hasDrift = end > threshold;
         var detail =
             $"{metricName}: Start≈{start}, Ende≈{end}, Schwelle={threshold} " +
