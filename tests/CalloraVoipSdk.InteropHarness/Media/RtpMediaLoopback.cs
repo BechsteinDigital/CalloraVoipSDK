@@ -10,26 +10,35 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace CalloraVoipSdk.InteropHarness.Media;
 
 /// <summary>
-/// L2-Fixture: zwei <see cref="RtpCallMediaSession"/> über echten UDP-Loopback (plain RTP, PCMU).
+/// L2-Fixture: zwei <see cref="RtpCallMediaSession"/> über echten UDP-Loopback. Konfigurierbar über
+/// Codec (PCMU/Opus, transport-only opake Payload) und Sicherheit (Plain RTP / SRTP via SDES).
 /// Kapselt den internen <c>CallAudioFrame</c> und bietet den Test-Projekten eine öffentliche API.
 /// </summary>
 public sealed class RtpMediaLoopback : IAsyncDisposable
 {
-    private const int PcmuPayloadType = 0;
-    private const int ClockRate = 8000;
-    private const int SamplesPerPacket = 160;
+    // SDES-Keying für den SRTP-Modus (RFC 4568). Zwei feste Master-Keys, richtungsweise getauscht:
+    // was Leg A lokal sendet, entschlüsselt Leg B als Remote — und umgekehrt.
+    private const string SrtpSuite = "AES_CM_128_HMAC_SHA1_80";
+    private const byte KeySeedA = 70;
+    private const byte KeySeedB = 90;
 
     private readonly RtpCallMediaSession _a;
     private readonly RtpCallMediaSession _b;
     private readonly int _portA;
     private readonly int _portB;
+    private readonly int _payloadType;
+    private readonly int _samplesPerPacket;
 
-    private RtpMediaLoopback(RtpCallMediaSession a, RtpCallMediaSession b, int portA, int portB)
+    private RtpMediaLoopback(
+        RtpCallMediaSession a, RtpCallMediaSession b,
+        int portA, int portB, int payloadType, int samplesPerPacket)
     {
         _a = a;
         _b = b;
         _portA = portA;
         _portB = portB;
+        _payloadType = payloadType;
+        _samplesPerPacket = samplesPerPacket;
     }
 
     /// <summary>Das gebundene Loopback-Portpaar (Leg A ↔ Leg B) — für Soak-Fehlerdiagnose.</summary>
@@ -40,15 +49,19 @@ public sealed class RtpMediaLoopback : IAsyncDisposable
     /// Port-Bind-Kollision (<see cref="System.Net.Sockets.SocketError.AddressAlreadyInUse"/>) mit
     /// frischen Ports bis zu <paramref name="maxAttempts"/> mal. <paramref name="metricsPublishInterval"/>
     /// steuert das Laufzeit-Metrik-Publish-Intervall beider Legs (<see langword="null"/> = SDK-Default 1 s).
+    /// <paramref name="codec"/>/<paramref name="security"/> wählen Codec-Profil und Transport-Sicherheit.
     /// </summary>
     public static async Task<RtpMediaLoopback> StartAsync(
-        int maxAttempts = 5, TimeSpan? metricsPublishInterval = null)
+        int maxAttempts = 5,
+        TimeSpan? metricsPublishInterval = null,
+        LoopbackCodec codec = LoopbackCodec.Pcmu,
+        LoopbackSecurity security = LoopbackSecurity.Plain)
     {
         for (var attempt = 1; ; attempt++)
         {
             try
             {
-                return await TryStartOnceAsync(metricsPublishInterval);
+                return await TryStartOnceAsync(metricsPublishInterval, codec, security);
             }
             catch (SocketException ex)
                 when (ex.SocketErrorCode == SocketError.AddressAlreadyInUse && attempt < maxAttempts)
@@ -58,20 +71,27 @@ public sealed class RtpMediaLoopback : IAsyncDisposable
         }
     }
 
-    private static async Task<RtpMediaLoopback> TryStartOnceAsync(TimeSpan? metricsPublishInterval)
+    private static async Task<RtpMediaLoopback> TryStartOnceAsync(
+        TimeSpan? metricsPublishInterval, LoopbackCodec codec, LoopbackSecurity security)
     {
         var portA = FreeUdpPort();
         var portB = FreeUdpPort();
+        var (payloadType, clockRate, samples) = CodecSpec(codec);
 
-        var a = CreateSession(portA, portB, metricsPublishInterval);
+        // Bei SRTP teilen beide Legs dieselben Master-Keys, richtungsweise getauscht.
+        var (localA, remoteA, localB, remoteB) = security == LoopbackSecurity.Srtp
+            ? (InlineKey(KeySeedA), InlineKey(KeySeedB), InlineKey(KeySeedB), InlineKey(KeySeedA))
+            : (null, null, null, null);
+
+        var a = CreateSession(portA, portB, payloadType, clockRate, samples, localA, remoteA, metricsPublishInterval);
         try
         {
-            var b = CreateSession(portB, portA, metricsPublishInterval);
+            var b = CreateSession(portB, portA, payloadType, clockRate, samples, localB, remoteB, metricsPublishInterval);
             try
             {
                 await b.StartAsync();
                 await a.StartAsync();
-                return new RtpMediaLoopback(a, b, portA, portB);
+                return new RtpMediaLoopback(a, b, portA, portB, payloadType, samples);
             }
             catch
             {
@@ -87,8 +107,10 @@ public sealed class RtpMediaLoopback : IAsyncDisposable
     }
 
     private static RtpCallMediaSession CreateSession(
-        int localPort, int remotePort, TimeSpan? metricsPublishInterval) =>
-        new(Parameters(localPort, remotePort), NullLoggerFactory.Instance,
+        int localPort, int remotePort, int payloadType, int clockRate, int samples,
+        string? srtpLocalKey, string? srtpRemoteKey, TimeSpan? metricsPublishInterval) =>
+        new(Parameters(localPort, remotePort, payloadType, clockRate, samples, srtpLocalKey, srtpRemoteKey),
+            NullLoggerFactory.Instance,
             jitterBufferOptions: null, playoutInterval: null, metricsPublishInterval: metricsPublishInterval);
 
     /// <summary>
@@ -104,7 +126,7 @@ public sealed class RtpMediaLoopback : IAsyncDisposable
         try
         {
             using var cts = new CancellationTokenSource(timeout);
-            var frame = new CallAudioFrame(payload, PcmuPayloadType, (uint)SamplesPerPacket);
+            var frame = new CallAudioFrame(payload, _payloadType, (uint)_samplesPerPacket);
             while (!tcs.Task.IsCompleted)
             {
                 cts.Token.ThrowIfCancellationRequested();
@@ -138,7 +160,7 @@ public sealed class RtpMediaLoopback : IAsyncDisposable
         try
         {
             using var cts = new CancellationTokenSource(duration);
-            var frame = new CallAudioFrame(new byte[160], PcmuPayloadType, (uint)SamplesPerPacket);
+            var frame = new CallAudioFrame(new byte[160], _payloadType, (uint)_samplesPerPacket);
             try
             {
                 while (true)
@@ -168,14 +190,37 @@ public sealed class RtpMediaLoopback : IAsyncDisposable
         finally { await _b.DisposeAsync(); }
     }
 
-    private static CallMediaParameters Parameters(int localPort, int remotePort) => new()
+    private static (int payloadType, int clockRate, int samplesPerPacket) CodecSpec(LoopbackCodec codec) => codec switch
+    {
+        LoopbackCodec.Pcmu => (0, 8000, 160),
+        LoopbackCodec.Opus => (111, 48000, 960),
+        _ => throw new ArgumentOutOfRangeException(nameof(codec), codec, "Unbekannter Loopback-Codec."),
+    };
+
+    private static CallMediaParameters Parameters(
+        int localPort, int remotePort, int payloadType, int clockRate, int samples,
+        string? srtpLocalKey, string? srtpRemoteKey) => new()
     {
         LocalEndPoint = new IPEndPoint(IPAddress.Loopback, localPort),
         RemoteEndPoint = new IPEndPoint(IPAddress.Loopback, remotePort),
-        PayloadType = PcmuPayloadType,
-        ClockRate = ClockRate,
-        SamplesPerPacket = SamplesPerPacket,
+        PayloadType = payloadType,
+        ClockRate = clockRate,
+        SamplesPerPacket = samples,
+        MediaProfile = srtpLocalKey is null ? "RTP/AVP" : "RTP/SAVP",
+        IsSrtpNegotiated = srtpLocalKey is not null,
+        SrtpSuite = srtpLocalKey is null ? null : SrtpSuite,
+        SrtpLocalKeyParams = srtpLocalKey,
+        SrtpRemoteKeyParams = srtpRemoteKey,
     };
+
+    /// <summary>Baut ein "inline:base64"-SDES-Key-Param aus 30 Bytes Testmaterial (16 Key + 14 Salt).</summary>
+    private static string InlineKey(byte seed)
+    {
+        var material = new byte[30];
+        for (var i = 0; i < material.Length; i++)
+            material[i] = (byte)(seed + i);
+        return $"inline:{Convert.ToBase64String(material)}";
+    }
 
     private static int FreeUdpPort()
     {
