@@ -25,6 +25,19 @@ internal sealed class CapturingSipTransportRuntime : ISipTransportRuntime
     /// </summary>
     public string? ThrowOnSendMethod { get; set; }
 
+    /// <summary>
+    /// When set, <see cref="SendRequestAsync"/> throws for any request the predicate matches — a finer-grained
+    /// alternative to <see cref="ThrowOnSendMethod"/> (e.g. fail only the first PRACK via a captured counter).
+    /// </summary>
+    public Func<CapturedSipRequest, bool>? ThrowOnSendPredicate { get; set; }
+
+    /// <summary>
+    /// When set, the provisional (1xx) responses it returns for a request are dispatched — in order — BEFORE the
+    /// final response from <see cref="ResponseFactory"/>. Lets a test deliver reliable provisionals (Require:
+    /// 100rel + RSeq) that drive the UAC's PRACK path, then a final response for the same transaction.
+    /// </summary>
+    public Func<CapturedSipRequest, IReadOnlyList<SipResponse>>? ProvisionalResponsesFactory { get; set; }
+
     public int ResponseSubscriptionsCreated { get; private set; }
 
     public void Dispose()
@@ -53,8 +66,9 @@ internal sealed class CapturingSipTransportRuntime : ISipTransportRuntime
         IPEndPoint remoteEndPoint,
         CancellationToken ct = default)
     {
-        ThrowIfConfigured(method);
-        Capture(method, requestUri, headers, body, remoteEndPoint);
+        var request = new CapturedSipRequest(method, requestUri, headers, body, remoteEndPoint);
+        ThrowIfConfigured(request);
+        Capture(request);
         return Task.CompletedTask;
     }
 
@@ -67,15 +81,18 @@ internal sealed class CapturingSipTransportRuntime : ISipTransportRuntime
         SipTransportProtocol transport,
         CancellationToken ct = default)
     {
-        ThrowIfConfigured(method);
-        Capture(method, requestUri, headers, body, remoteEndPoint);
+        var request = new CapturedSipRequest(method, requestUri, headers, body, remoteEndPoint);
+        ThrowIfConfigured(request);
+        Capture(request);
         return Task.CompletedTask;
     }
 
-    private void ThrowIfConfigured(string method)
+    private void ThrowIfConfigured(CapturedSipRequest request)
     {
-        if (ThrowOnSendMethod is not null && method.Equals(ThrowOnSendMethod, StringComparison.Ordinal))
-            throw new IOException($"Simulated transport send failure for {method}.");
+        if (ThrowOnSendMethod is not null && request.Method.Equals(ThrowOnSendMethod, StringComparison.Ordinal))
+            throw new IOException($"Simulated transport send failure for {request.Method}.");
+        if (ThrowOnSendPredicate is not null && ThrowOnSendPredicate(request))
+            throw new IOException($"Simulated transport send failure for {request.Method}.");
     }
 
     private readonly List<(int StatusCode, IReadOnlyDictionary<string, string> Headers, IPEndPoint RemoteEndPoint)> _responses = new();
@@ -151,14 +168,8 @@ internal sealed class CapturingSipTransportRuntime : ISipTransportRuntime
             return _requests.ToArray();
     }
 
-    private void Capture(
-        string method,
-        string requestUri,
-        IReadOnlyDictionary<string, string> headers,
-        string? body,
-        IPEndPoint remoteEndPoint)
+    private void Capture(CapturedSipRequest request)
     {
-        var request = new CapturedSipRequest(method, requestUri, headers, body, remoteEndPoint);
         TaskCompletionSource<CapturedSipRequest> signal;
         lock (_sync)
         {
@@ -170,9 +181,17 @@ internal sealed class CapturingSipTransportRuntime : ISipTransportRuntime
 
         signal.TrySetResult(request);
 
+        // Reliable provisionals (if any) are delivered in order before the final response, so the UAC's
+        // OnProvisionalResponse/PRACK path runs against the same transaction.
+        if (ProvisionalResponsesFactory?.Invoke(request) is { } provisionals)
+        {
+            foreach (var provisional in provisionals)
+                DispatchResponse(request.RemoteEndPoint, provisional);
+        }
+
         var response = ResponseFactory?.Invoke(request);
         if (response is not null)
-            DispatchResponse(remoteEndPoint, response);
+            DispatchResponse(request.RemoteEndPoint, response);
     }
 
     private void DispatchResponse(IPEndPoint remoteEndPoint, SipResponse response)
