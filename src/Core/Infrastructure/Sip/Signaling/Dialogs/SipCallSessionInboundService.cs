@@ -805,12 +805,16 @@ internal sealed class SipCallSessionInboundService
             headers["Subscription-State"] = "terminated;reason=noresource";
             headers["Content-Type"] = "message/sipfrag;version=2.0";
 
+            // RFC 3261 §12.2.1.1 (CF-014): route the in-dialog NOTIFY via the dialog route set / topmost route.
+            var (requestUri, remoteEndPoint) =
+                await SipInDialogRequestRouting.ApplyInDialogRoutingAsync(_context, headers, ct).ConfigureAwait(false);
+
             await _context.Transport.SendRequestAsync(
                     "NOTIFY",
-                    _context.RemoteRequestUri,
+                    requestUri,
                     headers,
                     body,
-                    _context.RemoteEndPoint,
+                    remoteEndPoint,
                     _context.SignalingTransport,
                     ct)
                 .ConfigureAwait(false);
@@ -843,12 +847,16 @@ internal sealed class SipCallSessionInboundService
             headers["Subscription-State"] = subscriptionStateHeader;
             headers["Content-Type"] = "message/sipfrag;version=2.0";
 
+            // RFC 3261 §12.2.1.1 (CF-014): route the in-dialog NOTIFY via the dialog route set / topmost route.
+            var (requestUri, remoteEndPoint) =
+                await SipInDialogRequestRouting.ApplyInDialogRoutingAsync(_context, headers, ct).ConfigureAwait(false);
+
             await _context.Transport.SendRequestAsync(
                     "NOTIFY",
-                    _context.RemoteRequestUri,
+                    requestUri,
                     headers,
                     "SIP/2.0 200 OK",
-                    _context.RemoteEndPoint,
+                    remoteEndPoint,
                     _context.SignalingTransport,
                     ct)
                 .ConfigureAwait(false);
