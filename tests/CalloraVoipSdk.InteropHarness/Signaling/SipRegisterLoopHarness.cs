@@ -48,7 +48,10 @@ public sealed class SipRegisterLoopHarness : IAsyncDisposable
         return harness;
     }
 
-    /// <summary>Lässt den Loop <paramref name="duration"/> lang laufen und gibt die beobachteten Zyklen zurück.</summary>
+    /// <summary>
+    /// Wartet <paramref name="duration"/> lang — währenddessen läuft der in <see cref="Start"/>
+    /// gestartete Refresh-Loop weiter — und gibt danach eine Momentaufnahme der beobachteten Zyklen zurück.
+    /// </summary>
     public async Task<IReadOnlyList<RegisterCycle>> RunAsync(TimeSpan duration)
     {
         await Task.Delay(duration);
@@ -58,8 +61,7 @@ public sealed class SipRegisterLoopHarness : IAsyncDisposable
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
-        _channel.StopRegistration();
-        await Task.Delay(50);
+        await _channel.StopRegistrationAsync().ConfigureAwait(false);
         _channel.Dispose();
     }
 }
