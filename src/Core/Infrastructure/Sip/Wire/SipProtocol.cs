@@ -1,3 +1,5 @@
+using CalloraVoipSdk.Core.Infrastructure.Common.Protocols;
+
 namespace CalloraVoipSdk.Core.Infrastructure.Sip.Wire;
 
 /// <summary>
@@ -122,16 +124,15 @@ internal static class SipProtocol
         if (string.IsNullOrWhiteSpace(value)) return null;
 
         // RFC 3261 §7.3.1/§25.1: header parameters are SEMI-separated (SEMI = SWS ";" SWS) and the tag is
-        // "tag" EQUAL token (EQUAL = SWS "=" SWS), so LWS may surround ";", the name, and "=". Only ";" at
-        // angle-bracket depth 0 separates header parameters — a ";tag=" inside a name-addr's <URI> is a URI
-        // parameter, not the dialog tag, and must not be matched.
-        var depth = 0;
+        // "tag" EQUAL token (EQUAL = SWS "=" SWS), so LWS may surround ";", the name, and "=". Only a top-level
+        // ";" separates header parameters — a ";tag=" inside a name-addr's <URI> is a URI parameter, and one
+        // inside a quoted display name (e.g. "Alice ;tag=fake") is literal text; neither is the dialog tag, so
+        // both must be skipped (CF-046). Quote/escape/bracket tracking is delegated to HeaderScanState.
+        var scan = new HeaderScanState();
         for (var i = 0; i < value.Length; i++)
         {
-            var c = value[i];
-            if (c == '<') { depth++; continue; }
-            if (c == '>') { if (depth > 0) depth--; continue; }
-            if (c != ';' || depth != 0) continue;
+            if (!scan.Consume(value[i]) || value[i] != ';')
+                continue;
 
             var p = i + 1;
             while (p < value.Length && char.IsWhiteSpace(value[p])) p++;

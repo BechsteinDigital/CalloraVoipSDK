@@ -12,39 +12,19 @@ internal static class ProtocolCommonUtilities
 {
     /// <summary>
     /// Splits a comma-separated header value list while preserving commas that fall inside a quoted string
-    /// (<c>"…"</c>) or a name-addr's angle brackets (<c>&lt;…&gt;</c>). This is the RFC 3261 §7.3.1 rule for
-    /// combining/splitting multiple header field values: a comma inside a display name or a <c>&lt;URI&gt;</c>
-    /// (which can itself carry commas in its parameters/headers) is not a value delimiter.
+    /// (<c>"…"</c>, honouring the <c>\</c> quoted-pair escape) or a name-addr's angle brackets (<c>&lt;…&gt;</c>).
+    /// This is the RFC 3261 §7.3.1 rule for combining/splitting multiple header field values: a comma inside a
+    /// display name or a <c>&lt;URI&gt;</c> (which can itself carry commas in its parameters/headers) is not a
+    /// value delimiter. Quote/bracket/escape tracking is delegated to <see cref="HeaderScanState"/> so that an
+    /// escaped quote (<c>\"</c>) inside a display name does not prematurely end the quoted string.
     /// </summary>
     public static IEnumerable<string> SplitCommaSeparatedRespectingQuotes(string value)
     {
         var current = new StringBuilder();
-        var inQuotes = false;
-        var bracketDepth = 0;
+        var scan = new HeaderScanState();
         foreach (var ch in value)
         {
-            if (ch == '"')
-            {
-                inQuotes = !inQuotes;
-                current.Append(ch);
-                continue;
-            }
-
-            if (!inQuotes && ch == '<')
-            {
-                bracketDepth++;
-                current.Append(ch);
-                continue;
-            }
-
-            if (!inQuotes && ch == '>')
-            {
-                if (bracketDepth > 0) bracketDepth--;
-                current.Append(ch);
-                continue;
-            }
-
-            if (ch == ',' && !inQuotes && bracketDepth == 0)
+            if (scan.Consume(ch) && ch == ',')
             {
                 var token = current.ToString().Trim();
                 if (token.Length > 0) yield return token;
