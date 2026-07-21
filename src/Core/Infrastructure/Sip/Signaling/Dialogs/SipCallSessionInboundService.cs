@@ -43,14 +43,15 @@ internal sealed class SipCallSessionInboundService
         if (!string.Equals(request.Header("Call-ID"), _context.CallId, StringComparison.Ordinal))
             return;
 
-        // RFC 3261 §12.2.2 (CF-013): a mid-dialog request (one carrying a To-tag) must match this dialog's full
-        // identity — Call-ID (matched above) plus our local tag (its To-tag) and the remote tag (its From-tag).
-        // A tag mismatch is a request for a different dialog that merely shares the Call-ID (a forked branch, or
-        // a stale/foreign request): reject it with 481 rather than mutate this dialog. ACK takes no response and
-        // CANCEL is matched by transaction (not dialog identity), so both are exempt from the tag gate.
+        // RFC 3261 §12.2.2 (CF-013): a mid-dialog request must match this dialog's full identity — Call-ID
+        // (matched above) plus our local tag (To-tag) and the remote tag (From-tag); a mismatch is a foreign/forked
+        // request and is rejected with 481 rather than mutating this dialog. The requirement is method-dependent
+        // (see RequiresDialogToTag): a strictly in-dialog method without a To-tag cannot terminate or mutate the
+        // dialog. ACK takes no response and CANCEL is transaction-matched, so both are exempt from the tag gate.
+        var toTagRequired = SipDialogIdentity.RequiresDialogToTag(request.Method);
         if (!string.Equals(request.Method, "CANCEL", StringComparison.Ordinal)
             && !SipDialogIdentity.Matches(
-                request.Header("To"), request.Header("From"), _context.LocalTag, _context.RemoteTag))
+                request.Header("To"), request.Header("From"), _context.LocalTag, _context.RemoteTag, toTagRequired))
         {
             if (!string.Equals(request.Method, "ACK", StringComparison.Ordinal))
             {
