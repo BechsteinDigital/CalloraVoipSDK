@@ -77,8 +77,8 @@ internal sealed class SipCallSessionTransactionService
         var staleRetries = 0;
         var timerRetries = 0;
         int? sessionIntervalOverride = null;
-        string? authorization = null;
         string? authorizationHeaderName = null;
+        string? selectedChallenge = null;
         var reliablePrackSync = new object();
         var reliableProvisionalOrder = new SipReliableProvisionalReceiptOrder();
         Task reliablePrackSendChain = Task.CompletedTask;
@@ -89,6 +89,26 @@ internal sealed class SipCallSessionTransactionService
             var branch = SipProtocol.NewBranch();
             var transactionInviteCSeq = cseq;
             _context.SetActiveInvite(cseq, branch);
+
+            // RFC 7616 §3.4 (CF-047): (re)generate the Authorization header for THIS request from the selected
+            // challenge, so every request that reuses the nonce carries a fresh, incrementing nonce-count (nc).
+            // The loop stores the selected challenge, not the finished Authorization line — replaying that line
+            // reuses the same nc, which a strict server rejects as a replay (e.g. a 422 Min-SE retry after an
+            // already-authenticated INVITE). One NextFor call per send keeps the nc unique per request.
+            string? authorization = null;
+            if (selectedChallenge is not null
+                && _context.DigestAuthenticator.TryCreateAuthorizationHeader(
+                    selectedChallenge,
+                    _context.AuthUsername,
+                    _context.AuthPassword!,
+                    "INVITE",
+                    _context.RemoteRequestUri,
+                    nonceCounter.NextFor(selectedChallenge),
+                    out var regeneratedAuthorization,
+                    body: body))
+            {
+                authorization = regeneratedAuthorization;
+            }
 
             var headers = _headers.CreateDialogRequestHeaders(
                 method: "INVITE",
@@ -205,20 +225,12 @@ internal sealed class SipCallSessionTransactionService
                 if (SipDigestChallengeSelector.TrySelect(
                         finalResponse.Response,
                         out var challengeHeader,
-                        out var nextAuthorizationHeaderName)
-                    && _context.DigestAuthenticator.TryCreateAuthorizationHeader(
-                        challengeHeader,
-                        _context.AuthUsername,
-                        _context.AuthPassword!,
-                        "INVITE",
-                        _context.RemoteRequestUri,
-                        nonceCounter.NextFor(challengeHeader),
-                        out var generatedAuthorization,
-                        body: body))
+                        out var nextAuthorizationHeaderName))
                 {
+                    // Store the challenge; the Authorization line is (re)built at the loop top with a fresh nc.
                     authAttempted = true;
                     authorizationHeaderName = nextAuthorizationHeaderName;
-                    authorization = generatedAuthorization;
+                    selectedChallenge = challengeHeader;
                     cseq = _context.NextLocalCSeq();
                     continue;
                 }
@@ -233,20 +245,12 @@ internal sealed class SipCallSessionTransactionService
                         finalResponse.Response,
                         out var challengeHeader,
                         out var nextAuthorizationHeaderName)
-                    && SipDigestChallengeSelector.IsStaleChallenge(challengeHeader)
-                    && _context.DigestAuthenticator.TryCreateAuthorizationHeader(
-                        challengeHeader,
-                        _context.AuthUsername,
-                        _context.AuthPassword!,
-                        "INVITE",
-                        _context.RemoteRequestUri,
-                        nonceCounter.NextFor(challengeHeader),
-                        out var generatedAuthorization,
-                        body: body))
+                    && SipDigestChallengeSelector.IsStaleChallenge(challengeHeader))
                 {
+                    // A fresh nonce: store it; NextFor resets the nc to 1 for the new nonce at the loop top.
                     staleRetries++;
                     authorizationHeaderName = nextAuthorizationHeaderName;
-                    authorization = generatedAuthorization;
+                    selectedChallenge = challengeHeader;
                     cseq = _context.NextLocalCSeq();
                     continue;
                 }
