@@ -78,14 +78,27 @@ internal sealed class CapturingSipTransportRuntime : ISipTransportRuntime
             throw new IOException($"Simulated transport send failure for {method}.");
     }
 
+    private readonly List<(int StatusCode, IReadOnlyDictionary<string, string> Headers, IPEndPoint RemoteEndPoint)> _responses = new();
+
+    /// <summary>Snapshot of the responses sent through this transport (status, headers, destination).</summary>
+    public IReadOnlyList<(int StatusCode, IReadOnlyDictionary<string, string> Headers, IPEndPoint RemoteEndPoint)> SnapshotResponses()
+    {
+        lock (_sync)
+            return _responses.ToArray();
+    }
+
     public Task SendResponseAsync(
         int statusCode,
         string reasonPhrase,
         IReadOnlyDictionary<string, string> headers,
         string? body,
         IPEndPoint remoteEndPoint,
-        CancellationToken ct = default) =>
-        Task.CompletedTask;
+        CancellationToken ct = default)
+    {
+        lock (_sync)
+            _responses.Add((statusCode, headers, remoteEndPoint));
+        return Task.CompletedTask;
+    }
 
     public Task SendResponseAsync(
         int statusCode,
