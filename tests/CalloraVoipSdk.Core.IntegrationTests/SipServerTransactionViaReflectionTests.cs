@@ -58,4 +58,30 @@ public sealed class SipServerTransactionViaReflectionTests
         var sent = Assert.Single(transport.SnapshotResponses());
         Assert.Equal(via, sent.Headers["Via"]);
     }
+
+    [Fact]
+    public async Task Reflection_also_applies_on_the_direct_send_path_without_a_transaction_key()
+    {
+        var transport = new CapturingSipTransportRuntime();
+        using var engine = new SipServerTransactionEngine(transport, NullLogger.Instance);
+        var source = new IPEndPoint(IPAddress.Parse("203.0.113.7"), 40000);
+
+        var via = "SIP/2.0/UDP 10.0.0.1:5060;branch=z9hG4bK-cf040;rport";
+        // No CSeq → SipServerTransactionKey.TryFromRequest fails → the engine takes the direct send path.
+        var keyless = new SipRequest("OPTIONS", "sip:us@example.test",
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Via"] = via,
+                ["From"] = "<sip:them@example.test>;tag=from-tag",
+                ["To"] = "<sip:us@example.test>",
+                ["Call-ID"] = "cf040-keyless",
+            }, string.Empty);
+        var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["Via"] = via };
+
+        await engine.SendResponseAsync(keyless, source, SipTransportProtocol.Udp, 200, "OK", headers, body: null);
+
+        var sent = Assert.Single(transport.SnapshotResponses());
+        Assert.Contains(";rport=40000", sent.Headers["Via"]);
+        Assert.Contains(";received=203.0.113.7", sent.Headers["Via"]);
+    }
 }
