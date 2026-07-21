@@ -1,3 +1,4 @@
+using CalloraVoipSdk.InteropHarness.Audit;
 using CalloraVoipSdk.InteropHarness.Media;
 using CalloraVoipSdk.InteropHarness.Metrics;
 using Xunit;
@@ -39,6 +40,17 @@ public sealed class MediaQualityDriftSoakTests
         var isShort = profile.Duration.TotalSeconds <= 5;
         var minSnapshots = isShort ? 3 : 10;
         Assert.True(snapshots.Count >= minSnapshots, $"{tag} Zu wenige Snapshots: {snapshots.Count}");
+
+        // Artefakt VOR den Assertions: Qualitäts-Messreihe je Codec/Sicherheit auch bei Fehlschlag festhalten.
+        SoakArtifactSink.TryWrite(SoakArtifactSink.CreateReport(
+            "MediaQualityDrift",
+            new Dictionary<string, string>
+            {
+                ["Codec"] = codec.ToString(),
+                ["Security"] = security.ToString(),
+                ["DurationSec"] = ((int)profile.Duration.TotalSeconds).ToString(),
+            },
+            qualitySeries: snapshots));
 
         var last = snapshots[^1];
         Assert.True(last.PacketsDelivered > 0, $"{tag} Es müssen Pakete ausgeliefert worden sein.");

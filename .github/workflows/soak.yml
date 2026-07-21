@@ -25,6 +25,9 @@ jobs:
     env:
       SOAK_ITERATIONS: ${{ github.event.inputs.iterations || '500' }}
       SOAK_DURATION_SECONDS: ${{ github.event.inputs.duration_seconds || '20' }}
+      # Aktiviert den strukturierten Audit-Sink (JSON-Messreihen + summary.md je Lauf).
+      # GITHUB_SHA wird vom Runner automatisch gesetzt und vom Sink als Commit-SHA gelesen.
+      SOAK_ARTIFACT_DIR: ${{ github.workspace }}/soak-artifacts
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -45,3 +48,11 @@ jobs:
 
       - name: Long soaks (Category=SoakLong)
         run: dotnet test tests/CalloraVoipSdk.SoakTests/CalloraVoipSdk.SoakTests.csproj --configuration Release --no-build -f net10.0 --filter "Category=SoakLong" --nologo --verbosity minimal
+
+      - name: Upload soak artifacts (Messreihen + summary.md)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: soak-artifacts
+          path: ${{ github.workspace }}/soak-artifacts
+          if-no-files-found: warn

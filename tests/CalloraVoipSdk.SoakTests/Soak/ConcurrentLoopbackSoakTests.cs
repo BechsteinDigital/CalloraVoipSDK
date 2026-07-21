@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using CalloraVoipSdk.InteropHarness.Audit;
 using CalloraVoipSdk.InteropHarness.Diagnostics;
 using CalloraVoipSdk.InteropHarness.Media;
 using CalloraVoipSdk.InteropHarness.Metrics;
@@ -39,6 +40,16 @@ public sealed class ConcurrentLoopbackSoakTests
             await RunWaveAsync(wave, profile.Parallelism, payload, failures);
             samples.Add(sampler.Capture());
         }
+
+        // Artefakt VOR den Assertions: Messreihe + strukturierte Fehler auch bei Fehlschlag festhalten.
+        SoakArtifactSink.TryWrite(SoakArtifactSink.CreateReport(
+            "ConcurrentLoopback",
+            new Dictionary<string, string>
+            {
+                ["Waves"] = profile.Waves.ToString(),
+                ["Parallelism"] = profile.Parallelism.ToString(),
+            },
+            resourceSeries: samples, failures: failures.ToArray()));
 
         // Strukturierte Diagnose statt eines nackten Zählers: bei Fehlschlag zeigt die Assert-Meldung
         // Welle, Index, Portpaar, Dauer und Ausnahmetyp jedes betroffenen Round-Trips.

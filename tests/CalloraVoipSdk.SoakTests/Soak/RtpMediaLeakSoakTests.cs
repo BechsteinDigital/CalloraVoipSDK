@@ -1,3 +1,4 @@
+using CalloraVoipSdk.InteropHarness.Audit;
 using CalloraVoipSdk.InteropHarness.Media;
 using CalloraVoipSdk.InteropHarness.Metrics;
 using Xunit;
@@ -40,6 +41,16 @@ public sealed class RtpMediaLeakSoakTests
                 samples.Add(sampler.Capture());
         }
         samples.Add(sampler.Capture());
+
+        // Artefakt VOR den Assertions: auch ein fehlschlagender Lauf hinterlässt seine Messreihe.
+        SoakArtifactSink.TryWrite(SoakArtifactSink.CreateReport(
+            "RtpMediaLeak",
+            new Dictionary<string, string>
+            {
+                ["Iterations"] = profile.Iterations.ToString(),
+                ["WarmUp"] = warmUp.ToString(),
+            },
+            resourceSeries: samples));
 
         if (samples.Count < 5)
             return; // Short-Profil: zu wenige Sockel für eine aussagekräftige Trend-/Plateau-Wertung.

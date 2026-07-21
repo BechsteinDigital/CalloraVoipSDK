@@ -1,3 +1,4 @@
+using CalloraVoipSdk.InteropHarness.Audit;
 using CalloraVoipSdk.InteropHarness.Metrics;
 using CalloraVoipSdk.InteropHarness.Signaling;
 using Xunit;
@@ -39,6 +40,16 @@ public sealed class SipLineChannelRefreshLifecycleSoakTests
 
             Assert.True(harness.ReachedRegistered, "LineState.Registered nie erreicht.");
         }
+
+        // Artefakt VOR den Assertions: Ressourcenreihe + Zyklus-Kennzahlen auch bei Fehlschlag festhalten.
+        SoakArtifactSink.TryWrite(SoakArtifactSink.CreateReport(
+            "SipLineChannelRefreshLifecycle",
+            new Dictionary<string, string>
+            {
+                ["DurationSec"] = ((int)profile.Duration.TotalSeconds).ToString(),
+                ["Cycles"] = cycles.Count.ToString(),
+            },
+            resourceSeries: samples));
 
         // Refresh-Verhalten: genügend Zyklen, monoton steigende CSeq, stabile Call-ID über den Loop.
         var minCycles = profile.Duration.TotalSeconds <= 5 ? 2 : 5;
