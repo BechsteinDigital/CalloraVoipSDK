@@ -45,6 +45,10 @@ public sealed class SipSessionTimerMinSeRetryTests
         var context = new AckTestSipCallSessionContext(transport);
         var service = new SipCallSessionTransactionService(context, new SipCallSessionHeaderService(context));
 
+        // Start before Established so the success transition is observable (the harness would otherwise already
+        // report Established).
+        context.TransitionTo(SipDialogState.Inviting);
+
         await service.SendInviteTransactionAsync(
             body: null, allowRingingTransition: true, SipDialogState.Established, CancellationToken.None);
 
