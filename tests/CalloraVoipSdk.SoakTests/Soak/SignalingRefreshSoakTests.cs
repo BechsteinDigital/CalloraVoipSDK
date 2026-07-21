@@ -1,20 +1,27 @@
 using CalloraVoipSdk.InteropHarness.Signaling;
+using Xunit;
 
 namespace CalloraVoipSdk.SoakTests.Soak;
 
 public sealed class SignalingRefreshSoakTests
 {
-    [Fact]
-    public async Task LongRegisterLoop_CallIdStable_CSeqMonotonic_NoSilentDrop()
+    [Fact, Trait("Category", "SoakShort")]
+    public Task LongRegisterLoop_Short() => RunAsync(SoakProfile.Short);
+
+    [Fact, Trait("Category", "SoakLong")]
+    public Task LongRegisterLoop_Long() => RunAsync(SoakProfile.Long);
+
+    private static async Task RunAsync(SoakProfile profile)
     {
         IReadOnlyList<RegisterCycle> cycles;
         await using (var harness = SipRegisterLoopHarness.Start(effectiveExpiresSeconds: 2))
         {
-            cycles = await harness.RunAsync(TimeSpan.FromSeconds(20));
+            cycles = await harness.RunAsync(profile.Duration);
             Assert.True(harness.ReachedRegistered, "LineState.Registered nie erreicht.");
         }
 
-        Assert.True(cycles.Count >= 5, $"Zu wenige Re-REGISTER-Zyklen: {cycles.Count}");
+        var minCycles = profile.Duration.TotalSeconds <= 5 ? 2 : 5;
+        Assert.True(cycles.Count >= minCycles, $"Zu wenige Re-REGISTER-Zyklen: {cycles.Count}");
 
         for (var i = 1; i < cycles.Count; i++)
             Assert.True(cycles[i].StartCSeq > cycles[i - 1].StartCSeq,

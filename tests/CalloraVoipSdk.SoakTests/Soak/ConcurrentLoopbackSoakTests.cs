@@ -1,25 +1,28 @@
 using CalloraVoipSdk.InteropHarness.Media;
 using CalloraVoipSdk.InteropHarness.Metrics;
+using Xunit;
 
 namespace CalloraVoipSdk.SoakTests.Soak;
 
 public sealed class ConcurrentLoopbackSoakTests
 {
-    private const int Waves = 20;
-    private const int Parallelism = 25;
+    [Fact, Trait("Category", "SoakShort")]
+    public Task ParallelLoopbackWaves_Short() => RunAsync(SoakProfile.Short);
 
-    [Fact]
-    public async Task ParallelLoopbackWaves_AllRoundTripsSucceed_AndMemoryStaysStable()
+    [Fact, Trait("Category", "SoakLong")]
+    public Task ParallelLoopbackWaves_Long() => RunAsync(SoakProfile.Long);
+
+    private static async Task RunAsync(SoakProfile profile)
     {
         var sampler = new ResourceSampler();
         var payload = new byte[160];
         var samples = new List<ResourceSample>();
         var failures = 0;
 
-        for (var wave = 0; wave < Waves; wave++)
+        for (var wave = 0; wave < profile.Waves; wave++)
         {
             var loopbacks = await Task.WhenAll(
-                Enumerable.Range(0, Parallelism).Select(_ => RtpMediaLoopback.StartAsync()));
+                Enumerable.Range(0, profile.Parallelism).Select(_ => RtpMediaLoopback.StartAsync()));
 
             try
             {
@@ -48,8 +51,11 @@ public sealed class ConcurrentLoopbackSoakTests
 
         Assert.Equal(0, failures);
 
-        var trend = TrendAssertions.NoUpwardDrift(
-            samples, s => s.ManagedBytes, toleranceRatio: 0.30);
-        Assert.False(trend.HasDrift, trend.Detail);
+        if (samples.Count >= 5)
+        {
+            var trend = TrendAssertions.NoUpwardDrift(
+                samples, s => s.ManagedBytes, toleranceRatio: 0.30);
+            Assert.False(trend.HasDrift, trend.Detail);
+        }
     }
 }
