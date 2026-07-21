@@ -103,7 +103,8 @@ internal sealed class SipWireProtocol : ISipWireCodec
         if (!IsValidStatusCode(statusCode))
             throw new ArgumentOutOfRangeException(nameof(statusCode), "SIP status code must be in range 100-699.");
         if (!IsValidReasonPhrase(reasonPhrase))
-            throw new ArgumentException("Reason phrase must not contain CR/LF control line breaks.", nameof(reasonPhrase));
+            throw new ArgumentException(
+                "Reason phrase must not contain control characters (RFC 3261 §7.2).", nameof(reasonPhrase));
         ValidateSerializedBodyConstraints(headers, body);
 
         var bodyText = body ?? string.Empty;
@@ -542,7 +543,10 @@ internal sealed class SipWireProtocol : ISipWireCodec
     {
         foreach (var ch in reasonPhrase)
         {
-            if (ch is '\r' or '\n')
+            // RFC 3261 §7.2: the Reason-Phrase permits SP/HTAB and printable/UTF-8 text but no other control
+            // characters. Reject every C0 control (except HTAB) and DEL — not just CR/LF — so an embedded NUL or
+            // other control cannot corrupt or inject into the status line (CF-067).
+            if ((ch < ' ' && ch != '\t') || ch == '\x7f')
                 return false;
         }
 
