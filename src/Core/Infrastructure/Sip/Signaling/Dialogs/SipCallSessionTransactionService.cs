@@ -80,7 +80,7 @@ internal sealed class SipCallSessionTransactionService
         string? authorization = null;
         string? authorizationHeaderName = null;
         var reliablePrackSync = new object();
-        var highestScheduledPrackRseq = 0;
+        var reliableProvisionalOrder = new SipReliableProvisionalReceiptOrder();
         Task reliablePrackSendChain = Task.CompletedTask;
 
         while (true)
@@ -122,7 +122,10 @@ internal sealed class SipCallSessionTransactionService
 
                             lock (reliablePrackSync)
                             {
-                                if (rseq <= highestScheduledPrackRseq)
+                                // RFC 3262 §4 (CF-044): PRACK only the next in-order reliable provisional. A gap
+                                // (higher RSeq than expected) or a duplicate/older RSeq is not acknowledged — the
+                                // UAC waits for the retransmission of the missing response.
+                                if (!reliableProvisionalOrder.TryAcceptInOrder(rseq))
                                 {
                                     _context.Logger.LogDebug(
                                         "Skipping out-of-order or duplicate reliable provisional RSeq={RSeq} on {CallId}.",
@@ -131,7 +134,6 @@ internal sealed class SipCallSessionTransactionService
                                     return;
                                 }
 
-                                highestScheduledPrackRseq = rseq;
                                 reliablePrackSendChain = reliablePrackSendChain
                                     .ContinueWith(
                                         _ => SendReliablePrackAsync(rackHeader, envelope.RemoteEndPoint, ct),
