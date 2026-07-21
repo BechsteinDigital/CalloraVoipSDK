@@ -72,7 +72,7 @@ internal sealed class SipCallSessionTransactionService
             throw new InvalidOperationException("Local tag must be set before INVITE.");
 
         var cseq = _context.NextLocalCSeq();
-        var nonceCount = 1;
+        var nonceCounter = new SipNonceCounter();
         var authAttempted = false;
         var staleRetries = 0;
         var timerRetries = 0;
@@ -212,7 +212,7 @@ internal sealed class SipCallSessionTransactionService
                         _context.AuthPassword!,
                         "INVITE",
                         _context.RemoteRequestUri,
-                        nonceCount++,
+                        nonceCounter.NextFor(challengeHeader),
                         out var generatedAuthorization))
                 {
                     authAttempted = true;
@@ -239,7 +239,7 @@ internal sealed class SipCallSessionTransactionService
                         _context.AuthPassword!,
                         "INVITE",
                         _context.RemoteRequestUri,
-                        nonceCount++,
+                        nonceCounter.NextFor(challengeHeader),
                         out var generatedAuthorization))
                 {
                     staleRetries++;
@@ -602,7 +602,7 @@ internal sealed class SipCallSessionTransactionService
         IReadOnlyDictionary<string, string>? extraHeaders,
         CancellationToken ct)
     {
-        var nonceCount = 1;
+        var nonceCounter = new SipNonceCounter();
         var authAttempted = false;
         var staleRetries = 0;
         string? authorizationHeaderName = null;
@@ -661,7 +661,7 @@ internal sealed class SipCallSessionTransactionService
             if (!TryResolveInDialogAuthRetry(
                     response.Response,
                     method,
-                    nonceCount,
+                    nonceCounter,
                     authAttempted,
                     out var shouldRetryWithAuth,
                     out var isStaleNonce,
@@ -676,7 +676,6 @@ internal sealed class SipCallSessionTransactionService
                 authAttempted = true;
                 authorizationHeaderName = nextAuthorizationHeaderName;
                 authorizationHeaderValue = nextAuthorizationHeaderValue;
-                nonceCount++;
                 continue;
             }
 
@@ -693,7 +692,6 @@ internal sealed class SipCallSessionTransactionService
                 staleRetries++;
                 authorizationHeaderName = nextAuthorizationHeaderName;
                 authorizationHeaderValue = nextAuthorizationHeaderValue;
-                nonceCount++;
                 continue;
             }
 
@@ -707,7 +705,7 @@ internal sealed class SipCallSessionTransactionService
     private bool TryResolveInDialogAuthRetry(
         SipResponse response,
         string method,
-        int nonceCount,
+        SipNonceCounter nonceCounter,
         bool authAttempted,
         out bool shouldRetryWithAuth,
         out bool isStaleNonceRetry,
@@ -736,7 +734,7 @@ internal sealed class SipCallSessionTransactionService
                 _context.AuthPassword!,
                 method,
                 _context.RemoteRequestUri,
-                nonceCount,
+                nonceCounter.NextFor(challengeHeader),
                 out var generatedAuthorization))
         {
             return false;
