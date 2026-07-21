@@ -18,13 +18,42 @@ internal static class SipSessionTimerPolicy
     public const int MinSessionExpiresSeconds = 90;
 
     /// <summary>
-    /// Applies outbound session-timer offer headers for INVITE/UPDATE refresh capability.
+    /// Applies outbound session-timer offer headers for INVITE/UPDATE refresh capability. When a peer or proxy
+    /// rejected an earlier offer with 422 "Session Interval Too Small", pass its Min-SE as
+    /// <paramref name="minSessionExpiresOverride"/> to raise both the offered Session-Expires and our Min-SE to
+    /// at least that value on the retry (RFC 4028 §5).
     /// </summary>
-    public static void ApplyOutboundOfferHeaders(IDictionary<string, string> headers)
+    /// <param name="headers">The outbound request headers to apply the session-timer offer to.</param>
+    /// <param name="minSessionExpiresOverride">
+    /// The peer/proxy Min-SE from a 422 to honour on a retry, or <see langword="null"/> for the default offer.
+    /// </param>
+    public static void ApplyOutboundOfferHeaders(IDictionary<string, string> headers, int? minSessionExpiresOverride = null)
     {
+        var minSe = minSessionExpiresOverride is { } requested && requested > MinSessionExpiresSeconds
+            ? requested
+            : MinSessionExpiresSeconds;
+        var sessionExpires = Math.Max(DefaultSessionExpiresSeconds, minSe);
         headers["Supported"] = AppendToken(headers.TryGetValue("Supported", out var existingSupported) ? existingSupported : null, "timer");
-        headers["Session-Expires"] = $"{DefaultSessionExpiresSeconds};refresher=uac";
-        headers["Min-SE"] = MinSessionExpiresSeconds.ToString();
+        headers["Session-Expires"] = $"{sessionExpires};refresher=uac";
+        headers["Min-SE"] = minSe.ToString();
+    }
+
+    /// <summary>
+    /// Reads the Min-SE minimum session interval (RFC 4028 §5) in seconds from a header value (e.g. the Min-SE
+    /// of a 422 "Session Interval Too Small" response). Returns <see langword="false"/> when absent or unparseable.
+    /// </summary>
+    /// <param name="minSeHeader">The raw Min-SE header value, or <see langword="null"/>.</param>
+    /// <param name="minSeSeconds">The parsed minimum interval in seconds when this returns <see langword="true"/>.</param>
+    public static bool TryParseMinSe(string? minSeHeader, out int minSeSeconds)
+    {
+        minSeSeconds = 0;
+        if (string.IsNullOrWhiteSpace(minSeHeader))
+            return false;
+
+        var trimmed = minSeHeader.Trim();
+        var semicolonIndex = trimmed.IndexOf(';');
+        var intervalText = semicolonIndex >= 0 ? trimmed[..semicolonIndex] : trimmed;
+        return int.TryParse(intervalText.Trim(), out minSeSeconds) && minSeSeconds > 0;
     }
 
     /// <summary>
