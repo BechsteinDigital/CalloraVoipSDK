@@ -289,7 +289,10 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
             ?? throw new InvalidOperationException("RTP telephone-event was not negotiated for this call media session.");
         var durationRtpUnits = RtpTelephoneEventCodec.DurationMsToRtpUnits(durationMs, _clockRate);
         var startDurationRtpUnits = (ushort)Math.Max(1, durationRtpUnits / 2);
-        var eventTimestamp = _rtp.GetCurrentTimestamp();
+        // Stamp the whole burst with the audio stream's current cursor and reserve the event's full duration so
+        // the cursor advances past it — otherwise a following DTMF event reuses this timestamp and a receiver
+        // folds it into this event, dropping the repeated tone (RFC 4733 §2.5.1.4).
+        var eventTimestamp = _rtp.ReserveTimestamp(durationRtpUnits);
 
         var startPacketPayload = RtpTelephoneEventCodec.BuildPayload(
             toneCode,

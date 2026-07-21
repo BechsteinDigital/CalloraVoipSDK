@@ -209,12 +209,13 @@ internal sealed class BundledOutboundPipeline
     }
 
     /// <summary>
-    /// The current outbound RTP timestamp cursor of the (non-simulcast) track registered for
-    /// <paramref name="mid"/>, so an out-of-band RFC 4733 telephone-event can be stamped on the audio
-    /// stream's clock (RFC 4733 §2.1).
+    /// Reserves <paramref name="units"/> of the (non-simulcast) track's timestamp space for an out-of-band
+    /// RFC 4733 telephone-event registered for <paramref name="mid"/>: returns the current cursor to stamp the
+    /// event on the audio stream's clock (RFC 4733 §2.1) and advances the cursor past the event so a following
+    /// event or media packet is distinctly timestamped rather than folded into this one (§2.5.1.4).
     /// </summary>
     /// <exception cref="InvalidOperationException">No track is registered for <paramref name="mid"/>.</exception>
-    public uint GetTrackTimestamp(string mid) => ResolveTrack(mid, rid: null).CurrentTimestamp;
+    public uint ReserveTrackTimestamp(string mid, uint units) => ResolveTrack(mid, rid: null).ReserveTimestamp(units);
 
     private BundledOutboundTrack ResolveTrack(string mid, string? rid)
     {
