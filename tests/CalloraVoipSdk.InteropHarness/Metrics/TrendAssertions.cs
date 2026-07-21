@@ -37,6 +37,37 @@ public static class TrendAssertions
         return new TrendResult(hasDrift, detail);
     }
 
+    /// <summary>
+    /// Wie die <c>long</c>-Variante, aber für <see cref="double"/>-Metriken (z. B. Jitter). Nutzt einen
+    /// relativen Floor (<paramref name="toleranceRatio"/> vom Startsockel) mit absolutem Mindest-Floor,
+    /// damit ein Startsockel nahe 0 keine Fehlalarme erzeugt.
+    /// </summary>
+    /// <param name="samples">Chronologische Messreihe (mindestens 2 Werte).</param>
+    /// <param name="selector">Extrahiert die zu prüfende Metrik.</param>
+    /// <param name="toleranceRatio">Erlaubtes relatives Wachstum (z. B. 0.20 = 20 %).</param>
+    /// <param name="metricName">Anzeigename der Metrik für die Begründung.</param>
+    public static TrendResult NoUpwardDrift<T>(
+        IReadOnlyList<T> samples,
+        Func<T, double> selector,
+        double toleranceRatio = 0.10,
+        string metricName = "value")
+    {
+        if (samples.Count < 2)
+            return new TrendResult(false, $"{metricName}: zu wenige Samples ({samples.Count}).");
+
+        var bucket = Math.Max(1, samples.Count / 5);
+        var start = MedianOfDouble(samples.Take(bucket).Select(selector));
+        var end = MedianOfDouble(samples.Skip(samples.Count - bucket).Select(selector));
+
+        var tolerance = Math.Max(1e-6, Math.Abs(start) * toleranceRatio);
+        var threshold = start + tolerance;
+        var hasDrift = end > threshold;
+        var detail =
+            $"{metricName}: Start≈{start:F3}, Ende≈{end:F3}, Schwelle={threshold:F3} " +
+            $"(+{toleranceRatio:P0}) → {(hasDrift ? "DRIFT" : "stabil")}.";
+        return new TrendResult(hasDrift, detail);
+    }
+
     private static long Median(IEnumerable<long> values)
     {
         var ordered = values.OrderBy(v => v).ToArray();
@@ -45,5 +76,13 @@ public static class TrendAssertions
         return ordered.Length % 2 == 1
             ? ordered[mid]
             : (ordered[mid - 1] + ordered[mid]) / 2;
+    }
+
+    private static double MedianOfDouble(IEnumerable<double> values)
+    {
+        var ordered = values.OrderBy(v => v).ToArray();
+        if (ordered.Length == 0) return 0d;
+        var mid = ordered.Length / 2;
+        return ordered.Length % 2 == 1 ? ordered[mid] : (ordered[mid - 1] + ordered[mid]) / 2d;
     }
 }
