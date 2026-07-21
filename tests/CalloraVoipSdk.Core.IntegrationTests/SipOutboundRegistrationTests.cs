@@ -23,6 +23,16 @@ public sealed class SipOutboundRegistrationTests
     }
 
     [Fact]
+    public void Ob_appends_after_an_existing_transport_uri_parameter()
+    {
+        // Production Contact URIs always carry a ;transport= parameter; ob must append as the last URI parameter.
+        var contact = SipRegistrationService.BuildContactHeaderValue(
+            "sip:bob@192.0.2.1:5060;transport=tcp", 600, "urn:uuid:1b4c-2");
+
+        Assert.Contains("<sip:bob@192.0.2.1:5060;transport=tcp;ob>", contact);
+    }
+
+    [Fact]
     public void A_plain_registration_contact_has_no_outbound_parameters()
     {
         var contact = SipRegistrationService.BuildContactHeaderValue(ContactUri, 600, instanceId: null);
