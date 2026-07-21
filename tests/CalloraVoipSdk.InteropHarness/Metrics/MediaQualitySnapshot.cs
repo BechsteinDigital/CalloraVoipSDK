@@ -20,7 +20,11 @@ public readonly record struct MediaQualitySnapshot(
     long PacketsUnrecoverableLoss)
 {
     /// <summary>Kapselt das interne Laufzeit-Metrik-Snapshot in einen öffentlichen Wert.</summary>
-    internal static MediaQualitySnapshot From(CallMediaRuntimeMetrics m) => new(
-        m.CapturedAtUtc, m.EstimatedJitterMs, m.EstimatedRoundTripTimeMs,
-        m.PacketsDelivered, m.PacketsDroppedLate, m.PacketsDroppedOverflow, m.PacketsUnrecoverableLoss);
+    internal static MediaQualitySnapshot From(CallMediaRuntimeMetrics m) =>
+        // DECISION: bewusst minimale Feld-Oberfläche für den Phase-2-Soak (Jitter + Loss).
+        // Weitere CallMediaRuntimeMetrics-Felder (Concealed, Duplicate, BufferedPackets, AdaptiveDelay)
+        // bei Bedarf späterer Soaks hier ergänzen.
+        new(
+            m.CapturedAtUtc, m.EstimatedJitterMs, m.EstimatedRoundTripTimeMs,
+            m.PacketsDelivered, m.PacketsDroppedLate, m.PacketsDroppedOverflow, m.PacketsUnrecoverableLoss);
 }

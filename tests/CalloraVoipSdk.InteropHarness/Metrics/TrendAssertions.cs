@@ -41,6 +41,8 @@ public static class TrendAssertions
     /// Wie die <c>long</c>-Variante, aber für <see cref="double"/>-Metriken (z. B. Jitter). Nutzt einen
     /// relativen Floor (<paramref name="toleranceRatio"/> vom Startsockel) mit absolutem Mindest-Floor,
     /// damit ein Startsockel nahe 0 keine Fehlalarme erzeugt.
+    /// Erwartet nicht-negative, finite Werte (z. B. Jitter/RTT in ms); negative Startsockel brechen die
+    /// "Aufwärts"-Semantik.
     /// </summary>
     /// <param name="samples">Chronologische Messreihe (mindestens 2 Werte).</param>
     /// <param name="selector">Extrahiert die zu prüfende Metrik.</param>
@@ -58,6 +60,11 @@ public static class TrendAssertions
         var bucket = Math.Max(1, samples.Count / 5);
         var start = MedianOfDouble(samples.Take(bucket).Select(selector));
         var end = MedianOfDouble(samples.Skip(samples.Count - bucket).Select(selector));
+
+        if (!double.IsFinite(start) || !double.IsFinite(end))
+            throw new ArgumentException(
+                $"{metricName}: nicht-finite Metrikwerte (NaN/Infinity) werden nicht unterstützt.",
+                nameof(selector));
 
         var tolerance = Math.Max(1e-6, Math.Abs(start) * toleranceRatio);
         var threshold = start + tolerance;
