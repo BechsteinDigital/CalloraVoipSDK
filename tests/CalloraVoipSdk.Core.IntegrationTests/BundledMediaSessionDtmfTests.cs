@@ -116,6 +116,44 @@ public sealed class BundledMediaSessionDtmfTests
     }
 
     [Fact]
+    public async Task Repeated_identical_dtmf_tones_arrive_as_separate_events_over_a_keyed_bundle()
+    {
+        var certA = DtlsCertificate.GenerateEcdsaP256();
+        var certB = DtlsCertificate.GenerateEcdsaP256();
+
+        var (client, server) = CreatePair(certA, certB);
+        await using var clientLease = client;
+        await using var serverLease = server;
+
+        var events = 0;
+        var twoSeen = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        server.DtmfReceived += (_, _) =>
+        {
+            if (Interlocked.Increment(ref events) >= 2)
+                twoSeen.TrySetResult();
+        };
+
+        await server.StartAsync();
+        await client.StartAsync();
+
+        // Media is suppressed until DTLS keys the transport; keep sending the SAME tone. Because the timestamp
+        // cursor is advanced per event (RFC 4733 §2.5.1.4), each delivered burst carries a DISTINCT timestamp, so
+        // the receiver surfaces the repeated identical tones as SEPARATE DtmfReceived events. Without the advance
+        // every burst shares one timestamp and the reassembler folds them into a single event (only ever one
+        // DtmfReceived) — the second event would never arrive and this loop would time out.
+        using var overall = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        while (!twoSeen.Task.IsCompleted)
+        {
+            overall.Token.ThrowIfCancellationRequested();
+            await client.SendDtmfAsync(toneCode: 7, durationMs: 80);
+            await Task.Delay(40, overall.Token);
+        }
+
+        await twoSeen.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.True(Volatile.Read(ref events) >= 2, "repeated identical tones must arrive as separate events");
+    }
+
+    [Fact]
     public async Task Ordinary_audio_still_flows_alongside_a_telephone_event_track()
     {
         var certA = DtlsCertificate.GenerateEcdsaP256();

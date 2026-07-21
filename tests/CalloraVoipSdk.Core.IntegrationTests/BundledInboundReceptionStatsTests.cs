@@ -235,6 +235,40 @@ public sealed class BundledInboundReceptionStatsTests
     }
 
     [Fact]
+    public void A_mapped_payload_type_adopts_the_negotiated_clock_over_a_previously_inferred_one()
+    {
+        const byte UnmappedPayloadType = 99; // not in the negotiated map → an inferred clock
+        var start = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var clock = new StepClock(start);
+        var stats = new BundledInboundReceptionStats(clock.Now, AudioVideoClockMap());
+
+        // Phase 1: RTP on an UNMAPPED payload type first — the source infers a (wrong) 16 kHz clock from the pairs
+        // (RTP +320 per 20 ms) and stays unknown-kind, because no negotiated clock/kind resolves.
+        var rtp = 0u;
+        for (var seq = 1; seq <= 20; seq++)
+        {
+            stats.RecordRtp(SsrcA, (ushort)seq, rtp, UnmappedPayloadType);
+            clock.Advance(TimeSpan.FromMilliseconds(20));
+            rtp += 320; // 320 / 0.020 s = 16 kHz inferred
+        }
+
+        // Phase 2: RTP with the negotiated audio payload type at the real 8 kHz cadence (RTP +160 per 20 ms). The
+        // source must adopt the exact negotiated 8 kHz clock (not keep the inferred 16 kHz) — otherwise the clock
+        // mismatch reports a large (~10 ms) fake jitter; on 8 kHz a constant cadence settles toward ~0.
+        for (var seq = 21; seq <= 160; seq++)
+        {
+            stats.RecordRtp(SsrcA, (ushort)seq, rtp, AudioPayloadType);
+            clock.Advance(TimeSpan.FromMilliseconds(20));
+            rtp += 160;
+        }
+
+        var perSsrc = Assert.Single(stats.SnapshotJitterMsPerSsrc());
+        Assert.Equal(BundledStreamKind.Audio, perSsrc.Kind); // kind resolved by the mapped payload type
+        Assert.Equal("0", perSsrc.Mid);
+        Assert.InRange(perSsrc.JitterMs, 0.0, 5.0); // negotiated 8 kHz adopted; NOT the inferred 16 kHz (~10 ms spike)
+    }
+
+    [Fact]
     public void Jitter_ms_uses_the_negotiated_clock_rate_when_supplied()
     {
         var start = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
