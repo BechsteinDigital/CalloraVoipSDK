@@ -15,6 +15,7 @@ internal sealed class SipDnsRouteResolver : ISipRouteResolver
 {
     private readonly LookupClient _lookupClient;
     private readonly ILogger<SipDnsRouteResolver> _logger;
+    private readonly Func<int, int> _nextInt;
 
     /// <summary>
     /// Creates a resolver using default DNS lookup settings.
@@ -37,11 +38,14 @@ internal sealed class SipDnsRouteResolver : ISipRouteResolver
     /// </summary>
     public SipDnsRouteResolver(
         LookupClient lookupClient,
-        ILoggerFactory loggerFactory)
+        ILoggerFactory loggerFactory,
+        Func<int, int>? nextInt = null)
     {
         _lookupClient = lookupClient ?? throw new ArgumentNullException(nameof(lookupClient));
         _logger = (loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory)))
             .CreateLogger<SipDnsRouteResolver>();
+        // RFC 2782 SRV weight selection uses a random draw; injectable so it is deterministic in tests.
+        _nextInt = nextInt ?? Random.Shared.Next;
     }
 
     /// <inheritdoc />
@@ -189,16 +193,17 @@ internal sealed class SipDnsRouteResolver : ISipRouteResolver
         {
             var srvResponse = await _lookupClient.QueryAsync(srvQueryName, QueryType.SRV, cancellationToken: ct)
                 .ConfigureAwait(false);
-            var srvRecords = srvResponse.Answers
-                .OfType<SrvRecord>()
-                .OrderBy(r => r.Priority)
-                .ThenByDescending(r => r.Weight)
-                .ToArray();
+            var srvRecords = srvResponse.Answers.OfType<SrvRecord>().ToArray();
             if (srvRecords.Length == 0)
                 return [];
 
+            // RFC 2782 / RFC 3263: ascending priority, then a weighted random draw within each priority group.
+            // (The former deterministic highest-weight-first order defeated load balancing across a proxy farm.)
+            var orderedSrvRecords = SipSrvWeightedOrdering.Order(
+                srvRecords, r => r.Priority, r => r.Weight, _nextInt);
+
             var candidates = new List<SipRouteCandidate>();
-            foreach (var srvRecord in srvRecords)
+            foreach (var srvRecord in orderedSrvRecords)
             {
                 var targetHost = NormalizeDnsName(srvRecord.Target.Value);
                 if (string.IsNullOrWhiteSpace(targetHost))
