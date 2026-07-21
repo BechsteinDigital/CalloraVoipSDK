@@ -93,12 +93,14 @@ internal sealed class BundledSourceReceptionState
     }
 
     /// <summary>
-    /// Seeds the negotiated RTP clock rate once it becomes known. A source seen only via its SR is created with
-    /// an inferred clock (rate 0); its first RTP packet resolves the exact negotiated rate by payload type
-    /// (CF-004f). Applied only while no rate is established yet, so it never disrupts an already-running
-    /// RFC 3550 §A.8 jitter estimate (a negotiated rate seeded on the first RTP packet lands before any inference).
+    /// Adopts the negotiated RTP clock rate once it becomes known by payload type (CF-004f). A source first seen
+    /// via its SR — or via a not-yet-mapped payload type — carries a 0/inferred clock until an RTP packet with a
+    /// mapped payload type resolves the exact negotiated rate. This is only ever called for such a source (one
+    /// whose kind is still unknown), so it never clobbers an already-negotiated rate. When it replaces an
+    /// <em>inferred</em> rate it re-establishes the RFC 3550 §A.8 transit baseline, so the jitter estimate is not
+    /// left scaled by the discarded rate; seeding onto a 0 clock (the common early-SR case) resets nothing.
     /// </summary>
-    /// <param name="clockRate">The negotiated RTP clock rate (Hz); ignored when 0 or a rate is already set.</param>
+    /// <param name="clockRate">The negotiated RTP clock rate (Hz); ignored when 0 or already the current rate.</param>
     public void TrySeedNegotiatedClockRate(uint clockRate)
     {
         if (clockRate == 0)
@@ -106,8 +108,18 @@ internal sealed class BundledSourceReceptionState
 
         lock (_sync)
         {
-            if (_clockRate == 0)
-                _clockRate = clockRate;
+            if (_clockRate == clockRate)
+                return;
+
+            var replacedInferredRate = _clockRate != 0;
+            _clockRate = clockRate;
+            if (replacedInferredRate)
+            {
+                // The accumulated jitter was measured in the discarded rate's units; re-establish the §A.8
+                // transit baseline so the estimate rebuilds on the exact negotiated clock.
+                _hasTransit = false;
+                _jitter = 0;
+            }
         }
     }
 
