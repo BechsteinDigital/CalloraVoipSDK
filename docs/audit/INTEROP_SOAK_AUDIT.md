@@ -16,6 +16,10 @@
 
 Media-Drift-Soak ist von „nur Jitter/PCMU/Plain" auf die **volle Matrix** erweitert: **Codec {PCMU, Opus} × Sicherheit {Plain RTP, SRTP-SDES}** (4 Kombinationen, je `SoakShort`+`SoakLong`). Opus läuft transport-only (opake Payload, PT 111/48 kHz/960 Samples); SRTP über SDES-Keying (`AES_CM_128_HMAC_SHA1_80`, richtungsweise getauschte Master-Keys). Geprüft je Kombination: `PacketsDelivered>0`, **`PacketsDroppedOverflow==0`** (eigenständige Verlustursache, getrennt von Late/Loss), Jitter-Nicht-Drift (Long). `PacketsUnrecoverableLoss==0` bleibt **F002-blockiert** (Skip). RTT/RTCP: siehe **F004** (an L2 nicht messbar).
 
+## Coverage-Notiz Signaling (P1e, 2026-07-21)
+
+Der frühere „Signaling-Soak" ist präzise als **`SipLineChannelRefreshLifecycleSoakTests`** benannt (Scope-Ehrlichkeit). Er prüft ausschließlich den Re-REGISTER-**Refresh-Scheduler** des echten SipLineChannel gegen einen **In-Memory-Fake-Registrar** (`RecordingRegistrationService`): Zyklus-Kadenz, monotone CSeq, stabile Call-ID — plus eine **Ressourcenreihe** (nebenläufiges Sampling → Managed-Regression + Threads/Sockets/FDs-Plateau, nur Long). **Kein Nachweis** von Wire-Format, Transaktions-Layer, Digest-Auth, Transport oder Interop — echter SIP-Wire-Soak wäre ein eigener L4-Interop-Lauf (vgl. **F003**: fehlende Zeit-Abstraktion verhindert echtes Zeit-Rafting).
+
 ## Verifikations-Notiz F002 (adversarial, opus, 2026-07-21)
 
 Kausalkette Ende-zu-Ende gegen den echten Code bestätigt (Verdict **CONFIRMED**):
