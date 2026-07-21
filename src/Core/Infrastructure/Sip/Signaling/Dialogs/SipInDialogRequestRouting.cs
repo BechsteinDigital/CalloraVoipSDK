@@ -37,7 +37,7 @@ internal static class SipInDialogRequestRouting
     public static SipInDialogRoutingPlan Plan(string remoteTargetUri, IReadOnlyList<string> routeSet)
     {
         if (routeSet is null || routeSet.Count == 0)
-            return new SipInDialogRoutingPlan(remoteTargetUri, [], remoteTargetUri, HasRouteSet: false);
+            return new SipInDialogRoutingPlan(remoteTargetUri, [], remoteTargetUri, ResolveNextHop: false);
 
         try
         {
@@ -45,13 +45,14 @@ internal static class SipInDialogRequestRouting
             // as the one source of truth. It validates URIs and throws on malformed input, which an in-dialog
             // request must survive rather than abort on.
             var target = SipInitialRequestRoutingPlanner.CreateInitialTarget(remoteTargetUri, routeSet);
-            return new SipInDialogRoutingPlan(target.RequestUri, target.RouteSet, target.NextHopUri, HasRouteSet: true);
+            return new SipInDialogRoutingPlan(target.RequestUri, target.RouteSet, target.NextHopUri, ResolveNextHop: true);
         }
         catch (ArgumentException)
         {
-            // A malformed remote target or route-set entry must not abort a BYE/re-INVITE: fall back to the raw
-            // remote target and route set, which the caller then sends to the learned response source.
-            return new SipInDialogRoutingPlan(remoteTargetUri, routeSet, remoteTargetUri, HasRouteSet: true);
+            // A malformed remote target or route-set entry must not abort a BYE/re-INVITE: keep the raw route
+            // header best-effort, but report ResolveNextHop:false so the caller sends to the learned response
+            // source rather than resolving a possibly-bogus (e.g. private/NAT) target address.
+            return new SipInDialogRoutingPlan(remoteTargetUri, routeSet, remoteTargetUri, ResolveNextHop: false);
         }
     }
 
@@ -76,7 +77,7 @@ internal static class SipInDialogRequestRouting
             headers.Remove("Route");
 
         var remoteEndPoint = context.RemoteEndPoint;
-        if (plan.HasRouteSet)
+        if (plan.ResolveNextHop)
         {
             remoteEndPoint = await ResolveNextHopAsync(context, plan.NextHopUri, ct).ConfigureAwait(false)
                              ?? context.RemoteEndPoint;
@@ -119,9 +120,13 @@ internal static class SipInDialogRequestRouting
 /// <param name="RequestUri">The effective Request-URI (remote target, or the strict topmost route).</param>
 /// <param name="RouteHeaderSet">The composed Route header set (empty for a direct dialog).</param>
 /// <param name="NextHopUri">The topmost-route URI to resolve as the transport next hop (remote target when empty).</param>
-/// <param name="HasRouteSet">Whether the dialog carries a route set (drives resolved-hop vs response-source send).</param>
+/// <param name="ResolveNextHop">
+/// Whether the transport next hop should be resolved from <see cref="NextHopUri"/>: <see langword="true"/> for a
+/// routed dialog with a well-formed route set; <see langword="false"/> for a direct dialog or a route set that
+/// could not be planned, both of which send to the learned response source instead.
+/// </param>
 internal readonly record struct SipInDialogRoutingPlan(
     string RequestUri,
     IReadOnlyList<string> RouteHeaderSet,
     string NextHopUri,
-    bool HasRouteSet);
+    bool ResolveNextHop);

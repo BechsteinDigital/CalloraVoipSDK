@@ -24,7 +24,7 @@ public sealed class SipInDialogRequestRoutingTests
         Assert.Equal(RemoteTarget, plan.RequestUri);
         Assert.Empty(plan.RouteHeaderSet);
         Assert.Equal(RemoteTarget, plan.NextHopUri);
-        Assert.False(plan.HasRouteSet);
+        Assert.False(plan.ResolveNextHop);
     }
 
     [Fact]
@@ -36,7 +36,7 @@ public sealed class SipInDialogRequestRoutingTests
         Assert.Equal(RemoteTarget, plan.RequestUri);
         Assert.Equal(["sip:proxy1.example.net;lr", "sip:proxy2.example.net;lr"], plan.RouteHeaderSet);
         Assert.Equal("sip:proxy1.example.net;lr", plan.NextHopUri);
-        Assert.True(plan.HasRouteSet);
+        Assert.True(plan.ResolveNextHop);
     }
 
     [Fact]
@@ -50,7 +50,7 @@ public sealed class SipInDialogRequestRoutingTests
         Assert.Equal("sip:strict.example.net", plan.RequestUri);
         Assert.Equal(["sip:proxy2.example.net;lr", RemoteTarget], plan.RouteHeaderSet);
         Assert.Equal("sip:strict.example.net", plan.NextHopUri);
-        Assert.True(plan.HasRouteSet);
+        Assert.True(plan.ResolveNextHop);
     }
 
     // ── ApplyInDialogRoutingAsync: header override + transport destination ────────────
@@ -92,6 +92,26 @@ public sealed class SipInDialogRequestRoutingTests
         Assert.Equal("<sip:proxy1.example.net:6001;lr>, <sip:proxy2.example.net:6002;lr>", headers["Route"]);
         // The capturing runtime resolves host:port to loopback:port — the topmost route (6001), not the source.
         Assert.Equal(new IPEndPoint(IPAddress.Loopback, 6001), remoteEndPoint);
+    }
+
+    [Fact]
+    public async Task Malformed_route_set_falls_back_to_the_response_source_not_a_resolved_target()
+    {
+        // A route-set entry that is not a valid SIP URI must not abort the request nor resolve a bogus target:
+        // keep the raw Route header best-effort but send to the NAT-safe learned response source.
+        var responseSource = new IPEndPoint(IPAddress.Parse("192.0.2.10"), 5060);
+        var context = new AckTestSipCallSessionContext(new CapturingSipTransportRuntime())
+        {
+            RouteSet = ["this-is-not-a-sip-uri"],
+        };
+        context.RemoteEndPoint = responseSource;
+        var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        var (requestUri, remoteEndPoint) =
+            await SipInDialogRequestRouting.ApplyInDialogRoutingAsync(context, headers, default);
+
+        Assert.Equal(RemoteTarget, requestUri);
+        Assert.Equal(responseSource, remoteEndPoint);
     }
 
     [Fact]
