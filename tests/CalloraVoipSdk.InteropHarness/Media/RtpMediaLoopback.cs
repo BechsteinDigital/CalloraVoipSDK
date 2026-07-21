@@ -25,8 +25,29 @@ public sealed class RtpMediaLoopback : IAsyncDisposable
         _b = b;
     }
 
-    /// <summary>Bindet beide Legs auf Loopback und startet ihre Medienpfade.</summary>
-    public static async Task<RtpMediaLoopback> StartAsync()
+    /// <summary>
+    /// Bindet beide Legs auf freie Loopback-Ports und startet ihre Medienpfade. Wiederholt bei
+    /// Port-Bind-Kollision (<see cref="System.Net.Sockets.SocketError.AddressAlreadyInUse"/>) mit
+    /// frischen Ports bis zu <paramref name="maxAttempts"/> mal — das schließt das TOCTOU-Fenster
+    /// von <c>FreeUdpPort</c> unter Parallelität.
+    /// </summary>
+    public static async Task<RtpMediaLoopback> StartAsync(int maxAttempts = 5)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return await TryStartOnceAsync();
+            }
+            catch (SocketException ex)
+                when (ex.SocketErrorCode == SocketError.AddressAlreadyInUse && attempt < maxAttempts)
+            {
+                // Port zwischen Probe und Bind belegt — mit frischen Ports erneut versuchen.
+            }
+        }
+    }
+
+    private static async Task<RtpMediaLoopback> TryStartOnceAsync()
     {
         var portA = FreeUdpPort();
         var portB = FreeUdpPort();
