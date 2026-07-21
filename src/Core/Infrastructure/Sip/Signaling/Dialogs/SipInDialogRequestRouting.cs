@@ -66,8 +66,14 @@ internal static class SipInDialogRequestRouting
     /// <param name="context">The dialog session context (remote target, route set, transport, response source).</param>
     /// <param name="headers">The request headers whose <c>Route</c> header is rewritten in place.</param>
     /// <param name="ct">Cancellation token for the next-hop resolution.</param>
+    /// <param name="directTarget">
+    /// An explicit direct/unresolved transport target for this specific request — e.g. the exact provisional a
+    /// PRACK answers, so a later provisional cannot shift its destination. <see langword="null"/> uses the
+    /// dialog's learned response source (<see cref="ISipCallSessionContext.RemoteEndPoint"/>).
+    /// </param>
     public static async Task<(string RequestUri, IPEndPoint RemoteEndPoint)> ApplyInDialogRoutingAsync(
-        ISipCallSessionContext context, IDictionary<string, string> headers, CancellationToken ct)
+        ISipCallSessionContext context, IDictionary<string, string> headers, CancellationToken ct,
+        IPEndPoint? directTarget = null)
     {
         // Plan the dialog-established route set (reversed Record-Route, always raw) with full §12.2.1.1
         // loose/strict handling. When the dialog carries none, a preloaded outbound-proxy route set is already
@@ -84,11 +90,14 @@ internal static class SipInDialogRequestRouting
         else
             headers.Remove("Route");
 
-        var remoteEndPoint = context.RemoteEndPoint;
+        // The direct/unresolved target: an explicit per-request source (e.g. the specific provisional a PRACK
+        // answers) when supplied, else the dialog's learned response source.
+        var fallback = directTarget ?? context.RemoteEndPoint;
+        var remoteEndPoint = fallback;
         if (plan.ResolveNextHop)
         {
             remoteEndPoint = await ResolveNextHopAsync(context, plan.NextHopUri, ct).ConfigureAwait(false)
-                             ?? context.RemoteEndPoint;
+                             ?? fallback;
         }
 
         return (plan.RequestUri, remoteEndPoint);

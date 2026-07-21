@@ -176,4 +176,26 @@ public sealed class SipInDialogRequestRoutingTests
         Assert.Equal("<sip:route2.example.net:6002;lr>, <sip:orig.example.test>", headers["Route"]);
         Assert.Equal(new IPEndPoint(IPAddress.Loopback, 6002), remoteEndPoint); // stored topmost, unchanged
     }
+
+    [Fact]
+    public async Task Direct_target_override_pins_the_send_target_for_a_direct_dialog()
+    {
+        // A per-request direct target (e.g. the exact provisional a PRACK answers) pins the send destination
+        // instead of the dialog's latest learned source, so a later provisional cannot redirect it.
+        var learnedSource = new IPEndPoint(IPAddress.Parse("192.0.2.10"), 5060);
+        var pinnedTarget = new IPEndPoint(IPAddress.Parse("198.51.100.7"), 5062);
+        var context = new AckTestSipCallSessionContext(new CapturingSipTransportRuntime())
+        {
+            DialogRouteSet = [],
+            RouteSet = [],
+        };
+        context.RemoteEndPoint = learnedSource;
+        var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        var (requestUri, remoteEndPoint) =
+            await SipInDialogRequestRouting.ApplyInDialogRoutingAsync(context, headers, default, pinnedTarget);
+
+        Assert.Equal(RemoteTarget, requestUri);
+        Assert.Equal(pinnedTarget, remoteEndPoint);
+    }
 }
