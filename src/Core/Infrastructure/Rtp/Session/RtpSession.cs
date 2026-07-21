@@ -230,6 +230,23 @@ internal sealed class RtpSession : IRtpSession
         }
     }
 
+    /// <summary>
+    /// Reserves <paramref name="units"/> of timestamp space for an out-of-band RFC 4733 telephone-event burst:
+    /// returns the current cursor to stamp the burst with, then advances the cursor past it so a following event
+    /// or media frame carries a distinct, monotonically increasing timestamp (RFC 4733 §2.5.1.4). Without this,
+    /// consecutive DTMF tones reuse the same timestamp and a receiver folds them into one, dropping the repeat.
+    /// </summary>
+    /// <param name="units">The burst's duration in RTP timestamp units to advance the cursor by.</param>
+    internal uint ReserveTimestamp(uint units)
+    {
+        lock (_sendSync)
+        {
+            var reserved = _timestamp;
+            _timestamp += units;
+            return reserved;
+        }
+    }
+
     /// <summary>Local synchronization source (RFC 3550 §5.1) — used as the sender SSRC of RTCP feedback.</summary>
     internal uint LocalSsrc => Volatile.Read(ref _ssrc);
 

@@ -68,7 +68,26 @@ internal sealed class BundledInboundReceptionStats
     public void RecordRtp(uint ssrc, ushort sequenceNumber, uint rtpTimestamp, byte payloadType = 0)
     {
         var state = GetOrAddSource(ssrc, payloadType);
+        // A source first seen via its SR (or via a packet whose payload type was not yet in the negotiated map)
+        // was created with an unknown kind and an inferred clock, and the GetOrAdd factory only runs once — so an
+        // RTP packet that now resolves the negotiated clock/kind by payload type must upgrade the source here,
+        // otherwise it stays Unknown with an inferred clock forever (CF-004f follow-up).
+        ResolvePendingSourceKindAndClock(ssrc, payloadType, state);
         state.RecordRtp(sequenceNumber, rtpTimestamp, _utcNow());
+    }
+
+    // Upgrades a source still carrying the unknown kind (first seen via an SR, or a not-yet-mapped payload type)
+    // once an RTP packet resolves the negotiated kind/MID/clock by payload type. A no-op for a source whose kind
+    // was already resolved on creation — the common RTP-first case is byte-for-byte unchanged.
+    private void ResolvePendingSourceKindAndClock(uint ssrc, byte payloadType, BundledSourceReceptionState state)
+    {
+        if (_sourceKinds.TryGetValue(ssrc, out var current) && current.Kind != BundledStreamKind.Unknown)
+            return;
+        if (!_clockByPayloadType.TryGetValue(payloadType, out var descriptor))
+            return; // payload type still not in the negotiated map — leave the source unknown/inferred.
+
+        _sourceKinds[ssrc] = new BundledInboundSourceKind(descriptor.Kind, descriptor.Mid);
+        state.TrySeedNegotiatedClockRate(descriptor.ClockRate);
     }
 
     // A source seen only via an SR (before any RTP) has no payload type to resolve the negotiated clock from.

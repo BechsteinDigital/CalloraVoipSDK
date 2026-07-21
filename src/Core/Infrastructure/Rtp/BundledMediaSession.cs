@@ -736,8 +736,11 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     /// Sends one out-of-band DTMF tone as an RFC 4733 telephone-event burst on the audio track: an event-start
     /// packet (marker set, half the duration) followed by two end-of-event packets (E-bit set, full duration —
     /// the second a reliability retransmission per RFC 4733 §2.5.1.4), all sharing one RTP timestamp on the
-    /// telephone-event payload type. Fails closed like all bundle sends — suppressed until the DTLS handshake
-    /// keys the transport (never leaves as plaintext).
+    /// telephone-event payload type, after which the audio track's timestamp cursor is advanced past the event so
+    /// a following tone is distinctly timestamped. A no-op when outbound audio was not negotiated
+    /// (<see cref="AudioSendEnabled"/> is false) — like <see cref="SendAudioAsync"/>, since the remote will not
+    /// process the telephone-event stream. Fails closed like all bundle sends — suppressed until the DTLS
+    /// handshake keys the transport (never leaves as plaintext).
     /// </summary>
     /// <param name="toneCode">The DTMF event code (0–9, 10=*, 11=#, 12–15=A–D per RFC 4733 §3.2).</param>
     /// <param name="durationMs">The tone duration in milliseconds (at least the RFC 4733 floor).</param>
@@ -752,14 +755,22 @@ internal sealed class BundledMediaSession : IAsyncDisposable
             throw new ArgumentOutOfRangeException(
                 nameof(durationMs), durationMs, $"DTMF duration must be at least {RtpTelephoneEventCodec.MinDurationMs} ms.");
 
+        // Outbound audio was not negotiated (a send-only/inactive remote answer, or a local side that does not
+        // send): the remote will not process the telephone-event stream, so the burst is a no-op — mirroring
+        // SendAudioAsync — instead of leaking DTMF onto a stream the peer declared it will not receive.
+        if (!_audioSendEnabled)
+            return;
+
         var payloadType = _telephoneEventPayloadType
             ?? throw new InvalidOperationException("RTP telephone-event (DTMF) was not negotiated for this WebRTC session.");
 
         var durationRtpUnits = RtpTelephoneEventCodec.DurationMsToRtpUnits(durationMs, _telephoneEventClockRate);
         var startDurationRtpUnits = (ushort)Math.Max(1, durationRtpUnits / 2);
         // The event shares the audio stream's timestamp clock (RFC 4733 §2.1): stamp the whole burst with the
-        // audio track's current timestamp cursor, without advancing it (SendTimestampedAsync leaves it be).
-        var eventTimestamp = _outbound.GetTrackTimestamp(_audioMid);
+        // audio track's current cursor, and reserve the event's full duration so the cursor advances past it —
+        // otherwise a following DTMF event (or media) reuses this timestamp and a receiver folds it into this
+        // event, dropping the repeated tone (RFC 4733 §2.5.1.4).
+        var eventTimestamp = _outbound.ReserveTrackTimestamp(_audioMid, durationRtpUnits);
 
         var startPayload = RtpTelephoneEventCodec.BuildPayload(toneCode, endOfEvent: false, durationRtpUnits: startDurationRtpUnits);
         var endPayload = RtpTelephoneEventCodec.BuildPayload(toneCode, endOfEvent: true, durationRtpUnits: durationRtpUnits);

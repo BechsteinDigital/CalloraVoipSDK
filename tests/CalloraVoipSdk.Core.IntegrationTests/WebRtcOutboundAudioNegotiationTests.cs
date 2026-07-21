@@ -58,6 +58,22 @@ public sealed class WebRtcOutboundAudioNegotiationTests
         Assert.False(session!.AudioSendEnabled);
     }
 
+    [Fact]
+    public async Task Send_dtmf_is_a_no_op_when_outbound_audio_is_suppressed()
+    {
+        // Remote is send-only → AudioSendEnabled is false. DTMF rides the audio stream, so it must be a no-op
+        // (like SendAudioAsync) rather than leaking onto a stream the peer declared it will not receive. This
+        // Pcmu-only negotiation carries no telephone-event, yet SendDtmf does NOT throw "not negotiated" — the
+        // audio-send gate short-circuits first (before the fix this reached the telephone-event check and threw).
+        var session = BuildSession(Offer(), WithAudioDirection(RemoteAnswer(), "sendonly"));
+
+        Assert.NotNull(session);
+        await using var _ = session;
+        Assert.False(session!.AudioSendEnabled);
+
+        await session.SendDtmfAsync(toneCode: 5, durationMs: 100); // completes without throwing; nothing is sent
+    }
+
     private static BundledMediaSession? BuildSession(SdpSessionDescription local, SdpSessionDescription remote) =>
         WebRtcSessionFactory.TryCreate(
             remote, local,

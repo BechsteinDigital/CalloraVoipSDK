@@ -79,13 +79,18 @@ internal sealed class SipCallSessionTransactionService
         int? sessionIntervalOverride = null;
         string? authorizationHeaderName = null;
         string? selectedChallenge = null;
-        var reliablePrackSync = new object();
-        var reliableProvisionalOrder = new SipReliableProvisionalReceiptOrder();
-        Task reliablePrackSendChain = Task.CompletedTask;
 
         while (true)
         {
             ct.ThrowIfCancellationRequested();
+
+            // RFC 3262 §4 (CF-044): the reliable-provisional receipt order and the PRACK send-chain are per-INVITE
+            // state — reset for each attempt so a retried INVITE (422/auth) starts a fresh RSeq sequence rather
+            // than rejecting the new transaction's provisionals as out-of-order against the previous attempt.
+            var reliablePrackSync = new object();
+            var reliableProvisionalOrder = new SipReliableProvisionalReceiptOrder();
+            Task reliablePrackSendChain = Task.CompletedTask;
+
             var branch = SipProtocol.NewBranch();
             var transactionInviteCSeq = cseq;
             _context.SetActiveInvite(cseq, branch);
@@ -154,13 +159,12 @@ internal sealed class SipCallSessionTransactionService
                                     return;
                                 }
 
-                                reliablePrackSendChain = reliablePrackSendChain
-                                    .ContinueWith(
-                                        _ => SendReliablePrackAsync(rackHeader, envelope.RemoteEndPoint, ct),
-                                        ct,
-                                        TaskContinuationOptions.None,
-                                        TaskScheduler.Default)
-                                    .Unwrap();
+                                // Chain by AWAITING the predecessor (not ContinueWith, which runs regardless of a
+                                // faulted/cancelled antecedent and drops its exception): a failed earlier PRACK
+                                // then propagates through the chain and aborts the INVITE at the await below,
+                                // instead of being silently swallowed (CF-044).
+                                reliablePrackSendChain = SendReliablePrackAfterAsync(
+                                    reliablePrackSendChain, rackHeader, envelope.RemoteEndPoint, ct);
                             }
                         },
                     },
@@ -772,6 +776,21 @@ internal sealed class SipCallSessionTransactionService
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Chains one reliable PRACK after its predecessor in the send-order chain: awaits the predecessor first so a
+    /// prior PRACK failure or cancellation propagates (rather than being swallowed by a fire-and-forget
+    /// continuation), then sends this PRACK. Preserves strict in-order PRACK delivery (RFC 3262 §4, CF-044).
+    /// </summary>
+    private async Task SendReliablePrackAfterAsync(
+        Task predecessor,
+        string rackHeaderValue,
+        IPEndPoint provisionalSource,
+        CancellationToken ct)
+    {
+        await predecessor.ConfigureAwait(false);
+        await SendReliablePrackAsync(rackHeaderValue, provisionalSource, ct).ConfigureAwait(false);
     }
 
     /// <summary>

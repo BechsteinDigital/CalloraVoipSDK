@@ -93,6 +93,25 @@ internal sealed class BundledSourceReceptionState
     }
 
     /// <summary>
+    /// Seeds the negotiated RTP clock rate once it becomes known. A source seen only via its SR is created with
+    /// an inferred clock (rate 0); its first RTP packet resolves the exact negotiated rate by payload type
+    /// (CF-004f). Applied only while no rate is established yet, so it never disrupts an already-running
+    /// RFC 3550 §A.8 jitter estimate (a negotiated rate seeded on the first RTP packet lands before any inference).
+    /// </summary>
+    /// <param name="clockRate">The negotiated RTP clock rate (Hz); ignored when 0 or a rate is already set.</param>
+    public void TrySeedNegotiatedClockRate(uint clockRate)
+    {
+        if (clockRate == 0)
+            return;
+
+        lock (_sync)
+        {
+            if (_clockRate == 0)
+                _clockRate = clockRate;
+        }
+    }
+
+    /// <summary>
     /// Captures this source's reception report block and advances the fraction-lost interval baseline
     /// (RFC 3550 §A.3). Returns <see langword="null"/> before any RTP has been counted. Stateful: call once
     /// per emitted report.
