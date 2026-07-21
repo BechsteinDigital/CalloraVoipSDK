@@ -1,3 +1,6 @@
+using System.Collections.Concurrent;
+using System.Diagnostics;
+using CalloraVoipSdk.InteropHarness.Diagnostics;
 using CalloraVoipSdk.InteropHarness.Media;
 using CalloraVoipSdk.InteropHarness.Metrics;
 using Xunit;
@@ -6,6 +9,8 @@ namespace CalloraVoipSdk.SoakTests.Soak;
 
 public sealed class ConcurrentLoopbackSoakTests
 {
+    private static readonly TimeSpan RoundTripTimeout = TimeSpan.FromSeconds(15);
+
     [Fact, Trait("Category", "SoakShort")]
     public Task ParallelLoopbackWaves_Short() => RunAsync(SoakProfile.Short);
 
@@ -17,23 +22,27 @@ public sealed class ConcurrentLoopbackSoakTests
         var sampler = new ResourceSampler();
         var payload = new byte[160];
         var samples = new List<ResourceSample>();
-        var failures = 0;
+        var failures = new ConcurrentQueue<SoakFailure>();
 
         // Warm-up-Wellen: ThreadPool auf das Parallelitätsniveau hochlaufen lassen und Heap/committeten
         // Speicher einschwingen, bevor die Baseline erfasst wird — sonst zählt das Plateau die einmalige
-        // Pool-Expansion als Thread-Leak und die Regression den Warmlauf als Drift.
+        // Pool-Expansion als Thread-Leak und die Regression den Warmlauf als Drift. Warm-up-Fehlschläge
+        // werden verworfen (nicht gemessen); ein systematischer Bruch schlägt in den Messwellen ebenso durch.
         var warmUpWaves = Math.Max(2, profile.Waves / 5);
+        var warmUpSink = new ConcurrentQueue<SoakFailure>();
         for (var i = 0; i < warmUpWaves; i++)
-            _ = await RunWaveAsync(profile.Parallelism, payload);
+            await RunWaveAsync(wave: -(i + 1), profile.Parallelism, payload, warmUpSink);
         samples.Add(sampler.Capture());
 
         for (var wave = 0; wave < profile.Waves; wave++)
         {
-            failures += await RunWaveAsync(profile.Parallelism, payload);
+            await RunWaveAsync(wave, profile.Parallelism, payload, failures);
             samples.Add(sampler.Capture());
         }
 
-        Assert.Equal(0, failures);
+        // Strukturierte Diagnose statt eines nackten Zählers: bei Fehlschlag zeigt die Assert-Meldung
+        // Welle, Index, Portpaar, Dauer und Ausnahmetyp jedes betroffenen Round-Trips.
+        Assert.True(failures.IsEmpty, SoakFailureReport.Describe(failures));
 
         if (samples.Count < 5)
             return; // Short-Profil: zu wenige Wellen für eine aussagekräftige Wertung.
@@ -48,13 +57,10 @@ public sealed class ConcurrentLoopbackSoakTests
             samples, s => s.PrivateMemoryBytes, maxSlopePerSample: 2_000_000, "PrivateMemoryBytes");
         Assert.False(privateMemory.HasDrift, privateMemory.Detail);
 
-        // ThreadPool wächst unter bursty Last per Hill-Climbing weiter, auch nach dem Warm-up →
-        // großzügigere absolute Thread-Toleranz, aber weiterhin ein Plateau (kein relatives %-Wachstum).
         var threads = ResourcePlateauAssertions.WithinPlateau(
             samples, s => s.ThreadCount, absoluteTolerance: 8, "ThreadCount");
         Assert.False(threads.Exceeded, threads.Detail);
 
-        // Sockets werden je Welle nach dem Dispose gemessen → müssen auf das Baseline-Niveau zurückfallen.
         var sockets = ResourcePlateauAssertions.WithinPlateau(
             samples, s => s.SocketDescriptorCount, absoluteTolerance: 2, "SocketDescriptorCount");
         Assert.False(sockets.Exceeded, sockets.Detail);
@@ -66,33 +72,43 @@ public sealed class ConcurrentLoopbackSoakTests
 
     /// <summary>
     /// Startet <paramref name="parallelism"/> Loopbacks gleichzeitig, führt je einen Round-Trip aus
-    /// und disposed alle wieder. Liefert die Anzahl fehlgeschlagener Round-Trips dieser Welle.
+    /// und disposed alle wieder. Jeder Fehlschlag (Ausnahme oder falsche Länge) wird strukturiert in
+    /// <paramref name="failures"/> erfasst — inkl. Welle, Index, Portpaar, verstrichener Zeit und Typ.
     /// </summary>
-    private static async Task<int> RunWaveAsync(int parallelism, byte[] payload)
+    private static async Task RunWaveAsync(
+        int wave, int parallelism, byte[] payload, ConcurrentQueue<SoakFailure> failures)
     {
         var loopbacks = await Task.WhenAll(
             Enumerable.Range(0, parallelism).Select(_ => RtpMediaLoopback.StartAsync()));
 
         try
         {
-            var results = await Task.WhenAll(loopbacks.Select(async l =>
-            {
-                try
-                {
-                    var got = await l.RoundTripAsync(payload, TimeSpan.FromSeconds(15));
-                    return got.Length == payload.Length;
-                }
-                catch
-                {
-                    return false;
-                }
-            }));
-
-            return results.Count(ok => !ok);
+            await Task.WhenAll(loopbacks.Select((loopback, index) =>
+                RunOneAsync(wave, index, loopback, payload, failures)));
         }
         finally
         {
             await Task.WhenAll(loopbacks.Select(l => l.DisposeAsync().AsTask()));
+        }
+    }
+
+    private static async Task RunOneAsync(
+        int wave, int index, RtpMediaLoopback loopback, byte[] payload, ConcurrentQueue<SoakFailure> failures)
+    {
+        var ports = $"{loopback.PortPair.LegA}↔{loopback.PortPair.LegB}";
+        var stopwatch = Stopwatch.StartNew();
+        try
+        {
+            var got = await loopback.RoundTripAsync(payload, RoundTripTimeout);
+            if (got.Length != payload.Length)
+                failures.Enqueue(new SoakFailure(
+                    wave, index, ports, stopwatch.Elapsed,
+                    "LengthMismatch", $"Erwartet {payload.Length} Bytes, empfangen {got.Length}."));
+        }
+        catch (Exception ex)
+        {
+            failures.Enqueue(new SoakFailure(
+                wave, index, ports, stopwatch.Elapsed, ex.GetType().Name, ex.Message));
         }
     }
 }

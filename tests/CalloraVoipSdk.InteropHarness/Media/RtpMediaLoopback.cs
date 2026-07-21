@@ -21,12 +21,19 @@ public sealed class RtpMediaLoopback : IAsyncDisposable
 
     private readonly RtpCallMediaSession _a;
     private readonly RtpCallMediaSession _b;
+    private readonly int _portA;
+    private readonly int _portB;
 
-    private RtpMediaLoopback(RtpCallMediaSession a, RtpCallMediaSession b)
+    private RtpMediaLoopback(RtpCallMediaSession a, RtpCallMediaSession b, int portA, int portB)
     {
         _a = a;
         _b = b;
+        _portA = portA;
+        _portB = portB;
     }
+
+    /// <summary>Das gebundene Loopback-Portpaar (Leg A ↔ Leg B) — für Soak-Fehlerdiagnose.</summary>
+    public (int LegA, int LegB) PortPair => (_portA, _portB);
 
     /// <summary>
     /// Bindet beide Legs auf freie Loopback-Ports und startet ihre Medienpfade. Wiederholt bei
@@ -64,7 +71,7 @@ public sealed class RtpMediaLoopback : IAsyncDisposable
             {
                 await b.StartAsync();
                 await a.StartAsync();
-                return new RtpMediaLoopback(a, b);
+                return new RtpMediaLoopback(a, b, portA, portB);
             }
             catch
             {
