@@ -120,11 +120,39 @@ internal static class SipProtocol
     public static string? ExtractTag(string? value)
     {
         if (string.IsNullOrWhiteSpace(value)) return null;
-        var markerIndex = value.IndexOf(";tag=", StringComparison.OrdinalIgnoreCase);
-        if (markerIndex < 0) return null;
-        var tail = value[(markerIndex + 5)..];
-        var endIndex = tail.IndexOf(';');
-        return endIndex >= 0 ? tail[..endIndex].Trim() : tail.Trim();
+
+        // RFC 3261 §7.3.1/§25.1: header parameters are SEMI-separated (SEMI = SWS ";" SWS) and the tag is
+        // "tag" EQUAL token (EQUAL = SWS "=" SWS), so LWS may surround ";", the name, and "=". Only ";" at
+        // angle-bracket depth 0 separates header parameters — a ";tag=" inside a name-addr's <URI> is a URI
+        // parameter, not the dialog tag, and must not be matched.
+        var depth = 0;
+        for (var i = 0; i < value.Length; i++)
+        {
+            var c = value[i];
+            if (c == '<') { depth++; continue; }
+            if (c == '>') { if (depth > 0) depth--; continue; }
+            if (c != ';' || depth != 0) continue;
+
+            var p = i + 1;
+            while (p < value.Length && char.IsWhiteSpace(value[p])) p++;
+            var nameStart = p;
+            while (p < value.Length && value[p] != '=' && value[p] != ';' && !char.IsWhiteSpace(value[p])) p++;
+            if (!value[nameStart..p].Equals("tag", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            while (p < value.Length && char.IsWhiteSpace(value[p])) p++;
+            if (p >= value.Length || value[p] != '=')
+                continue; // a bare "tag" parameter without a value is not a dialog tag.
+            p++;
+            while (p < value.Length && char.IsWhiteSpace(value[p])) p++;
+
+            var valueStart = p;
+            while (p < value.Length && value[p] != ';') p++;
+            var tag = value[valueStart..p].Trim();
+            return tag.Length > 0 ? tag : null;
+        }
+
+        return null;
     }
 
     /// <summary>

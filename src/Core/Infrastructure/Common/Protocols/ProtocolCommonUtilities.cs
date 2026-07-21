@@ -11,12 +11,16 @@ namespace CalloraVoipSdk.Core.Infrastructure.Common.Protocols;
 internal static class ProtocolCommonUtilities
 {
     /// <summary>
-    /// Splits a comma-separated string while preserving commas inside quoted sections.
+    /// Splits a comma-separated header value list while preserving commas that fall inside a quoted string
+    /// (<c>"…"</c>) or a name-addr's angle brackets (<c>&lt;…&gt;</c>). This is the RFC 3261 §7.3.1 rule for
+    /// combining/splitting multiple header field values: a comma inside a display name or a <c>&lt;URI&gt;</c>
+    /// (which can itself carry commas in its parameters/headers) is not a value delimiter.
     /// </summary>
     public static IEnumerable<string> SplitCommaSeparatedRespectingQuotes(string value)
     {
         var current = new StringBuilder();
         var inQuotes = false;
+        var bracketDepth = 0;
         foreach (var ch in value)
         {
             if (ch == '"')
@@ -26,7 +30,21 @@ internal static class ProtocolCommonUtilities
                 continue;
             }
 
-            if (ch == ',' && !inQuotes)
+            if (!inQuotes && ch == '<')
+            {
+                bracketDepth++;
+                current.Append(ch);
+                continue;
+            }
+
+            if (!inQuotes && ch == '>')
+            {
+                if (bracketDepth > 0) bracketDepth--;
+                current.Append(ch);
+                continue;
+            }
+
+            if (ch == ',' && !inQuotes && bracketDepth == 0)
             {
                 var token = current.ToString().Trim();
                 if (token.Length > 0) yield return token;
