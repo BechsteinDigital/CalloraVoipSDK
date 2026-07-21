@@ -168,6 +168,8 @@ internal sealed class SipCallSessionContextAdapter : ISipCallSessionContext
     public IReadOnlyList<string> RouteSet =>
         _session._dialogManager.RouteSet.Count > 0 ? _session._dialogManager.RouteSet : _session._initialRouteSet;
 
+    public IReadOnlyList<string> DialogRouteSet => _session._dialogManager.RouteSet;
+
     public void ApplyInviteDialogResponse(SipResponse response) => _session.ApplyInviteDialogResponse(response);
 
     public void ApplyInboundDialogRequest(SipRequest request) => _session.ApplyInboundDialogRequest(request);

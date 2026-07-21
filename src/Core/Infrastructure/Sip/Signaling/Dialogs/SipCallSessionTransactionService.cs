@@ -128,7 +128,7 @@ internal sealed class SipCallSessionTransactionService
                                 highestScheduledPrackRseq = rseq;
                                 reliablePrackSendChain = reliablePrackSendChain
                                     .ContinueWith(
-                                        _ => SendReliablePrackAsync(rackHeader, envelope.RemoteEndPoint, ct),
+                                        _ => SendReliablePrackAsync(rackHeader, ct),
                                         ct,
                                         TaskContinuationOptions.None,
                                         TaskScheduler.Default)
@@ -740,7 +740,6 @@ internal sealed class SipCallSessionTransactionService
     /// </summary>
     private async Task SendReliablePrackAsync(
         string rackHeaderValue,
-        IPEndPoint remoteEndPoint,
         CancellationToken ct)
     {
         var cseq = _context.NextLocalCSeq();
@@ -754,11 +753,16 @@ internal sealed class SipCallSessionTransactionService
         headers["RAck"] = rackHeaderValue;
         headers["Supported"] = SipCallSessionTransactionUtilities.AppendSupportedToken(headers.TryGetValue("Supported", out var existingSupported) ? existingSupported : null, "100rel");
 
+        // RFC 3262 §4 + RFC 3261 §12.2.1.1 (CF-014): PRACK is an in-dialog request within the early dialog and
+        // follows its route set / topmost route; a direct early dialog falls back to the learned response source.
+        var (requestUri, remoteEndPoint) =
+            await SipInDialogRequestRouting.ApplyInDialogRoutingAsync(_context, headers, ct).ConfigureAwait(false);
+
         var transactionResult = await _clientTransactions.ExecuteAsync(
                 new SipClientTransactionRequest
                 {
                     Method = "PRACK",
-                    RequestUri = _context.RemoteRequestUri,
+                    RequestUri = requestUri,
                     Headers = headers,
                     Body = null,
                     RemoteEndPoint = remoteEndPoint,

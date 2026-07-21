@@ -69,7 +69,15 @@ internal static class SipInDialogRequestRouting
     public static async Task<(string RequestUri, IPEndPoint RemoteEndPoint)> ApplyInDialogRoutingAsync(
         ISipCallSessionContext context, IDictionary<string, string> headers, CancellationToken ct)
     {
-        var plan = Plan(context.RemoteRequestUri, context.RouteSet);
+        // Plan the dialog-established route set (reversed Record-Route, always raw) with full §12.2.1.1
+        // loose/strict handling. When the dialog carries none, a preloaded outbound-proxy route set is already
+        // in send-form from the initial-request planner, so it is used as-is rather than re-planned — re-planning
+        // an already strict-rewritten set would double-rewrite it (CF-014 F1). An absent route set falls through
+        // to the direct dialog (the learned response source).
+        var dialogRouteSet = context.DialogRouteSet;
+        var plan = dialogRouteSet.Count > 0
+            ? Plan(context.RemoteRequestUri, dialogRouteSet)
+            : PreplannedFallback(context.RemoteRequestUri, context.RouteSet);
 
         if (plan.RouteHeaderSet.Count > 0)
             headers["Route"] = string.Join(", ", plan.RouteHeaderSet.Select(uri => $"<{uri}>"));
@@ -84,6 +92,18 @@ internal static class SipInDialogRequestRouting
         }
 
         return (plan.RequestUri, remoteEndPoint);
+    }
+
+    // A preloaded route set (used when the dialog established no Record-Route route set of its own) is already
+    // in RFC 3261 §12.2.1.1 send-form from the initial-request planner, so it is NOT re-planned: the Request-URI
+    // stays the dialog remote target and the transport next hop is the stored topmost route. This keeps in-dialog
+    // requests on a configured outbound proxy without double-rewriting an already strict-rewritten set (CF-014 F1).
+    private static SipInDialogRoutingPlan PreplannedFallback(string remoteTargetUri, IReadOnlyList<string> routeSet)
+    {
+        if (routeSet is null || routeSet.Count == 0)
+            return new SipInDialogRoutingPlan(remoteTargetUri, [], remoteTargetUri, ResolveNextHop: false);
+
+        return new SipInDialogRoutingPlan(remoteTargetUri, routeSet, routeSet[0], ResolveNextHop: true);
     }
 
     // Resolves the topmost route URI to a concrete transport endpoint via the transport's route resolver
