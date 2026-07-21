@@ -41,7 +41,7 @@ jobs:
         run: dotnet test tests/CalloraVoipSdk.ArchitectureTests/CalloraVoipSdk.ArchitectureTests.csproj --configuration Release --no-build --nologo --verbosity minimal
 
       - name: Test + Coverage (Non-Core)
-        run: dotnet test CalloraVoipSdk.sln --configuration Release --no-build --filter "FullyQualifiedName!~CalloraVoipSdk.Core.Tests" --collect:"XPlat Code Coverage" --results-directory ./TestResults --nologo --verbosity minimal
+        run: dotnet test CalloraVoipSdk.sln --configuration Release --no-build --filter "FullyQualifiedName!~CalloraVoipSdk.Core.Tests&Category!=SoakLong&Category!=Interop" --collect:"XPlat Code Coverage" --results-directory ./TestResults --nologo --verbosity minimal
 
       - name: Upload Coverage Artifacts
         if: always()
@@ -51,3 +51,28 @@ jobs:
           path: |
             TestResults/**/coverage.cobertura.xml
           if-no-files-found: warn
+
+  interop:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
+
+      - name: Restore
+        run: dotnet restore CalloraVoipSdk.sln
+
+      - name: Build
+        run: dotnet build CalloraVoipSdk.sln --configuration Release --no-restore
+
+      - name: Interop tests (Docker/Asterisk)
+        run: dotnet test tests/CalloraVoipSdk.InteropTests/CalloraVoipSdk.InteropTests.csproj --configuration Release --no-build -f net10.0 --filter "Category=Interop" --nologo --verbosity minimal

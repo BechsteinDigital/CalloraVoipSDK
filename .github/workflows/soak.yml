@@ -1,0 +1,58 @@
+name: soak
+
+on:
+  workflow_dispatch:
+    inputs:
+      iterations:
+        description: "SOAK_ITERATIONS (serielle Leak-Zyklen)"
+        required: false
+        default: "500"
+      duration_seconds:
+        description: "SOAK_DURATION_SECONDS (Media-/Signaling-Lauf)"
+        required: false
+        default: "20"
+  schedule:
+    - cron: "0 3 * * *"  # täglich 03:00 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  soak-long:
+    runs-on: ubuntu-latest
+    # Untrusted workflow_dispatch-Inputs bewusst nur über env: (nicht in run: interpoliert);
+    # der Test liest sie via int.TryParse (nicht-numerische Werte → Default).
+    env:
+      SOAK_ITERATIONS: ${{ github.event.inputs.iterations || '500' }}
+      SOAK_DURATION_SECONDS: ${{ github.event.inputs.duration_seconds || '20' }}
+      # Aktiviert den strukturierten Audit-Sink (JSON-Messreihen + summary.md je Lauf).
+      # GITHUB_SHA wird vom Runner automatisch gesetzt und vom Sink als Commit-SHA gelesen.
+      SOAK_ARTIFACT_DIR: ${{ github.workspace }}/soak-artifacts
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
+
+      - name: Restore
+        run: dotnet restore CalloraVoipSdk.sln
+
+      - name: Build
+        run: dotnet build CalloraVoipSdk.sln --configuration Release --no-restore
+
+      - name: Long soaks (Category=SoakLong)
+        run: dotnet test tests/CalloraVoipSdk.SoakTests/CalloraVoipSdk.SoakTests.csproj --configuration Release --no-build -f net10.0 --filter "Category=SoakLong" --nologo --verbosity minimal
+
+      - name: Upload soak artifacts (Messreihen + summary.md)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: soak-artifacts
+          path: ${{ github.workspace }}/soak-artifacts
+          if-no-files-found: warn

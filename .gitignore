@@ -101,6 +101,7 @@ graphify-out/
 _site/
 docs/*
 !docs/portal
+!docs/audit/
 
 AGENTS.md
 CLAUDE.md
