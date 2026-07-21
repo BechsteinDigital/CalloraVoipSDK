@@ -544,16 +544,22 @@ internal sealed class SipRegistrationService : ISipRegistrationService
     }
 
     /// <summary>
-    /// Builds the Contact header value including <c>expires</c> and optional
-    /// <c>+sip.instance</c> and <c>reg-id</c> parameters (RFC 5626 §4).
+    /// Builds the Contact header value including <c>expires</c> and, when an instance id is present (outbound
+    /// registration, RFC 5626 §4.1), the <c>;ob</c> URI parameter plus the <c>+sip.instance</c> and
+    /// <c>reg-id</c> Contact parameters. Internal for direct testing.
     /// </summary>
-    private static string BuildContactHeaderValue(
+    internal static string BuildContactHeaderValue(
         string contactUri,
         int expiresSeconds,
         string? instanceId)
     {
+        // RFC 5626 §4.1: when registering for outbound, the 'ob' URI parameter goes in the Contact URI (inside
+        // the angle brackets) to tell the edge proxy/registrar to route future in-dialog and mid-dialog requests
+        // back over this same registered flow — the piece that actually makes the flow reusable.
+        var uri = string.IsNullOrWhiteSpace(instanceId) ? contactUri : $"{contactUri};ob";
+
         // RFC 3261 §10.2.1.1: include expires as a Contact parameter for per-binding control.
-        var value = $"<{contactUri}>;expires={expiresSeconds}";
+        var value = $"<{uri}>;expires={expiresSeconds}";
 
         if (!string.IsNullOrWhiteSpace(instanceId))
         {
