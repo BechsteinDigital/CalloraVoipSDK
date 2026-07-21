@@ -113,7 +113,9 @@ internal sealed class AckTestSipCallSessionContext : ISipCallSessionContext
     {
     }
 
-    public bool NotifyTransferRequested(string referTo, string referredBy) => false;
+    public bool TransferAccepted { get; init; }
+
+    public bool NotifyTransferRequested(string referTo, string referredBy) => TransferAccepted;
 
     public bool NotifySubscriptionRequested(string eventType, int expiresSeconds, string? acceptHeader) => false;
 
