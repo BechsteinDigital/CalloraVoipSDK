@@ -67,4 +67,40 @@ public sealed class AsteriskEarlyMediaInteropTests
 
         await call.HangupAsync();
     }
+
+    // F011 Slice 2 (grün): Die auf einem provisorischen 183 getragene SDP ist über die öffentliche API
+    // sichtbar (ICall.EarlyMediaSdp), getrennt vom finalen 200-OK-Answer. Der volle Pre-Answer-RTP-Empfang
+    // (oben) bleibt bis Slice 3/4 Skip-blockiert.
+    [DockerRequiredFact]
+    public async Task EarlyMediaSdp_IsExposedOnCall_WhenProvisionalCarriesSdp()
+    {
+        await using var asterisk = new AsteriskContainer();
+        await asterisk.StartAsync();
+        using var client = new VoipClient(new VoipConfiguration
+        {
+            UserAgent = "CalloraInteropTest/1.0",
+            SrtpPolicy = SrtpPolicy.Disabled,
+        });
+
+        var reg = await client.ConnectAsync(
+            new SipAccount
+            {
+                SipServer = asterisk.ContainerIpAddress,
+                Port = 5060,
+                Username = asterisk.Username,
+                Password = asterisk.Password,
+                Transport = DomainSipTransport.Udp,
+            },
+            new ConnectOptions { Timeout = TimeSpan.FromSeconds(20) });
+        Assert.True(reg.IsSuccess, $"Registrierung fehlgeschlagen: Status={reg.Status}");
+
+        var result = await client.DialAndWaitUntilConnectedAsync(
+            reg.Line!, asterisk.CallTargetUri("earlymedia"), new DialWaitOptions { ConnectTimeout = TimeSpan.FromSeconds(10) });
+        Assert.True(result.IsSuccess, $"DialStatus: {result.Status}");
+        var call = result.Call!;
+
+        Assert.False(string.IsNullOrEmpty(call.EarlyMediaSdp), "Early-Media-SDP wurde nicht über die öffentliche API exponiert.");
+
+        await call.HangupAsync();
+    }
 }

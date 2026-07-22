@@ -47,6 +47,28 @@ public sealed class SipEarlyMediaSdpCaptureTests
     }
 
     [Fact]
+    public async Task Provisional_180_with_sdp_body_is_captured_as_early_media()
+    {
+        // RFC 3960: early media may ride on 180 Ringing too, not only 183 Session Progress.
+        var transport = new CapturingSipTransportRuntime
+        {
+            ProvisionalResponsesFactory = req => req.Method == "INVITE"
+                ? [new SipResponse(180, "Ringing", Headers(req), EarlyMediaSdp)]
+                : Array.Empty<SipResponse>(),
+            ResponseFactory = req => req.Method == "INVITE"
+                ? new SipResponse(200, "OK", Headers(req), EarlyMediaSdp)
+                : null,
+        };
+        var context = new AckTestSipCallSessionContext(transport);
+        var service = new SipCallSessionTransactionService(context, new SipCallSessionHeaderService(context));
+
+        await service.SendInviteTransactionAsync(
+            body: null, allowRingingTransition: true, SipDialogState.Established, CancellationToken.None);
+
+        Assert.Equal(EarlyMediaSdp, context.CapturedEarlyMediaSdp);
+    }
+
+    [Fact]
     public async Task Provisional_180_without_body_leaves_early_media_unset()
     {
         var transport = new CapturingSipTransportRuntime

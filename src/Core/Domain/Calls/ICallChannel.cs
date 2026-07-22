@@ -55,6 +55,12 @@ internal interface ICallChannel : IDisposable
     /// </summary>
     string? Diversion => null;
 
+    /// <summary>
+    /// SDP body from a provisional (180/183) early-media response, or <see langword="null"/>.
+    /// Default implementation returns null.
+    /// </summary>
+    string? EarlyMediaSdp => null;
+
     // ── Media negotiation ─────────────────────────────────────────────────────
 
     /// <summary>
