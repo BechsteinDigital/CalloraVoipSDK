@@ -10,20 +10,17 @@ using DomainSipTransport = CalloraVoipSdk.Core.Domain.Lines.SipTransport;
 namespace CalloraVoipSdk.InteropTests.Transport;
 
 /// <summary>
-/// SIP über TCP-Transport gegen echten Asterisk (Fixture hat [transport-tcp] auf 5060).
+/// SIP über TCP-Transport gegen echten Asterisk (Fixture hat [transport-tcp] auf 5060): Register und
+/// ein beantworteter Call laufen komplett über TCP-Signalisierung. Media bleibt Plain RTP über UDP.
 ///
-/// Befund F010 (siehe docs/audit/INTEROP_SOAK_AUDIT.md): Die erste TCP-Registration erhält 200 OK,
-/// aber der NAT-korrektive Re-Register (SipLineChannel, rport-basiert) wird transport-unabhängig
-/// angewendet und schreibt den Contact auf die vom Registrar reflektierte SNAT-Adresse um. Über die
-/// persistente TCP-Verbindung passt dieser Contact nicht zum tatsächlichen Verbindungs-Source-Port →
-/// Asterisk lehnt die Re-Registration mit 403 ab → Line Failed. Über UDP ist das SNAT-Mapping stabil,
-/// daher grün. Der ideale Zustand ist Skip-blockiert bis F010 gefixt ist.
+/// F010 (GEFIXT): Der NAT-korrektive Re-Register ist jetzt auf UDP beschränkt — über TCP/TLS übernimmt
+/// die persistente Verbindung das Routing (RFC 5626), sodass die Registration stabil bleibt (früher:
+/// Contact-Rewrite auf den SNAT-Port → 403). Siehe docs/audit/INTEROP_SOAK_AUDIT.md.
 /// </summary>
 [Trait("Category", "Interop")]
 public sealed class AsteriskTcpTransportInteropTests
 {
-    [Fact(Skip = "F010 — NAT-korrektiver Re-Register wird transport-unabhängig angewendet; über TCP+NAT schreibt er den Contact auf den SNAT-Port um, der nicht zur persistenten Verbindung passt → Asterisk 403 auf die Re-Registration. Erste Registration (200 OK) gelingt. Siehe docs/audit/INTEROP_SOAK_AUDIT.md")]
-    [Trait("Category", "Interop")]
+    [DockerRequiredFact]
     public async Task RegisterAndAnsweredCall_OverTcpSignaling()
     {
         await using var asterisk = new AsteriskContainer();

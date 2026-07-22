@@ -424,7 +424,13 @@ internal sealed class SipLineChannel : ILineChannel
                         _learnedPublicContact?.Port,
                         result.ObservedPublicHost,
                         result.ObservedPublicPort);
-                    if (changed)
+                    // The NAT-corrective re-register applies only to connectionless transport (UDP).
+                    // Over connection-oriented transports (TCP/TLS/WS) the persistent connection carries
+                    // the routing (RFC 5626 SIP Outbound); rewriting the Contact to the registrar-observed
+                    // SNAT address would break the very next re-register, because its ephemeral source
+                    // port no longer matches the connection → registrar 403 (interop finding F010).
+                    var natCorrectionApplies = _account.Transport is SipTransport.Udp;
+                    if (changed && natCorrectionApplies)
                     {
                         _learnedPublicContact = host is null ? null : new LearnedPublicContact(host, port);
                         if (correctiveReregistrations < options.MaxCorrectiveReregistrations)

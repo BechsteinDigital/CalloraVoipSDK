@@ -190,9 +190,10 @@ public sealed class AsteriskContainer : IAsyncDisposable
     /// <summary>
     /// Baut eine Ziel-Request-URI für die im Dialplan definierten Test-Extensions
     /// (<c>answer</c> → 200 OK + Media, <c>busy</c>, <c>decline</c>, <c>noanswer</c>) bzw. eine
-    /// unbekannte Extension (→ 404). Nur nach <see cref="StartAsync"/> gültig (Container-Bridge-IP).
+    /// unbekannte Extension (→ 404). <paramref name="port"/> muss zum Signalisierungs-Transport passen
+    /// (5060 für UDP/TCP, <see cref="SipTlsPort"/> für TLS). Nur nach <see cref="StartAsync"/> gültig.
     /// </summary>
-    public string CallTargetUri(string extension) => $"sip:{extension}@{ContainerIpAddress}:5060";
+    public string CallTargetUri(string extension, int port = 5060) => $"sip:{extension}@{ContainerIpAddress}:{port}";
 
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
