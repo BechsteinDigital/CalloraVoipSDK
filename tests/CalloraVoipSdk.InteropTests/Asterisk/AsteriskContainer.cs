@@ -30,7 +30,7 @@ public sealed class AsteriskContainer : IAsyncDisposable
         "type=endpoint\n" +
         "context=default\n" +
         "disallow=all\n" +
-        "allow=ulaw\n" +
+        "allow=ulaw,alaw,g722\n" +               // mehrere Codecs → Negotiation-Tests wählen per SDK-Präferenz
         "auth=6001\n" +
         "aors=6001\n" +
         "\n" +
