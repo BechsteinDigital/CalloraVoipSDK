@@ -29,6 +29,16 @@ Media-Drift-Soak ist von „nur Jitter/PCMU/Plain" auf die **volle Matrix** erwe
 
 Der frühere „Signaling-Soak" ist präzise als **`SipLineChannelRefreshLifecycleSoakTests`** benannt (Scope-Ehrlichkeit). Er prüft ausschließlich den Re-REGISTER-**Refresh-Scheduler** des echten SipLineChannel gegen einen **In-Memory-Fake-Registrar** (`RecordingRegistrationService`): Zyklus-Kadenz, monotone CSeq, stabile Call-ID — plus eine **Ressourcenreihe** (nebenläufiges Sampling → Managed-Regression + Threads/Sockets/FDs-Plateau, nur Long). **Kein Nachweis** von Wire-Format, Transaktions-Layer, Digest-Auth, Transport oder Interop — echter SIP-Wire-Soak wäre ein eigener L4-Interop-Lauf (vgl. **F003**: fehlende Zeit-Abstraktion verhindert echtes Zeit-Rafting).
 
+## Coverage-Notiz Asterisk-Interop-Matrix (Phase 6+, 2026-07-22)
+
+Die Asterisk-Interop-Suite (`tests/CalloraVoipSdk.InteropTests`, echter `andrius/asterisk:22` via Testcontainers) deckt jetzt die volle SIP/RTP-Matrix ab — **22 grün, 4 Skip** (befund-blockiert):
+
+**Grün:** Register-Happy + Failure (Wrong-PW/Unknown-User → Failed prompt [F005], Unreachable → Timeout); Call-Failure (busy/486, decline/403, unknown/404); no-answer-Timeout [F008], Cancel→Canceled [F009]; **Happy-Path Outbound** (INVITE→200→ACK→RTP→BYE); **Codec-Negotiation** (PCMU/PCMA/G722 per Präferenz); **SRTP-SDES** (RTP/SAVP + `a=crypto`, verschlüsseltes Media); **DTMF** RFC 4733 (Empfang + Verhandlung); **Hold/Unhold** (re-INVITE); **Inbound Call** (Asterisk→SDK via `channel originate`); **Blind + Attended Transfer** (REFER/Replaces); **Session-Timer**-Verhandlung (RFC 4028).
+
+**Skip (befund-blockiert):** TCP- + TLS-Register [**F010**: NAT-Re-Register transport-unabhängig → 403]; Early Media [**F011**: kein 183-Media-Setup]; Auth-Error-Durchreichung [**F005b**].
+
+Media-Assertion unidirektional (`SilenceAudioDevice` sendet nichts): Asterisk sendet Milliwatt/Töne, Empfang via `ICall.RtpStatistics.PacketsReceived`. Plain RTP außer im SDES-Test. Neue Befunde dieser Phase: **F005b, F010, F011**.
+
 ## Verifikations-Notiz F002 (adversarial, opus, 2026-07-21)
 
 Kausalkette Ende-zu-Ende gegen den echten Code bestätigt (Verdict **CONFIRMED**):
