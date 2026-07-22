@@ -474,48 +474,107 @@ internal sealed class SipCallSessionTransactionService
     }
 
     /// <summary>
-    /// Sends in-dialog UPDATE as RFC4028 session refresh and returns true when accepted.
+    /// Sends in-dialog UPDATE as RFC 4028 session refresh and returns true when accepted. A 401/407 challenge on
+    /// the refresh is answered with digest credentials and the UPDATE is retried (bounded, RFC 3261 §22.2 /
+    /// RFC 7616) — otherwise a refresh behind an authenticating proxy would be reported as a failed refresh and
+    /// tear the healthy dialog down via BYE (issue #4). Returns false only when the refresh is genuinely rejected
+    /// or cannot be authenticated.
     /// </summary>
     public async Task<bool> SendSessionRefreshUpdateAsync(CancellationToken ct)
     {
-        var cseq = _context.NextLocalCSeq();
-        var headers = _headers.CreateDialogRequestHeaders(
-            method: "UPDATE",
-            cseq: cseq,
-            branch: SipProtocol.NewBranch(),
-            authorizationHeaderName: null,
-            authorizationHeader: null,
-            includeContentType: false);
-        SipSessionTimerPolicy.ApplyOutboundOfferHeaders(headers);
+        var nonceCounter = new SipNonceCounter();
+        var authAttempted = false;
+        var staleRetries = 0;
+        string? authorizationHeaderName = null;
+        string? authorizationHeaderValue = null;
 
-        // RFC 3261 §12.2.1.1 (CF-014): route the in-dialog UPDATE via the dialog route set / topmost route.
-        var (requestUri, remoteEndPoint) =
-            await SipInDialogRequestRouting.ApplyInDialogRoutingAsync(_context, headers, ct).ConfigureAwait(false);
+        while (true)
+        {
+            ct.ThrowIfCancellationRequested();
+            var cseq = _context.NextLocalCSeq();
+            var headers = _headers.CreateDialogRequestHeaders(
+                method: "UPDATE",
+                cseq: cseq,
+                branch: SipProtocol.NewBranch(),
+                authorizationHeaderName: authorizationHeaderName,
+                authorizationHeader: authorizationHeaderValue,
+                includeContentType: false);
+            SipSessionTimerPolicy.ApplyOutboundOfferHeaders(headers);
 
-        var transactionResult = await _clientTransactions.ExecuteAsync(
-                new SipClientTransactionRequest
+            // RFC 3261 §12.2.1.1 (CF-014): route the in-dialog UPDATE via the dialog route set / topmost route.
+            var (requestUri, remoteEndPoint) =
+                await SipInDialogRequestRouting.ApplyInDialogRoutingAsync(_context, headers, ct).ConfigureAwait(false);
+
+            var transactionResult = await _clientTransactions.ExecuteAsync(
+                    new SipClientTransactionRequest
+                    {
+                        Method = "UPDATE",
+                        RequestUri = requestUri,
+                        Headers = headers,
+                        Body = null,
+                        RemoteEndPoint = remoteEndPoint,
+                        Transport = _context.SignalingTransport,
+                        Timeout = _context.Timeout
+                    },
+                    ct)
+                .ConfigureAwait(false);
+
+            var response = transactionResult.FinalResponse;
+            _context.RemoteEndPoint = response.RemoteEndPoint;
+            _context.ApplyTargetRefreshDialogResponse(response.Response, "UPDATE");
+
+            if (SipProtocol.IsSuccess(response.Response.StatusCode))
+            {
+                _context.ApplySessionTimerNegotiation(
+                    response.Response.Header("Session-Expires"),
+                    localIsRequester: true);
+                return true;
+            }
+
+            // RFC 3261 §22.2: answer a 401/407 on the refresh UPDATE with digest credentials and retry the
+            // request (bounded, same challenge/nonce machinery as the INVITE and in-dialog loops), rather than
+            // reporting a failed refresh that would tear the dialog down (#4).
+            if (!TryResolveInDialogAuthRetry(
+                    response.Response,
+                    "UPDATE",
+                    body: null,
+                    requestUri,
+                    nonceCounter,
+                    authAttempted,
+                    out var shouldRetryWithAuth,
+                    out var isStaleNonce,
+                    out var nextAuthorizationHeaderName,
+                    out var nextAuthorizationHeaderValue))
+            {
+                return false;
+            }
+
+            if (shouldRetryWithAuth)
+            {
+                authAttempted = true;
+                authorizationHeaderName = nextAuthorizationHeaderName;
+                authorizationHeaderValue = nextAuthorizationHeaderValue;
+                continue;
+            }
+
+            if (isStaleNonce)
+            {
+                if (staleRetries >= MaxStaleNonceRetries)
                 {
-                    Method = "UPDATE",
-                    RequestUri = requestUri,
-                    Headers = headers,
-                    Body = null,
-                    RemoteEndPoint = remoteEndPoint,
-                    Transport = _context.SignalingTransport,
-                    Timeout = _context.Timeout
-                },
-                ct)
-            .ConfigureAwait(false);
+                    _context.Logger.LogWarning(
+                        "SIP session {CallId}: peer issued more than {Max} stale-nonce UPDATE refresh challenges; abandoning digest retry.",
+                        _context.CallId, MaxStaleNonceRetries);
+                    return false;
+                }
 
-        var response = transactionResult.FinalResponse;
-        _context.RemoteEndPoint = response.RemoteEndPoint;
-        _context.ApplyTargetRefreshDialogResponse(response.Response, "UPDATE");
-        if (!SipProtocol.IsSuccess(response.Response.StatusCode))
+                staleRetries++;
+                authorizationHeaderName = nextAuthorizationHeaderName;
+                authorizationHeaderValue = nextAuthorizationHeaderValue;
+                continue;
+            }
+
             return false;
-
-        _context.ApplySessionTimerNegotiation(
-            response.Response.Header("Session-Expires"),
-            localIsRequester: true);
-        return true;
+        }
     }
 
     /// <summary>
