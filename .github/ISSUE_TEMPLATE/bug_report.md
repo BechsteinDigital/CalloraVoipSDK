@@ -1,38 +1,41 @@
 ---
 name: Bug report
-about: Create a report to help us improve
+about: Report a defect in the SDK
 title: ''
-labels: ''
+labels: bug
 assignees: ''
 
 ---
 
+<!--
+Security vulnerability? Do NOT file it here — see SECURITY.md for private reporting.
+Search existing issues first: this repo tracks known findings in issues #3–#20.
+-->
+
 **Describe the bug**
-A clear and concise description of what the bug is.
+A clear and concise description of what is wrong.
 
-**To Reproduce**
-Steps to reproduce the behavior:
-1. Go to '...'
-2. Click on '....'
-3. Scroll down to '....'
-4. See error
+**Affected area**
+Which subsystem? (SIP · SDP · RTP/SRTP/DTLS · STUN/TURN/ICE · Core · Client/Audio · WebRTC)
+File/class if known (e.g. `Srtp/Context/SrtcpContext.cs`).
 
-**Expected behavior**
-A clear and concise description of what you expected to happen.
+**To reproduce**
+Steps or, ideally, a minimal failing test. See `docs/maintainers/onboarding-debugging.md`
+for the test harness (loopback, capturing transport, Asterisk container).
 
-**Screenshots**
-If applicable, add screenshots to help explain your problem.
+**Expected behaviour**
+What you expected, ideally with the RFC/section if it's a compliance question.
 
-**Desktop (please complete the following information):**
- - OS: [e.g. iOS]
- - Browser [e.g. chrome, safari]
- - Version [e.g. 22]
+**Environment**
+- SDK version / commit:
+- .NET target (net8.0 / net9.0 / net10.0):
+- OS (Linux / Windows) and, for interop issues, the peer stack (Asterisk, FreeSWITCH,
+  Fritz!Box, sipgate, browser, …):
+- Transport (UDP / TCP / TLS / WS / WSS) and media mode (plain RTP / SDES-SRTP / DTLS-SRTP):
 
-**Smartphone (please complete the following information):**
- - Device: [e.g. iPhone6]
- - OS: [e.g. iOS8.1]
- - Browser [e.g. stock browser, safari]
- - Version [e.g. 22]
+**Logs**
+Relevant logs. Enable the SIP wire trace via `LogLevel.Trace` (SDES keys and ICE passwords
+are redacted automatically). **Scrub any remaining credentials before posting.**
 
 **Additional context**
-Add any other context about the problem here.
+Anything else that helps.

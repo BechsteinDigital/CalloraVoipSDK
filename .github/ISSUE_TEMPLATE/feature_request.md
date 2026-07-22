@@ -1,20 +1,24 @@
 ---
 name: Feature request
-about: Suggest an idea for this project
+about: Suggest a feature or enhancement
 title: ''
-labels: ''
+labels: enhancement
 assignees: ''
 
 ---
 
-**Is your feature request related to a problem? Please describe.**
-A clear and concise description of what the problem is. Ex. I'm always frustrated when [...]
+**Problem / use case**
+What are you trying to build, and where does the SDK fall short today?
 
-**Describe the solution you'd like**
-A clear and concise description of what you want to happen.
+**Proposed solution**
+What you'd like to happen. If it touches the protocol stack, note the relevant RFC(s).
 
-**Describe alternatives you've considered**
-A clear and concise description of any alternative solutions or features you've considered.
+**Affected area**
+Which subsystem would this touch? (SIP · SDP · RTP/SRTP/DTLS · STUN/TURN/ICE · Core ·
+Client/Audio · WebRTC)
+
+**Alternatives considered**
+Other approaches or workarounds you've weighed.
 
 **Additional context**
-Add any other context or screenshots about the feature request here.
+Anything else — links, prior art in other stacks, interop requirements.
