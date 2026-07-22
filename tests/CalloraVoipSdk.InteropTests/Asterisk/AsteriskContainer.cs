@@ -42,6 +42,28 @@ public sealed class AsteriskContainer : IAsyncDisposable
         "\n" +
         "[6001]\n" +
         "type=aor\n" +
+        "max_contacts=1\n" +
+        "\n" +
+        // Zweiter Endpoint mit erzwungener SRTP-SDES-Medienverschlüsselung (RFC 4568) für die
+        // SRTP-Interop-Tests. 6001 bleibt bewusst Plain RTP, damit die Non-Happy-Path-/Happy-Path-/
+        // Codec-Tests (SrtpPolicy.Disabled) unberührt bleiben.
+        "[6002]\n" +
+        "type=endpoint\n" +
+        "context=default\n" +
+        "disallow=all\n" +
+        "allow=ulaw,alaw,g722\n" +
+        "media_encryption=sdes\n" +               // erzwingt RTP/SAVP + a=crypto (SDES)
+        "auth=6002\n" +
+        "aors=6002\n" +
+        "\n" +
+        "[6002]\n" +
+        "type=auth\n" +
+        "auth_type=userpass\n" +
+        "username=6002\n" +
+        "password=secret\n" +
+        "\n" +
+        "[6002]\n" +
+        "type=aor\n" +
         "max_contacts=1\n";
 
     // Dialplan für Call-Tests. Kontext [default] passt zu context=default am Endpoint 6001.
@@ -85,6 +107,12 @@ public sealed class AsteriskContainer : IAsyncDisposable
 
     /// <summary>Passwort des konfigurierten Endpoints (Digest-Auth).</summary>
     public string Password => "secret";
+
+    /// <summary>Benutzername des zweiten Endpoints mit erzwungener SRTP-SDES-Medienverschlüsselung.</summary>
+    public string SdesUsername => "6002";
+
+    /// <summary>Passwort des SDES-Endpoints (Digest-Auth).</summary>
+    public string SdesPassword => "secret";
 
     /// <summary>Docker-Host (meist 127.0.0.1/localhost) für den Port-gemappten UDP-Zugang.</summary>
     public string Host => _container.Hostname;
