@@ -43,4 +43,11 @@ public static class SrtpDecisionReasonCodes
     /// Remote SDP could not be parsed into media parameters.
     /// </summary>
     public const string MediaParametersUnavailable = "srtp.media_parameters_unavailable";
+
+    /// <summary>
+    /// SDES SRTP is keyed over a signaling transport without confidentiality (no TLS/SIPS), so the
+    /// master key travels in cleartext SDP (RFC 4568 §7). Media confidentiality is not actually
+    /// assured against a passive eavesdropper on the signaling path; use TLS/SIPS or DTLS-SRTP.
+    /// </summary>
+    public const string SdesKeyOverInsecureSignaling = "srtp.sdes.insecure_signaling";
 }

@@ -35,6 +35,18 @@ internal static class SrtpPolicyEvaluator
         };
 
     /// <summary>
+    /// True when the applied policy places an SDES master key into the SDP (RFC 4568) while the
+    /// signaling transport carries no confidentiality (no TLS/SIPS) — i.e. the key travels in
+    /// cleartext. DTLS-SRTP keys never appear in the SDP, so a DTLS offer is exempt; a
+    /// <see cref="SrtpPolicy.Disabled"/> call offers no key at all.
+    /// </summary>
+    public static bool ExposesSdesKeyOverInsecureSignaling(
+        SrtpPolicy policy,
+        bool offerDtlsSrtp,
+        bool signalingIsSecure) =>
+        policy != SrtpPolicy.Disabled && !offerDtlsSrtp && !signalingIsSecure;
+
+    /// <summary>
     /// Maps policy + negotiation result to a stable reason code.
     /// </summary>
     public static string ResolveReasonCode(SrtpPolicy policy, bool isSrtpNegotiated) =>
