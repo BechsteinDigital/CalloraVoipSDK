@@ -25,6 +25,11 @@ internal sealed class CallMediaOrchestrator : IDisposable
     private readonly ILogger<CallMediaOrchestrator> _logger;
     private readonly ConcurrentDictionary<CallId, ActiveMediaEntry> _active = new();
     private readonly ConcurrentDictionary<CallId, MediaActivity> _activity = new();
+    // Monotonic per-call negotiation generation: bumped on every negotiation, so only the latest one may install
+    // a session (a slower ICE selection cannot overwrite a newer one). Removed on teardown so a late ICE result
+    // for a terminated call is rejected. Guards the register/displace/teardown mutations of _active (#10).
+    private readonly ConcurrentDictionary<CallId, long> _mediaGeneration = new();
+    private readonly object _setupSync = new();
     private readonly MediaSupervisionOptions _supervision;
 
     // Read on the background ICE-setup task as well as the SIP/dispose threads — volatile
@@ -127,13 +132,17 @@ internal sealed class CallMediaOrchestrator : IDisposable
     {
         if (_disposed) return;
 
+        // Stamp this negotiation with a monotonic generation; only the latest generation may install a session,
+        // so a slower ICE selection (e.g. from an earlier re-INVITE) cannot overwrite a newer one (#10).
+        var generation = _mediaGeneration.AddOrUpdate(call.CallId, 1, static (_, current) => current + 1);
+
         // ICE candidate selection is async and may run STUN connectivity checks; doing it
         // inline would block the SIP signaling thread that raised this event. Non-ICE calls
         // resolve instantly, so they stay fully synchronous (unchanged ordering); ICE calls
         // complete media setup on a background task once the pair is selected.
         if (_iceAgent is null || !parameters.IceEnabled)
         {
-            SetUpMediaSession(call, channel, parameters);
+            SetUpMediaSession(call, channel, parameters, generation);
             return;
         }
 
@@ -142,8 +151,7 @@ internal sealed class CallMediaOrchestrator : IDisposable
             try
             {
                 var effective = await ResolveIceCandidatePairAsync(call, parameters).ConfigureAwait(false);
-                if (_disposed) return;
-                SetUpMediaSession(call, channel, effective);
+                SetUpMediaSession(call, channel, effective, generation);
             }
             catch (Exception ex)
             {
@@ -152,8 +160,11 @@ internal sealed class CallMediaOrchestrator : IDisposable
         });
     }
 
-    private void SetUpMediaSession(ICall call, ICallChannel channel, CallMediaParameters effectiveParameters)
+    private void SetUpMediaSession(ICall call, ICallChannel channel, CallMediaParameters effectiveParameters, long generation)
     {
+        // Cheap early-out when the orchestrator is gone. The authoritative guard against installing a session for
+        // an already-terminated call (or a superseded negotiation) is re-evaluated under _setupSync just before
+        // registration, so a session built here is disposed rather than installed if the call raced to teardown.
         if (_disposed) return;
 
         _logger.LogDebug(
@@ -165,14 +176,6 @@ internal sealed class CallMediaOrchestrator : IDisposable
         // Expose negotiated parameters on the call so the audio device can read them.
         if (sdkCall is not null)
             sdkCall.SetMediaParameters(effectiveParameters);
-
-        // Tear down any prior session on re-INVITE before wiring the new one.
-        if (_active.TryRemove(call.CallId, out var old))
-        {
-            UnwireSession(old);
-            _ = old.QualityMonitor.DisposeAsync();
-            _ = old.Session.DisposeAsync();
-        }
 
         var session = _sessionFactory.Create(effectiveParameters);
         var qualityMonitor = new CallRtcpQualityMonitor(session, effectiveParameters, _loggerFactory, _rtcpPacketCodec);
@@ -263,11 +266,43 @@ internal sealed class CallMediaOrchestrator : IDisposable
             consentLostHandler,
             connectivityDegradedHandler,
             connectivityRecoveredHandler);
-        _active[call.CallId] = entry;
-        _activity[call.CallId] = new MediaActivity { Call = call, LastActivityUtc = DateTimeOffset.UtcNow };
+        // Register atomically against teardown, re-checking the guard under the lock: a concurrent
+        // termination/teardown or a newer negotiation must win the race — otherwise the session (RTP socket +
+        // RTCP loops) would leak on an already-terminated call, with no Terminated event left to reap it (#10).
+        ActiveMediaEntry? displaced = null;
+        lock (_setupSync)
+        {
+            if (!CanInstallMediaSession(call, generation))
+            {
+                UnwireSession(entry);
+                _ = qualityMonitor.DisposeAsync();
+                _ = session.DisposeAsync();
+                return;
+            }
+
+            _active.TryRemove(call.CallId, out displaced); // prior session on re-INVITE
+            _active[call.CallId] = entry;
+            _activity[call.CallId] = new MediaActivity { Call = call, LastActivityUtc = DateTimeOffset.UtcNow };
+        }
+
+        if (displaced is not null)
+        {
+            UnwireSession(displaced);
+            _ = displaced.QualityMonitor.DisposeAsync();
+            _ = displaced.Session.DisposeAsync();
+        }
 
         _ = StartSessionAsync(call.CallId, entry);
     }
+
+    // Whether a media session may still be installed for this negotiation: the orchestrator is live, the call has
+    // not terminated, and this is still the latest negotiation generation for the call. Re-evaluated under
+    // <see cref="_setupSync"/> at install time so a concurrent teardown/termination or a newer negotiation wins (#10).
+    private bool CanInstallMediaSession(ICall call, long generation) =>
+        !_disposed
+        && call.State != CallState.Terminated
+        && _mediaGeneration.TryGetValue(call.CallId, out var latest)
+        && latest == generation;
 
     private async Task StartSessionAsync(CallId callId, ActiveMediaEntry entry)
     {
@@ -286,7 +321,13 @@ internal sealed class CallMediaOrchestrator : IDisposable
     private async Task TeardownMediaAsync(CallId callId)
     {
         _activity.TryRemove(callId, out _);
-        if (!_active.TryRemove(callId, out var entry)) return;
+        // Supersede any in-flight negotiation so a late ICE result cannot install a session after teardown, and
+        // remove the active entry under the same lock the install takes so the two cannot race (#10).
+        _mediaGeneration.TryRemove(callId, out _);
+        ActiveMediaEntry? entry;
+        lock (_setupSync)
+            _active.TryRemove(callId, out entry);
+        if (entry is null) return;
 
         try
         {
@@ -308,14 +349,21 @@ internal sealed class CallMediaOrchestrator : IDisposable
         if (_disposed) return;
         _disposed = true;
 
-        foreach (var entry in _active.Values)
+        // Drain the active sessions under the install lock, and with _disposed already set, so a late install
+        // (its guard now sees _disposed) can neither slip an entry past this drain nor start after it (#10).
+        ActiveMediaEntry[] entries;
+        lock (_setupSync)
+        {
+            entries = _active.Values.ToArray();
+            _active.Clear();
+        }
+
+        foreach (var entry in entries)
         {
             UnwireSession(entry);
             _ = entry.QualityMonitor.DisposeAsync();
             _ = entry.Session.DisposeAsync();
         }
-
-        _active.Clear();
     }
 
     // ──────────────────────────────────────────────────────────────────────────

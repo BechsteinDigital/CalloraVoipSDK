@@ -286,6 +286,117 @@ public sealed class CallMediaOrchestratorVideoWiringTests
         public void RaiseCongestionUpdated() => CongestionUpdated?.Invoke();
     }
 
+    // ── #10: ICE-teardown race — no media-session leak for a terminated call ──────
+
+    [Fact]
+    public async Task Terminating_during_ice_selection_does_not_leak_a_media_session()
+    {
+        var session = new TrackingMediaSession();
+        var ice = new BlockingIceAgent();
+        var channel = new RecordingCallChannel();
+        using var orchestrator = new CallMediaOrchestrator(
+            new FakeSessionFactory(session), NullLoggerFactory.Instance, new RtcpPacketCodec(), ice);
+        var call = new Call(
+            CallId.New(), CallDirection.Inbound, "sip:remote@test.invalid",
+            channel, new FakePhoneLine(), NullLogger<Call>.Instance);
+        orchestrator.AttachCall(call, channel);
+
+        // ICE-enabled negotiation → media setup runs on a background task that blocks inside the ICE agent.
+        channel.RaiseMediaNegotiated(IceParams());
+
+        // Terminate the call while ICE selection is still blocked. Teardown runs and finds no session to remove
+        // yet — the classic leak window: without the fix the late ICE result would install + start a session for
+        // an already-terminated call, with no further Terminated event to reap it (#10).
+        orchestrator.OnCallStateChanged(
+            this, new CallStateChangedEventArgs(CallState.Connected, CallState.Terminated, call));
+
+        // Let ICE selection finish → SetUpMediaSession runs and must NOT install/start a session.
+        ice.Release();
+        await session.Settled.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(0, session.StartCount);     // never started → no RTP socket / RTCP loops leaked
+        Assert.True(session.DisposeCount >= 1);  // the built-but-not-installed session was disposed instead
+    }
+
+    private static CallMediaParameters IceParams() => new()
+    {
+        LocalEndPoint = new IPEndPoint(IPAddress.Loopback, 0),
+        RemoteEndPoint = new IPEndPoint(IPAddress.Loopback, 0),
+        RtcpMux = true,
+        PayloadType = 0,
+        ClockRate = 8000,
+        SamplesPerPacket = 160,
+        IceEnabled = true,
+    };
+
+    private sealed class BlockingIceAgent : ICallIceAgent
+    {
+        private readonly TaskCompletionSource _gate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public void Release() => _gate.TrySetResult();
+
+        public Task<CallIceLocalDescription?> BuildLocalDescriptionAsync(
+            IPEndPoint localEndPoint,
+            System.Net.Sockets.Socket? sharedMediaSocket = null,
+            IPEndPoint? videoLocalEndPoint = null,
+            System.Net.Sockets.Socket? videoSharedMediaSocket = null,
+            CancellationToken ct = default) =>
+            throw new NotSupportedException("Not used by the ICE-teardown-race test.");
+
+        public async Task<CallIceSelectionResult> SelectCandidatePairAsync(
+            CallId callId, CallMediaParameters parameters, CancellationToken ct)
+        {
+            await _gate.Task.ConfigureAwait(false);
+            // No selected pair → the orchestrator keeps the negotiated params and proceeds to SetUpMediaSession.
+            return new CallIceSelectionResult
+            {
+                State = CallIceNegotiationState.Failed,
+                HasSelectedPair = false,
+                ReasonCode = "test-no-pair",
+            };
+        }
+    }
+
+    private sealed class TrackingMediaSession : ICallMediaSession
+    {
+        public int StartCount;
+        public int DisposeCount;
+        public readonly TaskCompletionSource Settled = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public IVideoMediaStream? Video => null;
+        public Task StartAsync(CancellationToken ct = default)
+        {
+            Interlocked.Increment(ref StartCount);
+            Settled.TrySetResult();
+            return Task.CompletedTask;
+        }
+        public Task SendFrameAsync(CallAudioFrame frame, CancellationToken ct = default) => Task.CompletedTask;
+        public Task SendDtmfAsync(byte toneCode, int durationMs = 160, CancellationToken ct = default) => Task.CompletedTask;
+        public void UpdateRoundTripTimeHint(TimeSpan roundTripTime) { }
+        public CallMediaRuntimeMetrics GetRuntimeMetricsSnapshot() =>
+            new(DateTimeOffset.UtcNow, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+        public CallMediaRtpSnapshot GetRtpSnapshot() =>
+            new(DateTimeOffset.UtcNow, 0u, null, 0u, 0u, 0u, false, 0u, 0u, 0, 0, 0u, 0u, 0, 0, 0);
+        public Task SendRtcpMuxDatagramAsync(ReadOnlyMemory<byte> datagram, CancellationToken ct = default) => Task.CompletedTask;
+
+#pragma warning disable CS0067 // events unused by this leak test
+        public event Action<CallAudioFrame>? FrameReceived;
+        public event Action<byte, int>? DtmfReceived;
+        public event Action<CallMediaRuntimeMetrics>? RuntimeMetricsUpdated;
+        public event Action<byte[]>? RtcpMuxDatagramReceived;
+        public event Action? MediaConsentLost;
+        public event Action? MediaConnectivityDegraded;
+        public event Action? MediaConnectivityRecovered;
+#pragma warning restore CS0067
+
+        public ValueTask DisposeAsync()
+        {
+            Interlocked.Increment(ref DisposeCount);
+            Settled.TrySetResult();
+            return ValueTask.CompletedTask;
+        }
+    }
+
     private sealed class FakeVideoSession(IVideoMediaStream? video) : ICallMediaSession
     {
         public IVideoMediaStream? Video => video;
