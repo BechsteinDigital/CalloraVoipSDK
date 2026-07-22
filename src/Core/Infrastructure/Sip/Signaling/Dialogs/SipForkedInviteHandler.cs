@@ -178,11 +178,22 @@ internal sealed class SipForkedInviteHandler
             return false;
 
         inviteCseq = SipProtocol.ExtractCSeqNumber(cseqHeader);
-        if (inviteCseq <= 0 || inviteCseq != _context.ActiveInviteCSeq)
+        if (inviteCseq <= 0)
             return false;
 
         remoteTag = SipProtocol.ExtractTag(response.Header("To")) ?? string.Empty;
         if (string.IsNullOrWhiteSpace(remoteTag))
+            return false;
+
+        // Accept a 2xx that belongs either to the still-active INVITE transaction (a forked branch matching the
+        // active CSeq) or to the already-confirmed selected dialog. The latter — a RETRANSMITTED 2xx whose To-tag
+        // is our established remote tag — must still be ACKed (RFC 3261 §13.2.2.4) even though the active-invite
+        // state was cleared on the first 2xx; otherwise a lost initial ACK leaves the UAS retransmitting the 200 OK
+        // until it gives up and drops the call.
+        var matchesActiveInvite = inviteCseq == _context.ActiveInviteCSeq;
+        var matchesConfirmedDialog = !string.IsNullOrWhiteSpace(_context.RemoteTag)
+            && string.Equals(remoteTag, _context.RemoteTag, StringComparison.Ordinal);
+        if (!matchesActiveInvite && !matchesConfirmedDialog)
             return false;
 
         return true;
