@@ -1,0 +1,7 @@
+{
+  "latest": "4.6",
+  "versions": [
+    { "label": "4.6 (preview)", "path": "" },
+    { "label": "4.5", "path": "4.5" }
+  ]
+}

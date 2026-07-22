@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Enum PeerConnectionState | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Enum PeerConnectionState | CalloraVoipSdk ">
+      
+      <meta name="description" content="Lifecycle state of a WebRTC , modelled on the W3C RTCPeerConnectionState (RFC 8829): a signalling-neutral view of where the peer is between creation and teardown. ICE consent and the DTLS handshake drive the transitions.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/new/main/apiSpec/new?filename=CalloraVoipSdk_WebRtc_PeerConnectionState.md&amp;value=---%0Auid%3A%20CalloraVoipSdk.WebRtc.PeerConnectionState%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="CalloraVoipSdk.WebRtc.PeerConnectionState">
+
+
+
+
+  <h1 id="CalloraVoipSdk_WebRtc_PeerConnectionState" data-uid="CalloraVoipSdk.WebRtc.PeerConnectionState" class="text-break">
+Enum PeerConnectionState  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/PeerConnectionState.cs/#L8"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="CalloraVoipSdk.html">CalloraVoipSdk</a>.<a class="xref" href="CalloraVoipSdk.WebRtc.html">WebRtc</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>CalloraVoipSdk.Client.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Lifecycle state of a WebRTC <a class="xref" href="CalloraVoipSdk.WebRtc.IPeerConnection.html">IPeerConnection</a>, modelled on the W3C
+<code>RTCPeerConnectionState</code> (RFC 8829): a signalling-neutral view of where the peer is between
+creation and teardown. ICE consent and the DTLS handshake drive the transitions.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public enum PeerConnectionState</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h2 id="fields">Fields
+</h2>
+  <dl class="parameters">
+    <dt id="CalloraVoipSdk_WebRtc_PeerConnectionState_Closed"><code>Closed = 5</code></dt>
+  
+  <dd><p>The peer was closed and its resources released.</p>
+</dd>
+    <dt id="CalloraVoipSdk_WebRtc_PeerConnectionState_Connected"><code>Connected = 2</code></dt>
+  
+  <dd><p>ICE consent and the DTLS handshake are established; media can flow.</p>
+</dd>
+    <dt id="CalloraVoipSdk_WebRtc_PeerConnectionState_Connecting"><code>Connecting = 1</code></dt>
+  
+  <dd><p>A remote description was applied and the transport is being established (ICE/DTLS).</p>
+</dd>
+    <dt id="CalloraVoipSdk_WebRtc_PeerConnectionState_Disconnected"><code>Disconnected = 3</code></dt>
+  
+  <dd><p>Connectivity was lost transiently (RFC 7675 consent miss) but may recover.</p>
+</dd>
+    <dt id="CalloraVoipSdk_WebRtc_PeerConnectionState_Failed"><code>Failed = 4</code></dt>
+  
+  <dd><p>Negotiation or the transport failed unrecoverably.</p>
+</dd>
+    <dt id="CalloraVoipSdk_WebRtc_PeerConnectionState_New"><code>New = 0</code></dt>
+  
+  <dd><p>Created; no remote description applied yet.</p>
+</dd>
+  </dl>
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/PeerConnectionState.cs/#L8" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

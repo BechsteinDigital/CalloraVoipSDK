@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Video calls | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Video calls | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/portal/guides/video-calls.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="video-calls">Video calls</h1>
+
+<p>The SDK carries <strong>encoded video</strong> end to end over the public API, exactly like audio: it
+negotiates the video m-line, moves reassembled frames in and out, and feeds back a
+recommended bitrate and keyframe requests. It is <strong>transport-only</strong> — the SDK never encodes
+or decodes. You bring the codec (VP8, H.264, …), the camera, and the display.</p>
+<blockquote>
+<p><strong>Runnable example:</strong> <a href="https://github.com/BechsteinDigital/CalloraVoipSDK/tree/main/examples/CalloraVoipSdk.Sample.VideoCalling">VideoCalling</a>
+wires a video call over nothing but the public API — receive, send, the bitrate hook, and a
+clearly marked <code>StubVideoEncoder</code> placeholder (no real codec).</p>
+</blockquote>
+<h2 id="two-ways-to-use-it">Two ways to use it</h2>
+<ol>
+<li><strong>Raw frame tap</strong> — you already own an encoder/decoder. Push and pull <code>VideoFrame</code>s
+directly through <code>IVideoSender</code>/<code>IVideoReceiver</code>. Full control, no bundled codec.</li>
+<li><strong>Default video convenience</strong> — hand the SDK an <code>IVideoDevice</code> (your codec package) and
+call <code>AttachDefaultVideoAsync</code>; the SDK owns the wiring. The &quot;audio-simple&quot; path.</li>
+</ol>
+<h2 id="receive-inbound-video">Receive inbound video</h2>
+<pre><code class="lang-csharp">IVideoReceiver receiver = client.Media.CreateVideoReceiver();
+receiver.AttachToCall(call);
+
+receiver.FrameReceived += (_, e) =&gt;
+{
+    VideoFrame frame = e.Frame;      // encoded bytes — decode with your own codec
+    // frame.Payload      : ReadOnlyMemory&lt;byte&gt; (one coded picture)
+    // frame.PayloadType  : negotiated RTP payload type (identifies the codec)
+    // frame.RtpTimestamp : 90 kHz video clock
+    // frame.IsKeyFrame   : true for an intra-coded key frame
+    myDecoder.Decode(frame.Payload);
+};
+</code></pre>
+<p>The <code>FrameReceived</code> handler runs <strong>synchronously on the media receive path</strong> — do not block
+or perform inline I/O. Buffer into your own queue and return immediately.</p>
+<h2 id="send-outbound-video">Send outbound video</h2>
+<pre><code class="lang-csharp">IVideoSender sender = client.Media.CreateVideoSender();
+sender.AttachToCall(call);
+
+// payload must already be encoded in the negotiated codec
+await sender.SendAsync(new VideoFrame(
+    Payload: encodedBytes,
+    PayloadType: 96,
+    RtpTimestamp: rtpTs,
+    IsKeyFrame: false));
+</code></pre>
+<p>Frames sent while the call is not <code>Connected</code> or <code>OnHold</code> are dropped.</p>
+<h2 id="adapt-to-the-network--the-payoff">Adapt to the network — the payoff</h2>
+<p>The SDK folds transport-cc feedback into a ready-to-use recommended bitrate. Set your
+encoder to it; don't compute bandwidth yourself.</p>
+<pre><code class="lang-csharp">sender.RecommendedBitrateChanged += (_, e) =&gt; encoder.SetBitrate(e.RecommendedBitrateBps);
+
+// or poll:
+long? bps = sender.RecommendedBitrateBps;      // null until congestion control is active
+NetworkQuality? quality = sender.NetworkQuality; // Good / Fair / Poor
+</code></pre>
+<h2 id="keyframes">Keyframes</h2>
+<pre><code class="lang-csharp">// The peer asked for a fresh reference frame (RTCP PLI/FIR):
+sender.KeyFrameRequested += (_, _) =&gt; encoder.ForceKeyFrame();
+</code></pre>
+<p>Send the resulting intra frame via <code>SendAsync</code> with <code>IsKeyFrame: true</code>. On the receive side
+the SDK already reports inbound losses to the peer (Generic NACK + throttled PLI, RFC 4585)
+when the peer advertised that feedback in SDP — you do not drive that.</p>
+<h2 id="default-video-convenience">Default video convenience</h2>
+<p>If you package your codec behind an <code>IVideoDevice</code>, register it in DI and let the SDK wire
+the call for you — the byte-analog of <code>AttachDefaultAudioAsync</code>:</p>
+<pre><code class="lang-csharp">services.AddCalloraVoip(options =&gt; { /* … */ });
+services.AddSingleton&lt;IVideoDevice, MyVp8VideoDevice&gt;();   // your codec package
+// …
+await client.AttachDefaultVideoAsync(call);   // connects your device on Connected/OnHold
+await client.DetachDefaultVideoAsync(call);
+</code></pre>
+<p>Without a registered <code>IVideoDevice</code>, <code>AttachDefaultVideoAsync</code> fails closed with
+<code>InvalidOperationException</code> — the SDK core ships no codec. DI registration is the supported
+way to supply the device.</p>
+<p><code>IVideoDevice.Connect(receiver, sender, parameters)</code> receives the negotiated codec via
+<code>parameters</code> (<code>VideoConnectionParameters</code>: payload type, codec name, clock rate), so the
+device encodes/decodes in the agreed format. The negotiated video parameters are also
+readable on <code>ICall.MediaParameters.Video</code> (<code>CallVideoParameters</code>).</p>
+<h2 id="what-the-sdk-does-and-does-not-do">What the SDK does and does not do</h2>
+<table>
+<thead>
+<tr>
+<th>The SDK</th>
+<th>Your code</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Negotiates the video m-line (SDP)</td>
+<td>—</td>
+</tr>
+<tr>
+<td>Packetizes / depacketizes RTP (VP8, H.264)</td>
+<td>—</td>
+</tr>
+<tr>
+<td>Moves encoded frames in and out</td>
+<td>Encode / decode the payload</td>
+</tr>
+<tr>
+<td>SRTP/SRTCP, RTX, NACK/PLI feedback</td>
+<td>—</td>
+</tr>
+<tr>
+<td>Recommends a bitrate, surfaces keyframe requests</td>
+<td>Set the encoder, capture, render</td>
+</tr>
+</tbody>
+</table>
+<p>The SDK <strong>never encodes or decodes</strong>. A <code>VideoFrame</code> payload is encoded codec bytes, not
+pixels. FIR is honoured on receive but not generated (PLI is the keyframe request for
+point-to-point calls).</p>
+<h2 id="relationship-to-audio">Relationship to audio</h2>
+<p>Video mirrors the audio contract: <code>CreateVideoReceiver()/CreateVideoSender()</code> parallel
+<code>CreateReceiver()/CreateSender()</code>, and <code>AttachDefaultVideoAsync</code> parallels
+<code>AttachDefaultAudioAsync</code>. The difference is that the SDK bundles audio codecs and OS audio
+devices, while video is transport-only — the codec lives in your <code>IVideoDevice</code>.</p>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/portal/guides/video-calls.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class WebRtcStats | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class WebRtcStats | CalloraVoipSdk ">
+      
+      <meta name="description" content="A point-in-time statistics snapshot for a peer connection (the SDK&#39;s getStats). Transport counters, derived bitrates and the ICE state/selected pair are populated today; quality, video and congestion-control metrics are added in later slices and read null until then — a null value means &amp;quot;not yet measured&amp;quot;, never a fabricated zero.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/new/main/apiSpec/new?filename=CalloraVoipSdk_WebRtc_WebRtcStats.md&amp;value=---%0Auid%3A%20CalloraVoipSdk.WebRtc.WebRtcStats%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="CalloraVoipSdk.WebRtc.WebRtcStats">
+
+
+
+  <h1 id="CalloraVoipSdk_WebRtc_WebRtcStats" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats" class="text-break">
+Class WebRtcStats  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L9"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="CalloraVoipSdk.html">CalloraVoipSdk</a>.<a class="xref" href="CalloraVoipSdk.WebRtc.html">WebRtc</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>CalloraVoipSdk.Client.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>A point-in-time statistics snapshot for a peer connection (the SDK's <code>getStats</code>). Transport
+counters, derived bitrates and the ICE state/selected pair are populated today; quality, video and
+congestion-control metrics are added in later slices and read <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> until then — a null
+value means &quot;not yet measured&quot;, never a fabricated zero.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sealed class WebRtcStats</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">WebRtcStats</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="CalloraVoipSdk_WebRtc_WebRtcStats_AvailableOutgoingBitrateBps_" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.AvailableOutgoingBitrateBps*"></a>
+
+  <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_AvailableOutgoingBitrateBps" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.AvailableOutgoingBitrateBps">
+  AvailableOutgoingBitrateBps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L120"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Estimated available outgoing bitrate in bits/second from congestion control, or
+<a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> until transport-cc is wired through the bundle.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public long? AvailableOutgoingBitrateBps { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_WebRtc_WebRtcStats_BytesReceived_" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.BytesReceived*"></a>
+
+  <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_BytesReceived" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.BytesReceived">
+  BytesReceived
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L26"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Total bytes of decrypted inbound RTP packets.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public long BytesReceived { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_WebRtc_WebRtcStats_BytesSent_" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.BytesSent*"></a>
+
+  <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_BytesSent" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.BytesSent">
+  BytesSent
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L20"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Total bytes of protected RTP datagrams sent.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public long BytesSent { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_WebRtc_WebRtcStats_ConnectionState_" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.ConnectionState*"></a>
+
+  <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_ConnectionState" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.ConnectionState">
+  ConnectionState
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L12"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The peer connection's current lifecycle state.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public required PeerConnectionState ConnectionState { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="CalloraVoipSdk.WebRtc.PeerConnectionState.html">PeerConnectionState</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_WebRtc_WebRtcStats_DroppedDatagrams_" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.DroppedDatagrams*"></a>
+
+  <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_DroppedDatagrams" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.DroppedDatagrams">
+  DroppedDatagrams
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L32"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Inbound datagrams dropped (pre-key, auth failure, replay, or unroutable).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public long DroppedDatagrams { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_WebRtc_WebRtcStats_FirCount_" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.FirCount*"></a>
+
+  <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_FirCount" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.FirCount">
+  FirCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L97"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Full Intra Request (FIR) messages, or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> until video feedback metrics are wired.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public long? FirCount { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_WebRtc_WebRtcStats_FramesDropped_" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.FramesDropped*"></a>
+
+  <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_FramesDropped" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.FramesDropped">
+  FramesDropped
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L85"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Frames dropped (e.g. by the reorder buffer), or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> until video metrics are wired.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public long? FramesDropped { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_WebRtc_WebRtcStats_FramesPerSecond_" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.FramesPerSecond*"></a>
+
+  <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_FramesPerSecond" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.FramesPerSecond">
+  FramesPerSecond
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L82"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Inbound frames per second, or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> until video metrics are wired.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double? FramesPerSecond { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_WebRtc_WebRtcStats_IceState_" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.IceState*"></a>
+
+  <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_IceState" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.IceState">
+  IceState
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L106"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>A W3C <code>RTCIceConnectionState</code>-style label (new/checking/connected/disconnected/failed/closed)
+derived from the peer's connectivity — the bundle uses single-candidate selection, not a separate
+ICE-checklist FSM.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? IceState { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_WebRtc_WebRtcStats_IncomingBitrateBps_" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.IncomingBitrateBps*"></a>
+
+  <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_IncomingBitrateBps" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.IncomingBitrateBps">
+  IncomingBitrateBps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L40"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Incoming bitrate in bits/second since the previous snapshot; <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> on the first snapshot.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double? IncomingBitrateBps { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_WebRtc_WebRtcStats_JitterMs_" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.JitterMs*"></a>
+
+  <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_JitterMs" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.JitterMs">
+  JitterMs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L59"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Our local receive-side interarrival jitter in milliseconds (RFC 3550 §A.8) — the WebRTC
+<code>getStats</code> inbound-rtp jitter — or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> until an inbound clock rate is established
+(no media received yet). Converted from RTP timestamp units with the negotiated clock rate. This is the
+session aggregate — the worst (maximum) across inbound sources; the per-stream breakdown is in
+<a class="xref" href="CalloraVoipSdk.WebRtc.WebRtcStats.html#CalloraVoipSdk_WebRtc_WebRtcStats_MediaStreams">MediaStreams</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double? JitterMs { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_WebRtc_WebRtcStats_KeyFrames_" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.KeyFrames*"></a>
+
+  <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_KeyFrames" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.KeyFrames">
+  KeyFrames
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L88"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Key frames received, or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> until video metrics are wired.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public long? KeyFrames { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_WebRtc_WebRtcStats_MediaStreams_" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.MediaStreams*"></a>
+
+  <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_MediaStreams" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.MediaStreams">
+  MediaStreams
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L77"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Per-media-stream quality (CF-004f): one entry per audio/video track (folded by MID) carrying the RTT and
+loss the peer reports on our outbound stream plus our local receive-side jitter for that track's remote
+inbound source, and one entry per remote inbound source whose payload type could not be attributed to a
+track. Empty until a session is built or a per-stream metric is available. The scalar
+<a class="xref" href="CalloraVoipSdk.WebRtc.WebRtcStats.html#CalloraVoipSdk_WebRtc_WebRtcStats_RoundTripTimeMs">RoundTripTimeMs</a>/<a class="xref" href="CalloraVoipSdk.WebRtc.WebRtcStats.html#CalloraVoipSdk_WebRtc_WebRtcStats_PacketLoss">PacketLoss</a>/<a class="xref" href="CalloraVoipSdk.WebRtc.WebRtcStats.html#CalloraVoipSdk_WebRtc_WebRtcStats_JitterMs">JitterMs</a> are the worst-of aggregate
+across these streams.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IReadOnlyList&lt;WebRtcMediaStreamStats&gt; MediaStreams { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="CalloraVoipSdk.WebRtc.WebRtcMediaStreamStats.html">WebRtcMediaStreamStats</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_WebRtc_WebRtcStats_NackCount_" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.NackCount*"></a>
+
+  <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_NackCount" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.NackCount">
+  NackCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L91"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generic NACK feedback messages, or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> until video feedback metrics are wired.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public long? NackCount { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_WebRtc_WebRtcStats_OutgoingBitrateBps_" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.OutgoingBitrateBps*"></a>
+
+  <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_OutgoingBitrateBps" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.OutgoingBitrateBps">
+  OutgoingBitrateBps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Outgoing bitrate in bits/second since the previous snapshot; <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> on the first snapshot.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double? OutgoingBitrateBps { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_WebRtc_WebRtcStats_PacketLoss_" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.PacketLoss*"></a>
+
+  <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_PacketLoss" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.PacketLoss">
+  PacketLoss
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L50"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Fraction of our outbound packets the peer reports lost (0..1) via its RTCP reception report
+(RFC 3550 §6.4.1), or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> until the peer has reported on our media. This is the
+session aggregate — the worst (maximum) loss across our sending streams; the per-stream breakdown is in
+<a class="xref" href="CalloraVoipSdk.WebRtc.WebRtcStats.html#CalloraVoipSdk_WebRtc_WebRtcStats_MediaStreams">MediaStreams</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double? PacketLoss { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_WebRtc_WebRtcStats_PacketsReceived_" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.PacketsReceived*"></a>
+
+  <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_PacketsReceived" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.PacketsReceived">
+  PacketsReceived
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L23"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Total RTP packets received and successfully decrypted.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public long PacketsReceived { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_WebRtc_WebRtcStats_PacketsSent_" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.PacketsSent*"></a>
+
+  <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_PacketsSent" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.PacketsSent">
+  PacketsSent
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L17"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Total RTP packets sent across all tracks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public long PacketsSent { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_WebRtc_WebRtcStats_PliCount_" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.PliCount*"></a>
+
+  <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_PliCount" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.PliCount">
+  PliCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L94"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Picture Loss Indication (PLI) messages, or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> until video feedback metrics are wired.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public long? PliCount { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_WebRtc_WebRtcStats_RoundTripTimeMs_" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.RoundTripTimeMs*"></a>
+
+  <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_RoundTripTimeMs" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.RoundTripTimeMs">
+  RoundTripTimeMs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L67"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Round-trip time in milliseconds derived from the peer's echoed LSR/DLSR (RFC 3550 §6.4.1), or
+<a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> until a report block echoing one of our Sender Reports has arrived. This is the
+session aggregate — the worst (maximum) RTT across our sending streams; the per-stream breakdown is in
+<a class="xref" href="CalloraVoipSdk.WebRtc.WebRtcStats.html#CalloraVoipSdk_WebRtc_WebRtcStats_MediaStreams">MediaStreams</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double? RoundTripTimeMs { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_WebRtc_WebRtcStats_SelectedLocalCandidate_" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.SelectedLocalCandidate*"></a>
+
+  <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_SelectedLocalCandidate" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.SelectedLocalCandidate">
+  SelectedLocalCandidate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L109"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The selected local candidate (the bound local media endpoint), or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> before the transport binds.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? SelectedLocalCandidate { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_WebRtc_WebRtcStats_SelectedRemoteCandidate_" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.SelectedRemoteCandidate*"></a>
+
+  <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_SelectedRemoteCandidate" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.SelectedRemoteCandidate">
+  SelectedRemoteCandidate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L112"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The selected remote candidate (the resolved remote media endpoint), or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> before one is set.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? SelectedRemoteCandidate { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_WebRtc_WebRtcStats_SuppressedSends_" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.SuppressedSends*"></a>
+
+  <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_SuppressedSends" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.SuppressedSends">
+  SuppressedSends
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L29"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Outbound sends suppressed before the SRTP keys were installed (fail-closed).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public long SuppressedSends { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L9" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>SRTP / SRTCP | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="SRTP / SRTCP | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/portal/guides/srtp-srtcp.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="srtp--srtcp">SRTP / SRTCP</h1>
+
+<p>The SDK encrypts media with SRTP (SDES keying, RFC 4568) and encrypts/authenticates RTCP
+with SRTCP (RFC 3711 §3.4). It acts as <strong>both</strong> offerer and answerer. A rekey re-INVITE
+swaps the keys; a hold/unhold re-offer deliberately <strong>reuses</strong> the existing keys (no rekey).</p>
+<h2 id="policy">Policy</h2>
+<p><code>VoipConfiguration.SrtpPolicy</code> sets the default for all calls:</p>
+<table>
+<thead>
+<tr>
+<th>Value</th>
+<th>Behaviour</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Disabled</code></td>
+<td>Never use SRTP; media is plain RTP</td>
+</tr>
+<tr>
+<td><code>Optional</code> <em>(default)</em></td>
+<td>Offer/accept SRTP when the peer supports it, else fall back to RTP</td>
+</tr>
+<tr>
+<td><code>Required</code></td>
+<td>Only complete calls with SRTP; calls without it fail</td>
+</tr>
+</tbody>
+</table>
+<pre><code class="lang-csharp">new VoipConfiguration { SrtpPolicy = SrtpPolicy.Required };
+</code></pre>
+<h2 id="per-call-override">Per-call override</h2>
+<pre><code class="lang-csharp">ICall call = await line.DialAsync(
+    &quot;sip:1002@pbx.example.com&quot;,
+    new DialOptions { UseSrtp = true });
+</code></pre>
+<p><code>DialOptions.UseSrtp</code> overrides the configured policy for a single outbound call.</p>
+<h2 id="what-is-negotiated">What is negotiated</h2>
+<ul>
+<li><strong>Offer as caller</strong> — outbound INVITEs advertise <code>RTP/SAVP</code> with an <code>a=crypto</code> line
+(AES-CM / HMAC-SHA1 suites).</li>
+<li><strong>Answer as callee</strong> — inbound SRTP offers are accepted and keyed.</li>
+<li><strong>SRTCP</strong> — once SRTP is negotiated, RTCP is protected too (encrypted + authenticated).</li>
+<li><strong>Rekey</strong> — a rekey re-INVITE (RFC 3264 §8) swaps the SRTP keys. Hold/unhold sends a
+re-offer but <strong>reuses</strong> the existing keys (no rekey, by design — avoids needless key churn).</li>
+</ul>
+<h2 id="verifying">Verifying</h2>
+<p>The negotiated crypto is readable on the call once connected — no wire trace required:</p>
+<pre><code class="lang-csharp">var media = call.MediaParameters;
+bool    encrypted = media?.IsSrtpNegotiated ?? false;
+string? suite     = media?.SrtpSuite;                 // e.g. &quot;AES_CM_128_HMAC_SHA1_80&quot;, null = plain RTP
+bool    srtcp     = media?.IsSrtcpEncrypted ?? false; // RTCP protected too (RFC 3711 §3.4)
+</code></pre>
+<p>The key material itself stays internal. You can still confirm the <code>a=crypto</code> line via the
+<a href="../production/diagnostics.html">SIP wire trace</a>. With <code>Required</code>, a peer that cannot do SRTP
+yields a failed call rather than a silent downgrade.</p>
+<h2 id="limitations">Limitations</h2>
+<ul>
+<li>Keying is <strong>SDES</strong> (<code>a=crypto</code>). DTLS-SRTP is available separately (RFC 5763, opt-in via
+<code>VoipConfiguration.OfferDtlsSrtp</code>) and is not the SDES negotiation path described here.</li>
+<li>For maximum interop, prefer the <code>AES_CM_128_HMAC_SHA1_80</code> suite. There is a known defect in
+the <code>*_HMAC_SHA1_32</code> suites where the <strong>SRTCP</strong> auth tag is 4 bytes instead of the required
+10 (RFC 4568 §6.2), which breaks RTCP interop with standards-compliant peers (e.g. libsrtp);
+tracked in the <a href="https://github.com/BechsteinDigital/callora-voip-sdk/issues">issue tracker</a>.</li>
+<li>SRTP protects the media path; it does not by itself secure signaling — run SIP over TLS
+for signaling confidentiality.</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/portal/guides/srtp-srtcp.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>
