@@ -9,6 +9,11 @@ on:
 permissions:
   contents: read
 
+# Cancel superseded runs on the same PR/branch to save runner minutes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-and-test:
     strategy:
@@ -41,7 +46,7 @@ jobs:
         run: dotnet test tests/CalloraVoipSdk.ArchitectureTests/CalloraVoipSdk.ArchitectureTests.csproj --configuration Release --no-build --nologo --verbosity minimal
 
       - name: Test + Coverage (Non-Core)
-        run: dotnet test CalloraVoipSdk.sln --configuration Release --no-build --filter "FullyQualifiedName!~CalloraVoipSdk.Core.Tests&Category!=SoakLong&Category!=Interop" --collect:"XPlat Code Coverage" --results-directory ./TestResults --nologo --verbosity minimal
+        run: dotnet test CalloraVoipSdk.sln --configuration Release --no-build --filter "Category!=SoakLong&Category!=Interop&FullyQualifiedName!~ArchitectureTests" --collect:"XPlat Code Coverage" --results-directory ./TestResults --nologo --verbosity minimal
 
       - name: Upload Coverage Artifacts
         if: always()
