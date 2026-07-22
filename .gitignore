@@ -102,6 +102,7 @@ _site/
 docs/*
 !docs/portal
 !docs/audit/
+!docs/maintainers/
 
 AGENTS.md
 CLAUDE.md

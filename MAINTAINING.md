@@ -8,6 +8,9 @@ Ergänzende Dokumente:
 | Dokument | Inhalt |
 |---|---|
 | [`ENGINEERING_RULES.md`](ENGINEERING_RULES.md) | Verbindliche Regeln; mechanisch per ArchitectureTests erzwungen |
+| [`docs/maintainers/flows.md`](docs/maintainers/flows.md) | Die fünf Kern-Abläufe als Sequenz-Walkthroughs (Klassenkette + Thread je Schritt) |
+| [`docs/maintainers/threading-map.md`](docs/maintainers/threading-map.md) | Threading-/Ownership-Karte: Loops, Event-Thread-Verträge, Locks, Sockets, Dispose-Reihenfolgen |
+| [`docs/maintainers/onboarding-debugging.md`](docs/maintainers/onboarding-debugging.md) | Erste-Woche-Pfad, Diagnose-Werkzeuge (Wire-Trace, Telemetrie, Harness), Stolperfallen |
 | [`docs/audit/CODE_FINDINGS_REGISTER.md`](docs/audit/CODE_FINDINGS_REGISTER.md) | Register der im Code referenzierten Marker (CF-xxx, HARD-xxx, ADR-xxx) |
 | [`docs/audit/INTEROP_SOAK_AUDIT.md`](docs/audit/INTEROP_SOAK_AUDIT.md) | Lebendes Fehlerregister aus Interop-/Soak-Audits (F001–F004) |
 | [`docs/audit/2026-07-22-quelltext-tiefenanalyse.md`](docs/audit/2026-07-22-quelltext-tiefenanalyse.md) | Vollständige Tiefenanalyse (Klassenkataloge aller Subsysteme, Befunde mit Datei:Zeile) — datierter Referenzstand |
