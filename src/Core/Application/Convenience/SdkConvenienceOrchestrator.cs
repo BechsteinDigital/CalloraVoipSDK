@@ -133,66 +133,68 @@ internal sealed class SdkConvenienceOrchestrator : IDisposable
             throw new ArgumentException("Target URI is required.", nameof(targetUri));
         ValidatePositiveTimeout(connectTimeout, nameof(connectTimeout));
 
-        ICall call;
+        // connectTimeout bounds the WHOLE dial-and-wait, including line.DialAsync and its INVITE
+        // transaction — otherwise a peer that keeps ringing past the ring/transaction timeout blocks
+        // DialAsync far beyond connectTimeout and the call surfaces as Failed instead of Timeout (F008).
+        using var timeoutCts = new CancellationTokenSource(connectTimeout);
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
+
+        ICall? call = null;
         try
         {
-            call = await line.DialAsync(targetUri, dialOptions, ct).ConfigureAwait(false);
+            call = await line.DialAsync(targetUri, dialOptions, linkedCts.Token).ConfigureAwait(false);
+
+            var waiter = new TaskCompletionSource<CallState>(TaskCreationOptions.RunContinuationsAsynchronously);
+            EventHandler<CallStateChangedEventArgs> onStateChanged = (_, args) =>
+            {
+                if (ShouldCompleteDialWait(args.NewState))
+                    waiter.TrySetResult(args.NewState);
+            };
+
+            call.StateChanged += onStateChanged;
+            try
+            {
+                if (ShouldCompleteDialWait(call.State))
+                    waiter.TrySetResult(call.State);
+
+                var finalState = await waiter.Task.WaitAsync(linkedCts.Token).ConfigureAwait(false);
+                return finalState switch
+                {
+                    CallState.Connected or CallState.OnHold =>
+                        new CallConnectOutcome(CallConnectStatus.Connected, call, finalState, null),
+                    _ => new CallConnectOutcome(CallConnectStatus.Failed, call, finalState, null),
+                };
+            }
+            finally
+            {
+                call.StateChanged -= onStateChanged;
+            }
         }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        // Caller cancellation wins, however it surfaced — an OperationCanceledException from the token, or
+        // a SIP transaction-terminated exception raised when the auto-CANCEL aborted the INVITE (F009).
+        catch (Exception) when (ct.IsCancellationRequested)
         {
-            return new CallConnectOutcome(CallConnectStatus.Canceled, null, null, null);
+            if (hangupOnCancellation && call is not null)
+                await TryHangupAsync(call).ConfigureAwait(false);
+
+            return new CallConnectOutcome(CallConnectStatus.Canceled, call, call?.State, null);
+        }
+        // connectTimeout elapsed (still ringing, or the transaction timed out) → Timeout, not Failed (F008).
+        catch (Exception) when (timeoutCts.IsCancellationRequested)
+        {
+            if (hangupOnTimeout && call is not null)
+                await TryHangupAsync(call).ConfigureAwait(false);
+
+            return new CallConnectOutcome(CallConnectStatus.Timeout, call, call?.State, null);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(
                 ex,
-                "Convenience dial failed before wait phase. target={TargetUri} line={LineId}",
+                "Convenience dial failed. target={TargetUri} line={LineId}",
                 targetUri,
                 line.LineId);
-            return new CallConnectOutcome(CallConnectStatus.Failed, null, null, ex);
-        }
-
-        var waiter = new TaskCompletionSource<CallState>(TaskCreationOptions.RunContinuationsAsynchronously);
-        EventHandler<CallStateChangedEventArgs> onStateChanged = (_, args) =>
-        {
-            if (ShouldCompleteDialWait(args.NewState))
-                waiter.TrySetResult(args.NewState);
-        };
-
-        call.StateChanged += onStateChanged;
-        try
-        {
-            if (ShouldCompleteDialWait(call.State))
-                waiter.TrySetResult(call.State);
-
-            using var timeoutCts = new CancellationTokenSource(connectTimeout);
-            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
-
-            var finalState = await waiter.Task.WaitAsync(linkedCts.Token).ConfigureAwait(false);
-            return finalState switch
-            {
-                CallState.Connected or CallState.OnHold =>
-                    new CallConnectOutcome(CallConnectStatus.Connected, call, finalState, null),
-                _ => new CallConnectOutcome(CallConnectStatus.Failed, call, finalState, null),
-            };
-        }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
-        {
-            if (hangupOnCancellation)
-                await TryHangupAsync(call).ConfigureAwait(false);
-
-            return new CallConnectOutcome(CallConnectStatus.Canceled, call, call.State, null);
-        }
-        catch (OperationCanceledException)
-        {
-            if (hangupOnTimeout)
-                await TryHangupAsync(call).ConfigureAwait(false);
-
-            return new CallConnectOutcome(CallConnectStatus.Timeout, call, call.State, null);
-        }
-        finally
-        {
-            call.StateChanged -= onStateChanged;
+            return new CallConnectOutcome(CallConnectStatus.Failed, call, call?.State, ex);
         }
     }
 
@@ -364,6 +366,10 @@ internal sealed class SdkConvenienceOrchestrator : IDisposable
     private static bool ShouldCompleteConnectWait(LineState state, bool failFastOnRegistrationFailed) =>
         state == LineState.Registered
         || state == LineState.Unregistered
+        // Terminal, non-retryable failure (e.g. permanent auth rejection): always a definitive connect
+        // outcome, so complete the wait immediately instead of blocking until the timeout and then
+        // mis-reporting Timeout. RegistrationFailed is the RETRYABLE variant, gated by fail-fast (F005).
+        || state == LineState.Failed
         || (failFastOnRegistrationFailed && state == LineState.RegistrationFailed);
 
     private static bool ShouldCompleteDialWait(CallState state) =>
