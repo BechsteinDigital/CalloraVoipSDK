@@ -15,9 +15,9 @@ namespace CalloraVoipSdk.InteropTests.Registration;
 /// Befund F005 (GEFIXT): Bei permanenter Auth-Ablehnung short-circuittet die Convenience-<c>ConnectAsync</c>
 /// jetzt am terminalen <see cref="LineState.Failed"/> und meldet zügig <see cref="ConnectStatus.Failed"/>,
 /// statt das volle Timeout abzuwarten (vorher: <see cref="ConnectStatus.Timeout"/> nach vollem Timeout).
-/// Offener Rest F005b: der zugrunde liegende Auth-Fehler (401/403) wird noch NICHT als
-/// <c>ConnectResult.Error</c> durchgereicht — Status ist korrekt, aber <c>Error == null</c> (Skip-blockiert).
-/// Siehe docs/audit/INTEROP_SOAK_AUDIT.md.
+/// F005b (GEFIXT): der zugrunde liegende Auth-Fehler (401/403) wird jetzt als
+/// <c>ConnectResult.Error</c> durchgereicht — die permanente Failure-Reason wird vor dem
+/// State-Übergang erfasst. Siehe docs/audit/INTEROP_SOAK_AUDIT.md.
 /// </summary>
 [Trait("Category", "Interop")]
 public sealed class AsteriskRegisterFailureInteropTests
@@ -97,10 +97,9 @@ public sealed class AsteriskRegisterFailureInteropTests
         Assert.True(elapsed < TimeSpan.FromSeconds(15), $"Auth-Ablehnung wurde nicht short-circuitet: {elapsed}");
     }
 
-    // ── Skip (F005b): offener Rest — der Auth-Fehler sollte als ConnectResult.Error sichtbar sein ──
+    // ── Grün (F005b gefixt): der Auth-Fehler ist als ConnectResult.Error sichtbar ──────────────────
 
-    [Fact(Skip = "F005b — ConnectResult.Error bleibt bei Auth-Ablehnung null: der Status ist korrekt Failed (F005 gefixt), aber der zugrunde liegende Auth-Fehler (401/403) wird nicht als Error durchgereicht. Siehe docs/audit/INTEROP_SOAK_AUDIT.md")]
-    [Trait("Category", "Interop")]
+    [DockerRequiredFact]
     public async Task WrongPassword_ShouldExposeAuthError()
     {
         await using var asterisk = new AsteriskContainer();

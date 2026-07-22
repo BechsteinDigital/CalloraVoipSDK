@@ -481,8 +481,10 @@ internal sealed class SipLineChannel : ILineChannel
                             ex,
                             "SIP registration permanently rejected for [{User}]: authentication failure (attempt {Count}).",
                             _account.Username, failureCount);
-                        _onState?.Invoke(LineState.Failed);
+                        // Publish the failure reason before the terminal state so a Connect-waiter
+                        // that completes on LineState.Failed can attach the reason to its result (F005b).
                         _onReconnectFailed?.Invoke(ReregisterFailReason.AuthenticationFailed, failureCount);
+                        _onState?.Invoke(LineState.Failed);
                         return;
                     }
 
@@ -504,8 +506,8 @@ internal sealed class SipLineChannel : ILineChannel
                             ex,
                             "Registration permanently failed for [{User}] after {Count} attempts (max {Max}).",
                             _account.Username, failureCount, options.MaxRetries);
-                        _onState?.Invoke(LineState.Failed);
                         _onReconnectFailed?.Invoke(ReregisterFailReason.MaxRetriesExceeded, failureCount);
+                        _onState?.Invoke(LineState.Failed);
                         return;
                     }
 
