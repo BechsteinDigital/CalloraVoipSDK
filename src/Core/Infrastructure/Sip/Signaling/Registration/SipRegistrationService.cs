@@ -563,8 +563,11 @@ internal sealed class SipRegistrationService : ISipRegistrationService
 
         if (!string.IsNullOrWhiteSpace(instanceId))
         {
-            // RFC 5626 §4.1: +sip.instance identifies the UA instance for the registrar.
-            value += $";\"+sip.instance\"=\"<{instanceId}>\"";
+            // RFC 5626 §4.1: +sip.instance identifies the UA instance for the registrar. The parameter NAME is
+            // the bare token "+sip.instance" (the '+' and '.' are legal token characters per RFC 3261 §25.1) —
+            // only the VALUE is a quoted string carrying the instance URN in angle brackets. Quoting the name
+            // (";\"+sip.instance\"=…") is malformed and a strict registrar may reject the Contact.
+            value += $";+sip.instance=\"<{instanceId}>\"";
             // RFC 5626 §4.1: reg-id identifies the flow; starts at 1 for the first registration.
             value += ";reg-id=1";
         }
