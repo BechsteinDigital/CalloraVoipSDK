@@ -217,10 +217,13 @@ internal sealed class SipCallSessionTransactionService
                 return;
             }
 
-            // RFC 3261 §17.1.1.3: ACK for 3xx-6xx INVITE responses is sent automatically
-            // by the client transaction (SipClientTransactionExecutor) with the same Via branch.
-            // The TU must NOT send a duplicate ACK here.
-            _context.RemoteTag = SipProtocol.ExtractTag(finalResponse.Response.Header("To")) ?? _context.RemoteTag;
+            // No manual ACK here: the client transaction sends the INVITE 3xx-6xx ACK itself
+            // (RFC 3261 §17.1.1.3, same Via branch, To-tag taken from the received response).
+            // And a non-2xx response's To-tag is NOT adopted (RFC 3261 §12.1.2: no dialog is
+            // established) — otherwise the auth-retry (401/407) or redirected INVITE would carry an
+            // in-dialog To-tag and a strict UAS (e.g. Asterisk) answers 481 Call/Transaction Does
+            // Not Exist. The remote tag is confirmed only via ApplyInviteDialogResponse above
+            // (2xx / reliable early dialog, RFC 3262).
 
             if (!authAttempted
                 && finalResponse.Response.StatusCode is 401 or 407
