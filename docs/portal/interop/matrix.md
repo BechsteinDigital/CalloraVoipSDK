@@ -9,15 +9,18 @@ interop test.
 
 | Platform | Status | Notes |
 |----------|--------|-------|
-| **AVM FRITZ!Box** | ✅ Verified in a real interop test | Register, dial, two-way audio, DTMF against a live device; source of several hardening fixes |
+| **AVM FRITZ!Box** | ✅ Verified against a live device (manual) | Register, dial, two-way audio, DTMF against real hardware; source of several hardening fixes. Not an automated CI test |
+| **Asterisk** | 🧪 REGISTER covered by an automated interop test (CI) | `AsteriskRegisterInteropTests` runs the 401→200 REGISTER flow against a PJSIP Asterisk container in CI. Full call/media/DTMF/transfer not yet covered |
 | sipgate | ⚙️ Guidance only — not yet formally verified | Standard trunk registration expected to work; see the page |
-| Asterisk | ⚙️ Guidance only — not yet formally verified | Standard `chan_pjsip` peer expected to work |
 | FreeSWITCH | ⚙️ Guidance only — not yet formally verified | Standard SIP profile expected to work |
 | 3CX | ⚙️ Guidance only — not yet formally verified | Standard extension registration expected to work |
 
-⚙️ **Guidance only** means: the SDK speaks standard SIP and *should* interoperate, and we
-provide configuration notes, but we have **not** yet run a validated end-to-end test
-against that platform. Do your own acceptance test before relying on it in production.
+- ✅ **Verified (manual)** — exercised against real hardware by hand; not reproducible in CI.
+- 🧪 **Automated (partial)** — a repeatable interop test exists in the repo and runs in CI, but
+  only covers part of the flow (e.g. registration, not full call/media).
+- ⚙️ **Guidance only** — the SDK speaks standard SIP and *should* interoperate, and we provide
+  configuration notes, but we have **not** yet run a validated end-to-end test against that
+  platform. Do your own acceptance test before relying on it in production.
 
 ## What "standard" support means
 
