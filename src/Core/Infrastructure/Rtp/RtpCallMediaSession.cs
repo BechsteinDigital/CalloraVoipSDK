@@ -533,9 +533,20 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
 
         _lastDeliveredPayload = payload;
         _lastDeliveredPayloadType = packet.PayloadType;
-        _lastDeliveredSequence = packet.SequenceNumber;
-        _hasLastDeliveredSequence = true;
+        AdvanceDeliveredSequence(packet.SequenceNumber);
         _inboundStats.RecordDelivered();
+    }
+
+    // Marks a sequence as accounted for and advances the delivered-sequence cursor forward only (RFC 3550 §A.1
+    // signed-delta wraparound). Forward-only so that a reordered delivery arriving behind a cursor already
+    // advanced by a late drop does not move the cursor backwards (which would fabricate a huge gap). The first
+    // call establishes the cursor. Called from the playout loop (delivery) and the RTP receive loop (late drop),
+    // exactly like the telephone-event cursor bump — _lastDeliveredSequence is a ushort, so the writes are atomic.
+    private void AdvanceDeliveredSequence(ushort sequenceNumber)
+    {
+        if (!_hasLastDeliveredSequence || unchecked((short)(sequenceNumber - _lastDeliveredSequence)) > 0)
+            _lastDeliveredSequence = sequenceNumber;
+        _hasLastDeliveredSequence = true;
     }
 
     private void EmitConcealmentFramesIfNeeded(ushort incomingSequenceNumber, byte incomingPayloadType, int incomingPayloadLength)
@@ -544,10 +555,14 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
             return;
 
         var expectedSequence = unchecked((ushort)(_lastDeliveredSequence + 1));
-        var gapSize = (ushort)(incomingSequenceNumber - expectedSequence);
-        if (gapSize == 0)
+        // RFC 3550 §A.1 signed-delta: a non-positive delta is not a forward gap — the packet is in order (0) or
+        // already behind the cursor, which happens once a late-dropped packet has advanced the cursor past this
+        // slot (F002). Neither case is unrecoverable loss, so there is nothing to conceal or count.
+        var forwardGap = unchecked((short)(incomingSequenceNumber - expectedSequence));
+        if (forwardGap <= 0)
             return;
 
+        var gapSize = (ushort)forwardGap;
         var concealmentCount = Math.Min((int)gapSize, MaxConcealmentBurstPackets);
         for (var i = 0; i < concealmentCount; i++)
         {
@@ -662,6 +677,13 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
 
             case JitterBufferAddResult.Late:
                 _inboundStats.RecordDroppedLate();
+                // The packet arrived (RFC 3550 counts it as received) but too late to play out — it is a late
+                // drop, NOT unrecoverable loss. Advance the delivered-sequence cursor past it (forward-only, so a
+                // genuinely out-of-order/lost sequence is never masked) so the next delivered packet does not see
+                // a false gap that EmitConcealmentFramesIfNeeded would otherwise miscount as unrecoverable loss
+                // (F002). Runs on the RTP receive loop, like the telephone-event cursor bump above.
+                if (_hasLastDeliveredSequence)
+                    AdvanceDeliveredSequence(packet.SequenceNumber);
                 _logger.LogDebug(
                     "RTP packet dropped as late in jitter buffer: seq={Seq}, ts={Timestamp}, pt={PayloadType}, ssrc={Ssrc:X8}.",
                     packet.SequenceNumber,

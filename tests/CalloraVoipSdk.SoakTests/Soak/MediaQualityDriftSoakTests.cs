@@ -67,11 +67,11 @@ public sealed class MediaQualityDriftSoakTests
         }
     }
 
-    // Reproduziert F002: auf reinem UDP-Loopback (kein echter Verlust) MUSS UnrecoverableLoss 0 sein.
-    // Aktuell blockiert durch F002 (late-angekommene Pakete werden fälschlich als UnrecoverableLoss
-    // gezählt, weil _lastDeliveredSequence bei Late-Drops nicht fortgeschrieben wird). Skip entfernen,
-    // sobald F002 gefixt ist — dann verifiziert dieser Test den Fix.
-    [Fact(Skip = "F002 — Media-Defekt: Late-Drops fälschlich als UnrecoverableLoss, siehe docs/audit/INTEROP_SOAK_AUDIT.md"), Trait("Category", "SoakLong")]
+    // Verifiziert F002: auf reinem UDP-Loopback (kein echter Verlust) MUSS UnrecoverableLoss 0 sein.
+    // Late-angekommene Pakete werden nicht mehr als UnrecoverableLoss gezählt — der Late-Drop-Pfad rückt jetzt
+    // den Delivered-Sequence-Cursor vorwärts, sodass kein falscher Gap entsteht (siehe RtpCallMediaSession
+    // HandleJitterBufferAddResult/Late + EmitConcealmentFramesIfNeeded, docs/audit/INTEROP_SOAK_AUDIT.md F002).
+    [Fact, Trait("Category", "SoakLong")]
     public async Task LongCall_UnrecoverableLoss_IsZeroOnLoopback()
     {
         await using var loopback = await RtpMediaLoopback.StartAsync(
