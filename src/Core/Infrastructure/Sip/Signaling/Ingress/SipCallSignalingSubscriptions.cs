@@ -10,6 +10,10 @@ namespace CalloraVoipSdk.Core.Infrastructure.Sip.Signaling;
 
 internal sealed class SipCallSignalingSubscriptions
 {
+    // RFC 6665: floor for the subscription refresh delay so a pathologically short granted lease cannot spin the
+    // refresh loop (the zero-delay busy-loop of a non-positive lease is stopped separately).
+    private const double MinSubscriptionRefreshDelaySeconds = 1.0;
+
     private readonly ISipTransportRuntime _transport;
     private readonly ISipDigestAuthenticator _digestAuthenticator;
     private readonly SipClientTransactionExecutor _subscribeExecutor;
@@ -175,9 +179,13 @@ internal sealed class SipCallSignalingSubscriptions
         if (finalResponse is null || chosenEndPoint is null)
             throw new InvalidOperationException($"SIP SUBSCRIBE to '{request.RemoteUri}' failed: no successful response.");
 
+        // RFC 6665 §4.1.2.2: honour the server-granted lease as-is. Artificially raising a sub-60s grant to 60s
+        // (the old Math.Max(60, …)) would schedule the refresh at 90% of an inflated 60s — after the real lease
+        // already expired — so the subscription silently lapses (#4). Floor at 0: a non-positive grant means no
+        // active subscription, and the refresh loop then stops rather than busy-looping on a zero delay.
         var negotiatedExpires = int.TryParse(finalResponse.Header("Expires"), out var parsedExpires)
-            ? Math.Max(60, parsedExpires)
-            : expiresSeconds;
+            ? Math.Max(0, parsedExpires)
+            : Math.Max(0, expiresSeconds);
         var remoteTag = SipProtocol.ExtractTag(finalResponse.Header("To"));
 
         SipSubscriptionHandle? handle = null;
@@ -266,12 +274,54 @@ internal sealed class SipCallSignalingSubscriptions
             entry.AuthUsername,
             localEndPoint,
             entry.Transport);
-        var cseq = entry.LocalCSeq + 1;
-        entry.LocalCSeq = cseq;
         var fromHeader = SipProtocol.FormatNameAddr(displayName: null, entry.LocalUri, entry.LocalTag);
         var toHeader = string.IsNullOrWhiteSpace(entry.RemoteTag)
             ? SipProtocol.FormatNameAddr(displayName: null, entry.RemoteUri)
             : SipProtocol.FormatNameAddr(displayName: null, entry.RemoteUri, entry.RemoteTag);
+
+        var response = await ExecuteSubscribeRefreshAsync(
+            entry, localEndPoint, contactUri, fromHeader, toHeader, expiresSeconds,
+            authorizationHeaderName: null, authorizationHeader: null, ct).ConfigureAwait(false);
+
+        // RFC 3261 §22 / RFC 6665: answer a 401/407 on the refresh with digest credentials and retry — like the
+        // initial SUBSCRIBE — otherwise a refresh behind an authenticating proxy silently lapses and the
+        // subscription is lost (#4). One challenge/retry is enough; the initial SUBSCRIBE established the flow.
+        if ((response.StatusCode == 401 || response.StatusCode == 407)
+            && !string.IsNullOrWhiteSpace(entry.AuthPassword)
+            && SipDigestChallengeSelector.TrySelect(response, out var challengeHeader, out var authResultHeaderName)
+            && _digestAuthenticator.TryCreateAuthorizationHeader(
+                challengeHeader,
+                entry.AuthUsername,
+                entry.AuthPassword!,
+                "SUBSCRIBE",
+                entry.RequestUri,
+                new SipNonceCounter().NextFor(challengeHeader),
+                out var authorizationHeader))
+        {
+            response = await ExecuteSubscribeRefreshAsync(
+                entry, localEndPoint, contactUri, fromHeader, toHeader, expiresSeconds,
+                authResultHeaderName, authorizationHeader, ct).ConfigureAwait(false);
+        }
+
+        // RFC 6665 §4.1.2.2: honour the server-granted lease as-is (see the initial negotiation) — do NOT raise a
+        // sub-60s grant to 60s. A non-positive grant (0 = terminated) stops the refresh loop rather than looping.
+        if (int.TryParse(response.Header("Expires"), out var newExpires) && newExpires >= 0)
+            entry.ExpiresSeconds = newExpires;
+    }
+
+    private async Task<SipResponse> ExecuteSubscribeRefreshAsync(
+        SipOutboundSubscriptionEntry entry,
+        IPEndPoint localEndPoint,
+        string contactUri,
+        string fromHeader,
+        string toHeader,
+        int expiresSeconds,
+        string? authorizationHeaderName,
+        string? authorizationHeader,
+        CancellationToken ct)
+    {
+        var cseq = entry.LocalCSeq + 1;
+        entry.LocalCSeq = cseq;
         var branch = SipProtocol.NewBranch();
         var headers = BuildSubscribeHeaders(
             localEndPoint,
@@ -285,6 +335,8 @@ internal sealed class SipCallSignalingSubscriptions
             entry.EventType,
             expiresSeconds,
             entry.AcceptHeader);
+        if (authorizationHeaderName is not null && authorizationHeader is not null)
+            headers[authorizationHeaderName] = authorizationHeader;
 
         var result = await _subscribeExecutor.ExecuteAsync(
                 new SipClientTransactionRequest
@@ -299,19 +351,24 @@ internal sealed class SipCallSignalingSubscriptions
                 },
                 ct)
             .ConfigureAwait(false);
-
-        if (int.TryParse(result.FinalResponse.Response.Header("Expires"), out var newExpires))
-            entry.ExpiresSeconds = Math.Max(60, newExpires);
+        return result.FinalResponse.Response;
     }
 
     private async Task RunSubscriptionRefreshAsync(SipOutboundSubscriptionEntry entry, CancellationToken ct)
     {
         while (!ct.IsCancellationRequested)
         {
-            var delay = TimeSpan.FromSeconds(entry.ExpiresSeconds * 0.9);
+            // RFC 6665: a non-positive lease means the subscription is not active (or the server declined to grant
+            // one) — stop refreshing rather than spinning on a zero delay (#4).
+            if (entry.ExpiresSeconds <= 0)
+                break;
+
+            // Refresh at ~90% of the granted lease, with a small floor so a pathologically short lease cannot
+            // tight-loop the transaction.
+            var refreshSeconds = Math.Max(entry.ExpiresSeconds * 0.9, MinSubscriptionRefreshDelaySeconds);
             try
             {
-                await Task.Delay(delay, ct).ConfigureAwait(false);
+                await Task.Delay(TimeSpan.FromSeconds(refreshSeconds), ct).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
