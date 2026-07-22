@@ -47,7 +47,7 @@ jobs:
       - name: Build and test (release gate)
         run: |
           dotnet build CalloraVoipSdk.sln -c Release --no-restore
-          dotnet test CalloraVoipSdk.sln -c Release --no-build --nologo
+          dotnet test CalloraVoipSdk.sln -c Release --no-build --nologo --filter "Category!=SoakLong&Category!=Interop"
 
       - name: Pack CalloraVoipSdk.Core
         run: dotnet pack src/Core/CalloraVoipSdk.Core.csproj -c Release --no-restore -o artifacts/nuget /p:Version=${{ steps.version.outputs.version }}

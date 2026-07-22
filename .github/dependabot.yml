@@ -1,0 +1,41 @@
+# Dependabot keeps dependencies and GitHub Actions up to date.
+# https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+version: 2
+updates:
+  # NuGet packages across the solution (Core, Client, Audio.*, tests, samples).
+  - package-ecosystem: "nuget"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "deps"
+    groups:
+      # One PR for the Microsoft.Extensions.* family instead of one per package.
+      microsoft-extensions:
+        patterns:
+          - "Microsoft.Extensions.*"
+      # Bundle low-risk patch/minor bumps to cut PR noise.
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # GitHub Actions used by the workflows (checkout, setup-dotnet, upload-artifact, ...).
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "ci"
+    commit-message:
+      prefix: "ci"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
