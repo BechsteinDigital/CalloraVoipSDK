@@ -178,6 +178,16 @@ public sealed class AsteriskContainer : IAsyncDisposable
     }
 
     /// <summary>
+    /// Liefert die kombinierte Container-Standardausgabe (Asterisk-Konsole) — z. B. um bei aktivem
+    /// <c>pjsip set logger on</c> die ausgetauschten SIP-Nachrichten zu inspizieren.
+    /// </summary>
+    public async Task<string> GetConsoleLogsAsync()
+    {
+        var (stdout, stderr) = await _container.GetLogsAsync().ConfigureAwait(false);
+        return stdout + "\n" + stderr;
+    }
+
+    /// <summary>
     /// Baut eine Ziel-Request-URI für die im Dialplan definierten Test-Extensions
     /// (<c>answer</c> → 200 OK + Media, <c>busy</c>, <c>decline</c>, <c>noanswer</c>) bzw. eine
     /// unbekannte Extension (→ 404). Nur nach <see cref="StartAsync"/> gültig (Container-Bridge-IP).
