@@ -59,6 +59,16 @@ public sealed class VoipConfiguration
     public bool           OfferDtlsSrtp          { get; init; }
 
     /// <summary>
+    /// Opt-in hard enforcement of the RFC 4568 §7 caveat (see <see cref="SrtpPolicy"/>). When
+    /// <see langword="true"/>, an outbound call that would key SDES over an insecure signaling transport
+    /// (no TLS/SIPS, and <see cref="OfferDtlsSrtp"/> unset) is <b>refused</b> (fail-closed) instead of
+    /// placed with the master key in cleartext SDP. Default: <see langword="false"/> — such calls proceed
+    /// but the SDK logs a warning. Set this when a non-confidential media key must never leave the host;
+    /// use TLS/SIPS signaling or DTLS-SRTP to place calls under this policy.
+    /// </summary>
+    public bool           RequireSecureSignalingForSdes { get; init; }
+
+    /// <summary>
     /// Optional DTLS-SRTP identity certificate (RFC 5763) for the media plane. <see langword="null"/>
     /// (default) generates a fresh ephemeral ECDSA P-256 certificate per client instance — the WebRTC
     /// privacy default. Supply your own for a stable/pinned identity (enterprise, compliance): it must be

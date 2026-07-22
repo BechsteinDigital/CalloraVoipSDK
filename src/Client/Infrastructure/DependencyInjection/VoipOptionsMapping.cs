@@ -32,6 +32,7 @@ internal static class VoipOptionsMapping
             EnableAutomaticAudioDeviceSelection = options.EnableAutomaticAudioDeviceSelection,
             PreferredAudioCodecs = options.PreferredAudioCodecs,
             OfferDtlsSrtp = options.OfferDtlsSrtp,
+            RequireSecureSignalingForSdes = options.RequireSecureSignalingForSdes,
             DtlsCertificate = options.DtlsCertificate,
             EnableVideo = options.EnableVideo,
             PreferredVideoCodecs = options.PreferredVideoCodecs,
