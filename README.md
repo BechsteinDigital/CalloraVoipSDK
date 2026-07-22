@@ -1,22 +1,33 @@
 # CalloraVoipSdk
 
-[![CI](https://github.com/BechsteinDigital/CalloraVoipSdk/actions/workflows/ci.yml/badge.svg)](https://github.com/BechsteinDigital/CalloraVoipSdk/actions/workflows/ci.yml)
+[![CI](https://github.com/BechsteinDigital/callora-voip-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/BechsteinDigital/callora-voip-sdk/actions/workflows/ci.yml)
 [![NuGet Version](https://img.shields.io/nuget/v/CalloraVoipSdk.Core)](https://www.nuget.org/packages/CalloraVoipSdk.Core)
 [![NuGet Downloads](https://img.shields.io/nuget/dt/CalloraVoipSdk.Core)](https://www.nuget.org/packages/CalloraVoipSdk.Core)
-![Coverage](https://img.shields.io/badge/coverage-cobertura%20artifact-blue)
-[![Docs](https://img.shields.io/badge/docs-github%20pages-blue)](https://bechsteindigital.github.io/CalloraVoipSDK/)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+[![Docs](https://img.shields.io/badge/docs-github%20pages-blue)](https://bechsteindigital.github.io/callora-voip-sdk/)
 
 ![C#](https://img.shields.io/badge/c%23-%23239120.svg?style=for-the-badge&logo=csharp&logoColor=white)
 ![.Net](https://img.shields.io/badge/.NET-5C2D91?style=for-the-badge&logo=.net&logoColor=white)
 
-Commercial-grade .NET VoIP SDK for SIP signaling, RTP media, PBX integrations and voice automation.
+Commercial-grade .NET VoIP SDK for SIP signaling, RTP/SRTP media, WebRTC and PBX integrations.
 
 CalloraVoipSdk is a .NET VoIP SDK (net8.0 / net9.0 / net10.0) for building softphones, PBX integrations, contact-center workflows and voice automation systems.  
 It exposes a stable, developer-friendly API through `VoipClient` while keeping transport, media and device internals behind a clean facade — and opens up through a module registry for building products like AI voice agents on top.
 
-📖 **Documentation:** [bechsteindigital.github.io/CalloraVoipSDK](https://bechsteindigital.github.io/CalloraVoipSDK/)
+📖 **Documentation:** [bechsteindigital.github.io/callora-voip-sdk](https://bechsteindigital.github.io/callora-voip-sdk/)
 🧪 **Examples:** [`examples/`](examples) — runnable samples (BasicCalling, Dialer, Transfer, CustomAudio, VideoCalling, WebRtcPeer, WebRtcRecording, WebRtcDependencyInjection, and a browser video-call website `WebRtcVideoCall.Web`)
 🛠️ **Maintainers:** [`MAINTAINING.md`](MAINTAINING.md) — architecture map, invariants, workflows; rules in [`ENGINEERING_RULES.md`](ENGINEERING_RULES.md)
+
+> **Project status — preview (`4.6.0-preview`).** The **SIP + RTP core** is the mature,
+> production-oriented surface: registration, in/outbound call control, transfer, DTMF, SRTP
+> (SDES) and measured RTCP quality metrics — with symmetric RTP (comedia) as the
+> production-proven NAT path. Newer surfaces — the **WebRTC facade**, **full ICE**
+> (RFC 8445/7675), **DTLS-SRTP**, and the **self-hostable STUN/TURN server** — are implemented
+> but not yet validated against a broad interop matrix; treat them as preview and validate for
+> your environment before production. Known gaps and interop defects are tracked openly in the
+> [issue tracker](../../issues) — bug reports and interop feedback are especially welcome.
+
+**Contents:** [Why](#why-calloravoipsdk) · [Features](#current-feature-set) · [Install](#installation) · [Quickstart](#quickstart) · [Architecture](#architecture) · [Contributing](#contributing) · [Security](#security) · [License](#license)
 
 ## What's new in 4.6 (preview)
 
@@ -29,7 +40,7 @@ It exposes a stable, developer-friendly API through `VoipClient` while keeping t
   encodes/decodes. Trickle ICE + early-bind (an ephemeral media port yields a live m-line) and
   send-side simulcast (RFC 8853, offerer-confirmed; receive-side RID demux is a later slice) are
   included. See the `WebRtc*` samples. **Preview:** not yet browser-validated (Chrome/Firefox),
-  API may change; no data channels (SCTP) or TURN relay yet.
+  API may change; no data channels (SCTP) and no TCP/TLS TURN relay yet (UDP TURN relay is included).
 
 > **Breaking change in 4.6** — the SIP-facade configuration types were renamed so each facade owns a
 > facade-scoped name (parallel to `WebRtcConfiguration`/`WebRtcOptions`/`AddCalloraWebRtc`):
@@ -66,7 +77,8 @@ Available in the repository today:
 - Advanced call control: DTMF, blind transfer, attended transfer
 - In-dialog operations: `INFO`, `OPTIONS`, `SUBSCRIBE`, `NOTIFY`
 - Media stack: RTP sessions, sender, receiver, `MediaConnector`, cross-connect
-- Media encryption: SRTP via SDES (RFC 4568) as both caller and callee, encrypted/authenticated
+- Media encryption: SRTP via **SDES** (RFC 4568) or **DTLS-SRTP** (RFC 5763, opt-in via
+  `VoipConfiguration.OfferDtlsSrtp`) as both caller and callee, encrypted/authenticated
   RTCP via SRTCP (RFC 3711 §3.4), a configurable per-call policy
   (`VoipConfiguration.SrtpPolicy`: Disabled / Optional / Required), re-keying on re-INVITE, and the
   negotiated suite name / SRTCP status readable on `ICall.MediaParameters`
@@ -78,6 +90,9 @@ Available in the repository today:
   RFC 3550 RTP counters (`ICall.RtpStatistics`)
 - NAT/trunk controls: public signaling contact (`SipAccount.PublicSipHost`) and an opt-in public
   media address for CGNAT / static 1:1 NAT (`SipAccount.PublicMediaHost`)
+- Self-hostable **STUN and TURN server** (RFC 5389 / RFC 5766) via `AddCalloraStunServer(...)` /
+  `AddCalloraTurnServer(...)` — for development and self-hosted NAT traversal. Newer surface;
+  validate against your clients before production (see [open issues](../../issues))
 - Per-call media tap: attach frame receivers/senders to any call for bots, bridging
   and streaming scenarios (`client.Media.CreateReceiver()/CreateSender()`)
 - Encoded video (transport-only): send/receive encoded frames
@@ -149,7 +164,7 @@ This keeps the external API compact and stable while allowing internal evolution
 
 CalloraVoipSdk follows Semantic Versioning (`MAJOR.MINOR.PATCH`).
 
-- Current public release line: `4.x` (see [releases](https://github.com/BechsteinDigital/CalloraVoipSDK/releases))
+- Current public release line: `4.x` (preview; see [releases](https://github.com/BechsteinDigital/callora-voip-sdk/releases))
 - Public API removals only happen in MAJOR releases; deprecations are introduced
   through `[Obsolete(...)]` before removal
 - Consumer-relevant changes are documented in [`CHANGELOG.md`](CHANGELOG.md)
@@ -186,9 +201,19 @@ dotnet add package CalloraVoipSdk.Audio.Linux     # Linux
 
 ```bash
 dotnet restore CalloraVoipSdk.sln
-dotnet build CalloraVoipSdk.sln
-dotnet test CalloraVoipSdk.sln
+dotnet build CalloraVoipSdk.sln -c Release
+
+# Architecture gates (CI runs these first)
+dotnet test tests/CalloraVoipSdk.ArchitectureTests -c Release
+
+# Standard test set (matches CI: excludes long soaks and Docker interop)
+dotnet test CalloraVoipSdk.sln -c Release \
+  --filter "Category!=SoakLong&Category!=Interop"
 ```
+
+> The full test matrix (long soak tests, Docker/Asterisk interop, the performance gate) and the
+> L0–L4 test model are documented in [`CONTRIBUTING.md`](CONTRIBUTING.md) and
+> [`MAINTAINING.md`](MAINTAINING.md).
 
 ## Quickstart
 
@@ -419,7 +444,7 @@ await videoOut.SendAsync(new VideoFrame(encodedBytes, PayloadType: 96, RtpTimest
 
 Prefer the "audio-simple" path? Package your codec behind an `IVideoDevice`, register it in
 DI, and call `await client.AttachDefaultVideoAsync(call)`. Full walkthrough:
-[Video calls guide](https://bechsteindigital.github.io/CalloraVoipSDK/guides/video-calls.html).
+[Video calls guide](https://bechsteindigital.github.io/callora-voip-sdk/guides/video-calls.html).
 
 ## Extending the SDK — module registry
 
@@ -487,6 +512,21 @@ Licensed under the Apache License, Version 2.0. See [`LICENSE`](LICENSE).
 
 ## Contributing
 
-Contributions, issues and discussions are welcome.
+Contributions, issues and interop reports are welcome — this is our first open-source
+release, so real-world feedback (which PBX/trunk/browser you tested against, what broke) is
+especially valuable.
 
-If you plan to contribute larger changes, open an issue first so architecture and API impact can be discussed before implementation.
+- **Start here:** [`CONTRIBUTING.md`](CONTRIBUTING.md) — setup, test levels, and the bar for a PR.
+- **Report a bug / request a feature:** open an [issue](../../issues) (templates provided). For
+  larger changes, open an issue first so architecture and API impact can be discussed.
+- **Good first issues:** browse the
+  [`good first issue`](../../issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) label.
+- **Maintainer docs:** [`MAINTAINING.md`](MAINTAINING.md), [`ENGINEERING_RULES.md`](ENGINEERING_RULES.md)
+  and [`docs/maintainers/`](docs/maintainers/).
+- **Code of Conduct:** [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md).
+
+## Security
+
+Please report security vulnerabilities **privately** — see [`SECURITY.md`](SECURITY.md) — and
+not as a public issue. This SDK handles SIP digest authentication and SRTP/DTLS keying, so
+responsible disclosure matters.
