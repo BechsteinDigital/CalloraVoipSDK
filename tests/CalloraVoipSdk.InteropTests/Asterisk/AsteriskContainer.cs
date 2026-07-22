@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
 
@@ -25,6 +27,14 @@ public sealed class AsteriskContainer : IAsyncDisposable
         "type=transport\n" +
         "protocol=tcp\n" +
         "bind=0.0.0.0:5060\n" +
+        "\n" +
+        "[transport-tls]\n" +
+        "type=transport\n" +
+        "protocol=tls\n" +
+        "bind=0.0.0.0:5061\n" +
+        "cert_file=/etc/asterisk/keys/asterisk.pem\n" +
+        "priv_key_file=/etc/asterisk/keys/asterisk.key\n" +
+        "method=tlsv1_2\n" +
         "\n" +
         "[6001]\n" +
         "type=endpoint\n" +
@@ -91,6 +101,8 @@ public sealed class AsteriskContainer : IAsyncDisposable
     private readonly IContainer _container;
     private readonly FileInfo _pjsipConfFile;
     private readonly FileInfo _extensionsConfFile;
+    private readonly FileInfo _tlsCertFile;
+    private readonly FileInfo _tlsKeyFile;
 
     /// <summary>Erstellt (noch nicht gestartet) den Asterisk-Container.</summary>
     public AsteriskContainer()
@@ -102,9 +114,23 @@ public sealed class AsteriskContainer : IAsyncDisposable
         _extensionsConfFile = new FileInfo(Path.GetTempFileName());
         File.WriteAllText(_extensionsConfFile.FullName, ExtensionsConf);
 
+        // Self-signed TLS-Zertifikat für [transport-tls]; der SDK vertraut ihm im Test über
+        // TlsConfiguration.AcceptUntrustedCertificates.
+        using (var rsa = RSA.Create(2048))
+        {
+            var certRequest = new CertificateRequest("CN=asterisk", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+            using var cert = certRequest.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(2));
+            _tlsCertFile = new FileInfo(Path.GetTempFileName());
+            File.WriteAllText(_tlsCertFile.FullName, cert.ExportCertificatePem());
+            _tlsKeyFile = new FileInfo(Path.GetTempFileName());
+            File.WriteAllText(_tlsKeyFile.FullName, rsa.ExportPkcs8PrivateKeyPem());
+        }
+
         _container = new ContainerBuilder("andrius/asterisk:22")
             .WithResourceMapping(_pjsipConfFile, new FileInfo("/etc/asterisk/pjsip.conf"))
             .WithResourceMapping(_extensionsConfFile, new FileInfo("/etc/asterisk/extensions.conf"))
+            .WithResourceMapping(_tlsCertFile, new FileInfo("/etc/asterisk/keys/asterisk.pem"))
+            .WithResourceMapping(_tlsKeyFile, new FileInfo("/etc/asterisk/keys/asterisk.key"))
             .WithExposedPort(SipPortWithProtocol)
             .WithPortBinding(SipPortWithProtocol, assignRandomHostPort: true)
             .WithWaitStrategy(Wait.ForUnixContainer().UntilMessageIsLogged("Asterisk Ready."))
@@ -135,6 +161,9 @@ public sealed class AsteriskContainer : IAsyncDisposable
     /// </summary>
     public string ContainerIpAddress => _container.IpAddress;
 
+    /// <summary>Fester TLS-SIP-Port des Containers (über die Bridge-IP erreichbar).</summary>
+    public int SipTlsPort => 5061;
+
     /// <summary>Startet den Container und wartet, bis Asterisk SIP-ready ist.</summary>
     public Task StartAsync() => _container.StartAsync();
 
@@ -161,5 +190,7 @@ public sealed class AsteriskContainer : IAsyncDisposable
         await _container.DisposeAsync().ConfigureAwait(false);
         try { _pjsipConfFile.Delete(); } catch { /* best effort */ }
         try { _extensionsConfFile.Delete(); } catch { /* best effort */ }
+        try { _tlsCertFile.Delete(); } catch { /* best effort */ }
+        try { _tlsKeyFile.Delete(); } catch { /* best effort */ }
     }
 }
