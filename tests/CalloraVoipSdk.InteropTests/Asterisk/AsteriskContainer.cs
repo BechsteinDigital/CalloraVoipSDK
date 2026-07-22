@@ -4,20 +4,26 @@ using DotNet.Testcontainers.Containers;
 namespace CalloraVoipSdk.InteropTests.Asterisk;
 
 /// <summary>
-/// Startet einen Asterisk-Container (PJSIP, andrius/asterisk:22) mit einer minimalen
-/// REGISTER-Konfiguration und exponiert den gemappten SIP/UDP-Port. Nur für Interop-Tests.
+/// Startet einen Asterisk-Container (PJSIP, andrius/asterisk:22) mit einer minimalen SIP-Konfiguration
+/// (UDP + TCP Transport, Endpoint 6001 mit Digest-Auth) und einem Dialplan für Non-Happy-Path-Calls.
+/// Nur für Interop-Tests.
 /// </summary>
 public sealed class AsteriskContainer : IAsyncDisposable
 {
     private const string SipPortWithProtocol = "5060/udp";
 
-    // Minimale PJSIP-Konfiguration: UDP-Transport + Endpoint 6001 mit Digest-Auth.
-    // WICHTIG: Kein führendes Leerzeichen / keine Einrückung — Asterisk config-Parser
-    // erwartet Einträge am Zeilenanfang.
+    // Minimale PJSIP-Konfiguration. WICHTIG: Kein führendes Leerzeichen — der Asterisk-Parser
+    // erwartet Einträge am Zeilenanfang. TCP-Transport ist nötig, weil das SDK große INVITEs
+    // (SDP + Auth > UDP-MTU) RFC 3261 §18.1.1-konform auf TCP eskaliert.
     private const string PjsipConf =
         "[transport-udp]\n" +
         "type=transport\n" +
         "protocol=udp\n" +
+        "bind=0.0.0.0:5060\n" +
+        "\n" +
+        "[transport-tcp]\n" +
+        "type=transport\n" +
+        "protocol=tcp\n" +
         "bind=0.0.0.0:5060\n" +
         "\n" +
         "[6001]\n" +
@@ -38,19 +44,33 @@ public sealed class AsteriskContainer : IAsyncDisposable
         "type=aor\n" +
         "max_contacts=1\n";
 
+    // Dialplan für Non-Happy-Path-Call-Tests. Kontext [default] passt zu context=default am
+    // Endpoint 6001. Jede Extension bildet einen definierten SIP-Fehler ab (App→SIP live verifiziert).
+    // Unbekannte Extensions (kein Eintrag) → Asterisk 404 Not Found.
+    private const string ExtensionsConf =
+        "[default]\n" +
+        "exten => busy,1,Busy()\n" +              // → 486 Busy Here
+        "exten => decline,1,Hangup(21)\n" +       // Q.850 cause 21 → Ablehnung
+        "exten => noanswer,1,Ringing()\n" +       // ringt, ohne je zu antworten
+        "same => n,Wait(3600)\n";                 // → aufrufer-seitiger Timeout / CANCEL
+
     private readonly IContainer _container;
     private readonly FileInfo _pjsipConfFile;
+    private readonly FileInfo _extensionsConfFile;
 
     /// <summary>Erstellt (noch nicht gestartet) den Asterisk-Container.</summary>
     public AsteriskContainer()
     {
-        // Schreibe pjsip.conf in eine temporäre Datei, damit Testcontainers sie als
-        // reguläre Datei (nicht als Byte-Array-Artefakt) ins Container-Dateisystem kopiert.
+        // Schreibe die Configs in temporäre Dateien, damit Testcontainers sie als reguläre
+        // Dateien (nicht als Byte-Array-Artefakt) ins Container-Dateisystem kopiert.
         _pjsipConfFile = new FileInfo(Path.GetTempFileName());
         File.WriteAllText(_pjsipConfFile.FullName, PjsipConf);
+        _extensionsConfFile = new FileInfo(Path.GetTempFileName());
+        File.WriteAllText(_extensionsConfFile.FullName, ExtensionsConf);
 
         _container = new ContainerBuilder("andrius/asterisk:22")
             .WithResourceMapping(_pjsipConfFile, new FileInfo("/etc/asterisk/pjsip.conf"))
+            .WithResourceMapping(_extensionsConfFile, new FileInfo("/etc/asterisk/extensions.conf"))
             .WithExposedPort(SipPortWithProtocol)
             .WithPortBinding(SipPortWithProtocol, assignRandomHostPort: true)
             .WithWaitStrategy(Wait.ForUnixContainer().UntilMessageIsLogged("Asterisk Ready."))
@@ -63,9 +83,7 @@ public sealed class AsteriskContainer : IAsyncDisposable
     /// <summary>Passwort des konfigurierten Endpoints (Digest-Auth).</summary>
     public string Password => "secret";
 
-    /// <summary>
-    /// Docker-Host (meist 127.0.0.1/localhost) für den Port-gemappten UDP-Zugang.
-    /// </summary>
+    /// <summary>Docker-Host (meist 127.0.0.1/localhost) für den Port-gemappten UDP-Zugang.</summary>
     public string Host => _container.Hostname;
 
     /// <summary>Auf den Host gemappter SIP/UDP-Port.</summary>
@@ -80,10 +98,18 @@ public sealed class AsteriskContainer : IAsyncDisposable
     /// <summary>Startet den Container und wartet, bis Asterisk SIP-ready ist.</summary>
     public Task StartAsync() => _container.StartAsync();
 
+    /// <summary>
+    /// Baut eine Ziel-Request-URI für die im Dialplan definierten Test-Extensions
+    /// (<c>busy</c>, <c>decline</c>, <c>noanswer</c>) bzw. eine unbekannte Extension (→ 404).
+    /// Nur nach <see cref="StartAsync"/> gültig (nutzt die Container-Bridge-IP).
+    /// </summary>
+    public string CallTargetUri(string extension) => $"sip:{extension}@{ContainerIpAddress}:5060";
+
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
         await _container.DisposeAsync().ConfigureAwait(false);
         try { _pjsipConfFile.Delete(); } catch { /* best effort */ }
+        try { _extensionsConfFile.Delete(); } catch { /* best effort */ }
     }
 }
