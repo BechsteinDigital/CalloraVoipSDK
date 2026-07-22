@@ -5940,6 +5940,19 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.DependencyInjection.CalloraTurnServerBuilder.WithLoggerFactory
   nameWithType: CalloraTurnServerBuilder.WithLoggerFactory
+- uid: CalloraVoipSdk.DependencyInjection.CalloraTurnServerBuilder.WithPublicRelayAddress(System.Net.IPAddress)
+  name: WithPublicRelayAddress(IPAddress)
+  href: _api/CalloraVoipSdk.DependencyInjection.CalloraTurnServerBuilder.html#CalloraVoipSdk_DependencyInjection_CalloraTurnServerBuilder_WithPublicRelayAddress_System_Net_IPAddress_
+  commentId: M:CalloraVoipSdk.DependencyInjection.CalloraTurnServerBuilder.WithPublicRelayAddress(System.Net.IPAddress)
+  fullName: CalloraVoipSdk.DependencyInjection.CalloraTurnServerBuilder.WithPublicRelayAddress(System.Net.IPAddress)
+  nameWithType: CalloraTurnServerBuilder.WithPublicRelayAddress(IPAddress)
+- uid: CalloraVoipSdk.DependencyInjection.CalloraTurnServerBuilder.WithPublicRelayAddress*
+  name: WithPublicRelayAddress
+  href: _api/CalloraVoipSdk.DependencyInjection.CalloraTurnServerBuilder.html#CalloraVoipSdk_DependencyInjection_CalloraTurnServerBuilder_WithPublicRelayAddress_
+  commentId: Overload:CalloraVoipSdk.DependencyInjection.CalloraTurnServerBuilder.WithPublicRelayAddress
+  isSpec: "True"
+  fullName: CalloraVoipSdk.DependencyInjection.CalloraTurnServerBuilder.WithPublicRelayAddress
+  nameWithType: CalloraTurnServerBuilder.WithPublicRelayAddress
 - uid: CalloraVoipSdk.DependencyInjection.CalloraTurnServerBuilder.WithRealm(System.String)
   name: WithRealm(string)
   href: _api/CalloraVoipSdk.DependencyInjection.CalloraTurnServerBuilder.html#CalloraVoipSdk_DependencyInjection_CalloraTurnServerBuilder_WithRealm_System_String_
@@ -7034,6 +7047,19 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.Hosting.TurnServerHostConfiguration.MaxTotalAllocations
   nameWithType: TurnServerHostConfiguration.MaxTotalAllocations
+- uid: CalloraVoipSdk.Hosting.TurnServerHostConfiguration.PublicRelayAddress
+  name: PublicRelayAddress
+  href: _api/CalloraVoipSdk.Hosting.TurnServerHostConfiguration.html#CalloraVoipSdk_Hosting_TurnServerHostConfiguration_PublicRelayAddress
+  commentId: P:CalloraVoipSdk.Hosting.TurnServerHostConfiguration.PublicRelayAddress
+  fullName: CalloraVoipSdk.Hosting.TurnServerHostConfiguration.PublicRelayAddress
+  nameWithType: TurnServerHostConfiguration.PublicRelayAddress
+- uid: CalloraVoipSdk.Hosting.TurnServerHostConfiguration.PublicRelayAddress*
+  name: PublicRelayAddress
+  href: _api/CalloraVoipSdk.Hosting.TurnServerHostConfiguration.html#CalloraVoipSdk_Hosting_TurnServerHostConfiguration_PublicRelayAddress_
+  commentId: Overload:CalloraVoipSdk.Hosting.TurnServerHostConfiguration.PublicRelayAddress
+  isSpec: "True"
+  fullName: CalloraVoipSdk.Hosting.TurnServerHostConfiguration.PublicRelayAddress
+  nameWithType: TurnServerHostConfiguration.PublicRelayAddress
 - uid: CalloraVoipSdk.Hosting.TurnServerHostConfiguration.Realm
   name: Realm
   href: _api/CalloraVoipSdk.Hosting.TurnServerHostConfiguration.html#CalloraVoipSdk_Hosting_TurnServerHostConfiguration_Realm
@@ -7170,6 +7196,19 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.Hosting.TurnServerHostOptions.MaxTotalAllocations
   nameWithType: TurnServerHostOptions.MaxTotalAllocations
+- uid: CalloraVoipSdk.Hosting.TurnServerHostOptions.PublicRelayAddress
+  name: PublicRelayAddress
+  href: _api/CalloraVoipSdk.Hosting.TurnServerHostOptions.html#CalloraVoipSdk_Hosting_TurnServerHostOptions_PublicRelayAddress
+  commentId: P:CalloraVoipSdk.Hosting.TurnServerHostOptions.PublicRelayAddress
+  fullName: CalloraVoipSdk.Hosting.TurnServerHostOptions.PublicRelayAddress
+  nameWithType: TurnServerHostOptions.PublicRelayAddress
+- uid: CalloraVoipSdk.Hosting.TurnServerHostOptions.PublicRelayAddress*
+  name: PublicRelayAddress
+  href: _api/CalloraVoipSdk.Hosting.TurnServerHostOptions.html#CalloraVoipSdk_Hosting_TurnServerHostOptions_PublicRelayAddress_
+  commentId: Overload:CalloraVoipSdk.Hosting.TurnServerHostOptions.PublicRelayAddress
+  isSpec: "True"
+  fullName: CalloraVoipSdk.Hosting.TurnServerHostOptions.PublicRelayAddress
+  nameWithType: TurnServerHostOptions.PublicRelayAddress
 - uid: CalloraVoipSdk.Hosting.TurnServerHostOptions.Realm
   name: Realm
   href: _api/CalloraVoipSdk.Hosting.TurnServerHostOptions.html#CalloraVoipSdk_Hosting_TurnServerHostOptions_Realm

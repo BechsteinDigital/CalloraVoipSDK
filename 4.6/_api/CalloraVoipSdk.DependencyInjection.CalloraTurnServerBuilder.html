@@ -231,7 +231,7 @@ Class CalloraTurnServerBuilder  <a class="header-action link-secondary" title="V
 
   <h3 id="CalloraVoipSdk_DependencyInjection_CalloraTurnServerBuilder_WithLoggerFactory_Microsoft_Extensions_Logging_ILoggerFactory_" data-uid="CalloraVoipSdk.DependencyInjection.CalloraTurnServerBuilder.WithLoggerFactory(Microsoft.Extensions.Logging.ILoggerFactory)">
   WithLoggerFactory(ILoggerFactory)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Hosting/CalloraTurnServerBuilder.cs/#L71"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Hosting/CalloraTurnServerBuilder.cs/#L83"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Overrides the logger factory used for server diagnostics.</p>
@@ -245,6 +245,45 @@ Class CalloraTurnServerBuilder  <a class="header-action link-secondary" title="V
   <h4 class="section">Parameters</h4>
   <dl class="parameters">
     <dt><code>loggerFactory</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/microsoft.extensions.logging.iloggerfactory">ILoggerFactory</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="CalloraVoipSdk.DependencyInjection.CalloraTurnServerBuilder.html">CalloraTurnServerBuilder</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_DependencyInjection_CalloraTurnServerBuilder_WithPublicRelayAddress_" data-uid="CalloraVoipSdk.DependencyInjection.CalloraTurnServerBuilder.WithPublicRelayAddress*"></a>
+
+  <h3 id="CalloraVoipSdk_DependencyInjection_CalloraTurnServerBuilder_WithPublicRelayAddress_System_Net_IPAddress_" data-uid="CalloraVoipSdk.DependencyInjection.CalloraTurnServerBuilder.WithPublicRelayAddress(System.Net.IPAddress)">
+  WithPublicRelayAddress(IPAddress)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Hosting/CalloraTurnServerBuilder.cs/#L75"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the public IP address advertised to clients in XOR-RELAYED-ADDRESS (RFC 8656 §7.2). Use this in
+NAT'd, multi-homed, or cloud deployments where the relay socket's bound/routed address is not the
+address remote peers must reach.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public CalloraTurnServerBuilder WithPublicRelayAddress(IPAddress publicRelayAddress)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>publicRelayAddress</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.net.ipaddress">IPAddress</a></dt>
     <dd></dd>
   </dl>
 

@@ -220,7 +220,7 @@ configuration objects (<code>VoipConfiguration</code>, <code>WebRtcConfiguration
 
   <h3 id="CalloraVoipSdk_Hosting_TurnServerHostConfiguration_DefaultAllocationLifetimeSeconds" data-uid="CalloraVoipSdk.Hosting.TurnServerHostConfiguration.DefaultAllocationLifetimeSeconds">
   DefaultAllocationLifetimeSeconds
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Hosting/TurnServerHostConfiguration.cs/#L36"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Hosting/TurnServerHostConfiguration.cs/#L44"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>The allocation lifetime granted when a client does not request one (RFC 8656 §3.9). Default 600 s.</p>
@@ -252,7 +252,7 @@ configuration objects (<code>VoipConfiguration</code>, <code>WebRtcConfiguration
 
   <h3 id="CalloraVoipSdk_Hosting_TurnServerHostConfiguration_LoggerFactory" data-uid="CalloraVoipSdk.Hosting.TurnServerHostConfiguration.LoggerFactory">
   LoggerFactory
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Hosting/TurnServerHostConfiguration.cs/#L45"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Hosting/TurnServerHostConfiguration.cs/#L53"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>The logger factory for server diagnostics; a no-op factory is used when null.</p>
@@ -284,7 +284,7 @@ configuration objects (<code>VoipConfiguration</code>, <code>WebRtcConfiguration
 
   <h3 id="CalloraVoipSdk_Hosting_TurnServerHostConfiguration_MaxAllocationLifetimeSeconds" data-uid="CalloraVoipSdk.Hosting.TurnServerHostConfiguration.MaxAllocationLifetimeSeconds">
   MaxAllocationLifetimeSeconds
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Hosting/TurnServerHostConfiguration.cs/#L39"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Hosting/TurnServerHostConfiguration.cs/#L47"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>The maximum allocation lifetime a client may request. Default 3600 s.</p>
@@ -316,7 +316,7 @@ configuration objects (<code>VoipConfiguration</code>, <code>WebRtcConfiguration
 
   <h3 id="CalloraVoipSdk_Hosting_TurnServerHostConfiguration_MaxTotalAllocations" data-uid="CalloraVoipSdk.Hosting.TurnServerHostConfiguration.MaxTotalAllocations">
   MaxTotalAllocations
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Hosting/TurnServerHostConfiguration.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Hosting/TurnServerHostConfiguration.cs/#L50"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>The maximum number of concurrent allocations the server admits. Default 16384.</p>
@@ -334,6 +334,41 @@ configuration objects (<code>VoipConfiguration</code>, <code>WebRtcConfiguration
   <h4 class="section">Property Value</h4>
   <dl class="parameters">
     <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Hosting_TurnServerHostConfiguration_PublicRelayAddress_" data-uid="CalloraVoipSdk.Hosting.TurnServerHostConfiguration.PublicRelayAddress*"></a>
+
+  <h3 id="CalloraVoipSdk_Hosting_TurnServerHostConfiguration_PublicRelayAddress" data-uid="CalloraVoipSdk.Hosting.TurnServerHostConfiguration.PublicRelayAddress">
+  PublicRelayAddress
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Hosting/TurnServerHostConfiguration.cs/#L41"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The public IP address advertised to clients in XOR-RELAYED-ADDRESS instead of the bound/routed
+relay address (RFC 8656 §7.2). Set this in NAT'd, multi-homed, or cloud deployments where the
+relay socket's local address is not reachable by remote peers. When null the server derives the
+advertised address automatically and warns if it can only fall back to loopback.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IPAddress? PublicRelayAddress { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.net.ipaddress">IPAddress</a></dt>
     <dd></dd>
   </dl>
 
