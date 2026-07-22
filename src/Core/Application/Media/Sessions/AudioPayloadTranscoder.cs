@@ -208,21 +208,27 @@ internal static class AudioPayloadTranscoder
                 return true;
 
             case PayloadCodecKind.G722:
+            {
+                // G.722 is ADPCM: the predictor state carries across frame boundaries, so the plan owns
+                // one codec instance (a persistent decode state + a persistent encode state) for the
+                // lifetime of this call leg — re-initialising per frame produces audible artefacts.
+                var g722 = new PcmG722Codec();
                 plan = new AudioPayloadTranscodingPlan(
                     context,
                     toFileFrame: frame =>
                     {
-                        var decoded = PcmG722Codec.Decode(frame.Payload.Span);
+                        var decoded = g722.Decode(frame.Payload.Span);
                         return new MediaFrame(decoded, payloadType, frame.DurationRtpUnits);
                     },
                     fromFileFrame: frame =>
                     {
                         EnsurePcm16(frame.Payload.Span);
-                        var encoded = PcmG722Codec.Encode(frame.Payload.Span);
+                        var encoded = g722.Encode(frame.Payload.Span);
                         return new MediaFrame(encoded, payloadType, frame.DurationRtpUnits);
                     });
                 error = string.Empty;
                 return true;
+            }
 
             case PayloadCodecKind.Opus:
             {
