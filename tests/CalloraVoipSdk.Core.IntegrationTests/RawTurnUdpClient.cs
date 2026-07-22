@@ -2,9 +2,11 @@ using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using CalloraVoipSdk.Core.Infrastructure.Stun.Attributes;
+using CalloraVoipSdk.Core.Infrastructure.Stun.Auth;
 using CalloraVoipSdk.Core.Infrastructure.Stun.Messages;
 using CalloraVoipSdk.Core.Infrastructure.Stun.Wire;
 using CalloraVoipSdk.Core.Infrastructure.Turn.Attributes;
+using CalloraVoipSdk.Core.Infrastructure.Turn.Client;
 using CalloraVoipSdk.Core.Infrastructure.Turn.Wire;
 
 namespace CalloraVoipSdk.Core.IntegrationTests;
@@ -41,6 +43,7 @@ internal sealed class RawTurnUdpClient : IDisposable
 
     private readonly UdpClient _udp;
     private readonly IStunMessageCodec _codec;
+    private readonly TurnTransactionEngine _engine;
 
     /// <summary>Binds a loopback socket and connects it to the TURN server endpoint.</summary>
     public RawTurnUdpClient(IPEndPoint serverEndPoint, IStunMessageCodec codec)
@@ -49,6 +52,7 @@ internal sealed class RawTurnUdpClient : IDisposable
         ArgumentNullException.ThrowIfNull(codec);
 
         _codec = codec;
+        _engine = new TurnTransactionEngine(codec);
         _udp = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
         _udp.Connect(serverEndPoint);
     }
@@ -78,6 +82,62 @@ internal sealed class RawTurnUdpClient : IDisposable
             ?? throw new InvalidOperationException("TURN Allocate success response is missing XOR-RELAYED-ADDRESS.");
         var lifetime = TurnAttributeMapper.DecodeLifetime(response)?.Seconds ?? 0;
         return new TurnAllocation(relayed, lifetime);
+    }
+
+    /// <summary>
+    /// Sends an Allocate request authenticated with long-term credentials (RFC 5389 §10.2
+    /// challenge/response, driven by the production <see cref="TurnTransactionEngine"/> over this
+    /// client's stable socket) and returns the relayed address and lifetime.
+    /// </summary>
+    public async Task<TurnAllocation> AllocateAuthenticatedAsync(
+        StunCredentials credentials,
+        uint? lifetimeSeconds = null,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(credentials);
+
+        var (response, _) = await _engine.ExecuteWithAuthAsync(
+                TurnMessageMethod.Allocate,
+                _ =>
+                {
+                    var attributes = new List<StunAttribute>
+                    {
+                        TurnAttributeMapper.Encode(new TurnRequestedTransportAttribute
+                        {
+                            Protocol = TurnRequestedTransportProtocol.Udp
+                        })
+                    };
+                    if (lifetimeSeconds.HasValue)
+                        attributes.Add(TurnAttributeMapper.Encode(new TurnLifetimeAttribute { Seconds = lifetimeSeconds.Value }));
+                    return attributes;
+                },
+                credentials,
+                SendRequestOnceAsync,
+                ct)
+            .ConfigureAwait(false);
+
+        var relayed = TurnAttributeMapper.DecodeXorRelayedAddress(response)?.EndPoint
+            ?? throw new InvalidOperationException("TURN Allocate success response is missing XOR-RELAYED-ADDRESS.");
+        var lifetime = TurnAttributeMapper.DecodeLifetime(response)?.Seconds ?? 0;
+        return new TurnAllocation(relayed, lifetime);
+    }
+
+    /// <summary>Installs a permission for the peer address using long-term-authenticated requests.</summary>
+    public async Task CreatePermissionAuthenticatedAsync(
+        StunCredentials credentials,
+        IPEndPoint peerEndPoint,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(credentials);
+        ArgumentNullException.ThrowIfNull(peerEndPoint);
+
+        _ = await _engine.ExecuteWithAuthAsync(
+                TurnMessageMethod.CreatePermission,
+                txId => [TurnAttributeMapper.Encode(new TurnXorPeerAddressAttribute { EndPoint = peerEndPoint }, txId)],
+                credentials,
+                SendRequestOnceAsync,
+                ct)
+            .ConfigureAwait(false);
     }
 
     /// <summary>Installs a permission for the peer address (keyed by IP per RFC 5766 §8).</summary>
@@ -203,6 +263,26 @@ internal sealed class RawTurnUdpClient : IDisposable
             if (decoded.MessageClass is not (StunMessageClass.SuccessResponse or StunMessageClass.ErrorResponse))
                 continue; // A stray indication racing the response; ignore.
             return decoded;
+        }
+    }
+
+    // The single-round-trip delegate the TurnTransactionEngine drives: send one encoded request over the
+    // stable socket and return the transaction-matched, validated success response — raising
+    // TurnChallengeException on a 401/438 challenge so the engine's auth flow can react (same contract as
+    // the production TurnClientTransport).
+    private async Task<StunMessage> SendRequestOnceAsync(StunMessage request, byte[] requestBytes, CancellationToken ct)
+    {
+        await _udp.SendAsync(requestBytes, ct).ConfigureAwait(false);
+
+        while (true)
+        {
+            var received = await ReceiveWithTimeoutAsync(TransactionTimeout, ct).ConfigureAwait(false);
+            var decoded = _codec.Decode(received.Buffer);
+            if (decoded is null || !decoded.TransactionId.SequenceEqual(request.TransactionId))
+                continue; // ChannelData, noise, or a different transaction — keep waiting.
+            if (decoded.MessageClass is not (StunMessageClass.SuccessResponse or StunMessageClass.ErrorResponse))
+                continue; // A stray indication racing the response.
+            return TurnResponseValidator.Validate(decoded, request.MessageMethod);
         }
     }
 
