@@ -9440,6 +9440,19 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.VoipConfiguration.PreferredVideoCodecs
   nameWithType: VoipConfiguration.PreferredVideoCodecs
+- uid: CalloraVoipSdk.VoipConfiguration.RequireSecureSignalingForSdes
+  name: RequireSecureSignalingForSdes
+  href: _api/CalloraVoipSdk.VoipConfiguration.html#CalloraVoipSdk_VoipConfiguration_RequireSecureSignalingForSdes
+  commentId: P:CalloraVoipSdk.VoipConfiguration.RequireSecureSignalingForSdes
+  fullName: CalloraVoipSdk.VoipConfiguration.RequireSecureSignalingForSdes
+  nameWithType: VoipConfiguration.RequireSecureSignalingForSdes
+- uid: CalloraVoipSdk.VoipConfiguration.RequireSecureSignalingForSdes*
+  name: RequireSecureSignalingForSdes
+  href: _api/CalloraVoipSdk.VoipConfiguration.html#CalloraVoipSdk_VoipConfiguration_RequireSecureSignalingForSdes_
+  commentId: Overload:CalloraVoipSdk.VoipConfiguration.RequireSecureSignalingForSdes
+  isSpec: "True"
+  fullName: CalloraVoipSdk.VoipConfiguration.RequireSecureSignalingForSdes
+  nameWithType: VoipConfiguration.RequireSecureSignalingForSdes
 - uid: CalloraVoipSdk.VoipConfiguration.SrtpPolicy
   name: SrtpPolicy
   href: _api/CalloraVoipSdk.VoipConfiguration.html#CalloraVoipSdk_VoipConfiguration_SrtpPolicy
@@ -9667,6 +9680,19 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.VoipOptions.PreferredVideoCodecs
   nameWithType: VoipOptions.PreferredVideoCodecs
+- uid: CalloraVoipSdk.VoipOptions.RequireSecureSignalingForSdes
+  name: RequireSecureSignalingForSdes
+  href: _api/CalloraVoipSdk.VoipOptions.html#CalloraVoipSdk_VoipOptions_RequireSecureSignalingForSdes
+  commentId: P:CalloraVoipSdk.VoipOptions.RequireSecureSignalingForSdes
+  fullName: CalloraVoipSdk.VoipOptions.RequireSecureSignalingForSdes
+  nameWithType: VoipOptions.RequireSecureSignalingForSdes
+- uid: CalloraVoipSdk.VoipOptions.RequireSecureSignalingForSdes*
+  name: RequireSecureSignalingForSdes
+  href: _api/CalloraVoipSdk.VoipOptions.html#CalloraVoipSdk_VoipOptions_RequireSecureSignalingForSdes_
+  commentId: Overload:CalloraVoipSdk.VoipOptions.RequireSecureSignalingForSdes
+  isSpec: "True"
+  fullName: CalloraVoipSdk.VoipOptions.RequireSecureSignalingForSdes
+  nameWithType: VoipOptions.RequireSecureSignalingForSdes
 - uid: CalloraVoipSdk.VoipOptions.SrtpPolicy
   name: SrtpPolicy
   href: _api/CalloraVoipSdk.VoipOptions.html#CalloraVoipSdk_VoipOptions_SrtpPolicy

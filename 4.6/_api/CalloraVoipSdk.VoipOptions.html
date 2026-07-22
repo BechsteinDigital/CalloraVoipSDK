@@ -186,7 +186,7 @@ Class VoipOptions  <a class="header-action link-secondary" title="View source" h
 
   <h3 id="CalloraVoipSdk_VoipOptions_BridgeAudioFormat" data-uid="CalloraVoipSdk.VoipOptions.BridgeAudioFormat">
   BridgeAudioFormat
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipOptions.cs/#L86"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipOptions.cs/#L92"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Audio format delivered to bridge/recording consumers.
@@ -252,7 +252,7 @@ See <a class="xref" href="CalloraVoipSdk.VoipConfiguration.html#CalloraVoipSdk_V
 
   <h3 id="CalloraVoipSdk_VoipOptions_DtlsCertificate" data-uid="CalloraVoipSdk.VoipOptions.DtlsCertificate">
   DtlsCertificate
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipOptions.cs/#L67"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipOptions.cs/#L73"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Optional DTLS-SRTP identity certificate for the media plane; <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> uses the
@@ -318,7 +318,7 @@ and constraints (ECDSA P-256 with an exportable private key).</p>
 
   <h3 id="CalloraVoipSdk_VoipOptions_EnableVideo" data-uid="CalloraVoipSdk.VoipOptions.EnableVideo">
   EnableVideo
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipOptions.cs/#L73"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipOptions.cs/#L79"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Enable video (<code>m=video</code>) negotiation for calls.
@@ -351,7 +351,7 @@ See <a class="xref" href="CalloraVoipSdk.VoipConfiguration.html#CalloraVoipSdk_V
 
   <h3 id="CalloraVoipSdk_VoipOptions_HangupHeldCallOnMediaSilence" data-uid="CalloraVoipSdk.VoipOptions.HangupHeldCallOnMediaSilence">
   HangupHeldCallOnMediaSilence
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipOptions.cs/#L98"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipOptions.cs/#L104"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Hang up a held call when its media goes silent.
@@ -416,7 +416,7 @@ See <a class="xref" href="CalloraVoipSdk.VoipConfiguration.html#CalloraVoipSdk_V
 
   <h3 id="CalloraVoipSdk_VoipOptions_InboundMediaTimeout" data-uid="CalloraVoipSdk.VoipOptions.InboundMediaTimeout">
   InboundMediaTimeout
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipOptions.cs/#L92"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipOptions.cs/#L98"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Timeout after which an answered call that never receives inbound media is torn down.
@@ -579,7 +579,7 @@ See <a class="xref" href="CalloraVoipSdk.VoipConfiguration.html#CalloraVoipSdk_V
 
   <h3 id="CalloraVoipSdk_VoipOptions_PreferredVideoCodecs" data-uid="CalloraVoipSdk.VoipOptions.PreferredVideoCodecs">
   PreferredVideoCodecs
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipOptions.cs/#L80"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipOptions.cs/#L86"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Ordered video codec preference by SDP encoding name; only applies when
@@ -599,6 +599,39 @@ See <a class="xref" href="CalloraVoipSdk.VoipConfiguration.html#CalloraVoipSdk_V
   <h4 class="section">Property Value</h4>
   <dl class="parameters">
     <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_VoipOptions_RequireSecureSignalingForSdes_" data-uid="CalloraVoipSdk.VoipOptions.RequireSecureSignalingForSdes*"></a>
+
+  <h3 id="CalloraVoipSdk_VoipOptions_RequireSecureSignalingForSdes" data-uid="CalloraVoipSdk.VoipOptions.RequireSecureSignalingForSdes">
+  RequireSecureSignalingForSdes
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipOptions.cs/#L66"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Refuse outbound calls that would key SDES over insecure signaling (fail-closed).
+See <a class="xref" href="CalloraVoipSdk.VoipConfiguration.html#CalloraVoipSdk_VoipConfiguration_RequireSecureSignalingForSdes">RequireSecureSignalingForSdes</a> for semantics.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool RequireSecureSignalingForSdes { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
     <dd></dd>
   </dl>
 
