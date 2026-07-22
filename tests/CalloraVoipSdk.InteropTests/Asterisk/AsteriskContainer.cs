@@ -81,7 +81,12 @@ public sealed class AsteriskContainer : IAsyncDisposable
         "exten => dtmf,1,Answer()\n" +            // → 200 OK, dann RFC-4733-Ziffern senden
         "same => n,Wait(2)\n" +                   // Media etablieren, DTMF-Listener anhängen
         "same => n,SendDTMF(1234)\n" +            // sendet 1-2-3-4 als telephone-event
-        "same => n,Wait(30)\n";                   // Call offen halten für den Empfang
+        "same => n,Wait(30)\n" +                  // Call offen halten für den Empfang
+        "exten => earlymedia,1,Progress()\n" +    // → 183 Session Progress mit SDP (Early Media)
+        "same => n,Playtones(dial)\n" +           // Dial-Ton als Early-Media-RTP vor dem 200 OK
+        "same => n,Wait(4)\n" +                   // Early-Media-Fenster
+        "same => n,Answer()\n" +                  // → 200 OK
+        "same => n,Milliwatt()\n";                // Post-Answer-Media
 
     private readonly IContainer _container;
     private readonly FileInfo _pjsipConfFile;
