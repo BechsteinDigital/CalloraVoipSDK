@@ -1,34 +1,57 @@
 name: Release Documentation
 
+# Versioned docs: the latest minor line is served at the site root; older lines are kept
+# under /<minor>/ (e.g. /4.5/). Publishing is stateful — it writes into the `gh-pages`
+# branch and preserves existing version folders, so older releases stay live.
+#
+# NOTE: GitHub Pages must be set to "Deploy from a branch → gh-pages / (root)"
+# (Settings → Pages). Seed an older line once with a manual run, e.g. ref=v4.5.0, version=4.5.
+
 on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref (tag/branch) to build docs from, e.g. v4.5.0. Empty = current."
+        required: false
+        default: ""
+      version:
+        description: "Doc version folder, e.g. 4.5. Empty = minor of the built source."
+        required: false
+        default: ""
+      set_latest:
+        description: "Also publish this build as the site root (latest)."
+        type: boolean
+        default: false
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write   # push to the gh-pages branch
 
 concurrency:
-  group: pages
+  group: docs-pages
   cancel-in-progress: false
 
 jobs:
   release-docs:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-
     steps:
-      - name: Checkout
+      - name: Checkout target ref
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.inputs.ref || github.sha }}
           fetch-depth: 0
 
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
+      - name: Overlay versioning assets from main
+        # Chrome + version-picker assets are version-agnostic, so older doc builds (4.5)
+        # also get the dropdown and the current theme. Only the *content* comes from the ref.
+        run: |
+          git fetch origin main --depth=1
+          git checkout origin/main -- \
+            docs/portal/public/main.js \
+            docs/portal/public/main.css \
+            docs/portal/versions.json \
+            docfx.json || true
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -38,64 +61,89 @@ jobs:
             9.0.x
             10.0.x
 
-      - name: Restore local tools
-        run: dotnet tool restore
-
-      - name: Restore solution
-        run: dotnet restore CalloraVoipSdk.sln
+      - name: Restore tools + solution
+        run: |
+          dotnet tool restore
+          dotnet restore CalloraVoipSdk.sln
 
       - name: Build API projects
         run: |
           dotnet build src/Core/CalloraVoipSdk.Core.csproj --no-restore -c Release
           dotnet build src/Client/CalloraVoipSdk.Client.csproj --no-restore -c Release
 
-      - name: Extract version from tag or Directory.Build.props
-        id: version
+      - name: Resolve version
+        id: v
         shell: bash
         run: |
-          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
-            RAW_VERSION="${GITHUB_REF_NAME}"
+          set -euo pipefail
+          PREFIX="$(grep -oPm1 '(?<=<VersionPrefix>)[^<]+' src/Directory.Build.props || echo 0.0.0)"
+          MINOR="$(echo "$PREFIX" | cut -d. -f1-2)"
+          VERSION="${{ github.event.inputs.version }}"
+          [ -z "$VERSION" ] && VERSION="$MINOR"
+          if [ "${{ github.event_name }}" = "push" ]; then
+            LATEST=true
           else
-            # Commit-level docs build (push to main / manual dispatch): the version is the
-            # source-of-truth VersionPrefix so the site still shows the real release, not "dev".
-            PROPS_VERSION="$(grep -oPm1 '(?<=<VersionPrefix>)[^<]+' src/Directory.Build.props || true)"
-            RAW_VERSION="v${PROPS_VERSION:-dev}"
+            LATEST="${{ github.event.inputs.set_latest }}"
           fi
-          VERSION="${RAW_VERSION#v}"
-          echo "raw=${RAW_VERSION}" >> "$GITHUB_OUTPUT"
-          echo "clean=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "latest=$LATEST"   >> "$GITHUB_OUTPUT"
+          echo "Publishing docs version '$VERSION' (latest=$LATEST)"
 
       - name: Inject version into DocFX metadata
         run: |
-          jq \
-            --arg raw "${{ steps.version.outputs.raw }}" \
-            --arg clean "${{ steps.version.outputs.clean }}" \
-            '
-            .build.globalMetadata._appVersion = $raw
-            | .build.globalMetadata._appVersionClean = $clean
-            ' \
+          jq --arg v "${{ steps.v.outputs.version }}" \
+            '.build.globalMetadata._appVersion = $v' \
             docfx.json > docfx.tmp.json
           mv docfx.tmp.json docfx.json
 
       - name: Build DocFX site
         run: dotnet tool run docfx docfx.json
 
-      - name: Prepare Pages artifact
+      - name: Publish to gh-pages (version-aware, stateful)
         shell: bash
         run: |
-          rm -rf pages-dist
-          mkdir -p "pages-dist/${{ steps.version.outputs.raw }}"
+          set -euo pipefail
+          VERSION="${{ steps.v.outputs.version }}"
+          LATEST="${{ steps.v.outputs.latest }}"
 
-          cp -R _site/. pages-dist/
-          cp -R _site/. "pages-dist/${{ steps.version.outputs.raw }}/"
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          touch pages-dist/.nojekyll
+          if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
+            git fetch origin gh-pages --depth=1
+            git worktree add pages origin/gh-pages
+          else
+            git worktree add --detach pages
+            (cd pages && git checkout --orphan gh-pages && git rm -rf . >/dev/null 2>&1 || true)
+          fi
 
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: ./pages-dist
+          # Refresh the requested version folder.
+          rm -rf "pages/${VERSION}"
+          mkdir -p "pages/${VERSION}"
+          cp -R _site/. "pages/${VERSION}/"
 
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          # Optionally refresh the root (latest) — preserve .git and existing /X.Y/ folders.
+          if [ "$LATEST" = "true" ]; then
+            shopt -s dotglob
+            for entry in pages/*; do
+              name="$(basename "$entry")"
+              [ "$name" = ".git" ] && continue
+              [[ "$name" =~ ^[0-9]+\.[0-9]+$ ]] && continue
+              rm -rf "$entry"
+            done
+            shopt -u dotglob
+            cp -R _site/. pages/
+          fi
+
+          # Authoritative manifest at the root (read by every version via absolute base URL).
+          cp docs/portal/versions.json pages/versions.json
+          touch pages/.nojekyll
+
+          cd pages
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No documentation changes to publish."
+            exit 0
+          fi
+          git commit -m "docs: publish ${VERSION}$([ "$LATEST" = "true" ] && echo ' (latest)')"
+          git push origin HEAD:gh-pages
