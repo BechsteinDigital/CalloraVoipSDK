@@ -6,6 +6,8 @@
 
 ## Ergebnis (2026-07-22)
 
+**Nachtrag Gruppe B (nach dem F006-Fix in main):** `AsteriskCallFailureInteropTests` gebaut — 3 grüne (busy→486, decline→403, nonexistent→404 → je `DialStatus.Failed`) + 2 Skip. Media bewusst `SrtpPolicy.Disabled` (Plain RTP erreicht den Dialplan; SRTP-Angebot → 488, siehe F007). Zwei neue verifizierte Funde: **F008** (`DialWaitOptions.ConnectTimeout` bei ringendem Ziel nicht geehrt → wartet ~RingTimeout, meldet `Failed` statt `Timeout`) und **F009** (externe Cancellation → `Failed` statt `DialStatus.Canceled`). Interop gesamt: 8 grün + 3 Skip (F005/F008/F009). Damit ist der ursprüngliche A+B-Scope umgesetzt; F005-Vertiefung bleibt durch die geänderte Facade-Realität (Codes nicht aus `.Error` first-class) gegenstandslos.
+
 Umgesetzt: **Gruppe A (REGISTER-Non-Happy-Path)** — 3 grüne Tests gegen echten Asterisk + 1 Skip.
 Die empirische Verifikation korrigierte zwei Plan-Annahmen (die Recon war ungenau — daher „erst messen, dann festschreiben"):
 
