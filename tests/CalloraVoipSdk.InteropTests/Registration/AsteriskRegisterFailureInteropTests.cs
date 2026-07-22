@@ -12,11 +12,12 @@ namespace CalloraVoipSdk.InteropTests.Registration;
 /// falsches Passwort, unbekannter User, unerreichbarer Server. Prüft die Facade-Ergebnis-Taxonomie
 /// (<see cref="ConnectStatus"/>) auf L4.
 ///
-/// Befund F005 (siehe docs/audit/INTEROP_SOAK_AUDIT.md): Bei permanenter Auth-Ablehnung erreicht die
-/// Line intern <see cref="LineState.Failed"/>, aber die Convenience-<c>ConnectAsync</c> short-circuittet
-/// NICHT — sie wartet das volle Timeout ab und meldet dann <see cref="ConnectStatus.Timeout"/> mit
-/// <c>Error == null</c>. Die grünen Tests halten das reale Verhalten fest; der ideale Zustand
-/// (Status=Failed + Auth-Code) ist Skip-blockiert bis F005 gefixt ist.
+/// Befund F005 (GEFIXT): Bei permanenter Auth-Ablehnung short-circuittet die Convenience-<c>ConnectAsync</c>
+/// jetzt am terminalen <see cref="LineState.Failed"/> und meldet zügig <see cref="ConnectStatus.Failed"/>,
+/// statt das volle Timeout abzuwarten (vorher: <see cref="ConnectStatus.Timeout"/> nach vollem Timeout).
+/// Offener Rest F005b: der zugrunde liegende Auth-Fehler (401/403) wird noch NICHT als
+/// <c>ConnectResult.Error</c> durchgereicht — Status ist korrekt, aber <c>Error == null</c> (Skip-blockiert).
+/// Siehe docs/audit/INTEROP_SOAK_AUDIT.md.
 /// </summary>
 [Trait("Category", "Interop")]
 public sealed class AsteriskRegisterFailureInteropTests
@@ -76,11 +77,31 @@ public sealed class AsteriskRegisterFailureInteropTests
         Assert.Equal(ConnectStatus.Timeout, result.Status);
     }
 
-    // ── Skip (F005): idealer Zustand — Auth-Ablehnung sollte SCHNELL als Failed mit Code kommen ──
+    // ── Grün (F005 gefixt): Auth-Ablehnung meldet zügig Failed, ohne das volle Timeout abzuwarten ──
 
-    [Fact(Skip = "F005 — ConnectAsync short-circuittet nicht bei terminalem Failed: Auth-Ablehnung wird als Timeout+Error=null gemeldet statt Failed+Auth-Code. Siehe docs/audit/INTEROP_SOAK_AUDIT.md")]
+    [DockerRequiredFact]
+    public async Task WrongPassword_ReportsFailedStatusPromptly()
+    {
+        await using var asterisk = new AsteriskContainer();
+        await asterisk.StartAsync();
+
+        using var client = new VoipClient(new VoipConfiguration { UserAgent = "CalloraInteropTest/1.0" });
+        var started = DateTimeOffset.UtcNow;
+        var result = await client.ConnectAsync(
+            Account(asterisk.ContainerIpAddress, asterisk.Username, "definitely-wrong"),
+            new ConnectOptions { Timeout = TimeSpan.FromSeconds(20) });
+        var elapsed = DateTimeOffset.UtcNow - started;
+
+        Assert.Equal(ConnectStatus.Failed, result.Status);          // F005-Fix: Failed statt Timeout
+        Assert.Equal(LineState.Failed, result.FinalLineState);
+        Assert.True(elapsed < TimeSpan.FromSeconds(15), $"Auth-Ablehnung wurde nicht short-circuitet: {elapsed}");
+    }
+
+    // ── Skip (F005b): offener Rest — der Auth-Fehler sollte als ConnectResult.Error sichtbar sein ──
+
+    [Fact(Skip = "F005b — ConnectResult.Error bleibt bei Auth-Ablehnung null: der Status ist korrekt Failed (F005 gefixt), aber der zugrunde liegende Auth-Fehler (401/403) wird nicht als Error durchgereicht. Siehe docs/audit/INTEROP_SOAK_AUDIT.md")]
     [Trait("Category", "Interop")]
-    public async Task WrongPassword_ShouldReportFailedStatusWithAuthCode()
+    public async Task WrongPassword_ShouldExposeAuthError()
     {
         await using var asterisk = new AsteriskContainer();
         await asterisk.StartAsync();
