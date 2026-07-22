@@ -139,6 +139,16 @@ public sealed class AsteriskContainer : IAsyncDisposable
     public Task StartAsync() => _container.StartAsync();
 
     /// <summary>
+    /// Führt ein Kommando im Container aus (z. B. die Asterisk-CLI via <c>asterisk -rx …</c>) und
+    /// gibt dessen Standardausgabe zurück. Nur nach <see cref="StartAsync"/> gültig.
+    /// </summary>
+    public async Task<string> ExecAsync(params string[] command)
+    {
+        var result = await _container.ExecAsync(command).ConfigureAwait(false);
+        return result.Stdout;
+    }
+
+    /// <summary>
     /// Baut eine Ziel-Request-URI für die im Dialplan definierten Test-Extensions
     /// (<c>answer</c> → 200 OK + Media, <c>busy</c>, <c>decline</c>, <c>noanswer</c>) bzw. eine
     /// unbekannte Extension (→ 404). Nur nach <see cref="StartAsync"/> gültig (Container-Bridge-IP).
