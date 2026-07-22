@@ -36,7 +36,18 @@ public sealed class VoipConfiguration
     /// </summary>
     [Obsolete("Use AddCalloraVoip(...)/CalloraBuilder overrides. VoipConfiguration.Services will be removed after v1.0.", false)]
     public IServiceProvider? Services            { get; init; }
-    /// <summary>Default media-encryption policy for calls; defaults to <see cref="SrtpPolicy.Optional"/>. Overridable per call via <c>DialOptions.UseSrtp</c>.</summary>
+    /// <summary>
+    /// Default media-encryption policy for calls; defaults to <see cref="SrtpPolicy.Optional"/>.
+    /// Overridable per call via <c>DialOptions.UseSrtp</c>.
+    /// <para>
+    /// <b>Security note (RFC 4568 §7):</b> unless <see cref="OfferDtlsSrtp"/> is set, SRTP is keyed
+    /// via SDES, which carries the master key as an <c>a=crypto</c> line inside the SDP. That key is
+    /// only confidential when the signaling transport is secure (TLS/SIPS). Over UDP/TCP the key
+    /// travels in cleartext, so a passive eavesdropper on the signaling path can decrypt the media —
+    /// the SDK logs a warning in this case. For real media confidentiality use TLS/SIPS signaling or
+    /// enable <see cref="OfferDtlsSrtp"/> (keys never appear in the SDP).
+    /// </para>
+    /// </summary>
     public SrtpPolicy     SrtpPolicy             { get; init; } = SrtpPolicy.Optional;
 
     /// <summary>

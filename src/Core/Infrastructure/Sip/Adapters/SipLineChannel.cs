@@ -29,6 +29,7 @@ internal sealed class SipLineChannel : ILineChannel
     private readonly IReadOnlyList<string>? _preferredCodecNames;
     private readonly SdpDtlsNegotiationOptions? _dtlsOptions;
     private readonly bool _offerDtlsSrtp;
+    private bool _warnedSdesInsecureSignaling;
     private readonly bool _enableVideo;
     private readonly IReadOnlyList<string>? _preferredVideoCodecNames;
     private readonly ILogger<SipLineChannel> _logger;
@@ -216,6 +217,7 @@ internal sealed class SipLineChannel : ILineChannel
         ThrowIfDisposed();
         _ = options ?? throw new ArgumentNullException(nameof(options));
         var resolvedPolicy = SrtpPolicyEvaluator.ResolveEffectivePolicy(_globalSrtpPolicy, options.UseSrtp);
+        WarnIfSdesKeyExposed(resolvedPolicy.Policy);
         return new SipCoreCallChannel(
             _callChannelLogger,
             _sdpNegotiator,
@@ -648,6 +650,29 @@ internal sealed class SipLineChannel : ILineChannel
     /// <summary>
     /// Maps domain SIP transport choice to infrastructure transport protocol.
     /// </summary>
+    private static bool IsSecureSignaling(SipTransport transport) =>
+        transport is SipTransport.Tls or SipTransport.Wss;
+
+    // Surfaces the RFC 4568 §7 caveat once per line: an SDES a=crypto key sent over a signaling
+    // transport without confidentiality (UDP/TCP/WS) travels in cleartext, so the offered SRTP gives
+    // no real confidentiality against a passive eavesdropper on the signaling path. TLS/SIPS signaling
+    // or DTLS-SRTP (keys never in the SDP) avoids this.
+    private void WarnIfSdesKeyExposed(SrtpPolicy policy)
+    {
+        if (_warnedSdesInsecureSignaling
+            || !SrtpPolicyEvaluator.ExposesSdesKeyOverInsecureSignaling(
+                policy, _offerDtlsSrtp, IsSecureSignaling(_account.Transport)))
+            return;
+
+        _warnedSdesInsecureSignaling = true;
+        _logger.LogWarning(
+            "SRTP policy '{Policy}' offers SDES keying over an insecure signaling transport ({Transport}): " +
+            "the SRTP master key is carried in cleartext SDP (RFC 4568 §7), so media confidentiality is not " +
+            "assured against a passive eavesdropper on the signaling path. Use TLS/SIPS signaling or enable " +
+            "DTLS-SRTP for real media confidentiality. [{ReasonCode}]",
+            policy, _account.Transport, SrtpDecisionReasonCodes.SdesKeyOverInsecureSignaling);
+    }
+
     private static Transport.SipTransportProtocol MapTransport(SipTransport transport) => transport switch
     {
         SipTransport.Tcp => Transport.SipTransportProtocol.Tcp,
