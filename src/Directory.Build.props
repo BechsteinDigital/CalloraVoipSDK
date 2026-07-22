@@ -4,7 +4,7 @@
          release workflow (/p:Version=X.Y.Z), which drives PackageVersion, AssemblyVersion,
          FileVersion and InformationalVersion together. -->
     <VersionPrefix>4.6.0</VersionPrefix>
-    <VersionSuffix Condition="'$(VersionSuffix)' == ''">preview.1</VersionSuffix>
+    <VersionSuffix Condition="'$(VersionSuffix)' == ''">preview.2</VersionSuffix>
     <Version Condition="'$(Version)' == ''">$(VersionPrefix)-$(VersionSuffix)</Version>
     <Authors>Bechstein Digital</Authors>
     <Company>Bechstein Digital</Company>
