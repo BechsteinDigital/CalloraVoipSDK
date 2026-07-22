@@ -1,3 +1,5 @@
+using System.Net;
+
 namespace CalloraVoipSdk.Core.Infrastructure.Turn.Server;
 
 /// <summary>
@@ -7,6 +9,16 @@ internal sealed class TurnServerOptions
 {
     /// <summary>Default options instance.</summary>
     public static TurnServerOptions Default { get; } = new();
+
+    /// <summary>
+    /// The public IP address advertised in XOR-RELAYED-ADDRESS (RFC 8656 §7.2) instead of the bound or
+    /// routed local relay address. Set this in NAT'd / multi-homed / cloud deployments where the address
+    /// the relay socket binds to is not the address remote peers must reach. When <see langword="null"/>
+    /// the server derives the advertised address from the routed local interface and, as a last resort,
+    /// falls back to loopback with a warning. Only applied when its address family matches the allocation's
+    /// relay family (an IPv4 value is ignored for an IPv6 allocation and vice versa).
+    /// </summary>
+    public IPAddress? PublicRelayAddress { get; init; }
 
     /// <summary>
     /// TCP listen backlog for stream transports.
