@@ -29,6 +29,7 @@ internal sealed class SipLineChannel : ILineChannel
     private readonly IReadOnlyList<string>? _preferredCodecNames;
     private readonly SdpDtlsNegotiationOptions? _dtlsOptions;
     private readonly bool _offerDtlsSrtp;
+    private readonly bool _requireSecureSignalingForSdes;
     private bool _warnedSdesInsecureSignaling;
     private readonly bool _enableVideo;
     private readonly IReadOnlyList<string>? _preferredVideoCodecNames;
@@ -73,10 +74,12 @@ internal sealed class SipLineChannel : ILineChannel
         SdpDtlsNegotiationOptions? dtlsOptions = null,
         bool offerDtlsSrtp = false,
         bool enableVideo = false,
-        IReadOnlyList<string>? preferredVideoCodecNames = null)
+        IReadOnlyList<string>? preferredVideoCodecNames = null,
+        bool requireSecureSignalingForSdes = false)
     {
         _dtlsOptions = dtlsOptions;
         _offerDtlsSrtp = offerDtlsSrtp && dtlsOptions is not null;
+        _requireSecureSignalingForSdes = requireSecureSignalingForSdes;
         _enableVideo = enableVideo;
         _preferredVideoCodecNames = preferredVideoCodecNames;
         _account = account ?? throw new ArgumentNullException(nameof(account));
@@ -217,7 +220,7 @@ internal sealed class SipLineChannel : ILineChannel
         ThrowIfDisposed();
         _ = options ?? throw new ArgumentNullException(nameof(options));
         var resolvedPolicy = SrtpPolicyEvaluator.ResolveEffectivePolicy(_globalSrtpPolicy, options.UseSrtp);
-        WarnIfSdesKeyExposed(resolvedPolicy.Policy);
+        GuardSdesKeyExposure(resolvedPolicy.Policy);
         return new SipCoreCallChannel(
             _callChannelLogger,
             _sdpNegotiator,
@@ -657,11 +660,22 @@ internal sealed class SipLineChannel : ILineChannel
     // transport without confidentiality (UDP/TCP/WS) travels in cleartext, so the offered SRTP gives
     // no real confidentiality against a passive eavesdropper on the signaling path. TLS/SIPS signaling
     // or DTLS-SRTP (keys never in the SDP) avoids this.
-    private void WarnIfSdesKeyExposed(SrtpPolicy policy)
+    private void GuardSdesKeyExposure(SrtpPolicy policy)
     {
-        if (_warnedSdesInsecureSignaling
-            || !SrtpPolicyEvaluator.ExposesSdesKeyOverInsecureSignaling(
+        if (!SrtpPolicyEvaluator.ExposesSdesKeyOverInsecureSignaling(
                 policy, _offerDtlsSrtp, IsSecureSignaling(_account.Transport)))
+            return;
+
+        // Opt-in hard enforcement: refuse rather than key SDES over insecure signaling (fail-closed,
+        // analogous to SrtpPolicy.Required). The caller placed an outbound call whose SDES a=crypto key
+        // would travel in cleartext SDP (RFC 4568 §7); with RequireSecureSignalingForSdes set, don't.
+        if (_requireSecureSignalingForSdes)
+            throw new InvalidOperationException(
+                $"SRTP policy '{policy}' would key SDES over an insecure signaling transport ({_account.Transport}), " +
+                "exposing the master key in cleartext SDP (RFC 4568 §7). RequireSecureSignalingForSdes is set, so the " +
+                $"outbound call is refused. Use TLS/SIPS signaling or enable DTLS-SRTP. [{SrtpDecisionReasonCodes.SdesKeyOverInsecureSignaling}]");
+
+        if (_warnedSdesInsecureSignaling)
             return;
 
         _warnedSdesInsecureSignaling = true;

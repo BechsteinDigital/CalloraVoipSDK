@@ -319,7 +319,8 @@ public sealed class VoipClient : IVoipClient
                 dtlsSignalingOptions,
                 config.OfferDtlsSrtp,
                 config.EnableVideo,
-                config.PreferredVideoCodecs);
+                config.PreferredVideoCodecs,
+                config.RequireSecureSignalingForSdes);
 
             return new PhoneLine(
                 account,

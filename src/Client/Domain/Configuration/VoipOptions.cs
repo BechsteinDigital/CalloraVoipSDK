@@ -60,6 +60,12 @@ public sealed class VoipOptions
     public bool OfferDtlsSrtp { get; set; }
 
     /// <summary>
+    /// Refuse outbound calls that would key SDES over insecure signaling (fail-closed).
+    /// See <see cref="VoipConfiguration.RequireSecureSignalingForSdes"/> for semantics.
+    /// </summary>
+    public bool RequireSecureSignalingForSdes { get; set; }
+
+    /// <summary>
     /// Optional DTLS-SRTP identity certificate for the media plane; <see langword="null"/> uses the
     /// ephemeral ECDSA P-256 default. See <see cref="VoipConfiguration.DtlsCertificate"/> for semantics
     /// and constraints (ECDSA P-256 with an exportable private key).
