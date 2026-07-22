@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
 using CalloraVoipSdk.Core.Application.Media.Rtcp.Packets;
 using CalloraVoipSdk.Core.Application.Media.Rtcp.Wire;
+using CalloraVoipSdk.Core.Infrastructure.Common.Network;
 using CalloraVoipSdk.Core.Infrastructure.Rtcp.Wire;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Wire;
@@ -87,8 +88,6 @@ internal sealed class RtpSession : IRtpSession
     // stays open (the receive loop and STUN send path keep working for a possible ICE restart).
     private int _transmissionStopped;
 
-    private const int ReceiveBufferSize = 8192;
-
     /// <inheritdoc />
     public event EventHandler<RtpPacket>? PacketReceived;
 
@@ -157,9 +156,17 @@ internal sealed class RtpSession : IRtpSession
         _timestamp      = (uint)Random.Shared.Next();
 
         _udp = new UdpClient(AddressFamily.InterNetwork);
-        _udp.Client.ReceiveBufferSize = ReceiveBufferSize;
+        // Kernel SO_RCVBUF (queues many pending datagrams) — distinct from the per-datagram user-space
+        // buffer used by the receive loop below (MediaSocketDefaults.DatagramBufferBytes).
+        _udp.Client.ReceiveBufferSize = options.SocketReceiveBufferBytes;
         _udp.Client.Bind(options.LocalEndPoint);
     }
+
+    /// <summary>
+    /// The kernel receive buffer (SO_RCVBUF) the OS actually granted for the media socket, in bytes —
+    /// an internal diagnostic seam (the OS may clamp the requested value to its own maximum).
+    /// </summary>
+    internal int EffectiveSocketReceiveBufferBytes => _udp.Client.ReceiveBufferSize;
 
     // -------------------------------------------------------------------------
     // Start
@@ -440,7 +447,7 @@ internal sealed class RtpSession : IRtpSession
         // returns a fresh array, the RTCP path clones before dispatch) before the next
         // receive overwrites the buffer — so a single reused buffer is safe and removes the
         // per-datagram byte[] that UdpClient.ReceiveAsync allocated on every packet.
-        var buffer = ArrayPool<byte>.Shared.Rent(ReceiveBufferSize);
+        var buffer = ArrayPool<byte>.Shared.Rent(MediaSocketDefaults.DatagramBufferBytes);
         var remoteTemplate = new IPEndPoint(IPAddress.Any, 0);
         try
         {
