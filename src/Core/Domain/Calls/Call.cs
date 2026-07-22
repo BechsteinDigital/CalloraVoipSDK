@@ -164,8 +164,19 @@ internal sealed class Call : ICall, IDisposable
     {
         GuardState(CallState.Connected);
         TransitionTo(CallState.Transferring);
-        var ok = await _channel.BlindTransferAsync(targetUri, TimeSpan.FromSeconds(10), ct)
-            .ConfigureAwait(false);
+        bool ok;
+        try
+        {
+            ok = await _channel.BlindTransferAsync(targetUri, TimeSpan.FromSeconds(10), ct)
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            // The transfer signaling failed, timed out, or was cancelled — restore the connected call instead of
+            // leaving it wedged in Transferring, where hold/DTMF/retry are all blocked and only hangup escapes.
+            TransitionTo(CallState.Connected);
+            throw;
+        }
         TransitionTo(ok ? CallState.Terminated : CallState.Connected);
     }
 
@@ -177,9 +188,22 @@ internal sealed class Call : ICall, IDisposable
         if (consultationCall is not Call target)
             throw new ArgumentException("Must be a Call from this SDK.", nameof(consultationCall));
 
+        // Attended transfer requires the same Connected precondition as a blind transfer — without this guard an
+        // invalid TransitionTo(Transferring) is silently ignored (e.g. from Ringing) yet the channel transfer runs.
+        GuardState(CallState.Connected);
         TransitionTo(CallState.Transferring);
-        var ok = await _channel.AttendedTransferAsync(target._channel, TimeSpan.FromSeconds(10), ct)
-            .ConfigureAwait(false);
+        bool ok;
+        try
+        {
+            ok = await _channel.AttendedTransferAsync(target._channel, TimeSpan.FromSeconds(10), ct)
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            // See BlindTransferAsync: restore the connected call rather than wedging it in Transferring.
+            TransitionTo(CallState.Connected);
+            throw;
+        }
         TransitionTo(ok ? CallState.Terminated : CallState.Connected);
         return ok;
     }
