@@ -17,7 +17,9 @@ public sealed class SipOutboundRegistrationTests
         var contact = SipRegistrationService.BuildContactHeaderValue(ContactUri, 600, "urn:uuid:1b4c-2");
 
         Assert.Contains($"<{ContactUri};ob>", contact); // RFC 5626 §4.1: ob is a URI parameter (inside <>)
-        Assert.Contains(";\"+sip.instance\"=\"<urn:uuid:1b4c-2>\"", contact);
+        // RFC 5626 §4.1: the parameter NAME is the bare token +sip.instance; only the value is quoted.
+        Assert.Contains(";+sip.instance=\"<urn:uuid:1b4c-2>\"", contact);
+        Assert.DoesNotContain("\"+sip.instance\"", contact); // the parameter name must NOT be quoted (was malformed)
         Assert.Contains(";reg-id=1", contact);
         Assert.Contains(";expires=600", contact);
     }
