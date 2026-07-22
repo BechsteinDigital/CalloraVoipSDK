@@ -44,15 +44,18 @@ public sealed class AsteriskContainer : IAsyncDisposable
         "type=aor\n" +
         "max_contacts=1\n";
 
-    // Dialplan für Non-Happy-Path-Call-Tests. Kontext [default] passt zu context=default am
-    // Endpoint 6001. Jede Extension bildet einen definierten SIP-Fehler ab (App→SIP live verifiziert).
-    // Unbekannte Extensions (kein Eintrag) → Asterisk 404 Not Found.
+    // Dialplan für Call-Tests. Kontext [default] passt zu context=default am Endpoint 6001.
+    // Non-Happy-Path-Extensions bilden je einen definierten SIP-Fehler ab (App→SIP live verifiziert);
+    // die answer-Extension beantwortet den Call und sendet aktiv Media (Milliwatt-Testton), sodass
+    // SDK-seitig RTP-Empfang messbar ist. Unbekannte Extensions (kein Eintrag) → Asterisk 404.
     private const string ExtensionsConf =
         "[default]\n" +
         "exten => busy,1,Busy()\n" +              // → 486 Busy Here
         "exten => decline,1,Hangup(21)\n" +       // Q.850 cause 21 → Ablehnung
         "exten => noanswer,1,Ringing()\n" +       // ringt, ohne je zu antworten
-        "same => n,Wait(3600)\n";                 // → aufrufer-seitiger Timeout / CANCEL
+        "same => n,Wait(3600)\n" +                // → aufrufer-seitiger Timeout / CANCEL
+        "exten => answer,1,Answer()\n" +          // → 200 OK, Dialog etabliert
+        "same => n,Milliwatt()\n";                // endloser 1004-Hz-Testton → RTP fließt SDK-wärts
 
     private readonly IContainer _container;
     private readonly FileInfo _pjsipConfFile;
@@ -100,8 +103,8 @@ public sealed class AsteriskContainer : IAsyncDisposable
 
     /// <summary>
     /// Baut eine Ziel-Request-URI für die im Dialplan definierten Test-Extensions
-    /// (<c>busy</c>, <c>decline</c>, <c>noanswer</c>) bzw. eine unbekannte Extension (→ 404).
-    /// Nur nach <see cref="StartAsync"/> gültig (nutzt die Container-Bridge-IP).
+    /// (<c>answer</c> → 200 OK + Media, <c>busy</c>, <c>decline</c>, <c>noanswer</c>) bzw. eine
+    /// unbekannte Extension (→ 404). Nur nach <see cref="StartAsync"/> gültig (Container-Bridge-IP).
     /// </summary>
     public string CallTargetUri(string extension) => $"sip:{extension}@{ContainerIpAddress}:5060";
 
