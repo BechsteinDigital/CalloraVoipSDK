@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>NAT and SIP trunks | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="NAT and SIP trunks | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/portal/guides/nat-and-trunks.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="nat-and-sip-trunks">NAT and SIP trunks</h1>
+
+<p>Getting media through NAT and registering against SIP trunks are the two most common
+real-world hurdles. This guide covers what the SDK does automatically and what you must
+configure.</p>
+<h2 id="choosing-the-sip-transport">Choosing the SIP transport</h2>
+<p>By default the SDK sends outbound requests over UDP. Enterprise proxies that only accept TCP
+or TLS can be served by setting the default transport once:</p>
+<pre><code class="lang-csharp">using var client = new VoipClient(new SdkConfiguration
+{
+    DefaultTransport = SipTransport.Tls   // Udp (default) / Tcp / Tls / Ws / Wss
+});
+</code></pre>
+<p>With <code>AddCallora(...)</code> use <code>options.DefaultTransport</code> or <code>builder.WithTransport(SipTransport.Tls)</code>.
+A <code>sips:</code> scheme or an explicit <code>;transport=</code> on the target URI still overrides the default per call.</p>
+<h2 id="advertised-media-address">Advertised media address</h2>
+<p>The SDK resolves the media address it advertises in SDP so it does not offer a loopback
+or wrong-interface address to a LAN or WAN peer. In straightforward NAT setups where the
+PBX/trunk performs the address fix-up (symmetric RTP / latching), this is usually enough
+for two-way audio.</p>
+<p>Behind CGNAT or a static 1:1 NAT where the peer does <strong>not</strong> latch to the source address, you can
+force the public media IP into the SDP <code>c=</code> line:</p>
+<pre><code class="lang-csharp">new SipAccount
+{
+    // ... credentials ...
+    PublicSipHost   = &quot;203.0.113.7&quot;,   // public signaling contact (Contact / Via)
+    PublicMediaHost = &quot;203.0.113.7&quot;    // opt-in: public IP forced into SDP media (c=)
+};
+</code></pre>
+<p><code>PublicMediaHost</code> is an advanced opt-in: leave it unset (the default) to keep the auto-resolved,
+symmetric-RTP-friendly address. Only set it when the RTP port is preserved end-to-end; a public
+address with a remapped port breaks media. Non-IP values are ignored.</p>
+<h2 id="ice-opt-in-experimental">ICE (opt-in, experimental)</h2>
+<p>Full ICE (RFC 8445 / RFC 7675) is implemented <strong>opt-in</strong> and is still marked unproven in
+production. Enable it via <code>SdkConfiguration.Ice</code>. Treat it as experimental and validate
+against your own network before relying on it. Without ICE, plan for a
+media-relaying/SBC path on hostile NAT.</p>
+<h2 id="registering-against-a-trunk">Registering against a trunk</h2>
+<pre><code class="lang-csharp">var connect = await client.ConnectAsync(new SipAccount
+{
+    Username           = &quot;trunkuser&quot;,
+    Password           = &quot;secret&quot;,
+    SipServer          = &quot;trunk.provider.example&quot;,
+    RegistrationExpiry = 300,
+    InboundNumbers     = new[] { &quot;4930123456&quot; },  // DIDs you own
+    AcceptTrunkInbound = true
+});
+</code></pre>
+<p><code>InboundNumbers</code> lets the SDK match inbound requests addressed to your DIDs rather than a
+registered extension AOR.</p>
+<h2 id="custom-headers-and-caller-identity">Custom headers and caller identity</h2>
+<p>Add extra headers to an outbound INVITE for trunk/PBX routing (protected dialog/transport
+headers and header-injection attempts are refused):</p>
+<pre><code class="lang-csharp">await line.DialAsync(&quot;sip:4930999@trunk.provider.example&quot;, new DialOptions
+{
+    CustomHeaders = new Dictionary&lt;string, string&gt;
+    {
+        [&quot;X-Trunk-Account&quot;] = &quot;acme-42&quot;
+    }
+});
+</code></pre>
+<p>On inbound calls the peer-asserted identity and diversion history are read-only on the call:</p>
+<pre><code class="lang-csharp">var caller    = call.RemoteAssertedIdentity;  // P-Asserted-Identity (RFC 3325), trusted peers only
+var divertedFrom = call.Diversion;            // Diversion (RFC 5806), when present
+</code></pre>
+<h2 id="reliable-provisionals">Reliable provisionals</h2>
+<p>The SDK sends reliable provisional responses (RFC 3262, <code>100rel</code>) only when the peer
+explicitly requires them (<code>Require: 100rel</code>). This avoids interop friction with peers
+that don't expect PRACK.</p>
+<h2 id="provider-notes">Provider notes</h2>
+<p>Interop specifics per provider/PBX live under <strong>Interop</strong>:</p>
+<ul>
+<li><a href="../interop/fritzbox.html">FRITZ!Box</a> — the one platform validated in a real interop test</li>
+<li><a href="../interop/sipgate.html">sipgate</a>, <a href="../interop/asterisk.html">Asterisk</a>,
+<a href="../interop/freeswitch.html">FreeSWITCH</a>, <a href="../interop/3cx.html">3CX</a> — configuration
+guidance; see the <a href="../interop/matrix.html">matrix</a> for verification status</li>
+</ul>
+<h2 id="diagnostics">Diagnostics</h2>
+<p>Enable the SIP wire trace (Trace log level) to see the actual SDP being offered/answered
+when audio is one-way or absent — see <a href="../production/diagnostics.html">Diagnostics</a>.</p>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/portal/guides/nat-and-trunks.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

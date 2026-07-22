@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class CallIceSnapshot | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class CallIceSnapshot | CalloraVoipSdk ">
+      
+      <meta name="description" content="Read-only snapshot of ICE (RFC 8445 / RFC 7675) connectivity establishment for one call media leg. Produced once candidate-pair selection completes and exposed via . It explains which local/remote candidate pair media flows over and why — otherwise an ICE-driven media path or teardown is opaque to the consumer. Non-ICE calls never produce a snapshot ( stays null).">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/new/main/apiSpec/new?filename=CalloraVoipSdk_Core_Domain_Calls_CallIceSnapshot.md&amp;value=---%0Auid%3A%20CalloraVoipSdk.Core.Domain.Calls.CallIceSnapshot%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="CalloraVoipSdk.Core.Domain.Calls.CallIceSnapshot">
+
+
+
+  <h1 id="CalloraVoipSdk_Core_Domain_Calls_CallIceSnapshot" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallIceSnapshot" class="text-break">
+Class CallIceSnapshot  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallIceSnapshot.cs/#L25"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="CalloraVoipSdk.html">CalloraVoipSdk</a>.<a class="xref" href="CalloraVoipSdk.Core.html">Core</a>.<a class="xref" href="CalloraVoipSdk.Core.Domain.html">Domain</a>.<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.html">Calls</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>CalloraVoipSdk.Core.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Read-only snapshot of ICE (RFC 8445 / RFC 7675) connectivity establishment for one call media
+leg. Produced once candidate-pair selection completes and exposed via
+<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.ICall.html#CalloraVoipSdk_Core_Domain_Calls_ICall_IceSnapshot">IceSnapshot</a>. It explains which local/remote candidate pair media flows over
+and why — otherwise an ICE-driven media path or teardown is opaque to the consumer. Non-ICE
+calls never produce a snapshot (<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.ICall.html#CalloraVoipSdk_Core_Domain_Calls_ICall_IceSnapshot">IceSnapshot</a> stays <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>).</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sealed record CallIceSnapshot : IEquatable&lt;CallIceSnapshot&gt;</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">CallIceSnapshot</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.iequatable-1">IEquatable</a>&lt;<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallIceSnapshot.html">CallIceSnapshot</a>&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallIceSnapshot__ctor_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallIceSnapshot.#ctor*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallIceSnapshot__ctor_CalloraVoipSdk_Core_Domain_Calls_CallIceState_System_Boolean_System_Boolean_CalloraVoipSdk_Core_Domain_Calls_CallIceCandidate_CalloraVoipSdk_Core_Domain_Calls_CallIceCandidate_System_Net_IPEndPoint_System_Net_IPEndPoint_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallIceSnapshot.#ctor(CalloraVoipSdk.Core.Domain.Calls.CallIceState,System.Boolean,System.Boolean,CalloraVoipSdk.Core.Domain.Calls.CallIceCandidate,CalloraVoipSdk.Core.Domain.Calls.CallIceCandidate,System.Net.IPEndPoint,System.Net.IPEndPoint)">
+  CallIceSnapshot(CallIceState, bool, bool, CallIceCandidate?, CallIceCandidate?, IPEndPoint?, IPEndPoint?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallIceSnapshot.cs/#L25"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Read-only snapshot of ICE (RFC 8445 / RFC 7675) connectivity establishment for one call media
+leg. Produced once candidate-pair selection completes and exposed via
+<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.ICall.html#CalloraVoipSdk_Core_Domain_Calls_ICall_IceSnapshot">IceSnapshot</a>. It explains which local/remote candidate pair media flows over
+and why — otherwise an ICE-driven media path or teardown is opaque to the consumer. Non-ICE
+calls never produce a snapshot (<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.ICall.html#CalloraVoipSdk_Core_Domain_Calls_ICall_IceSnapshot">IceSnapshot</a> stays <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public CallIceSnapshot(CallIceState State, bool HasSelectedPair, bool Nominated, CallIceCandidate? LocalCandidate, CallIceCandidate? RemoteCandidate, IPEndPoint? SelectedLocalEndPoint, IPEndPoint? SelectedRemoteEndPoint)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>State</code> <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallIceState.html">CallIceState</a></dt>
+    <dd><p>Final ICE state reached by the agent for this leg.</p>
+</dd>
+    <dt><code>HasSelectedPair</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True when ICE selected a working candidate pair and media uses
+<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallIceSnapshot.html#CalloraVoipSdk_Core_Domain_Calls_CallIceSnapshot_SelectedLocalEndPoint">SelectedLocalEndPoint</a>/<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallIceSnapshot.html#CalloraVoipSdk_Core_Domain_Calls_CallIceSnapshot_SelectedRemoteEndPoint">SelectedRemoteEndPoint</a> instead of the plain SDP endpoints.</p>
+</dd>
+    <dt><code>Nominated</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True when the selected pair was confirmed by a USE-CANDIDATE nomination check (RFC 8445 §8.1.1);
+false for an unnominated but reachable pair.</p>
+</dd>
+    <dt><code>LocalCandidate</code> <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallIceCandidate.html">CallIceCandidate</a></dt>
+    <dd><p>The selected local ICE candidate, or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> when no pair was selected.</p>
+</dd>
+    <dt><code>RemoteCandidate</code> <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallIceCandidate.html">CallIceCandidate</a></dt>
+    <dd><p>The selected remote ICE candidate, or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> when no pair was selected.</p>
+</dd>
+    <dt><code>SelectedLocalEndPoint</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.net.ipendpoint">IPEndPoint</a></dt>
+    <dd><p>The selected local RTP endpoint, or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> when no pair was selected.</p>
+</dd>
+    <dt><code>SelectedRemoteEndPoint</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.net.ipendpoint">IPEndPoint</a></dt>
+    <dd><p>The selected remote RTP endpoint, or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> when no pair was selected.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallIceSnapshot_HasSelectedPair_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallIceSnapshot.HasSelectedPair*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallIceSnapshot_HasSelectedPair" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallIceSnapshot.HasSelectedPair">
+  HasSelectedPair
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallIceSnapshot.cs/#L27"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>True when ICE selected a working candidate pair and media uses
+<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallIceSnapshot.html#CalloraVoipSdk_Core_Domain_Calls_CallIceSnapshot_SelectedLocalEndPoint">SelectedLocalEndPoint</a>/<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallIceSnapshot.html#CalloraVoipSdk_Core_Domain_Calls_CallIceSnapshot_SelectedRemoteEndPoint">SelectedRemoteEndPoint</a> instead of the plain SDP endpoints.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool HasSelectedPair { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallIceSnapshot_LocalCandidate_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallIceSnapshot.LocalCandidate*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallIceSnapshot_LocalCandidate" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallIceSnapshot.LocalCandidate">
+  LocalCandidate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallIceSnapshot.cs/#L29"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The selected local ICE candidate, or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> when no pair was selected.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public CallIceCandidate? LocalCandidate { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallIceCandidate.html">CallIceCandidate</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallIceSnapshot_Nominated_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallIceSnapshot.Nominated*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallIceSnapshot_Nominated" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallIceSnapshot.Nominated">
+  Nominated
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallIceSnapshot.cs/#L28"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>True when the selected pair was confirmed by a USE-CANDIDATE nomination check (RFC 8445 §8.1.1);
+false for an unnominated but reachable pair.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool Nominated { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallIceSnapshot_RemoteCandidate_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallIceSnapshot.RemoteCandidate*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallIceSnapshot_RemoteCandidate" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallIceSnapshot.RemoteCandidate">
+  RemoteCandidate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallIceSnapshot.cs/#L30"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The selected remote ICE candidate, or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> when no pair was selected.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public CallIceCandidate? RemoteCandidate { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallIceCandidate.html">CallIceCandidate</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallIceSnapshot_SelectedLocalEndPoint_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallIceSnapshot.SelectedLocalEndPoint*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallIceSnapshot_SelectedLocalEndPoint" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallIceSnapshot.SelectedLocalEndPoint">
+  SelectedLocalEndPoint
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallIceSnapshot.cs/#L31"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The selected local RTP endpoint, or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> when no pair was selected.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IPEndPoint? SelectedLocalEndPoint { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.net.ipendpoint">IPEndPoint</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallIceSnapshot_SelectedRemoteEndPoint_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallIceSnapshot.SelectedRemoteEndPoint*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallIceSnapshot_SelectedRemoteEndPoint" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallIceSnapshot.SelectedRemoteEndPoint">
+  SelectedRemoteEndPoint
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallIceSnapshot.cs/#L32"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The selected remote RTP endpoint, or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> when no pair was selected.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IPEndPoint? SelectedRemoteEndPoint { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.net.ipendpoint">IPEndPoint</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallIceSnapshot_State_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallIceSnapshot.State*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallIceSnapshot_State" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallIceSnapshot.State">
+  State
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallIceSnapshot.cs/#L26"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Final ICE state reached by the agent for this leg.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public CallIceState State { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallIceState.html">CallIceState</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallIceSnapshot.cs/#L25" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

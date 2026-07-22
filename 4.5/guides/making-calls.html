@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Making calls | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Making calls | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/portal/guides/making-calls.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="making-calls">Making calls</h1>
+
+<p>This guide covers outbound calling beyond the <a href="../getting-started/outbound-call.html">minimal example</a>:
+non-blocking dial, following call state, DTMF and transfers.</p>
+<blockquote>
+<p><strong>Runnable examples:</strong> <a href="https://github.com/BechsteinDigital/CalloraVoipSDK/tree/main/examples/CalloraVoipSdk.Sample.Dialer">Dialer</a>
+(campaign dialing) and <a href="https://github.com/BechsteinDigital/CalloraVoipSDK/tree/main/examples/CalloraVoipSdk.Sample.Transfer">Transfer</a>
+(blind + attended transfer).</p>
+</blockquote>
+<h2 id="blocking-vs-non-blocking-dial">Blocking vs. non-blocking dial</h2>
+<p><strong>Blocking</strong> — wait until the callee answers:</p>
+<pre><code class="lang-csharp">var dial = await client.DialAndWaitUntilConnectedAsync(line, &quot;sip:1002@pbx.example.com&quot;);
+if (dial.IsSuccess) await client.AttachDefaultAudioAsync(dial.Call!);
+</code></pre>
+<p><strong>Non-blocking</strong> — get the call immediately and follow its state:</p>
+<pre><code class="lang-csharp">ICall call = await line.DialAsync(&quot;sip:1002@pbx.example.com&quot;);
+call.StateChanged += (_, e) =&gt;
+{
+    // marshal off the signaling thread — see the events contract
+    Console.WriteLine($&quot;call {call} -&gt; {e.State}&quot;);
+};
+</code></pre>
+<h2 id="dtmf">DTMF</h2>
+<pre><code class="lang-csharp">await call.SendDtmfAsync(DtmfTone.One);
+await call.SendDtmfAsync(DtmfTone.Hash);
+</code></pre>
+<p>DTMF is sent as RFC 4733 telephone-events. Inbound DTMF surfaces via
+<code>DtmfReceived</code> — note it can arrive on the SIP-INFO <strong>or</strong> the media thread
+(see <a href="../concepts/events.html">Events</a>).</p>
+<h2 id="hold--unhold">Hold / unhold</h2>
+<pre><code class="lang-csharp">await call.HoldAsync();     // re-INVITE sendonly
+await call.UnholdAsync();   // re-INVITE sendrecv
+</code></pre>
+<p>Hold/unhold on an SRTP call keeps the media secured and rekeys as needed.</p>
+<h2 id="transfer">Transfer</h2>
+<pre><code class="lang-csharp">// Blind: hand the call off, no consultation.
+await call.BlindTransferAsync(&quot;sip:1003@pbx.example.com&quot;);
+
+// Attended: consult first on a second call, then connect the two.
+ICall consult = await line.DialAsync(&quot;sip:1003@pbx.example.com&quot;);
+// …speak to 1003…
+bool ok = await call.AttendedTransferAsync(consult);
+</code></pre>
+<p>Attended transfer uses REFER with a <code>Replaces</code> (RFC 5589). It needs a PBX that supports
+REFER-based transfer (e.g. Asterisk, FreeSWITCH, 3CX). Endpoints that don't — such as a
+FRITZ!Box on PSTN legs — reject the REFER; bridge the media there instead (see
+<a href="bridge-calls.html">Bridge two calls</a>).</p>
+<p>Inbound transfer requests (REFER from the peer) arrive as <code>TransferRequested</code>, handled
+synchronously so you can accept or reject inline.</p>
+<h2 id="error-handling">Error handling</h2>
+<p><code>AcceptAsync</code>/<code>HangupAsync</code>/<code>HoldAsync</code>/<code>UnholdAsync</code>/<code>SendDtmfAsync</code>/transfer throw
+<code>InvalidOperationException</code> if called in the wrong state. The <code>Send*</code>/<code>Reject</code>/<code>Redirect</code>
+family returns <code>CallActionResult</code>. Full rule: <a href="../production/threading.html#error-contract">error contract</a>.</p>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/portal/guides/making-calls.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

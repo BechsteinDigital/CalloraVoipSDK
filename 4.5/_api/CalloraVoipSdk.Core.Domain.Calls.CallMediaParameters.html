@@ -1,0 +1,1154 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class CallMediaParameters | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class CallMediaParameters | CalloraVoipSdk ">
+      
+      <meta name="description" content="Negotiated media parameters for one active call leg. Produced by the infrastructure adapter after SDP offer/answer exchange and consumed by the application media orchestrator to set up RTP I/O.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/new/main/apiSpec/new?filename=CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters.md&amp;value=---%0Auid%3A%20CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters">
+
+
+
+  <h1 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters" class="text-break">
+Class CallMediaParameters  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L12"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="CalloraVoipSdk.html">CalloraVoipSdk</a>.<a class="xref" href="CalloraVoipSdk.Core.html">Core</a>.<a class="xref" href="CalloraVoipSdk.Core.Domain.html">Domain</a>.<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.html">Calls</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>CalloraVoipSdk.Core.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Negotiated media parameters for one active call leg.
+Produced by the infrastructure adapter after SDP offer/answer exchange
+and consumed by the application media orchestrator to set up RTP I/O.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sealed class CallMediaParameters</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">CallMediaParameters</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_AppliedSrtpPolicy_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.AppliedSrtpPolicy*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_AppliedSrtpPolicy" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.AppliedSrtpPolicy">
+  AppliedSrtpPolicy
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L129"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Effective SRTP policy applied to this call during offer/answer evaluation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SrtpPolicy AppliedSrtpPolicy { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="CalloraVoipSdk.Core.Security.SrtpPolicy.html">SrtpPolicy</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_ClockRate_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.ClockRate*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_ClockRate" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.ClockRate">
+  ClockRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L59"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Codec clock rate in Hz (e.g. 8000 for G.711).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public required int ClockRate { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_CodecName_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.CodecName*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_CodecName" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.CodecName">
+  CodecName
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Normalized negotiated codec name for <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.html#CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_PayloadType">PayloadType</a> (for example PCMU, PCMA, G722).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string CodecName { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_IceControlling_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.IceControlling*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_IceControlling" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.IceControlling">
+  IceControlling
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L74"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>True when this agent holds the ICE controlling role (RFC 8445 §5.1.1): the SDP offerer is
+controlling, the answerer controlled. Defaults to controlling to preserve the outbound-offer
+case; the infrastructure adapter sets it from the actual offer/answer direction.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IceControlling { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_IceEnabled_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.IceEnabled*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_IceEnabled" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.IceEnabled">
+  IceEnabled
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L67"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>True when ICE metadata is available for this call leg and candidate checks can run.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IceEnabled { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_IsDtlsNegotiated_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.IsDtlsNegotiated*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_IsDtlsNegotiated" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.IsDtlsNegotiated">
+  IsDtlsNegotiated
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L176"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>True when offer/answer negotiated DTLS-SRTP keying for this leg (RFC 5763):
+the media layer must complete a DTLS handshake before any media flows and stays
+fail-closed until then. Mutually exclusive with SDES key material.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsDtlsNegotiated { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_IsSrtcpEncrypted_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.IsSrtcpEncrypted*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_IsSrtcpEncrypted" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.IsSrtcpEncrypted">
+  IsSrtcpEncrypted
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L154"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>True when RTCP for this leg is encrypted and authenticated as SRTCP (RFC 3711 §3.4). SRTCP
+protection engages together with SRTP media whenever SDES key material was negotiated for
+both directions; <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a> for plain RTP/RTCP.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsSrtcpEncrypted { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_IsSrtpNegotiated_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.IsSrtpNegotiated*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_IsSrtpNegotiated" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.IsSrtpNegotiated">
+  IsSrtpNegotiated
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L134"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>True when negotiated media is SRTP according to SDP profile/attributes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsSrtpNegotiated { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_LocalEndPoint_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.LocalEndPoint*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_LocalEndPoint" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.LocalEndPoint">
+  LocalEndPoint
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L15"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Local UDP endpoint to bind the RTP socket to.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public required IPEndPoint LocalEndPoint { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.net.ipendpoint">IPEndPoint</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_LocalIceCandidates_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.LocalIceCandidates*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_LocalIceCandidates" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.LocalIceCandidates">
+  LocalIceCandidates
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L109"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Local ICE candidates advertised by this SDK for the media m-line.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IReadOnlyList&lt;CallIceCandidate&gt; LocalIceCandidates { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallIceCandidate.html">CallIceCandidate</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_LocalIceOptions_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.LocalIceOptions*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_LocalIceOptions" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.LocalIceOptions">
+  LocalIceOptions
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L89"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Local ICE options attribute value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? LocalIceOptions { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_LocalIcePwd_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.LocalIcePwd*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_LocalIcePwd" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.LocalIcePwd">
+  LocalIcePwd
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L84"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Local ICE password used for connectivity checks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? LocalIcePwd { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_LocalIceUfrag_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.LocalIceUfrag*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_LocalIceUfrag" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.LocalIceUfrag">
+  LocalIceUfrag
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L79"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Local ICE username fragment used for connectivity checks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? LocalIceUfrag { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_LocalRtcpEndPoint_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.LocalRtcpEndPoint*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_LocalRtcpEndPoint" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.LocalRtcpEndPoint">
+  LocalRtcpEndPoint
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L29"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Local UDP endpoint used for RTCP control traffic.
+When null, the runtime derives it from <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.html#CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_LocalEndPoint">LocalEndPoint</a> and <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.html#CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_RtcpMux">RtcpMux</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IPEndPoint? LocalRtcpEndPoint { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.net.ipendpoint">IPEndPoint</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_MediaProfile_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.MediaProfile*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_MediaProfile" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.MediaProfile">
+  MediaProfile
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L124"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Negotiated media profile from the remote SDP m-line (for example <code>RTP/AVP</code> or <code>RTP/SAVP</code>).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string MediaProfile { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_PayloadType_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.PayloadType*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_PayloadType" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.PayloadType">
+  PayloadType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Negotiated RTP payload type (e.g. 0 = PCMU, 8 = PCMA).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public required int PayloadType { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_PayloadTypeCodecMap_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.PayloadTypeCodecMap*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_PayloadTypeCodecMap" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.PayloadTypeCodecMap">
+  PayloadTypeCodecMap
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L49"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Payload-type to codec-name mapping parsed from remote SDP for this audio m-line.
+Used to resolve dynamic RTP payload types (96-127) at runtime.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IReadOnlyDictionary&lt;int, string&gt; PayloadTypeCodecMap { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlydictionary-2">IReadOnlyDictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_RemoteEndPoint_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.RemoteEndPoint*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_RemoteEndPoint" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.RemoteEndPoint">
+  RemoteEndPoint
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L18"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Remote UDP endpoint to send RTP packets to.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public required IPEndPoint RemoteEndPoint { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.net.ipendpoint">IPEndPoint</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_RemoteIceCandidates_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.RemoteIceCandidates*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_RemoteIceCandidates" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.RemoteIceCandidates">
+  RemoteIceCandidates
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L114"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Remote ICE candidates parsed from peer SDP for the media m-line.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IReadOnlyList&lt;CallIceCandidate&gt; RemoteIceCandidates { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallIceCandidate.html">CallIceCandidate</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_RemoteIceEndOfCandidates_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.RemoteIceEndOfCandidates*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_RemoteIceEndOfCandidates" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.RemoteIceEndOfCandidates">
+  RemoteIceEndOfCandidates
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L119"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>True when the remote SDP signaled <code>a=end-of-candidates</code>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool RemoteIceEndOfCandidates { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_RemoteIceOptions_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.RemoteIceOptions*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_RemoteIceOptions" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.RemoteIceOptions">
+  RemoteIceOptions
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L104"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Remote ICE options attribute value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? RemoteIceOptions { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_RemoteIcePwd_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.RemoteIcePwd*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_RemoteIcePwd" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.RemoteIcePwd">
+  RemoteIcePwd
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L99"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Remote ICE password used for connectivity checks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? RemoteIcePwd { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_RemoteIceUfrag_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.RemoteIceUfrag*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_RemoteIceUfrag" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.RemoteIceUfrag">
+  RemoteIceUfrag
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L94"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Remote ICE username fragment used for connectivity checks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? RemoteIceUfrag { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_RemoteRtcpEndPoint_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.RemoteRtcpEndPoint*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_RemoteRtcpEndPoint" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.RemoteRtcpEndPoint">
+  RemoteRtcpEndPoint
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L35"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Remote UDP endpoint used for RTCP control traffic.
+When null, the runtime derives it from <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.html#CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_RemoteEndPoint">RemoteEndPoint</a> and <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.html#CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_RtcpMux">RtcpMux</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IPEndPoint? RemoteRtcpEndPoint { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.net.ipendpoint">IPEndPoint</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_RtcpMux_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.RtcpMux*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_RtcpMux" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.RtcpMux">
+  RtcpMux
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L23"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>True when RTP and RTCP are multiplexed on one UDP port (<code>a=rtcp-mux</code>, RFC 5761).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool RtcpMux { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_SamplesPerPacket_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.SamplesPerPacket*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_SamplesPerPacket" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.SamplesPerPacket">
+  SamplesPerPacket
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L62"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Number of audio samples per RTP packet (e.g. 160 for 20 ms at 8000 Hz).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public required int SamplesPerPacket { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_SrtpDecisionReasonCode_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.SrtpDecisionReasonCode*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_SrtpDecisionReasonCode" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.SrtpDecisionReasonCode">
+  SrtpDecisionReasonCode
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L140"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Stable reason code for SRTP policy decision outcome.
+See <a class="xref" href="CalloraVoipSdk.Core.Security.SrtpDecisionReasonCodes.html">SrtpDecisionReasonCodes</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string SrtpDecisionReasonCode { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_SrtpSuite_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.SrtpSuite*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_SrtpSuite" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.SrtpSuite">
+  SrtpSuite
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L147"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Negotiated SDES crypto-suite token (for example <code>AES_CM_128_HMAC_SHA1_80</code>) when SRTP
+media encryption engaged for this leg; <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> for plain RTP. Exposed read-only
+for audit/compliance; the value is stamped by the media-negotiation layer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? SrtpSuite { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_TelephoneEventPayloadType_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.TelephoneEventPayloadType*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_TelephoneEventPayloadType" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.TelephoneEventPayloadType">
+  TelephoneEventPayloadType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L56"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Negotiated RTP payload type for RFC 4733 <code>telephone-event</code> DTMF.
+Null when RTP DTMF was not negotiated for this call leg.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int? TelephoneEventPayloadType { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_Video_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.Video*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_Video" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.Video">
+  Video
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L194"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Negotiated video parameters (WebRTC phase 2); <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> for an
+audio-only call leg.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public CallVideoParameters? Video { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallVideoParameters.html">CallVideoParameters</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L12" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

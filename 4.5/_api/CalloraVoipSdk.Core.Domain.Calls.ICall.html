@@ -1,0 +1,1376 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface ICall | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface ICall | CalloraVoipSdk ">
+      
+      <meta name="description" content="A single call and its lifecycle.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/new/main/apiSpec/new?filename=CalloraVoipSdk_Core_Domain_Calls_ICall.md&amp;value=---%0Auid%3A%20CalloraVoipSdk.Core.Domain.Calls.ICall%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall">
+
+
+
+  <h1 id="CalloraVoipSdk_Core_Domain_Calls_ICall" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall" class="text-break">
+Interface ICall  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L35"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="CalloraVoipSdk.html">CalloraVoipSdk</a>.<a class="xref" href="CalloraVoipSdk.Core.html">Core</a>.<a class="xref" href="CalloraVoipSdk.Core.Domain.html">Domain</a>.<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.html">Calls</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>CalloraVoipSdk.Core.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>A single call and its lifecycle.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface ICall</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+  <h2 id="CalloraVoipSdk_Core_Domain_Calls_ICall_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>Event threading contract.</b> Event handlers run <em>synchronously on the SDK thread
+that raised the event</em> — this is usually not the thread that created the call. Handlers
+therefore <b>must not block or perform long-running/synchronous I/O</b>: a blocked handler stalls
+the SDK path that raised it (SIP signaling or media), delaying every other call on the same line.
+Off-load real work to your own task or queue, e.g.
+<code>call.StateChanged += (_, e) =&gt; _ = Task.Run(() =&gt; Handle(e));</code>. Handlers should also not
+throw. See each event for the specific thread and whether it is serialized.</p>
+<p><a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.ICall.html#CalloraVoipSdk_Core_Domain_Calls_ICall_TransferRequested">TransferRequested</a> is the exception to off-loading: it needs a synchronous
+accept/reject decision, so make that decision quickly inline (do not await long work).</p>
+<p><b>Error contract.</b> The action methods split into two error styles by return type.
+The core lifecycle operations return <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task">Task</a> (or
+<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task&lt;TResult&gt;</a> of <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a> for
+<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.ICall.html#CalloraVoipSdk_Core_Domain_Calls_ICall_AttendedTransferAsync_CalloraVoipSdk_Core_Domain_Calls_ICall_System_Threading_CancellationToken_">AttendedTransferAsync(ICall, CancellationToken)</a>) and <b>throw</b>: invalid usage surfaces as
+<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a> (wrong state or direction),
+<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a> (invalid argument), and cancellation surfaces as
+<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.operationcanceledexception">OperationCanceledException</a>; transport, timeout and unexpected transport-layer
+failures propagate as-is. The extended in-dialog / inbound-response operations return
+<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionResult.html">CallActionResult</a> instead and <b>do not throw for foreseeable outcomes</b>: an
+invalid state or direction, a protocol rejection (for example a SIP 4xx from the peer), an invalid
+request, cancellation, and transport failures are all reported as a non-success
+<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionResult.html">CallActionResult</a> whose <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionResult.html#CalloraVoipSdk_Core_Domain_Calls_CallActionResult_Status">Status</a> classifies the cause
+(see <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionStatus.html">CallActionStatus</a>). These result-returning methods are the ones that involve a
+SIP round-trip whose negative answer is a normal protocol result rather than a programming error.
+Per-method tags below state the exact exceptions and result semantics.</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_CallId_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.CallId*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_CallId" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.CallId">
+  CallId
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Stable identifier of this call within the SDK.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">CallId CallId { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallId.html">CallId</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_Direction_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.Direction*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_Direction" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.Direction">
+  Direction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L44"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Whether the call was placed locally (<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallDirection.html#CalloraVoipSdk_Core_Domain_Calls_CallDirection_Outbound">Outbound</a>) or received (<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallDirection.html#CalloraVoipSdk_Core_Domain_Calls_CallDirection_Inbound">Inbound</a>).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">CallDirection Direction { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallDirection.html">CallDirection</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_Diversion_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.Diversion*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_Diversion" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.Diversion">
+  Diversion
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L94"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>First <code>Diversion</code> URI (RFC 5806) from an inbound INVITE describing where the call was
+diverted from; <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> for outbound calls or when no Diversion header is present.
+Informational routing history, surfaced as-received.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string? Diversion { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_IceSnapshot_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.IceSnapshot*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_IceSnapshot" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.IceSnapshot">
+  IceSnapshot
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L80"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Read-only ICE (RFC 8445) connectivity snapshot for this leg once candidate-pair selection
+completes, or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> for calls where ICE was not negotiated. Reports the
+final ICE state and the selected local/remote candidate pair.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">CallIceSnapshot? IceSnapshot { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallIceSnapshot.html">CallIceSnapshot</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_Line_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.Line*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_Line" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.Line">
+  Line
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L53"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The phone line this call belongs to.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IPhoneLine Line { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.html">IPhoneLine</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_MediaParameters_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.MediaParameters*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_MediaParameters" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.MediaParameters">
+  MediaParameters
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L59"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Negotiated media parameters (codec, endpoints). Set once
+<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallState.html#CalloraVoipSdk_Core_Domain_Calls_CallState_Connected">Connected</a> is reached; null before that.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">CallMediaParameters? MediaParameters { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.html">CallMediaParameters</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_QualitySnapshot_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.QualitySnapshot*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_QualitySnapshot" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.QualitySnapshot">
+  QualitySnapshot
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L65"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Latest quality snapshot derived from RTP/RTCP runtime metrics.
+Before media starts, this value is an empty baseline snapshot.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">CallQualitySnapshot QualitySnapshot { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallQualitySnapshot.html">CallQualitySnapshot</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_RemoteAssertedIdentity_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.RemoteAssertedIdentity*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_RemoteAssertedIdentity" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.RemoteAssertedIdentity">
+  RemoteAssertedIdentity
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L87"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Peer-asserted caller identity (P-Asserted-Identity, RFC 3325) parsed from an inbound INVITE
+when the sending peer is trusted, for trunk/PBX routing; <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> for outbound
+calls, untrusted peers, or when the header is absent.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string? RemoteAssertedIdentity { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_RemoteParty_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.RemoteParty*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_RemoteParty" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.RemoteParty">
+  RemoteParty
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L47"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The remote party's SIP URI or address-of-record.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string RemoteParty { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_RtpStatistics_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.RtpStatistics*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_RtpStatistics" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.RtpStatistics">
+  RtpStatistics
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L73"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Latest raw RTP transport statistics (SSRC identifiers, packet/octet counters, RFC 3550
+loss and jitter counters) for this leg, or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> until the first RTCP
+reporting interval has produced counters. Complements <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.ICall.html#CalloraVoipSdk_Core_Domain_Calls_ICall_QualitySnapshot">QualitySnapshot</a> with the
+underlying uninterpreted counters for diagnostics and billing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">CallRtpStatistics? RtpStatistics { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallRtpStatistics.html">CallRtpStatistics</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_StartedAt_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.StartedAt*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_StartedAt" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.StartedAt">
+  StartedAt
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L50"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>UTC timestamp of when this call object was created (dial or inbound INVITE).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">DateTimeOffset StartedAt { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.datetimeoffset">DateTimeOffset</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_State_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.State*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_State" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.State">
+  State
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L41"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Current lifecycle state; changes are signalled by <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.ICall.html#CalloraVoipSdk_Core_Domain_Calls_ICall_StateChanged">StateChanged</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">CallState State { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallState.html">CallState</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_AcceptAsync_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.AcceptAsync*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_AcceptAsync_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.AcceptAsync(System.Threading.CancellationToken)">
+  AcceptAsync(CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L143"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Accepts an inbound ringing call and moves it to <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallState.html#CalloraVoipSdk_Core_Domain_Calls_CallState_Connected">Connected</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task AcceptAsync(CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Cancels the accept; on cancellation <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.operationcanceledexception">OperationCanceledException</a> is thrown.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task">Task</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>The call is not <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallDirection.html#CalloraVoipSdk_Core_Domain_Calls_CallDirection_Inbound">Inbound</a>, or its state is not
+<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallState.html#CalloraVoipSdk_Core_Domain_Calls_CallState_Ringing">Ringing</a>.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.operationcanceledexception">OperationCanceledException</a></dt>
+    <dd><p><code class="paramref">ct</code> was canceled.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_AttendedTransferAsync_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.AttendedTransferAsync*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_AttendedTransferAsync_CalloraVoipSdk_Core_Domain_Calls_ICall_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.AttendedTransferAsync(CalloraVoipSdk.Core.Domain.Calls.ICall,System.Threading.CancellationToken)">
+  AttendedTransferAsync(ICall, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L221"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Attended transfer: transfer this call to the party in <code class="paramref">consultationCall</code>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task&lt;bool&gt; AttendedTransferAsync(ICall consultationCall, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>consultationCall</code> <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.ICall.html">ICall</a></dt>
+    <dd><p>The consultation call to transfer to. Must be a call created by this SDK.</p>
+</dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Cancels the transfer; on cancellation <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.operationcanceledexception">OperationCanceledException</a> is thrown.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a>&gt;</dt>
+    <dd><p><a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a> when the transfer completed and this call moved to
+<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallState.html#CalloraVoipSdk_Core_Domain_Calls_CallState_Terminated">Terminated</a>; <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a> when the transfer did not complete
+and this call returned to <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallState.html#CalloraVoipSdk_Core_Domain_Calls_CallState_Connected">Connected</a>.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p><code class="paramref">consultationCall</code> is not a call created by this SDK.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.operationcanceledexception">OperationCanceledException</a></dt>
+    <dd><p><code class="paramref">ct</code> was canceled.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_BlindTransferAsync_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.BlindTransferAsync*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_BlindTransferAsync_System_String_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.BlindTransferAsync(System.String,System.Threading.CancellationToken)">
+  BlindTransferAsync(string, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L203"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs a blind transfer to <code class="paramref">targetUri</code>. On a successful transfer the call
+moves to <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallState.html#CalloraVoipSdk_Core_Domain_Calls_CallState_Terminated">Terminated</a>; if the transfer fails it returns to
+<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallState.html#CalloraVoipSdk_Core_Domain_Calls_CallState_Connected">Connected</a>. Either way the task completes without a return value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task BlindTransferAsync(string targetUri, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>targetUri</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The transfer target URI.</p>
+</dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Cancels the transfer; on cancellation <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.operationcanceledexception">OperationCanceledException</a> is thrown.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task">Task</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>The call state is not <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallState.html#CalloraVoipSdk_Core_Domain_Calls_CallState_Connected">Connected</a>.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.operationcanceledexception">OperationCanceledException</a></dt>
+    <dd><p><code class="paramref">ct</code> was canceled.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_HangupAsync_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.HangupAsync*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_HangupAsync_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.HangupAsync(System.Threading.CancellationToken)">
+  HangupAsync(CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L153"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Hangs up the call and transitions it to <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallState.html#CalloraVoipSdk_Core_Domain_Calls_CallState_Terminated">Terminated</a>. If the call is
+already <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallState.html#CalloraVoipSdk_Core_Domain_Calls_CallState_Terminated">Terminated</a> this is a no-op that completes successfully.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task HangupAsync(CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Accepted for signature symmetry but currently not forwarded to the transport, so the hangup is
+not cancelled via this token.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task">Task</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_HoldAsync_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.HoldAsync*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_HoldAsync_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.HoldAsync(System.Threading.CancellationToken)">
+  HoldAsync(CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L165"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Places the active call on hold and emits a local <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.ICall.html#CalloraVoipSdk_Core_Domain_Calls_ICall_HoldStateChanged">HoldStateChanged</a> event.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task HoldAsync(CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Accepted for signature symmetry but currently not forwarded to the transport, so the hold is
+not cancelled via this token.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task">Task</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>The call state is not <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallState.html#CalloraVoipSdk_Core_Domain_Calls_CallState_Connected">Connected</a>.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_RedirectAsync_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.RedirectAsync*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_RedirectAsync_System_Collections_Generic_IReadOnlyList_System_String__System_Int32_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.RedirectAsync(System.Collections.Generic.IReadOnlyList{System.String},System.Int32,System.Threading.CancellationToken)">
+  RedirectAsync(IReadOnlyList&lt;string&gt;, int, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L256"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Redirects an inbound ringing call with a 3xx SIP response and contact targets. Does not throw
+for foreseeable outcomes; the result carries the classification instead.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task&lt;CallActionResult&gt; RedirectAsync(IReadOnlyList&lt;string&gt; contactUris, int statusCode = 302, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>contactUris</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>The redirect contact target URIs.</p>
+</dd>
+    <dt><code>statusCode</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The 3xx SIP status code to respond with (default 302 Moved Temporarily).</p>
+</dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Cancels the operation; reported as <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionStatus.html#CalloraVoipSdk_Core_Domain_Calls_CallActionStatus_Canceled">Canceled</a>, not thrown.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionResult.html">CallActionResult</a>&gt;</dt>
+    <dd><p><a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionStatus.html#CalloraVoipSdk_Core_Domain_Calls_CallActionStatus_Succeeded">Succeeded</a> once the redirect is sent and the call is terminated;
+<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionStatus.html#CalloraVoipSdk_Core_Domain_Calls_CallActionStatus_InvalidState">InvalidState</a> when the call is not
+<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallDirection.html#CalloraVoipSdk_Core_Domain_Calls_CallDirection_Inbound">Inbound</a> or its state is not <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallState.html#CalloraVoipSdk_Core_Domain_Calls_CallState_Ringing">Ringing</a> (checked
+before any SIP round-trip); <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionStatus.html#CalloraVoipSdk_Core_Domain_Calls_CallActionStatus_Canceled">Canceled</a> on cancellation; or
+<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionStatus.html#CalloraVoipSdk_Core_Domain_Calls_CallActionStatus_Failed">Failed</a> on a transport-layer failure.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_RejectAsync_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.RejectAsync*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_RejectAsync_System_Int32_System_String_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.RejectAsync(System.Int32,System.String,System.Threading.CancellationToken)">
+  RejectAsync(int, string?, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L237"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Rejects an inbound ringing call with a 4xx/5xx/6xx SIP status. Does not throw for foreseeable
+outcomes; the result carries the classification instead (see the interface error contract).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task&lt;CallActionResult&gt; RejectAsync(int statusCode = 486, string? reasonPhrase = null, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>statusCode</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The SIP status code to reject with (default 486 Busy Here).</p>
+</dd>
+    <dt><code>reasonPhrase</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Optional SIP reason phrase; a default is derived when omitted.</p>
+</dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Cancels the operation; reported as <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionStatus.html#CalloraVoipSdk_Core_Domain_Calls_CallActionStatus_Canceled">Canceled</a>, not thrown.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionResult.html">CallActionResult</a>&gt;</dt>
+    <dd><p><a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionStatus.html#CalloraVoipSdk_Core_Domain_Calls_CallActionStatus_Succeeded">Succeeded</a> once the reject is sent and the call is terminated;
+<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionStatus.html#CalloraVoipSdk_Core_Domain_Calls_CallActionStatus_InvalidState">InvalidState</a> when the call is not
+<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallDirection.html#CalloraVoipSdk_Core_Domain_Calls_CallDirection_Inbound">Inbound</a> or its state is not <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallState.html#CalloraVoipSdk_Core_Domain_Calls_CallState_Ringing">Ringing</a> (checked
+before any SIP round-trip); <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionStatus.html#CalloraVoipSdk_Core_Domain_Calls_CallActionStatus_Canceled">Canceled</a> on cancellation; or
+<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionStatus.html#CalloraVoipSdk_Core_Domain_Calls_CallActionStatus_Failed">Failed</a> on a transport-layer failure.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_SendDtmfAsync_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.SendDtmfAsync*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_SendDtmfAsync_CalloraVoipSdk_Core_Domain_Calls_DtmfTone_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.SendDtmfAsync(CalloraVoipSdk.Core.Domain.Calls.DtmfTone,System.Threading.CancellationToken)">
+  SendDtmfAsync(DtmfTone, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L190"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sends one DTMF tone while the call is connected.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task SendDtmfAsync(DtmfTone tone, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tone</code> <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.DtmfTone.html">DtmfTone</a></dt>
+    <dd><p>The tone to send.</p>
+</dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Accepted for signature symmetry but currently not forwarded to the transport, so the send is
+not cancelled via this token.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task">Task</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>The call state is not <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallState.html#CalloraVoipSdk_Core_Domain_Calls_CallState_Connected">Connected</a>.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_SendInfoAsync_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.SendInfoAsync*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_SendInfoAsync_System_String_System_String_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.SendInfoAsync(System.String,System.String,System.Threading.CancellationToken)">
+  SendInfoAsync(string, string, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L275"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sends in-dialog SIP INFO. Does not throw for foreseeable outcomes; the result carries the
+classification instead.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task&lt;CallActionResult&gt; SendInfoAsync(string contentType, string body, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>contentType</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The INFO body content type.</p>
+</dd>
+    <dt><code>body</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The INFO message body.</p>
+</dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Cancels the operation; reported as <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionStatus.html#CalloraVoipSdk_Core_Domain_Calls_CallActionStatus_Canceled">Canceled</a>, not thrown.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionResult.html">CallActionResult</a>&gt;</dt>
+    <dd><p><a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionStatus.html#CalloraVoipSdk_Core_Domain_Calls_CallActionStatus_Succeeded">Succeeded</a> once the INFO is sent;
+<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionStatus.html#CalloraVoipSdk_Core_Domain_Calls_CallActionStatus_Canceled">Canceled</a> on cancellation;
+<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionStatus.html#CalloraVoipSdk_Core_Domain_Calls_CallActionStatus_InvalidRequest">InvalidRequest</a> for an invalid argument;
+<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionStatus.html#CalloraVoipSdk_Core_Domain_Calls_CallActionStatus_InvalidState">InvalidState</a> when the transport reports the operation invalid for
+the current state; or <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionStatus.html#CalloraVoipSdk_Core_Domain_Calls_CallActionStatus_Failed">Failed</a> on a transport-layer failure.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_SendNotifyAsync_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.SendNotifyAsync*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_SendNotifyAsync_System_String_System_String_System_String_System_String_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.SendNotifyAsync(System.String,System.String,System.String,System.String,System.Threading.CancellationToken)">
+  SendNotifyAsync(string, string, string?, string?, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L330"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sends in-dialog SIP NOTIFY. Does not throw for foreseeable outcomes; the result carries the
+classification instead.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task&lt;CallActionResult&gt; SendNotifyAsync(string eventType, string subscriptionState, string? contentType = null, string? body = null, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>eventType</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The SIP event package the notification belongs to.</p>
+</dd>
+    <dt><code>subscriptionState</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The Subscription-State header value.</p>
+</dd>
+    <dt><code>contentType</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Optional body content type.</p>
+</dd>
+    <dt><code>body</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Optional request body.</p>
+</dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Cancels the operation; reported as <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionStatus.html#CalloraVoipSdk_Core_Domain_Calls_CallActionStatus_Canceled">Canceled</a>, not thrown.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionResult.html">CallActionResult</a>&gt;</dt>
+    <dd><p><a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionStatus.html#CalloraVoipSdk_Core_Domain_Calls_CallActionStatus_Succeeded">Succeeded</a> when the peer accepts;
+<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionStatus.html#CalloraVoipSdk_Core_Domain_Calls_CallActionStatus_Rejected">Rejected</a> when the peer declines the NOTIFY;
+<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionStatus.html#CalloraVoipSdk_Core_Domain_Calls_CallActionStatus_Canceled">Canceled</a> on cancellation; or
+<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionStatus.html#CalloraVoipSdk_Core_Domain_Calls_CallActionStatus_Failed">Failed</a> on a transport-layer failure.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_SendOptionsAsync_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.SendOptionsAsync*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_SendOptionsAsync_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.SendOptionsAsync(System.Threading.CancellationToken)">
+  SendOptionsAsync(CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L291"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sends in-dialog SIP OPTIONS. Does not throw for foreseeable outcomes; the result carries the
+classification instead.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task&lt;CallActionResult&gt; SendOptionsAsync(CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Cancels the operation; reported as <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionStatus.html#CalloraVoipSdk_Core_Domain_Calls_CallActionStatus_Canceled">Canceled</a>, not thrown.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionResult.html">CallActionResult</a>&gt;</dt>
+    <dd><p><a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionStatus.html#CalloraVoipSdk_Core_Domain_Calls_CallActionStatus_Succeeded">Succeeded</a> when the peer accepts;
+<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionStatus.html#CalloraVoipSdk_Core_Domain_Calls_CallActionStatus_Rejected">Rejected</a> when the peer declines the OPTIONS;
+<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionStatus.html#CalloraVoipSdk_Core_Domain_Calls_CallActionStatus_Canceled">Canceled</a> on cancellation; or
+<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionStatus.html#CalloraVoipSdk_Core_Domain_Calls_CallActionStatus_Failed">Failed</a> on a transport-layer failure.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_SendSubscribeAsync_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.SendSubscribeAsync*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_SendSubscribeAsync_System_String_System_Int32_System_String_System_String_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.SendSubscribeAsync(System.String,System.Int32,System.String,System.String,System.Threading.CancellationToken)">
+  SendSubscribeAsync(string, int, string?, string?, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L308"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sends in-dialog SIP SUBSCRIBE. Does not throw for foreseeable outcomes; the result carries the
+classification instead.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task&lt;CallActionResult&gt; SendSubscribeAsync(string eventType, int expiresSeconds = 300, string? acceptHeader = null, string? body = null, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>eventType</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The SIP event package to subscribe to.</p>
+</dd>
+    <dt><code>expiresSeconds</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Requested subscription duration in seconds (default 300).</p>
+</dd>
+    <dt><code>acceptHeader</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Optional Accept header value.</p>
+</dd>
+    <dt><code>body</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Optional request body.</p>
+</dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Cancels the operation; reported as <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionStatus.html#CalloraVoipSdk_Core_Domain_Calls_CallActionStatus_Canceled">Canceled</a>, not thrown.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionResult.html">CallActionResult</a>&gt;</dt>
+    <dd><p><a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionStatus.html#CalloraVoipSdk_Core_Domain_Calls_CallActionStatus_Succeeded">Succeeded</a> when the peer accepts;
+<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionStatus.html#CalloraVoipSdk_Core_Domain_Calls_CallActionStatus_Rejected">Rejected</a> when the peer declines the SUBSCRIBE;
+<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionStatus.html#CalloraVoipSdk_Core_Domain_Calls_CallActionStatus_Canceled">Canceled</a> on cancellation; or
+<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallActionStatus.html#CalloraVoipSdk_Core_Domain_Calls_CallActionStatus_Failed">Failed</a> on a transport-layer failure.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_UnholdAsync_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.UnholdAsync*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_UnholdAsync_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.UnholdAsync(System.Threading.CancellationToken)">
+  UnholdAsync(CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L177"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Takes the call off hold and emits a local <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.ICall.html#CalloraVoipSdk_Core_Domain_Calls_ICall_HoldStateChanged">HoldStateChanged</a> event.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task UnholdAsync(CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Accepted for signature symmetry but currently not forwarded to the transport, so the unhold is
+not cancelled via this token.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task">Task</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>The call state is not <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallState.html#CalloraVoipSdk_Core_Domain_Calls_CallState_OnHold">OnHold</a>.</p>
+</dd>
+  </dl>
+
+
+
+  <h2 class="section" id="events">Events
+</h2>
+
+
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_DtmfReceived" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.DtmfReceived">
+  DtmfReceived
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L116"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Raised when a DTMF tone is received. This event may fire from <em>two</em> threads: the SIP
+signaling thread (SIP INFO tones) and the media receive thread (RFC 4733 in-band RTP events).
+It is therefore not guaranteed single-threaded — keep the handler thread-safe and fast.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">event EventHandler&lt;DtmfReceivedEventArgs&gt;? DtmfReceived</code></pre>
+  </div>
+
+
+
+
+
+
+  <h4 class="section">Event Type</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.eventhandler-1">EventHandler</a>&lt;<a class="xref" href="CalloraVoipSdk.Core.Domain.Events.DtmfReceivedEventArgs.html">DtmfReceivedEventArgs</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_HoldStateChanged" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.HoldStateChanged">
+  HoldStateChanged
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L109"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Raised when the remote party puts the call on or off hold. Serialized on the SIP signaling
+thread; buffered and replayed like <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.ICall.html#CalloraVoipSdk_Core_Domain_Calls_ICall_StateChanged">StateChanged</a> when no handler is attached.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">event EventHandler&lt;HoldStateChangedEventArgs&gt;? HoldStateChanged</code></pre>
+  </div>
+
+
+
+
+
+
+  <h4 class="section">Event Type</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.eventhandler-1">EventHandler</a>&lt;<a class="xref" href="CalloraVoipSdk.Core.Domain.Events.HoldStateChangedEventArgs.html">HoldStateChangedEventArgs</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_QualitySnapshotChanged" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.QualitySnapshotChanged">
+  QualitySnapshotChanged
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L130"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Raised periodically with an updated call-quality snapshot. Fires on a media/RTCP thread
+(RTCP send-timer and receive driven, not the signaling thread), so it may interleave with
+the signaling-thread events above. Not buffered.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">event EventHandler&lt;CallQualitySnapshotChangedEventArgs&gt;? QualitySnapshotChanged</code></pre>
+  </div>
+
+
+
+
+
+
+  <h4 class="section">Event Type</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.eventhandler-1">EventHandler</a>&lt;<a class="xref" href="CalloraVoipSdk.Core.Domain.Events.CallQualitySnapshotChangedEventArgs.html">CallQualitySnapshotChangedEventArgs</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_StateChanged" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.StateChanged">
+  StateChanged
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L103"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Raised when <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.ICall.html#CalloraVoipSdk_Core_Domain_Calls_ICall_State">State</a> changes. Serialized on the SIP signaling thread. If no
+handler is attached yet, state changes are buffered and replayed in order once one is —
+the initial state is never missed. See the interface remarks for the handler contract.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">event EventHandler&lt;CallStateChangedEventArgs&gt;? StateChanged</code></pre>
+  </div>
+
+
+
+
+
+
+  <h4 class="section">Event Type</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.eventhandler-1">EventHandler</a>&lt;<a class="xref" href="CalloraVoipSdk.Core.Domain.Events.CallStateChangedEventArgs.html">CallStateChangedEventArgs</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_TransferRequested" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.TransferRequested">
+  TransferRequested
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L123"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Raised when the peer requests a transfer (SIP REFER), on the SIP signaling thread. The
+handler must set the accept/reject decision on the event args synchronously (see remarks);
+it drives the SIP response, so decide quickly and do not await long-running work.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">event EventHandler&lt;TransferRequestedEventArgs&gt;? TransferRequested</code></pre>
+  </div>
+
+
+
+
+
+
+  <h4 class="section">Event Type</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.eventhandler-1">EventHandler</a>&lt;<a class="xref" href="CalloraVoipSdk.Core.Domain.Events.TransferRequestedEventArgs.html">TransferRequestedEventArgs</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L35" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

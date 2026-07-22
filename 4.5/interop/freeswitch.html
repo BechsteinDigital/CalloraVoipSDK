@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>FreeSWITCH | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="FreeSWITCH | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/portal/interop/freeswitch.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="freeswitch">FreeSWITCH</h1>
+
+<p><strong>Status: ⚙️ configuration guidance — not yet formally verified.</strong> The SDK is a standard SIP
+endpoint and is expected to register against a FreeSWITCH SIP profile, but we have not yet
+run a validated interop test. Run your own acceptance test first.</p>
+<h2 id="directory-user">Directory user</h2>
+<p>A standard directory user (e.g. <code>conf/directory/default/1001.xml</code>) with a password works:</p>
+<pre><code class="lang-xml">&lt;user id=&quot;1001&quot;&gt;
+  &lt;params&gt;
+    &lt;param name=&quot;password&quot; value=&quot;your-strong-password&quot;/&gt;
+  &lt;/params&gt;
+  &lt;variables&gt;
+    &lt;variable name=&quot;user_context&quot; value=&quot;default&quot;/&gt;
+  &lt;/variables&gt;
+&lt;/user&gt;
+</code></pre>
+<h2 id="connect-from-the-sdk">Connect from the SDK</h2>
+<pre><code class="lang-csharp">var connect = await client.ConnectAsync(new SipAccount
+{
+    Username  = &quot;1001&quot;,
+    Password  = &quot;your-strong-password&quot;,
+    SipServer = &quot;freeswitch.lan&quot;    // the box running the internal SIP profile (5060)
+});
+</code></pre>
+<h2 id="expected-configuration">Expected configuration</h2>
+<ul>
+<li><strong>Profile</strong> — register against the <code>internal</code> profile unless you have a custom one.</li>
+<li><strong>Codecs</strong> — set the profile's <code>inbound-codec-prefs</code> / <code>outbound-codec-prefs</code> to overlap
+with your <code>PreferredAudioCodecs</code> (<code>PCMU,PCMA</code> is the safe baseline; add <code>OPUS</code> if
+enabled).</li>
+<li><strong>DTMF</strong> — RFC 4733 (<code>rfc2833</code>) is the default and matches the SDK.</li>
+<li><strong>SRTP</strong> — set the profile/dialplan to SDES and use <code>SrtpPolicy.Required</code> to enforce it.</li>
+</ul>
+<h2 id="validate">Validate</h2>
+<p>Registration, a <code>default</code>-context dial to another extension, DTMF into an IVR, and SRTP
+if configured. Reports welcome: <a href="mailto:info@bechstein.digital">info@bechstein.digital</a>.</p>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/portal/interop/freeswitch.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

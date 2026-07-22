@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Troubleshooting | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Troubleshooting | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/portal/production/troubleshooting.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="troubleshooting">Troubleshooting</h1>
+
+<p>Concrete fixes for the failures you are most likely to hit. Pair each with a <code>Trace</code> log
+and quality snapshots — see <a href="diagnostics.html">Diagnostics</a>.</p>
+<h2 id="registration-fails">Registration fails</h2>
+<ul>
+<li><strong>401/407 loop</strong> — wrong username/password/realm. The SDK does a bounded stale-nonce
+retry; a persistent challenge means credentials. For 3CX, use the <strong>auth ID</strong>, not the
+extension number (<a href="../interop/3cx.html">3CX</a>).</li>
+<li><strong>No response to REGISTER</strong> — registrar host/port unreachable, or the box expects TLS.
+Check <code>SipServer</code> and network path.</li>
+<li><strong>Binding lingers after restart</strong> — fixed: unregister reuses the registration Call-ID +
+CSeq (RFC 3261 §10.2.2). Prefer an awaited <code>UnregisterAsync</code> on shutdown over relying on
+dispose.</li>
+</ul>
+<h2 id="one-way-or-no-audio">One-way or no audio</h2>
+<ul>
+<li>SDP advertises a wrong/unreachable media address → check <code>c=</code>/<code>m=</code> in the trace. The
+SDK advertises a routable (non-loopback) address; on complex NAT you may still need an
+SBC. See <a href="../guides/nat-and-trunks.html">NAT and SIP trunks</a>.</li>
+<li>No common codec → align <code>PreferredAudioCodecs</code> with the peer; keep G.711 (PCMU/PCMA) as
+a baseline.</li>
+</ul>
+<h2 id="choppy--robotic-audio">Choppy / robotic audio</h2>
+<ul>
+<li>High jitter/loss in the quality snapshots → a network problem, not the SDK. The adaptive
+jitter buffer compensates within limits.</li>
+<li>A stalled RTP timestamp burst (comfort noise / repeats) no longer derails the jitter
+estimator (fixed in 4.3.1).</li>
+</ul>
+<h2 id="dtmf-not-detected">DTMF not detected</h2>
+<ul>
+<li>Confirm RFC 4733 telephone-events are negotiated in the SDP and the peer's DTMF mode
+matches. Inbound DTMF fires <code>DtmfReceived</code> — remember it can arrive on two threads
+(<a href="../concepts/events.html">Events</a>).</li>
+</ul>
+<h2 id="srtp-call-fails">SRTP call fails</h2>
+<ul>
+<li>With <code>SrtpPolicy.Required</code>, a peer that can't do SDES SRTP yields a <strong>failed</strong> call by
+design (no silent downgrade). Confirm <code>a=crypto</code> in the trace and the peer's SRTP
+setting. Use <code>Optional</code> to allow fallback. See <a href="../guides/srtp-srtcp.html">SRTP/SRTCP</a>.</li>
+</ul>
+<h2 id="calls-linger-after-the-process-exits">Calls linger after the process exits</h2>
+<ul>
+<li>Explicitly <code>HangupAsync</code> active calls and <code>UnregisterAsync</code> lines before <code>Dispose()</code>;
+the dispose-time cleanup is best-effort (<a href="lifecycle-dispose.html">Lifecycle &amp; dispose</a>).</li>
+</ul>
+<h2 id="still-stuck">Still stuck?</h2>
+<p>Capture a <code>Trace</code> log of the failing call and open a conversation at
+<a href="mailto:info@bechstein.digital">info@bechstein.digital</a>.</p>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/portal/production/troubleshooting.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

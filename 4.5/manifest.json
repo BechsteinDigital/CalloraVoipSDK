@@ -1,0 +1,2163 @@
+{
+  "source_base_path": "/home/runner/work/callora-voip-sdk/callora-voip-sdk",
+  "xrefmap": "xrefmap.yml",
+  "files": [
+    {
+      "type": "Resource",
+      "output": {
+        "resource": {
+          "relative_path": "index.json"
+        }
+      }
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.BridgeAudioFormat.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.BridgeAudioFormat.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.BridgeAudioFormat",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.BridgeAudioFormat.yml\" sourcestartlinenumber=\"1\">Audio format delivered to and expected from a media consumer (the &quot;bridge&quot;/tap), such as\nan AI realtime bridge. When it differs from the negotiated wire codec, the SDK transcodes\naudio transparently so the consumer sees a single, fixed codec regardless of what the SIP\npeer negotiated.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.ConnectOptions.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.ConnectOptions.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.ConnectOptions",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.ConnectOptions.yml\" sourcestartlinenumber=\"1\">Options for convenience registration flows.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.ConnectResult.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.ConnectResult.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.ConnectResult",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.ConnectResult.yml\" sourcestartlinenumber=\"1\">Result model for convenience registration/connect operations.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.ConnectStatus.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.ConnectStatus.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.ConnectStatus",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.ConnectStatus.yml\" sourcestartlinenumber=\"1\">Status for convenience registration/connect operations.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Application.Calls.CallManager.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Application.Calls.CallManager.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Application.Calls.CallManager",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Application.Calls.CallManager.yml\" sourcestartlinenumber=\"1\">Registry of the SDK's live calls. Exposes the active-call collection, lookup, and\nadd/remove/state-change notifications. Instances are created by the SDK, not by consumers.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Application.Calls.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Application.Calls.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Application.Calls",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Application.Lines.PhoneLineManager.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Application.Lines.PhoneLineManager.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Application.Lines.PhoneLineManager",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Application.Lines.PhoneLineManager.yml\" sourcestartlinenumber=\"1\">Registry of the SDK's phone lines. Registers new SIP accounts, unregisters lines, exposes the\ncurrent line collection, and aggregates each line's inbound-call notifications. Instances are\ncreated by the SDK, not by consumers.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Application.Lines.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Application.Lines.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Application.Lines",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Application.Media.AudioFileFormat.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Application.Media.AudioFileFormat.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Application.Media.AudioFileFormat",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Application.Media.AudioFileFormat.yml\" sourcestartlinenumber=\"1\">Audio file container format used by recording and playback sessions.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Application.Media.IMediaReceiver.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Application.Media.IMediaReceiver.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Application.Media.IMediaReceiver",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Application.Media.IMediaReceiver.yml\" sourcestartlinenumber=\"1\">Public per-call tap for inbound media frames. Multiple receivers can be attached to the\nsame call in parallel (e.g. default audio, recording and a realtime bridge); every attached\nreceiver observes every inbound frame.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Application.Media.IMediaSender.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Application.Media.IMediaSender.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Application.Media.IMediaSender",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Application.Media.IMediaSender.yml\" sourcestartlinenumber=\"1\">Public per-call injection point for outbound media frames. Frames are handed to the call's\nactive send path; the payload must already be encoded in the negotiated codec\n(see <xref href=\"CalloraVoipSdk.Core.Domain.Calls.ICall.MediaParameters\" data-throw-if-not-resolved=\"false\"></xref> for payload type and clock rate).</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Application.Media.IMixedMediaBus.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Application.Media.IMixedMediaBus.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Application.Media.IMixedMediaBus",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Application.Media.IMixedMediaBus.yml\" sourcestartlinenumber=\"1\">Abstraction for a mixed PCM16 media bus that supports recording taps and playback injection.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Application.Media.IPlaybackSession.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Application.Media.IPlaybackSession.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Application.Media.IPlaybackSession",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Application.Media.IPlaybackSession.yml\" sourcestartlinenumber=\"1\">Public handle for one active playback session.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Application.Media.IRecordingEncryptionProvider.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Application.Media.IRecordingEncryptionProvider.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Application.Media.IRecordingEncryptionProvider",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Application.Media.IRecordingEncryptionProvider.yml\" sourcestartlinenumber=\"1\">Optional provider that encrypts finalized recording files.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Application.Media.IRecordingSession.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Application.Media.IRecordingSession.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Application.Media.IRecordingSession",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Application.Media.IRecordingSession.yml\" sourcestartlinenumber=\"1\">Public handle for one active recording session.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Application.Media.IVideoReceiver.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Application.Media.IVideoReceiver.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Application.Media.IVideoReceiver",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Application.Media.IVideoReceiver.yml\" sourcestartlinenumber=\"1\">Public per-call tap for inbound encoded video frames. Multiple receivers can attach to the same\ncall in parallel; every attached receiver observes every reassembled inbound frame. The SDK is\ntransport-only — decode the payload with your own codec.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Application.Media.IVideoSender.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Application.Media.IVideoSender.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Application.Media.IVideoSender",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Application.Media.IVideoSender.yml\" sourcestartlinenumber=\"1\">Public per-call injection point for outbound encoded video frames. Frames are handed to the call's\nactive video send path; the payload must already be encoded in the negotiated codec\n(see <xref href=\"CalloraVoipSdk.Core.Domain.Calls.ICall.MediaParameters\" data-throw-if-not-resolved=\"false\"></xref> for the negotiated media). The SDK is transport-only and\nnever encodes.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Application.Media.MediaConnector.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Application.Media.MediaConnector.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Application.Media.MediaConnector",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Application.Media.MediaConnector.yml\" sourcestartlinenumber=\"1\">Connects media receivers to media senders with bounded in-memory backpressure.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Application.Media.MediaFrame.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Application.Media.MediaFrame.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Application.Media.MediaFrame",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Application.Media.MediaFrame.yml\" sourcestartlinenumber=\"1\">One encoded audio frame on the public media contract. The payload carries codec data as\nnegotiated for the call (identified by <code class=\"paramref\">PayloadType</code>, e.g. 0 = PCMU,\n8 = PCMA, 9 = G.722); it is not decoded PCM.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Application.Media.MediaFrameReceivedEventArgs.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Application.Media.MediaFrameReceivedEventArgs.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Application.Media.MediaFrameReceivedEventArgs",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Application.Media.MediaFrameReceivedEventArgs.yml\" sourcestartlinenumber=\"1\">Event payload for <xref href=\"CalloraVoipSdk.Core.Application.Media.IMediaReceiver.FrameReceived\" data-throw-if-not-resolved=\"false\"></xref>. Delivered synchronously on the\nmedia path — handlers must return quickly (see the event's documentation).</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Application.Media.MediaManager.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Application.Media.MediaManager.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Application.Media.MediaManager",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Application.Media.MediaManager.yml\" sourcestartlinenumber=\"1\">Factory and orchestration entrypoint for media routing, recording and playback.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Application.Media.MediaReceiver.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Application.Media.MediaReceiver.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Application.Media.MediaReceiver",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Application.Media.MediaReceiver.yml\" sourcestartlinenumber=\"1\">Surfaces a call's inbound (decoded) audio frames to the application via the\n<xref href=\"CalloraVoipSdk.Core.Application.Media.MediaReceiver.FrameReceived\" data-throw-if-not-resolved=\"false\"></xref> event. Attach to a call to start receiving; a faulting subscriber is\nisolated so it neither stops other subscribers nor the RTP callback.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Application.Media.MediaSender.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Application.Media.MediaSender.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Application.Media.MediaSender",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Application.Media.MediaSender.yml\" sourcestartlinenumber=\"1\">Feeds application-supplied audio frames into a call's outbound RTP stream. Attach to a call,\nthen push frames with <xref href=\"CalloraVoipSdk.Core.Application.Media.MediaSender.SendAsync(CalloraVoipSdk.Core.Application.Media.MediaFrame%2cSystem.Threading.CancellationToken)\" data-throw-if-not-resolved=\"false\"></xref>. Frames sent while the call is not connected/on-hold\nare silently dropped rather than throwing.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Application.Media.MediaSessionErrorEventArgs.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Application.Media.MediaSessionErrorEventArgs.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Application.Media.MediaSessionErrorEventArgs",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Application.Media.MediaSessionErrorEventArgs.yml\" sourcestartlinenumber=\"1\">Error payload raised by recording and playback sessions.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Application.Media.MediaSessionState.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Application.Media.MediaSessionState.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Application.Media.MediaSessionState",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Application.Media.MediaSessionState.yml\" sourcestartlinenumber=\"1\">Runtime state for recording/playback media sessions.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Application.Media.MediaSessionStateChangedEventArgs.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Application.Media.MediaSessionStateChangedEventArgs.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Application.Media.MediaSessionStateChangedEventArgs",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Application.Media.MediaSessionStateChangedEventArgs.yml\" sourcestartlinenumber=\"1\">Describes one media session state transition.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Application.Media.PlaybackOptions.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Application.Media.PlaybackOptions.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Application.Media.PlaybackOptions",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Application.Media.PlaybackOptions.yml\" sourcestartlinenumber=\"1\">Runtime options for playback sessions.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Application.Media.PlaybackRequest.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Application.Media.PlaybackRequest.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Application.Media.PlaybackRequest",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Application.Media.PlaybackRequest.yml\" sourcestartlinenumber=\"1\">Input payload for starting a playback session.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Application.Media.RecordingOptions.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Application.Media.RecordingOptions.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Application.Media.RecordingOptions",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Application.Media.RecordingOptions.yml\" sourcestartlinenumber=\"1\">Configuration for call/conference recording sessions.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Application.Media.VideoBitrateRecommendationEventArgs.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Application.Media.VideoBitrateRecommendationEventArgs.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Application.Media.VideoBitrateRecommendationEventArgs",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Application.Media.VideoBitrateRecommendationEventArgs.yml\" sourcestartlinenumber=\"1\">Event payload for <xref href=\"CalloraVoipSdk.Core.Application.Media.IVideoSender.RecommendedBitrateChanged\" data-throw-if-not-resolved=\"false\"></xref>: the SDK's ready-to-use\noutbound video bitrate recommendation and the coarse network quality behind it. Set your encoder's\ntarget bitrate to <xref href=\"CalloraVoipSdk.Core.Application.Media.VideoBitrateRecommendationEventArgs.RecommendedBitrateBps\" data-throw-if-not-resolved=\"false\"></xref> — the SDK never encodes (transport-only).</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Application.Media.VideoFrame.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Application.Media.VideoFrame.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Application.Media.VideoFrame",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Application.Media.VideoFrame.yml\" sourcestartlinenumber=\"1\">One encoded video frame on the public media contract. The SDK is transport-only: the payload\ncarries already-encoded codec bytes (one coded picture) as negotiated for the call — it is not\ndecoded pixels, and the SDK never encodes or decodes. Bring your own codec (VP8, H.264, …) and\nread <xref href=\"CalloraVoipSdk.Core.Application.Media.VideoFrame.PayloadType\" data-throw-if-not-resolved=\"false\"></xref> to identify it.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Application.Media.VideoFrameReceivedEventArgs.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Application.Media.VideoFrameReceivedEventArgs.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Application.Media.VideoFrameReceivedEventArgs",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Application.Media.VideoFrameReceivedEventArgs.yml\" sourcestartlinenumber=\"1\">Event payload for <xref href=\"CalloraVoipSdk.Core.Application.Media.IVideoReceiver.FrameReceived\" data-throw-if-not-resolved=\"false\"></xref>. Delivered synchronously on the\nmedia path — handlers must return quickly (see the event's documentation).</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Application.Media.VideoReceiver.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Application.Media.VideoReceiver.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Application.Media.VideoReceiver",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Application.Media.VideoReceiver.yml\" sourcestartlinenumber=\"1\">Surfaces a call's inbound encoded video frames to the application via the\n<xref href=\"CalloraVoipSdk.Core.Application.Media.VideoReceiver.FrameReceived\" data-throw-if-not-resolved=\"false\"></xref> event. Attach to a call to start receiving; a faulting subscriber is\nisolated so it neither stops other subscribers nor the RTP callback. Mirrors\n<xref href=\"CalloraVoipSdk.Core.Application.Media.MediaReceiver\" data-throw-if-not-resolved=\"false\"></xref> for video — transport-only, so the payload is encoded, not decoded.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Application.Media.VideoSender.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Application.Media.VideoSender.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Application.Media.VideoSender",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Application.Media.VideoSender.yml\" sourcestartlinenumber=\"1\">Feeds application-supplied encoded video frames into a call's outbound RTP stream. Attach to a\ncall, then push frames with <xref href=\"CalloraVoipSdk.Core.Application.Media.VideoSender.SendAsync(CalloraVoipSdk.Core.Application.Media.VideoFrame%2cSystem.Threading.CancellationToken)\" data-throw-if-not-resolved=\"false\"></xref>. Frames sent while the call is not\nconnected/on-hold are silently dropped rather than throwing. Mirrors <xref href=\"CalloraVoipSdk.Core.Application.Media.MediaSender\" data-throw-if-not-resolved=\"false\"></xref> for\nvideo — transport-only, so the payload must already be encoded.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Application.Media.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Application.Media.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Application.Media",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Calls.CallActionResult.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Calls.CallActionResult.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Calls.CallActionResult",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Calls.CallActionResult.yml\" sourcestartlinenumber=\"1\">Unified result model for extended call control operations.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Calls.CallActionStatus.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Calls.CallActionStatus.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Calls.CallActionStatus",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Calls.CallActionStatus.yml\" sourcestartlinenumber=\"1\">Outcome category for extended call control operations.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Calls.CallDirection.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Calls.CallDirection.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Calls.CallDirection",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Calls.CallDirection.yml\" sourcestartlinenumber=\"1\">Indicates whether a call was initiated by the local party or received from a remote party.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Calls.CallIceCandidate.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Calls.CallIceCandidate.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Calls.CallIceCandidate",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Calls.CallIceCandidate.yml\" sourcestartlinenumber=\"1\">Represents one ICE candidate associated with a call media leg.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Calls.CallIceSnapshot.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Calls.CallIceSnapshot.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Calls.CallIceSnapshot",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Calls.CallIceSnapshot.yml\" sourcestartlinenumber=\"1\">Read-only snapshot of ICE (RFC 8445 / RFC 7675) connectivity establishment for one call media\nleg. Produced once candidate-pair selection completes and exposed via\n<xref href=\"CalloraVoipSdk.Core.Domain.Calls.ICall.IceSnapshot\" data-throw-if-not-resolved=\"false\"></xref>. It explains which local/remote candidate pair media flows over\nand why — otherwise an ICE-driven media path or teardown is opaque to the consumer. Non-ICE\ncalls never produce a snapshot (<xref href=\"CalloraVoipSdk.Core.Domain.Calls.ICall.IceSnapshot\" data-throw-if-not-resolved=\"false\"></xref> stays <a href=\"https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null\">null</a>).</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Calls.CallIceState.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Calls.CallIceState.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Calls.CallIceState",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Calls.CallIceState.yml\" sourcestartlinenumber=\"1\">Public lifecycle state of ICE (RFC 8445) connectivity establishment for one call media leg,\nsurfaced read-only via <xref href=\"CalloraVoipSdk.Core.Domain.Calls.CallIceSnapshot.State\" data-throw-if-not-resolved=\"false\"></xref>. Non-ICE calls never produce an\nICE snapshot, so this state is only meaningful when ICE was negotiated for the leg.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Calls.CallId.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Calls.CallId.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Calls.CallId",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Calls.CallId.yml\" sourcestartlinenumber=\"1\">Strongly-typed, immutable identifier for a single call instance.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.yml\" sourcestartlinenumber=\"1\">Negotiated media parameters for one active call leg.\nProduced by the infrastructure adapter after SDP offer/answer exchange\nand consumed by the application media orchestrator to set up RTP I/O.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Calls.CallQualitySnapshot.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Calls.CallQualitySnapshot.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Calls.CallQualitySnapshot",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Calls.CallQualitySnapshot.yml\" sourcestartlinenumber=\"1\">Public quality snapshot for one call media leg.\nValues are updated continuously while the call is active and can be used\nby SDK consumers for routing, alerting, or UI quality indicators.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Calls.CallRtpStatistics.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Calls.CallRtpStatistics.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Calls.CallRtpStatistics",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Calls.CallRtpStatistics.yml\" sourcestartlinenumber=\"1\">Raw RTP transport statistics for one active call media leg, exposed for diagnostics,\nbilling and troubleshooting. Unlike <xref href=\"CalloraVoipSdk.Core.Domain.Calls.CallQualitySnapshot\" data-throw-if-not-resolved=\"false\"></xref> — which surfaces\nderived quality metrics (jitter/loss in ms/%, MOS) — this record carries the underlying\nRFC 3550 counters (SSRC identifiers, packet/octet counts, RTP-unit jitter) without\ninterpretation. Available on <xref href=\"CalloraVoipSdk.Core.Domain.Calls.ICall.RtpStatistics\" data-throw-if-not-resolved=\"false\"></xref> once media is flowing.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Calls.CallState.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Calls.CallState.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Calls.CallState",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Calls.CallState.yml\" sourcestartlinenumber=\"1\">Lifecycle state of a call.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Calls.CallVideoParameters.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Calls.CallVideoParameters.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Calls.CallVideoParameters",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Calls.CallVideoParameters.yml\" sourcestartlinenumber=\"1\">Negotiated video parameters for one call leg (WebRTC phase 2). Present on\n<xref href=\"CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.Video\" data-throw-if-not-resolved=\"false\"></xref> only when the SDP exchange negotiated an\nactive video m-line with a codec the SDK supports; <a href=\"https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null\">null</a> keeps the\ncall audio-only. Grouped into one object so parameter enrichment passes video\nthrough as a unit.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Calls.DialOptions.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Calls.DialOptions.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Calls.DialOptions",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Calls.DialOptions.yml\" sourcestartlinenumber=\"1\">Per-call dialing options — a pure Domain value object supplied to\n<xref href=\"CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.DialAsync(System.String%2cCalloraVoipSdk.Core.Domain.Calls.DialOptions%2cSystem.Threading.CancellationToken)\" data-throw-if-not-resolved=\"false\"></xref>.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Calls.DtmfTone.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Calls.DtmfTone.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Calls.DtmfTone",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Calls.DtmfTone.yml\" sourcestartlinenumber=\"1\">Validated DTMF tone (0-9, *, #, A-D).</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Calls.ICall.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Calls.ICall.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Calls.ICall",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Calls.ICall.yml\" sourcestartlinenumber=\"1\">A single call and its lifecycle.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Calls.NetworkQuality.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Calls.NetworkQuality.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Calls.NetworkQuality",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Calls.NetworkQuality.yml\" sourcestartlinenumber=\"1\">Coarse, ready-to-use indicator of the media path's health, derived by the SDK from the congestion\nsignal (delay trend + loss). Meant for a simple UI hint or a plugin decision — read it instead of\ninterpreting raw metrics yourself. A call-media value describing the leg, alongside\n<xref href=\"CalloraVoipSdk.Core.Domain.Calls.CallQualitySnapshot\" data-throw-if-not-resolved=\"false\"></xref>.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Calls.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Calls.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Calls",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Events.CallActivityEventArgs.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Events.CallActivityEventArgs.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Events.CallActivityEventArgs",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Events.CallActivityEventArgs.yml\" sourcestartlinenumber=\"1\">Payload for call-registry activity events (a call being added or removed).</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Events.CallErrorEventArgs.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Events.CallErrorEventArgs.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Events.CallErrorEventArgs",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Events.CallErrorEventArgs.yml\" sourcestartlinenumber=\"1\">Payload for a call-related error notification.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Events.CallQualitySnapshotChangedEventArgs.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Events.CallQualitySnapshotChangedEventArgs.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Events.CallQualitySnapshotChangedEventArgs",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Events.CallQualitySnapshotChangedEventArgs.yml\" sourcestartlinenumber=\"1\">Event arguments for call quality snapshot updates.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Events.CallStateChangedEventArgs.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Events.CallStateChangedEventArgs.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Events.CallStateChangedEventArgs",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Events.CallStateChangedEventArgs.yml\" sourcestartlinenumber=\"1\">Payload for the call <code>StateChanged</code> event.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Events.DtmfReceivedEventArgs.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Events.DtmfReceivedEventArgs.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Events.DtmfReceivedEventArgs",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Events.DtmfReceivedEventArgs.yml\" sourcestartlinenumber=\"1\">Payload for the call <code>DtmfReceived</code> event.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Events.HoldStateChangedEventArgs.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Events.HoldStateChangedEventArgs.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Events.HoldStateChangedEventArgs",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Events.HoldStateChangedEventArgs.yml\" sourcestartlinenumber=\"1\">Payload for the call <code>HoldStateChanged</code> event.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Events.IncomingCallEventArgs.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Events.IncomingCallEventArgs.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Events.IncomingCallEventArgs",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Events.IncomingCallEventArgs.yml\" sourcestartlinenumber=\"1\">Payload for the line <code>IncomingCall</code> event.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Events.LineReconnectFailedEventArgs.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Events.LineReconnectFailedEventArgs.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Events.LineReconnectFailedEventArgs",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Events.LineReconnectFailedEventArgs.yml\" sourcestartlinenumber=\"1\">Raised when a phone line has permanently failed to re-register and entered\n<xref href=\"CalloraVoipSdk.Core.Domain.Lines.LineState.Failed\" data-throw-if-not-resolved=\"false\"></xref>.  No further reconnect attempts will be made.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Events.LineReconnectingEventArgs.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Events.LineReconnectingEventArgs.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Events.LineReconnectingEventArgs",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Events.LineReconnectingEventArgs.yml\" sourcestartlinenumber=\"1\">Raised when a phone line begins a reconnect attempt after its SIP registration was lost.\nThe line is already in <xref href=\"CalloraVoipSdk.Core.Domain.Lines.LineState.Reconnecting\" data-throw-if-not-resolved=\"false\"></xref> when this event fires.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Events.LineStateChangedEventArgs.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Events.LineStateChangedEventArgs.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Events.LineStateChangedEventArgs",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Events.LineStateChangedEventArgs.yml\" sourcestartlinenumber=\"1\">Payload for the line <code>StateChanged</code> event.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Events.TransferRequestedEventArgs.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Events.TransferRequestedEventArgs.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Events.TransferRequestedEventArgs",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Events.TransferRequestedEventArgs.yml\" sourcestartlinenumber=\"1\">Payload for the call <code>TransferRequested</code> event (an inbound SIP REFER).</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Events.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Events.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Events",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Lines.IPhoneLine",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.yml\" sourcestartlinenumber=\"1\">A registered SIP line (account) that places and receives calls.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Lines.LineId.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Lines.LineId.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Lines.LineId",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Lines.LineId.yml\" sourcestartlinenumber=\"1\">Stable, opaque identifier for a phone line.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Lines.LineState.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Lines.LineState.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Lines.LineState",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Lines.LineState.yml\" sourcestartlinenumber=\"1\">Describes the current registration state of a phone line.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Lines.ReregisterFailReason.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Lines.ReregisterFailReason.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Lines.ReregisterFailReason",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Lines.ReregisterFailReason.yml\" sourcestartlinenumber=\"1\">Describes why a phone line permanently failed to re-register and entered\n<xref href=\"CalloraVoipSdk.Core.Domain.Lines.LineState.Failed\" data-throw-if-not-resolved=\"false\"></xref>.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Lines.ReregisterOptions.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Lines.ReregisterOptions.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Lines.ReregisterOptions",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Lines.ReregisterOptions.yml\" sourcestartlinenumber=\"1\">Controls automatic re-registration behavior when a SIP registration is lost due to a network\ndisruption or server restart.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Lines.SipAccount.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Lines.SipAccount.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Lines.SipAccount",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Lines.SipAccount.yml\" sourcestartlinenumber=\"1\">Configuration of a SIP account used to register a <xref href=\"CalloraVoipSdk.Core.Domain.Lines.IPhoneLine\" data-throw-if-not-resolved=\"false\"></xref> and place/receive calls.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Lines.SipAddress.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Lines.SipAddress.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Lines.SipAddress",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Lines.SipAddress.yml\" sourcestartlinenumber=\"1\">Immutable, validated SIP address (e.g. sip:alice<xref href=\"example.com)\" data-throw-if-not-resolved=\"False\" data-raw-source=\"@example.com)\" sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Lines.SipAddress.yml\" sourcestartlinenumber=\"1\"></xref>.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Lines.SipCredentials.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Lines.SipCredentials.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Lines.SipCredentials",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Lines.SipCredentials.yml\" sourcestartlinenumber=\"1\">Immutable SIP authentication credentials.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Lines.SipTransport.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Lines.SipTransport.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Lines.SipTransport",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Lines.SipTransport.yml\" sourcestartlinenumber=\"1\">Supported SIP signaling transports on line-account level.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Lines.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Lines.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Lines",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Security.SipDomainCertificateValidator.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Security.SipDomainCertificateValidator.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Security.SipDomainCertificateValidator",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Security.SipDomainCertificateValidator.yml\" sourcestartlinenumber=\"1\">Validates X.509 certificates against SIP domain identities per RFC 5922\n&quot;Domain Certificates in SIP&quot;.</p>\n<p>\nRFC 5922 §7.1 requires that when a SIP entity establishes a TLS connection,\nit MUST verify the server certificate contains a subjectAltName (SAN) extension\nwith a value that matches the expected SIP domain. Two SAN entry types are valid:\n</p>\n<ol><li>\n      <code>uniformResourceIdentifier</code> — a <code>sip:</code> or <code>sips:</code> URI whose\n      host component matches the SIP domain (case-insensitive DNS comparison).\n    </li><li>\n      <code>dNSName</code> — a DNS hostname that matches the SIP domain, with wildcard\n      support for the leftmost label (e.g. <code>*.example.com</code>).\n    </li></ol>\n<p>\nThis validator is intentionally stateless and purely functional so that it\ncan be used from callback contexts (e.g. <xref href=\"System.Net.Security.SslStream\" data-throw-if-not-resolved=\"false\"></xref>\ncertificate validation callbacks) without thread-safety concerns.\n</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Security.SrtpDecisionReasonCodes.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Security.SrtpDecisionReasonCodes.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Security.SrtpDecisionReasonCodes",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Security.SrtpDecisionReasonCodes.yml\" sourcestartlinenumber=\"1\">Stable reason-code constants for SRTP policy and negotiation decisions.\nThese values are emitted in call media metadata and SIP telemetry.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Security.SrtpPolicy.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Security.SrtpPolicy.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Security.SrtpPolicy",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Security.SrtpPolicy.yml\" sourcestartlinenumber=\"1\">Controls whether media (RTP) is protected with SRTP for a call.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Security.TlsConfiguration.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Security.TlsConfiguration.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Security.TlsConfiguration",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Security.TlsConfiguration.yml\" sourcestartlinenumber=\"1\">TLS configuration for SIP transport connections.</p>\n<p>\nSupports both outbound (client) and inbound (server) TLS use-cases.\nCertificate loading is lazy and cached after the first call to\n<xref href=\"CalloraVoipSdk.Core.Security.TlsConfiguration.GetCertificate\" data-throw-if-not-resolved=\"false\"></xref>.\n</p>\n<p>\nRFC 5922 compliance: set <xref href=\"CalloraVoipSdk.Core.Security.TlsConfiguration.ExpectedSipDomain\" data-throw-if-not-resolved=\"false\"></xref> to enable\ndomain certificate validation per RFC 5922 §7.1 in addition to the\nstandard chain and hostname checks performed by the TLS stack.\n</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Security.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Security.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Security",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.DependencyInjection.CalloraBuilder.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.DependencyInjection.CalloraBuilder.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.DependencyInjection.CalloraBuilder",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.DependencyInjection.CalloraBuilder.yml\" sourcestartlinenumber=\"1\">Builder for optional CalloraVoipSdk dependency overrides.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.DependencyInjection.CalloraHostedService.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.DependencyInjection.CalloraHostedService.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.DependencyInjection.CalloraHostedService",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.DependencyInjection.CalloraHostedService.yml\" sourcestartlinenumber=\"1\">Coordinates CalloraVoipSdk lifecycle through host start/stop hooks.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.DependencyInjection.SdkOptionsValidator.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.DependencyInjection.SdkOptionsValidator.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.DependencyInjection.SdkOptionsValidator",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.DependencyInjection.SdkOptionsValidator.yml\" sourcestartlinenumber=\"1\">Startup validation for host-bound <xref href=\"CalloraVoipSdk.SdkOptions\" data-throw-if-not-resolved=\"false\"></xref>.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.DependencyInjection.ServiceCollectionExtensions.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.DependencyInjection.ServiceCollectionExtensions.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.DependencyInjection.ServiceCollectionExtensions",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.DependencyInjection.ServiceCollectionExtensions.yml\" sourcestartlinenumber=\"1\">Dependency-injection entrypoint for CalloraVoipSdk.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.DependencyInjection.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.DependencyInjection.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.DependencyInjection",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.DeviceManager.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.DeviceManager.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.DeviceManager",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.DeviceManager.yml\" sourcestartlinenumber=\"1\">Runtime audio device control facade.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.DialResult.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.DialResult.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.DialResult",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.DialResult.yml\" sourcestartlinenumber=\"1\">Result model for convenience outbound dial-and-wait operations.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.DialStatus.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.DialStatus.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.DialStatus",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.DialStatus.yml\" sourcestartlinenumber=\"1\">Status for convenience outbound dial-and-wait operations.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.DialWaitOptions.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.DialWaitOptions.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.DialWaitOptions",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.DialWaitOptions.yml\" sourcestartlinenumber=\"1\">Options for convenience outbound dialing flows.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.IVoipClient.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.IVoipClient.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.IVoipClient",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.IVoipClient.yml\" sourcestartlinenumber=\"1\">Public SDK client contract for dependency-injection and consumer testability.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.IceConfiguration.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.IceConfiguration.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.IceConfiguration",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.IceConfiguration.yml\" sourcestartlinenumber=\"1\">Controls ICE gathering and connectivity checks for call media sessions.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.IceOptions.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.IceOptions.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.IceOptions",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.IceOptions.yml\" sourcestartlinenumber=\"1\">Mutable ICE options model for DI-based SDK configuration.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.IceServerConfiguration.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.IceServerConfiguration.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.IceServerConfiguration",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.IceServerConfiguration.yml\" sourcestartlinenumber=\"1\">Defines one ICE helper server entry used by the call media runtime.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.IceServerType.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.IceServerType.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.IceServerType",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.IceServerType.yml\" sourcestartlinenumber=\"1\">Classifies one ICE helper server entry.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.IceTransport.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.IceTransport.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.IceTransport",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.IceTransport.yml\" sourcestartlinenumber=\"1\">Transport protocol used to connect to STUN/TURN servers.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.ModuleManager.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.ModuleManager.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.ModuleManager",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.ModuleManager.yml\" sourcestartlinenumber=\"1\">Runtime availability facade for optional SDK modules.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.ModuleRegistry.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.ModuleRegistry.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.ModuleRegistry",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.ModuleRegistry.yml\" sourcestartlinenumber=\"1\">Thread-safe registry resolving optional SDK modules by their feature contract.\nModules are contributed by separate packages either through dependency injection\n(register <xref href=\"CalloraVoipSdk.Modules.IVoipClientModule\" data-throw-if-not-resolved=\"false\"></xref> services before <code>AddCallora</code>) or\nprogrammatically via <xref href=\"CalloraVoipSdk.ModuleRegistry.Register(CalloraVoipSdk.Modules.IVoipClientModule)\" data-throw-if-not-resolved=\"false\"></xref>.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Modules.IPlaybackModule.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Modules.IPlaybackModule.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Modules.IPlaybackModule",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Modules.IPlaybackModule.yml\" sourcestartlinenumber=\"1\">SDK facade for playback features.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Modules.IRecordingModule.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Modules.IRecordingModule.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Modules.IRecordingModule",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Modules.IRecordingModule.yml\" sourcestartlinenumber=\"1\">SDK facade for recording features.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Modules.IVoipClientModule.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Modules.IVoipClientModule.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Modules.IVoipClientModule",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Modules.IVoipClientModule.yml\" sourcestartlinenumber=\"1\">Contract every SDK module implements to be discoverable through <xref href=\"CalloraVoipSdk.ModuleRegistry\" data-throw-if-not-resolved=\"false\"></xref>.\nModule packages define their own feature interfaces on top of this marker; the SDK core\nnever references concrete module types.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Modules.ModuleFeatureUnavailableException.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Modules.ModuleFeatureUnavailableException.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Modules.ModuleFeatureUnavailableException",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Modules.ModuleFeatureUnavailableException.yml\" sourcestartlinenumber=\"1\">Thrown by <xref href=\"CalloraVoipSdk.ModuleRegistry.Get%60%601\" data-throw-if-not-resolved=\"false\"></xref> when no registered module implements\nthe requested feature contract.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Modules.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Modules.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Modules",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.PolicyManager.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.PolicyManager.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.PolicyManager",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.PolicyManager.yml\" sourcestartlinenumber=\"1\">Policy facade exposing active SDK policy defaults.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.QualityManager.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.QualityManager.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.QualityManager",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.QualityManager.yml\" sourcestartlinenumber=\"1\">Runtime quality facade for call-level snapshots and subscriptions.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.SdkConfiguration.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.SdkConfiguration.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.SdkConfiguration",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.SdkConfiguration.yml\" sourcestartlinenumber=\"1\">Top-level SDK configuration: identity, transport security, logging, media/codec behavior, and\ncall-lifecycle timeouts. Supplied once when constructing or registering the SDK.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.SdkOptions.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.SdkOptions.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.SdkOptions",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.SdkOptions.yml\" sourcestartlinenumber=\"1\">Options model used by <code>AddCallora(...)</code> for host-based configuration.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.SessionManager.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.SessionManager.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.SessionManager",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.SessionManager.yml\" sourcestartlinenumber=\"1\">Read-only runtime view over active calls and media sessions.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.SipTransport.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.SipTransport.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.SipTransport",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.SipTransport.yml\" sourcestartlinenumber=\"1\">Default SIP signaling transport a consumer selects via\n<xref href=\"CalloraVoipSdk.SdkConfiguration.DefaultTransport\" data-throw-if-not-resolved=\"false\"></xref>. Determines which transport the SDK uses for\noutbound requests and its advertised local contact when a target URI does not force a transport\n(for example via a <code>sips:</code> scheme or <code>;transport=</code> parameter). All five transports\nare listened on regardless; this only selects the default for outbound routing.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.TelemetryManager.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.TelemetryManager.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.TelemetryManager",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.TelemetryManager.yml\" sourcestartlinenumber=\"1\">Telemetry facade for SIP events, metrics, and call-detail records.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.VoipClient.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.VoipClient.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.VoipClient",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.VoipClient.yml\" sourcestartlinenumber=\"1\">Public SDK facade composing line management, call management, and media routing.\nThis is the primary entry point for SDK consumers.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.VoipClientInitializationException.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.VoipClientInitializationException.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.VoipClientInitializationException",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.VoipClientInitializationException.yml\" sourcestartlinenumber=\"1\">Signals that the VoIP SDK client could not be initialized due to runtime environment constraints.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk",
+      "Summary": null
+    },
+    {
+      "type": "Toc",
+      "source_relative_path": "docs/portal/_api/toc.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/toc.html"
+        },
+        ".json": {
+          "relative_path": "_api/toc.json"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/architecture/call-lifecycle.md",
+      "output": {
+        ".html": {
+          "relative_path": "architecture/call-lifecycle.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/architecture/media-pipeline.md",
+      "output": {
+        ".html": {
+          "relative_path": "architecture/media-pipeline.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/architecture/overview.md",
+      "output": {
+        ".html": {
+          "relative_path": "architecture/overview.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Toc",
+      "source_relative_path": "docs/portal/architecture/toc.yml",
+      "output": {
+        ".html": {
+          "relative_path": "architecture/toc.html"
+        },
+        ".json": {
+          "relative_path": "architecture/toc.json"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/changelog.md",
+      "output": {
+        ".html": {
+          "relative_path": "changelog.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/commercial/index.md",
+      "output": {
+        ".html": {
+          "relative_path": "commercial/index.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/commercial/intelligence.md",
+      "output": {
+        ".html": {
+          "relative_path": "commercial/intelligence.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/commercial/privacy.md",
+      "output": {
+        ".html": {
+          "relative_path": "commercial/privacy.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/commercial/realtime.md",
+      "output": {
+        ".html": {
+          "relative_path": "commercial/realtime.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/commercial/risk.md",
+      "output": {
+        ".html": {
+          "relative_path": "commercial/risk.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Toc",
+      "source_relative_path": "docs/portal/commercial/toc.yml",
+      "output": {
+        ".html": {
+          "relative_path": "commercial/toc.html"
+        },
+        ".json": {
+          "relative_path": "commercial/toc.json"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/commercial/websocket.md",
+      "output": {
+        ".html": {
+          "relative_path": "commercial/websocket.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/concepts/calls.md",
+      "output": {
+        ".html": {
+          "relative_path": "concepts/calls.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/concepts/events.md",
+      "output": {
+        ".html": {
+          "relative_path": "concepts/events.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/concepts/lines.md",
+      "output": {
+        ".html": {
+          "relative_path": "concepts/lines.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/concepts/media.md",
+      "output": {
+        ".html": {
+          "relative_path": "concepts/media.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/concepts/modules.md",
+      "output": {
+        ".html": {
+          "relative_path": "concepts/modules.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Toc",
+      "source_relative_path": "docs/portal/concepts/toc.yml",
+      "output": {
+        ".html": {
+          "relative_path": "concepts/toc.html"
+        },
+        ".json": {
+          "relative_path": "concepts/toc.json"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/concepts/voipclient.md",
+      "output": {
+        ".html": {
+          "relative_path": "concepts/voipclient.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/examples/demo-walkthrough.md",
+      "output": {
+        ".html": {
+          "relative_path": "examples/demo-walkthrough.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Toc",
+      "source_relative_path": "docs/portal/examples/toc.yml",
+      "output": {
+        ".html": {
+          "relative_path": "examples/toc.html"
+        },
+        ".json": {
+          "relative_path": "examples/toc.json"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/getting-started/inbound-call.md",
+      "output": {
+        ".html": {
+          "relative_path": "getting-started/inbound-call.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/getting-started/install.md",
+      "output": {
+        ".html": {
+          "relative_path": "getting-started/install.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/getting-started/outbound-call.md",
+      "output": {
+        ".html": {
+          "relative_path": "getting-started/outbound-call.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Toc",
+      "source_relative_path": "docs/portal/getting-started/toc.yml",
+      "output": {
+        ".html": {
+          "relative_path": "getting-started/toc.html"
+        },
+        ".json": {
+          "relative_path": "getting-started/toc.json"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/guides/audio-devices.md",
+      "output": {
+        ".html": {
+          "relative_path": "guides/audio-devices.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/guides/bridge-calls.md",
+      "output": {
+        ".html": {
+          "relative_path": "guides/bridge-calls.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/guides/inbound-calls.md",
+      "output": {
+        ".html": {
+          "relative_path": "guides/inbound-calls.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/guides/making-calls.md",
+      "output": {
+        ".html": {
+          "relative_path": "guides/making-calls.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/guides/media-tap.md",
+      "output": {
+        ".html": {
+          "relative_path": "guides/media-tap.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/guides/nat-and-trunks.md",
+      "output": {
+        ".html": {
+          "relative_path": "guides/nat-and-trunks.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/guides/recording-playback.md",
+      "output": {
+        ".html": {
+          "relative_path": "guides/recording-playback.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/guides/rtcp-quality-metrics.md",
+      "output": {
+        ".html": {
+          "relative_path": "guides/rtcp-quality-metrics.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/guides/srtp-srtcp.md",
+      "output": {
+        ".html": {
+          "relative_path": "guides/srtp-srtcp.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Toc",
+      "source_relative_path": "docs/portal/guides/toc.yml",
+      "output": {
+        ".html": {
+          "relative_path": "guides/toc.html"
+        },
+        ".json": {
+          "relative_path": "guides/toc.json"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/guides/video-calls.md",
+      "output": {
+        ".html": {
+          "relative_path": "guides/video-calls.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/index.md",
+      "output": {
+        ".html": {
+          "relative_path": "index.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/interop/3cx.md",
+      "output": {
+        ".html": {
+          "relative_path": "interop/3cx.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/interop/asterisk.md",
+      "output": {
+        ".html": {
+          "relative_path": "interop/asterisk.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/interop/freeswitch.md",
+      "output": {
+        ".html": {
+          "relative_path": "interop/freeswitch.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/interop/fritzbox.md",
+      "output": {
+        ".html": {
+          "relative_path": "interop/fritzbox.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/interop/matrix.md",
+      "output": {
+        ".html": {
+          "relative_path": "interop/matrix.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/interop/sipgate.md",
+      "output": {
+        ".html": {
+          "relative_path": "interop/sipgate.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Toc",
+      "source_relative_path": "docs/portal/interop/toc.yml",
+      "output": {
+        ".html": {
+          "relative_path": "interop/toc.html"
+        },
+        ".json": {
+          "relative_path": "interop/toc.json"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/production/diagnostics.md",
+      "output": {
+        ".html": {
+          "relative_path": "production/diagnostics.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/production/lifecycle-dispose.md",
+      "output": {
+        ".html": {
+          "relative_path": "production/lifecycle-dispose.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/production/logging.md",
+      "output": {
+        ".html": {
+          "relative_path": "production/logging.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/production/threading.md",
+      "output": {
+        ".html": {
+          "relative_path": "production/threading.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/production/timeouts.md",
+      "output": {
+        ".html": {
+          "relative_path": "production/timeouts.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Toc",
+      "source_relative_path": "docs/portal/production/toc.yml",
+      "output": {
+        ".html": {
+          "relative_path": "production/toc.html"
+        },
+        ".json": {
+          "relative_path": "production/toc.json"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/production/troubleshooting.md",
+      "output": {
+        ".html": {
+          "relative_path": "production/troubleshooting.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "docs/portal/public/main.css",
+      "output": {
+        "resource": {
+          "relative_path": "public/main.css"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "docs/portal/public/main.js",
+      "output": {
+        "resource": {
+          "relative_path": "public/main.js"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Toc",
+      "source_relative_path": "docs/portal/toc.yml",
+      "output": {
+        ".html": {
+          "relative_path": "toc.html"
+        },
+        ".json": {
+          "relative_path": "toc.json"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "docs/portal/versions.json",
+      "output": {
+        "resource": {
+          "relative_path": "versions.json"
+        }
+      },
+      "version": ""
+    }
+  ],
+  "groups": [
+    {
+      "xrefmap": "xrefmap.yml"
+    }
+  ]
+}
