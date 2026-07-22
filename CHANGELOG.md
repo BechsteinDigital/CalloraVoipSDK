@@ -6,13 +6,59 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
 
 ## [Unreleased]
 
-Development version: **4.6.0-preview.2** (no public API changes since preview.1).
+## [4.6.0-preview.2] - 2026-07-22
+
+A large RFC-compliance and hardening release on top of the preview.1 WebRTC facade
+(145 source files changed, ~9.9k insertions since preview.1). No breaking API changes.
+
+### Added
+- **Self-hostable STUN & TURN server**: `AddCalloraStunServer(...)` / `AddCalloraTurnServer(...)`
+  server-hosting facade with TURN control over UDP/TCP/TLS (end-to-end covered), inbound
+  FINGERPRINT validation on both servers, `DONT-FRAGMENT` on the relay socket, and EVEN-PORT
+  + RESERVATION-TOKEN (RFC 8656 §7).
+- **TURN relay lifecycle** (RFC 8656 §9/§12, CF-003): permission-refresh and channel-rebind
+  keepalive loops that hold a real allocation alive across more than one lifetime.
+- **RTCP quality on the WebRTC/BUNDLE media path** (RFC 3550, CF-004a–g): periodic Sender and
+  Receiver Reports, per-SSRC reception statistics, RTT from RR/SR (§6.4.1), report-block paging
+  without overflow loss, negotiated-clock-rate §A.8 jitter with NTP↔RTP SR extrapolation, and
+  per-SSRC/MID quality snapshots surfaced on `WebRtcStats` (e.g. `JitterMs`); verified two-peer
+  over real DTLS-SRTCP (CF-004g).
+- **DTMF (RFC 4733 telephone-event) end-to-end on the WebRTC/BUNDLE path** (CF-007).
+- **SHA-512-256 SIP digest authentication** (RFC 8760, CF-001), resolving a multi-challenge
+  authentication deadlock; digest `qop=auth-int` (RFC 7616, CF-067a); RFC 5626 outbound `;ob`
+  contact parameter (CF-067b).
+- `THIRD-PARTY-NOTICES.md` — license attribution for all runtime dependencies.
+
+### Fixed
+- **SIP in-dialog routing** now follows the dialog route set (loose/strict, RFC 3261 §12.2.1.1)
+  instead of the last response source; in-dialog digest signs the effective request-URI behind a
+  strict router (CF-014).
+- **Dialog identity matching** (§12.2.2, CF-013): the tag gate returns 481 on mismatch; a
+  To-tag-less BYE no longer terminates the dialog.
+- **`received=`/`rport=`** handling centralized in the transaction layer (§18.2.1 / RFC 3581,
+  CF-040); a bare `;rport` reply now targets the real source port, not the sent-by port.
+- **PRACK** is strictly in-order (RFC 3262 §4, CF-044); gaps are not acknowledged and chain
+  faults propagate.
+- **Digest nonce-count** coupled to the nonce (RFC 7616 §3.4, CF-042); the INVITE 422 retry
+  increments `nc` instead of replaying it and raises Session-Expires/Min-SE (RFC 4028, CF-047).
+- **SUBSCRIBE** uses the digest challenge selector (§22, CF-043); **SRV** records are chosen with
+  weight randomization (RFC 2782/3263, CF-041); **REFER** emits active/progress NOTIFY
+  (RFC 3515 §2.4.4, partial, CF-045).
+- **Wire robustness**: multi-value header split respects `<…>`; tag extraction is LWS/quote/
+  escape aware (§7.3.1/§25.1, CF-046); reason-phrase control-character hardening (§7.2, CF-067a).
+- **DTMF timestamp cursor** advances on the SIP and BUNDLE paths, with an RFC-4733 §2.5.1.4 audio
+  send-gate during tone playout.
+- **SSRC collision** handling (RFC 3550 §8.2, CF-005: RTCP BYE + SSRC reseed); randomized RTCP
+  interval (§6.3.1), teardown BYE (§6.6) and opaque CNAME (RFC 7022, CF-006).
+- TURN-over-TLS end-to-end certificate handling made Windows-SChannel compatible.
 
 ### Changed
-- Documentation & open-source readiness: aligned the README and the DocFX portal with the
-  latest source audit (honest maturity/interop status), and added community-health files
-  (`SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, PR template), Dependabot and CI
-  hygiene. No public API or behaviour changes.
+- **Testing & CI**: interop + soak + audit test package (L0–L3 harness, a living audit register,
+  a REGISTER interop pass against a real Asterisk container; `SoakShort` on PRs, `SoakLong`
+  nightly, `Interop` on Docker); Dependabot (NuGet + Actions) and CI hygiene.
+- **Documentation & open-source readiness**: full source audit; README and DocFX portal aligned
+  to it with honest maturity/interop status; versioned docs (4.5 / 4.6); maintainer docs;
+  `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, PR/issue templates.
 
 ## [4.6.0-preview.1] - 2026-07-18
 

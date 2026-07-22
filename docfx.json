@@ -31,6 +31,10 @@
       {
         "files": ["public/**"],
         "src": "docs/portal"
+      },
+      {
+        "files": ["versions.json"],
+        "src": "docs/portal"
       }
     ],
     "output": "_site",
