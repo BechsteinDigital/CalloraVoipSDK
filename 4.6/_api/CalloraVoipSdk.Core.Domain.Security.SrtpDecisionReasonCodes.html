@@ -405,6 +405,39 @@ This is an explicit and allowed fallback.</p>
 
 
 
+  <h3 id="CalloraVoipSdk_Core_Domain_Security_SrtpDecisionReasonCodes_SdesKeyOverInsecureSignaling" data-uid="CalloraVoipSdk.Core.Domain.Security.SrtpDecisionReasonCodes.SdesKeyOverInsecureSignaling">
+  SdesKeyOverInsecureSignaling
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Security/SrtpDecisionReasonCodes.cs/#L52"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>SDES SRTP is keyed over a signaling transport without confidentiality (no TLS/SIPS), so the
+master key travels in cleartext SDP (RFC 4568 §7). Media confidentiality is not actually
+assured against a passive eavesdropper on the signaling path; use TLS/SIPS or DTLS-SRTP.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public const string SdesKeyOverInsecureSignaling = &quot;srtp.sdes.insecure_signaling&quot;</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
 </article>
 
         <div class="contribution d-print-none">

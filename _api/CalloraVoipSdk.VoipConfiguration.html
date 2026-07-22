@@ -155,7 +155,7 @@ call-lifecycle timeouts. Supplied once when constructing or registering the SDK.
 
   <h3 id="CalloraVoipSdk_VoipConfiguration_AudioDevice" data-uid="CalloraVoipSdk.VoipConfiguration.AudioDevice">
   AudioDevice
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L100"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L111"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Audio device to use for all calls.
@@ -189,7 +189,7 @@ attempts to load a platform device (Linux/Windows) at runtime.</p>
 
   <h3 id="CalloraVoipSdk_VoipConfiguration_BridgeAudioFormat" data-uid="CalloraVoipSdk.VoipConfiguration.BridgeAudioFormat">
   BridgeAudioFormat
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L126"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L137"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Audio format delivered to and expected from the media consumer (bridge/tap). When set
@@ -259,7 +259,7 @@ TCP- or TLS-only enterprise proxies.</p>
 
   <h3 id="CalloraVoipSdk_VoipConfiguration_DtlsCertificate" data-uid="CalloraVoipSdk.VoipConfiguration.DtlsCertificate">
   DtlsCertificate
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L59"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L70"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Optional DTLS-SRTP identity certificate (RFC 5763) for the media plane. <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>
@@ -297,7 +297,7 @@ non-exportable HSM keys are rejected fail-closed). The DTLS certificate is authe
 
   <h3 id="CalloraVoipSdk_VoipConfiguration_EnableAutomaticAudioDeviceSelection" data-uid="CalloraVoipSdk.VoipConfiguration.EnableAutomaticAudioDeviceSelection">
   EnableAutomaticAudioDeviceSelection
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L106"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L117"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Automatically load a platform audio device when <a class="xref" href="CalloraVoipSdk.VoipConfiguration.html#CalloraVoipSdk_VoipConfiguration_AudioDevice">AudioDevice</a>
@@ -330,7 +330,7 @@ is left at <span class="xref">CalloraVoipSdk.Core.Infrastructure.Audio.SilenceAu
 
   <h3 id="CalloraVoipSdk_VoipConfiguration_EnableVideo" data-uid="CalloraVoipSdk.VoipConfiguration.EnableVideo">
   EnableVideo
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L75"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L86"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>When <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a>, calls negotiate a video stream (WebRTC phase 2,
@@ -373,7 +373,7 @@ video m-line carries its port but no candidates, so video needs direct connectiv
 
   <h3 id="CalloraVoipSdk_VoipConfiguration_HangupHeldCallOnMediaSilence" data-uid="CalloraVoipSdk.VoipConfiguration.HangupHeldCallOnMediaSilence">
   HangupHeldCallOnMediaSilence
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L139"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L150"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Whether the inbound-media timeout also applies to on-hold calls (which legitimately
@@ -406,7 +406,7 @@ carry no inbound RTP). Default: <a href="https://learn.microsoft.com/dotnet/csha
 
   <h3 id="CalloraVoipSdk_VoipConfiguration_Ice" data-uid="CalloraVoipSdk.VoipConfiguration.Ice">
   Ice
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L88"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L99"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>ICE runtime configuration for NAT traversal and candidate-pair selection.
@@ -439,7 +439,7 @@ Disabled by default.</p>
 
   <h3 id="CalloraVoipSdk_VoipConfiguration_InboundMediaTimeout" data-uid="CalloraVoipSdk.VoipConfiguration.InboundMediaTimeout">
   InboundMediaTimeout
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L133"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L144"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Hang up a connected call whose inbound RTP has been silent this long — a NAT-safe
@@ -505,7 +505,7 @@ stops. <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.times
 
   <h3 id="CalloraVoipSdk_VoipConfiguration_MaxConcurrentCallsPerLine" data-uid="CalloraVoipSdk.VoipConfiguration.MaxConcurrentCallsPerLine">
   MaxConcurrentCallsPerLine
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L93"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L104"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Maximum simultaneous calls per phone line. 0 = unlimited.</p>
@@ -537,7 +537,7 @@ stops. <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.times
 
   <h3 id="CalloraVoipSdk_VoipConfiguration_OfferDtlsSrtp" data-uid="CalloraVoipSdk.VoipConfiguration.OfferDtlsSrtp">
   OfferDtlsSrtp
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L48"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L59"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>When <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a>, outbound call offers advertise DTLS-SRTP keying
@@ -572,7 +572,7 @@ setting. Default: <a href="https://learn.microsoft.com/dotnet/csharp/language-re
 
   <h3 id="CalloraVoipSdk_VoipConfiguration_PreferredAudioCodecs" data-uid="CalloraVoipSdk.VoipConfiguration.PreferredAudioCodecs">
   PreferredAudioCodecs
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L118"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L129"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Ordered audio codec preference by SDP encoding name (&quot;PCMU&quot;, &quot;PCMA&quot;, &quot;G722&quot;,
@@ -611,7 +611,7 @@ offer it, negotiation fails rather than producing an audio-less answer.
 
   <h3 id="CalloraVoipSdk_VoipConfiguration_PreferredVideoCodecs" data-uid="CalloraVoipSdk.VoipConfiguration.PreferredVideoCodecs">
   PreferredVideoCodecs
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L82"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L93"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Ordered video codec preference by SDP encoding name (<code>VP8</code>, <code>H264</code>) when
@@ -645,10 +645,19 @@ offer it, negotiation fails rather than producing an audio-less answer.
 
   <h3 id="CalloraVoipSdk_VoipConfiguration_SrtpPolicy" data-uid="CalloraVoipSdk.VoipConfiguration.SrtpPolicy">
   SrtpPolicy
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L40"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L51"><i class="bi bi-code-slash"></i></a>
   </h3>
 
-  <div class="markdown level1 summary"><p>Default media-encryption policy for calls; defaults to <a class="xref" href="CalloraVoipSdk.Core.Domain.Security.SrtpPolicy.html#CalloraVoipSdk_Core_Domain_Security_SrtpPolicy_Optional">Optional</a>. Overridable per call via <code>DialOptions.UseSrtp</code>.</p>
+  <div class="markdown level1 summary"><p>Default media-encryption policy for calls; defaults to <a class="xref" href="CalloraVoipSdk.Core.Domain.Security.SrtpPolicy.html#CalloraVoipSdk_Core_Domain_Security_SrtpPolicy_Optional">Optional</a>.
+Overridable per call via <code>DialOptions.UseSrtp</code>.</p>
+<p>
+<b>Security note (RFC 4568 §7):</b> unless <a class="xref" href="CalloraVoipSdk.VoipConfiguration.html#CalloraVoipSdk_VoipConfiguration_OfferDtlsSrtp">OfferDtlsSrtp</a> is set, SRTP is keyed
+via SDES, which carries the master key as an <code>a=crypto</code> line inside the SDP. That key is
+only confidential when the signaling transport is secure (TLS/SIPS). Over UDP/TCP the key
+travels in cleartext, so a passive eavesdropper on the signaling path can decrypt the media —
+the SDK logs a warning in this case. For real media confidentiality use TLS/SIPS signaling or
+enable <a class="xref" href="CalloraVoipSdk.VoipConfiguration.html#CalloraVoipSdk_VoipConfiguration_OfferDtlsSrtp">OfferDtlsSrtp</a> (keys never appear in the SDP).
+</p>
 </div>
   <div class="markdown level1 conceptual"></div>
 

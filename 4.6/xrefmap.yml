@@ -5664,6 +5664,12 @@ references:
   commentId: F:CalloraVoipSdk.Core.Domain.Security.SrtpDecisionReasonCodes.RequiredRemoteNoSrtp
   fullName: CalloraVoipSdk.Core.Domain.Security.SrtpDecisionReasonCodes.RequiredRemoteNoSrtp
   nameWithType: SrtpDecisionReasonCodes.RequiredRemoteNoSrtp
+- uid: CalloraVoipSdk.Core.Domain.Security.SrtpDecisionReasonCodes.SdesKeyOverInsecureSignaling
+  name: SdesKeyOverInsecureSignaling
+  href: _api/CalloraVoipSdk.Core.Domain.Security.SrtpDecisionReasonCodes.html#CalloraVoipSdk_Core_Domain_Security_SrtpDecisionReasonCodes_SdesKeyOverInsecureSignaling
+  commentId: F:CalloraVoipSdk.Core.Domain.Security.SrtpDecisionReasonCodes.SdesKeyOverInsecureSignaling
+  fullName: CalloraVoipSdk.Core.Domain.Security.SrtpDecisionReasonCodes.SdesKeyOverInsecureSignaling
+  nameWithType: SrtpDecisionReasonCodes.SdesKeyOverInsecureSignaling
 - uid: CalloraVoipSdk.Core.Domain.Security.SrtpPolicy
   name: SrtpPolicy
   href: _api/CalloraVoipSdk.Core.Domain.Security.SrtpPolicy.html
