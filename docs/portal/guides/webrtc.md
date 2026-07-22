@@ -1,10 +1,14 @@
 # WebRTC (preview)
 
 > **Preview (v4.6.0-preview.1).** The WebRTC facade has not yet been validated against real browsers
-> (Chrome/Firefox); its API may change before it is declared stable. Data channels (SCTP) and TURN relay
-> are not included, and simulcast is send-side only (offerer-confirmed; receive-side RID demux is a later
-> slice). Trickle ICE and early-bind have landed: an ephemeral media port yields a live m-line, and a
-> fixed, reachable port is still recommended for NAT reachability without TURN.
+> (Chrome/Firefox); its API may change before it is declared stable. Data channels (SCTP) are not
+> included and TURN relay is **UDP-only** (no TCP/TLS TURN). Simulcast is send-side only
+> (offerer-confirmed; receive-side RID demux is a later slice). Additional known limits: the media
+> socket is currently **IPv4-only** (an IPv6 `LocalEndPoint` fails to bind), browser **mDNS
+> (`.local`) host candidates are ignored** (interop then relies on server-reflexive/relay candidates),
+> and the socket receive buffer is small — expect drops for high-bitrate video under load. Trickle ICE
+> and early-bind have landed: an ephemeral media port yields a live m-line, and a fixed, reachable port
+> is still recommended for NAT reachability without TURN.
 
 The `CalloraVoipSdk.WebRtc` namespace is a signalling-neutral WebRTC peer surface that mirrors the
 four-level design of `VoipClient`. It is **transport-only**: the SDK runs ICE, DTLS-SRTP, BUNDLE and

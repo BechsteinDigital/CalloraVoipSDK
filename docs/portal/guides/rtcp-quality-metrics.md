@@ -29,6 +29,12 @@ call.QualitySnapshotChanged += (_, e) =>
 RTT feeds the adaptive jitter buffer, so the playout delay tracks real network
 conditions.
 
+> **Known limitation:** on a low-loss/loopback path, packets that arrive too late for
+> playout can currently be counted as unrecoverable loss, so the loss figure may read higher
+> than the true network loss. Treat loss as directional/trend data rather than an exact
+> network-loss percentage until this is fixed
+> ([issue tracker](https://github.com/BechsteinDigital/callora-voip-sdk/issues)).
+
 ## Raw RTP counters
 
 Where the quality snapshot gives derived values (ms / %), `call.RtpStatistics` exposes the

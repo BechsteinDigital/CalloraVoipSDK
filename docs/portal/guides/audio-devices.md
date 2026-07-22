@@ -62,3 +62,8 @@ new VoipConfiguration
 > of these plays through `AttachDefaultAudioAsync` without extra work. Opus is opt-in — list
 > `"OPUS"` in `PreferredAudioCodecs` (or it is dropped from the offer). For other/custom codecs,
 > drive the call through a [media tap](media-tap.md) with your own codec instead.
+>
+> **Known limitation (G.722):** G.722 transcoding currently resets its ADPCM predictor state
+> per frame instead of carrying it across frames, which can cause audible artifacts. Prefer
+> Opus or G.711 (PCMU/PCMA) where audio quality matters until this is fixed
+> ([issue tracker](https://github.com/BechsteinDigital/callora-voip-sdk/issues)).

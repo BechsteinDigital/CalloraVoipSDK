@@ -24,13 +24,14 @@ IMediaSender sender = client.Media.CreateSender();
 await sender.SendAsync(frame);   // frame: an encoded MediaFrame (payload in the negotiated codec)
 ```
 
-`SendAsync(MediaFrame, CancellationToken)` paces frames into the call's send path. Feed
-it PCM produced by your TTS or audio source.
+`SendAsync(MediaFrame, CancellationToken)` paces frames into the call's send path. Feed it
+frames **already encoded in the negotiated codec** — encode your TTS/PCM output first (the
+payload is not PCM; see the note below).
 
 ## Typical bot loop
 
-1. `CreateReceiver()` → decoded inbound audio → your STT / logic.
-2. Your logic produces a response as audio.
+1. `CreateReceiver()` → inbound frames (encoded in the negotiated codec) → decode → your STT / logic.
+2. Your logic produces a response as audio → encode it into the negotiated codec.
 3. `CreateSender().SendAsync(frame)` → the response plays to the remote party.
 
 SRTP/SRTCP is transparent — tapped frames are already decrypted — but the payload is

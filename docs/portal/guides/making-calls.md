@@ -45,7 +45,8 @@ await call.HoldAsync();     // re-INVITE sendonly
 await call.UnholdAsync();   // re-INVITE sendrecv
 ```
 
-Hold/unhold on an SRTP call keeps the media secured and rekeys as needed.
+Hold/unhold on an SRTP call keeps the media secured; the hold/unhold re-offer reuses the
+existing SRTP keys (no rekey, by design).
 
 ## Transfer
 
@@ -64,11 +65,17 @@ REFER-based transfer (e.g. Asterisk, FreeSWITCH, 3CX). Endpoints that don't — 
 FRITZ!Box on PSTN legs — reject the REFER; bridge the media there instead (see
 [Bridge two calls](bridge-calls.md)).
 
+> **Recovery note:** if a transfer fails with a transport/timeout error, the call can remain
+> in the `Transferring` state (hold/DTMF/further transfers are then blocked). Call
+> `HangupAsync` to recover. Tracked in the
+> [issue tracker](https://github.com/BechsteinDigital/callora-voip-sdk/issues).
+
 Inbound transfer requests (REFER from the peer) arrive as `TransferRequested`, handled
 synchronously so you can accept or reject inline.
 
 ## Error handling
 
-`AcceptAsync`/`HangupAsync`/`HoldAsync`/`UnholdAsync`/`SendDtmfAsync`/transfer throw
-`InvalidOperationException` if called in the wrong state. The `Send*`/`Reject`/`Redirect`
-family returns `CallActionResult`. Full rule: [error contract](../production/threading.md#error-contract).
+`AcceptAsync`/`HangupAsync`/`HoldAsync`/`UnholdAsync`/`SendDtmfAsync`/`BlindTransferAsync` throw
+`InvalidOperationException` if called in the wrong state. (`AttendedTransferAsync` currently has
+**no** state guard — call it only from `Connected`.) The `Send*`/`Reject`/`Redirect` family
+returns `CallActionResult`. Full rule: [error contract](../production/threading.md#error-contract).
