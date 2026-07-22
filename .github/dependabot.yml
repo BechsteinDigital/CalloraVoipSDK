@@ -13,6 +13,13 @@ updates:
       - "dependencies"
     commit-message:
       prefix: "deps"
+    ignore:
+      # Keep the library on the lowest supported major (net8 → 8.0.x) for consumer
+      # compatibility. Take patch/minor within the major, but never a major bump of the
+      # public Microsoft.Extensions.* dependencies — that would force net8 consumers onto
+      # a newer runtime stack. Bump the major deliberately, not via Dependabot.
+      - dependency-name: "Microsoft.Extensions.*"
+        update-types: ["version-update:semver-major"]
     groups:
       # One PR for the Microsoft.Extensions.* family instead of one per package.
       microsoft-extensions:

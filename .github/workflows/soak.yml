@@ -30,10 +30,10 @@ jobs:
       SOAK_ARTIFACT_DIR: ${{ github.workspace }}/soak-artifacts
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: |
             8.0.x
@@ -51,7 +51,7 @@ jobs:
 
       - name: Upload soak artifacts (Messreihen + summary.md)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: soak-artifacts
           path: ${{ github.workspace }}/soak-artifacts
