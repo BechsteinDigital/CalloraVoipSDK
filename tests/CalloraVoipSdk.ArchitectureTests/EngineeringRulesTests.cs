@@ -114,7 +114,7 @@ public sealed class EngineeringRulesTests
     [Fact]
     public void Keine_Datei_ueberschreitet_1000_Zeilen()
     {
-        var violations = SourceScan.CsFiles("src", "tests", "samples")
+        var violations = SourceScan.CsFiles("src", "tests", "examples")
             .Where(f => File.ReadLines(f).Count() > 1000)
             .Select(SourceScan.Relative)
             .ToList();
