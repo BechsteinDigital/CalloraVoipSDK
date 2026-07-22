@@ -6,6 +6,14 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
 
 ## [Unreleased]
 
+Development version: **4.6.0-preview.2** (no public API changes since preview.1).
+
+### Changed
+- Documentation & open-source readiness: aligned the README and the DocFX portal with the
+  latest source audit (honest maturity/interop status), and added community-health files
+  (`SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, PR template), Dependabot and CI
+  hygiene. No public API or behaviour changes.
+
 ## [4.6.0-preview.1] - 2026-07-18
 
 ### Added
