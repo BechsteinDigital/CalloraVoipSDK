@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Sockets;
 using CalloraVoipSdk;
 using CalloraVoipSdk.Core.Application.Ports.Connectivity;
+using CalloraVoipSdk.Core.Infrastructure.Common.Network;
 using CalloraVoipSdk.Core.Infrastructure.Dtls;
 using CalloraVoipSdk.Core.Infrastructure.Rtp;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Models;
@@ -770,7 +771,9 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             if (_mediaSocket is null)
             {
                 var socket = new UdpClient(AddressFamily.InterNetwork);
-                socket.Client.ReceiveBufferSize = 8192;
+                // Kernel SO_RCVBUF for the shared media socket; sized for video bitrates, not the max
+                // datagram (MediaSocketDefaults keeps those two concerns separate).
+                socket.Client.ReceiveBufferSize = MediaSocketDefaults.SocketReceiveBufferBytes;
                 socket.Client.Bind(_options.LocalEndPoint);
                 _mediaSocket = socket;
             }
