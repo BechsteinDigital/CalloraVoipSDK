@@ -1,9 +1,10 @@
 # FRITZ!Box
 
-**Status: ✅ verified in a real interop test.** Registration, dialing, two-way audio and
-DTMF were exercised against a live AVM FRITZ!Box, and several SDK hardening fixes came
+**Status: ✅ verified against a live device (manual).** Registration, dialing, two-way audio and
+DTMF were exercised by hand against a real AVM FRITZ!Box, and several SDK hardening fixes came
 directly out of that test (advertised media-address resolution, static payload types
-without `rtpmap`, codec preference).
+without `rtpmap`, codec preference). This is a manual verification against real hardware, not an
+automated CI test.
 
 ## Set up an IP phone on the FRITZ!Box
 

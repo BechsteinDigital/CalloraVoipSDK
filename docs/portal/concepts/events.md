@@ -11,12 +11,12 @@ swallowed but may drop the notification.
 
 | Event | Source | Thread |
 |-------|--------|--------|
-| `ICall.StateChanged` | call | Signaling thread, buffered/serialized |
-| `ICall.HoldStateChanged` | call | Signaling thread, buffered/serialized |
+| `ICall.StateChanged` | call | Signaling thread, serialized |
+| `ICall.HoldStateChanged` | call | Signaling thread, serialized |
 | `ICall.DtmfReceived` | call | **Two possible threads**: SIP INFO handling *or* the RFC-4733 media path |
 | `ICall.TransferRequested` | call | Signaling thread — handled **synchronously** (accept/reject inline) |
 | `ICall.QualitySnapshotChanged` | call | Media/RTCP thread |
-| `IPhoneLine.StateChanged` | line | Signaling thread, buffered |
+| `IPhoneLine.StateChanged` | line | Signaling thread, serialized |
 | `IPhoneLine.IncomingCall` | line | Signaling thread |
 | `VoipClient.IncomingCall` / `CallStateChanged` | client | Signaling thread |
 
@@ -25,6 +25,8 @@ thread-safe or marshal onto your own queue.
 
 ## Do / don't
 
+- **Do** subscribe **before** placing/accepting a call — events fire live to the handlers
+  present at the transition and are not guaranteed to be replayed to late subscribers.
 - **Do** marshal to your UI/synchronization context, enqueue work, or set flags.
 - **Do** keep handlers short and non-blocking.
 - **Don't** run `await`-heavy work inline on the event thread — offload it.

@@ -22,4 +22,4 @@ An adaptive jitter buffer smooths out network packet reordering and delay variat
 
 ## RTCP
 
-RTCP Sender Reports and Receiver Reports are sent every 5 seconds. Quality metrics (packet loss, jitter, round-trip time) are available via `call.GetRtcpQuality()`.
+RTCP Sender Reports and Receiver Reports are sent every 5 seconds. Quality metrics (packet loss, jitter, round-trip time) are available via the `ICall.QualitySnapshot` property and the `ICall.QualitySnapshotChanged` event (or `client.QualityManager`).

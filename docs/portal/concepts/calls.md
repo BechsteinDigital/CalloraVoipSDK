@@ -19,6 +19,9 @@ await call.BlindTransferAsync("sip:1003@pbx.example.com");
 bool ok = await call.AttendedTransferAsync(consultationCall);
 ```
 
+> `AttendedTransferAsync` is the exception to the rule above: it currently has **no** state
+> guard, so a wrong-state call is not rejected — invoke it only from `Connected`.
+
 Methods that return a `CallActionResult` instead of throwing for foreseeable outcomes
 (remote decline, invalid request, timeout):
 
@@ -37,13 +40,15 @@ The full rule is the [error contract](../production/threading.md#error-contract)
 
 | Event | Meaning | Thread |
 |-------|---------|--------|
-| `StateChanged` | Dialog state transition | Signaling (buffered) |
-| `HoldStateChanged` | Local/remote hold state | Signaling (buffered) |
+| `StateChanged` | Dialog state transition | Signaling (serialized) |
+| `HoldStateChanged` | Local/remote hold state | Signaling (serialized) |
 | `DtmfReceived` | Inbound DTMF | SIP INFO **or** RFC-4733 media thread |
 | `TransferRequested` | Peer asks for a transfer (REFER) | Signaling (synchronous accept/reject) |
 | `QualitySnapshotChanged` | New RTCP quality snapshot | Media/RTCP thread |
 
-See [Events](events.md) for the threading contract these follow.
+See [Events](events.md) for the threading contract these follow. Subscribe **before** placing or
+accepting a call — events are delivered live to the handlers registered at the time of the
+transition and are not guaranteed to be replayed to a handler that subscribes afterwards.
 
 ## Media
 

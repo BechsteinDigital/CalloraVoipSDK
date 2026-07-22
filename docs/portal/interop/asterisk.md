@@ -1,8 +1,9 @@
 # Asterisk
 
-**Status: ⚙️ configuration guidance — not yet formally verified.** CalloraVoipSdk registers
-as a standard SIP endpoint and is expected to work against Asterisk's `chan_pjsip`, but we
-have not yet run a validated interop test. Run your own acceptance test first.
+**Status: 🧪 REGISTER covered by an automated interop test (CI).** `AsteriskRegisterInteropTests`
+runs the 401→200 REGISTER flow against a PJSIP Asterisk container in CI, so registration against
+`chan_pjsip` is exercised on every relevant run. Full call/media/DTMF/transfer are **not** yet
+covered by an automated test — run your own acceptance test for those before production.
 
 ## Example `pjsip.conf` peer
 

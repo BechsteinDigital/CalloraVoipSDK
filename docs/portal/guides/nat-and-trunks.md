@@ -98,10 +98,13 @@ that don't expect PRACK.
 
 Interop specifics per provider/PBX live under **Interop**:
 
-- [FRITZ!Box](../interop/fritzbox.md) — the one platform validated in a real interop test
-- [sipgate](../interop/sipgate.md), [Asterisk](../interop/asterisk.md),
-  [FreeSWITCH](../interop/freeswitch.md), [3CX](../interop/3cx.md) — configuration
-  guidance; see the [matrix](../interop/matrix.md) for verification status
+- [FRITZ!Box](../interop/fritzbox.md) — verified **manually** against a live device (not an
+  automated test); source of several hardening fixes
+- [Asterisk](../interop/asterisk.md) — REGISTER covered by an **automated** CI interop test
+  (full call/media not yet)
+- [sipgate](../interop/sipgate.md), [FreeSWITCH](../interop/freeswitch.md),
+  [3CX](../interop/3cx.md) — configuration guidance only; see the
+  [matrix](../interop/matrix.md) for the full verification status
 
 ## Diagnostics
 

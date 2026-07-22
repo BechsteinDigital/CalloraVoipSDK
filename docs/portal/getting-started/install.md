@@ -7,13 +7,14 @@ platform audio backends ship as separate packages so you only pull in what you n
 
 | Package | Purpose |
 |---------|---------|
-| `CalloraVoipSdk.Core` | SIP/RTP/SRTP/SDP stack and the media pipeline |
-| `CalloraVoipSdk.Client` | The public `VoipClient` facade |
+| `CalloraVoipSdk` | **Recommended entry point** — meta-package that pulls in the `VoipClient` facade (`CalloraVoipSdk.Client`) and shared audio abstractions |
+| `CalloraVoipSdk.Core` | SIP/RTP/SRTP/SDP stack and the media pipeline (pulled in transitively) |
+| `CalloraVoipSdk.Client` | The public `VoipClient` facade (if you prefer to reference it directly) |
 | `CalloraVoipSdk.Audio.Linux` | ALSA/PulseAudio device backend for Linux |
 | `CalloraVoipSdk.Audio.Windows` | WASAPI device backend for Windows |
 
 ```bash
-dotnet add package CalloraVoipSdk.Client
+dotnet add package CalloraVoipSdk
 # plus the audio backend for your host OS:
 dotnet add package CalloraVoipSdk.Audio.Linux
 # or

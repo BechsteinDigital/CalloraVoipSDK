@@ -5,6 +5,7 @@
 [![NuGet Downloads](https://img.shields.io/nuget/dt/CalloraVoipSdk.Core)](https://www.nuget.org/packages/CalloraVoipSdk.Core)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 [![Docs](https://img.shields.io/badge/docs-github%20pages-blue)](https://bechsteindigital.github.io/callora-voip-sdk/)
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-support-ff5e5b?logo=ko-fi&logoColor=white)](https://ko-fi.com/bechsteindigital)
 
 ![C#](https://img.shields.io/badge/c%23-%23239120.svg?style=for-the-badge&logo=csharp&logoColor=white)
 ![.Net](https://img.shields.io/badge/.NET-5C2D91?style=for-the-badge&logo=.net&logoColor=white)
@@ -530,3 +531,9 @@ especially valuable.
 Please report security vulnerabilities **privately** — see [`SECURITY.md`](SECURITY.md) — and
 not as a public issue. This SDK handles SIP digest authentication and SRTP/DTLS keying, so
 responsible disclosure matters.
+
+## Support
+
+The SDK core is open and free (Apache-2.0). If it helps you build something, you can support
+ongoing development on **[Ko-fi](https://ko-fi.com/bechsteindigital)** ☕. For commercial
+plugins or early access, contact [info@bechstein.digital](mailto:info@bechstein.digital).

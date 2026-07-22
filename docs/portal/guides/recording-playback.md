@@ -33,6 +33,11 @@ await play.StopAsync();
 WAV and MP3 are supported for playback; recording writes WAV. The session decodes/encodes
 against the call's negotiated audio format for you.
 
+> **MP3 caveat:** MP3 playback expects raw MPEG frames from byte 0. Files with an ID3v2 tag
+> (the common case) or VBR headers currently fail rather than resynchronizing to the next
+> frame. Strip ID3 tags first, or use WAV, until this is improved
+> ([issue tracker](https://github.com/BechsteinDigital/callora-voip-sdk/issues)).
+
 ## Lifecycle notes
 
 - Always `StopAsync` a recording to flush and close the file cleanly — a dropped session

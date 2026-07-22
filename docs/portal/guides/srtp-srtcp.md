@@ -1,8 +1,8 @@
 # SRTP / SRTCP
 
 The SDK encrypts media with SRTP (SDES keying, RFC 4568) and encrypts/authenticates RTCP
-with SRTCP (RFC 3711 §3.4). It acts as **both** offerer and answerer, and rekeys on
-re-INVITE.
+with SRTCP (RFC 3711 §3.4). It acts as **both** offerer and answerer. A rekey re-INVITE
+swaps the keys; a hold/unhold re-offer deliberately **reuses** the existing keys (no rekey).
 
 ## Policy
 
@@ -34,8 +34,8 @@ ICall call = await line.DialAsync(
   (AES-CM / HMAC-SHA1 suites).
 - **Answer as callee** — inbound SRTP offers are accepted and keyed.
 - **SRTCP** — once SRTP is negotiated, RTCP is protected too (encrypted + authenticated).
-- **Rekey** — a re-INVITE (RFC 3264 §8) rekeys the session; hold/unhold keeps SRTP alive
-  and rekeys as needed.
+- **Rekey** — a rekey re-INVITE (RFC 3264 §8) swaps the SRTP keys. Hold/unhold sends a
+  re-offer but **reuses** the existing keys (no rekey, by design — avoids needless key churn).
 
 ## Verifying
 
@@ -54,6 +54,11 @@ yields a failed call rather than a silent downgrade.
 
 ## Limitations
 
-- Keying is **SDES** (`a=crypto`). DTLS-SRTP is not the negotiation path here.
+- Keying is **SDES** (`a=crypto`). DTLS-SRTP is available separately (RFC 5763, opt-in via
+  `VoipConfiguration.OfferDtlsSrtp`) and is not the SDES negotiation path described here.
+- For maximum interop, prefer the `AES_CM_128_HMAC_SHA1_80` suite. There is a known defect in
+  the `*_HMAC_SHA1_32` suites where the **SRTCP** auth tag is 4 bytes instead of the required
+  10 (RFC 4568 §6.2), which breaks RTCP interop with standards-compliant peers (e.g. libsrtp);
+  tracked in the [issue tracker](https://github.com/BechsteinDigital/callora-voip-sdk/issues).
 - SRTP protects the media path; it does not by itself secure signaling — run SIP over TLS
   for signaling confidentiality.

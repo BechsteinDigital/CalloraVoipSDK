@@ -21,34 +21,44 @@ and intelligent decision logic.
 
 ## Current Status
 
-**Available on [nuget.org](https://www.nuget.org/packages/CalloraVoipSdk) — current release: v4.5.0.**
+Latest stable package: **v4.5.0** on [nuget.org](https://www.nuget.org/packages/CalloraVoipSdk).
+The **4.6 line is in preview** (this documentation): it adds the WebRTC facade, DTLS-SRTP and a
+self-hostable STUN/TURN server on top of the stable SIP + RTP core.
 
-**What works today:**
+> **How to read the status column.** *Stable* = mature, heavily covered by the RFC-oriented test
+> suite, and the intended production surface. *Preview* = implemented but not yet validated against
+> a broad interop matrix — validate for your environment first. The production-proven NAT path is
+> symmetric RTP (comedia), which needs no ICE or STUN. Known gaps and interop defects are tracked
+> openly in the [issue tracker](https://github.com/BechsteinDigital/callora-voip-sdk/issues).
 
-| Capability | Status |
-|-----------|--------|
-| SIP Register / Dial / Accept / Hangup | ✅ Production-ready |
-| Hold / Unhold / Blind + Attended Transfer | ✅ Production-ready |
-| RTP media transport | ✅ Production-ready |
-| SRTP + SRTCP media encryption (SDES, offer & answer; RFC 4568 / RFC 3711) | ✅ Production-ready |
-| Adaptive jitter buffer | ✅ Production-ready |
-| Media cross-connect / bridge | ✅ Production-ready |
-| Per-call media tap (frame receivers/senders for bots and streaming) | ✅ Production-ready |
-| Encoded video: send/receive, transport-cc bitrate recommendation, keyframe feedback ([transport-only](guides/video-calls.md)) | ✅ New in v4.5.0 |
-| WebRTC facade: peer connections, SDK-driven signalling, W3C tracks, media taps ([transport-only](guides/webrtc.md)) | 🧪 Preview in v4.6.0 (not browser-validated) |
-| Module registry (`client.Modules`) as plugin extension point | ✅ Production-ready |
-| Configurable audio codec preference | ✅ Production-ready |
-| DTMF send/receive (RFC 4733) | ✅ Production-ready |
-| RTCP quality metrics (measured jitter, loss, round-trip time) | ✅ Production-ready |
-| Recording + Playback (WAV/MP3) | ✅ Production-ready |
-| Linux + Windows audio devices | ✅ Production-ready |
-| Runtime device hot-switch + controls | ✅ Production-ready |
-
-**In progress / planned:**
+**Core (SIP + RTP):**
 
 | Capability | Status |
 |-----------|--------|
-| ICE for NAT traversal (RFC 8445/7675: role + tie-breaker, check-list FSM, nomination, inbound/triggered checks, consent freshness, restart) — opt-in, unproven in production | 🔧 In progress |
+| SIP Register / Dial / Accept / Hangup | ✅ Stable |
+| Hold / Unhold / Blind + Attended Transfer | ✅ Stable |
+| RTP media transport | ✅ Stable |
+| SRTP + SRTCP media encryption (SDES, offer & answer; RFC 4568 / RFC 3711) | ✅ Stable |
+| DTLS-SRTP media encryption (RFC 5763, opt-in) | 🧪 Preview |
+| Adaptive jitter buffer | ✅ Stable |
+| Media cross-connect / bridge | ✅ Stable |
+| Per-call media tap (frame receivers/senders for bots and streaming) | ✅ Stable |
+| Module registry (`client.Modules`) as plugin extension point | ✅ Stable |
+| Configurable audio codec preference | ✅ Stable |
+| DTMF send/receive (RFC 4733) | ✅ Stable |
+| RTCP quality metrics (measured jitter, loss, round-trip time) | ✅ Stable |
+| Recording + Playback (WAV/MP3) | ✅ Stable |
+| Linux + Windows audio devices | ✅ Stable |
+| Runtime device hot-switch + controls | ✅ Stable |
+| Encoded video: send/receive, transport-cc bitrate recommendation, keyframe feedback ([transport-only](guides/video-calls.md)) | ✅ Stable (single-stream) |
+
+**Preview / in progress:**
+
+| Capability | Status |
+|-----------|--------|
+| WebRTC facade: peer connections, SDK-driven signalling, W3C tracks, media taps ([transport-only](guides/webrtc.md)) | 🧪 Preview (not browser-validated; no SCTP; UDP TURN only) |
+| Self-hostable STUN / TURN server (RFC 5389 / 5766) | 🧪 Preview (validate against your clients) |
+| ICE for NAT traversal (RFC 8445/7675: role + tie-breaker, check-list FSM, nomination, inbound/triggered checks, consent freshness, restart) | 🧪 Preview — opt-in, unproven in production |
 | Backend/API for signed plugin marketplace + tenant entitlements | 📋 Roadmap |
 
 ## SDK Structure
@@ -56,7 +66,8 @@ and intelligent decision logic.
 **CalloraVoipSdk.Core** — Sovereign calling foundation
 
 Clean DDD architecture: Domain → Application → Infrastructure → public `VoipClient` facade.
-No vendor lock-in. Full protocol stack owned in-house (SIP, RTP, SRTP, SDP, STUN).
+No vendor lock-in. Full protocol stack owned in-house (SIP, RTP, SRTP, DTLS-SRTP, SDP,
+STUN/TURN client **and** server) — no external SIP/RTP/ICE library.
 
 **Commercial plugins** *(private feed, licensed separately — in development)*
 

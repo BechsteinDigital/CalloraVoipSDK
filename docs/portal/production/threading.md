@@ -31,8 +31,13 @@ Call-control methods split into two deliberate categories:
 
 ```
 AcceptAsync, HangupAsync, HoldAsync, UnholdAsync,
-SendDtmfAsync, BlindTransferAsync, AttendedTransferAsync
+SendDtmfAsync, BlindTransferAsync
 ```
+
+> **Note:** `AttendedTransferAsync` currently has **no** state guard (unlike `BlindTransferAsync`),
+> and invalid state transitions are logged-and-ignored rather than thrown — so a wrong-state
+> attended transfer does not throw today. Call it only from `Connected`. This gap is tracked in
+> the [issue tracker](https://github.com/BechsteinDigital/callora-voip-sdk/issues).
 
 **`CallActionResult`-returning methods** — foreseeable outcomes (remote decline, invalid
 request, timeout, wrong state at the peer) are returned, not thrown:
