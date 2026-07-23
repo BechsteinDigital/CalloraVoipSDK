@@ -7,6 +7,13 @@ namespace CalloraVoipSdk.SoakTests.Soak;
 
 public sealed class MediaQualityDriftSoakTests
 {
+    /// <summary>
+    /// Absoluter Jitter-Floor (ms), unter dem Loopback-Jitter als Scheduling-Rauschen gilt und kein Drift
+    /// gemeldet wird. Weit über dem erwarteten Sub-ms-Loopback-Jitter, weit unter dem 20-ms-Frame-Intervall
+    /// und jeder audio-relevanten Jitter-Buffer-Zielgröße — ein echter Anstieg hierüber ist noch fangbar.
+    /// </summary>
+    private const double JitterDriftFloorMs = 5.0;
+
     /// <summary>Die Qualitäts-Matrix: jeder Codec × jede Transport-Sicherheit.</summary>
     public static IEnumerable<object[]> Matrix() => new[]
     {
@@ -61,8 +68,13 @@ public sealed class MediaQualityDriftSoakTests
 
         if (!isShort)
         {
+            // Relativer Drift-Check mit absolutem Floor: auf sauberem UDP-Loopback ist der Jitter sub-ms und
+            // wird vom OS-Scheduling des (geteilten) CI-Runners dominiert — ein relativer +50 %-Sprung von z. B.
+            // 0,3 auf 0,7 ms ist Messrauschen, kein Leak. Erst ein Anstieg über eine audio-relevante Schwelle
+            // (JitterDriftFloorMs) UND +50 % gilt als echte Drift. Weit unter dem 20-ms-Frame-Intervall.
             var jitter = TrendAssertions.NoUpwardDrift(
-                snapshots, s => s.JitterMs, toleranceRatio: 0.50, metricName: $"{tag} JitterMs");
+                snapshots, s => s.JitterMs, toleranceRatio: 0.50,
+                metricName: $"{tag} JitterMs", absoluteFloor: JitterDriftFloorMs);
             Assert.False(jitter.HasDrift, jitter.Detail);
         }
     }
