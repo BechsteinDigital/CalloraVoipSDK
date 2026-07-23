@@ -86,6 +86,8 @@ public sealed class PhoneLineOutboundRingingTests
         }
 
         public void SetInboundHandler(Action<ICallChannel, string> onInbound) { }
+        public void SetMessageHandler(Action<CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage> onMessage) { }
+        public Task SendMessageAsync(string targetUri, string body, string contentType, CancellationToken ct = default) => Task.CompletedTask;
         public void Dispose() { }
     }
 

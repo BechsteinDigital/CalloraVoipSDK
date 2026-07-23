@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Net;
 using System.Net.Sockets;
+using CalloraVoipSdk.Core.Infrastructure.Common.Network;
 using CalloraVoipSdk.Core.Infrastructure.Common.Relay;
 using Microsoft.Extensions.Logging;
 
@@ -32,8 +33,6 @@ namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
 /// </summary>
 internal sealed class BundledMediaTransport : IBundledDatagramSender, IRelayControlTransport, IAsyncDisposable
 {
-    private const int ReceiveBufferSize = 8192;
-
     private readonly BundledInboundPipeline _inbound;
     private readonly ILogger<BundledMediaTransport> _logger;
     private readonly IPEndPoint _localEndPoint;
@@ -100,7 +99,9 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IRelayCont
         else
         {
             _udp = new UdpClient(AddressFamily.InterNetwork);
-            _udp.Client.ReceiveBufferSize = ReceiveBufferSize;
+            // Kernel SO_RCVBUF (queues many pending datagrams) — distinct from the per-datagram user-space
+            // buffer used by the receive loop (MediaSocketDefaults.DatagramBufferBytes).
+            _udp.Client.ReceiveBufferSize = MediaSocketDefaults.SocketReceiveBufferBytes;
             _udp.Client.Bind(_localEndPoint);
         }
     }
@@ -316,7 +317,7 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IRelayCont
     {
         _logger.LogDebug("Bundled media receive loop started on {LocalEndPoint}", _localEndPoint);
 
-        var buffer = ArrayPool<byte>.Shared.Rent(ReceiveBufferSize);
+        var buffer = ArrayPool<byte>.Shared.Rent(MediaSocketDefaults.DatagramBufferBytes);
         var remoteTemplate = new IPEndPoint(IPAddress.Any, 0);
         try
         {

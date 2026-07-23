@@ -130,6 +130,7 @@ public sealed class SipLineChannelUnregisterTests
     private sealed class NoopSignalingService : ISipCallSignalingService
     {
         public event EventHandler<SipIncomingInviteEventArgs>? IncomingInvite { add { } remove { } }
+        public event EventHandler<SipIncomingMessageEventArgs>? IncomingMessage { add { } remove { } }
         public event EventHandler<SipIncomingInviteEventArgs>? OutboundCallStarted { add { } remove { } }
 
         public Task<ISipCallSession> InviteAsync(SipInviteRequest request, Action<ISipCallSession>? onSessionCreated = null, CancellationToken ct = default) =>
@@ -137,6 +138,8 @@ public sealed class SipLineChannelUnregisterTests
 
         public Task<SipSubscriptionHandle> SubscribeAsync(SipSubscribeRequest request, CancellationToken ct = default) =>
             throw new NotSupportedException();
+
+        public Task<int> SendMessageAsync(SipMessageRequest request, CancellationToken ct = default) => Task.FromResult(200);
 
         public void Dispose() { }
     }

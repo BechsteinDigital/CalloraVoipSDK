@@ -525,7 +525,7 @@ internal sealed class TurnServer : IAsyncDisposable
                 break;
 
             case StunMessageClass.Indication:
-                await HandleTurnIndicationAsync(message, rawPacket, context, ct).ConfigureAwait(false);
+                await HandleTurnIndicationAsync(message, context, ct).ConfigureAwait(false);
                 break;
 
             default:
@@ -574,13 +574,14 @@ internal sealed class TurnServer : IAsyncDisposable
 
     private async Task HandleTurnIndicationAsync(
         StunMessage indication,
-        byte[] rawIndication,
         TurnClientContext context,
         CancellationToken ct)
     {
-        if (!_requestAuthenticator.IsAuthenticatedIndication(indication, rawIndication))
-            return;
-
+        // Send/Data indications are never authenticated (RFC 5766/8656 §10): they carry no
+        // MESSAGE-INTEGRITY, so requiring it here rejects RFC-conformant peers on the relay
+        // data path. Security comes — as for the ChannelData path — from the allocation being
+        // bound to the client's 5-tuple (registry keyed by ClientKey) plus an installed
+        // permission for the peer (RFC 8656 §9), checked below.
         var method = (TurnMessageMethod)(ushort)indication.MessageMethod;
         if (method != TurnMessageMethod.Send)
             return;

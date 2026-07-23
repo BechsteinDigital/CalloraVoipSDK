@@ -17,12 +17,19 @@ internal sealed class SrtcpContext : ISrtcpContext
     private const int RtcpHeaderLength = 8;
     private const int SrtcpIndexLength = 4;
     private const int AuthTagFullLength = 20;
+
+    // SRTCP always carries an 80-bit (10-byte) HMAC-SHA1 tag for every supported suite,
+    // including AES_CM_128/256_HMAC_SHA1_32: the 32-bit truncation of RFC 3711 §5.2 applies
+    // to SRTP only. RFC 4568 §6.2 and the RFC 5764 §4.1.2 footnote keep SRTCP at 80 bit so the
+    // mandatory RTCP authentication is not weakened — a shorter tag breaks interop with
+    // libsrtp-based peers on the RTCP path once SHA1_32 is negotiated.
+    private const int SrtcpAuthTagLength = 10;
+
     private const uint EncryptionFlag = 0x8000_0000;
     private const uint SrtcpIndexMask = 0x7FFF_FFFF;
 
     private readonly SrtpSessionKeys _keys;
     private readonly AesCmCipher _cipher;
-    private readonly int _authTagLength;
 
     // Per-SSRC SRTCP index and replay window (RFC 3711 §3.2.3): the index and replay state are
     // per synchronisation source, so several RTCP senders multiplexed over one BUNDLE key do not
@@ -40,9 +47,6 @@ internal sealed class SrtcpContext : ISrtcpContext
         ArgumentNullException.ThrowIfNull(material);
         _keys = SrtpKeyDerivation.DeriveRtcp(material);
         _cipher = new AesCmCipher(_keys.CipherKey);
-        _authTagLength = material.Suite is SrtpCryptoSuite.AesCm128HmacSha1_32
-                                        or SrtpCryptoSuite.AesCm256HmacSha1_32
-            ? 4 : 10;
     }
 
     /// <summary>Derived SRTCP session keys — internal test seam for dispose/zeroing evidence.</summary>
@@ -64,7 +68,7 @@ internal sealed class SrtcpContext : ISrtcpContext
 
             // Layout: [clear header + encrypted payload][E|index (4)][auth tag].
             var result = GC.AllocateUninitializedArray<byte>(
-                rtcpPacket.Length + SrtcpIndexLength + _authTagLength);
+                rtcpPacket.Length + SrtcpIndexLength + SrtcpAuthTagLength);
             rtcpPacket.CopyTo(result);
 
             if (encryptedLen > 0)
@@ -82,7 +86,7 @@ internal sealed class SrtcpContext : ISrtcpContext
             var authedLen = rtcpPacket.Length + SrtcpIndexLength;
             Span<byte> tag = stackalloc byte[AuthTagFullLength];
             ComputeAuthTag(result.AsSpan(0, authedLen), tag);
-            tag[.._authTagLength].CopyTo(result.AsSpan(authedLen, _authTagLength));
+            tag[..SrtcpAuthTagLength].CopyTo(result.AsSpan(authedLen, SrtcpAuthTagLength));
 
             return result;
         }
@@ -91,21 +95,21 @@ internal sealed class SrtcpContext : ISrtcpContext
     /// <inheritdoc />
     public byte[] UnprotectRtcp(ReadOnlySpan<byte> srtcpPacket)
     {
-        if (srtcpPacket.Length < RtcpHeaderLength + SrtcpIndexLength + _authTagLength)
+        if (srtcpPacket.Length < RtcpHeaderLength + SrtcpIndexLength + SrtcpAuthTagLength)
             throw new ArgumentException("SRTCP packet too short.", nameof(srtcpPacket));
 
         lock (_sync)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
 
-            var authedLen = srtcpPacket.Length - _authTagLength;
+            var authedLen = srtcpPacket.Length - SrtcpAuthTagLength;
             var authedSpan = srtcpPacket[..authedLen];
             var receivedTag = srtcpPacket[authedLen..];
 
             // 1. Verify auth tag before decryption (RFC 3711 §3.3 — verify-then-decrypt).
             Span<byte> expectedTag = stackalloc byte[AuthTagFullLength];
             ComputeAuthTag(authedSpan, expectedTag);
-            if (!CryptographicOperations.FixedTimeEquals(receivedTag, expectedTag[.._authTagLength]))
+            if (!CryptographicOperations.FixedTimeEquals(receivedTag, expectedTag[..SrtcpAuthTagLength]))
                 throw new SrtpAuthenticationException("SRTCP authentication tag mismatch.");
 
             var indexWord = BinaryPrimitives.ReadUInt32BigEndian(authedSpan[(authedLen - SrtcpIndexLength)..]);

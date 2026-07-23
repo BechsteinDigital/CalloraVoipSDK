@@ -42,6 +42,13 @@ public interface IPhoneLine
     event EventHandler<OutboundCallRingingEventArgs>? OutboundCallRinging;
 
     /// <summary>
+    /// Raised when an inbound out-of-dialog SIP MESSAGE (RFC 3428 pager-mode IM) arrives for this line
+    /// (signaling thread). The SDK has already answered it 200 OK; no reply is required. Keep the handler
+    /// fast (see remarks).
+    /// </summary>
+    event EventHandler<IncomingMessageEventArgs>?      IncomingMessage;
+
+    /// <summary>
     /// Raised each time the SDK begins a reconnect attempt after losing the SIP registration.
     /// The line is already in <see cref="LineState.Reconnecting"/> when this event fires.
     /// </summary>
@@ -65,6 +72,16 @@ public interface IPhoneLine
     /// <param name="ct">Cancels the dial attempt.</param>
     /// <returns>The newly created outbound call.</returns>
     Task<ICall> DialAsync(string targetUri, DialOptions? options = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// Sends an out-of-dialog SIP MESSAGE (RFC 3428 pager-mode instant message) from this line.
+    /// </summary>
+    /// <param name="targetUri">The recipient's SIP URI.</param>
+    /// <param name="body">The message text/body.</param>
+    /// <param name="contentType">The body's MIME type; defaults to <c>text/plain</c>.</param>
+    /// <param name="ct">Cancels the send.</param>
+    /// <returns>A task that completes when the peer answers 2xx; it faults on a non-2xx or no response.</returns>
+    Task SendMessageAsync(string targetUri, string body, string contentType = "text/plain", CancellationToken ct = default);
 
     /// <summary>
     /// Unregisters this line (sends REGISTER with Expires: 0) and stops automatic re-registration.

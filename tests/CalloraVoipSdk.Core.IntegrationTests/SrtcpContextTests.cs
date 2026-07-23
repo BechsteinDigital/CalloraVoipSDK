@@ -28,13 +28,16 @@ public sealed class SrtcpContextTests
             "inline:" + Convert.ToBase64String(Convert.FromHexString(RfcMasterKeyHex + RfcMasterSaltHex)),
             SrtpCryptoSuite.AesCm128HmacSha1_80);
 
-    private static SrtpKeyMaterial Material(byte seed)
+    private static SrtpKeyMaterial Material(byte seed) =>
+        Material(seed, SrtpCryptoSuite.AesCm128HmacSha1_80);
+
+    private static SrtpKeyMaterial Material(byte seed, SrtpCryptoSuite suite)
     {
         var material = new byte[30];
         for (var i = 0; i < material.Length; i++)
             material[i] = (byte)(seed + i);
         return SrtpKeyMaterial.ParseInline(
-            "inline:" + Convert.ToBase64String(material), SrtpCryptoSuite.AesCm128HmacSha1_80);
+            "inline:" + Convert.ToBase64String(material), suite);
     }
 
     private static byte[] Rtcp(uint ssrc, int payloadLength)
@@ -104,6 +107,37 @@ public sealed class SrtcpContextTests
 
         Assert.Equal(0x8000_0001u, BinaryPrimitives.ReadUInt32BigEndian(first.AsSpan(packet.Length)));
         Assert.Equal(0x8000_0002u, BinaryPrimitives.ReadUInt32BigEndian(second.AsSpan(packet.Length)));
+    }
+
+    // ── RFC 4568 §6.2 / RFC 5764 §4.1.2: SRTCP keeps the 80-bit tag even for SHA1_32 ──
+
+    [Theory]
+    [InlineData(false)] // AES_CM_128_HMAC_SHA1_80
+    [InlineData(true)]  // AES_CM_128_HMAC_SHA1_32 — SRTP tag would be 32 bit, SRTCP stays 80 bit
+    public void Srtcp_tag_is_80_bit_for_every_suite(bool sha1_32)
+    {
+        var suite = sha1_32
+            ? SrtpCryptoSuite.AesCm128HmacSha1_32
+            : SrtpCryptoSuite.AesCm128HmacSha1_80;
+        var packet = Rtcp(ssrc: 0x11223344, payloadLength: 24);
+        using var ctx = new SrtcpContext(Material(11, suite));
+
+        var protectedPacket = ctx.ProtectRtcp(packet);
+
+        // The 32-bit truncation of RFC 3711 §5.2 is SRTP-only; SRTCP always appends a 10-byte tag.
+        Assert.Equal(packet.Length + IndexLength + AuthTagLength, protectedPacket.Length);
+    }
+
+    [Fact]
+    public void Sha1_32_suite_roundtrips_with_80_bit_srtcp_tag()
+    {
+        var packet = Rtcp(ssrc: 0x55667788, payloadLength: 28);
+        using var sender = new SrtcpContext(Material(12, SrtpCryptoSuite.AesCm128HmacSha1_32));
+        using var receiver = new SrtcpContext(Material(12, SrtpCryptoSuite.AesCm128HmacSha1_32));
+
+        var recovered = receiver.UnprotectRtcp(sender.ProtectRtcp(packet));
+
+        Assert.Equal(packet, recovered);
     }
 
     // ── Round-trip through a peer context (same master key, both directions) ──────

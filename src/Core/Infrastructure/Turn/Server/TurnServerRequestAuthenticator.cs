@@ -6,7 +6,8 @@ using CalloraVoipSdk.Core.Infrastructure.Stun.Wire;
 namespace CalloraVoipSdk.Core.Infrastructure.Turn.Server;
 
 /// <summary>
-/// Validates TURN requests/indications against long-term auth requirements.
+/// Validates TURN requests against long-term auth requirements. Send/Data indications are
+/// never authenticated (RFC 5766/8656 §10) and are therefore not handled here.
 /// </summary>
 internal sealed class TurnServerRequestAuthenticator
 {
@@ -108,41 +109,5 @@ internal sealed class TurnServerRequestAuthenticator
 
         authenticatedCredentials = resolved;
         return true;
-    }
-
-    /// <summary>
-    /// Authenticates TURN indications when auth is enabled.
-    /// </summary>
-    public bool IsAuthenticatedIndication(StunMessage indication, ReadOnlySpan<byte> rawIndication)
-    {
-        ArgumentNullException.ThrowIfNull(indication);
-
-        if (!_options.RequireAuthentication)
-            return true;
-
-        if (_authOptions is null)
-            return false;
-
-        var username = indication.Attributes.OfType<UsernameAttribute>().FirstOrDefault()?.Value;
-        var realm = indication.Attributes.OfType<RealmAttribute>().FirstOrDefault()?.Value;
-        var nonce = indication.Attributes.OfType<NonceAttribute>().FirstOrDefault()?.Value;
-        bool hasMi = indication.Attributes.Any(attribute => attribute.AttributeType == StunAttributeType.MessageIntegrity);
-
-        if (string.IsNullOrWhiteSpace(username)
-            || string.IsNullOrWhiteSpace(realm)
-            || string.IsNullOrWhiteSpace(nonce)
-            || !hasMi)
-        {
-            return false;
-        }
-
-        if (!_authOptions.CredentialProvider.TryGetCredentials(username, realm, out var credentials))
-            return false;
-
-        if (!credentials.IsLongTerm || !_authOptions.NonceManager.IsNonceValid(nonce))
-            return false;
-
-        var resolved = credentials.WithRealmAndNonce(realm, nonce);
-        return _codec.VerifyIntegrity(rawIndication, resolved.DeriveHmacKey());
     }
 }

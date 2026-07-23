@@ -162,6 +162,7 @@ internal sealed class FakePhoneLine : IPhoneLine
     public event EventHandler<LineStateChangedEventArgs>? StateChanged;
     public event EventHandler<IncomingCallEventArgs>? IncomingCall;
     public event EventHandler<OutboundCallRingingEventArgs>? OutboundCallRinging;
+    public event EventHandler<IncomingMessageEventArgs>? IncomingMessage { add { } remove { } }
     public event EventHandler<LineReconnectingEventArgs>? LineReconnecting;
     public event EventHandler<LineReconnectFailedEventArgs>? LineReconnectFailed;
 #pragma warning restore CS0067
@@ -170,5 +171,8 @@ internal sealed class FakePhoneLine : IPhoneLine
         throw new NotSupportedException();
 
     public Task UnregisterAsync(CancellationToken ct = default) =>
+        throw new NotSupportedException();
+
+    public Task SendMessageAsync(string targetUri, string body, string contentType = "text/plain", CancellationToken ct = default) =>
         throw new NotSupportedException();
 }

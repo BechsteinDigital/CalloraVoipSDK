@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using CalloraVoipSdk.Core.Domain.Calls;
 using CalloraVoipSdk.Core.Domain.Events;
+using CalloraVoipSdk.Core.Domain.Messages;
 
 namespace CalloraVoipSdk.Core.Domain.Lines;
 
@@ -28,6 +29,7 @@ internal sealed class PhoneLine : IPhoneLine, IDisposable
     public event EventHandler<LineStateChangedEventArgs>?    StateChanged;
     public event EventHandler<IncomingCallEventArgs>?         IncomingCall;
     public event EventHandler<OutboundCallRingingEventArgs>? OutboundCallRinging;
+    public event EventHandler<IncomingMessageEventArgs>?      IncomingMessage;
     public event EventHandler<LineReconnectingEventArgs>?    LineReconnecting;
     public event EventHandler<LineReconnectFailedEventArgs>? LineReconnectFailed;
 
@@ -48,6 +50,7 @@ internal sealed class PhoneLine : IPhoneLine, IDisposable
         _logger         = loggerFactory.CreateLogger<PhoneLine>();
 
         _channel.SetInboundHandler(HandleInbound);
+        _channel.SetMessageHandler(HandleInboundMessage);
     }
 
     internal void StartRegistration() =>
@@ -115,6 +118,9 @@ internal sealed class PhoneLine : IPhoneLine, IDisposable
         return call;
     }
 
+    public Task SendMessageAsync(string targetUri, string body, string contentType = "text/plain", CancellationToken ct = default)
+        => _channel.SendMessageAsync(targetUri, body, contentType, ct);
+
     public Task UnregisterAsync(CancellationToken ct = default)
         // Real de-registration: stop the refresh loop AND await the REGISTER Expires:0 round-trip
         // (RFC 3261 §10.2.2), so the returned task reflects the binding removal (HARD-E1) rather than
@@ -136,6 +142,10 @@ internal sealed class PhoneLine : IPhoneLine, IDisposable
         _callRegistry.Register(call);
         IncomingCall?.Invoke(this, new IncomingCallEventArgs(call));
     }
+
+    // An out-of-dialog MESSAGE (RFC 3428) carries no call state — surface it directly to subscribers.
+    private void HandleInboundMessage(SipInstantMessage message)
+        => IncomingMessage?.Invoke(this, new IncomingMessageEventArgs(message));
 
     // ── Helpers ───────────────────────────────────────────────────────────────
     private Call CreateCall(CallId id, CallDirection dir, string remote, ICallChannel channel)

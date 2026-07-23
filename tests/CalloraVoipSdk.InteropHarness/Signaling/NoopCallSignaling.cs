@@ -12,6 +12,9 @@ internal sealed class NoopCallSignaling : ISipCallSignalingService
     public event EventHandler<SipIncomingInviteEventArgs>? IncomingInvite { add { } remove { } }
 
     /// <inheritdoc />
+    public event EventHandler<SipIncomingMessageEventArgs>? IncomingMessage { add { } remove { } }
+
+    /// <inheritdoc />
     public event EventHandler<SipIncomingInviteEventArgs>? OutboundCallStarted { add { } remove { } }
 
     /// <inheritdoc />
@@ -21,6 +24,9 @@ internal sealed class NoopCallSignaling : ISipCallSignalingService
     /// <inheritdoc />
     public Task<SipSubscriptionHandle> SubscribeAsync(SipSubscribeRequest request, CancellationToken ct = default) =>
         throw new NotSupportedException();
+
+    /// <inheritdoc />
+    public Task<int> SendMessageAsync(SipMessageRequest request, CancellationToken ct = default) => Task.FromResult(200);
 
     /// <inheritdoc />
     public void Dispose() { }

@@ -28,6 +28,9 @@ public sealed class TurnServerHostOptions
     /// <summary>See <see cref="TurnServerHostConfiguration.TlsCertificate"/>.</summary>
     public X509Certificate2? TlsCertificate { get; set; }
 
+    /// <summary>See <see cref="TurnServerHostConfiguration.PublicRelayAddress"/>.</summary>
+    public IPAddress? PublicRelayAddress { get; set; }
+
     /// <summary>See <see cref="TurnServerHostConfiguration.DefaultAllocationLifetimeSeconds"/>.</summary>
     public uint DefaultAllocationLifetimeSeconds { get; set; } = 600;
 
@@ -50,6 +53,7 @@ public sealed class TurnServerHostOptions
         Realm = Realm,
         Credentials = [.. Credentials],
         TlsCertificate = TlsCertificate,
+        PublicRelayAddress = PublicRelayAddress,
         DefaultAllocationLifetimeSeconds = DefaultAllocationLifetimeSeconds,
         MaxAllocationLifetimeSeconds = MaxAllocationLifetimeSeconds,
         MaxTotalAllocations = MaxTotalAllocations,

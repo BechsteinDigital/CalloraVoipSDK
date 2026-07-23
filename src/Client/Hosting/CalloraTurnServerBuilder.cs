@@ -67,6 +67,18 @@ public sealed class CalloraTurnServerBuilder
         return this;
     }
 
+    /// <summary>
+    /// Sets the public IP address advertised to clients in XOR-RELAYED-ADDRESS (RFC 8656 §7.2). Use this in
+    /// NAT'd, multi-homed, or cloud deployments where the relay socket's bound/routed address is not the
+    /// address remote peers must reach.
+    /// </summary>
+    public CalloraTurnServerBuilder WithPublicRelayAddress(IPAddress publicRelayAddress)
+    {
+        ArgumentNullException.ThrowIfNull(publicRelayAddress);
+        _services.PostConfigure<TurnServerHostOptions>(options => options.PublicRelayAddress = publicRelayAddress);
+        return this;
+    }
+
     /// <summary>Overrides the logger factory used for server diagnostics.</summary>
     public CalloraTurnServerBuilder WithLoggerFactory(ILoggerFactory loggerFactory)
     {
