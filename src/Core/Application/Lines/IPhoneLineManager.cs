@@ -12,6 +12,9 @@ public interface IPhoneLineManager : IDisposable
     /// <summary>Raised when any managed line receives an inbound call; aggregates every line's incoming calls.</summary>
     event EventHandler<IncomingCallEventArgs>? IncomingCall;
 
+    /// <summary>Raised when any managed line receives an inbound SIP MESSAGE (RFC 3428); aggregates every line's messages.</summary>
+    event EventHandler<IncomingMessageEventArgs>? IncomingMessage;
+
     /// <summary>
     /// Registers <paramref name="account"/> as a new phone line and starts its SIP registration.
     /// </summary>

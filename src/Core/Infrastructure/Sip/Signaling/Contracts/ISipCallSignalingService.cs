@@ -11,6 +11,11 @@ internal interface ISipCallSignalingService : IDisposable
     event EventHandler<SipIncomingInviteEventArgs>? IncomingInvite;
 
     /// <summary>
+    /// Raised for an inbound out-of-dialog SIP MESSAGE (RFC 3428) after it is answered 200 OK.
+    /// </summary>
+    event EventHandler<SipIncomingMessageEventArgs>? IncomingMessage;
+
+    /// <summary>
     /// Raised when an outbound INVITE session has been created and is about to start.
     /// Fires before the INVITE transaction begins, allowing callers to subscribe to
     /// session events (e.g. StateChanged) before the first provisional response arrives.

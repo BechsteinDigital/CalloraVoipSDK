@@ -71,4 +71,23 @@ public sealed class SipMessageIngressTests
         // CSeq is echoed verbatim — method stays MESSAGE.
         Assert.Equal("1 MESSAGE", ok.Headers["CSeq"]);
     }
+
+    [Fact]
+    public void An_inbound_MESSAGE_raises_IncomingMessage_with_the_parsed_content()
+    {
+        using var transport = new CapturingSipTransportRuntime();
+        using var service = Build(transport);
+
+        SipIncomingMessageEventArgs? received = null;
+        service.IncomingMessage += (_, e) => received = e; // raised synchronously by the ingress handler
+
+        transport.DeliverInboundRequest(Remote, InboundMessage(body: "Hello SIP!", contentType: "text/plain"));
+
+        Assert.NotNull(received);
+        Assert.Equal("Hello SIP!", received!.Body);
+        Assert.Equal("text/plain", received.ContentType);
+        Assert.Contains("alice@example.test", received.From);
+        Assert.Contains("bob@example.test", received.To);
+        Assert.Equal("msg-call-1@example.test", received.CallId);
+    }
 }
