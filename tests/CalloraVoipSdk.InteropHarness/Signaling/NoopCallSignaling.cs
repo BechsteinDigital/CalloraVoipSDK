@@ -18,7 +18,7 @@ internal sealed class NoopCallSignaling : ISipCallSignalingService
     public event EventHandler<SipIncomingInviteEventArgs>? OutboundCallStarted { add { } remove { } }
 
     /// <inheritdoc />
-    public Task<ISipCallSession> InviteAsync(SipInviteRequest request, CancellationToken ct = default) =>
+    public Task<ISipCallSession> InviteAsync(SipInviteRequest request, Action<ISipCallSession>? onSessionCreated = null, CancellationToken ct = default) =>
         throw new NotSupportedException();
 
     /// <inheritdoc />

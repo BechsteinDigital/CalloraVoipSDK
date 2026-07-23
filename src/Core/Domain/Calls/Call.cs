@@ -152,11 +152,16 @@ internal sealed class Call : ICall, IDisposable
     }
 
     /// <summary>
-    /// Sends one DTMF tone while connected.
+    /// Sends one DTMF tone. Allowed once the (early or confirmed) dialog can carry media:
+    /// <see cref="CallState.Ringing"/> (early dialog, e.g. IVR navigation or AI-outbound bots that
+    /// send DTMF before the 200 OK), <see cref="CallState.Connected"/>, and <see cref="CallState.OnHold"/>.
+    /// The channel routes it via RTP telephone-event when the DTMF send delegate is wired
+    /// (F011 Slice 3b wires it already at Ringing), otherwise via SIP INFO.
     /// </summary>
     public Task SendDtmfAsync(DtmfTone tone, CancellationToken ct = default)
     {
-        GuardState(CallState.Connected);
+        if (State is not (CallState.Ringing or CallState.Connected or CallState.OnHold))
+            throw new InvalidOperationException($"Cannot send DTMF in state {State}.");
         return _channel.SendDtmfAsync(tone.Code);
     }
 

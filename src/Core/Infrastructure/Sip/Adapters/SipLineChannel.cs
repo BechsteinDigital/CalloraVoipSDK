@@ -311,8 +311,10 @@ internal sealed class SipLineChannel : ILineChannel
             CustomHeaders      = options.CustomHeaders
         };
 
-        var session = await _callSignalingService.InviteAsync(inviteRequest, ct).ConfigureAwait(false);
-        sipChannel.AttachSession(session);
+        await _callSignalingService
+            .InviteAsync(inviteRequest, onSessionCreated: sipChannel.AttachSession, ct)
+            .ConfigureAwait(false);
+        // AttachSession already ran via onSessionCreated (early bind); no late attach here.
     }
 
     /// <summary>
