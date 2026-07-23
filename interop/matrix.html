@@ -102,14 +102,14 @@ interop test.</p>
 </thead>
 <tbody>
 <tr>
+<td><strong>Asterisk</strong></td>
+<td>✅ Full SIP/RTP flow automated in CI</td>
+<td>Real PJSIP Asterisk container (Testcontainers): register (happy + failure), in/outbound calls with live RTP, codec negotiation (PCMU/PCMA/G722), SRTP-SDES, DTMF (RFC 4733), hold/unhold, blind &amp; attended transfer, session timers (RFC 4028), TCP/TLS transport. Known gap: early media (183). See the <a href="asterisk.html">Asterisk page</a></td>
+</tr>
+<tr>
 <td><strong>AVM FRITZ!Box</strong></td>
 <td>✅ Verified against a live device (manual)</td>
 <td>Register, dial, two-way audio, DTMF against real hardware; source of several hardening fixes. Not an automated CI test</td>
-</tr>
-<tr>
-<td><strong>Asterisk</strong></td>
-<td>🧪 REGISTER covered by an automated interop test (CI)</td>
-<td><code>AsteriskRegisterInteropTests</code> runs the 401→200 REGISTER flow against a PJSIP Asterisk container in CI. Full call/media/DTMF/transfer not yet covered</td>
 </tr>
 <tr>
 <td>sipgate</td>
@@ -129,9 +129,9 @@ interop test.</p>
 </tbody>
 </table>
 <ul>
+<li>✅ <strong>Automated (CI)</strong> — a repeatable interop suite runs the full SIP/RTP flow against a real
+container on every relevant run.</li>
 <li>✅ <strong>Verified (manual)</strong> — exercised against real hardware by hand; not reproducible in CI.</li>
-<li>🧪 <strong>Automated (partial)</strong> — a repeatable interop test exists in the repo and runs in CI, but
-only covers part of the flow (e.g. registration, not full call/media).</li>
 <li>⚙️ <strong>Guidance only</strong> — the SDK speaks standard SIP and <em>should</em> interoperate, and we provide
 configuration notes, but we have <strong>not</strong> yet run a validated end-to-end test against that
 platform. Do your own acceptance test before relying on it in production.</li>

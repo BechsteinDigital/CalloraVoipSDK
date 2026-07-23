@@ -87,10 +87,23 @@
         <article data-uid="">
 <h1 id="asterisk">Asterisk</h1>
 
-<p><strong>Status: 🧪 REGISTER covered by an automated interop test (CI).</strong> <code>AsteriskRegisterInteropTests</code>
-runs the 401→200 REGISTER flow against a PJSIP Asterisk container in CI, so registration against
-<code>chan_pjsip</code> is exercised on every relevant run. Full call/media/DTMF/transfer are <strong>not</strong> yet
-covered by an automated test — run your own acceptance test for those before production.</p>
+<p><strong>Status: ✅ Full SIP/RTP flow automated in CI.</strong> The interop suite
+(<code>tests/CalloraVoipSdk.InteropTests</code>) runs against a real PJSIP Asterisk container
+(<code>andrius/asterisk</code>, via Testcontainers) on every relevant run:</p>
+<ul>
+<li><strong>Registration</strong> — 401→200 happy path, plus failure paths (wrong password / unknown user →
+prompt <code>Failed</code>, unreachable → <code>Timeout</code>).</li>
+<li><strong>Calls</strong> — outbound happy path (INVITE→200→ACK→<strong>live RTP</strong>→BYE), inbound (Asterisk→SDK),
+and failure paths (busy/486, decline/403, unknown/404, no-answer timeout, caller cancel).</li>
+<li><strong>Media</strong> — codec negotiation (PCMU/PCMA/G722 by preference), SRTP-SDES (RTP/SAVP + <code>a=crypto</code>,
+encrypted media), DTMF (RFC 4733) receive + negotiation.</li>
+<li><strong>In-call</strong> — hold/unhold (re-INVITE), blind &amp; attended transfer (REFER/Replaces),
+session-timer negotiation (RFC 4028).</li>
+<li><strong>Transport</strong> — UDP, TCP and TLS.</li>
+</ul>
+<p><strong>Known gap:</strong> early media (183 Session Progress) — the SDK does not yet set up a media session
+from the 183 SDP; tracked in the <a href="https://github.com/BechsteinDigital/callora-voip-sdk/issues">issue tracker</a>.
+Run your own acceptance test for anything you depend on before production.</p>
 <h2 id="example-pjsipconf-peer">Example <code>pjsip.conf</code> peer</h2>
 <pre><code class="lang-ini">[6001]
 type = endpoint
