@@ -237,6 +237,10 @@ internal sealed class SipCoreCallChannel : ICallChannel
                 // ICE ufrag/pwd are per-dialog; EnsureLocalIceDescriptionAsync short-circuits on non-null,
                 // so a stale description from the first target must be cleared before the redirect rebind.
                 _localIceDescription = null;
+                // Note: an early-media receive session started for the first target is not torn down here.
+                // It is superseded by the next MediaParametersNegotiated on the new session (the orchestrator's
+                // "displaced" path disposes the previous session), or by the 200-OK publish. The brief window
+                // where the first session runs on is harmless (receive-only, no data loss).
             }
 
             _session = session;
