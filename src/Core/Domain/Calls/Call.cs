@@ -59,6 +59,9 @@ internal sealed class Call : ICall, IDisposable
     /// <inheritdoc />
     public string? Diversion => _channel.Diversion;
 
+    /// <inheritdoc />
+    public string? EarlyMediaSdp => _channel.EarlyMediaSdp;
+
     // ── Events ────────────────────────────────────────────────────────────────
     /// <inheritdoc />
     public event EventHandler<CallStateChangedEventArgs>?  StateChanged;

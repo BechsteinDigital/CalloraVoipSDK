@@ -424,7 +424,13 @@ internal sealed class SipLineChannel : ILineChannel
                         _learnedPublicContact?.Port,
                         result.ObservedPublicHost,
                         result.ObservedPublicPort);
-                    if (changed)
+                    // The NAT-corrective re-register applies only to connectionless transport (UDP).
+                    // Over connection-oriented transports (TCP/TLS/WS) the persistent connection carries
+                    // the routing (RFC 5626 SIP Outbound); rewriting the Contact to the registrar-observed
+                    // SNAT address would break the very next re-register, because its ephemeral source
+                    // port no longer matches the connection → registrar 403 (interop finding F010).
+                    var natCorrectionApplies = _account.Transport is SipTransport.Udp;
+                    if (changed && natCorrectionApplies)
                     {
                         _learnedPublicContact = host is null ? null : new LearnedPublicContact(host, port);
                         if (correctiveReregistrations < options.MaxCorrectiveReregistrations)
@@ -475,8 +481,10 @@ internal sealed class SipLineChannel : ILineChannel
                             ex,
                             "SIP registration permanently rejected for [{User}]: authentication failure (attempt {Count}).",
                             _account.Username, failureCount);
-                        _onState?.Invoke(LineState.Failed);
+                        // Publish the failure reason before the terminal state so a Connect-waiter
+                        // that completes on LineState.Failed can attach the reason to its result (F005b).
                         _onReconnectFailed?.Invoke(ReregisterFailReason.AuthenticationFailed, failureCount);
+                        _onState?.Invoke(LineState.Failed);
                         return;
                     }
 
@@ -498,8 +506,8 @@ internal sealed class SipLineChannel : ILineChannel
                             ex,
                             "Registration permanently failed for [{User}] after {Count} attempts (max {Max}).",
                             _account.Username, failureCount, options.MaxRetries);
-                        _onState?.Invoke(LineState.Failed);
                         _onReconnectFailed?.Invoke(ReregisterFailReason.MaxRetriesExceeded, failureCount);
+                        _onState?.Invoke(LineState.Failed);
                         return;
                     }
 

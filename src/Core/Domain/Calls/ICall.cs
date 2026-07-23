@@ -59,6 +59,14 @@ public interface ICall
     CallMediaParameters? MediaParameters { get; }
 
     /// <summary>
+    /// SDP body carried on a provisional (180/183) response — the early-media description offered by
+    /// the far end before the call is answered (RFC 3960), separate from the final answer in
+    /// <see cref="MediaParameters"/>. <see langword="null"/> until such a provisional arrives.
+    /// Default implementation returns null.
+    /// </summary>
+    string? EarlyMediaSdp => null;
+
+    /// <summary>
     /// Latest quality snapshot derived from RTP/RTCP runtime metrics.
     /// Before media starts, this value is an empty baseline snapshot.
     /// </summary>

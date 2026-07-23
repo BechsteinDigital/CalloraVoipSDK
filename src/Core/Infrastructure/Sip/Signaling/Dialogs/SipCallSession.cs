@@ -57,6 +57,7 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
     private string? _remoteAssertedIdentity;
     private readonly string? _diversion;
     private string? _remoteSdp;
+    private string? _earlyMediaSdp;
     private string? _localSdp;
     internal readonly SipSessionSdpProvider _sdpProvider;
     private SipDialogState _state;
@@ -194,6 +195,15 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
     public string? RemoteSdp
     {
         get { lock (_sync) return _remoteSdp; }
+    }
+    /// <summary>
+    /// SDP body from a provisional (180/183) response — the early-media description, kept separate
+    /// from the final <see cref="RemoteSdp"/> answer. Null until a provisional carries a body.
+    /// Foundation for early media; no media session is started from it in this slice.
+    /// </summary>
+    public string? EarlyMediaSdp
+    {
+        get { lock (_sync) return _earlyMediaSdp; }
     }
     /// <inheritdoc />
     public string? LocalSdp
@@ -933,6 +943,10 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
     internal void SetRemoteSdp(string? sdp)
     {
         lock (_sync) { _remoteSdp = sdp; }
+    }
+    internal void CaptureEarlyMediaSdp(string? sdp)
+    {
+        lock (_sync) { _earlyMediaSdp = sdp; }
     }
     internal void SetLocalSdp(string? sdp)
     {

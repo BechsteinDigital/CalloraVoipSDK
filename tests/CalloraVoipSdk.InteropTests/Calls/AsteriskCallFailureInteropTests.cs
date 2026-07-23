@@ -16,10 +16,9 @@ namespace CalloraVoipSdk.InteropTests.Calls;
 /// Semantik, nicht die Medien-Sicherheit; das Default-SRTP-Angebot (RTP/SAVP) würde der SRTP-lose
 /// Asterisk-Endpoint 6001 mit 488 ablehnen (orthogonal, siehe Audit-Fund F007).
 ///
-/// Befunde F008/F009 (siehe docs/audit/INTEROP_SOAK_AUDIT.md): no-answer ehrt `ConnectTimeout` nicht
-/// (wartet den Ring-/Transaktions-Timeout ab) und meldet `Failed` statt `Timeout`; externe Cancellation
-/// meldet `Failed` (synthetischer 408) statt `Canceled`. Die grünen Tests halten das reale Verhalten
-/// fest; die idealen Zustände sind Skip-blockiert bis zum Fix.
+/// Befunde F008/F009 (GEFIXT, siehe docs/audit/INTEROP_SOAK_AUDIT.md): no-answer ehrt jetzt
+/// `ConnectTimeout` (CANCEL bei Ablauf, `DialStatus.Timeout`) und externe Cancellation meldet
+/// `DialStatus.Canceled` statt des synthetischen `Failed`. Alle Tests halten das reale Verhalten fest.
 /// </summary>
 [Trait("Category", "Interop")]
 public sealed class AsteriskCallFailureInteropTests
@@ -90,10 +89,9 @@ public sealed class AsteriskCallFailureInteropTests
         Assert.Equal(DialStatus.Failed, result.Status); // Asterisk: 404 Not Found (kein Dialplan-Eintrag)
     }
 
-    // ── Skip (F008/F009): ideale Ergebnisse — bis Fix blockiert ──────────────────────────────────
+    // ── Grün (F008/F009 gefixt): ConnectTimeout wird geehrt, Cancellation meldet Canceled ────────
 
-    [Fact(Skip = "F008 — DialWaitOptions.ConnectTimeout wird bei ringendem Ziel nicht geehrt: der Call wartet ~RingTimeout und meldet Failed(synth. 408) statt Timeout. Siehe docs/audit/INTEROP_SOAK_AUDIT.md")]
-    [Trait("Category", "Interop")]
+    [DockerRequiredFact]
     public async Task NoAnswer_ShouldTimeoutWithinConnectTimeout()
     {
         await using var asterisk = new AsteriskContainer();
@@ -109,8 +107,7 @@ public sealed class AsteriskCallFailureInteropTests
         Assert.True(DateTimeOffset.UtcNow - started < TimeSpan.FromSeconds(10), "ConnectTimeout wurde nicht geehrt.");
     }
 
-    [Fact(Skip = "F009 — externe Cancellation meldet DialStatus.Failed (synth. 408) statt Canceled (Timing wird geehrt, nur das Status-Mapping ist falsch). Siehe docs/audit/INTEROP_SOAK_AUDIT.md")]
-    [Trait("Category", "Interop")]
+    [DockerRequiredFact]
     public async Task CancelledDial_ShouldYieldCanceled()
     {
         await using var asterisk = new AsteriskContainer();

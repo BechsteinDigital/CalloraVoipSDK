@@ -205,6 +205,12 @@ internal sealed class SipCoreCallChannel : ICallChannel
         get { lock (_sessionSync) return _session?.Diversion; }
     }
 
+    /// <inheritdoc />
+    public string? EarlyMediaSdp
+    {
+        get { lock (_sessionSync) return _session?.EarlyMediaSdp; }
+    }
+
     /// <summary>
     /// Attaches the SIP dialog session after INVITE bootstrap or inbound session creation.
     /// If the session is already Established (outbound), media negotiation is triggered immediately.

@@ -85,7 +85,14 @@ internal sealed class SdkConvenienceOrchestrator : IDisposable
                 waiter.TrySetResult(args.NewState);
         };
 
+        // Capture the permanent-failure reason so a terminal LineState.Failed surfaces it as the
+        // ConnectResult error instead of a null cause (F005b). SipLineChannel raises this before the
+        // state transition, so it is set by the time the waiter completes.
+        LineReconnectFailedEventArgs? failure = null;
+        EventHandler<LineReconnectFailedEventArgs> onReconnectFailed = (_, args) => failure ??= args;
+
         line.StateChanged += onStateChanged;
+        line.LineReconnectFailed += onReconnectFailed;
         try
         {
             if (ShouldCompleteConnectWait(line.State, failFastOnRegistrationFailed))
@@ -98,7 +105,7 @@ internal sealed class SdkConvenienceOrchestrator : IDisposable
             return finalState switch
             {
                 LineState.Registered => new LineConnectOutcome(LineConnectStatus.Registered, line, finalState, null),
-                _ => new LineConnectOutcome(LineConnectStatus.Failed, line, finalState, null),
+                _ => new LineConnectOutcome(LineConnectStatus.Failed, line, finalState, RegistrationFailureError(failure)),
             };
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -111,6 +118,7 @@ internal sealed class SdkConvenienceOrchestrator : IDisposable
         }
         finally
         {
+            line.LineReconnectFailed -= onReconnectFailed;
             line.StateChanged -= onStateChanged;
         }
     }
@@ -371,6 +379,18 @@ internal sealed class SdkConvenienceOrchestrator : IDisposable
         // mis-reporting Timeout. RegistrationFailed is the RETRYABLE variant, gated by fail-fast (F005).
         || state == LineState.Failed
         || (failFastOnRegistrationFailed && state == LineState.RegistrationFailed);
+
+    // Turns a captured permanent-registration-failure reason into a ConnectResult error so a Failed
+    // outcome carries a machine-readable cause instead of null (F005b).
+    private static Exception? RegistrationFailureError(LineReconnectFailedEventArgs? failure) =>
+        failure is null
+            ? null
+            : new InvalidOperationException(failure.Reason switch
+            {
+                ReregisterFailReason.AuthenticationFailed => "Line registration failed: the SIP server rejected the credentials (401/403).",
+                ReregisterFailReason.MaxRetriesExceeded => "Line registration failed: the maximum number of reconnect attempts was exceeded.",
+                _ => $"Line registration failed: {failure.Reason}.",
+            });
 
     private static bool ShouldCompleteDialWait(CallState state) =>
         state is CallState.Connected or CallState.OnHold or CallState.Terminated;
