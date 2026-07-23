@@ -231,7 +231,7 @@ stalls signaling and registration for the line. Off-load real work to your own t
 
   <h3 id="CalloraVoipSdk_Core_Domain_Lines_IPhoneLine_DialAsync_System_String_CalloraVoipSdk_Core_Domain_Calls_DialOptions_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.DialAsync(System.String,CalloraVoipSdk.Core.Domain.Calls.DialOptions,System.Threading.CancellationToken)">
   DialAsync(string, DialOptions?, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/IPhoneLine.cs/#L60"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/IPhoneLine.cs/#L67"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Places an outbound call from this line to <code class="paramref">targetUri</code> and returns the new call
@@ -278,7 +278,7 @@ already in <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallState.html
 
   <h3 id="CalloraVoipSdk_Core_Domain_Lines_IPhoneLine_UnregisterAsync_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.UnregisterAsync(System.Threading.CancellationToken)">
   UnregisterAsync(CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/IPhoneLine.cs/#L66"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/IPhoneLine.cs/#L73"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Unregisters this line (sends REGISTER with Expires: 0) and stops automatic re-registration.</p>
@@ -349,9 +349,42 @@ fires; accept or reject it via the call on the event args. Keep the handler fast
 
 
 
+  <h3 id="CalloraVoipSdk_Core_Domain_Lines_IPhoneLine_IncomingMessage" data-uid="CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.IncomingMessage">
+  IncomingMessage
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/IPhoneLine.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Raised when an inbound out-of-dialog SIP MESSAGE (RFC 3428 pager-mode IM) arrives for this line
+(signaling thread). The SDK has already answered it 200 OK; no reply is required. Keep the handler
+fast (see remarks).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">event EventHandler&lt;IncomingMessageEventArgs&gt;? IncomingMessage</code></pre>
+  </div>
+
+
+
+
+
+
+  <h4 class="section">Event Type</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.eventhandler-1">EventHandler</a>&lt;<a class="xref" href="CalloraVoipSdk.Core.Domain.Events.IncomingMessageEventArgs.html">IncomingMessageEventArgs</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
   <h3 id="CalloraVoipSdk_Core_Domain_Lines_IPhoneLine_LineReconnectFailed" data-uid="CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.LineReconnectFailed">
   LineReconnectFailed
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/IPhoneLine.cs/#L47"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/IPhoneLine.cs/#L54"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Raised when the line permanently fails to re-register and enters
@@ -383,7 +416,7 @@ fires; accept or reject it via the call on the event args. Keep the handler fast
 
   <h3 id="CalloraVoipSdk_Core_Domain_Lines_IPhoneLine_LineReconnecting" data-uid="CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.LineReconnecting">
   LineReconnecting
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/IPhoneLine.cs/#L41"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/IPhoneLine.cs/#L48"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Raised each time the SDK begins a reconnect attempt after losing the SIP registration.

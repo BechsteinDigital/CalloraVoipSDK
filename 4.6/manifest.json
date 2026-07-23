@@ -894,6 +894,20 @@
     },
     {
       "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Events.IncomingMessageEventArgs.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Events.IncomingMessageEventArgs.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Events.IncomingMessageEventArgs",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Events.IncomingMessageEventArgs.yml\" sourcestartlinenumber=\"1\">Payload for the line <code>IncomingMessage</code> event (RFC 3428 SIP MESSAGE).</p>\n"
+    },
+    {
+      "type": "ManagedReference",
       "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Events.LineReconnectFailedEventArgs.yml",
       "output": {
         ".html": {
@@ -1100,6 +1114,34 @@
       "Uid": null,
       "IsMRef": true,
       "Title": "CalloraVoipSdk.Core.Domain.Lines",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.yml\" sourcestartlinenumber=\"1\">An inbound SIP pager-mode instant message (RFC 3428). MESSAGE is stateless — it opens no dialog; the\nSDK answers it 200 OK and surfaces its content here for the application. Immutable value object.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Messages.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Messages.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Messages",
       "Summary": null
     },
     {

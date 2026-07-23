@@ -369,6 +369,12 @@ references:
   commentId: E:CalloraVoipSdk.Core.Application.Lines.IPhoneLineManager.IncomingCall
   fullName: CalloraVoipSdk.Core.Application.Lines.IPhoneLineManager.IncomingCall
   nameWithType: IPhoneLineManager.IncomingCall
+- uid: CalloraVoipSdk.Core.Application.Lines.IPhoneLineManager.IncomingMessage
+  name: IncomingMessage
+  href: _api/CalloraVoipSdk.Core.Application.Lines.IPhoneLineManager.html#CalloraVoipSdk_Core_Application_Lines_IPhoneLineManager_IncomingMessage
+  commentId: E:CalloraVoipSdk.Core.Application.Lines.IPhoneLineManager.IncomingMessage
+  fullName: CalloraVoipSdk.Core.Application.Lines.IPhoneLineManager.IncomingMessage
+  nameWithType: IPhoneLineManager.IncomingMessage
 - uid: CalloraVoipSdk.Core.Application.Lines.IPhoneLineManager.Register(CalloraVoipSdk.Core.Domain.Lines.SipAccount)
   name: Register(SipAccount)
   href: _api/CalloraVoipSdk.Core.Application.Lines.IPhoneLineManager.html#CalloraVoipSdk_Core_Application_Lines_IPhoneLineManager_Register_CalloraVoipSdk_Core_Domain_Lines_SipAccount_
@@ -433,6 +439,12 @@ references:
   commentId: E:CalloraVoipSdk.Core.Application.Lines.PhoneLineManager.IncomingCall
   fullName: CalloraVoipSdk.Core.Application.Lines.PhoneLineManager.IncomingCall
   nameWithType: PhoneLineManager.IncomingCall
+- uid: CalloraVoipSdk.Core.Application.Lines.PhoneLineManager.IncomingMessage
+  name: IncomingMessage
+  href: _api/CalloraVoipSdk.Core.Application.Lines.PhoneLineManager.html#CalloraVoipSdk_Core_Application_Lines_PhoneLineManager_IncomingMessage
+  commentId: E:CalloraVoipSdk.Core.Application.Lines.PhoneLineManager.IncomingMessage
+  fullName: CalloraVoipSdk.Core.Application.Lines.PhoneLineManager.IncomingMessage
+  nameWithType: PhoneLineManager.IncomingMessage
 - uid: CalloraVoipSdk.Core.Application.Lines.PhoneLineManager.Register(CalloraVoipSdk.Core.Domain.Lines.SipAccount)
   name: Register(SipAccount)
   href: _api/CalloraVoipSdk.Core.Application.Lines.PhoneLineManager.html#CalloraVoipSdk_Core_Application_Lines_PhoneLineManager_Register_CalloraVoipSdk_Core_Domain_Lines_SipAccount_
@@ -4693,6 +4705,25 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.Core.Domain.Events.IncomingCallEventArgs.Call
   nameWithType: IncomingCallEventArgs.Call
+- uid: CalloraVoipSdk.Core.Domain.Events.IncomingMessageEventArgs
+  name: IncomingMessageEventArgs
+  href: _api/CalloraVoipSdk.Core.Domain.Events.IncomingMessageEventArgs.html
+  commentId: T:CalloraVoipSdk.Core.Domain.Events.IncomingMessageEventArgs
+  fullName: CalloraVoipSdk.Core.Domain.Events.IncomingMessageEventArgs
+  nameWithType: IncomingMessageEventArgs
+- uid: CalloraVoipSdk.Core.Domain.Events.IncomingMessageEventArgs.Message
+  name: Message
+  href: _api/CalloraVoipSdk.Core.Domain.Events.IncomingMessageEventArgs.html#CalloraVoipSdk_Core_Domain_Events_IncomingMessageEventArgs_Message
+  commentId: P:CalloraVoipSdk.Core.Domain.Events.IncomingMessageEventArgs.Message
+  fullName: CalloraVoipSdk.Core.Domain.Events.IncomingMessageEventArgs.Message
+  nameWithType: IncomingMessageEventArgs.Message
+- uid: CalloraVoipSdk.Core.Domain.Events.IncomingMessageEventArgs.Message*
+  name: Message
+  href: _api/CalloraVoipSdk.Core.Domain.Events.IncomingMessageEventArgs.html#CalloraVoipSdk_Core_Domain_Events_IncomingMessageEventArgs_Message_
+  commentId: Overload:CalloraVoipSdk.Core.Domain.Events.IncomingMessageEventArgs.Message
+  isSpec: "True"
+  fullName: CalloraVoipSdk.Core.Domain.Events.IncomingMessageEventArgs.Message
+  nameWithType: IncomingMessageEventArgs.Message
 - uid: CalloraVoipSdk.Core.Domain.Events.LineReconnectFailedEventArgs
   name: LineReconnectFailedEventArgs
   href: _api/CalloraVoipSdk.Core.Domain.Events.LineReconnectFailedEventArgs.html
@@ -4907,6 +4938,12 @@ references:
   commentId: E:CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.IncomingCall
   fullName: CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.IncomingCall
   nameWithType: IPhoneLine.IncomingCall
+- uid: CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.IncomingMessage
+  name: IncomingMessage
+  href: _api/CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.html#CalloraVoipSdk_Core_Domain_Lines_IPhoneLine_IncomingMessage
+  commentId: E:CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.IncomingMessage
+  fullName: CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.IncomingMessage
+  nameWithType: IPhoneLine.IncomingMessage
 - uid: CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.LineId
   name: LineId
   href: _api/CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.html#CalloraVoipSdk_Core_Domain_Lines_IPhoneLine_LineId
@@ -5617,6 +5654,102 @@ references:
   commentId: F:CalloraVoipSdk.Core.Domain.Lines.SipTransport.Wss
   fullName: CalloraVoipSdk.Core.Domain.Lines.SipTransport.Wss
   nameWithType: SipTransport.Wss
+- uid: CalloraVoipSdk.Core.Domain.Messages
+  name: CalloraVoipSdk.Core.Domain.Messages
+  href: _api/CalloraVoipSdk.Core.Domain.Messages.html
+  commentId: N:CalloraVoipSdk.Core.Domain.Messages
+  fullName: CalloraVoipSdk.Core.Domain.Messages
+  nameWithType: CalloraVoipSdk.Core.Domain.Messages
+- uid: CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage
+  name: SipInstantMessage
+  href: _api/CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.html
+  commentId: T:CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage
+  fullName: CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage
+  nameWithType: SipInstantMessage
+- uid: CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.#ctor(System.String,System.String,System.String,System.String,System.String)
+  name: SipInstantMessage(string, string, string, string, string)
+  href: _api/CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.html#CalloraVoipSdk_Core_Domain_Messages_SipInstantMessage__ctor_System_String_System_String_System_String_System_String_System_String_
+  commentId: M:CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.#ctor(System.String,System.String,System.String,System.String,System.String)
+  name.vb: New(String, String, String, String, String)
+  fullName: CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.SipInstantMessage(string, string, string, string, string)
+  fullName.vb: CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.New(String, String, String, String, String)
+  nameWithType: SipInstantMessage.SipInstantMessage(string, string, string, string, string)
+  nameWithType.vb: SipInstantMessage.New(String, String, String, String, String)
+- uid: CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.#ctor*
+  name: SipInstantMessage
+  href: _api/CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.html#CalloraVoipSdk_Core_Domain_Messages_SipInstantMessage__ctor_
+  commentId: Overload:CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.#ctor
+  isSpec: "True"
+  name.vb: New
+  fullName: CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.SipInstantMessage
+  fullName.vb: CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.New
+  nameWithType: SipInstantMessage.SipInstantMessage
+  nameWithType.vb: SipInstantMessage.New
+- uid: CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.Body
+  name: Body
+  href: _api/CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.html#CalloraVoipSdk_Core_Domain_Messages_SipInstantMessage_Body
+  commentId: P:CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.Body
+  fullName: CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.Body
+  nameWithType: SipInstantMessage.Body
+- uid: CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.Body*
+  name: Body
+  href: _api/CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.html#CalloraVoipSdk_Core_Domain_Messages_SipInstantMessage_Body_
+  commentId: Overload:CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.Body
+  isSpec: "True"
+  fullName: CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.Body
+  nameWithType: SipInstantMessage.Body
+- uid: CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.CallId
+  name: CallId
+  href: _api/CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.html#CalloraVoipSdk_Core_Domain_Messages_SipInstantMessage_CallId
+  commentId: P:CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.CallId
+  fullName: CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.CallId
+  nameWithType: SipInstantMessage.CallId
+- uid: CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.CallId*
+  name: CallId
+  href: _api/CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.html#CalloraVoipSdk_Core_Domain_Messages_SipInstantMessage_CallId_
+  commentId: Overload:CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.CallId
+  isSpec: "True"
+  fullName: CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.CallId
+  nameWithType: SipInstantMessage.CallId
+- uid: CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.ContentType
+  name: ContentType
+  href: _api/CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.html#CalloraVoipSdk_Core_Domain_Messages_SipInstantMessage_ContentType
+  commentId: P:CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.ContentType
+  fullName: CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.ContentType
+  nameWithType: SipInstantMessage.ContentType
+- uid: CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.ContentType*
+  name: ContentType
+  href: _api/CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.html#CalloraVoipSdk_Core_Domain_Messages_SipInstantMessage_ContentType_
+  commentId: Overload:CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.ContentType
+  isSpec: "True"
+  fullName: CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.ContentType
+  nameWithType: SipInstantMessage.ContentType
+- uid: CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.From
+  name: From
+  href: _api/CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.html#CalloraVoipSdk_Core_Domain_Messages_SipInstantMessage_From
+  commentId: P:CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.From
+  fullName: CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.From
+  nameWithType: SipInstantMessage.From
+- uid: CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.From*
+  name: From
+  href: _api/CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.html#CalloraVoipSdk_Core_Domain_Messages_SipInstantMessage_From_
+  commentId: Overload:CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.From
+  isSpec: "True"
+  fullName: CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.From
+  nameWithType: SipInstantMessage.From
+- uid: CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.To
+  name: To
+  href: _api/CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.html#CalloraVoipSdk_Core_Domain_Messages_SipInstantMessage_To
+  commentId: P:CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.To
+  fullName: CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.To
+  nameWithType: SipInstantMessage.To
+- uid: CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.To*
+  name: To
+  href: _api/CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.html#CalloraVoipSdk_Core_Domain_Messages_SipInstantMessage_To_
+  commentId: Overload:CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.To
+  isSpec: "True"
+  fullName: CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.To
+  nameWithType: SipInstantMessage.To
 - uid: CalloraVoipSdk.Core.Domain.Security
   name: CalloraVoipSdk.Core.Domain.Security
   href: _api/CalloraVoipSdk.Core.Domain.Security.html
@@ -7859,6 +7992,12 @@ references:
   commentId: E:CalloraVoipSdk.IVoipClient.IncomingCall
   fullName: CalloraVoipSdk.IVoipClient.IncomingCall
   nameWithType: IVoipClient.IncomingCall
+- uid: CalloraVoipSdk.IVoipClient.IncomingMessage
+  name: IncomingMessage
+  href: _api/CalloraVoipSdk.IVoipClient.html#CalloraVoipSdk_IVoipClient_IncomingMessage
+  commentId: E:CalloraVoipSdk.IVoipClient.IncomingMessage
+  fullName: CalloraVoipSdk.IVoipClient.IncomingMessage
+  nameWithType: IVoipClient.IncomingMessage
 - uid: CalloraVoipSdk.IVoipClient.Lines
   name: Lines
   href: _api/CalloraVoipSdk.IVoipClient.html#CalloraVoipSdk_IVoipClient_Lines
@@ -9024,6 +9163,12 @@ references:
   commentId: E:CalloraVoipSdk.VoipClient.IncomingCall
   fullName: CalloraVoipSdk.VoipClient.IncomingCall
   nameWithType: VoipClient.IncomingCall
+- uid: CalloraVoipSdk.VoipClient.IncomingMessage
+  name: IncomingMessage
+  href: _api/CalloraVoipSdk.VoipClient.html#CalloraVoipSdk_VoipClient_IncomingMessage
+  commentId: E:CalloraVoipSdk.VoipClient.IncomingMessage
+  fullName: CalloraVoipSdk.VoipClient.IncomingMessage
+  nameWithType: VoipClient.IncomingMessage
 - uid: CalloraVoipSdk.VoipClient.Lines
   name: Lines
   href: _api/CalloraVoipSdk.VoipClient.html#CalloraVoipSdk_VoipClient_Lines

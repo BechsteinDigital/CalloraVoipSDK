@@ -163,7 +163,7 @@ created by the SDK, not by consumers.</p>
 
   <h3 id="CalloraVoipSdk_Core_Application_Lines_PhoneLineManager_All" data-uid="CalloraVoipSdk.Core.Application.Lines.PhoneLineManager.All">
   All
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Lines/PhoneLineManager.cs/#L52"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Lines/PhoneLineManager.cs/#L56"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>All currently registered lines, as a snapshot.</p>
@@ -199,7 +199,7 @@ created by the SDK, not by consumers.</p>
 
   <h3 id="CalloraVoipSdk_Core_Application_Lines_PhoneLineManager_Dispose" data-uid="CalloraVoipSdk.Core.Application.Lines.PhoneLineManager.Dispose">
   Dispose()
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Lines/PhoneLineManager.cs/#L55"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Lines/PhoneLineManager.cs/#L59"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Unregisters and disposes every managed line.</p>
@@ -226,7 +226,7 @@ created by the SDK, not by consumers.</p>
 
   <h3 id="CalloraVoipSdk_Core_Application_Lines_PhoneLineManager_Register_CalloraVoipSdk_Core_Domain_Lines_SipAccount_" data-uid="CalloraVoipSdk.Core.Application.Lines.PhoneLineManager.Register(CalloraVoipSdk.Core.Domain.Lines.SipAccount)">
   Register(SipAccount)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Lines/PhoneLineManager.cs/#L28"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Lines/PhoneLineManager.cs/#L31"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Registers <code class="paramref">account</code> as a new phone line and starts its SIP registration.</p>
@@ -265,7 +265,7 @@ created by the SDK, not by consumers.</p>
 
   <h3 id="CalloraVoipSdk_Core_Application_Lines_PhoneLineManager_UnregisterAsync_CalloraVoipSdk_Core_Domain_Lines_LineId_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Application.Lines.PhoneLineManager.UnregisterAsync(CalloraVoipSdk.Core.Domain.Lines.LineId,System.Threading.CancellationToken)">
   UnregisterAsync(LineId, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Lines/PhoneLineManager.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Lines/PhoneLineManager.cs/#L46"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Unregisters and disposes the line with the given id. No-op if the id is unknown.</p>
@@ -328,6 +328,37 @@ created by the SDK, not by consumers.</p>
   <h4 class="section">Event Type</h4>
   <dl class="parameters">
     <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.eventhandler-1">EventHandler</a>&lt;<a class="xref" href="CalloraVoipSdk.Core.Domain.Events.IncomingCallEventArgs.html">IncomingCallEventArgs</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h3 id="CalloraVoipSdk_Core_Application_Lines_PhoneLineManager_IncomingMessage" data-uid="CalloraVoipSdk.Core.Application.Lines.PhoneLineManager.IncomingMessage">
+  IncomingMessage
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Lines/PhoneLineManager.cs/#L21"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Raised when any managed line receives an inbound SIP MESSAGE; aggregates every line's messages.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public event EventHandler&lt;IncomingMessageEventArgs&gt;? IncomingMessage</code></pre>
+  </div>
+
+
+
+
+
+
+  <h4 class="section">Event Type</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.eventhandler-1">EventHandler</a>&lt;<a class="xref" href="CalloraVoipSdk.Core.Domain.Events.IncomingMessageEventArgs.html">IncomingMessageEventArgs</a>&gt;</dt>
     <dd></dd>
   </dl>
 
