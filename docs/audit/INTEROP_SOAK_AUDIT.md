@@ -31,11 +31,13 @@ Der frühere „Signaling-Soak" ist präzise als **`SipLineChannelRefreshLifecyc
 
 ## Coverage-Notiz Asterisk-Interop-Matrix (Phase 6+, 2026-07-22)
 
-Die Asterisk-Interop-Suite (`tests/CalloraVoipSdk.InteropTests`, echter `andrius/asterisk:22` via Testcontainers) deckt jetzt die volle SIP/RTP-Matrix ab — **22 grün, 4 Skip** (befund-blockiert):
+Die Asterisk-Interop-Suite (`tests/CalloraVoipSdk.InteropTests`, echter `andrius/asterisk:22` via Testcontainers) deckt jetzt die volle SIP/RTP-Matrix ab — nach den F010-/F005b-Fixes ist **Early Media (F011) der einzige verbleibende befund-blockierte Skip**; alles Übrige läuft grün:
 
 **Grün:** Register-Happy + Failure (Wrong-PW/Unknown-User → Failed prompt [F005], Unreachable → Timeout); Call-Failure (busy/486, decline/403, unknown/404); no-answer-Timeout [F008], Cancel→Canceled [F009]; **Happy-Path Outbound** (INVITE→200→ACK→RTP→BYE); **Codec-Negotiation** (PCMU/PCMA/G722 per Präferenz); **SRTP-SDES** (RTP/SAVP + `a=crypto`, verschlüsseltes Media); **DTMF** RFC 4733 (Empfang + Verhandlung); **Hold/Unhold** (re-INVITE); **Inbound Call** (Asterisk→SDK via `channel originate`); **Blind + Attended Transfer** (REFER/Replaces); **Session-Timer**-Verhandlung (RFC 4028).
 
-**Skip (befund-blockiert):** TCP- + TLS-Register [**F010**: NAT-Re-Register transport-unabhängig → 403]; Early Media [**F011**: kein 183-Media-Setup]; Auth-Error-Durchreichung [**F005b**].
+**Skip (befund-blockiert):** nur noch Early Media [**F011**: kein 183-Media-Setup]. Die zuvor geskippten
+Fälle sind entsperrt: TCP- + TLS-Register (F010 gefixt — NAT-Re-Register jetzt UDP-only) und
+Auth-Error-Durchreichung (F005b gefixt — Fehlerursache als `ConnectResult.Error`) sind grün.
 
 Media-Assertion unidirektional (`SilenceAudioDevice` sendet nichts): Asterisk sendet Milliwatt/Töne, Empfang via `ICall.RtpStatistics.PacketsReceived`. Plain RTP außer im SDES-Test. Neue Befunde dieser Phase: **F005b, F010, F011**.
 
