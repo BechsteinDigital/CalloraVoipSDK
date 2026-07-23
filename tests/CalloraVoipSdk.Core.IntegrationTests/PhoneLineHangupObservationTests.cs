@@ -72,6 +72,7 @@ public sealed class PhoneLineHangupObservationTests
         public Task StartOutboundDialAsync(ICallChannel channel, string targetUri, DialOptions options, CancellationToken ct) =>
             throw new NotSupportedException();
         public void SetInboundHandler(Action<ICallChannel, string> onInbound) { }
+        public void SetMessageHandler(Action<CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage> onMessage) { }
         public void Dispose() { }
     }
 

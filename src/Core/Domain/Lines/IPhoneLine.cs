@@ -35,6 +35,13 @@ public interface IPhoneLine
     event EventHandler<IncomingCallEventArgs>?         IncomingCall;
 
     /// <summary>
+    /// Raised when an inbound out-of-dialog SIP MESSAGE (RFC 3428 pager-mode IM) arrives for this line
+    /// (signaling thread). The SDK has already answered it 200 OK; no reply is required. Keep the handler
+    /// fast (see remarks).
+    /// </summary>
+    event EventHandler<IncomingMessageEventArgs>?      IncomingMessage;
+
+    /// <summary>
     /// Raised each time the SDK begins a reconnect attempt after losing the SIP registration.
     /// The line is already in <see cref="LineState.Reconnecting"/> when this event fires.
     /// </summary>

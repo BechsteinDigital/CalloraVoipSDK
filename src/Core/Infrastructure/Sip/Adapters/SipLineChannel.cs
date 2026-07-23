@@ -4,6 +4,7 @@ using CalloraVoipSdk.Core.Application.Calls;
 using CalloraVoipSdk.Core.Application.Media;
 using CalloraVoipSdk.Core.Domain.Calls;
 using CalloraVoipSdk.Core.Domain.Lines;
+using CalloraVoipSdk.Core.Domain.Messages;
 using CalloraVoipSdk.Core.Application.Ports.Sdp;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Observability;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Signaling;
@@ -41,6 +42,7 @@ internal sealed class SipLineChannel : ILineChannel
     private Action<int>? _onReconnecting;
     private Action<ReregisterFailReason, int>? _onReconnectFailed;
     private Action<ICallChannel, string>? _onInbound;
+    private Action<SipInstantMessage>? _onMessage;
     private CancellationTokenSource? _registrationCts;
     private int _disposed;
 
@@ -97,6 +99,7 @@ internal sealed class SipLineChannel : ILineChannel
         _callChannelLogger = loggerFactory.CreateLogger<SipCoreCallChannel>();
 
         _callSignalingService.IncomingInvite += HandleIncomingInvite;
+        _callSignalingService.IncomingMessage += HandleIncomingMessage;
     }
 
     /// <summary>
@@ -212,6 +215,10 @@ internal sealed class SipLineChannel : ILineChannel
     public void SetInboundHandler(Action<ICallChannel, string> onInbound)
         => _onInbound = onInbound;
 
+    /// <inheritdoc />
+    public void SetMessageHandler(Action<SipInstantMessage> onMessage)
+        => _onMessage = onMessage;
+
     /// <summary>
     /// Builds an outbound call channel that will attach to one SIP dialog session.
     /// </summary>
@@ -319,6 +326,37 @@ internal sealed class SipLineChannel : ILineChannel
     /// <summary>
     /// Handles inbound INVITE events from call signaling and dispatches to line domain callback.
     /// </summary>
+    private void HandleIncomingMessage(object? sender, SipIncomingMessageEventArgs args)
+    {
+        if (Volatile.Read(ref _disposed) != 0 || args is null)
+            return;
+
+        // Only surface a MESSAGE addressed to this line (same trunk/registrar matching as an inbound call).
+        if (!IsMessageForThisLine(args))
+            return;
+
+        var message = new SipInstantMessage(
+            from: args.From, to: args.To, body: args.Body, contentType: args.ContentType, callId: args.CallId);
+        try
+        {
+            _onMessage?.Invoke(message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Inbound MESSAGE dispatch failed on line [{User}].", _account.Username);
+        }
+    }
+
+    private bool IsMessageForThisLine(SipIncomingMessageEventArgs args) =>
+        TrunkInboundMatcher.IsForThisLine(
+            SipProtocol.ExtractUriFromNameAddr(args.To),
+            _account.Username,
+            _account.SipServer,
+            args.RemoteEndPoint?.Address,
+            ResolveTrustedRegistrarAddresses(),
+            _account.InboundNumbers,
+            _account.AcceptTrunkInbound);
+
     private void HandleIncomingInvite(object? sender, SipIncomingInviteEventArgs args)
     {
         if (Volatile.Read(ref _disposed) != 0)
@@ -738,6 +776,7 @@ internal sealed class SipLineChannel : ILineChannel
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
 
         _callSignalingService.IncomingInvite -= HandleIncomingInvite;
+        _callSignalingService.IncomingMessage -= HandleIncomingMessage;
         StopRegistration();
     }
 

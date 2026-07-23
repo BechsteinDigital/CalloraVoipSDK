@@ -12,6 +12,9 @@ internal sealed class NoopCallSignaling : ISipCallSignalingService
     public event EventHandler<SipIncomingInviteEventArgs>? IncomingInvite { add { } remove { } }
 
     /// <inheritdoc />
+    public event EventHandler<SipIncomingMessageEventArgs>? IncomingMessage { add { } remove { } }
+
+    /// <inheritdoc />
     public event EventHandler<SipIncomingInviteEventArgs>? OutboundCallStarted { add { } remove { } }
 
     /// <inheritdoc />

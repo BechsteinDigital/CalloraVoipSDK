@@ -62,6 +62,7 @@ public sealed class PhoneLineUnregisterContractTests
             throw new NotSupportedException();
 
         public void SetInboundHandler(Action<ICallChannel, string> onInbound) { }
+        public void SetMessageHandler(Action<CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage> onMessage) { }
 
         public void Dispose() { }
     }

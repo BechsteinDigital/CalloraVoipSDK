@@ -1,4 +1,5 @@
 using CalloraVoipSdk.Core.Domain.Calls;
+using CalloraVoipSdk.Core.Domain.Messages;
 
 namespace CalloraVoipSdk.Core.Domain.Lines;
 
@@ -51,4 +52,10 @@ internal interface ILineChannel : IDisposable
         CancellationToken ct);
 
     void SetInboundHandler(Action<ICallChannel, string> onInbound);
+
+    /// <summary>
+    /// Wires the callback invoked for an inbound out-of-dialog SIP MESSAGE (RFC 3428) addressed to this
+    /// line. The message has already been answered 200 OK by the transport layer.
+    /// </summary>
+    void SetMessageHandler(Action<SipInstantMessage> onMessage);
 }

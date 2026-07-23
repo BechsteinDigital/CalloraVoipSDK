@@ -90,6 +90,9 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
     public event EventHandler<SipIncomingInviteEventArgs>? IncomingInvite;
 
     /// <inheritdoc />
+    public event EventHandler<SipIncomingMessageEventArgs>? IncomingMessage;
+
+    /// <inheritdoc />
     public event EventHandler<SipIncomingInviteEventArgs>? OutboundCallStarted;
 
     /// <inheritdoc />
@@ -507,9 +510,16 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
         }
 
         // RFC 3428 §7: a MESSAGE is a pager-mode instant message that opens no dialog. Answer it 200 OK
-        // (the request creates no session; the message content is surfaced to the application separately).
+        // and surface its content to the application via IncomingMessage (the request creates no session).
         if (string.Equals(normalizedRequest.Method, "MESSAGE", StringComparison.Ordinal))
         {
+            IncomingMessage?.Invoke(this, new SipIncomingMessageEventArgs(
+                from: normalizedRequest.Header("From") ?? string.Empty,
+                to: normalizedRequest.Header("To") ?? string.Empty,
+                callId: callId,
+                contentType: normalizedRequest.Header("Content-Type") ?? "text/plain",
+                body: normalizedRequest.Body ?? string.Empty,
+                remoteEndPoint: remoteEndPoint));
             _ = SendIngressResponseAsync(
                 normalizedRequest,
                 remoteEndPoint,
