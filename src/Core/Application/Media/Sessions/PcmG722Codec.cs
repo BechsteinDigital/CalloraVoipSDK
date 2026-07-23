@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using NAudio.Codecs;
 
 namespace CalloraVoipSdk.Core.Application.Media.Sessions;
@@ -20,6 +21,15 @@ internal sealed class PcmG722Codec
     private readonly G722CodecState _decodeState = new(64000, G722Flags.None);
     private readonly G722CodecState _encodeState = new(64000, G722Flags.None);
 
+    // Grow-on-demand scratch buffers reused across frames. The NAudio ADPCM API needs a byte[]/short[]
+    // pair, so these hold the materialised input and the intermediate samples the previous implementation
+    // re-allocated per frame (payload.ToArray() / new short[...]). Safe to reuse because one instance
+    // serves one stream direction on one thread (see the class remark); only the returned array is freshly
+    // allocated each call, because the caller retains it as a MediaFrame payload.
+    private byte[] _decodeInput = [];
+    private short[] _decodeSamples = [];
+    private short[] _encodeSamples = [];
+
     /// <summary>
     /// Decodes G.722 payload bytes into PCM16 little-endian bytes, advancing the persistent decode state.
     /// </summary>
@@ -28,11 +38,14 @@ internal sealed class PcmG722Codec
         if (payload.Length == 0)
             return [];
 
-        var input = payload.ToArray();
-        var samples = new short[input.Length * 2];
-        _decodeCodec.Decode(_decodeState, samples, input, input.Length);
+        var input = EnsureCapacity(ref _decodeInput, payload.Length);
+        payload.CopyTo(input);
 
-        var pcm = new byte[samples.Length * 2];
+        var sampleCount = payload.Length * 2;
+        var samples = EnsureCapacity(ref _decodeSamples, sampleCount);
+        _decodeCodec.Decode(_decodeState, samples, input, payload.Length);
+
+        var pcm = new byte[sampleCount * 2];
         Buffer.BlockCopy(samples, 0, pcm, 0, pcm.Length);
         return pcm;
     }
@@ -48,11 +61,22 @@ internal sealed class PcmG722Codec
             throw new InvalidOperationException("G.722 encoder expects PCM16 payload with even byte count.");
 
         var sampleCount = pcm16.Length / 2;
-        var samples = new short[sampleCount];
-        Buffer.BlockCopy(pcm16.ToArray(), 0, samples, 0, pcm16.Length);
+        var samples = EnsureCapacity(ref _encodeSamples, sampleCount);
+        // Reinterpret the PCM16 bytes as samples in host byte order — identical to the previous
+        // Buffer.BlockCopy, without the intermediate byte[] copy pcm16.ToArray() allocated.
+        MemoryMarshal.Cast<byte, short>(pcm16).CopyTo(samples);
 
         var encoded = new byte[Math.Max(1, sampleCount / 2)];
         _encodeCodec.Encode(_encodeState, encoded, samples, sampleCount);
         return encoded;
+    }
+
+    // Returns a buffer of at least minLength, replacing the field only when the current one is too small
+    // (frames are a fixed size in practice, so this grows at most once).
+    private static T[] EnsureCapacity<T>(ref T[] buffer, int minLength)
+    {
+        if (buffer.Length < minLength)
+            buffer = new T[minLength];
+        return buffer;
     }
 }
