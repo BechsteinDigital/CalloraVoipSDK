@@ -4050,6 +4050,19 @@ references:
   commentId: E:CalloraVoipSdk.Core.Domain.Calls.ICall.DtmfReceived
   fullName: CalloraVoipSdk.Core.Domain.Calls.ICall.DtmfReceived
   nameWithType: ICall.DtmfReceived
+- uid: CalloraVoipSdk.Core.Domain.Calls.ICall.EarlyMediaSdp
+  name: EarlyMediaSdp
+  href: _api/CalloraVoipSdk.Core.Domain.Calls.ICall.html#CalloraVoipSdk_Core_Domain_Calls_ICall_EarlyMediaSdp
+  commentId: P:CalloraVoipSdk.Core.Domain.Calls.ICall.EarlyMediaSdp
+  fullName: CalloraVoipSdk.Core.Domain.Calls.ICall.EarlyMediaSdp
+  nameWithType: ICall.EarlyMediaSdp
+- uid: CalloraVoipSdk.Core.Domain.Calls.ICall.EarlyMediaSdp*
+  name: EarlyMediaSdp
+  href: _api/CalloraVoipSdk.Core.Domain.Calls.ICall.html#CalloraVoipSdk_Core_Domain_Calls_ICall_EarlyMediaSdp_
+  commentId: Overload:CalloraVoipSdk.Core.Domain.Calls.ICall.EarlyMediaSdp
+  isSpec: "True"
+  fullName: CalloraVoipSdk.Core.Domain.Calls.ICall.EarlyMediaSdp
+  nameWithType: ICall.EarlyMediaSdp
 - uid: CalloraVoipSdk.Core.Domain.Calls.ICall.HangupAsync(System.Threading.CancellationToken)
   name: HangupAsync(CancellationToken)
   href: _api/CalloraVoipSdk.Core.Domain.Calls.ICall.html#CalloraVoipSdk_Core_Domain_Calls_ICall_HangupAsync_System_Threading_CancellationToken_
