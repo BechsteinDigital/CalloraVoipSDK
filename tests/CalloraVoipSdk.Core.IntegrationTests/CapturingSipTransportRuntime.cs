@@ -10,10 +10,12 @@ internal sealed class CapturingSipTransportRuntime : ISipTransportRuntime
 {
     private readonly List<CapturedSipRequest> _requests = new();
     private readonly Dictionary<int, Action<IPEndPoint, SipResponse>> _responseHandlers = new();
+    private readonly Dictionary<int, Action<IPEndPoint, SipRequest>> _requestHandlers = new();
     private readonly object _sync = new();
     private TaskCompletionSource<CapturedSipRequest> _nextRequest =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
     private int _responseHandlerId;
+    private int _requestHandlerId;
 
     public IPEndPoint LocalEndPoint { get; } = new(IPAddress.Loopback, 5060);
 
@@ -44,7 +46,40 @@ internal sealed class CapturingSipTransportRuntime : ISipTransportRuntime
     {
     }
 
-    public IDisposable SubscribeRequests(Action<IPEndPoint, SipRequest> handler) => NoopDisposable.Instance;
+    public IDisposable SubscribeRequests(Action<IPEndPoint, SipRequest> handler)
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+        lock (_sync)
+        {
+            var id = ++_requestHandlerId;
+            _requestHandlers[id] = handler;
+            return new DelegateDisposable(() => RemoveRequestHandler(id));
+        }
+    }
+
+    /// <summary>
+    /// Simulates an inbound datagram by delivering <paramref name="request"/> to every subscribed request
+    /// handler (as the real transport would on receiving a request). Responses the handler emits are captured
+    /// via <see cref="SnapshotResponses"/>.
+    /// </summary>
+    public void DeliverInboundRequest(IPEndPoint remoteEndPoint, SipRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(remoteEndPoint);
+        ArgumentNullException.ThrowIfNull(request);
+
+        Action<IPEndPoint, SipRequest>[] handlers;
+        lock (_sync)
+            handlers = _requestHandlers.Values.ToArray();
+
+        foreach (var handler in handlers)
+            handler(remoteEndPoint, request);
+    }
+
+    private void RemoveRequestHandler(int id)
+    {
+        lock (_sync)
+            _requestHandlers.Remove(id);
+    }
 
     public IDisposable SubscribeResponses(Action<IPEndPoint, SipResponse> handler)
     {
