@@ -26,6 +26,9 @@ internal sealed class NoopCallSignaling : ISipCallSignalingService
         throw new NotSupportedException();
 
     /// <inheritdoc />
+    public Task<int> SendMessageAsync(SipMessageRequest request, CancellationToken ct = default) => Task.FromResult(200);
+
+    /// <inheritdoc />
     public void Dispose() { }
 }
 

@@ -36,5 +36,10 @@ internal interface ISipCallSignalingService : IDisposable
     Task<SipSubscriptionHandle> SubscribeAsync(
         SipSubscribeRequest request,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Sends an out-of-dialog SIP MESSAGE (RFC 3428) and returns the final response status code (2xx on success).
+    /// </summary>
+    Task<int> SendMessageAsync(SipMessageRequest request, CancellationToken ct = default);
 }
 

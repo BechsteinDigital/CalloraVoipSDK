@@ -58,4 +58,10 @@ internal interface ILineChannel : IDisposable
     /// line. The message has already been answered 200 OK by the transport layer.
     /// </summary>
     void SetMessageHandler(Action<SipInstantMessage> onMessage);
+
+    /// <summary>
+    /// Sends an out-of-dialog SIP MESSAGE (RFC 3428) from this line to <paramref name="targetUri"/>.
+    /// Completes when the peer answers 2xx; throws on a non-2xx final response or no response.
+    /// </summary>
+    Task SendMessageAsync(string targetUri, string body, string contentType, CancellationToken ct = default);
 }

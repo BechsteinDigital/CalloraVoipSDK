@@ -1,4 +1,5 @@
 using System.Net;
+using CalloraVoipSdk.Core.Infrastructure.Sip.Wire;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Sip.Signaling;
 
@@ -42,4 +43,16 @@ internal sealed class SipIncomingMessageEventArgs : EventArgs
 
     /// <summary>The peer's signaling transport address — used for line matching.</summary>
     public IPEndPoint RemoteEndPoint { get; }
+
+    /// <summary>
+    /// Builds the event data from an inbound MESSAGE request's parsed headers/body (RFC 3428 default
+    /// content type <c>text/plain</c> when the request omits it).
+    /// </summary>
+    public static SipIncomingMessageEventArgs FromRequest(SipRequest request, string callId, IPEndPoint remoteEndPoint) => new(
+        from: request.Header("From") ?? string.Empty,
+        to: request.Header("To") ?? string.Empty,
+        callId: callId,
+        contentType: request.Header("Content-Type") ?? "text/plain",
+        body: request.Body ?? string.Empty,
+        remoteEndPoint: remoteEndPoint);
 }

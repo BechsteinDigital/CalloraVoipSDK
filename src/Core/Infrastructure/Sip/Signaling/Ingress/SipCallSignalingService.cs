@@ -30,6 +30,7 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
     private readonly ILogger<SipCallSignalingService> _logger;
     private readonly SipClientTransactionExecutor _subscribeExecutor;
     private readonly SipCallSignalingSubscriptions _subscriptionService;
+    private readonly SipCallSignalingMessages _messageService;
     private readonly ConcurrentDictionary<string, SipCallSession> _sessions = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, SipOutboundSubscriptionEntry> _subscriptions = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, DateTimeOffset> _sessionStartTimes = new(StringComparer.Ordinal);
@@ -70,6 +71,7 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
             _subscriptions,
             _logger,
             SendIngressResponseAsync);
+        _messageService = new SipCallSignalingMessages(_transport, _digestAuthenticator, _subscribeExecutor, _logger);
 
         var resolvedSdpProvider = sdpProvider ?? BuildDefaultSdpProvider();
         _sessionDependencies = new SipCallSessionDependencies
@@ -513,13 +515,7 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
         // and surface its content to the application via IncomingMessage (the request creates no session).
         if (string.Equals(normalizedRequest.Method, "MESSAGE", StringComparison.Ordinal))
         {
-            IncomingMessage?.Invoke(this, new SipIncomingMessageEventArgs(
-                from: normalizedRequest.Header("From") ?? string.Empty,
-                to: normalizedRequest.Header("To") ?? string.Empty,
-                callId: callId,
-                contentType: normalizedRequest.Header("Content-Type") ?? "text/plain",
-                body: normalizedRequest.Body ?? string.Empty,
-                remoteEndPoint: remoteEndPoint));
+            IncomingMessage?.Invoke(this, SipIncomingMessageEventArgs.FromRequest(normalizedRequest, callId, remoteEndPoint));
             _ = SendIngressResponseAsync(
                 normalizedRequest,
                 remoteEndPoint,
@@ -790,6 +786,13 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
     {
         ThrowIfDisposed();
         return _subscriptionService.SubscribeAsync(request, ct);
+    }
+
+    /// <inheritdoc />
+    public Task<int> SendMessageAsync(SipMessageRequest request, CancellationToken ct = default)
+    {
+        ThrowIfDisposed();
+        return _messageService.SendMessageAsync(request, ct);
     }
 
     /// <summary>

@@ -219,6 +219,30 @@ internal sealed class SipLineChannel : ILineChannel
     public void SetMessageHandler(Action<SipInstantMessage> onMessage)
         => _onMessage = onMessage;
 
+    /// <inheritdoc />
+    public async Task SendMessageAsync(string targetUri, string body, string contentType, CancellationToken ct = default)
+    {
+        ThrowIfDisposed();
+        ArgumentException.ThrowIfNullOrWhiteSpace(targetUri);
+
+        var status = await _callSignalingService.SendMessageAsync(
+                new SipMessageRequest
+                {
+                    LocalUsername = _account.Username,
+                    LocalDomain = _account.SipServer,
+                    AuthPassword = _account.Password,
+                    RemoteUri = targetUri,
+                    Body = body ?? string.Empty,
+                    ContentType = string.IsNullOrWhiteSpace(contentType) ? "text/plain" : contentType,
+                    Transport = MapTransport(_account.Transport),
+                },
+                ct)
+            .ConfigureAwait(false);
+
+        if (status is < 200 or >= 300)
+            throw new InvalidOperationException($"SIP MESSAGE to '{targetUri}' failed with status {status}.");
+    }
+
     /// <summary>
     /// Builds an outbound call channel that will attach to one SIP dialog session.
     /// </summary>

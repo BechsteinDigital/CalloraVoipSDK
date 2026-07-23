@@ -478,6 +478,16 @@ public sealed class VoipClient : IVoipClient
         };
     }
 
+    /// <inheritdoc />
+    public Task SendMessageAsync(string targetUri, string body, string contentType = "text/plain", CancellationToken ct = default)
+    {
+        ThrowIfDisposed();
+        var line = Lines.All.FirstOrDefault()
+            ?? throw new InvalidOperationException(
+                "No registered line to send a SIP MESSAGE from. Register a line first, or use IPhoneLine.SendMessageAsync.");
+        return line.SendMessageAsync(targetUri, body, contentType, ct);
+    }
+
     /// <summary>
     /// Convenience outbound flow: dials a target and waits until the call reaches connected state.
     /// Existing <see cref="IPhoneLine.DialAsync"/> remains unchanged.

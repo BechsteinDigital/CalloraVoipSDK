@@ -150,6 +150,8 @@ public sealed class SipRportContactFlowTests
         public Task<SipSubscriptionHandle> SubscribeAsync(SipSubscribeRequest request, CancellationToken ct = default) =>
             throw new NotSupportedException();
 
+        public Task<int> SendMessageAsync(SipMessageRequest request, CancellationToken ct = default) => Task.FromResult(200);
+
         public void Dispose() { }
     }
 
