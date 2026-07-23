@@ -65,7 +65,6 @@ internal sealed class SipCoreCallChannel : ICallChannel
     private IPAddress? _advertisedMediaAddress;
     private readonly IPAddress? _configuredPublicMediaAddress;
     private ISipCallSession? _session;
-    private int _mediaParametersFired;
 
     // The serialized answer SDP we sent (carries our own SDES crypto line when SRTP was
     // negotiated). Written on the answer path before the session establishes, read by the
@@ -78,29 +77,16 @@ internal sealed class SipCoreCallChannel : ICallChannel
     // recovers our key the same way the answer path does.
     private volatile string? _localOfferSdp;
 
-    // The outbound encrypt key of the running SRTP media context (null when the call is
-    // plain RTP). A hold/unhold re-offer reuses it so the offered a=crypto stays identical
-    // to the live context — the peer keeps decrypting without a rekey. Set once media
-    // parameters publish; read on the signaling thread that issues hold/unhold.
-    private volatile string? _activeLocalSrtpKeyParams;
-
-    // The live outbound SDES key for the video m-line (RFC 4568 per-m-line), re-advertised on a
-    // hold/unhold re-offer so the running SRTP video stream is not rekeyed; null when the call
-    // has no SDES-keyed video. Independent of the audio key above.
-    private volatile string? _activeLocalVideoSrtpKeyParams;
-
     // DTLS-SRTP signaling (RFC 5763): local identity (fingerprint) plus whether locally
-    // originated offers advertise DTLS keying. _dtlsActiveOnCall latches once a leg
-    // negotiated DTLS so hold/unhold re-offers keep signaling it.
+    // originated offers advertise DTLS keying. The live-keying latch (whether a leg negotiated
+    // DTLS, plus the running SDES keys and the last-published signature) lives on the media
+    // publisher below.
     private readonly SdpDtlsNegotiationOptions? _dtlsOptions;
     private readonly bool _offerDtlsSrtp;
-    private volatile bool _dtlsActiveOnCall;
 
-    // Signature of the last published media parameters (SRTP keys + remote endpoint + codec).
-    // A re-INVITE whose negotiated media differs from this re-publishes MediaParametersNegotiated
-    // (rekey → the orchestrator rebuilds the media session); an identical one (a retransmission)
-    // does not, so media never churns without an actual change. Written on the signaling thread.
-    private volatile string? _lastPublishedSignature;
+    // Owns the per-call media-parameter publication (parse → enrich → policy → fire), the
+    // once-per-session guard, the rekey signature, and the live SRTP/DTLS keying state.
+    private readonly SipCallChannelMediaPublisher _mediaPublisher;
 
     // RFC 4566 §5.2 origin identity. Each channel (call leg) gets a unique, stable session id;
     // the version is incremented on every locally built SDP so peers detect media changes.
@@ -162,6 +148,16 @@ internal sealed class SipCoreCallChannel : ICallChannel
             _localVideoSocket = new UdpClient(new IPEndPoint(IPAddress.Any, 0));
             _localVideoPort = ((IPEndPoint)_localVideoSocket.Client.LocalEndPoint!).Port;
         }
+
+        _mediaPublisher = new SipCallChannelMediaPublisher(
+            _sdpNegotiator,
+            _srtpTelemetry,
+            _appliedSrtpPolicy,
+            _logger,
+            BuildMediaPublishContext,
+            ReleasePortReservationSockets,
+            parameters => MediaParametersNegotiated?.Invoke(this, parameters),
+            TerminateForSrtpPolicyViolationAsync);
     }
 
     /// <summary>
@@ -232,8 +228,7 @@ internal sealed class SipCoreCallChannel : ICallChannel
                 _session.RemoteHoldChanged   -= HandleSessionRemoteHoldChanged;
                 _session.DtmfReceived        -= HandleSessionDtmfReceived;
                 _session.TransferRequested   -= HandleSessionTransferRequested;
-                Interlocked.Exchange(ref _mediaParametersFired, 0);
-                _lastPublishedSignature = null;
+                _mediaPublisher.ResetForRebind();
                 // ICE ufrag/pwd are per-dialog; EnsureLocalIceDescriptionAsync short-circuits on non-null,
                 // so a stale description from the first target must be cleared before the redirect rebind.
                 _localIceDescription = null;
@@ -257,7 +252,7 @@ internal sealed class SipCoreCallChannel : ICallChannel
         // before the Connected state change reaches the application layer.
         if (session.State == SipDialogState.Established)
         {
-            var result = TryPublishMediaParameters(session, out var reasonCode);
+            var result = _mediaPublisher.TryPublish(session, out var reasonCode);
             if (result == MediaPublicationResult.PolicyViolation)
             {
                 _ = TerminateForSrtpPolicyViolationAsync(session, reasonCode);
@@ -325,7 +320,7 @@ internal sealed class SipCoreCallChannel : ICallChannel
         await session.AnswerAsync(answerSdp, ct: ct).ConfigureAwait(false);
 
         // Fire media parameters so the orchestrator can start RTP.
-        var result = TryPublishMediaParameters(session, out var reasonCodeAfterAnswer);
+        var result = _mediaPublisher.TryPublish(session, out var reasonCodeAfterAnswer);
         if (result == MediaPublicationResult.PolicyViolation)
         {
             await TerminateForSrtpPolicyViolationAsync(session, reasonCodeAfterAnswer)
@@ -589,125 +584,29 @@ internal sealed class SipCoreCallChannel : ICallChannel
     /// <inheritdoc />
     public void RemoveVideoFrameListener(Action<CallVideoFrame> onFrame) => _videoTap.RemoveListener(onFrame);
 
-    // ── Media parameters ──────────────────────────────────────────────────────
+    // ── Media parameters (delegated to the media publisher) ───────────────────
 
     /// <summary>
-    /// Parses and publishes negotiated media parameters.
-    /// Guarded so it fires at most once per session (re-INVITE will fire again).
+    /// Snapshots the channel's live negotiated context for a media-parameter publish: the local RTP
+    /// endpoint, the current SDP options, the gathered ICE description + role, and our retained
+    /// answer/offer SDP (the SDES encrypt key). Built by the publisher only when a publish reaches the
+    /// parse step, so the route-address probe stays as lazy as the inline code it replaced.
     /// </summary>
-    private MediaPublicationResult TryPublishMediaParameters(
-        ISipCallSession session,
-        out string reasonCode)
-    {
-        reasonCode = SrtpDecisionReasonCodes.NotEvaluated;
-
-        // Allow re-fire on re-INVITE (reset guard on new session).
-        if (Interlocked.Exchange(ref _mediaParametersFired, 1) != 0)
-            return MediaPublicationResult.Published;
-
-        return PublishMediaParametersFrom(session, session.RemoteSdp, out reasonCode);
-    }
-
-    // Publishes media parameters from an early-media (180/183) SDP so a receive-only session can start
-    // before the 200 OK (F011 slice 3b). SDES works as offerer (our key in _localOfferSdp, the peer key
-    // in the 183). A parse/policy failure releases the guard so the 200-OK publish runs normally. If the
-    // early SDP equals the later answer (Asterisk Progress->Answer), the Established transition sees an
-    // unchanged signature and the session runs through without a rebuild.
-    private void TryPublishEarlyMediaParameters(ISipCallSession session)
-    {
-        var earlySdp = session.EarlyMediaSdp;
-        if (string.IsNullOrWhiteSpace(earlySdp))
-            return;
-        if (Interlocked.Exchange(ref _mediaParametersFired, 1) != 0)
-            return;
-        if (PublishMediaParametersFrom(session, earlySdp, out _) != MediaPublicationResult.Published)
-            Interlocked.Exchange(ref _mediaParametersFired, 0); // release so the 200-OK path publishes
-    }
-
-    // Shared core: parses `remoteSdp`, enriches/validates, releases the port-reservation sockets and
-    // fires MediaParametersNegotiated. Used by the final 200-OK publish and the early-media publish
-    // (F011). The caller owns the once-per-session `_mediaParametersFired` guard.
-    private MediaPublicationResult PublishMediaParametersFrom(
-        ISipCallSession session,
-        string? remoteSdp,
-        out string reasonCode)
-    {
-        reasonCode = SrtpDecisionReasonCodes.NotEvaluated;
-
-        if (string.IsNullOrWhiteSpace(remoteSdp))
-        {
-            _logger.LogWarning("No remote SDP available for call {CallId}; RTP will not start.", session.CallId);
-            reasonCode = SrtpDecisionReasonCodes.MediaParametersUnavailable;
-            _srtpTelemetry.PublishDecision(session, isSrtpNegotiated: false, profile: string.Empty, reasonCode, violatesPolicy: _appliedSrtpPolicy == SrtpPolicy.Required);
-            return _appliedSrtpPolicy == SrtpPolicy.Required
-                ? MediaPublicationResult.PolicyViolation
-                : MediaPublicationResult.Skipped;
-        }
-
+    private MediaPublishContext BuildMediaPublishContext(ISipCallSession session) => new(
         // Same address the SDP advertises: RTP/RTCP must bind where the peer sends to,
         // and a loopback/wildcard signaling bind is not routable for a LAN peer.
-        var localIp = ResolveAdvertisedMediaAddress(session);
-        var localEndPoint = new IPEndPoint(localIp, _localMediaPort);
+        new IPEndPoint(ResolveAdvertisedMediaAddress(session), _localMediaPort),
+        BuildSdpOptions(),
+        _localIceDescription,
+        _iceControlling,
+        _localAnswerSdp ?? _localOfferSdp);
 
-        var parameters = _sdpNegotiator.TryParseMediaParameters(remoteSdp, localEndPoint, BuildSdpOptions());
-        if (parameters is null)
-        {
-            _logger.LogWarning("Failed to parse remote SDP for call {CallId}; RTP will not start.", session.CallId);
-            reasonCode = SrtpDecisionReasonCodes.MediaParametersUnavailable;
-            _srtpTelemetry.PublishDecision(session, isSrtpNegotiated: false, profile: string.Empty, reasonCode, violatesPolicy: _appliedSrtpPolicy == SrtpPolicy.Required);
-            return _appliedSrtpPolicy == SrtpPolicy.Required
-                ? MediaPublicationResult.PolicyViolation
-                : MediaPublicationResult.Skipped;
-        }
-
-        var withIceMetadata = CallMediaParametersIceEnricher.Enrich(parameters, _localIceDescription, _iceControlling);
-        reasonCode = SrtpPolicyEvaluator.ResolveReasonCode(_appliedSrtpPolicy, withIceMetadata.IsSrtpNegotiated);
-        var violatesPolicy = SrtpPolicyEvaluator.IsPolicyViolation(_appliedSrtpPolicy, withIceMetadata.IsSrtpNegotiated);
-        var enrichedParameters = CallMediaParametersDtlsEnricher.Enrich(
-            CallMediaParametersSrtpEnricher.Enrich(
-                withIceMetadata, reasonCode, remoteSdp, _localAnswerSdp ?? _localOfferSdp, _appliedSrtpPolicy),
-            remoteSdp, _localAnswerSdp ?? _localOfferSdp);
-
-        // Fail closed on a keyless secure negotiation: the exchange signals SRTP (secure
-        // profile / fingerprint) but produced neither SDES keys nor a DTLS association —
-        // e.g. a UDP/TLS answer without a fingerprint. Under Required this is a policy
-        // violation; the media layer additionally stays fail-closed (RequireEncryptedMedia).
-        if (IsKeylessSecureNegotiation(enrichedParameters))
-        {
-            reasonCode = SrtpDecisionReasonCodes.RequiredNegotiationFailed;
-            violatesPolicy = _appliedSrtpPolicy == SrtpPolicy.Required;
-        }
-
-        // Remember the live outbound encrypt key so a later hold/unhold re-offers the same
-        // key (keeps SRTP without rekeying); null when the call resolved to plain RTP.
-        // A DTLS-keyed leg latches instead so re-offers keep signaling DTLS.
-        _activeLocalSrtpKeyParams = enrichedParameters.SrtpLocalKeyParams;
-        _activeLocalVideoSrtpKeyParams = enrichedParameters.Video?.SrtpLocalKeyParams;
-        _dtlsActiveOnCall = enrichedParameters.IsDtlsNegotiated;
-        _srtpTelemetry.PublishDecision(
-            session,
-            enrichedParameters.IsSrtpNegotiated,
-            enrichedParameters.MediaProfile,
-            reasonCode,
-            violatesPolicy);
-
-        if (violatesPolicy)
-        {
-            _logger.LogWarning(
-                "SRTP policy violation for call {CallId}: policy={Policy} profile={Profile} reason={ReasonCode}",
-                session.CallId,
-                _appliedSrtpPolicy,
-                enrichedParameters.MediaProfile,
-                reasonCode);
-            return MediaPublicationResult.PolicyViolation;
-        }
-
-        _logger.LogDebug(
-            "Firing MediaParametersNegotiated for call {CallId}: local={Local} remote={Remote} PT={PT}",
-            session.CallId, enrichedParameters.LocalEndPoint, enrichedParameters.RemoteEndPoint, enrichedParameters.PayloadType);
-
-        // Release the port-reservation sockets so the audio and video RtpSessions can bind
-        // the same ports. UdpClient.Dispose is idempotent; Dispose() below calls it again.
+    /// <summary>
+    /// Releases the port-reservation sockets so the audio and video RtpSessions can bind the same
+    /// ports. UdpClient.Dispose is idempotent; <see cref="Dispose"/> calls it again.
+    /// </summary>
+    private void ReleasePortReservationSockets()
+    {
         try
         {
             _localMediaSocket.Dispose();
@@ -717,79 +616,7 @@ internal sealed class SipCoreCallChannel : ICallChannel
         {
             _logger.LogTrace(ex, "Port-reservation socket already disposed when releasing for RtpSession.");
         }
-
-        _lastPublishedSignature = RekeySignature(enrichedParameters);
-        MediaParametersNegotiated?.Invoke(this, enrichedParameters);
-        return MediaPublicationResult.Published;
     }
-
-    /// <summary>
-    /// Re-publishes media parameters when an established call's re-INVITE changes the negotiated
-    /// media (RFC 3264 §8: new SDES key, remote endpoint, or codec). Additive to the initial
-    /// <see cref="TryPublishMediaParameters"/>: it runs only after the first publish and only on a
-    /// real change (a retransmission with an identical signature is ignored), so the orchestrator
-    /// rebuilds the media session with the new keys only when something actually changed.
-    /// </summary>
-    private void TryRepublishMediaParametersOnRekey(ISipCallSession session)
-    {
-        var remoteSdp = session.RemoteSdp;
-        if (string.IsNullOrWhiteSpace(remoteSdp))
-            return;
-
-        var localEndPoint = new IPEndPoint(ResolveAdvertisedMediaAddress(session), _localMediaPort);
-        var parameters = _sdpNegotiator.TryParseMediaParameters(remoteSdp, localEndPoint, BuildSdpOptions());
-        if (parameters is null)
-            return;
-
-        var withIceMetadata = CallMediaParametersIceEnricher.Enrich(parameters, _localIceDescription, _iceControlling);
-        var reasonCode = SrtpPolicyEvaluator.ResolveReasonCode(_appliedSrtpPolicy, withIceMetadata.IsSrtpNegotiated);
-        // On an inbound re-INVITE the session carries the fresh answer we sent (new local key);
-        // on the outbound leg it is null and we fall back to our retained answer/offer.
-        var enriched = CallMediaParametersDtlsEnricher.Enrich(
-            CallMediaParametersSrtpEnricher.Enrich(
-                withIceMetadata, reasonCode, remoteSdp,
-                session.LocalSdp ?? _localAnswerSdp ?? _localOfferSdp, _appliedSrtpPolicy),
-            remoteSdp, session.LocalSdp ?? _localAnswerSdp ?? _localOfferSdp);
-
-        if (string.Equals(RekeySignature(enriched), _lastPublishedSignature, StringComparison.Ordinal))
-            return; // unchanged — retransmission or a re-INVITE that did not touch media
-
-        var violatesPolicy = SrtpPolicyEvaluator.IsPolicyViolation(_appliedSrtpPolicy, withIceMetadata.IsSrtpNegotiated);
-        if (IsKeylessSecureNegotiation(enriched))
-        {
-            // See TryPublishMediaParameters: a re-INVITE downgrading to a keyless secure
-            // negotiation must not slip past the policy either.
-            reasonCode = SrtpDecisionReasonCodes.RequiredNegotiationFailed;
-            violatesPolicy = _appliedSrtpPolicy == SrtpPolicy.Required;
-        }
-        _srtpTelemetry.PublishDecision(session, enriched.IsSrtpNegotiated, enriched.MediaProfile, reasonCode, violatesPolicy);
-        if (violatesPolicy)
-        {
-            _ = TerminateForSrtpPolicyViolationAsync(session, reasonCode);
-            return;
-        }
-
-        _activeLocalSrtpKeyParams = enriched.SrtpLocalKeyParams;
-        _activeLocalVideoSrtpKeyParams = enriched.Video?.SrtpLocalKeyParams;
-        _dtlsActiveOnCall = enriched.IsDtlsNegotiated;
-        _lastPublishedSignature = RekeySignature(enriched);
-        _logger.LogDebug("Re-publishing media parameters on re-INVITE rekey for call {CallId}.", session.CallId);
-        MediaParametersNegotiated?.Invoke(this, enriched);
-    }
-
-    /// <summary>
-    /// True when the SDP exchange signals secure media but negotiated no usable keying:
-    /// neither SDES key material nor a DTLS association. Such a leg must never run as
-    /// plain RTP while reporting <c>IsSrtpNegotiated</c>.
-    /// </summary>
-    private static bool IsKeylessSecureNegotiation(CallMediaParameters p) =>
-        p.IsSrtpNegotiated && p.SrtpLocalKeyParams is null && !p.IsDtlsNegotiated;
-
-    /// <summary>Signature of the media-relevant parameters; equal signature = same media.</summary>
-    private static string RekeySignature(CallMediaParameters p) =>
-        $"{p.RemoteEndPoint}|{p.PayloadType}|{p.CodecName}|{p.MediaProfile}|{p.IsSrtpNegotiated}"
-        + $"|{p.SrtpSuite}|{p.SrtpLocalKeyParams}|{p.SrtpRemoteKeyParams}"
-        + $"|{p.IsDtlsNegotiated}|{p.DtlsIsClient}|{p.DtlsRemoteFingerprintAlgorithm}|{p.DtlsRemoteFingerprintValue}";
 
     // ── Session event handlers ────────────────────────────────────────────────
 
@@ -804,15 +631,15 @@ internal sealed class SipCoreCallChannel : ICallChannel
         // transition so a receive-only media session starts before the 200 OK. No-op without an
         // early-media SDP; idempotent against the later Established publish (shared guard).
         if (e.NewState == SipDialogState.Ringing && sender is ISipCallSession ringing)
-            TryPublishEarlyMediaParameters(ringing);
+            _mediaPublisher.TryPublishEarly(ringing);
 
         // Keep ordering consistent with AttachSession(): publish media parameters
         // before Connected so call.MediaParameters is populated for app callbacks.
         if (e.NewState == SipDialogState.Established && sender is ISipCallSession s)
         {
-            if (Volatile.Read(ref _mediaParametersFired) == 0)
+            if (!_mediaPublisher.HasFired)
             {
-                var result = TryPublishMediaParameters(s, out var reasonCode);
+                var result = _mediaPublisher.TryPublish(s, out var reasonCode);
                 if (result == MediaPublicationResult.PolicyViolation)
                 {
                     _ = TerminateForSrtpPolicyViolationAsync(s, reasonCode);
@@ -823,7 +650,7 @@ internal sealed class SipCoreCallChannel : ICallChannel
             {
                 // Already established once — a further Established transition is a re-INVITE
                 // (e.g. unhold with a fresh peer key); rekey only when the media actually changed.
-                TryRepublishMediaParametersOnRekey(s);
+                _mediaPublisher.TryRepublishOnRekey(s);
             }
         }
 
@@ -895,8 +722,8 @@ internal sealed class SipCoreCallChannel : ICallChannel
         // peer keeps the association; SDES calls re-advertise the live key instead —
         // forcing DTLS onto an established SDES/plain call would break hold/unhold
         // against non-DTLS peers.
-        var srtpKey = _activeLocalSrtpKeyParams;
-        var reofferDtls = _dtlsActiveOnCall;
+        var srtpKey = _mediaPublisher.ActiveLocalSrtpKeyParams;
+        var reofferDtls = _mediaPublisher.DtlsActiveOnCall;
         return BuildLocalSdpOptions(
             offerSrtpCrypto: srtpKey is not null && !reofferDtls,
             offerSrtpKeyParams: srtpKey,
@@ -938,7 +765,7 @@ internal sealed class SipCoreCallChannel : ICallChannel
             {
                 Port = _localVideoPort,
                 PreferredCodecNames = _videoCodecNames,
-                OfferSrtpKeyParams = _activeLocalVideoSrtpKeyParams,
+                OfferSrtpKeyParams = _mediaPublisher.ActiveLocalVideoSrtpKeyParams,
                 Candidates = _localIceDescription?.VideoCandidates ?? [],
                 // Offer the transport-wide-cc header extension (RFC 8285 / draft-holmer): a peer that
                 // supports it echoes the a=extmap in its answer, enabling transport-cc congestion
@@ -1016,13 +843,6 @@ internal sealed class SipCoreCallChannel : ICallChannel
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
-
-    private enum MediaPublicationResult
-    {
-        Published,
-        Skipped,
-        PolicyViolation
-    }
 
     private ISipCallSession EnsureSession()
     {

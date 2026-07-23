@@ -428,7 +428,7 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
                 normalizedRequest,
                 out var unsupportedHeaderValue))
         {
-            var unsupportedHeaders = CreateIngressResponseHeaders(normalizedRequest, statusCode: 420);
+            var unsupportedHeaders = SipIngressResponseHeaders.Create(normalizedRequest, statusCode: 420);
             unsupportedHeaders["Unsupported"] = unsupportedHeaderValue;
             _ = SendIngressResponseAsync(
                 normalizedRequest,
@@ -447,7 +447,7 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
                 out var contentRejectionReasonPhrase,
                 out var contentRejectionHeaders))
         {
-            var rejectionHeaders = CreateIngressResponseHeaders(normalizedRequest, contentRejectionStatusCode);
+            var rejectionHeaders = SipIngressResponseHeaders.Create(normalizedRequest, contentRejectionStatusCode);
             if (contentRejectionHeaders is not null)
             {
                 foreach (var pair in contentRejectionHeaders)
@@ -505,7 +505,7 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
 
         if (string.Equals(normalizedRequest.Method, "OPTIONS", StringComparison.Ordinal))
         {
-            var headers = CreateIngressResponseHeaders(normalizedRequest, statusCode: 200);
+            var headers = SipIngressResponseHeaders.Create(normalizedRequest, statusCode: 200);
             headers["Allow"] = SupportedMethodList;
             headers["Accept"] = SupportedAcceptList;
             _ = SendIngressResponseAsync(
@@ -554,7 +554,7 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
         if (!string.Equals(normalizedRequest.Method, "INVITE", StringComparison.Ordinal)
             && !string.Equals(normalizedRequest.Method, "ACK", StringComparison.Ordinal))
         {
-            var headers = CreateIngressResponseHeaders(normalizedRequest, statusCode: 501);
+            var headers = SipIngressResponseHeaders.Create(normalizedRequest, statusCode: 501);
             headers["Allow"] = SupportedMethodList;
             _ = SendIngressResponseAsync(
                 normalizedRequest,
@@ -919,8 +919,8 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
                     statusCode,
                     reasonPhrase,
                     headers is null
-                        ? CreateIngressResponseHeaders(request, statusCode, remoteEndPoint)
-                        : EnsureIngressResponseToTag(headers, statusCode),
+                        ? SipIngressResponseHeaders.Create(request, statusCode, remoteEndPoint)
+                        : SipIngressResponseHeaders.EnsureToTag(headers, statusCode),
                     body: null,
                     CancellationToken.None)
                 .ConfigureAwait(false);
@@ -934,58 +934,6 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
                 request.Method,
                 request.Header("Call-ID"));
         }
-    }
-
-    /// <summary>
-    /// Creates minimal response headers for ingress-level replies.
-    /// </summary>
-    private static Dictionary<string, string> CreateIngressResponseHeaders(
-        SipRequest request,
-        int statusCode,
-        IPEndPoint? remoteEndPoint = null)
-    {
-        // RFC 3581 §4: reflect rport/received into the Via header of responses.
-        var viaValue = request.Header("Via") ?? string.Empty;
-        if (remoteEndPoint is not null)
-            viaValue = SipProtocol.ReflectViaRport(viaValue, remoteEndPoint);
-
-        var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["Via"] = viaValue,
-            ["From"] = request.Header("From") ?? string.Empty,
-            ["To"] = request.Header("To") ?? string.Empty,
-            ["Call-ID"] = request.Header("Call-ID") ?? string.Empty,
-            ["CSeq"] = request.Header("CSeq") ?? string.Empty,
-            ["Supported"] = "100rel, timer, replaces",
-            ["Server"] = "CalloraVoipSdk/1.0",
-            ["Date"] = DateTimeOffset.UtcNow.ToString("r"),
-            ["User-Agent"] = "CalloraVoipSdk/1.0"
-        };
-
-        // RFC 3261 §8.2.6.2: Record-Route MUST be copied verbatim from request to response.
-        var recordRoute = request.Header("Record-Route");
-        if (!string.IsNullOrWhiteSpace(recordRoute))
-            headers["Record-Route"] = recordRoute;
-
-        return EnsureIngressResponseToTag(headers, statusCode);
-    }
-
-    /// <summary>
-    /// Ensures To tag presence for non-100 UAS responses.
-    /// </summary>
-    private static Dictionary<string, string> EnsureIngressResponseToTag(
-        IReadOnlyDictionary<string, string> headers,
-        int statusCode)
-    {
-        var mutable = new Dictionary<string, string>(headers, StringComparer.OrdinalIgnoreCase);
-        if (statusCode <= 100)
-            return mutable;
-
-        var currentTo = mutable.TryGetValue("To", out var toHeaderValue)
-            ? toHeaderValue
-            : string.Empty;
-        mutable["To"] = SipCallSessionHeaderService.EnsureTag(currentTo, SipProtocol.NewTag());
-        return mutable;
     }
 
     /// <summary>
