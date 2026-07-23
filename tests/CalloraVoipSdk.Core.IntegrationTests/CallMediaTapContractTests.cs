@@ -170,4 +170,7 @@ internal sealed class FakePhoneLine : IPhoneLine
 
     public Task UnregisterAsync(CancellationToken ct = default) =>
         throw new NotSupportedException();
+
+    public Task SendMessageAsync(string targetUri, string body, string contentType = "text/plain", CancellationToken ct = default) =>
+        throw new NotSupportedException();
 }

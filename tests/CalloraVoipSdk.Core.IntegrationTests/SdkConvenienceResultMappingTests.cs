@@ -91,6 +91,7 @@ public sealed class SdkConvenienceResultMappingTests
         public event EventHandler<LineReconnectFailedEventArgs>? LineReconnectFailed { add { } remove { } }
 
         public Task<ICall> DialAsync(string targetUri, DialOptions? options = null, CancellationToken ct = default) => Dial!(ct);
+        public Task SendMessageAsync(string targetUri, string body, string contentType = "text/plain", CancellationToken ct = default) => Task.CompletedTask;
         public Task UnregisterAsync(CancellationToken ct = default) => Task.CompletedTask;
     }
 

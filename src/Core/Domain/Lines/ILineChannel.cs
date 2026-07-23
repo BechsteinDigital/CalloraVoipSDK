@@ -51,4 +51,10 @@ internal interface ILineChannel : IDisposable
         CancellationToken ct);
 
     void SetInboundHandler(Action<ICallChannel, string> onInbound);
+
+    /// <summary>
+    /// Sends an out-of-dialog SIP MESSAGE (RFC 3428) from this line to <paramref name="targetUri"/>.
+    /// Completes when the peer answers 2xx; throws on a non-2xx final response or no response.
+    /// </summary>
+    Task SendMessageAsync(string targetUri, string body, string contentType, CancellationToken ct = default);
 }
