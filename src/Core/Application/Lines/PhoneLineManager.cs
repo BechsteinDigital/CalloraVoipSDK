@@ -17,6 +17,9 @@ public sealed class PhoneLineManager : IPhoneLineManager
     /// <summary>Raised when any managed line receives an inbound call; aggregates every line's incoming calls.</summary>
     public event EventHandler<IncomingCallEventArgs>? IncomingCall;
 
+    /// <summary>Raised when any managed line receives an inbound SIP MESSAGE; aggregates every line's messages.</summary>
+    public event EventHandler<IncomingMessageEventArgs>? IncomingMessage;
+
     internal PhoneLineManager(Func<SipAccount, PhoneLine> factory)
         => _factory = factory;
 
@@ -29,6 +32,7 @@ public sealed class PhoneLineManager : IPhoneLineManager
     {
         var line = _factory(account);
         line.IncomingCall += (s, e) => IncomingCall?.Invoke(s, e);
+        line.IncomingMessage += (s, e) => IncomingMessage?.Invoke(s, e);
         _lines[line.LineId] = line;
         line.StartRegistration();
         return line;

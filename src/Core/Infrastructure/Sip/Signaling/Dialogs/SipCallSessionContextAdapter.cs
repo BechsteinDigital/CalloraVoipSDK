@@ -182,6 +182,8 @@ internal sealed class SipCallSessionContextAdapter : ISipCallSessionContext
 
     public void SetRemoteSdp(string? sdp) => _session.SetRemoteSdp(sdp);
 
+    public void CaptureEarlyMediaSdp(string? sdp) => _session.CaptureEarlyMediaSdp(sdp);
+
     public void SetLocalSdp(string? sdp) => _session.SetLocalSdp(sdp);
 
     public bool TryAcknowledgeReliableProvisional(

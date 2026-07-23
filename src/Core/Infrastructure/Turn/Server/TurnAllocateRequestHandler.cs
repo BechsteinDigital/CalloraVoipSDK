@@ -230,19 +230,37 @@ internal sealed class TurnAllocateRequestHandler
         };
     }
 
-    private static IPEndPoint ResolveAdvertisedRelayedEndPoint(
+    private IPEndPoint ResolveAdvertisedRelayedEndPoint(
         IPEndPoint boundRelayedEndPoint,
         IPEndPoint clientRemoteEndPoint)
     {
+        // An operator-configured public relay address always wins: in NAT'd / multi-homed / cloud
+        // deployments it is the only reliable source, since neither the bound wildcard nor the routed
+        // local interface address is what remote peers must reach (RFC 8656 §7.2 XOR-RELAYED-ADDRESS).
+        // Applied only when its family matches the relay so an IPv4 value is never advertised for an
+        // IPv6 allocation (which would XOR-encode to a wrong address the client cannot reach).
+        var configured = _options.PublicRelayAddress;
+        if (configured is not null && configured.AddressFamily == boundRelayedEndPoint.AddressFamily)
+            return new IPEndPoint(configured, boundRelayedEndPoint.Port);
+
         var advertised = LocalEndPointAdvertisementResolver.ResolveAdvertisedLocalEndPoint(
             boundRelayedEndPoint,
             clientRemoteEndPoint);
 
-        if (IPAddress.Any.Equals(advertised.Address))
-            return new IPEndPoint(IPAddress.Loopback, advertised.Port);
-
-        if (IPAddress.IPv6Any.Equals(advertised.Address))
-            return new IPEndPoint(IPAddress.IPv6Loopback, advertised.Port);
+        var isV6 = advertised.Address.AddressFamily == AddressFamily.InterNetworkV6;
+        if (IPAddress.Any.Equals(advertised.Address) || IPAddress.IPv6Any.Equals(advertised.Address))
+        {
+            // No routable local interface toward the client could be determined. Advertising loopback keeps
+            // a single-host / loopback deployment working, but it is unreachable from any other host — so warn
+            // loudly and point at PublicRelayAddress instead of silently handing out a dead relay address.
+            var loopback = isV6 ? IPAddress.IPv6Loopback : IPAddress.Loopback;
+            _logger.LogWarning(
+                "TURN could not resolve a routable relay address for client {Client}; advertising loopback " +
+                "{Loopback}:{Port}, which is unreachable off-host. Set TurnServerOptions.PublicRelayAddress " +
+                "for multi-host deployments.",
+                clientRemoteEndPoint, loopback, advertised.Port);
+            return new IPEndPoint(loopback, advertised.Port);
+        }
 
         return advertised;
     }

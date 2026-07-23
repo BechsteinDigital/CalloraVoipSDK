@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
 
@@ -26,11 +28,19 @@ public sealed class AsteriskContainer : IAsyncDisposable
         "protocol=tcp\n" +
         "bind=0.0.0.0:5060\n" +
         "\n" +
+        "[transport-tls]\n" +
+        "type=transport\n" +
+        "protocol=tls\n" +
+        "bind=0.0.0.0:5061\n" +
+        "cert_file=/etc/asterisk/keys/asterisk.pem\n" +
+        "priv_key_file=/etc/asterisk/keys/asterisk.key\n" +
+        "method=tlsv1_2\n" +
+        "\n" +
         "[6001]\n" +
         "type=endpoint\n" +
         "context=default\n" +
         "disallow=all\n" +
-        "allow=ulaw\n" +
+        "allow=ulaw,alaw,g722\n" +               // mehrere Codecs → Negotiation-Tests wählen per SDK-Präferenz
         "auth=6001\n" +
         "aors=6001\n" +
         "\n" +
@@ -42,21 +52,57 @@ public sealed class AsteriskContainer : IAsyncDisposable
         "\n" +
         "[6001]\n" +
         "type=aor\n" +
+        "max_contacts=1\n" +
+        "\n" +
+        // Zweiter Endpoint mit erzwungener SRTP-SDES-Medienverschlüsselung (RFC 4568) für die
+        // SRTP-Interop-Tests. 6001 bleibt bewusst Plain RTP, damit die Non-Happy-Path-/Happy-Path-/
+        // Codec-Tests (SrtpPolicy.Disabled) unberührt bleiben.
+        "[6002]\n" +
+        "type=endpoint\n" +
+        "context=default\n" +
+        "disallow=all\n" +
+        "allow=ulaw,alaw,g722\n" +
+        "media_encryption=sdes\n" +               // erzwingt RTP/SAVP + a=crypto (SDES)
+        "auth=6002\n" +
+        "aors=6002\n" +
+        "\n" +
+        "[6002]\n" +
+        "type=auth\n" +
+        "auth_type=userpass\n" +
+        "username=6002\n" +
+        "password=secret\n" +
+        "\n" +
+        "[6002]\n" +
+        "type=aor\n" +
         "max_contacts=1\n";
 
-    // Dialplan für Non-Happy-Path-Call-Tests. Kontext [default] passt zu context=default am
-    // Endpoint 6001. Jede Extension bildet einen definierten SIP-Fehler ab (App→SIP live verifiziert).
-    // Unbekannte Extensions (kein Eintrag) → Asterisk 404 Not Found.
+    // Dialplan für Call-Tests. Kontext [default] passt zu context=default am Endpoint 6001.
+    // Non-Happy-Path-Extensions bilden je einen definierten SIP-Fehler ab (App→SIP live verifiziert);
+    // die answer-Extension beantwortet den Call und sendet aktiv Media (Milliwatt-Testton), sodass
+    // SDK-seitig RTP-Empfang messbar ist. Unbekannte Extensions (kein Eintrag) → Asterisk 404.
     private const string ExtensionsConf =
         "[default]\n" +
         "exten => busy,1,Busy()\n" +              // → 486 Busy Here
         "exten => decline,1,Hangup(21)\n" +       // Q.850 cause 21 → Ablehnung
         "exten => noanswer,1,Ringing()\n" +       // ringt, ohne je zu antworten
-        "same => n,Wait(3600)\n";                 // → aufrufer-seitiger Timeout / CANCEL
+        "same => n,Wait(3600)\n" +                // → aufrufer-seitiger Timeout / CANCEL
+        "exten => answer,1,Answer()\n" +          // → 200 OK, Dialog etabliert
+        "same => n,Milliwatt()\n" +               // endloser 1004-Hz-Testton → RTP fließt SDK-wärts
+        "exten => dtmf,1,Answer()\n" +            // → 200 OK, dann RFC-4733-Ziffern senden
+        "same => n,Wait(2)\n" +                   // Media etablieren, DTMF-Listener anhängen
+        "same => n,SendDTMF(1234)\n" +            // sendet 1-2-3-4 als telephone-event
+        "same => n,Wait(30)\n" +                  // Call offen halten für den Empfang
+        "exten => earlymedia,1,Progress()\n" +    // → 183 Session Progress mit SDP (Early Media)
+        "same => n,Playtones(dial)\n" +           // Dial-Ton als Early-Media-RTP vor dem 200 OK
+        "same => n,Wait(4)\n" +                   // Early-Media-Fenster
+        "same => n,Answer()\n" +                  // → 200 OK
+        "same => n,Milliwatt()\n";                // Post-Answer-Media
 
     private readonly IContainer _container;
     private readonly FileInfo _pjsipConfFile;
     private readonly FileInfo _extensionsConfFile;
+    private readonly FileInfo _tlsCertFile;
+    private readonly FileInfo _tlsKeyFile;
 
     /// <summary>Erstellt (noch nicht gestartet) den Asterisk-Container.</summary>
     public AsteriskContainer()
@@ -68,9 +114,23 @@ public sealed class AsteriskContainer : IAsyncDisposable
         _extensionsConfFile = new FileInfo(Path.GetTempFileName());
         File.WriteAllText(_extensionsConfFile.FullName, ExtensionsConf);
 
+        // Self-signed TLS-Zertifikat für [transport-tls]; der SDK vertraut ihm im Test über
+        // TlsConfiguration.AcceptUntrustedCertificates.
+        using (var rsa = RSA.Create(2048))
+        {
+            var certRequest = new CertificateRequest("CN=asterisk", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+            using var cert = certRequest.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(2));
+            _tlsCertFile = new FileInfo(Path.GetTempFileName());
+            File.WriteAllText(_tlsCertFile.FullName, cert.ExportCertificatePem());
+            _tlsKeyFile = new FileInfo(Path.GetTempFileName());
+            File.WriteAllText(_tlsKeyFile.FullName, rsa.ExportPkcs8PrivateKeyPem());
+        }
+
         _container = new ContainerBuilder("andrius/asterisk:22")
             .WithResourceMapping(_pjsipConfFile, new FileInfo("/etc/asterisk/pjsip.conf"))
             .WithResourceMapping(_extensionsConfFile, new FileInfo("/etc/asterisk/extensions.conf"))
+            .WithResourceMapping(_tlsCertFile, new FileInfo("/etc/asterisk/keys/asterisk.pem"))
+            .WithResourceMapping(_tlsKeyFile, new FileInfo("/etc/asterisk/keys/asterisk.key"))
             .WithExposedPort(SipPortWithProtocol)
             .WithPortBinding(SipPortWithProtocol, assignRandomHostPort: true)
             .WithWaitStrategy(Wait.ForUnixContainer().UntilMessageIsLogged("Asterisk Ready."))
@@ -82,6 +142,12 @@ public sealed class AsteriskContainer : IAsyncDisposable
 
     /// <summary>Passwort des konfigurierten Endpoints (Digest-Auth).</summary>
     public string Password => "secret";
+
+    /// <summary>Benutzername des zweiten Endpoints mit erzwungener SRTP-SDES-Medienverschlüsselung.</summary>
+    public string SdesUsername => "6002";
+
+    /// <summary>Passwort des SDES-Endpoints (Digest-Auth).</summary>
+    public string SdesPassword => "secret";
 
     /// <summary>Docker-Host (meist 127.0.0.1/localhost) für den Port-gemappten UDP-Zugang.</summary>
     public string Host => _container.Hostname;
@@ -95,15 +161,39 @@ public sealed class AsteriskContainer : IAsyncDisposable
     /// </summary>
     public string ContainerIpAddress => _container.IpAddress;
 
+    /// <summary>Fester TLS-SIP-Port des Containers (über die Bridge-IP erreichbar).</summary>
+    public int SipTlsPort => 5061;
+
     /// <summary>Startet den Container und wartet, bis Asterisk SIP-ready ist.</summary>
     public Task StartAsync() => _container.StartAsync();
 
     /// <summary>
-    /// Baut eine Ziel-Request-URI für die im Dialplan definierten Test-Extensions
-    /// (<c>busy</c>, <c>decline</c>, <c>noanswer</c>) bzw. eine unbekannte Extension (→ 404).
-    /// Nur nach <see cref="StartAsync"/> gültig (nutzt die Container-Bridge-IP).
+    /// Führt ein Kommando im Container aus (z. B. die Asterisk-CLI via <c>asterisk -rx …</c>) und
+    /// gibt dessen Standardausgabe zurück. Nur nach <see cref="StartAsync"/> gültig.
     /// </summary>
-    public string CallTargetUri(string extension) => $"sip:{extension}@{ContainerIpAddress}:5060";
+    public async Task<string> ExecAsync(params string[] command)
+    {
+        var result = await _container.ExecAsync(command).ConfigureAwait(false);
+        return result.Stdout;
+    }
+
+    /// <summary>
+    /// Liefert die kombinierte Container-Standardausgabe (Asterisk-Konsole) — z. B. um bei aktivem
+    /// <c>pjsip set logger on</c> die ausgetauschten SIP-Nachrichten zu inspizieren.
+    /// </summary>
+    public async Task<string> GetConsoleLogsAsync()
+    {
+        var (stdout, stderr) = await _container.GetLogsAsync().ConfigureAwait(false);
+        return stdout + "\n" + stderr;
+    }
+
+    /// <summary>
+    /// Baut eine Ziel-Request-URI für die im Dialplan definierten Test-Extensions
+    /// (<c>answer</c> → 200 OK + Media, <c>busy</c>, <c>decline</c>, <c>noanswer</c>) bzw. eine
+    /// unbekannte Extension (→ 404). <paramref name="port"/> muss zum Signalisierungs-Transport passen
+    /// (5060 für UDP/TCP, <see cref="SipTlsPort"/> für TLS). Nur nach <see cref="StartAsync"/> gültig.
+    /// </summary>
+    public string CallTargetUri(string extension, int port = 5060) => $"sip:{extension}@{ContainerIpAddress}:{port}";
 
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
@@ -111,5 +201,7 @@ public sealed class AsteriskContainer : IAsyncDisposable
         await _container.DisposeAsync().ConfigureAwait(false);
         try { _pjsipConfFile.Delete(); } catch { /* best effort */ }
         try { _extensionsConfFile.Delete(); } catch { /* best effort */ }
+        try { _tlsCertFile.Delete(); } catch { /* best effort */ }
+        try { _tlsKeyFile.Delete(); } catch { /* best effort */ }
     }
 }

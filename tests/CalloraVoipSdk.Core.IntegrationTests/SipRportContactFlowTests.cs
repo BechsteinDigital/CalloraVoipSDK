@@ -141,6 +141,7 @@ public sealed class SipRportContactFlowTests
     private sealed class NoopSignalingService : ISipCallSignalingService
     {
         public event EventHandler<SipIncomingInviteEventArgs>? IncomingInvite { add { } remove { } }
+        public event EventHandler<SipIncomingMessageEventArgs>? IncomingMessage { add { } remove { } }
         public event EventHandler<SipIncomingInviteEventArgs>? OutboundCallStarted { add { } remove { } }
 
         public Task<ISipCallSession> InviteAsync(SipInviteRequest request, CancellationToken ct = default) =>

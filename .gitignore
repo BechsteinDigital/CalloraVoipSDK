@@ -118,4 +118,6 @@ examples/commercial/CalloraVoipSdk.Sample.RealtimeBridge/
 
 website/
 
+# Git worktree scaffolding created by local tooling (e.g. agent worktrees).
 .worktrees/
+.claire/

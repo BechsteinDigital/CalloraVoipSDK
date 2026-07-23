@@ -152,6 +152,11 @@ internal sealed class AckTestSipCallSessionContext : ISipCallSessionContext
     {
     }
 
+    /// <summary>The last SDP captured from a provisional (180/183) response, for early-media assertions.</summary>
+    public string? CapturedEarlyMediaSdp { get; private set; }
+
+    public void CaptureEarlyMediaSdp(string? sdp) => CapturedEarlyMediaSdp = sdp;
+
     public void SetLocalSdp(string? sdp)
     {
     }

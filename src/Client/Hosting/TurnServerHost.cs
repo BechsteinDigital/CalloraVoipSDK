@@ -41,6 +41,7 @@ public sealed class TurnServerHost : ITurnServerHost
             DefaultAllocationLifetimeSeconds = configuration.DefaultAllocationLifetimeSeconds,
             MaxAllocationLifetimeSeconds = configuration.MaxAllocationLifetimeSeconds,
             MaxTotalAllocations = configuration.MaxTotalAllocations,
+            PublicRelayAddress = configuration.PublicRelayAddress,
         };
 
         _server = new CoreTurnServer(

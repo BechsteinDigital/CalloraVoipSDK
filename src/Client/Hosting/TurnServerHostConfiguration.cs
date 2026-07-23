@@ -32,6 +32,14 @@ public sealed class TurnServerHostConfiguration
     /// <summary>The server certificate for a TLS transport; ignored for UDP/TCP. Required when <see cref="Transport"/> is TLS.</summary>
     public X509Certificate2? TlsCertificate { get; init; }
 
+    /// <summary>
+    /// The public IP address advertised to clients in XOR-RELAYED-ADDRESS instead of the bound/routed
+    /// relay address (RFC 8656 §7.2). Set this in NAT'd, multi-homed, or cloud deployments where the
+    /// relay socket's local address is not reachable by remote peers. When null the server derives the
+    /// advertised address automatically and warns if it can only fall back to loopback.
+    /// </summary>
+    public IPAddress? PublicRelayAddress { get; init; }
+
     /// <summary>The allocation lifetime granted when a client does not request one (RFC 8656 §3.9). Default 600 s.</summary>
     public uint DefaultAllocationLifetimeSeconds { get; init; } = 600;
 

@@ -17,7 +17,7 @@ namespace CalloraVoipSdk.Core.Infrastructure.Sip.Signaling;
 /// </summary>
 internal sealed class SipCallSignalingService : ISipCallSignalingService
 {
-    private const string SupportedMethodList = "INVITE, ACK, BYE, CANCEL, OPTIONS, INFO, REFER, NOTIFY, UPDATE, PRACK, SUBSCRIBE";
+    private const string SupportedMethodList = "INVITE, ACK, BYE, CANCEL, OPTIONS, INFO, REFER, NOTIFY, UPDATE, PRACK, SUBSCRIBE, MESSAGE";
     private const string SupportedAcceptList = "application/sdp, application/dtmf-relay, message/sipfrag";
 
     private readonly ISipTransportRuntime _transport;
@@ -71,11 +71,7 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
             _subscriptions,
             _logger,
             SendIngressResponseAsync);
-        _messageService = new SipCallSignalingMessages(
-            _transport,
-            _digestAuthenticator,
-            _subscribeExecutor,
-            _logger);
+        _messageService = new SipCallSignalingMessages(_transport, _digestAuthenticator, _subscribeExecutor, _logger);
 
         var resolvedSdpProvider = sdpProvider ?? BuildDefaultSdpProvider();
         _sessionDependencies = new SipCallSessionDependencies
@@ -94,6 +90,9 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
 
     /// <inheritdoc />
     public event EventHandler<SipIncomingInviteEventArgs>? IncomingInvite;
+
+    /// <inheritdoc />
+    public event EventHandler<SipIncomingMessageEventArgs>? IncomingMessage;
 
     /// <inheritdoc />
     public event EventHandler<SipIncomingInviteEventArgs>? OutboundCallStarted;
@@ -509,6 +508,20 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
             && _subscriptions.TryGetValue(callId, out var outboundSubscription))
         {
             _subscriptionService.HandleInboundSubscriptionNotify(remoteEndPoint, normalizedRequest, inboundTransport, outboundSubscription);
+            return;
+        }
+
+        // RFC 3428 §7: a MESSAGE is a pager-mode instant message that opens no dialog. Answer it 200 OK
+        // and surface its content to the application via IncomingMessage (the request creates no session).
+        if (string.Equals(normalizedRequest.Method, "MESSAGE", StringComparison.Ordinal))
+        {
+            IncomingMessage?.Invoke(this, SipIncomingMessageEventArgs.FromRequest(normalizedRequest, callId, remoteEndPoint));
+            _ = SendIngressResponseAsync(
+                normalizedRequest,
+                remoteEndPoint,
+                inboundTransport,
+                statusCode: 200,
+                reasonPhrase: "OK");
             return;
         }
 

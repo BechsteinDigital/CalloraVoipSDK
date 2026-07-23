@@ -39,20 +39,29 @@ public static class TrendAssertions
 
     /// <summary>
     /// Wie die <c>long</c>-Variante, aber für <see cref="double"/>-Metriken (z. B. Jitter). Nutzt einen
-    /// relativen Floor (<paramref name="toleranceRatio"/> vom Startsockel) mit absolutem Mindest-Floor,
-    /// damit ein Startsockel nahe 0 keine Fehlalarme erzeugt.
+    /// relativen Floor (<paramref name="toleranceRatio"/> vom Startsockel).
     /// Erwartet nicht-negative, finite Werte (z. B. Jitter/RTT in ms); negative Startsockel brechen die
     /// "Aufwärts"-Semantik.
+    /// <para>
+    /// <paramref name="absoluteFloor"/> unterdrückt Fehlalarme bei einem Startsockel nahe 0: Drift wird nur
+    /// gemeldet, wenn der Endsockel diesen absoluten Wert <em>überschreitet</em>. Auf sauberem Loopback ist
+    /// Sub-Millisekunden-Jitter reines Scheduling-Rauschen — ein relativer +50 %-Sprung von 0,3 auf 0,7 ms
+    /// ist kein Leak. Der Floor muss in denselben Einheiten wie die Metrik angegeben werden (z. B. ms).
+    /// </para>
     /// </summary>
     /// <param name="samples">Chronologische Messreihe (mindestens 2 Werte).</param>
     /// <param name="selector">Extrahiert die zu prüfende Metrik.</param>
     /// <param name="toleranceRatio">Erlaubtes relatives Wachstum (z. B. 0.20 = 20 %).</param>
     /// <param name="metricName">Anzeigename der Metrik für die Begründung.</param>
+    /// <param name="absoluteFloor">
+    /// Absoluter Mindest-Endwert, unterhalb dessen niemals Drift gemeldet wird (Standard 0 = kein Floor).
+    /// </param>
     public static TrendResult NoUpwardDrift<T>(
         IReadOnlyList<T> samples,
         Func<T, double> selector,
         double toleranceRatio = 0.10,
-        string metricName = "value")
+        string metricName = "value",
+        double absoluteFloor = 0d)
     {
         if (samples.Count < 2)
             return new TrendResult(false, $"{metricName}: zu wenige Samples ({samples.Count}).");
@@ -68,9 +77,11 @@ public static class TrendAssertions
 
         var tolerance = Math.Max(1e-6, Math.Abs(start) * toleranceRatio);
         var threshold = start + tolerance;
-        var hasDrift = end > threshold;
+        // Drift nur, wenn der Endsockel sowohl relativ über der Schwelle als auch absolut über dem Floor liegt.
+        var hasDrift = end > threshold && end > absoluteFloor;
+        var floorNote = absoluteFloor > 0d ? $", Floor={absoluteFloor:F3}" : string.Empty;
         var detail =
-            $"{metricName}: Start≈{start:F3}, Ende≈{end:F3}, Schwelle={threshold:F3} " +
+            $"{metricName}: Start≈{start:F3}, Ende≈{end:F3}, Schwelle={threshold:F3}{floorNote} " +
             $"(+{toleranceRatio:P0}) → {(hasDrift ? "DRIFT" : "stabil")}.";
         return new TrendResult(hasDrift, detail);
     }

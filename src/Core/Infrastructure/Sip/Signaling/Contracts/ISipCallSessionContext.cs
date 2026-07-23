@@ -304,6 +304,14 @@ internal interface ISipCallSessionContext
     void SetRemoteSdp(string? sdp);
 
     /// <summary>
+    /// Stores the SDP body carried on a provisional (180/183) response as early-media SDP, kept
+    /// separate from the final <see cref="SetRemoteSdp"/> answer. This is the signaling foundation
+    /// for early media (RFC 3960): a later slice sets up a receive-only media session from it. On its
+    /// own this only records the SDP and does not start media — the 200 OK path is unaffected.
+    /// </summary>
+    void CaptureEarlyMediaSdp(string? sdp);
+
+    /// <summary>
     /// Stores the local SDP body last put on the wire (an answer we sent on a re-INVITE, or an
     /// offer), so the media adapter can recover our own SDES key on a rekey.
     /// </summary>

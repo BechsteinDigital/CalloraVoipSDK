@@ -4,6 +4,7 @@ using CalloraVoipSdk.Core.Application.Calls;
 using CalloraVoipSdk.Core.Application.Media;
 using CalloraVoipSdk.Core.Domain.Calls;
 using CalloraVoipSdk.Core.Domain.Lines;
+using CalloraVoipSdk.Core.Domain.Messages;
 using CalloraVoipSdk.Core.Application.Ports.Sdp;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Observability;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Signaling;
@@ -41,6 +42,7 @@ internal sealed class SipLineChannel : ILineChannel
     private Action<int>? _onReconnecting;
     private Action<ReregisterFailReason, int>? _onReconnectFailed;
     private Action<ICallChannel, string>? _onInbound;
+    private Action<SipInstantMessage>? _onMessage;
     private CancellationTokenSource? _registrationCts;
     private int _disposed;
 
@@ -97,6 +99,7 @@ internal sealed class SipLineChannel : ILineChannel
         _callChannelLogger = loggerFactory.CreateLogger<SipCoreCallChannel>();
 
         _callSignalingService.IncomingInvite += HandleIncomingInvite;
+        _callSignalingService.IncomingMessage += HandleIncomingMessage;
     }
 
     /// <summary>
@@ -211,6 +214,10 @@ internal sealed class SipLineChannel : ILineChannel
     /// </summary>
     public void SetInboundHandler(Action<ICallChannel, string> onInbound)
         => _onInbound = onInbound;
+
+    /// <inheritdoc />
+    public void SetMessageHandler(Action<SipInstantMessage> onMessage)
+        => _onMessage = onMessage;
 
     /// <inheritdoc />
     public async Task SendMessageAsync(string targetUri, string body, string contentType, CancellationToken ct = default)
@@ -343,6 +350,37 @@ internal sealed class SipLineChannel : ILineChannel
     /// <summary>
     /// Handles inbound INVITE events from call signaling and dispatches to line domain callback.
     /// </summary>
+    private void HandleIncomingMessage(object? sender, SipIncomingMessageEventArgs args)
+    {
+        if (Volatile.Read(ref _disposed) != 0 || args is null)
+            return;
+
+        // Only surface a MESSAGE addressed to this line (same trunk/registrar matching as an inbound call).
+        if (!IsMessageForThisLine(args))
+            return;
+
+        var message = new SipInstantMessage(
+            from: args.From, to: args.To, body: args.Body, contentType: args.ContentType, callId: args.CallId);
+        try
+        {
+            _onMessage?.Invoke(message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Inbound MESSAGE dispatch failed on line [{User}].", _account.Username);
+        }
+    }
+
+    private bool IsMessageForThisLine(SipIncomingMessageEventArgs args) =>
+        TrunkInboundMatcher.IsForThisLine(
+            SipProtocol.ExtractUriFromNameAddr(args.To),
+            _account.Username,
+            _account.SipServer,
+            args.RemoteEndPoint?.Address,
+            ResolveTrustedRegistrarAddresses(),
+            _account.InboundNumbers,
+            _account.AcceptTrunkInbound);
+
     private void HandleIncomingInvite(object? sender, SipIncomingInviteEventArgs args)
     {
         if (Volatile.Read(ref _disposed) != 0)
@@ -448,7 +486,13 @@ internal sealed class SipLineChannel : ILineChannel
                         _learnedPublicContact?.Port,
                         result.ObservedPublicHost,
                         result.ObservedPublicPort);
-                    if (changed)
+                    // The NAT-corrective re-register applies only to connectionless transport (UDP).
+                    // Over connection-oriented transports (TCP/TLS/WS) the persistent connection carries
+                    // the routing (RFC 5626 SIP Outbound); rewriting the Contact to the registrar-observed
+                    // SNAT address would break the very next re-register, because its ephemeral source
+                    // port no longer matches the connection → registrar 403 (interop finding F010).
+                    var natCorrectionApplies = _account.Transport is SipTransport.Udp;
+                    if (changed && natCorrectionApplies)
                     {
                         _learnedPublicContact = host is null ? null : new LearnedPublicContact(host, port);
                         if (correctiveReregistrations < options.MaxCorrectiveReregistrations)
@@ -499,8 +543,10 @@ internal sealed class SipLineChannel : ILineChannel
                             ex,
                             "SIP registration permanently rejected for [{User}]: authentication failure (attempt {Count}).",
                             _account.Username, failureCount);
-                        _onState?.Invoke(LineState.Failed);
+                        // Publish the failure reason before the terminal state so a Connect-waiter
+                        // that completes on LineState.Failed can attach the reason to its result (F005b).
                         _onReconnectFailed?.Invoke(ReregisterFailReason.AuthenticationFailed, failureCount);
+                        _onState?.Invoke(LineState.Failed);
                         return;
                     }
 
@@ -522,8 +568,8 @@ internal sealed class SipLineChannel : ILineChannel
                             ex,
                             "Registration permanently failed for [{User}] after {Count} attempts (max {Max}).",
                             _account.Username, failureCount, options.MaxRetries);
-                        _onState?.Invoke(LineState.Failed);
                         _onReconnectFailed?.Invoke(ReregisterFailReason.MaxRetriesExceeded, failureCount);
+                        _onState?.Invoke(LineState.Failed);
                         return;
                     }
 
@@ -762,6 +808,7 @@ internal sealed class SipLineChannel : ILineChannel
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
 
         _callSignalingService.IncomingInvite -= HandleIncomingInvite;
+        _callSignalingService.IncomingMessage -= HandleIncomingMessage;
         StopRegistration();
     }
 

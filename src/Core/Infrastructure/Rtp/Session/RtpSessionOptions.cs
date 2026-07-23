@@ -1,4 +1,5 @@
 using System.Net;
+using CalloraVoipSdk.Core.Infrastructure.Common.Network;
 using CalloraVoipSdk.Core.Infrastructure.Srtp.Context;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Rtp.Session;
@@ -95,4 +96,12 @@ internal sealed class RtpSessionOptions
     /// packets when <see cref="MidExtensionId"/> is set. <see langword="null"/> outside BUNDLE.
     /// </summary>
     public string? Mid { get; init; }
+
+    /// <summary>
+    /// Requested kernel receive buffer (SO_RCVBUF) for the media socket, in bytes. Defaults to
+    /// <see cref="MediaSocketDefaults.SocketReceiveBufferBytes"/> (1 MiB) so short processing pauses do not
+    /// cause kernel drops at video bitrates; raise it for high-bitrate video where the OS permits. The OS
+    /// clamps the request to its own maximum, so this is an upper request, not a guarantee.
+    /// </summary>
+    public int SocketReceiveBufferBytes { get; init; } = MediaSocketDefaults.SocketReceiveBufferBytes;
 }

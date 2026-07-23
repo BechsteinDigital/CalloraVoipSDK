@@ -53,6 +53,12 @@ public interface IVoipClient : IDisposable
     /// <summary>Raised when a new inbound call arrives on any registered line.</summary>
     event EventHandler<IncomingCallEventArgs>? IncomingCall;
 
+    /// <summary>
+    /// Raised when an inbound SIP MESSAGE (RFC 3428 pager-mode instant message) arrives on any registered
+    /// line. The SDK has already answered it 200 OK; the handler only consumes the content.
+    /// </summary>
+    event EventHandler<IncomingMessageEventArgs>? IncomingMessage;
+
     /// <summary>Raised when any active call changes state.</summary>
     event EventHandler<CallStateChangedEventArgs>? CallStateChanged;
 

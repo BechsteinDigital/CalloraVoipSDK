@@ -121,6 +121,13 @@ public sealed class VoipClient : IVoipClient
     public event EventHandler<IncomingCallEventArgs>? IncomingCall;
 
     /// <summary>
+    /// Raised when an inbound SIP MESSAGE (RFC 3428 pager-mode instant message) arrives on any registered
+    /// line. The SDK has already answered it 200 OK. Fires on the SDK's SIP signaling thread; the handler
+    /// must not block or throw (see <see cref="ICall"/> remarks).
+    /// </summary>
+    public event EventHandler<IncomingMessageEventArgs>? IncomingMessage;
+
+    /// <summary>
     /// Raised when any active call changes state. Fires on the SDK's SIP signaling thread; the
     /// handler must not block or throw (see <see cref="ICall"/> remarks).
     /// </summary>
@@ -334,6 +341,7 @@ public sealed class VoipClient : IVoipClient
         Lines = lineManager;
 
         Lines.IncomingCall += (s, e) => IncomingCall?.Invoke(s, e);
+        Lines.IncomingMessage += (s, e) => IncomingMessage?.Invoke(s, e);
 
         // Video is transport-only: the SDK ships no codec, so the video device is optional and resolved
         // purely from DI (no platform-factory fallback like audio). When absent, AttachDefaultVideoAsync

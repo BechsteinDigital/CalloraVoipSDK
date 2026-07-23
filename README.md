@@ -22,10 +22,14 @@ It exposes a stable, developer-friendly API through `VoipClient` while keeping t
 > **Project status — preview (`4.6.0-preview`).** The **SIP + RTP core** is the mature,
 > production-oriented surface: registration, in/outbound call control, transfer, DTMF, SRTP
 > (SDES) and measured RTCP quality metrics — with symmetric RTP (comedia) as the
-> production-proven NAT path. Newer surfaces — the **WebRTC facade**, **full ICE**
-> (RFC 8445/7675), **DTLS-SRTP**, and the **self-hostable STUN/TURN server** — are implemented
-> but not yet validated against a broad interop matrix; treat them as preview and validate for
-> your environment before production. Known gaps and interop defects are tracked openly in the
+> production-proven NAT path. It is exercised in CI by an **automated interop suite against a
+> real Asterisk (PJSIP) container** — registration, in/outbound calls with live RTP, codec
+> negotiation (PCMU/PCMA/G722), SRTP-SDES, DTMF (RFC 4733), hold, blind & attended transfer,
+> session timers (RFC 4028) and TCP/TLS transport; the one known gap there is early media (183),
+> tracked openly. Newer surfaces — the **WebRTC facade**, **full ICE** (RFC 8445/7675),
+> **DTLS-SRTP**, and the **self-hostable STUN/TURN server** — are implemented but not yet
+> validated against a broad interop matrix; treat them as preview and validate for your
+> environment before production. Known gaps and interop defects are tracked openly in the
 > [issue tracker](../../issues) — bug reports and interop feedback are especially welcome.
 
 **Contents:** [Why](#why-calloravoipsdk) · [Features](#current-feature-set) · [Install](#installation) · [Quickstart](#quickstart) · [Architecture](#architecture) · [Contributing](#contributing) · [Security](#security) · [License](#license)
@@ -210,11 +214,27 @@ dotnet test tests/CalloraVoipSdk.ArchitectureTests -c Release
 # Standard test set (matches CI: excludes long soaks and Docker interop)
 dotnet test CalloraVoipSdk.sln -c Release \
   --filter "Category!=SoakLong&Category!=Interop"
+
+# Interop suite — real Asterisk (PJSIP) container via Testcontainers; needs a Docker daemon
+# (tests self-skip when none is reachable)
+dotnet test tests/CalloraVoipSdk.InteropTests -c Release --filter "Category=Interop"
+
+# Long soak tests — media-quality drift + resource-leak/plateau guards over extended runs
+dotnet test tests/CalloraVoipSdk.SoakTests -c Release --filter "Category=SoakLong"
 ```
 
-> The full test matrix (long soak tests, Docker/Asterisk interop, the performance gate) and the
-> L0–L4 test model are documented in [`CONTRIBUTING.md`](CONTRIBUTING.md) and
-> [`MAINTAINING.md`](MAINTAINING.md).
+**Interop coverage.** The interop suite runs the full SIP/RTP flow against a real Asterisk
+container in CI: registration (happy + failure), in/outbound calls with live RTP, codec
+negotiation (PCMU/PCMA/G722), SRTP-SDES media, DTMF (RFC 4733), hold/unhold, blind & attended
+transfer (REFER), session-timer negotiation (RFC 4028) and TCP/TLS transport. The one known
+functional gap is early media (183), tracked in the [issue tracker](../../issues).
+
+**Soak coverage.** The soak suite runs the media-quality matrix (PCMU/Opus × plain/SRTP) plus
+resource plateau/leak guards over long runs (`SoakShort` on PRs, `SoakLong` nightly), asserting
+no jitter-buffer overflow, correct loss accounting, and no monotone resource drift.
+
+> The full test matrix and the L0–L4 test model are documented in
+> [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`MAINTAINING.md`](MAINTAINING.md).
 
 ## Quickstart
 
@@ -495,17 +515,20 @@ The SDK core stays open and free; plugins are licensed separately. Contact
 
 ## Roadmap
 
-- Full ICE (RFC 8445 / RFC 7675): the agent now implements role derivation + tie-breaker,
-  the check-list state machine, regular nomination with `USE-CANDIDATE`, inbound connectivity
-  and triggered checks, ICE restart detection, and consent freshness with media cease — but it
-  remains **opt-in and unproven in production** (no live trunk validation yet). The final ICE
-  state and selected candidate pair are now observable via `ICall.IceSnapshot`. Remaining gaps:
-  TCP candidates, and surfacing consent loss to the application for a restart/terminate decision.
-  Real trunk calls run over symmetric RTP (comedia), which needs no ICE or STUN.
+- Full ICE (RFC 8445 / RFC 7675) is **implemented and opt-in** — role + tie-breaker, check-list
+  FSM, `USE-CANDIDATE` nomination, inbound/triggered checks, restart detection, and consent
+  freshness with media cease. Final state and selected pair are observable via `ICall.IceSnapshot`;
+  post-establishment changes (incl. consent loss → `Disconnected`) via `ICall.IceConnectionStateChanged`.
+  Remaining gaps toward production ([#62](../../issues/62)): ICE-TCP candidates (RFC 6544), local
+  ICE-restart *initiation* (only detection today), and live interop/production validation. Real trunk
+  calls run over symmetric RTP (comedia), which needs no ICE or STUN.
 - Commercial plugin line-up (private feed, licensed): Callora.Realtime, WebSocket
   streaming, Privacy/Risk/Intelligence — in development
-- CI/CD hardening: soak, interop and chaos gates
-- More end-to-end examples and interoperability validation
+- CI/CD hardening: soak and Asterisk interop gates are in place (media-quality matrix,
+  resource-leak guards, full SIP/RTP flow against a real container); remaining: early media
+  (183), a chaos/fault-injection gate, and a wired-up performance gate
+- Broader interop validation against more PBXs/trunks/browsers (Asterisk is automated;
+  FRITZ!Box is manually verified — the rest is configuration guidance so far)
 
 ## License
 

@@ -59,6 +59,13 @@ internal interface ISipCallSession : IDisposable
     string? RemoteSdp { get; }
 
     /// <summary>
+    /// SDP body carried on a provisional (180/183) response — the early-media description, separate
+    /// from the final <see cref="RemoteSdp"/> answer. <see langword="null"/> until a provisional
+    /// carries a body. Default implementation returns null.
+    /// </summary>
+    string? EarlyMediaSdp => null;
+
+    /// <summary>
     /// Local dialog tag (the tag this UA contributed: From-tag on an outbound leg, To-tag on an
     /// inbound leg). Used to build an RFC 3891 <c>Replaces</c> for attended transfer. Defaults to
     /// <see langword="null"/> so existing implementations keep compiling.
