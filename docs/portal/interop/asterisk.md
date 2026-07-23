@@ -1,9 +1,22 @@
 # Asterisk
 
-**Status: 🧪 REGISTER covered by an automated interop test (CI).** `AsteriskRegisterInteropTests`
-runs the 401→200 REGISTER flow against a PJSIP Asterisk container in CI, so registration against
-`chan_pjsip` is exercised on every relevant run. Full call/media/DTMF/transfer are **not** yet
-covered by an automated test — run your own acceptance test for those before production.
+**Status: ✅ Full SIP/RTP flow automated in CI.** The interop suite
+(`tests/CalloraVoipSdk.InteropTests`) runs against a real PJSIP Asterisk container
+(`andrius/asterisk`, via Testcontainers) on every relevant run:
+
+- **Registration** — 401→200 happy path, plus failure paths (wrong password / unknown user →
+  prompt `Failed`, unreachable → `Timeout`).
+- **Calls** — outbound happy path (INVITE→200→ACK→**live RTP**→BYE), inbound (Asterisk→SDK),
+  and failure paths (busy/486, decline/403, unknown/404, no-answer timeout, caller cancel).
+- **Media** — codec negotiation (PCMU/PCMA/G722 by preference), SRTP-SDES (RTP/SAVP + `a=crypto`,
+  encrypted media), DTMF (RFC 4733) receive + negotiation.
+- **In-call** — hold/unhold (re-INVITE), blind & attended transfer (REFER/Replaces),
+  session-timer negotiation (RFC 4028).
+- **Transport** — UDP, TCP and TLS.
+
+**Known gap:** early media (183 Session Progress) — the SDK does not yet set up a media session
+from the 183 SDP; tracked in the [issue tracker](https://github.com/BechsteinDigital/callora-voip-sdk/issues).
+Run your own acceptance test for anything you depend on before production.
 
 ## Example `pjsip.conf` peer
 

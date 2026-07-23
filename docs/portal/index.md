@@ -28,8 +28,11 @@ self-hostable STUN/TURN server on top of the stable SIP + RTP core.
 > **How to read the status column.** *Stable* = mature, heavily covered by the RFC-oriented test
 > suite, and the intended production surface. *Preview* = implemented but not yet validated against
 > a broad interop matrix — validate for your environment first. The production-proven NAT path is
-> symmetric RTP (comedia), which needs no ICE or STUN. Known gaps and interop defects are tracked
-> openly in the [issue tracker](https://github.com/BechsteinDigital/callora-voip-sdk/issues).
+> symmetric RTP (comedia), which needs no ICE or STUN. The SIP + RTP core is additionally exercised
+> by an **automated interop suite against a real Asterisk (PJSIP) container in CI** — calls, media,
+> codecs, SRTP-SDES, DTMF, transfer, session timers and TCP/TLS (see the
+> [interop matrix](interop/matrix.md); known gap: early media). Known gaps and interop defects are
+> tracked openly in the [issue tracker](https://github.com/BechsteinDigital/callora-voip-sdk/issues).
 
 **Core (SIP + RTP):**
 
