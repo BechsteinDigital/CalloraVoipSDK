@@ -601,7 +601,35 @@ internal sealed class SipCoreCallChannel : ICallChannel
         if (Interlocked.Exchange(ref _mediaParametersFired, 1) != 0)
             return MediaPublicationResult.Published;
 
-        var remoteSdp = session.RemoteSdp;
+        return PublishMediaParametersFrom(session, session.RemoteSdp, out reasonCode);
+    }
+
+    // Publishes media parameters from an early-media (180/183) SDP so a receive-only session can start
+    // before the 200 OK (F011 slice 3b). SDES works as offerer (our key in _localOfferSdp, the peer key
+    // in the 183). A parse/policy failure releases the guard so the 200-OK publish runs normally. If the
+    // early SDP equals the later answer (Asterisk Progress->Answer), the Established transition sees an
+    // unchanged signature and the session runs through without a rebuild.
+    private void TryPublishEarlyMediaParameters(ISipCallSession session)
+    {
+        var earlySdp = session.EarlyMediaSdp;
+        if (string.IsNullOrWhiteSpace(earlySdp))
+            return;
+        if (Interlocked.Exchange(ref _mediaParametersFired, 1) != 0)
+            return;
+        if (PublishMediaParametersFrom(session, earlySdp, out _) != MediaPublicationResult.Published)
+            Interlocked.Exchange(ref _mediaParametersFired, 0); // release so the 200-OK path publishes
+    }
+
+    // Shared core: parses `remoteSdp`, enriches/validates, releases the port-reservation sockets and
+    // fires MediaParametersNegotiated. Used by the final 200-OK publish and the early-media publish
+    // (F011). The caller owns the once-per-session `_mediaParametersFired` guard.
+    private MediaPublicationResult PublishMediaParametersFrom(
+        ISipCallSession session,
+        string? remoteSdp,
+        out string reasonCode)
+    {
+        reasonCode = SrtpDecisionReasonCodes.NotEvaluated;
+
         if (string.IsNullOrWhiteSpace(remoteSdp))
         {
             _logger.LogWarning("No remote SDP available for call {CallId}; RTP will not start.", session.CallId);
@@ -767,6 +795,12 @@ internal sealed class SipCoreCallChannel : ICallChannel
         // The unsubscribe in Dispose() races with in-flight event deliveries, so an early
         // disposed check prevents null-reference exceptions and spurious state transitions.
         if (Volatile.Read(ref _disposed) != 0) return;
+
+        // Early media (F011): when a provisional (180/183) carried an SDP, publish it on the Ringing
+        // transition so a receive-only media session starts before the 200 OK. No-op without an
+        // early-media SDP; idempotent against the later Established publish (shared guard).
+        if (e.NewState == SipDialogState.Ringing && sender is ISipCallSession ringing)
+            TryPublishEarlyMediaParameters(ringing);
 
         // Keep ordering consistent with AttachSession(): publish media parameters
         // before Connected so call.MediaParameters is populated for app callbacks.

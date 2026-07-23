@@ -139,16 +139,16 @@ internal sealed class SipCallSessionTransactionService
                         {
                             _context.ApplyInviteDialogResponse(envelope.Response);
                             _context.RemoteEndPoint = envelope.RemoteEndPoint;
-                            if (allowRingingTransition && envelope.Response.StatusCode is 180 or 183)
-                                _context.TransitionTo(SipDialogState.Ringing);
 
-                            // Early media (RFC 3960): a provisional 180/183 may carry an SDP answer. Capture
-                            // it — kept separate from the final 200-OK answer — as the foundation for a later
-                            // receive-only media session. This alone starts no media; the 200-OK path is
-                            // unaffected (F011, slice 1).
+                            // Early media (RFC 3960): capture the provisional SDP BEFORE the Ringing
+                            // transition, so the media adapter's Ringing handler can publish early-media
+                            // parameters from it. The 200-OK path is unaffected (F011 slice 3b).
                             if (envelope.Response.StatusCode is 180 or 183
                                 && !string.IsNullOrWhiteSpace(envelope.Response.Body))
                                 _context.CaptureEarlyMediaSdp(envelope.Response.Body);
+
+                            if (allowRingingTransition && envelope.Response.StatusCode is 180 or 183)
+                                _context.TransitionTo(SipDialogState.Ringing);
 
                             if (!TryBuildReliablePrackHeader(envelope.Response, transactionInviteCSeq, out var rseq, out var rackHeader))
                                 return;
