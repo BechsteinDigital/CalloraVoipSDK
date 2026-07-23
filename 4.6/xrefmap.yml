@@ -4969,6 +4969,22 @@ references:
   commentId: E:CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.LineReconnecting
   fullName: CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.LineReconnecting
   nameWithType: IPhoneLine.LineReconnecting
+- uid: CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.SendMessageAsync(System.String,System.String,System.String,System.Threading.CancellationToken)
+  name: SendMessageAsync(string, string, string, CancellationToken)
+  href: _api/CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.html#CalloraVoipSdk_Core_Domain_Lines_IPhoneLine_SendMessageAsync_System_String_System_String_System_String_System_Threading_CancellationToken_
+  commentId: M:CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.SendMessageAsync(System.String,System.String,System.String,System.Threading.CancellationToken)
+  name.vb: SendMessageAsync(String, String, String, CancellationToken)
+  fullName: CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.SendMessageAsync(string, string, string, System.Threading.CancellationToken)
+  fullName.vb: CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.SendMessageAsync(String, String, String, System.Threading.CancellationToken)
+  nameWithType: IPhoneLine.SendMessageAsync(string, string, string, CancellationToken)
+  nameWithType.vb: IPhoneLine.SendMessageAsync(String, String, String, CancellationToken)
+- uid: CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.SendMessageAsync*
+  name: SendMessageAsync
+  href: _api/CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.html#CalloraVoipSdk_Core_Domain_Lines_IPhoneLine_SendMessageAsync_
+  commentId: Overload:CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.SendMessageAsync
+  isSpec: "True"
+  fullName: CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.SendMessageAsync
+  nameWithType: IPhoneLine.SendMessageAsync
 - uid: CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.State
   name: State
   href: _api/CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.html#CalloraVoipSdk_Core_Domain_Lines_IPhoneLine_State
@@ -8118,6 +8134,22 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.IVoipClient.RecordingManager
   nameWithType: IVoipClient.RecordingManager
+- uid: CalloraVoipSdk.IVoipClient.SendMessageAsync(System.String,System.String,System.String,System.Threading.CancellationToken)
+  name: SendMessageAsync(string, string, string, CancellationToken)
+  href: _api/CalloraVoipSdk.IVoipClient.html#CalloraVoipSdk_IVoipClient_SendMessageAsync_System_String_System_String_System_String_System_Threading_CancellationToken_
+  commentId: M:CalloraVoipSdk.IVoipClient.SendMessageAsync(System.String,System.String,System.String,System.Threading.CancellationToken)
+  name.vb: SendMessageAsync(String, String, String, CancellationToken)
+  fullName: CalloraVoipSdk.IVoipClient.SendMessageAsync(string, string, string, System.Threading.CancellationToken)
+  fullName.vb: CalloraVoipSdk.IVoipClient.SendMessageAsync(String, String, String, System.Threading.CancellationToken)
+  nameWithType: IVoipClient.SendMessageAsync(string, string, string, CancellationToken)
+  nameWithType.vb: IVoipClient.SendMessageAsync(String, String, String, CancellationToken)
+- uid: CalloraVoipSdk.IVoipClient.SendMessageAsync*
+  name: SendMessageAsync
+  href: _api/CalloraVoipSdk.IVoipClient.html#CalloraVoipSdk_IVoipClient_SendMessageAsync_
+  commentId: Overload:CalloraVoipSdk.IVoipClient.SendMessageAsync
+  isSpec: "True"
+  fullName: CalloraVoipSdk.IVoipClient.SendMessageAsync
+  nameWithType: IVoipClient.SendMessageAsync
 - uid: CalloraVoipSdk.IVoipClient.SessionManager
   name: SessionManager
   href: _api/CalloraVoipSdk.IVoipClient.html#CalloraVoipSdk_IVoipClient_SessionManager
@@ -9289,6 +9321,22 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.VoipClient.RecordingManager
   nameWithType: VoipClient.RecordingManager
+- uid: CalloraVoipSdk.VoipClient.SendMessageAsync(System.String,System.String,System.String,System.Threading.CancellationToken)
+  name: SendMessageAsync(string, string, string, CancellationToken)
+  href: _api/CalloraVoipSdk.VoipClient.html#CalloraVoipSdk_VoipClient_SendMessageAsync_System_String_System_String_System_String_System_Threading_CancellationToken_
+  commentId: M:CalloraVoipSdk.VoipClient.SendMessageAsync(System.String,System.String,System.String,System.Threading.CancellationToken)
+  name.vb: SendMessageAsync(String, String, String, CancellationToken)
+  fullName: CalloraVoipSdk.VoipClient.SendMessageAsync(string, string, string, System.Threading.CancellationToken)
+  fullName.vb: CalloraVoipSdk.VoipClient.SendMessageAsync(String, String, String, System.Threading.CancellationToken)
+  nameWithType: VoipClient.SendMessageAsync(string, string, string, CancellationToken)
+  nameWithType.vb: VoipClient.SendMessageAsync(String, String, String, CancellationToken)
+- uid: CalloraVoipSdk.VoipClient.SendMessageAsync*
+  name: SendMessageAsync
+  href: _api/CalloraVoipSdk.VoipClient.html#CalloraVoipSdk_VoipClient_SendMessageAsync_
+  commentId: Overload:CalloraVoipSdk.VoipClient.SendMessageAsync
+  isSpec: "True"
+  fullName: CalloraVoipSdk.VoipClient.SendMessageAsync
+  nameWithType: VoipClient.SendMessageAsync
 - uid: CalloraVoipSdk.VoipClient.SessionManager
   name: SessionManager
   href: _api/CalloraVoipSdk.VoipClient.html#CalloraVoipSdk_VoipClient_SessionManager
