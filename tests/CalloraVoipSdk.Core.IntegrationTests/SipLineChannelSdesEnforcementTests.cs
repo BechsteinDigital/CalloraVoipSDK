@@ -74,7 +74,7 @@ public sealed class SipLineChannelSdesEnforcementTests
     {
         public event EventHandler<SipIncomingInviteEventArgs>? IncomingInvite { add { } remove { } }
         public event EventHandler<SipIncomingInviteEventArgs>? OutboundCallStarted { add { } remove { } }
-        public Task<ISipCallSession> InviteAsync(SipInviteRequest request, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<ISipCallSession> InviteAsync(SipInviteRequest request, Action<ISipCallSession>? onSessionCreated = null, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<SipSubscriptionHandle> SubscribeAsync(SipSubscribeRequest request, CancellationToken ct = default) => throw new NotSupportedException();
         public void Dispose() { }
     }

@@ -20,8 +20,17 @@ internal interface ISipCallSignalingService : IDisposable
     /// <summary>
     /// Starts an outbound INVITE flow and returns the established session.
     /// </summary>
+    /// <param name="request">The outbound INVITE parameters.</param>
+    /// <param name="onSessionCreated">
+    /// Optional callback invoked with the freshly created session immediately after it is created and
+    /// before the INVITE is sent, so callers can bind it to a media adapter and observe the early dialog
+    /// (Ringing/183) live instead of only after the 200 OK (F011). A redirect (3xx) that creates a fresh
+    /// session for a new target invokes the callback again with the replacement session.
+    /// </param>
+    /// <param name="ct">Cancellation token.</param>
     Task<ISipCallSession> InviteAsync(
         SipInviteRequest request,
+        Action<ISipCallSession>? onSessionCreated = null,
         CancellationToken ct = default);
 
     /// <summary>

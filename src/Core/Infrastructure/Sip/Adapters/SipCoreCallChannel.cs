@@ -225,7 +225,19 @@ internal sealed class SipCoreCallChannel : ICallChannel
         lock (_sessionSync)
         {
             if (_session is not null)
-                throw new InvalidOperationException("SIP call session already attached.");
+            {
+                // Redirect (3xx) created a fresh session for a new target: detach the old one (and reset
+                // the media-publish guard) before binding the replacement, instead of throwing.
+                _session.StateChanged        -= HandleSessionStateChanged;
+                _session.RemoteHoldChanged   -= HandleSessionRemoteHoldChanged;
+                _session.DtmfReceived        -= HandleSessionDtmfReceived;
+                _session.TransferRequested   -= HandleSessionTransferRequested;
+                Interlocked.Exchange(ref _mediaParametersFired, 0);
+                _lastPublishedSignature = null;
+                // ICE ufrag/pwd are per-dialog; EnsureLocalIceDescriptionAsync short-circuits on non-null,
+                // so a stale description from the first target must be cleared before the redirect rebind.
+                _localIceDescription = null;
+            }
 
             _session = session;
             _session.StateChanged += HandleSessionStateChanged;

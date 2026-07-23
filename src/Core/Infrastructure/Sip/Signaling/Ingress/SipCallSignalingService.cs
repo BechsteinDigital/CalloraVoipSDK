@@ -95,6 +95,7 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
     /// <inheritdoc />
     public async Task<ISipCallSession> InviteAsync(
         SipInviteRequest request,
+        Action<ISipCallSession>? onSessionCreated = null,
         CancellationToken ct = default)
     {
         ThrowIfDisposed();
@@ -203,6 +204,20 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
                 HookSessionLifecycle(session);
                 _sessionStartTimes[callId] = DateTimeOffset.UtcNow;
                 _sessionTraceIds[callId] = traceId;
+
+                // Bind the session to its channel now — before the INVITE goes out — so the media
+                // adapter observes the early dialog (Ringing/183) live instead of only after 200 OK (F011).
+                // A throwing callback (e.g. ObjectDisposedException from AttachSession on a concurrent
+                // channel dispose) must not leak the session in _sessions.
+                try
+                {
+                    onSessionCreated?.Invoke(session);
+                }
+                catch
+                {
+                    CleanupFailedOutboundSession(callId, session);
+                    throw;
+                }
 
                 try
                 {
