@@ -35,6 +35,13 @@ public interface IPhoneLine
     event EventHandler<IncomingCallEventArgs>?         IncomingCall;
 
     /// <summary>
+    /// Raised when an outbound call reaches Ringing (early dialog) before it is answered, giving the
+    /// caller a handle to observe early media / call state while DialAsync still awaits the 200 OK.
+    /// Runs synchronously on the signaling thread; keep the handler fast and non-blocking (see remarks).
+    /// </summary>
+    event EventHandler<OutboundCallRingingEventArgs>? OutboundCallRinging;
+
+    /// <summary>
     /// Raised each time the SDK begins a reconnect attempt after losing the SIP registration.
     /// The line is already in <see cref="LineState.Reconnecting"/> when this event fires.
     /// </summary>

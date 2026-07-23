@@ -87,6 +87,7 @@ public sealed class SdkConvenienceResultMappingTests
 
         public event EventHandler<LineStateChangedEventArgs>? StateChanged { add { } remove { } }
         public event EventHandler<IncomingCallEventArgs>? IncomingCall { add { } remove { } }
+        public event EventHandler<OutboundCallRingingEventArgs>? OutboundCallRinging { add { } remove { } }
         public event EventHandler<LineReconnectingEventArgs>? LineReconnecting { add { } remove { } }
         public event EventHandler<LineReconnectFailedEventArgs>? LineReconnectFailed { add { } remove { } }
 
