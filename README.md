@@ -515,13 +515,13 @@ The SDK core stays open and free; plugins are licensed separately. Contact
 
 ## Roadmap
 
-- Full ICE (RFC 8445 / RFC 7675): the agent now implements role derivation + tie-breaker,
-  the check-list state machine, regular nomination with `USE-CANDIDATE`, inbound connectivity
-  and triggered checks, ICE restart detection, and consent freshness with media cease — but it
-  remains **opt-in and unproven in production** (no live trunk validation yet). The final ICE
-  state and selected candidate pair are now observable via `ICall.IceSnapshot`. Remaining gaps:
-  TCP candidates, and surfacing consent loss to the application for a restart/terminate decision.
-  Real trunk calls run over symmetric RTP (comedia), which needs no ICE or STUN.
+- Full ICE (RFC 8445 / RFC 7675) is **implemented and opt-in** — role + tie-breaker, check-list
+  FSM, `USE-CANDIDATE` nomination, inbound/triggered checks, restart detection, and consent
+  freshness with media cease. Final state and selected pair are observable via `ICall.IceSnapshot`;
+  post-establishment changes (incl. consent loss → `Disconnected`) via `ICall.IceConnectionStateChanged`.
+  Remaining gaps toward production ([#62](../../issues/62)): ICE-TCP candidates (RFC 6544), local
+  ICE-restart *initiation* (only detection today), and live interop/production validation. Real trunk
+  calls run over symmetric RTP (comedia), which needs no ICE or STUN.
 - Commercial plugin line-up (private feed, licensed): Callora.Realtime, WebSocket
   streaming, Privacy/Risk/Intelligence — in development
 - CI/CD hardening: soak and Asterisk interop gates are in place (media-quality matrix,
