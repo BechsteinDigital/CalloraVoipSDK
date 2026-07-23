@@ -231,7 +231,7 @@ stalls signaling and registration for the line. Off-load real work to your own t
 
   <h3 id="CalloraVoipSdk_Core_Domain_Lines_IPhoneLine_DialAsync_System_String_CalloraVoipSdk_Core_Domain_Calls_DialOptions_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.DialAsync(System.String,CalloraVoipSdk.Core.Domain.Calls.DialOptions,System.Threading.CancellationToken)">
   DialAsync(string, DialOptions?, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/IPhoneLine.cs/#L67"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/IPhoneLine.cs/#L74"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Places an outbound call from this line to <code class="paramref">targetUri</code> and returns the new call
@@ -278,7 +278,7 @@ already in <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallState.html
 
   <h3 id="CalloraVoipSdk_Core_Domain_Lines_IPhoneLine_SendMessageAsync_System_String_System_String_System_String_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.SendMessageAsync(System.String,System.String,System.String,System.Threading.CancellationToken)">
   SendMessageAsync(string, string, string, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/IPhoneLine.cs/#L77"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/IPhoneLine.cs/#L84"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Sends an out-of-dialog SIP MESSAGE (RFC 3428 pager-mode instant message) from this line.</p>
@@ -326,7 +326,7 @@ already in <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallState.html
 
   <h3 id="CalloraVoipSdk_Core_Domain_Lines_IPhoneLine_UnregisterAsync_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.UnregisterAsync(System.Threading.CancellationToken)">
   UnregisterAsync(CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/IPhoneLine.cs/#L83"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/IPhoneLine.cs/#L90"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Unregisters this line (sends REGISTER with Expires: 0) and stops automatic re-registration.</p>
@@ -399,7 +399,7 @@ fires; accept or reject it via the call on the event args. Keep the handler fast
 
   <h3 id="CalloraVoipSdk_Core_Domain_Lines_IPhoneLine_IncomingMessage" data-uid="CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.IncomingMessage">
   IncomingMessage
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/IPhoneLine.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/IPhoneLine.cs/#L49"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Raised when an inbound out-of-dialog SIP MESSAGE (RFC 3428 pager-mode IM) arrives for this line
@@ -432,7 +432,7 @@ fast (see remarks).</p>
 
   <h3 id="CalloraVoipSdk_Core_Domain_Lines_IPhoneLine_LineReconnectFailed" data-uid="CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.LineReconnectFailed">
   LineReconnectFailed
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/IPhoneLine.cs/#L54"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/IPhoneLine.cs/#L61"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Raised when the line permanently fails to re-register and enters
@@ -464,7 +464,7 @@ fast (see remarks).</p>
 
   <h3 id="CalloraVoipSdk_Core_Domain_Lines_IPhoneLine_LineReconnecting" data-uid="CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.LineReconnecting">
   LineReconnecting
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/IPhoneLine.cs/#L48"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/IPhoneLine.cs/#L55"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Raised each time the SDK begins a reconnect attempt after losing the SIP registration.
@@ -484,6 +484,39 @@ The line is already in <a class="xref" href="CalloraVoipSdk.Core.Domain.Lines.Li
   <h4 class="section">Event Type</h4>
   <dl class="parameters">
     <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.eventhandler-1">EventHandler</a>&lt;<a class="xref" href="CalloraVoipSdk.Core.Domain.Events.LineReconnectingEventArgs.html">LineReconnectingEventArgs</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Lines_IPhoneLine_OutboundCallRinging" data-uid="CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.OutboundCallRinging">
+  OutboundCallRinging
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/IPhoneLine.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Raised when an outbound call reaches Ringing (early dialog) before it is answered, giving the
+caller a handle to observe early media / call state while DialAsync still awaits the 200 OK.
+Runs synchronously on the signaling thread; keep the handler fast and non-blocking (see remarks).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">event EventHandler&lt;OutboundCallRingingEventArgs&gt;? OutboundCallRinging</code></pre>
+  </div>
+
+
+
+
+
+
+  <h4 class="section">Event Type</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.eventhandler-1">EventHandler</a>&lt;<a class="xref" href="CalloraVoipSdk.Core.Domain.Events.OutboundCallRingingEventArgs.html">OutboundCallRingingEventArgs</a>&gt;</dt>
     <dd></dd>
   </dl>
 

@@ -4846,6 +4846,25 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.Core.Domain.Events.LineStateChangedEventArgs.OldState
   nameWithType: LineStateChangedEventArgs.OldState
+- uid: CalloraVoipSdk.Core.Domain.Events.OutboundCallRingingEventArgs
+  name: OutboundCallRingingEventArgs
+  href: _api/CalloraVoipSdk.Core.Domain.Events.OutboundCallRingingEventArgs.html
+  commentId: T:CalloraVoipSdk.Core.Domain.Events.OutboundCallRingingEventArgs
+  fullName: CalloraVoipSdk.Core.Domain.Events.OutboundCallRingingEventArgs
+  nameWithType: OutboundCallRingingEventArgs
+- uid: CalloraVoipSdk.Core.Domain.Events.OutboundCallRingingEventArgs.Call
+  name: Call
+  href: _api/CalloraVoipSdk.Core.Domain.Events.OutboundCallRingingEventArgs.html#CalloraVoipSdk_Core_Domain_Events_OutboundCallRingingEventArgs_Call
+  commentId: P:CalloraVoipSdk.Core.Domain.Events.OutboundCallRingingEventArgs.Call
+  fullName: CalloraVoipSdk.Core.Domain.Events.OutboundCallRingingEventArgs.Call
+  nameWithType: OutboundCallRingingEventArgs.Call
+- uid: CalloraVoipSdk.Core.Domain.Events.OutboundCallRingingEventArgs.Call*
+  name: Call
+  href: _api/CalloraVoipSdk.Core.Domain.Events.OutboundCallRingingEventArgs.html#CalloraVoipSdk_Core_Domain_Events_OutboundCallRingingEventArgs_Call_
+  commentId: Overload:CalloraVoipSdk.Core.Domain.Events.OutboundCallRingingEventArgs.Call
+  isSpec: "True"
+  fullName: CalloraVoipSdk.Core.Domain.Events.OutboundCallRingingEventArgs.Call
+  nameWithType: OutboundCallRingingEventArgs.Call
 - uid: CalloraVoipSdk.Core.Domain.Events.TransferRequestedEventArgs
   name: TransferRequestedEventArgs
   href: _api/CalloraVoipSdk.Core.Domain.Events.TransferRequestedEventArgs.html
@@ -4969,6 +4988,12 @@ references:
   commentId: E:CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.LineReconnecting
   fullName: CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.LineReconnecting
   nameWithType: IPhoneLine.LineReconnecting
+- uid: CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.OutboundCallRinging
+  name: OutboundCallRinging
+  href: _api/CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.html#CalloraVoipSdk_Core_Domain_Lines_IPhoneLine_OutboundCallRinging
+  commentId: E:CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.OutboundCallRinging
+  fullName: CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.OutboundCallRinging
+  nameWithType: IPhoneLine.OutboundCallRinging
 - uid: CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.SendMessageAsync(System.String,System.String,System.String,System.Threading.CancellationToken)
   name: SendMessageAsync(string, string, string, CancellationToken)
   href: _api/CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.html#CalloraVoipSdk_Core_Domain_Lines_IPhoneLine_SendMessageAsync_System_String_System_String_System_String_System_Threading_CancellationToken_

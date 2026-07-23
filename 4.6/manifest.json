@@ -950,6 +950,20 @@
     },
     {
       "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Events.OutboundCallRingingEventArgs.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Events.OutboundCallRingingEventArgs.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Events.OutboundCallRingingEventArgs",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Events.OutboundCallRingingEventArgs.yml\" sourcestartlinenumber=\"1\">Payload for the line <code>OutboundCallRinging</code> event: the outbound call reached Ringing (a 180/183\nearly dialog) before the 200 OK. Observe early media / call state via <xref href=\"CalloraVoipSdk.Core.Domain.Events.OutboundCallRingingEventArgs.Call\" data-throw-if-not-resolved=\"false\"></xref> — analogous\nto SIPSorcery's ClientCallRinging. Fires while <code>DialAsync</code> is still awaiting the answer.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
       "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Events.TransferRequestedEventArgs.yml",
       "output": {
         ".html": {

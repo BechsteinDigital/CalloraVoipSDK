@@ -160,6 +160,13 @@ The line is already in <a class="xref" href="CalloraVoipSdk.Core.Domain.Lines.Li
 </dd>
     </dl>
     <dl class="jumplist">
+      <dt><a class="xref" href="CalloraVoipSdk.Core.Domain.Events.OutboundCallRingingEventArgs.html">OutboundCallRingingEventArgs</a></dt>
+      <dd><p>Payload for the line <code>OutboundCallRinging</code> event: the outbound call reached Ringing (a 180/183
+early dialog) before the 200 OK. Observe early media / call state via <a class="xref" href="CalloraVoipSdk.Core.Domain.Events.OutboundCallRingingEventArgs.html#CalloraVoipSdk_Core_Domain_Events_OutboundCallRingingEventArgs_Call">Call</a> — analogous
+to SIPSorcery's ClientCallRinging. Fires while <code>DialAsync</code> is still awaiting the answer.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
       <dt><a class="xref" href="CalloraVoipSdk.Core.Domain.Events.TransferRequestedEventArgs.html">TransferRequestedEventArgs</a></dt>
       <dd><p>Payload for the call <code>TransferRequested</code> event (an inbound SIP REFER).</p>
 </dd>
