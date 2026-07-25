@@ -86,8 +86,10 @@ internal sealed class SdkConvenienceOrchestrator : IDisposable
         };
 
         // Capture the permanent-failure reason so a terminal LineState.Failed surfaces it as the
-        // ConnectResult error instead of a null cause (F005b). SipLineChannel raises this before the
-        // state transition, so it is set by the time the waiter completes.
+        // ConnectResult error instead of a null cause (F005b). We subscribe for the case where the failure
+        // fires after we attach, but a fast failure can fire BEFORE we subscribe (missed event) — so the
+        // outcome below falls back to line.LastReconnectFailure, which the line records as state at the
+        // source before the Failed transition and is therefore always available once State == Failed.
         LineReconnectFailedEventArgs? failure = null;
         EventHandler<LineReconnectFailedEventArgs> onReconnectFailed = (_, args) => failure ??= args;
 
@@ -105,7 +107,7 @@ internal sealed class SdkConvenienceOrchestrator : IDisposable
             return finalState switch
             {
                 LineState.Registered => new LineConnectOutcome(LineConnectStatus.Registered, line, finalState, null),
-                _ => new LineConnectOutcome(LineConnectStatus.Failed, line, finalState, RegistrationFailureError(failure)),
+                _ => new LineConnectOutcome(LineConnectStatus.Failed, line, finalState, RegistrationFailureError(failure ?? line.LastReconnectFailure)),
             };
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
