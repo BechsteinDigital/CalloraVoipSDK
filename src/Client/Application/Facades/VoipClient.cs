@@ -251,7 +251,8 @@ public sealed class VoipClient : IVoipClient
                 digestAuthenticator,
                 logFactory,
                 sdpProvider,
-                telemetry);
+                telemetry,
+                inboundUserAgent: config.UserAgent);
             _ownsCallSignalingService = true;
         }
         else

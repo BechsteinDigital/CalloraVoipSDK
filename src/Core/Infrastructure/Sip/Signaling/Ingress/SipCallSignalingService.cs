@@ -20,6 +20,10 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
     private const string SupportedMethodList = "INVITE, ACK, BYE, CANCEL, OPTIONS, INFO, REFER, NOTIFY, UPDATE, PRACK, SUBSCRIBE, MESSAGE";
     private const string SupportedAcceptList = "application/sdp, application/dtmf-relay, message/sipfrag";
 
+    private const string DefaultInboundUserAgent = "CalloraVoipSdk/1.0";
+    private static readonly TimeSpan DefaultInboundSessionTimeout = TimeSpan.FromSeconds(30);
+
+    private readonly string _inboundUserAgent;
     private readonly ISipTransportRuntime _transport;
     private readonly ISipDigestAuthenticator _digestAuthenticator;
     private readonly ISipServerTransactionEngine _serverTransactions;
@@ -52,10 +56,12 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
         SipSessionSdpProvider? sdpProvider = null,
         ISipTelemetrySink? telemetry = null,
         ISipIdentityTrustPolicy? identityTrustPolicy = null,
-        ISipUasUserIdentityPolicy? userIdentityPolicy = null)
+        ISipUasUserIdentityPolicy? userIdentityPolicy = null,
+        string? inboundUserAgent = null)
     {
         var resolvedDigestAuthenticator = digestAuthenticator
             ?? throw new ArgumentNullException(nameof(digestAuthenticator));
+        _inboundUserAgent = string.IsNullOrWhiteSpace(inboundUserAgent) ? DefaultInboundUserAgent : inboundUserAgent;
         _transport = transport ?? throw new ArgumentNullException(nameof(transport));
         _digestAuthenticator = resolvedDigestAuthenticator;
         _logger = (loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory)))
@@ -422,7 +428,9 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
             return;
         }
 
-        var normalizedRequest = SipIngressRequestPolicy.DecrementMaxForwardsIfPresent(request);
+        // A UAS does not decrement Max-Forwards — that is a proxy responsibility (RFC 3261 §16.6). No ingress
+        // normalization is applied here; the alias keeps the seam for any future inbound request normalization.
+        var normalizedRequest = request;
 
         if (!string.Equals(normalizedRequest.Method, "ACK", StringComparison.Ordinal)
             && !string.Equals(normalizedRequest.Method, "CANCEL", StringComparison.Ordinal)
@@ -633,8 +641,8 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
             PreferredIdentityUri = null,
             AuthUsername = string.Empty,
             AuthPassword = null,
-            UserAgent = "CalloraVoipSdk/1.0",
-            Timeout = TimeSpan.FromSeconds(30),
+            UserAgent = _inboundUserAgent,
+            Timeout = DefaultInboundSessionTimeout,
             RemoteEndPoint = remoteEndPoint,
             SignalingTransport = inboundTransport
         };
