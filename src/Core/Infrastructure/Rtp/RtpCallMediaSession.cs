@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using CalloraVoipSdk.Core.Application.Media;
 using CalloraVoipSdk.Core.Application.Media.Sessions;
 using CalloraVoipSdk.Core.Domain.Calls;
+using CalloraVoipSdk.Core.Infrastructure.Common.Timing;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.JitterBuffer;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Session;
@@ -398,7 +399,10 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
             return;
         }
 
-        var addResult = _jitterBuffer.Add(packet, DateTimeOffset.UtcNow);
+        // Jitter arrival/playout are driven off a monotonic clock (not wall-clock UtcNow) so an NTP step or
+        // manual system-clock change mid-call cannot corrupt the interarrival jitter estimate or the playout
+        // schedule. Add here and TryGetNext in DrainReadyPackets must read the same jump-free source.
+        var addResult = _jitterBuffer.Add(packet, MonotonicClock.Now);
         HandleJitterBufferAddResult(addResult, packet);
     }
 
@@ -516,7 +520,7 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
     {
         while (true)
         {
-            var packet = _jitterBuffer.TryGetNext(DateTimeOffset.UtcNow);
+            var packet = _jitterBuffer.TryGetNext(MonotonicClock.Now); // monotonic — see OnInboundRtpPacket
             if (packet is null)
                 return;
 
