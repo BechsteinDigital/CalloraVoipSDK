@@ -15,20 +15,31 @@ public sealed record TwoLegMediaResult(
     IReadOnlyList<uint> CalleeReceivedSequences,
     IReadOnlyList<uint> CallerReceivedSequences);
 
-/// <summary>Profil eines Zwei-Bein-Bridged-Calls: Endpunkte, Bridge-Extension und SRTP-Policy.</summary>
+/// <summary>Profil eines Zwei-Bein-Bridged-Calls: Endpunkte, Bridge-Extension, SRTP-Policy und Codec-Präferenzen.</summary>
 public sealed record TwoLegProfile(
     string CallerUser, string CallerPass,
     string CalleeUser, string CalleePass,
     string BridgeExtension,
-    SrtpPolicy SrtpPolicy)
+    SrtpPolicy SrtpPolicy,
+    IReadOnlyList<string> CallerCodecs,
+    IReadOnlyList<string> CalleeCodecs)
 {
+    private static readonly string[] Pcmu = { "PCMU" };
+
     /// <summary>Plain RTP / PCMU über die Endpunkte 6001 (Caller) und 6003 (Callee).</summary>
     public static TwoLegProfile Plain(AsteriskContainer a) =>
-        new(a.Username, a.Password, a.BridgeUsername, a.BridgePassword, "6003", SrtpPolicy.Disabled);
+        new(a.Username, a.Password, a.BridgeUsername, a.BridgePassword, "6003", SrtpPolicy.Disabled, Pcmu, Pcmu);
 
     /// <summary>SRTP-SDES / PCMU über die Endpunkte 6002 (Caller) und 6004 (Callee).</summary>
     public static TwoLegProfile Sdes(AsteriskContainer a) =>
-        new(a.SdesUsername, a.SdesPassword, a.SdesBridgeUsername, a.SdesBridgePassword, "6004", SrtpPolicy.Required);
+        new(a.SdesUsername, a.SdesPassword, a.SdesBridgeUsername, a.SdesBridgePassword, "6004", SrtpPolicy.Required, Pcmu, Pcmu);
+
+    /// <summary>
+    /// Codec-Mismatch: Caller pinnt G.722 (Endpoint 6001 kann g722), Callee ist PCMU-only (6003) →
+    /// Asterisk muss zwischen den Legs transcodieren.
+    /// </summary>
+    public static TwoLegProfile CodecMismatch(AsteriskContainer a) =>
+        new(a.Username, a.Password, a.BridgeUsername, a.BridgePassword, "6003", SrtpPolicy.Disabled, new[] { "G722" }, Pcmu);
 }
 
 /// <summary>
@@ -52,12 +63,12 @@ public sealed class TwoLegBridgedCall : IAsyncDisposable
         CalleeCall = calleeCall;
     }
 
-    private static VoipClient NewClient(SrtpPolicy srtpPolicy) =>
+    private static VoipClient NewClient(SrtpPolicy srtpPolicy, IReadOnlyList<string> codecs) =>
         new(new VoipConfiguration
         {
             UserAgent = "CalloraInteropTest/1.0",
             SrtpPolicy = srtpPolicy,
-            PreferredAudioCodecs = new[] { "PCMU" },   // beide Legs PCMU → Same-Codec-Passthrough für die Inhaltsverifikation
+            PreferredAudioCodecs = codecs,
         });
 
     private static async Task<IPhoneLine> RegisterAsync(AsteriskContainer asterisk, VoipClient client, string user, string pass)
@@ -81,8 +92,8 @@ public sealed class TwoLegBridgedCall : IAsyncDisposable
     public static async Task<TwoLegBridgedCall> StartAsync(AsteriskContainer asterisk, TwoLegProfile? profile = null)
     {
         var p = profile ?? TwoLegProfile.Plain(asterisk);
-        var callerClient = NewClient(p.SrtpPolicy);
-        var calleeClient = NewClient(p.SrtpPolicy);
+        var callerClient = NewClient(p.SrtpPolicy, p.CallerCodecs);
+        var calleeClient = NewClient(p.SrtpPolicy, p.CalleeCodecs);
         try
         {
             var callerLine = await RegisterAsync(asterisk, callerClient, p.CallerUser, p.CallerPass);
@@ -151,8 +162,8 @@ public sealed class TwoLegBridgedCall : IAsyncDisposable
         sendFromCaller.AttachToCall(CallerCall);
         sendFromCallee.AttachToCall(CalleeCall);
 
-        var srcA = new MarkedPcmuSource();
-        var srcB = new MarkedPcmuSource();
+        var srcA = new MarkedPcmuSource(CallerCall.MediaParameters!.PayloadType);
+        var srcB = new MarkedPcmuSource(CalleeCall.MediaParameters!.PayloadType);
         using var cts = new CancellationTokenSource(runFor);
         try
         {
