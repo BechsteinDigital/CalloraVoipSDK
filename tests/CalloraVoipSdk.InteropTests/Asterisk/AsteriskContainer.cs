@@ -43,6 +43,10 @@ public sealed class AsteriskContainer : IAsyncDisposable
         "allow=ulaw,alaw,g722\n" +               // mehrere Codecs → Negotiation-Tests wählen per SDK-Präferenz
         "auth=6001\n" +
         "aors=6001\n" +
+        // direct_media=no: Asterisk bleibt im Medienpfad (RTP-Relay) statt die gebrückten Legs per
+        // re-INVITE auf direkte Endpoint-zu-Endpoint-Media umzustellen — sonst empfängt kein Leg RTP
+        // (Zwei-Bein-Test). No-op für app-basierte 6001-Calls (Milliwatt etc.), die Asterisk selbst bedient.
+        "direct_media=no\n" +
         "\n" +
         "[6001]\n" +
         "type=auth\n" +
@@ -85,6 +89,7 @@ public sealed class AsteriskContainer : IAsyncDisposable
         "allow=ulaw\n" +
         "auth=6003\n" +
         "aors=6003\n" +
+        "direct_media=no\n" +                     // s. 6001: Relay erzwingen, sonst fließt kein Bridge-RTP
         "\n" +
         "[6003]\n" +
         "type=auth\n" +
