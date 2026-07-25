@@ -33,6 +33,14 @@ internal sealed class PhoneLine : IPhoneLine, IDisposable
     public event EventHandler<LineReconnectingEventArgs>?    LineReconnecting;
     public event EventHandler<LineReconnectFailedEventArgs>? LineReconnectFailed;
 
+    // The terminal reconnect/registration failure reason, captured as state so an observer that only
+    // sees LineState.Failed (e.g. a convenience connect that subscribed after a fast failure already
+    // fired the event) can surface it race-free. Written before the Failed transition (F005b).
+    private volatile LineReconnectFailedEventArgs? _lastReconnectFailure;
+
+    /// <inheritdoc />
+    public LineReconnectFailedEventArgs? LastReconnectFailure => _lastReconnectFailure;
+
     internal PhoneLine(
         SipAccount                    account,
         ILineChannel                  channel,
@@ -63,8 +71,12 @@ internal sealed class PhoneLine : IPhoneLine, IDisposable
             },
             onReconnectFailed: (reason, attemptCount) =>
             {
-                var handlers = LineReconnectFailed;
-                handlers?.Invoke(this, new LineReconnectFailedEventArgs(reason, attemptCount, this));
+                // Capture the failure as state BEFORE raising the event and before the channel's
+                // subsequent LineState.Failed transition, so a consumer that only observes the terminal
+                // Failed state surfaces it race-free even if it missed the event (F005b).
+                var args = new LineReconnectFailedEventArgs(reason, attemptCount, this);
+                _lastReconnectFailure = args;
+                LineReconnectFailed?.Invoke(this, args);
             });
 
     // ── IPhoneLine ────────────────────────────────────────────────────────────
