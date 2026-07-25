@@ -104,7 +104,7 @@ interop test.</p>
 <tr>
 <td><strong>Asterisk</strong></td>
 <td>✅ Full SIP/RTP flow automated in CI</td>
-<td>Real PJSIP Asterisk container (Testcontainers): register (happy + failure), in/outbound calls with live RTP, codec negotiation (PCMU/PCMA/G722), SRTP-SDES, DTMF (RFC 4733), hold/unhold, blind &amp; attended transfer, session timers (RFC 4028), TCP/TLS transport. Known gap: early media (183). See the <a href="asterisk.html">Asterisk page</a></td>
+<td>Real PJSIP Asterisk container (Testcontainers), <strong>all cases green / none skipped</strong>: register (happy + failure), in/outbound calls with live RTP, codec negotiation (PCMU/PCMA/G722), SRTP-SDES, DTMF (RFC 4733), hold/unhold, blind &amp; attended transfer, session timers (RFC 4028), early media (RFC 3960), TCP/TLS transport, plus a two-leg bridged call with byte-exact bidirectional media. See the <a href="asterisk.html">Asterisk page</a></td>
 </tr>
 <tr>
 <td><strong>AVM FRITZ!Box</strong></td>

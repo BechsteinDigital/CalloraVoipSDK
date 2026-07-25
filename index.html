@@ -96,9 +96,10 @@ suite, and the intended production surface. <em>Preview</em> = implemented but n
 a broad interop matrix — validate for your environment first. The production-proven NAT path is
 symmetric RTP (comedia), which needs no ICE or STUN. The SIP + RTP core is additionally exercised
 by an <strong>automated interop suite against a real Asterisk (PJSIP) container in CI</strong> — calls, media,
-codecs, SRTP-SDES, DTMF, transfer, session timers and TCP/TLS (see the
-<a href="interop/matrix.html">interop matrix</a>; known gap: early media). Known gaps and interop defects are
-tracked openly in the <a href="https://github.com/BechsteinDigital/callora-voip-sdk/issues">issue tracker</a>.</p>
+codecs, SRTP-SDES, DTMF, transfer, session timers, early media and TCP/TLS, plus a two-leg bridged
+call with byte-exact bidirectional media (see the <a href="interop/matrix.html">interop matrix</a>; currently
+all cases green, none skipped). Known gaps and interop defects are tracked openly in the
+<a href="https://github.com/BechsteinDigital/callora-voip-sdk/issues">issue tracker</a>.</p>
 </blockquote>
 <p><strong>Core (SIP + RTP):</strong></p>
 <table>
@@ -115,6 +116,14 @@ tracked openly in the <a href="https://github.com/BechsteinDigital/callora-voip-
 </tr>
 <tr>
 <td>Hold / Unhold / Blind + Attended Transfer</td>
+<td>✅ Stable</td>
+</tr>
+<tr>
+<td>REFER transfer progress subscription (RFC 3515 / 6665)</td>
+<td>✅ Stable</td>
+</tr>
+<tr>
+<td>Early media (RFC 3960): pre-answer receive-only media + DTMF in the early dialog</td>
 <td>✅ Stable</td>
 </tr>
 <tr>
@@ -151,6 +160,14 @@ tracked openly in the <a href="https://github.com/BechsteinDigital/callora-voip-
 </tr>
 <tr>
 <td>DTMF send/receive (RFC 4733)</td>
+<td>✅ Stable</td>
+</tr>
+<tr>
+<td>SIP MESSAGE send &amp; receive (RFC 3428)</td>
+<td>✅ Stable</td>
+</tr>
+<tr>
+<td>SIP PUBLISH: event-state publish / refresh / modify / remove (RFC 3903)</td>
 <td>✅ Stable</td>
 </tr>
 <tr>
