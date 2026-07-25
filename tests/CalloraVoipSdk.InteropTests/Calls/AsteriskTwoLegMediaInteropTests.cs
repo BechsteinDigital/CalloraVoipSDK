@@ -124,4 +124,35 @@ public sealed class AsteriskTwoLegMediaInteropTests
                 $"{label}: RoundTripTimeMs nicht befüllt ({q.RoundTripTimeMs?.ToString() ?? "null"}).");
         }
     }
+
+    [DockerRequiredFact]
+    public async Task BridgedCall_DeliversMarkedContentEndToEnd()
+    {
+        await using var asterisk = new AsteriskContainer();
+        await asterisk.StartAsync();
+        await using var bridged = await TwoLegBridgedCall.StartAsync(asterisk);
+
+        var result = await bridged.RunBidirectionalMediaAsync(TimeSpan.FromSeconds(8));
+
+        var received = result.CalleeReceivedSequences;
+        Assert.NotEmpty(received);
+        // Größter kontiguierlicher Lauf empfangener Marker; Rand-/Playout-Verluste toleriert.
+        var longestRun = LongestContiguousRun(received);
+        Assert.True(longestRun >= 50,
+            $"Nur {longestRun} zusammenhängende markierte Frames end-to-end (von {received.Count} empfangen).");
+
+        static int LongestContiguousRun(IReadOnlyList<uint> seqs)
+        {
+            var set = new HashSet<uint>(seqs);
+            var best = 0;
+            foreach (var s in set)
+            {
+                if (set.Contains(s - 1)) continue; // nur Lauf-Anfänge
+                var len = 1;
+                while (set.Contains(s + (uint)len)) len++;
+                best = Math.Max(best, len);
+            }
+            return best;
+        }
+    }
 }
