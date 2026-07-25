@@ -1,5 +1,6 @@
 using CalloraVoipSdk.Core.Domain.Calls;
 using CalloraVoipSdk.Core.Domain.Messages;
+using CalloraVoipSdk.Core.Domain.Publications;
 
 namespace CalloraVoipSdk.Core.Domain.Lines;
 
@@ -64,4 +65,10 @@ internal interface ILineChannel : IDisposable
     /// Completes when the peer answers 2xx; throws on a non-2xx final response or no response.
     /// </summary>
     Task SendMessageAsync(string targetUri, string body, string contentType, CancellationToken ct = default);
+
+    /// <summary>
+    /// Publishes event state for this line's address-of-record via an out-of-dialog SIP PUBLISH (RFC 3903)
+    /// and returns the assigned SIP-ETag and granted lifetime. Throws on a non-2xx final response or no response.
+    /// </summary>
+    Task<PublishResult> PublishAsync(string eventType, string body, string contentType, int expiresSeconds, CancellationToken ct = default);
 }

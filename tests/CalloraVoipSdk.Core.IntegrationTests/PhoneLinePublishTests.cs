@@ -1,18 +1,20 @@
 using CalloraVoipSdk.Core.Domain.Calls;
 using CalloraVoipSdk.Core.Domain.Lines;
 using CalloraVoipSdk.Core.Domain.Messages;
+using CalloraVoipSdk.Core.Domain.Publications;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CalloraVoipSdk.Core.IntegrationTests;
 
 /// <summary>
-/// CF-066a Slice 2 — domain hop: an inbound SIP MESSAGE delivered by the line channel is surfaced on
-/// <see cref="PhoneLine.IncomingMessage"/> without creating a call (RFC 3428; MESSAGE is stateless).
+/// CF-066b Slice 2 — domain hop: <see cref="PhoneLine.PublishAsync"/> forwards a SIP PUBLISH to the line
+/// channel with the event/body/content-type/expires and returns the channel's <see cref="PublishResult"/>
+/// (the SIP-ETag + granted lifetime) to the caller.
 /// </summary>
-public sealed class PhoneLineIncomingMessageTests
+public sealed class PhoneLinePublishTests
 {
     [Fact]
-    public void A_channel_delivered_MESSAGE_is_surfaced_on_IncomingMessage()
+    public async Task PublishAsync_forwards_to_the_channel_and_returns_its_result()
     {
         var channel = new CapturingLineChannel();
         var line = new PhoneLine(
@@ -22,14 +24,11 @@ public sealed class PhoneLineIncomingMessageTests
             maxCalls: 0,
             NullLoggerFactory.Instance);
 
-        SipInstantMessage? received = null;
-        line.IncomingMessage += (_, e) => received = e.Message;
+        var result = await line.PublishAsync("presence", "<presence/>", "application/pidf+xml", 1800);
 
-        var message = new SipInstantMessage(
-            "<sip:alice@example.test>", "<sip:u@sipconnect.example>", "hi", "text/plain", "call-1");
-        channel.DeliverMessage(message);
-
-        Assert.Same(message, received);
+        Assert.Equal("etag-9", result.ETag);
+        Assert.Equal(1800, result.ExpiresSeconds);
+        Assert.Equal(("presence", "<presence/>", "application/pidf+xml", 1800), channel.LastPublish);
     }
 
     private sealed class NoopCallRegistry : ICallRegistry
@@ -38,13 +37,15 @@ public sealed class PhoneLineIncomingMessageTests
         public IReadOnlyCollection<ICall> Active => [];
     }
 
-    // A line-channel test double that captures the message handler PhoneLine wires, so the test can
-    // deliver an inbound MESSAGE as the real SipLineChannel would after answering it 200 OK.
     private sealed class CapturingLineChannel : ILineChannel
     {
-        private Action<SipInstantMessage>? _onMessage;
+        public (string EventType, string Body, string ContentType, int Expires) LastPublish { get; private set; }
 
-        public void DeliverMessage(SipInstantMessage message) => _onMessage?.Invoke(message);
+        public Task<PublishResult> PublishAsync(string eventType, string body, string contentType, int expiresSeconds, CancellationToken ct = default)
+        {
+            LastPublish = (eventType, body, contentType, expiresSeconds);
+            return Task.FromResult(new PublishResult("etag-9", expiresSeconds));
+        }
 
         public void StartRegistration(
             Action<LineState> onStateChange,
@@ -58,9 +59,8 @@ public sealed class PhoneLineIncomingMessageTests
         public Task StartOutboundDialAsync(ICallChannel channel, string targetUri, DialOptions options, CancellationToken ct) =>
             throw new NotSupportedException();
         public void SetInboundHandler(Action<ICallChannel, string> onInbound) { }
-        public void SetMessageHandler(Action<SipInstantMessage> onMessage) => _onMessage = onMessage;
+        public void SetMessageHandler(Action<SipInstantMessage> onMessage) { }
         public Task SendMessageAsync(string targetUri, string body, string contentType, CancellationToken ct = default) => Task.CompletedTask;
-        public Task<CalloraVoipSdk.Core.Domain.Publications.PublishResult> PublishAsync(string eventType, string body, string contentType, int expiresSeconds, CancellationToken ct = default) => Task.FromResult(new CalloraVoipSdk.Core.Domain.Publications.PublishResult(null, 0));
         public void Dispose() { }
     }
 }

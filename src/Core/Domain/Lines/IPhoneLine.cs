@@ -1,5 +1,6 @@
 using CalloraVoipSdk.Core.Domain.Calls;
 using CalloraVoipSdk.Core.Domain.Events;
+using CalloraVoipSdk.Core.Domain.Publications;
 
 namespace CalloraVoipSdk.Core.Domain.Lines;
 
@@ -75,6 +76,18 @@ public interface IPhoneLine
     /// <param name="ct">Cancels the send.</param>
     /// <returns>A task that completes when the peer answers 2xx; it faults on a non-2xx or no response.</returns>
     Task SendMessageAsync(string targetUri, string body, string contentType = "text/plain", CancellationToken ct = default);
+
+    /// <summary>
+    /// Publishes event state for this line's address-of-record via SIP PUBLISH (RFC 3903 event state
+    /// publication), for example presence. Returns the SIP-ETag and granted lifetime for a later refresh.
+    /// </summary>
+    /// <param name="eventType">The event package (Event header, e.g. <c>presence</c>).</param>
+    /// <param name="body">The event-state document to publish (for example a PIDF body).</param>
+    /// <param name="contentType">The body's MIME type (e.g. <c>application/pidf+xml</c>).</param>
+    /// <param name="expiresSeconds">Requested publication lifetime in seconds. Defaults to 3600.</param>
+    /// <param name="ct">Cancels the publish.</param>
+    /// <returns>The assigned entity-tag and granted lifetime; faults on a non-2xx or no response.</returns>
+    Task<PublishResult> PublishAsync(string eventType, string body, string contentType = "text/plain", int expiresSeconds = 3600, CancellationToken ct = default);
 
     /// <summary>
     /// Unregisters this line (sends REGISTER with Expires: 0) and stops automatic re-registration.
