@@ -22,7 +22,7 @@ internal sealed class AckTestSipCallSessionContext : ISipCallSessionContext
 
     public ISipTransportRuntime Transport { get; }
 
-    public SipSessionSdpProvider SdpProvider { get; } = new()
+    public SipSessionSdpProvider SdpProvider { get; init; } = new()
     {
         BuildOffer = (_, _) => string.Empty,
         TryNegotiateAnswer = (_, _, _) => string.Empty,
