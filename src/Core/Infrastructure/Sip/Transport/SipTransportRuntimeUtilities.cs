@@ -11,7 +11,10 @@ internal static class SipTransportRuntimeUtilities
 {
     public static int AllocateEphemeralPort()
     {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
+        // Probe on IPAddress.Any so the free-port hint matches the system-wide "+:" scope the WebSocket listener
+        // binds on (a loopback-only probe can report a port that is taken on another interface). This is only a
+        // best-effort hint — the caller must still handle a bind race by retrying on a fresh port.
+        var listener = new TcpListener(IPAddress.Any, 0);
         listener.Start();
         var port = ((IPEndPoint)listener.LocalEndpoint).Port;
         listener.Stop();

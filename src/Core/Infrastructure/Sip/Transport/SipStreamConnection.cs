@@ -16,6 +16,7 @@ internal sealed class SipStreamConnection : IDisposable
     private readonly ILogger _logger;
     private readonly Func<IPEndPoint, SipTransportProtocol, ReadOnlyMemory<byte>, Task> _onFrameAsync;
     private readonly Action _onClosed;
+    private static readonly TimeSpan DisposeJoinTimeout = TimeSpan.FromSeconds(2);
     private readonly CancellationTokenSource _stop = new();
     private readonly SemaphoreSlim _sendGate = new(1, 1);
     private readonly SipWireStreamFramer _framer = new();
@@ -165,7 +166,11 @@ internal sealed class SipStreamConnection : IDisposable
         _stop.Cancel();
         try
         {
-            _receiveLoop.GetAwaiter().GetResult();
+            // Bounded join: a receive loop stuck in a slow frame dispatch must not block disposal indefinitely.
+            // After the timeout we proceed; disposing the stream/client below forces any pending read to fault
+            // and the loop to unwind.
+            if (!_receiveLoop.Wait(DisposeJoinTimeout))
+                _logger.LogDebug("SIP stream connection receive loop did not stop within {Timeout} during disposal.", DisposeJoinTimeout);
         }
         catch (Exception ex)
         {
