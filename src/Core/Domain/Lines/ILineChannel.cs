@@ -70,5 +70,6 @@ internal interface ILineChannel : IDisposable
     /// Publishes event state for this line's address-of-record via an out-of-dialog SIP PUBLISH (RFC 3903)
     /// and returns the assigned SIP-ETag and granted lifetime. Throws on a non-2xx final response or no response.
     /// </summary>
-    Task<PublishResult> PublishAsync(string eventType, string body, string contentType, int expiresSeconds, CancellationToken ct = default);
+    /// <param name="ifMatch">SIP-If-Match entity-tag of a prior publication to refresh/modify/remove; null for an initial publication.</param>
+    Task<PublishResult> PublishAsync(string eventType, string body, string contentType, int expiresSeconds, string? ifMatch = null, CancellationToken ct = default);
 }

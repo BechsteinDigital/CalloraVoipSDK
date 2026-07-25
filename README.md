@@ -25,8 +25,9 @@ It exposes a stable, developer-friendly API through `VoipClient` while keeping t
 > production-proven NAT path. It is exercised in CI by an **automated interop suite against a
 > real Asterisk (PJSIP) container** — registration, in/outbound calls with live RTP, codec
 > negotiation (PCMU/PCMA/G722), SRTP-SDES, DTMF (RFC 4733), hold, blind & attended transfer,
-> session timers (RFC 4028) and TCP/TLS transport; the one known gap there is early media (183),
-> tracked openly. Newer surfaces — the **WebRTC facade**, **full ICE** (RFC 8445/7675),
+> session timers (RFC 4028), early media (RFC 3960) and TCP/TLS transport, plus a two-leg bridged
+> call with **byte-exact bidirectional media** verified through the PBX — the matrix runs with zero
+> skipped cases. Newer surfaces — the **WebRTC facade**, **full ICE** (RFC 8445/7675),
 > **DTLS-SRTP**, and the **self-hostable STUN/TURN server** — are implemented but not yet
 > validated against a broad interop matrix; treat them as preview and validate for your
 > environment before production. Known gaps and interop defects are tracked openly in the
@@ -79,8 +80,15 @@ CalloraVoipSdk is built for developers who need more than a black-box telephony 
 Available in the repository today:
 
 - SIP basics: register, invite/dial, accept, hangup, hold/unhold
-- Advanced call control: DTMF, blind transfer, attended transfer
+- Advanced call control: DTMF, blind & attended transfer with REFER progress tracking
+  (RFC 3515 / 6665, via `TransferRequestedEventArgs.Subscription`)
+- Early media (RFC 3960): pre-answer **receive-only** media from a 180/183 SDP, a pre-answer
+  call handle (`IPhoneLine.OutboundCallRinging`), the early SDP on `ICall.EarlyMediaSdp`, and DTMF
+  in the early dialog (`SendDtmfAsync` while ringing — IVR / AI outbound)
 - In-dialog operations: `INFO`, `OPTIONS`, `SUBSCRIBE`, `NOTIFY`
+- Messaging & presence: SIP `MESSAGE` (RFC 3428) send & receive
+  (`VoipClient.SendMessageAsync` / `IncomingMessage` event) and SIP `PUBLISH` (RFC 3903, e.g.
+  presence — publish / refresh / modify / remove via `VoipClient.PublishAsync`)
 - Media stack: RTP sessions, sender, receiver, `MediaConnector`, cross-connect
 - Media encryption: SRTP via **SDES** (RFC 4568) or **DTLS-SRTP** (RFC 5763, opt-in via
   `VoipConfiguration.OfferDtlsSrtp`) as both caller and callee, encrypted/authenticated
@@ -224,10 +232,13 @@ dotnet test tests/CalloraVoipSdk.SoakTests -c Release --filter "Category=SoakLon
 ```
 
 **Interop coverage.** The interop suite runs the full SIP/RTP flow against a real Asterisk
-container in CI: registration (happy + failure), in/outbound calls with live RTP, codec
-negotiation (PCMU/PCMA/G722), SRTP-SDES media, DTMF (RFC 4733), hold/unhold, blind & attended
-transfer (REFER), session-timer negotiation (RFC 4028) and TCP/TLS transport. The one known
-functional gap is early media (183), tracked in the [issue tracker](../../issues).
+container in CI (currently **all cases green, none skipped**): registration (happy + failure),
+in/outbound calls with live RTP, codec negotiation (PCMU/PCMA/G722), SRTP-SDES media, DTMF
+(RFC 4733), hold/unhold, blind & attended transfer (REFER), session-timer negotiation (RFC 4028),
+early media (RFC 3960, pre-answer receive + DTMF in the early dialog) and TCP/TLS transport. A
+separate two-leg suite bridges two SDK legs through the PBX and verifies **bidirectional,
+byte-exact media** (RTP counters both ways, local + remote RTCP quality, and byte-identical
+PCMU payload A→B).
 
 **Soak coverage.** The soak suite runs the media-quality matrix (PCMU/Opus × plain/SRTP) plus
 resource plateau/leak guards over long runs (`SoakShort` on PRs, `SoakLong` nightly), asserting
@@ -525,8 +536,9 @@ The SDK core stays open and free; plugins are licensed separately. Contact
 - Commercial plugin line-up (private feed, licensed): Callora.Realtime, WebSocket
   streaming, Privacy/Risk/Intelligence — in development
 - CI/CD hardening: soak and Asterisk interop gates are in place (media-quality matrix,
-  resource-leak guards, full SIP/RTP flow against a real container); remaining: early media
-  (183), a chaos/fault-injection gate, and a wired-up performance gate
+  resource-leak guards, full SIP/RTP flow against a real container with zero skipped cases, plus a
+  two-leg byte-exact bidirectional media test); remaining: a chaos/fault-injection gate and a
+  wired-up performance gate
 - Broader interop validation against more PBXs/trunks/browsers (Asterisk is automated;
   FRITZ!Box is manually verified — the rest is configuration guidance so far)
 

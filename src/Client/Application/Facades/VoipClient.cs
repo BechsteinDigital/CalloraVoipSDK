@@ -499,6 +499,38 @@ public sealed class VoipClient : IVoipClient
         return line.PublishAsync(eventType, body, contentType, expiresSeconds, ct);
     }
 
+    /// <inheritdoc />
+    public Task<Core.Domain.Publications.PublishResult> RefreshPublicationAsync(
+        string eventType, string etag, int expiresSeconds = 3600, CancellationToken ct = default)
+    {
+        ThrowIfDisposed();
+        var line = Lines.All.FirstOrDefault()
+            ?? throw new InvalidOperationException(
+                "No registered line to publish from. Register a line first, or use IPhoneLine.RefreshPublicationAsync.");
+        return line.RefreshPublicationAsync(eventType, etag, expiresSeconds, ct);
+    }
+
+    /// <inheritdoc />
+    public Task<Core.Domain.Publications.PublishResult> ModifyPublicationAsync(
+        string eventType, string etag, string body, string contentType = "text/plain", int expiresSeconds = 3600, CancellationToken ct = default)
+    {
+        ThrowIfDisposed();
+        var line = Lines.All.FirstOrDefault()
+            ?? throw new InvalidOperationException(
+                "No registered line to publish from. Register a line first, or use IPhoneLine.ModifyPublicationAsync.");
+        return line.ModifyPublicationAsync(eventType, etag, body, contentType, expiresSeconds, ct);
+    }
+
+    /// <inheritdoc />
+    public Task RemovePublicationAsync(string eventType, string etag, CancellationToken ct = default)
+    {
+        ThrowIfDisposed();
+        var line = Lines.All.FirstOrDefault()
+            ?? throw new InvalidOperationException(
+                "No registered line to publish from. Register a line first, or use IPhoneLine.RemovePublicationAsync.");
+        return line.RemovePublicationAsync(eventType, etag, ct);
+    }
+
     /// <summary>
     /// Convenience outbound flow: dials a target and waits until the call reaches connected state.
     /// Existing <see cref="IPhoneLine.DialAsync"/> remains unchanged.
