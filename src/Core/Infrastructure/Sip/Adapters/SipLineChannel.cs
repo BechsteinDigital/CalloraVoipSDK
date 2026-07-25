@@ -53,6 +53,7 @@ internal sealed class SipLineChannel : ILineChannel
     // Resolved once (background registration loop), read on the inbound-INVITE thread —
     // published via a volatile reference for safe cross-thread visibility.
     private volatile IReadOnlyCollection<System.Net.IPAddress>? _trustedRegistrarAddresses;
+    private int _trustedRegistrarResolveStarted;
 
     // NAT: public address learned from the registrar's Via received=/rport= (N2). Written on
     // the registration loop, read on the inbound-INVITE thread; held as a single immutable
@@ -411,7 +412,7 @@ internal sealed class SipLineChannel : ILineChannel
             _account.Username,
             _account.SipServer,
             args.RemoteEndPoint?.Address,
-            ResolveTrustedRegistrarAddresses(),
+            TrustedRegistrarAddresses(),
             _account.InboundNumbers,
             _account.AcceptTrunkInbound);
 
@@ -548,9 +549,9 @@ internal sealed class SipLineChannel : ILineChannel
                     correctiveReregistrations = 0;
                     failureCount = 0;
                     hadSuccessfulRegistration = true;
-                    // Resolve trusted registrar peers here (background loop), so the inbound
-                    // INVITE path never blocks on DNS; the result is cached and volatile.
-                    _ = ResolveTrustedRegistrarAddresses();
+                    // Warm the trusted registrar peer cache in the background, so the inbound INVITE path
+                    // never blocks on DNS; the resolution is one-shot and the result is cached and volatile.
+                    StartTrustedRegistrarResolution();
                     _onState?.Invoke(LineState.Registered);
 
                     var refreshDelay = ComputeRefreshDelay(result.EffectiveExpiresSeconds, options);
@@ -679,7 +680,7 @@ internal sealed class SipLineChannel : ILineChannel
             _account.Username,
             _account.SipServer,
             session.RemoteSignalingEndPoint?.Address,
-            ResolveTrustedRegistrarAddresses(),
+            TrustedRegistrarAddresses(),
             _account.InboundNumbers,
             _account.AcceptTrunkInbound);
 
@@ -687,11 +688,35 @@ internal sealed class SipLineChannel : ILineChannel
     /// Resolves and caches the registrar/outbound-proxy addresses this line trusts for
     /// inbound peer matching. Best-effort DNS; an unresolvable host contributes nothing.
     /// </summary>
-    private IReadOnlyCollection<System.Net.IPAddress> ResolveTrustedRegistrarAddresses()
+    /// <summary>
+    /// Non-blocking read of the trusted registrar addresses for the inbound dispatch path. Returns the warm
+    /// cache, or an empty set while a one-shot background resolution populates it — the DNS lookup never runs on
+    /// the inbound thread. An inbound request that arrives before the cache is warm (e.g. before the first
+    /// registration) matches best-effort (empty contributes nothing), consistent with the best-effort contract.
+    /// </summary>
+    private IReadOnlyCollection<System.Net.IPAddress> TrustedRegistrarAddresses()
     {
-        if (_trustedRegistrarAddresses is not null)
-            return _trustedRegistrarAddresses;
+        var cached = _trustedRegistrarAddresses;
+        if (cached is not null)
+            return cached;
 
+        StartTrustedRegistrarResolution();
+        return Array.Empty<System.Net.IPAddress>();
+    }
+
+    /// <summary>
+    /// Kicks off the one-shot background resolution of the trusted registrar addresses (idempotent). Safe to call
+    /// from the registration loop or the inbound path; it never blocks.
+    /// </summary>
+    private void StartTrustedRegistrarResolution()
+    {
+        if (Interlocked.Exchange(ref _trustedRegistrarResolveStarted, 1) != 0)
+            return;
+        _ = ResolveTrustedRegistrarAddressesAsync();
+    }
+
+    private async Task ResolveTrustedRegistrarAddressesAsync()
+    {
         var addresses = new HashSet<System.Net.IPAddress>();
         foreach (var host in new[] { _account.SipServer, _account.OutboundProxy })
         {
@@ -702,7 +727,7 @@ internal sealed class SipLineChannel : ILineChannel
                 : host;
             try
             {
-                foreach (var address in System.Net.Dns.GetHostAddresses(bareHost))
+                foreach (var address in await System.Net.Dns.GetHostAddressesAsync(bareHost).ConfigureAwait(false))
                     addresses.Add(address);
             }
             catch (Exception ex)
@@ -712,7 +737,6 @@ internal sealed class SipLineChannel : ILineChannel
         }
 
         _trustedRegistrarAddresses = addresses;
-        return _trustedRegistrarAddresses;
     }
 
     /// <summary>
