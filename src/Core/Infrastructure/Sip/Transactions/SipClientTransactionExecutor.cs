@@ -379,18 +379,18 @@ internal sealed class SipClientTransactionExecutor : ISipClientTransactionExecut
     }
 
     /// <summary>
-    /// Resolves transaction timeout. Uses RFC3261 64*T1 default when caller kept default timeout.
+    /// Resolves the transaction timeout: an explicit <see cref="SipClientTransactionRequest.Timeout"/> is honoured
+    /// as-is (even when it equals the default), otherwise the RFC 3261 64*T1 timeout is derived from
+    /// <see cref="SipClientTransactionRequest.T1"/>. Internal for direct unit testing of the derivation.
     /// </summary>
-    private static TimeSpan ResolveTransactionTimeout(SipClientTransactionRequest request)
+    internal static TimeSpan ResolveTransactionTimeout(SipClientTransactionRequest request)
     {
-        if (request.Timeout != DefaultTransactionTimeout)
-            return request.Timeout;
+        if (request.Timeout is { } explicitTimeout)
+            return explicitTimeout;
 
         var derivedMilliseconds = request.T1.TotalMilliseconds * 64d;
-        if (double.IsInfinity(derivedMilliseconds) || double.IsNaN(derivedMilliseconds))
-            return request.Timeout;
-        if (derivedMilliseconds <= 0d)
-            return request.Timeout;
+        if (double.IsInfinity(derivedMilliseconds) || double.IsNaN(derivedMilliseconds) || derivedMilliseconds <= 0d)
+            return DefaultTransactionTimeout;
 
         return TimeSpan.FromMilliseconds(derivedMilliseconds);
     }
@@ -659,7 +659,7 @@ internal sealed class SipClientTransactionExecutor : ISipClientTransactionExecut
         if (string.IsNullOrWhiteSpace(branch) || !SipProtocol.HasMagicCookie(branch))
             throw new ArgumentException("Via branch must be present and start with RFC3261 magic cookie.", nameof(request));
 
-        if (request.Timeout <= TimeSpan.Zero)
+        if (request.Timeout is { } timeout && timeout <= TimeSpan.Zero)
             throw new ArgumentOutOfRangeException(nameof(request), "Timeout must be positive.");
         if (request.T1 <= TimeSpan.Zero)
             throw new ArgumentOutOfRangeException(nameof(request), "T1 must be positive.");
