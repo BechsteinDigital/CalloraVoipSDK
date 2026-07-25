@@ -236,7 +236,7 @@ internal sealed class SipRegistrationService : ISipRegistrationService
                         routeCandidate.EndPoint);
                     continue;
                 }
-                catch (InvalidOperationException transportEx) when (transportEx.InnerException is not null)
+                catch (SipTransactionTransportException transportEx)
                 {
                     lastTransportFailure = transportEx;
                     _logger.LogDebug(
