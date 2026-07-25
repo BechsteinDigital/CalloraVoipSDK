@@ -173,7 +173,9 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
         if (video.RtxPayloadType is { } rtxPt)
         {
             _rtxPayloadType = (byte)rtxPt;
-            _rtxSsrc = unchecked((uint)Random.Shared.Next());
+            // RFC 3550 §8.1: the repair-stream SSRC is unpredictable and full-range (RtpRandom), not the
+            // predictable 31-bit Random.Shared.Next() an off-path attacker could guess to spoof RTX.
+            _rtxSsrc = RtpRandom.NextSsrc();
             _retransmitBuffer = new RtpRetransmissionBuffer();
             _rtp.ConfigureSecondaryStream(_rtxPayloadType);
             _rtp.PacketSent += _retransmitBuffer.Store;

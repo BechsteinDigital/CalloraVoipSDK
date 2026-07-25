@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Buffers.Binary;
 using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
@@ -147,16 +146,20 @@ internal sealed class RtpSession : IRtpSession
         _codec   = codec;
         _logger  = logger;
         _ssrcTable = new RtpTrackedSsrcTable(logger);
-        _ssrc    = options.Ssrc ?? (uint)Random.Shared.Next();
+        // RFC 3550 §8.1 / security considerations: the SSRC is drawn from the full 32-bit space with a
+        // cryptographically strong RNG (see RtpRandom — Random.Shared is a non-crypto PRNG and (uint)Next() never
+        // sets the high bit, so it only covered 31 bits), so an off-path attacker cannot predict it.
+        _ssrc    = options.Ssrc ?? RtpRandom.NextUInt32();
 
         _outboundSrtp  = options.OutboundSrtp;
         _inboundSrtp   = options.InboundSrtp;
         _outboundSrtcp = options.OutboundSrtcp;
         _inboundSrtcp  = options.InboundSrtcp;
 
-        // Random initial sequence number and timestamp offset (RFC 3550 §5.1)
-        _sequenceNumber = (ushort)Random.Shared.Next(ushort.MaxValue);
-        _timestamp      = (uint)Random.Shared.Next();
+        // Random initial sequence number and timestamp offset (RFC 3550 §5.1): cryptographically strong and full
+        // range (the old Random.Shared.Next(ushort.MaxValue) also never reached 65535, and Next() was 31-bit).
+        _sequenceNumber = (ushort)RtpRandom.NextUInt32();
+        _timestamp      = RtpRandom.NextUInt32();
 
         _udp = new UdpClient(AddressFamily.InterNetwork);
         // Kernel SO_RCVBUF (queues many pending datagrams) — distinct from the per-datagram user-space
@@ -725,15 +728,16 @@ internal sealed class RtpSession : IRtpSession
         uint newSsrc;
         do
         {
-            newSsrc = (uint)Random.Shared.Next();
+            newSsrc = RtpRandom.NextUInt32();
         }
         while (newSsrc == oldSsrc || _ssrcTable.Contains(newSsrc));
 
         lock (_sendSync)
         {
-            // A new source identity restarts the sequence and timestamp offsets (RFC 3550 §5.1 / §8.2).
-            _sequenceNumber = (ushort)Random.Shared.Next(ushort.MaxValue);
-            _timestamp = (uint)Random.Shared.Next();
+            // A new source identity restarts the sequence and timestamp offsets (RFC 3550 §5.1 / §8.2),
+            // re-seeded from the same crypto-strong full-range source (RtpRandom).
+            _sequenceNumber = (ushort)RtpRandom.NextUInt32();
+            _timestamp = RtpRandom.NextUInt32();
             _ssrc = newSsrc;
         }
 
