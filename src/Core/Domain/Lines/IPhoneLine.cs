@@ -61,6 +61,14 @@ public interface IPhoneLine
     /// </summary>
     event EventHandler<LineReconnectFailedEventArgs>? LineReconnectFailed;
 
+    /// <summary>
+    /// The reason for the last permanent registration/reconnect failure, or <see langword="null"/> if the
+    /// line never failed. Captured as state before the <see cref="LineState.Failed"/> transition, so a
+    /// consumer that only observes the terminal Failed state can read the cause race-free even if it missed
+    /// the <see cref="LineReconnectFailed"/> event (e.g. a fast failure that fired before it subscribed).
+    /// </summary>
+    LineReconnectFailedEventArgs? LastReconnectFailure => null;
+
     // ── Actions ───────────────────────────────────────────────────────────────
 
     /// <summary>
