@@ -50,10 +50,9 @@ internal sealed class SipLineChannel : ILineChannel
     private string? _registrationCallId;
     private int _registrationNextCSeq = 1;
 
-    // Resolved once (background registration loop), read on the inbound-INVITE thread —
-    // published via a volatile reference for safe cross-thread visibility.
-    private volatile IReadOnlyCollection<System.Net.IPAddress>? _trustedRegistrarAddresses;
-    private int _trustedRegistrarResolveStarted;
+    // Resolves the trusted registrar/proxy addresses off the inbound-INVITE thread (background one-shot with a
+    // bounded retry back-off); reads are non-blocking. See TrustedRegistrarResolver.
+    private readonly TrustedRegistrarResolver _trustedRegistrars;
 
     // NAT: public address learned from the registrar's Via received=/rport= (N2). Written on
     // the registration loop, read on the inbound-INVITE thread; held as a single immutable
@@ -98,6 +97,12 @@ internal sealed class SipLineChannel : ILineChannel
         ArgumentNullException.ThrowIfNull(loggerFactory);
         _logger = loggerFactory.CreateLogger<SipLineChannel>();
         _callChannelLogger = loggerFactory.CreateLogger<SipCoreCallChannel>();
+
+        var registrarHosts = new[] { _account.SipServer, _account.OutboundProxy }
+            .Where(host => !string.IsNullOrWhiteSpace(host))
+            .Select(host => SipProtocol.TryParseSipUri(host!, out _, out var parsedHost, out _) ? parsedHost! : host!)
+            .ToList();
+        _trustedRegistrars = new TrustedRegistrarResolver(registrarHosts, _logger);
 
         _callSignalingService.IncomingInvite += HandleIncomingInvite;
         _callSignalingService.IncomingMessage += HandleIncomingMessage;
@@ -412,7 +417,7 @@ internal sealed class SipLineChannel : ILineChannel
             _account.Username,
             _account.SipServer,
             args.RemoteEndPoint?.Address,
-            TrustedRegistrarAddresses(),
+            _trustedRegistrars.Addresses(),
             _account.InboundNumbers,
             _account.AcceptTrunkInbound);
 
@@ -549,9 +554,9 @@ internal sealed class SipLineChannel : ILineChannel
                     correctiveReregistrations = 0;
                     failureCount = 0;
                     hadSuccessfulRegistration = true;
-                    // Warm the trusted registrar peer cache in the background, so the inbound INVITE path
-                    // never blocks on DNS; the resolution is one-shot and the result is cached and volatile.
-                    StartTrustedRegistrarResolution();
+                    // Warm the trusted registrar peer cache in the background, so the inbound INVITE path never
+                    // blocks on DNS.
+                    _trustedRegistrars.Warm();
                     _onState?.Invoke(LineState.Registered);
 
                     var refreshDelay = ComputeRefreshDelay(result.EffectiveExpiresSeconds, options);
@@ -680,85 +685,9 @@ internal sealed class SipLineChannel : ILineChannel
             _account.Username,
             _account.SipServer,
             session.RemoteSignalingEndPoint?.Address,
-            TrustedRegistrarAddresses(),
+            _trustedRegistrars.Addresses(),
             _account.InboundNumbers,
             _account.AcceptTrunkInbound);
-
-    /// <summary>
-    /// Resolves and caches the registrar/outbound-proxy addresses this line trusts for
-    /// inbound peer matching. Best-effort DNS; an unresolvable host contributes nothing.
-    /// </summary>
-    /// <summary>
-    /// Non-blocking read of the trusted registrar addresses for the inbound dispatch path. Returns the warm
-    /// cache, or an empty set while a one-shot background resolution populates it — the DNS lookup never runs on
-    /// the inbound thread. An inbound request that arrives before the cache is warm (e.g. before the first
-    /// registration) matches best-effort (empty contributes nothing), consistent with the best-effort contract.
-    /// </summary>
-    private IReadOnlyCollection<System.Net.IPAddress> TrustedRegistrarAddresses()
-    {
-        var cached = _trustedRegistrarAddresses;
-        if (cached is not null)
-            return cached;
-
-        StartTrustedRegistrarResolution();
-        return Array.Empty<System.Net.IPAddress>();
-    }
-
-    /// <summary>
-    /// Kicks off the one-shot background resolution of the trusted registrar addresses (idempotent). Safe to call
-    /// from the registration loop or the inbound path; it never blocks.
-    /// </summary>
-    private void StartTrustedRegistrarResolution()
-    {
-        if (Interlocked.Exchange(ref _trustedRegistrarResolveStarted, 1) != 0)
-            return;
-        _ = ResolveTrustedRegistrarAddressesAsync();
-    }
-
-    private async Task ResolveTrustedRegistrarAddressesAsync()
-    {
-        var addresses = new HashSet<System.Net.IPAddress>();
-        var hadConfiguredHost = false;
-        foreach (var host in new[] { _account.SipServer, _account.OutboundProxy })
-        {
-            if (string.IsNullOrWhiteSpace(host))
-                continue;
-            hadConfiguredHost = true;
-            var bareHost = SipProtocol.TryParseSipUri(host, out _, out var parsedHost, out _)
-                ? parsedHost
-                : host;
-            try
-            {
-                foreach (var address in await System.Net.Dns.GetHostAddressesAsync(bareHost).ConfigureAwait(false))
-                    addresses.Add(address);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogDebug(ex, "Could not resolve trusted registrar host '{Host}' for inbound matching.", bareHost);
-            }
-        }
-
-        if (ShouldCacheTrustedRegistrars(addresses.Count, hadConfiguredHost))
-        {
-            _trustedRegistrarAddresses = addresses;
-        }
-        else
-        {
-            // A configured host failed to resolve (e.g. a transient DNS error): do not cache the empty result.
-            // Reset the one-shot guard so a later registration or inbound request retries, instead of leaving the
-            // line permanently without trusted registrar peers until the process restarts.
-            Interlocked.Exchange(ref _trustedRegistrarResolveStarted, 0);
-        }
-    }
-
-    /// <summary>
-    /// Decides whether a trusted-registrar resolution should be cached (committed) or retried. A resolution is
-    /// cached when it produced at least one address, or when no registrar host was configured at all (an
-    /// intentionally empty set). A configured host that resolved to nothing — a transient DNS failure — is not
-    /// cached so it is retried later.
-    /// </summary>
-    internal static bool ShouldCacheTrustedRegistrars(int resolvedCount, bool hadConfiguredHost)
-        => resolvedCount > 0 || !hadConfiguredHost;
 
     /// <summary>
     /// Builds one registration request from line account configuration.
