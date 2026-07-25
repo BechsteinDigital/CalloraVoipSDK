@@ -17,6 +17,7 @@ namespace CalloraVoipSdk.Core.Infrastructure.Sip.Signaling;
 /// </remarks>
 internal sealed class SipReferSubscription : IReferSubscription
 {
+    private const string PendingState = "pending;expires=60";
     private const string ActiveState = "active;expires=60";
     // RFC 6665 §4.1.3: a REFER subscription that has run its course reports "noresource" — the referenced
     // progress state no longer exists. Retained as the conventional REFER-completion reason.
@@ -27,6 +28,7 @@ internal sealed class SipReferSubscription : IReferSubscription
     private readonly List<(string SubState, string Sipfrag)> _pending = [];
     private Task _sendTail = Task.CompletedTask;
     private Phase _phase = Phase.Created;
+    private bool _startPending;
 
     private enum Phase
     {
@@ -46,6 +48,16 @@ internal sealed class SipReferSubscription : IReferSubscription
     /// </summary>
     public SipReferSubscription(Func<string, string, CancellationToken, Task> sendNotify)
         => _sendNotify = sendNotify;
+
+    /// <inheritdoc />
+    public void ReportPending()
+    {
+        lock (_gate)
+        {
+            // Only meaningful before the immediate NOTIFY is sent (i.e. in-handler); no-op once started/terminated.
+            if (_phase == Phase.Created) _startPending = true;
+        }
+    }
 
     /// <inheritdoc />
     public void ReportTrying() => ReportProgress(100, "Trying");
@@ -86,7 +98,8 @@ internal sealed class SipReferSubscription : IReferSubscription
     }
 
     /// <summary>
-    /// Sends the immediate <c>active</c>/100 Trying NOTIFY (RFC 3515 §2.4.4) and flushes any reports the
+    /// Sends the immediate 100 Trying NOTIFY (RFC 3515 §2.4.4) — <c>pending</c> when the consumer signalled it
+    /// in-handler via <see cref="ReportPending"/>, otherwise <c>active</c> — and flushes any reports the
     /// application made synchronously inside the transfer handler, in order. Returns a task that completes when
     /// those NOTIFYs have been dispatched. No-op once <see cref="Cancel"/> has run.
     /// </summary>
@@ -96,7 +109,9 @@ internal sealed class SipReferSubscription : IReferSubscription
         {
             if (_phase == Phase.Cancelled) return _sendTail;
 
-            Dispatch(ActiveState, "SIP/2.0 100 Trying", ct);
+            // RFC 6665 §4.1.3: start pending when the consumer signalled it in-handler, else active. A later
+            // progress report (buffered below or dispatched after Start) carries the active state.
+            Dispatch(_startPending ? PendingState : ActiveState, "SIP/2.0 100 Trying", ct);
             foreach (var (subState, sipfrag) in _pending)
                 Dispatch(subState, sipfrag, ct);
             _pending.Clear();
