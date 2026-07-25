@@ -1,55 +1,24 @@
-using CalloraVoipSdk;
-using CalloraVoipSdk.Core.Domain.Lines;
-using CalloraVoipSdk.Core.Domain.Security;
-using CalloraVoipSdk.InteropTests.Asterisk;
 using CalloraVoipSdk.InteropTests.Media;
+using CalloraVoipSdk.InteropTests.Pbx;
 using Xunit;
-
-using DomainSipTransport = CalloraVoipSdk.Core.Domain.Lines.SipTransport;
 
 namespace CalloraVoipSdk.InteropTests.Calls;
 
 /// <summary>
-/// Zwei-Bein-Media-Interop gegen echten Asterisk: zwei VoipClient-Legs (A=6001, B=6003) werden über den
-/// PBX gebrückt und der Medienpfad bidirektional gemessen (Paketzähler, RTCP-Qualität, Inhalt). Diese
-/// Suite wächst über mehrere Slices; die Fixture-Smoke-Tests bleiben als Aufbau-Regression bestehen.
+/// Abstrakte Basis: Zwei-Bein-Media-Matrix. Zwei VoipClient-Legs werden über einen PBX gebrückt
+/// und der Medienpfad bidirektional gemessen (Paketzähler, RTCP-Qualität, Inhalt).
 /// </summary>
-[Trait("Category", "Interop")]
-public sealed class AsteriskTwoLegMediaInteropTests
+public abstract class TwoLegMediaMatrix
 {
-    private static VoipClient NewClient() =>
-        new(new VoipConfiguration { UserAgent = "CalloraInteropTest/1.0", SrtpPolicy = SrtpPolicy.Disabled });
-
-    // Fixture-Smoke-Test: belegt, dass der zweite Plain-RTP-Endpoint 6003 sich registriert.
-    // Die Bridge-/Media-Tests folgen in den nächsten Slices dieser Datei.
-    [DockerRequiredFact]
-    public async Task SecondPlainRtpEndpoint_6003_Registers()
-    {
-        await using var asterisk = new AsteriskContainer();
-        await asterisk.StartAsync();
-        using var client = NewClient();
-
-        var reg = await client.ConnectAsync(
-            new SipAccount
-            {
-                SipServer = asterisk.ContainerIpAddress,
-                Port = 5060,
-                Username = asterisk.BridgeUsername,
-                Password = asterisk.BridgePassword,
-                Transport = DomainSipTransport.Udp,
-            },
-            new ConnectOptions { Timeout = TimeSpan.FromSeconds(20) });
-
-        Assert.True(reg.IsSuccess, $"Registrierung 6003 fehlgeschlagen: Status={reg.Status}");
-    }
+    protected abstract IPbxFixture CreatePbx(int bridgePairs = 1);
 
     [DockerRequiredFact]
     public async Task BridgedCall_ConnectsBothLegs()
     {
-        await using var asterisk = new AsteriskContainer();
-        await asterisk.StartAsync();
+        await using var pbx = CreatePbx();
+        await pbx.StartAsync();
 
-        await using var bridged = await TwoLegBridgedCall.StartAsync(asterisk);
+        await using var bridged = await TwoLegBridgedCall.StartAsync(pbx);
 
         Assert.Equal(CalloraVoipSdk.Core.Domain.Calls.CallState.Connected, bridged.CallerCall.State);
         Assert.Equal(CalloraVoipSdk.Core.Domain.Calls.CallState.Connected, bridged.CalleeCall.State);
@@ -60,9 +29,9 @@ public sealed class AsteriskTwoLegMediaInteropTests
     [DockerRequiredFact]
     public async Task BridgedCall_FlowsRtpInBothDirections()
     {
-        await using var asterisk = new AsteriskContainer();
-        await asterisk.StartAsync();
-        await using var bridged = await TwoLegBridgedCall.StartAsync(asterisk);
+        await using var pbx = CreatePbx();
+        await pbx.StartAsync();
+        await using var bridged = await TwoLegBridgedCall.StartAsync(pbx);
 
         await bridged.RunBidirectionalMediaAsync();
 
@@ -80,9 +49,9 @@ public sealed class AsteriskTwoLegMediaInteropTests
     [DockerRequiredFact]
     public async Task BridgedCall_PopulatesLocalRtcpQuality()
     {
-        await using var asterisk = new AsteriskContainer();
-        await asterisk.StartAsync();
-        await using var bridged = await TwoLegBridgedCall.StartAsync(asterisk);
+        await using var pbx = CreatePbx();
+        await pbx.StartAsync();
+        await using var bridged = await TwoLegBridgedCall.StartAsync(pbx);
 
         await bridged.RunBidirectionalMediaAsync(TimeSpan.FromSeconds(10));
 
@@ -102,9 +71,9 @@ public sealed class AsteriskTwoLegMediaInteropTests
     [DockerRequiredFact]
     public async Task BridgedCall_PopulatesRemoteRtcpReport()
     {
-        await using var asterisk = new AsteriskContainer();
-        await asterisk.StartAsync();
-        await using var bridged = await TwoLegBridgedCall.StartAsync(asterisk);
+        await using var pbx = CreatePbx();
+        await pbx.StartAsync();
+        await using var bridged = await TwoLegBridgedCall.StartAsync(pbx);
 
         await using var flow = bridged.StartBidirectionalMedia();
 
@@ -121,8 +90,8 @@ public sealed class AsteriskTwoLegMediaInteropTests
         AssertRemoteReport(bridged.CallerCall, "Caller");
         AssertRemoteReport(bridged.CalleeCall, "Callee");
 
-        // Der SDK parst Asterisks RTCP RR/SR: Peer-Sicht (Jitter/Loss) + RTT werden befüllt.
-        // MOS bleibt null (Asterisk sendet kein RTCP-XR VoIP-Metrics) → hier bewusst nicht asserted.
+        // Der SDK parst den RTCP RR/SR: Peer-Sicht (Jitter/Loss) + RTT werden befüllt.
+        // MOS bleibt null (kein RTCP-XR VoIP-Metrics) → hier bewusst nicht asserted.
         static void AssertRemoteReport(CalloraVoipSdk.Core.Domain.Calls.ICall call, string label)
         {
             var q = call.QualitySnapshot;
@@ -138,9 +107,9 @@ public sealed class AsteriskTwoLegMediaInteropTests
     [DockerRequiredFact]
     public async Task BridgedCall_DeliversMarkedContentEndToEnd()
     {
-        await using var asterisk = new AsteriskContainer();
-        await asterisk.StartAsync();
-        await using var bridged = await TwoLegBridgedCall.StartAsync(asterisk);
+        await using var pbx = CreatePbx();
+        await pbx.StartAsync();
+        await using var bridged = await TwoLegBridgedCall.StartAsync(pbx);
 
         var result = await bridged.RunBidirectionalMediaAsync(TimeSpan.FromSeconds(8));
 
@@ -161,9 +130,9 @@ public sealed class AsteriskTwoLegMediaInteropTests
     [DockerRequiredFact]
     public async Task SdesBridgedCall_FlowsEncryptedMediaBothDirections()
     {
-        await using var asterisk = new AsteriskContainer();
-        await asterisk.StartAsync();
-        await using var bridged = await TwoLegBridgedCall.StartAsync(asterisk, TwoLegProfile.Sdes(asterisk));
+        await using var pbx = CreatePbx();
+        await pbx.StartAsync();
+        await using var bridged = await TwoLegBridgedCall.StartAsync(pbx, PbxMediaMode.Sdes);
 
         // Beide Legs verhandelten verschlüsseltes Media (RFC 4568 SDES → RTP/SAVP).
         AssertSrtp(bridged.CallerCall, "Caller");
@@ -174,7 +143,7 @@ public sealed class AsteriskTwoLegMediaInteropTests
         // Verschlüsseltes Media floss in beide Richtungen (Empfang = entschlüsselt gezählt).
         AssertBidirectionalRtp(bridged.CallerCall, "Caller");
         AssertBidirectionalRtp(bridged.CalleeCall, "Callee");
-        // Inhalt byte-exakt nach Entschlüsselung (Asterisk terminiert SDES je Leg, relayt Klartext-PCMU).
+        // Inhalt byte-exakt nach Entschlüsselung (PBX terminiert SDES je Leg, relayt Klartext-PCMU).
         Assert.True(LongestContiguousRun(result.CalleeReceivedSequences) >= 50,
             $"A→B verschlüsselter Inhalt nicht durchgängig ({result.CalleeReceivedSequences.Count} empfangen).");
         Assert.True(LongestContiguousRun(result.CallerReceivedSequences) >= 50,
@@ -196,11 +165,11 @@ public sealed class AsteriskTwoLegMediaInteropTests
     [DockerRequiredFact]
     public async Task MismatchedCodecBridgedCall_StillFlowsViaTranscoding()
     {
-        await using var asterisk = new AsteriskContainer();
-        await asterisk.StartAsync();
-        await using var bridged = await TwoLegBridgedCall.StartAsync(asterisk, TwoLegProfile.CodecMismatch(asterisk));
+        await using var pbx = CreatePbx();
+        await pbx.StartAsync();
+        await using var bridged = await TwoLegBridgedCall.StartAsync(pbx, callerCodecs: new[] { "G722" });
 
-        // Codec-Mismatch: Caller G.722 (PT 9) vs. Callee PCMU (PT 0) → Asterisk MUSS transcodieren.
+        // Codec-Mismatch: Caller G.722 (PT 9) vs. Callee PCMU (PT 0) → PBX MUSS transcodieren.
         Assert.Equal(9, bridged.CallerCall.MediaParameters!.PayloadType);
         Assert.Equal(0, bridged.CalleeCall.MediaParameters!.PayloadType);
 
@@ -224,7 +193,7 @@ public sealed class AsteriskTwoLegMediaInteropTests
     }
 
     /// <summary>Längster zusammenhängender Lauf aufeinanderfolgender Sequenzmarker (O(n)).</summary>
-    private static int LongestContiguousRun(IReadOnlyList<uint> seqs)
+    protected static int LongestContiguousRun(IReadOnlyList<uint> seqs)
     {
         var set = new HashSet<uint>(seqs);
         var best = 0;
@@ -237,4 +206,11 @@ public sealed class AsteriskTwoLegMediaInteropTests
         }
         return best;
     }
+}
+
+/// <summary>Fährt die Zwei-Bein-Media-Matrix gegen einen echten Asterisk.</summary>
+[Trait("Category", "Interop")]
+public sealed class AsteriskTwoLegMediaMatrix : TwoLegMediaMatrix
+{
+    protected override IPbxFixture CreatePbx(int bridgePairs = 1) => new AsteriskPbxFixture(bridgePairs);
 }

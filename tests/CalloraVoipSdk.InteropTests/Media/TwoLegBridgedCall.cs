@@ -4,7 +4,7 @@ using CalloraVoipSdk.Core.Domain.Calls;
 using CalloraVoipSdk.Core.Domain.Events;
 using CalloraVoipSdk.Core.Domain.Lines;
 using CalloraVoipSdk.Core.Domain.Security;
-using CalloraVoipSdk.InteropTests.Asterisk;
+using CalloraVoipSdk.InteropTests.Pbx;
 
 using DomainSipTransport = CalloraVoipSdk.Core.Domain.Lines.SipTransport;
 
@@ -15,46 +15,20 @@ public sealed record TwoLegMediaResult(
     IReadOnlyList<uint> CalleeReceivedSequences,
     IReadOnlyList<uint> CallerReceivedSequences);
 
-/// <summary>Profil eines Zwei-Bein-Bridged-Calls: Endpunkte, Bridge-Extension, SRTP-Policy und Codec-Präferenzen.</summary>
-public sealed record TwoLegProfile(
-    string CallerUser, string CallerPass,
-    string CalleeUser, string CalleePass,
-    string BridgeExtension,
-    SrtpPolicy SrtpPolicy,
-    IReadOnlyList<string> CallerCodecs,
-    IReadOnlyList<string> CalleeCodecs)
-{
-    private static readonly string[] Pcmu = { "PCMU" };
-
-    /// <summary>Plain RTP / PCMU über die Endpunkte 6001 (Caller) und 6003 (Callee).</summary>
-    public static TwoLegProfile Plain(AsteriskContainer a) =>
-        new(a.Username, a.Password, a.BridgeUsername, a.BridgePassword, "6003", SrtpPolicy.Disabled, Pcmu, Pcmu);
-
-    /// <summary>SRTP-SDES / PCMU über die Endpunkte 6002 (Caller) und 6004 (Callee).</summary>
-    public static TwoLegProfile Sdes(AsteriskContainer a) =>
-        new(a.SdesUsername, a.SdesPassword, a.SdesBridgeUsername, a.SdesBridgePassword, "6004", SrtpPolicy.Required, Pcmu, Pcmu);
-
-    /// <summary>
-    /// Codec-Mismatch: Caller pinnt G.722 (Endpoint 6001 kann g722), Callee ist PCMU-only (6003) →
-    /// Asterisk muss zwischen den Legs transcodieren.
-    /// </summary>
-    public static TwoLegProfile CodecMismatch(AsteriskContainer a) =>
-        new(a.Username, a.Password, a.BridgeUsername, a.BridgePassword, "6003", SrtpPolicy.Disabled, new[] { "G722" }, Pcmu);
-}
-
 /// <summary>
-/// L4-Fixture: zwei <see cref="VoipClient"/>-Legs über einen echten Asterisk gebrückt (A=6001 wählt
-/// Extension 6003 → Asterisk Dial(PJSIP/6003) → B=6003 nimmt inbound an). Kapselt Aufbau, beidseitige
-/// Media-Injektion via <see cref="IMediaSender"/> und -Erfassung via <see cref="IMediaReceiver"/>.
+/// L4-Fixture: zwei <see cref="VoipClient"/>-Legs über einen echten PBX gebrückt. Kapselt Aufbau,
+/// beidseitige Media-Injektion via <see cref="IMediaSender"/> und -Erfassung via <see cref="IMediaReceiver"/>.
 /// </summary>
 public sealed class TwoLegBridgedCall : IAsyncDisposable
 {
+    private static readonly string[] PcmuOnly = { "PCMU" };
+
     private readonly VoipClient _callerClient;
     private readonly VoipClient _calleeClient;
     private readonly IPhoneLine _callerLine;
 
-    public ICall CallerCall { get; }   // A (6001)
-    public ICall CalleeCall { get; }   // B (6003)
+    public ICall CallerCall { get; }   // A
+    public ICall CalleeCall { get; }   // B
 
     private TwoLegBridgedCall(VoipClient callerClient, VoipClient calleeClient, IPhoneLine callerLine, ICall callerCall, ICall calleeCall)
     {
@@ -73,42 +47,48 @@ public sealed class TwoLegBridgedCall : IAsyncDisposable
             PreferredAudioCodecs = codecs,
         });
 
-    private static async Task<IPhoneLine> RegisterAsync(AsteriskContainer asterisk, VoipClient client, string user, string pass)
+    private static async Task<IPhoneLine> RegisterAsync(IPbxFixture pbx, VoipClient client, PbxEndpoint endpoint)
     {
         var reg = await client.ConnectAsync(
             new SipAccount
             {
-                SipServer = asterisk.ContainerIpAddress,
-                Port = 5060,
-                Username = user,
-                Password = pass,
+                SipServer = pbx.SipHost,
+                Port = pbx.SipUdpPort,
+                Username = endpoint.Username,
+                Password = endpoint.Password,
                 Transport = DomainSipTransport.Udp,
             },
             new ConnectOptions { Timeout = TimeSpan.FromSeconds(20) });
         if (!reg.IsSuccess)
-            throw new InvalidOperationException($"Registrierung {user} fehlgeschlagen: {reg.Status}");
+            throw new InvalidOperationException($"Registrierung {endpoint.Username} fehlgeschlagen: {reg.Status}");
         return reg.Line!;
     }
 
-    /// <summary>Baut den gebrückten Call auf und wartet, bis beide Legs Connected sind.</summary>
-    public static async Task<TwoLegBridgedCall> StartAsync(AsteriskContainer asterisk, TwoLegProfile? profile = null)
+    /// <summary>Baut den gebrückten Call über den PBX auf und wartet, bis beide Legs Connected sind.</summary>
+    public static async Task<TwoLegBridgedCall> StartAsync(
+        IPbxFixture pbx,
+        PbxMediaMode mode = PbxMediaMode.Plain,
+        int pairIndex = 0,
+        IReadOnlyList<string>? callerCodecs = null,
+        IReadOnlyList<string>? calleeCodecs = null)
     {
-        var p = profile ?? TwoLegProfile.Plain(asterisk);
-        var callerClient = NewClient(p.SrtpPolicy, p.CallerCodecs);
-        var calleeClient = NewClient(p.SrtpPolicy, p.CalleeCodecs);
+        var pair = pbx.BridgePair(mode, pairIndex);
+        var srtp = mode == PbxMediaMode.Sdes ? SrtpPolicy.Required : SrtpPolicy.Disabled;
+        var callerClient = NewClient(srtp, callerCodecs ?? PcmuOnly);
+        var calleeClient = NewClient(srtp, calleeCodecs ?? PcmuOnly);
         try
         {
-            var callerLine = await RegisterAsync(asterisk, callerClient, p.CallerUser, p.CallerPass);
-            await RegisterAsync(asterisk, calleeClient, p.CalleeUser, p.CalleePass);
+            var callerLine = await RegisterAsync(pbx, callerClient, pair.Caller);
+            await RegisterAsync(pbx, calleeClient, pair.Callee);
 
-            // B nimmt den eingehenden (von Asterisk gebrückten) Call an. Der Handler erfasst nur den Call;
+            // B nimmt den eingehenden (von PBX gebrückten) Call an. Der Handler erfasst nur den Call;
             // A's Dial blockiert bis zum Accept → beides läuft nebenläufig.
             var calleeTcs = new TaskCompletionSource<ICall>(TaskCreationOptions.RunContinuationsAsynchronously);
             void OnIncoming(object? _, IncomingCallEventArgs e) => calleeTcs.TrySetResult(e.Call);
             calleeClient.IncomingCall += OnIncoming;
 
             var dialTask = callerClient.DialAndWaitUntilConnectedAsync(
-                callerLine, asterisk.CallTargetUri(p.BridgeExtension),
+                callerLine, pair.BridgeDialUri,
                 new DialWaitOptions { ConnectTimeout = TimeSpan.FromSeconds(20) });
 
             var calleeCall = await calleeTcs.Task.WaitAsync(TimeSpan.FromSeconds(20));
