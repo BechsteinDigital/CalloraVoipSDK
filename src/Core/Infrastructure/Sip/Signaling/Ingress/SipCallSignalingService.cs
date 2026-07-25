@@ -31,6 +31,7 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
     private readonly SipClientTransactionExecutor _subscribeExecutor;
     private readonly SipCallSignalingSubscriptions _subscriptionService;
     private readonly SipCallSignalingMessages _messageService;
+    private readonly SipCallSignalingPublications _publicationService;
     private readonly ConcurrentDictionary<string, SipCallSession> _sessions = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, SipOutboundSubscriptionEntry> _subscriptions = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, DateTimeOffset> _sessionStartTimes = new(StringComparer.Ordinal);
@@ -72,6 +73,7 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
             _logger,
             SendIngressResponseAsync);
         _messageService = new SipCallSignalingMessages(_transport, _digestAuthenticator, _subscribeExecutor, _logger);
+        _publicationService = new SipCallSignalingPublications(_transport, _digestAuthenticator, _subscribeExecutor, _logger);
 
         var resolvedSdpProvider = sdpProvider ?? BuildDefaultSdpProvider();
         _sessionDependencies = new SipCallSessionDependencies
@@ -808,6 +810,13 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
     {
         ThrowIfDisposed();
         return _messageService.SendMessageAsync(request, ct);
+    }
+
+    /// <inheritdoc />
+    public Task<SipPublishResult> PublishAsync(SipPublishRequest request, CancellationToken ct = default)
+    {
+        ThrowIfDisposed();
+        return _publicationService.PublishAsync(request, ct);
     }
 
     /// <summary>
