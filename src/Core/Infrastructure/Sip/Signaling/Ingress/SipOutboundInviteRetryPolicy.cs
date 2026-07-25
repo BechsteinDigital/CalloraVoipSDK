@@ -1,5 +1,6 @@
 using System.Net;
 using CalloraVoipSdk.Core.Infrastructure.Common.Protocols;
+using CalloraVoipSdk.Core.Infrastructure.Sip.Transactions;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Wire;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Sip.Signaling;
@@ -31,10 +32,13 @@ internal static class SipOutboundInviteRetryPolicy
     }
 
     /// <summary>
-    /// Returns true when an invalid-operation error represents transport-layer failure.
+    /// Returns true when an error represents a SIP transaction transport-layer failure — a faulted send/
+    /// retransmission (<see cref="SipTransactionTransportException"/>), which warrants candidate failover and a
+    /// synthetic 503. Any other <see cref="InvalidOperationException"/> (e.g. a state or negotiation error that
+    /// merely carries an inner exception, such as a failed PRACK) is not a transport failure and must propagate.
     /// </summary>
     public static bool IsTransportFailure(InvalidOperationException exception) =>
-        exception.InnerException is not null;
+        exception is SipTransactionTransportException;
 
     /// <summary>
     /// Enqueues Contact URIs from one redirect response while suppressing duplicates.
