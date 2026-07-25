@@ -51,14 +51,16 @@ public sealed class TwoLegBridgedCall : IAsyncDisposable
 {
     private readonly VoipClient _callerClient;
     private readonly VoipClient _calleeClient;
+    private readonly IPhoneLine _callerLine;
 
     public ICall CallerCall { get; }   // A (6001)
     public ICall CalleeCall { get; }   // B (6003)
 
-    private TwoLegBridgedCall(VoipClient callerClient, VoipClient calleeClient, ICall callerCall, ICall calleeCall)
+    private TwoLegBridgedCall(VoipClient callerClient, VoipClient calleeClient, IPhoneLine callerLine, ICall callerCall, ICall calleeCall)
     {
         _callerClient = callerClient;
         _calleeClient = calleeClient;
+        _callerLine = callerLine;
         CallerCall = callerCall;
         CalleeCall = calleeCall;
     }
@@ -117,7 +119,7 @@ public sealed class TwoLegBridgedCall : IAsyncDisposable
             if (!dial.IsSuccess)
                 throw new InvalidOperationException($"Bridged-Dial fehlgeschlagen: {dial.Status}");
 
-            return new TwoLegBridgedCall(callerClient, calleeClient, dial.Call!, calleeCall);
+            return new TwoLegBridgedCall(callerClient, calleeClient, callerLine, dial.Call!, calleeCall);
         }
         catch
         {
@@ -125,6 +127,22 @@ public sealed class TwoLegBridgedCall : IAsyncDisposable
             calleeClient.Dispose();
             throw;
         }
+    }
+
+    /// <summary>
+    /// Wählt vom Caller (A) aus einen Beratungs-Call zur angegebenen URI und wartet bis
+    /// <paramref name="connectTimeout"/> auf den Connected-Zustand. Gibt den verbundenen
+    /// Beratungs-<see cref="ICall"/> zurück. Ermöglicht Attended-Transfer-Tests ohne Exposure
+    /// der internen Caller-Felder.
+    /// </summary>
+    public async Task<ICall> DialCallerConsultationAsync(string uri, TimeSpan connectTimeout)
+    {
+        var result = await _callerClient.DialAndWaitUntilConnectedAsync(
+            _callerLine, uri,
+            new DialWaitOptions { ConnectTimeout = connectTimeout });
+        if (!result.IsSuccess)
+            throw new InvalidOperationException($"Beratungs-Dial fehlgeschlagen: {result.Status}");
+        return result.Call!;
     }
 
     /// <summary>
