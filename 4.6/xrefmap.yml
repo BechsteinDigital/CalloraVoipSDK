@@ -4380,6 +4380,86 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.Core.Domain.Calls.ICall.UnholdAsync
   nameWithType: ICall.UnholdAsync
+- uid: CalloraVoipSdk.Core.Domain.Calls.IReferSubscription
+  name: IReferSubscription
+  href: _api/CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.html
+  commentId: T:CalloraVoipSdk.Core.Domain.Calls.IReferSubscription
+  fullName: CalloraVoipSdk.Core.Domain.Calls.IReferSubscription
+  nameWithType: IReferSubscription
+- uid: CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportFailure(System.Int32,System.String)
+  name: ReportFailure(int, string?)
+  href: _api/CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.html#CalloraVoipSdk_Core_Domain_Calls_IReferSubscription_ReportFailure_System_Int32_System_String_
+  commentId: M:CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportFailure(System.Int32,System.String)
+  name.vb: ReportFailure(Integer, String)
+  fullName: CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportFailure(int, string?)
+  fullName.vb: CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportFailure(Integer, String)
+  nameWithType: IReferSubscription.ReportFailure(int, string?)
+  nameWithType.vb: IReferSubscription.ReportFailure(Integer, String)
+- uid: CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportFailure*
+  name: ReportFailure
+  href: _api/CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.html#CalloraVoipSdk_Core_Domain_Calls_IReferSubscription_ReportFailure_
+  commentId: Overload:CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportFailure
+  isSpec: "True"
+  fullName: CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportFailure
+  nameWithType: IReferSubscription.ReportFailure
+- uid: CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportProgress(System.Int32,System.String)
+  name: ReportProgress(int, string?)
+  href: _api/CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.html#CalloraVoipSdk_Core_Domain_Calls_IReferSubscription_ReportProgress_System_Int32_System_String_
+  commentId: M:CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportProgress(System.Int32,System.String)
+  name.vb: ReportProgress(Integer, String)
+  fullName: CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportProgress(int, string?)
+  fullName.vb: CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportProgress(Integer, String)
+  nameWithType: IReferSubscription.ReportProgress(int, string?)
+  nameWithType.vb: IReferSubscription.ReportProgress(Integer, String)
+- uid: CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportProgress*
+  name: ReportProgress
+  href: _api/CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.html#CalloraVoipSdk_Core_Domain_Calls_IReferSubscription_ReportProgress_
+  commentId: Overload:CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportProgress
+  isSpec: "True"
+  fullName: CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportProgress
+  nameWithType: IReferSubscription.ReportProgress
+- uid: CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportRinging
+  name: ReportRinging()
+  href: _api/CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.html#CalloraVoipSdk_Core_Domain_Calls_IReferSubscription_ReportRinging
+  commentId: M:CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportRinging
+  fullName: CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportRinging()
+  nameWithType: IReferSubscription.ReportRinging()
+- uid: CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportRinging*
+  name: ReportRinging
+  href: _api/CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.html#CalloraVoipSdk_Core_Domain_Calls_IReferSubscription_ReportRinging_
+  commentId: Overload:CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportRinging
+  isSpec: "True"
+  fullName: CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportRinging
+  nameWithType: IReferSubscription.ReportRinging
+- uid: CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportSuccess(System.Int32,System.String)
+  name: ReportSuccess(int, string?)
+  href: _api/CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.html#CalloraVoipSdk_Core_Domain_Calls_IReferSubscription_ReportSuccess_System_Int32_System_String_
+  commentId: M:CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportSuccess(System.Int32,System.String)
+  name.vb: ReportSuccess(Integer, String)
+  fullName: CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportSuccess(int, string?)
+  fullName.vb: CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportSuccess(Integer, String)
+  nameWithType: IReferSubscription.ReportSuccess(int, string?)
+  nameWithType.vb: IReferSubscription.ReportSuccess(Integer, String)
+- uid: CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportSuccess*
+  name: ReportSuccess
+  href: _api/CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.html#CalloraVoipSdk_Core_Domain_Calls_IReferSubscription_ReportSuccess_
+  commentId: Overload:CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportSuccess
+  isSpec: "True"
+  fullName: CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportSuccess
+  nameWithType: IReferSubscription.ReportSuccess
+- uid: CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportTrying
+  name: ReportTrying()
+  href: _api/CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.html#CalloraVoipSdk_Core_Domain_Calls_IReferSubscription_ReportTrying
+  commentId: M:CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportTrying
+  fullName: CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportTrying()
+  nameWithType: IReferSubscription.ReportTrying()
+- uid: CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportTrying*
+  name: ReportTrying
+  href: _api/CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.html#CalloraVoipSdk_Core_Domain_Calls_IReferSubscription_ReportTrying_
+  commentId: Overload:CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportTrying
+  isSpec: "True"
+  fullName: CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportTrying
+  nameWithType: IReferSubscription.ReportTrying
 - uid: CalloraVoipSdk.Core.Domain.Calls.NetworkQuality
   name: NetworkQuality
   href: _api/CalloraVoipSdk.Core.Domain.Calls.NetworkQuality.html
@@ -4897,6 +4977,19 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.Core.Domain.Events.TransferRequestedEventArgs.Call
   nameWithType: TransferRequestedEventArgs.Call
+- uid: CalloraVoipSdk.Core.Domain.Events.TransferRequestedEventArgs.Subscription
+  name: Subscription
+  href: _api/CalloraVoipSdk.Core.Domain.Events.TransferRequestedEventArgs.html#CalloraVoipSdk_Core_Domain_Events_TransferRequestedEventArgs_Subscription
+  commentId: P:CalloraVoipSdk.Core.Domain.Events.TransferRequestedEventArgs.Subscription
+  fullName: CalloraVoipSdk.Core.Domain.Events.TransferRequestedEventArgs.Subscription
+  nameWithType: TransferRequestedEventArgs.Subscription
+- uid: CalloraVoipSdk.Core.Domain.Events.TransferRequestedEventArgs.Subscription*
+  name: Subscription
+  href: _api/CalloraVoipSdk.Core.Domain.Events.TransferRequestedEventArgs.html#CalloraVoipSdk_Core_Domain_Events_TransferRequestedEventArgs_Subscription_
+  commentId: Overload:CalloraVoipSdk.Core.Domain.Events.TransferRequestedEventArgs.Subscription
+  isSpec: "True"
+  fullName: CalloraVoipSdk.Core.Domain.Events.TransferRequestedEventArgs.Subscription
+  nameWithType: TransferRequestedEventArgs.Subscription
 - uid: CalloraVoipSdk.Core.Domain.Events.TransferRequestedEventArgs.TargetUri
   name: TargetUri
   href: _api/CalloraVoipSdk.Core.Domain.Events.TransferRequestedEventArgs.html#CalloraVoipSdk_Core_Domain_Events_TransferRequestedEventArgs_TargetUri

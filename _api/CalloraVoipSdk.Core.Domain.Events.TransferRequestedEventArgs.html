@@ -218,6 +218,40 @@ Class TransferRequestedEventArgs  <a class="header-action link-secondary" title=
 
 
 
+  <a id="CalloraVoipSdk_Core_Domain_Events_TransferRequestedEventArgs_Subscription_" data-uid="CalloraVoipSdk.Core.Domain.Events.TransferRequestedEventArgs.Subscription*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Events_TransferRequestedEventArgs_Subscription" data-uid="CalloraVoipSdk.Core.Domain.Events.TransferRequestedEventArgs.Subscription">
+  Subscription
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Events/TransferRequestedEventArgs.cs/#L21"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Live handle to the REFER's implicit subscription (RFC 3515 / RFC 6665). After accepting, the
+application places the referred call itself and reports its progress and final outcome through
+this handle so the transferor sees the real status. Reporting is optional.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IReferSubscription Subscription { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.html">IReferSubscription</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
   <a id="CalloraVoipSdk_Core_Domain_Events_TransferRequestedEventArgs_TargetUri_" data-uid="CalloraVoipSdk.Core.Domain.Events.TransferRequestedEventArgs.TargetUri*"></a>
 
   <h3 id="CalloraVoipSdk_Core_Domain_Events_TransferRequestedEventArgs_TargetUri" data-uid="CalloraVoipSdk.Core.Domain.Events.TransferRequestedEventArgs.TargetUri">
