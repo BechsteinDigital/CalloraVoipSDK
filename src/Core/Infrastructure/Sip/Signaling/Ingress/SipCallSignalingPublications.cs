@@ -85,7 +85,7 @@ internal sealed class SipCallSignalingPublications
             var branch = SipProtocol.NewBranch();
             var headers = BuildPublishHeaders(
                 localEndPoint, branch, routeCandidate.Transport, fromHeader, toHeader, callId, cseq,
-                request.EventType, expires, contentType, body);
+                request.EventType, expires, contentType, body, request.IfMatch);
 
             SipResponse response;
             try
@@ -111,7 +111,7 @@ internal sealed class SipCallSignalingPublications
                 var retryBranch = SipProtocol.NewBranch();
                 var retryHeaders = BuildPublishHeaders(
                     localEndPoint, retryBranch, routeCandidate.Transport, fromHeader, toHeader, callId, cseq,
-                    request.EventType, expires, contentType, body);
+                    request.EventType, expires, contentType, body, request.IfMatch);
                 retryHeaders[authResultHeaderName] = authorizationHeader;
                 try
                 {
@@ -174,8 +174,10 @@ internal sealed class SipCallSignalingPublications
         string eventType,
         int expires,
         string contentType,
-        string body) =>
-        new(StringComparer.OrdinalIgnoreCase)
+        string body,
+        string? ifMatch)
+    {
+        var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["Via"] = SipSignalingFormat.BuildVia(localEndPoint, branch, transport),
             ["Max-Forwards"] = "70",
@@ -185,8 +187,18 @@ internal sealed class SipCallSignalingPublications
             ["CSeq"] = $"{cseq} PUBLISH",
             ["Event"] = eventType,
             ["Expires"] = expires.ToString(CultureInfo.InvariantCulture),
-            ["Content-Type"] = contentType,
             ["User-Agent"] = "CalloraVoipSdk/1.0",
             ["Content-Length"] = Encoding.UTF8.GetByteCount(body).ToString(CultureInfo.InvariantCulture)
         };
+
+        // RFC 3903 §4: an update (refresh/modify/remove) targets a prior publication by its entity-tag.
+        if (!string.IsNullOrWhiteSpace(ifMatch))
+            headers["SIP-If-Match"] = ifMatch;
+
+        // RFC 3903 §6 / RFC 3261 §20.15: a bodyless PUBLISH (refresh/remove) carries no Content-Type.
+        if (body.Length > 0)
+            headers["Content-Type"] = contentType;
+
+        return headers;
+    }
 }
