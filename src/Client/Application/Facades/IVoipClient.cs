@@ -5,6 +5,7 @@ using CalloraVoipSdk.Core.Application.Ports.Audio;
 using CalloraVoipSdk.Core.Domain.Calls;
 using CalloraVoipSdk.Core.Domain.Events;
 using CalloraVoipSdk.Core.Domain.Lines;
+using CalloraVoipSdk.Core.Domain.Publications;
 using CalloraVoipSdk.Modules;
 
 namespace CalloraVoipSdk;
@@ -82,6 +83,19 @@ public interface IVoipClient : IDisposable
     /// <param name="ct">Cancels the send.</param>
     /// <returns>A task that completes when the peer answers 2xx; it faults on a non-2xx or no response.</returns>
     Task SendMessageAsync(string targetUri, string body, string contentType = "text/plain", CancellationToken ct = default);
+
+    /// <summary>
+    /// Publishes event state (RFC 3903, e.g. presence) for the first registered line's address-of-record and
+    /// returns the SIP-ETag and granted lifetime. Register a line first, or use
+    /// <see cref="IPhoneLine.PublishAsync"/> to publish from a specific line.
+    /// </summary>
+    /// <param name="eventType">The event package (Event header, e.g. <c>presence</c>).</param>
+    /// <param name="body">The event-state document to publish (for example a PIDF body).</param>
+    /// <param name="contentType">The body's MIME type (e.g. <c>application/pidf+xml</c>).</param>
+    /// <param name="expiresSeconds">Requested publication lifetime in seconds. Defaults to 3600.</param>
+    /// <param name="ct">Cancels the publish.</param>
+    /// <returns>The assigned entity-tag and granted lifetime; faults on a non-2xx or no response.</returns>
+    Task<PublishResult> PublishAsync(string eventType, string body, string contentType = "text/plain", int expiresSeconds = 3600, CancellationToken ct = default);
 
     /// <summary>Attaches default audio routing to the specified call.</summary>
     Task AttachDefaultAudioAsync(ICall call, CancellationToken ct = default);
