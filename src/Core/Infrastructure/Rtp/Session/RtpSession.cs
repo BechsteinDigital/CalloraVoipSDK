@@ -96,10 +96,12 @@ internal sealed class RtpSession : IRtpSession
     public event EventHandler? SsrcCollisionDetected;
 
     /// <summary>
-    /// Raised when an inbound datagram on the RTP socket is identified as RTCP
-    /// in RTCP-MUX mode (RFC 5761).
+    /// Raised when an inbound datagram on the RTP socket is identified as RTCP in RTCP-MUX mode (RFC 5761),
+    /// carrying the decoded compound. The compound is decoded once here and the shared, read-only list is
+    /// handed to every subscriber (quality monitor, keyframe feedback, transport-cc) so the same bytes are not
+    /// re-parsed per consumer.
     /// </summary>
-    internal event Action<byte[]>? ControlPacketReceived;
+    internal event Action<IReadOnlyList<RtcpPacket>>? RtcpCompoundReceived;
 
     /// <summary>
     /// Raised when an inbound datagram on the media socket is classified as STUN
@@ -595,9 +597,22 @@ internal sealed class RtpSession : IRtpSession
                 rtcpDatagram = datagram.ToArray();
             }
 
+            IReadOnlyList<RtcpPacket> packets;
             try
             {
-                ControlPacketReceived?.Invoke(rtcpDatagram);
+                // Decode the compound once; every subscriber shares this read-only list (no per-consumer
+                // re-parse). A malformed compound is dropped — RTCP must never break the receive loop.
+                packets = _rtcpCodec.Decode(rtcpDatagram);
+            }
+            catch (Exception ex) when (ex is ArgumentException or NotSupportedException)
+            {
+                _logger.LogDebug("Dropping malformed inbound RTCP compound from {Source}: {Message}", source, ex.Message);
+                return;
+            }
+
+            try
+            {
+                RtcpCompoundReceived?.Invoke(packets);
             }
             catch (Exception ex)
             {
@@ -862,7 +877,7 @@ internal sealed class RtpSession : IRtpSession
 
         loopCts?.Dispose();
         _udp.Dispose();
-        ControlPacketReceived = null;
+        RtcpCompoundReceived = null;
         StunPacketReceived = null;
         DtlsPacketReceived = null;
         SecondaryPacketReceived = null;

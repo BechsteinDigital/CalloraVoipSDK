@@ -1,5 +1,4 @@
 using CalloraVoipSdk.Core.Application.Media.Rtcp.Packets;
-using CalloraVoipSdk.Core.Application.Media.Rtcp.Wire;
 using CalloraVoipSdk.Core.Domain.Calls;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
 using Microsoft.Extensions.Logging;
@@ -24,7 +23,6 @@ internal sealed class TransportCcCongestionController
     private const double FairLossRatio = 0.02; // ≥2% loss → mild stress
 
     private readonly byte _extensionId;
-    private readonly IRtcpPacketCodec _codec;
     private readonly TransportCcSendHistory _sendHistory;
     private readonly TransportCcDelayTrendEstimator _delayTrend;
     private readonly TransportCcLossEstimator _loss;
@@ -35,7 +33,6 @@ internal sealed class TransportCcCongestionController
 
     public TransportCcCongestionController(
         byte extensionId,
-        IRtcpPacketCodec codec,
         TransportCcSendHistory sendHistory,
         TransportCcDelayTrendEstimator delayTrend,
         TransportCcLossEstimator loss,
@@ -44,7 +41,6 @@ internal sealed class TransportCcCongestionController
         long ticksPerSecond,
         ILogger logger)
     {
-        ArgumentNullException.ThrowIfNull(codec);
         ArgumentNullException.ThrowIfNull(sendHistory);
         ArgumentNullException.ThrowIfNull(delayTrend);
         ArgumentNullException.ThrowIfNull(loss);
@@ -54,7 +50,6 @@ internal sealed class TransportCcCongestionController
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(ticksPerSecond);
 
         _extensionId = extensionId;
-        _codec = codec;
         _sendHistory = sendHistory;
         _delayTrend = delayTrend;
         _loss = loss;
@@ -106,24 +101,12 @@ internal sealed class TransportCcCongestionController
     }
 
     /// <summary>
-    /// Processes an inbound RTCP datagram (already SRTCP-unprotected): each transport-cc report it
-    /// contains updates the delay-trend and loss estimators. A malformed datagram is dropped —
-    /// feedback must never break the receive path.
+    /// Processes the decoded inbound RTCP compound (already SRTCP-unprotected and parsed once by the session):
+    /// each transport-cc report it contains updates the delay-trend and loss estimators.
     /// </summary>
-    public void OnControlDatagram(byte[] datagram)
+    public void OnRtcpPackets(IReadOnlyList<RtcpPacket> packets)
     {
-        ArgumentNullException.ThrowIfNull(datagram);
-
-        IReadOnlyList<RtcpPacket> packets;
-        try
-        {
-            packets = _codec.Decode(datagram);
-        }
-        catch (ArgumentException ex)
-        {
-            _logger.LogDebug(ex, "Dropping malformed inbound RTCP datagram for transport-cc.");
-            return;
-        }
+        ArgumentNullException.ThrowIfNull(packets);
 
         foreach (var packet in packets)
         {

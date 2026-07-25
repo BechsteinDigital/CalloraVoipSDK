@@ -224,7 +224,7 @@ public sealed class QosMetricsTests
         public event Action<CallAudioFrame>? FrameReceived { add { } remove { } }
         public event Action<byte, int>? DtmfReceived { add { } remove { } }
         public event Action<CallMediaRuntimeMetrics>? RuntimeMetricsUpdated { add { } remove { } }
-        public event Action<byte[]>? RtcpMuxDatagramReceived { add { } remove { } }
+        public event Action<IReadOnlyList<RtcpPacket>>? RtcpCompoundReceived { add { } remove { } }
         public event Action? MediaConsentLost { add { } remove { } }
         public event Action? MediaConnectivityDegraded { add { } remove { } }
         public event Action? MediaConnectivityRecovered { add { } remove { } }
