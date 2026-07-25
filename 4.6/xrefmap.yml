@@ -4402,6 +4402,19 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportFailure
   nameWithType: IReferSubscription.ReportFailure
+- uid: CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportPending
+  name: ReportPending()
+  href: _api/CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.html#CalloraVoipSdk_Core_Domain_Calls_IReferSubscription_ReportPending
+  commentId: M:CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportPending
+  fullName: CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportPending()
+  nameWithType: IReferSubscription.ReportPending()
+- uid: CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportPending*
+  name: ReportPending
+  href: _api/CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.html#CalloraVoipSdk_Core_Domain_Calls_IReferSubscription_ReportPending_
+  commentId: Overload:CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportPending
+  isSpec: "True"
+  fullName: CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportPending
+  nameWithType: IReferSubscription.ReportPending
 - uid: CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportProgress(System.Int32,System.String)
   name: ReportProgress(int, string?)
   href: _api/CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.html#CalloraVoipSdk_Core_Domain_Calls_IReferSubscription_ReportProgress_System_Int32_System_String_

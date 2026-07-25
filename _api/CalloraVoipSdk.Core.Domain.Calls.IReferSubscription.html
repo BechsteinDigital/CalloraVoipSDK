@@ -142,7 +142,7 @@ returns without awaiting the network.
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_IReferSubscription_ReportFailure_System_Int32_System_String_" data-uid="CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportFailure(System.Int32,System.String)">
   ReportFailure(int, string?)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/IReferSubscription.cs/#L52"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/IReferSubscription.cs/#L59"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Reports that the referred call failed — a <code>terminated</code> NOTIFY with the sipfrag
@@ -176,11 +176,42 @@ report wins; later reports are ignored.</p>
 
 
 
+  <a id="CalloraVoipSdk_Core_Domain_Calls_IReferSubscription_ReportPending_" data-uid="CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportPending*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_IReferSubscription_ReportPending" data-uid="CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportPending">
+  ReportPending()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/IReferSubscription.cs/#L30"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Marks the subscription as pending (RFC 6665 §4.1.3): the transfer was accepted but the referred
+call has not started yet. Makes the immediate NOTIFY carry <code>Subscription-State: pending</code> instead of
+<code>active</code>. Only effective when called synchronously inside the transfer handler, before the first
+NOTIFY is sent; the first subsequent progress report transitions the subscription to <code>active</code>.
+Ignored once the subscription is already active or terminated.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void ReportPending()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
   <a id="CalloraVoipSdk_Core_Domain_Calls_IReferSubscription_ReportProgress_" data-uid="CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportProgress*"></a>
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_IReferSubscription_ReportProgress_System_Int32_System_String_" data-uid="CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportProgress(System.Int32,System.String)">
   ReportProgress(int, string?)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/IReferSubscription.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/IReferSubscription.cs/#L45"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Reports arbitrary interim progress of the referred call as an <code>active</code> NOTIFY
@@ -218,7 +249,7 @@ carrying the sipfrag <code>SIP/2.0 {statusCode} {reasonPhrase}</code>. Intended 
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_IReferSubscription_ReportRinging" data-uid="CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportRinging">
   ReportRinging()
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/IReferSubscription.cs/#L31"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/IReferSubscription.cs/#L38"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Reports that the referred call is ringing — an <code>active</code> NOTIFY with the
@@ -246,7 +277,7 @@ sipfrag <code>SIP/2.0 180 Ringing</code>. Ignored once the subscription has term
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_IReferSubscription_ReportSuccess_System_Int32_System_String_" data-uid="CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportSuccess(System.Int32,System.String)">
   ReportSuccess(int, string?)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/IReferSubscription.cs/#L45"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/IReferSubscription.cs/#L52"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Reports that the referred call completed successfully — a <code>terminated</code> NOTIFY
@@ -284,7 +315,7 @@ subscription. The first terminal report wins; later reports are ignored.</p>
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_IReferSubscription_ReportTrying" data-uid="CalloraVoipSdk.Core.Domain.Calls.IReferSubscription.ReportTrying">
   ReportTrying()
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/IReferSubscription.cs/#L27"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/IReferSubscription.cs/#L34"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Reports that the referred call is being tried — an <code>active</code> NOTIFY with the
