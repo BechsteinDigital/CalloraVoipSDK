@@ -39,6 +39,19 @@ Die Asterisk-Interop-Suite (`tests/CalloraVoipSdk.InteropTests`, echter `andrius
 
 Media-Assertion unidirektional (`SilenceAudioDevice` sendet nichts): Asterisk sendet Milliwatt/Töne, Empfang via `ICall.RtpStatistics.PacketsReceived`. Plain RTP außer im SDES-Test. **Vorbehalt F011-DTMF:** der DTMF-*Send* im early dialog ist nur SDK-seitig nachgewiesen (`SendDtmfAsync` wirft im Ringing nicht + telephone-event verhandelt); der Peer-*Empfang* im early dialog und der zur Laufzeit genommene Sendepfad (RTP-telephone-event vs. stiller SIP-INFO-Fallback bei RTP-Fehler) sind NICHT end-to-end bestätigt. Neue Befunde dieser Phase: **F005b, F010, F011**.
 
+## Coverage-Notiz Zwei-Bein-Media, bidirektional gemessen (Phase 6+, 2026-07-23)
+
+Neu: **echter Zwei-Bein-Media-Call** durch den PBX statt der bisherigen unidirektionalen Milliwatt-Messung. Zwei `VoipClient`-Legs (A=6001, B=6003) werden über den echten Asterisk gebrückt (A wählt Extension `6003` → `Dial(PJSIP/6003)` → B nimmt inbound an); beide Legs senden aktiv markiertes PCMU via `IMediaSender` und empfangen via `IMediaReceiver`. **6 harte `[DockerRequiredFact]`, 0 Skip** (`AsteriskTwoLegMediaInteropTests` + Fixtures `TwoLegBridgedCall`/`MarkedPcmuSource`) — 2 Fixture-Smoke (Endpoint-6003-Registrierung, Bridged-Call-Aufbau beide Legs Connected/PCMU) plus die 4 Mess-Ebenen:
+
+- **Ebene 1 — bidirektionale RTP-Paketzähler:** auf BEIDEN Legs `RtpStatistics.PacketsSent>0 && PacketsReceived>0` → Media floss in beide Richtungen durch den Relay.
+- **Ebene 2 lokal — RTCP:** `RtcpActive`, `LocalReceiveJitterMs` (endlich ≥0), `LocalReceivePacketLossPercent` (0–100) auf beiden Legs.
+- **Ebene 2 remote — RTCP RR/SR:** `RemoteReportJitterMs`, `RemoteReportPacketLossPercent`, `RoundTripTimeMs` sind gegen echten Asterisk **befüllt** (empirisch ~0,6 ms Jitter / 0 % Loss / ~1 ms RTT). **Positiv-Befund:** der SDK parst Asterisks RTCP korrekt und liefert die Peer-Sicht + eine **echte RTT an L4** — die L3/L4-Ergänzung zu **F004** (an bare-L2 ist RTT nur ein statischer Hint; über den vollen `VoipClient`/`CallMediaOrchestrator`-Pfad wird sie real gemessen).
+- **Ebene 3 — byte-exakte Inhaltsverifikation A→B:** markierte PCMU-Payload (uint32-Sequenz in den ersten 4 Bytes) kommt end-to-end unverändert an; Asterisk relayt PCMU byte-exakt (kein Transcoding), längster zusammenhängender Empfangslauf 171 von ~400 gesendeten.
+
+**Fixture-Fakten (wiederverwendbar):** `direct_media=no` auf den gebrückten Endpunkten 6001/6003 ist **nötig** — sonst re-INVITEt Asterisk (PJSIP-Default `direct_media=yes`) die Legs auf direkte Endpoint-zu-Endpoint-Media, verlässt den Medienpfad, und kein Leg empfängt RTP. PCMU wird auf beiden Clients gepinnt (`PreferredAudioCodecs=["PCMU"]`), weil der SDK per Default **G.722 (PT 9) vor PCMU** anbietet — ohne Pinning verhandelt der Caller-Leg G.722, der Callee (ulaw-only) PCMU → Codec-Mismatch/Transcoding (kein Defekt, legitime Default-Präferenz).
+
+**Coverage-Ehrlichkeit:** Audio wird SDK-seitig via `IMediaSender` injiziert (kein Mikrofon, kein Codec-Encode) — dies misst den **Transport-/Medienpfad**, nicht akustische Qualität. Nur **Plain RTP / PCMU**; SRTP-SDES-Variante und Codec-Mismatch/Transcoding-Pfad bleiben offen (Folge-Slices). **MOS null:** `RemoteMosListeningQuality`/`RemoteMosConversationalQuality` bleiben gegen Asterisk `null` — Asterisk sendet kein RTCP-XR VoIP-Metrics (RFC 3611), und der SDK berechnet keinen lokalen MOS-Schätzwert (E-Modell). Kein Defekt (peer-/feature-abhängig), aber als Lücke notiert: eine lokale MOS-Schätzung wäre ein mögliches SDK-Feature.
+
 ## Verifikations-Notiz F002 (adversarial, opus, 2026-07-21)
 
 Kausalkette Ende-zu-Ende gegen den echten Code bestätigt (Verdict **CONFIRMED**):
