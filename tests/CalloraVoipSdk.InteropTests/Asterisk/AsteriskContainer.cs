@@ -69,6 +69,7 @@ public sealed class AsteriskContainer : IAsyncDisposable
         "media_encryption=sdes\n" +               // erzwingt RTP/SAVP + a=crypto (SDES)
         "auth=6002\n" +
         "aors=6002\n" +
+        "direct_media=no\n" +
         "\n" +
         "[6002]\n" +
         "type=auth\n" +
@@ -99,6 +100,27 @@ public sealed class AsteriskContainer : IAsyncDisposable
         "\n" +
         "[6003]\n" +
         "type=aor\n" +
+        "max_contacts=1\n" +
+        "\n" +
+        // Vierter Endpoint: SRTP-SDES, PCMU-only — Callee-Bein der verschlüsselten Zwei-Bein-Bridge.
+        "[6004]\n" +
+        "type=endpoint\n" +
+        "context=default\n" +
+        "disallow=all\n" +
+        "allow=ulaw\n" +
+        "media_encryption=sdes\n" +
+        "auth=6004\n" +
+        "aors=6004\n" +
+        "direct_media=no\n" +
+        "\n" +
+        "[6004]\n" +
+        "type=auth\n" +
+        "auth_type=userpass\n" +
+        "username=6004\n" +
+        "password=secret\n" +
+        "\n" +
+        "[6004]\n" +
+        "type=aor\n" +
         "max_contacts=1\n";
 
     // Dialplan für Call-Tests. Kontext [default] passt zu context=default am Endpoint 6001.
@@ -126,7 +148,8 @@ public sealed class AsteriskContainer : IAsyncDisposable
                                                   //   Wait(4) ließ das SDES-Early-Media-Fenster kollabieren.
         "same => n,Answer()\n" +                  // → 200 OK
         "same => n,Milliwatt()\n" +               // Post-Answer-Media
-        "exten => 6003,1,Dial(PJSIP/6003,30)\n";  // brückt den Anruf an den zweiten registrierten SDK-Endpoint
+        "exten => 6003,1,Dial(PJSIP/6003,30)\n" +   // brückt an den zweiten registrierten SDK-Endpoint (Plain)
+        "exten => 6004,1,Dial(PJSIP/6004,30)\n";     // brückt an den SDES-Callee (verschlüsselte Zwei-Bein-Bridge)
 
     private readonly IContainer _container;
     private readonly FileInfo _pjsipConfFile;
@@ -184,6 +207,12 @@ public sealed class AsteriskContainer : IAsyncDisposable
 
     /// <summary>Passwort des Bridge-Endpoints (Digest-Auth).</summary>
     public string BridgePassword => "secret";
+
+    /// <summary>Benutzername des vierten Endpoints (SRTP-SDES, PCMU-only), Callee-Bein der verschlüsselten Bridge.</summary>
+    public string SdesBridgeUsername => "6004";
+
+    /// <summary>Passwort des SDES-Bridge-Endpoints (Digest-Auth).</summary>
+    public string SdesBridgePassword => "secret";
 
     /// <summary>Docker-Host (meist 127.0.0.1/localhost) für den Port-gemappten UDP-Zugang.</summary>
     public string Host => _container.Hostname;

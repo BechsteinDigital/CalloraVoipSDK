@@ -15,6 +15,22 @@ public sealed record TwoLegMediaResult(
     IReadOnlyList<uint> CalleeReceivedSequences,
     IReadOnlyList<uint> CallerReceivedSequences);
 
+/// <summary>Profil eines Zwei-Bein-Bridged-Calls: Endpunkte, Bridge-Extension und SRTP-Policy.</summary>
+public sealed record TwoLegProfile(
+    string CallerUser, string CallerPass,
+    string CalleeUser, string CalleePass,
+    string BridgeExtension,
+    SrtpPolicy SrtpPolicy)
+{
+    /// <summary>Plain RTP / PCMU über die Endpunkte 6001 (Caller) und 6003 (Callee).</summary>
+    public static TwoLegProfile Plain(AsteriskContainer a) =>
+        new(a.Username, a.Password, a.BridgeUsername, a.BridgePassword, "6003", SrtpPolicy.Disabled);
+
+    /// <summary>SRTP-SDES / PCMU über die Endpunkte 6002 (Caller) und 6004 (Callee).</summary>
+    public static TwoLegProfile Sdes(AsteriskContainer a) =>
+        new(a.SdesUsername, a.SdesPassword, a.SdesBridgeUsername, a.SdesBridgePassword, "6004", SrtpPolicy.Required);
+}
+
 /// <summary>
 /// L4-Fixture: zwei <see cref="VoipClient"/>-Legs über einen echten Asterisk gebrückt (A=6001 wählt
 /// Extension 6003 → Asterisk Dial(PJSIP/6003) → B=6003 nimmt inbound an). Kapselt Aufbau, beidseitige
@@ -36,11 +52,11 @@ public sealed class TwoLegBridgedCall : IAsyncDisposable
         CalleeCall = calleeCall;
     }
 
-    private static VoipClient NewClient() =>
+    private static VoipClient NewClient(SrtpPolicy srtpPolicy) =>
         new(new VoipConfiguration
         {
             UserAgent = "CalloraInteropTest/1.0",
-            SrtpPolicy = SrtpPolicy.Disabled,
+            SrtpPolicy = srtpPolicy,
             PreferredAudioCodecs = new[] { "PCMU" },   // beide Legs PCMU → Same-Codec-Passthrough für die Inhaltsverifikation
         });
 
@@ -62,14 +78,15 @@ public sealed class TwoLegBridgedCall : IAsyncDisposable
     }
 
     /// <summary>Baut den gebrückten Call auf und wartet, bis beide Legs Connected sind.</summary>
-    public static async Task<TwoLegBridgedCall> StartAsync(AsteriskContainer asterisk)
+    public static async Task<TwoLegBridgedCall> StartAsync(AsteriskContainer asterisk, TwoLegProfile? profile = null)
     {
-        var callerClient = NewClient();
-        var calleeClient = NewClient();
+        var p = profile ?? TwoLegProfile.Plain(asterisk);
+        var callerClient = NewClient(p.SrtpPolicy);
+        var calleeClient = NewClient(p.SrtpPolicy);
         try
         {
-            var callerLine = await RegisterAsync(asterisk, callerClient, asterisk.Username, asterisk.Password);
-            await RegisterAsync(asterisk, calleeClient, asterisk.BridgeUsername, asterisk.BridgePassword);
+            var callerLine = await RegisterAsync(asterisk, callerClient, p.CallerUser, p.CallerPass);
+            await RegisterAsync(asterisk, calleeClient, p.CalleeUser, p.CalleePass);
 
             // B nimmt den eingehenden (von Asterisk gebrückten) Call an. Der Handler erfasst nur den Call;
             // A's Dial blockiert bis zum Accept → beides läuft nebenläufig.
@@ -78,7 +95,7 @@ public sealed class TwoLegBridgedCall : IAsyncDisposable
             calleeClient.IncomingCall += OnIncoming;
 
             var dialTask = callerClient.DialAndWaitUntilConnectedAsync(
-                callerLine, asterisk.CallTargetUri("6003"),
+                callerLine, asterisk.CallTargetUri(p.BridgeExtension),
                 new DialWaitOptions { ConnectTimeout = TimeSpan.FromSeconds(20) });
 
             var calleeCall = await calleeTcs.Task.WaitAsync(TimeSpan.FromSeconds(20));
