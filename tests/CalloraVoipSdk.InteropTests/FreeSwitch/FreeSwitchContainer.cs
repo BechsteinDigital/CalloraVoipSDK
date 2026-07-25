@@ -14,12 +14,38 @@ public sealed class FreeSwitchContainer : IAsyncDisposable
 {
     // FreeSWITCH-Domain in der Vanilla-Config = $${domain} = Container-IP. Wir referenzieren sie im
     // Dialplan als $${domain}; Registrierungen landen via force-register-domain in dieser Domain.
-    private const string DirectoryPath = "/etc/freeswitch/directory/default/zzz_callora.xml";
-    private const string DialplanPath = "/etc/freeswitch/dialplan/default.xml";
+    //
+    // ★ Das safarov-Image-Entrypoint kopiert beim Start `cp -varf .../vanilla/* /etc/freeswitch/`
+    //   (nur wenn freeswitch.xml fehlt = immer beim frischen Container) und ÜBERSCHREIBT dabei
+    //   gleichnamige Mounts. Direkt nach /etc/freeswitch gemountete Overrides (dialplan/default.xml,
+    //   local_stream.conf.xml) würden also geklobbert. Darum: unsere Configs in ein Staging-Verzeichnis
+    //   /callora/ mounten und per eigenem Entrypoint NACH der Vanilla-Kopie drüberlegen.
+    private const string StageDir = "/callora";
+
+    // mod_local_stream startet für jeden konfigurierten Stream (moh/default) einen Thread, der die
+    // Musik-Sounds liest. Das safarov-Image liefert diese Sounds NICHT → der Thread retryt endlos
+    // ("Unknown source moh") bei ~99 % CPU und verhungert das Call-Setup. Wir überlagern
+    // local_stream.conf.xml leer: keine Stream-Directories → keine Threads → kein Spin. MOH brauchen
+    // die Media-Tests nicht.
+    private const string EmptyLocalStreamXml =
+        "<configuration name=\"local_stream.conf\" description=\"stream files\">\n</configuration>\n";
+
+    // Eigenes Entrypoint: Vanilla-Kopie ausführen, DANN unsere Overrides drüberlegen, dann FreeSWITCH
+    // im Vordergrund starten (exec → PID 1, empfängt Signale; -nc -nf = keine Konsole/kein Fork).
+    // Image ist Alpine-basiert (busybox) → /bin/sh, kein bash; cp-Flags -arf + vanilla/* wie das
+    // Original-Entrypoint.
+    private const string EntrypointScript =
+        "set -e; mkdir -p /etc/freeswitch; " +
+        "cp -arf /usr/share/freeswitch/conf/vanilla/* /etc/freeswitch/; " +
+        "cp " + StageDir + "/directory.xml /etc/freeswitch/directory/default/zzz_callora.xml; " +
+        "cp " + StageDir + "/dialplan.xml /etc/freeswitch/dialplan/default.xml; " +
+        "cp " + StageDir + "/local_stream.conf.xml /etc/freeswitch/autoload_configs/local_stream.conf.xml; " +
+        "exec /usr/bin/freeswitch -nc -nf -nonat";
 
     private readonly IContainer _container;
     private readonly FileInfo _directoryFile;
     private readonly FileInfo _dialplanFile;
+    private readonly FileInfo _localStreamFile;
 
     /// <summary>Erstellt (noch nicht gestartet) den FreeSWITCH-Container.</summary>
     /// <param name="extraBridgePairs">Zusätzliche Plain-RTP-Paare sc{i}/se{i} für den Soak (0 = Basis).</param>
@@ -27,10 +53,13 @@ public sealed class FreeSwitchContainer : IAsyncDisposable
     {
         _directoryFile = WriteTemp(BuildDirectoryXml(extraBridgePairs));
         _dialplanFile = WriteTemp(BuildDialplanXml(extraBridgePairs));
+        _localStreamFile = WriteTemp(EmptyLocalStreamXml);
 
         _container = new ContainerBuilder("safarov/freeswitch:latest")
-            .WithResourceMapping(_directoryFile, new FileInfo(DirectoryPath))
-            .WithResourceMapping(_dialplanFile, new FileInfo(DialplanPath))
+            .WithResourceMapping(_directoryFile, new FileInfo($"{StageDir}/directory.xml"))
+            .WithResourceMapping(_dialplanFile, new FileInfo($"{StageDir}/dialplan.xml"))
+            .WithResourceMapping(_localStreamFile, new FileInfo($"{StageDir}/local_stream.conf.xml"))
+            .WithEntrypoint("/bin/sh", "-c", EntrypointScript)
             .WithExposedPort("5060/udp")
             .WithPortBinding("5060/udp", assignRandomHostPort: true)
             .WithWaitStrategy(Wait.ForUnixContainer().UntilMessageIsLogged("MSG Thread 0 Started"))
@@ -157,5 +186,6 @@ public sealed class FreeSwitchContainer : IAsyncDisposable
         await _container.DisposeAsync().ConfigureAwait(false);
         try { _directoryFile.Delete(); } catch { /* best effort */ }
         try { _dialplanFile.Delete(); } catch { /* best effort */ }
+        try { _localStreamFile.Delete(); } catch { /* best effort */ }
     }
 }
