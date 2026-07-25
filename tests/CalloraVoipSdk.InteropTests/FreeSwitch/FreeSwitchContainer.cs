@@ -33,13 +33,18 @@ public sealed class FreeSwitchContainer : IAsyncDisposable
     // Eigenes Entrypoint: Vanilla-Kopie ausführen, DANN unsere Overrides drüberlegen, dann FreeSWITCH
     // im Vordergrund starten (exec → PID 1, empfängt Signale; -nc -nf = keine Konsole/kein Fork).
     // Image ist Alpine-basiert (busybox) → /bin/sh, kein bash; cp-Flags -arf + vanilla/* wie das
-    // Original-Entrypoint.
+    // Original-Entrypoint. Nach der Vanilla-Kopie:
+    //  • unsere Overlays drüberlegen (Directory/Dialplan/local_stream);
+    //  • internal-Profil surgisch patchen: inbound-late-negotiation=false erzwingt frühe Codec-
+    //    Negotiation + Transcoding, statt die Caller-Codecs an den PCMU-only-Callee durchzureichen
+    //    (sonst scheitert der Codec-Mismatch-Bridge-Call; für Plain-PCMU unschädlich).
     private const string EntrypointScript =
         "set -e; mkdir -p /etc/freeswitch; " +
         "cp -arf /usr/share/freeswitch/conf/vanilla/* /etc/freeswitch/; " +
         "cp " + StageDir + "/directory.xml /etc/freeswitch/directory/default/zzz_callora.xml; " +
         "cp " + StageDir + "/dialplan.xml /etc/freeswitch/dialplan/default.xml; " +
         "cp " + StageDir + "/local_stream.conf.xml /etc/freeswitch/autoload_configs/local_stream.conf.xml; " +
+        "sed -i '/inbound-late-negotiation/s/true/false/' /etc/freeswitch/sip_profiles/internal.xml; " +
         "exec /usr/bin/freeswitch -nc -nf -nonat";
 
     private readonly IContainer _container;
@@ -115,8 +120,8 @@ public sealed class FreeSwitchContainer : IAsyncDisposable
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("<include>");
         sb.AppendLine("  <context name=\"default\">");
-        AppendBridge(sb, "6003");
-        AppendBridge(sb, "6004");
+        AppendBridge(sb, "6003", secure: false);
+        AppendBridge(sb, "6004", secure: true);
         sb.AppendLine("    <extension name=\"callora-media-playback\">");
         sb.AppendLine("      <condition field=\"destination_number\" expression=\"^answer$\">");
         sb.AppendLine("        <action application=\"answer\"/>");
@@ -124,17 +129,29 @@ public sealed class FreeSwitchContainer : IAsyncDisposable
         sb.AppendLine("      </condition>");
         sb.AppendLine("    </extension>");
         for (var i = 0; i < extraBridgePairs; i++)
-            AppendBridge(sb, $"se{i}");
+            AppendBridge(sb, $"se{i}", secure: false);
         sb.AppendLine("  </context>");
         sb.AppendLine("</include>");
         return sb.ToString();
     }
 
-    private static void AppendBridge(System.Text.StringBuilder sb, string callee)
+    // Erzwingt am AUSGEHENDEN (Callee-)Bridge-Bein den Callee-Codec (PCMU) und – bei SDES – SRTP.
+    // ★ Directory-<variables> (absolute_codec_string / rtp_secure_media) gelten NUR wenn der User selbst
+    //   anruft (inbound), NICHT wenn FreeSWITCH ihn anwählt. Ohne diese Erzwingung reicht FreeSWITCH den
+    //   Caller-Codec ans Callee-Bein durch (Passthrough) → G.722 an den PCMU-only-Callee = INCOMPATIBLE_
+    //   DESTINATION (Codec-Mismatch) bzw. kein SRTP am Callee (SDES). Die Vars gehören daher in die
+    //   Bridge-Dialstring ({...} setzt sie am B-Bein): PCMU erzwingt Transcoding wenn der Caller G.722
+    //   nutzt, sonst Same-Codec-Passthrough (byte-exakt); rtp_secure_media=true offeriert SRTP zum Callee.
+    private static void AppendBridge(System.Text.StringBuilder sb, string callee, bool secure)
     {
+        var bLegVars = secure ? "absolute_codec_string=PCMU,rtp_secure_media=true" : "absolute_codec_string=PCMU";
         sb.AppendLine($"    <extension name=\"callora-bridge-{callee}\">");
         sb.AppendLine($"      <condition field=\"destination_number\" expression=\"^{callee}$\">");
-        sb.AppendLine($"        <action application=\"bridge\" data=\"user/{callee}@$${{domain}}\"/>");
+        // export rtcp_audio_interval_msec → gilt für das eingehende (Caller-)Bein UND wird aufs Callee-
+        // Bein propagiert, sodass der SDK auf BEIDEN Seiten einen RTCP-Empfangsbericht (RemoteReport:
+        // Jitter/Loss/RTT) bekommt.
+        sb.AppendLine("        <action application=\"export\" data=\"rtcp_audio_interval_msec=5000\"/>");
+        sb.AppendLine($"        <action application=\"bridge\" data=\"{{{bLegVars}}}user/{callee}@$${{domain}}\"/>");
         sb.AppendLine("      </condition>");
         sb.AppendLine("    </extension>");
     }
@@ -175,10 +192,25 @@ public sealed class FreeSwitchContainer : IAsyncDisposable
     /// <summary>Ziel-Request-URI für eine Dialplan-Extension (Bridge-Callee oder "answer").</summary>
     public string CallTargetUri(string extension) => $"sip:{extension}@{ContainerIpAddress}:5060";
 
+    /// <summary>Führt ein Kommando im Container aus und gibt dessen Standardausgabe zurück.</summary>
+    public async Task<string> ExecAsync(params string[] command)
+    {
+        var result = await _container.ExecAsync(command).ConfigureAwait(false);
+        return result.Stdout;
+    }
+
+    /// <summary>
+    /// Kombinierte FreeSWITCH-Logs. FreeSWITCH läuft mit <c>-nc</c> (keine Konsole) → die ausführlichen
+    /// Logs gehen in die Logdatei, nicht nach stdout; wir lesen daher primär die Logdatei.
+    /// </summary>
     public async Task<string> GetConsoleLogsAsync()
     {
-        var (stdout, stderr) = await _container.GetLogsAsync().ConfigureAwait(false);
-        return stdout + "\n" + stderr;
+        try { return await ExecAsync("cat", "/var/log/freeswitch/freeswitch.log").ConfigureAwait(false); }
+        catch
+        {
+            var (stdout, stderr) = await _container.GetLogsAsync().ConfigureAwait(false);
+            return stdout + "\n" + stderr;
+        }
     }
 
     public async ValueTask DisposeAsync()
