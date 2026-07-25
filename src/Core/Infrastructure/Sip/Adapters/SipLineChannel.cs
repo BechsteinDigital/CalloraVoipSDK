@@ -718,10 +718,12 @@ internal sealed class SipLineChannel : ILineChannel
     private async Task ResolveTrustedRegistrarAddressesAsync()
     {
         var addresses = new HashSet<System.Net.IPAddress>();
+        var hadConfiguredHost = false;
         foreach (var host in new[] { _account.SipServer, _account.OutboundProxy })
         {
             if (string.IsNullOrWhiteSpace(host))
                 continue;
+            hadConfiguredHost = true;
             var bareHost = SipProtocol.TryParseSipUri(host, out _, out var parsedHost, out _)
                 ? parsedHost
                 : host;
@@ -736,8 +738,27 @@ internal sealed class SipLineChannel : ILineChannel
             }
         }
 
-        _trustedRegistrarAddresses = addresses;
+        if (ShouldCacheTrustedRegistrars(addresses.Count, hadConfiguredHost))
+        {
+            _trustedRegistrarAddresses = addresses;
+        }
+        else
+        {
+            // A configured host failed to resolve (e.g. a transient DNS error): do not cache the empty result.
+            // Reset the one-shot guard so a later registration or inbound request retries, instead of leaving the
+            // line permanently without trusted registrar peers until the process restarts.
+            Interlocked.Exchange(ref _trustedRegistrarResolveStarted, 0);
+        }
     }
+
+    /// <summary>
+    /// Decides whether a trusted-registrar resolution should be cached (committed) or retried. A resolution is
+    /// cached when it produced at least one address, or when no registrar host was configured at all (an
+    /// intentionally empty set). A configured host that resolved to nothing — a transient DNS failure — is not
+    /// cached so it is retried later.
+    /// </summary>
+    internal static bool ShouldCacheTrustedRegistrars(int resolvedCount, bool hadConfiguredHost)
+        => resolvedCount > 0 || !hadConfiguredHost;
 
     /// <summary>
     /// Builds one registration request from line account configuration.
