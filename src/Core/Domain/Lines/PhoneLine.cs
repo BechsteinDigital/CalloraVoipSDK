@@ -28,6 +28,7 @@ internal sealed class PhoneLine : IPhoneLine, IDisposable
 
     public event EventHandler<LineStateChangedEventArgs>?    StateChanged;
     public event EventHandler<IncomingCallEventArgs>?         IncomingCall;
+    public event EventHandler<OutboundCallRingingEventArgs>? OutboundCallRinging;
     public event EventHandler<IncomingMessageEventArgs>?      IncomingMessage;
     public event EventHandler<LineReconnectingEventArgs>?    LineReconnecting;
     public event EventHandler<LineReconnectFailedEventArgs>? LineReconnectFailed;
@@ -84,6 +85,17 @@ internal sealed class PhoneLine : IPhoneLine, IDisposable
         _callRegistry.Register(call);
         call.TransitionTo(CallState.Dialing);
 
+        // Surface the call once it reaches Ringing (early dialog), while StartOutboundDialAsync still
+        // awaits the 200 OK. Fires at most once; detaches itself.
+        EventHandler<CallStateChangedEventArgs>? onRinging = null;
+        onRinging = (_, e) =>
+        {
+            if (e.NewState != CallState.Ringing) return;
+            call.StateChanged -= onRinging;
+            OutboundCallRinging?.Invoke(this, new OutboundCallRingingEventArgs(call));
+        };
+        call.StateChanged += onRinging;
+
         try
         {
             await _channel.StartOutboundDialAsync(channel, targetUri, options, ct);
@@ -93,6 +105,14 @@ internal sealed class PhoneLine : IPhoneLine, IDisposable
             _logger.LogWarning(ex, "Outbound dial to {Uri} failed on [{User}]", targetUri, Account.Username);
             call.TransitionTo(CallState.Terminated);
             throw;
+        }
+        finally
+        {
+            // Idempotent: the self-detach at the Ringing fire may already have run. Also covers the
+            // direct Dialing→Connected success path (no Ringing) so no dead handler leaks onto
+            // call.StateChanged. StartOutboundDialAsync returns after any Ringing transition, so the
+            // handler is only removed once it has served its purpose.
+            call.StateChanged -= onRinging;
         }
 
         return call;

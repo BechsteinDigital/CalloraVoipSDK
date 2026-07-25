@@ -93,8 +93,12 @@ public sealed class AsteriskContainer : IAsyncDisposable
         "same => n,SendDTMF(1234)\n" +            // sendet 1-2-3-4 als telephone-event
         "same => n,Wait(30)\n" +                  // Call offen halten für den Empfang
         "exten => earlymedia,1,Progress()\n" +    // → 183 Session Progress mit SDP (Early Media)
-        "same => n,Playtones(dial)\n" +           // Dial-Ton als Early-Media-RTP vor dem 200 OK
-        "same => n,Wait(4)\n" +                   // Early-Media-Fenster
+        "same => n,Playtones(dial)\n" +           // Dial-Ton als Early-Media-RTP vor dem 200 OK (Playtones
+                                                  //   antwortet NICHT — Wait() hält das Fenster wirklich offen)
+        "same => n,Wait(10)\n" +                  // Early-Media-Fenster. Empirisch (Slice 3e): Plain-RTP kommt
+                                                  //   ~0,6 s nach dem 183, SDES-SRTP erst ~5,5 s (Krypto-Setup-
+                                                  //   Latenz). 10 s geben BEIDEN Pfaden Puffer vor dem Answer;
+                                                  //   Wait(4) ließ das SDES-Early-Media-Fenster kollabieren.
         "same => n,Answer()\n" +                  // → 200 OK
         "same => n,Milliwatt()\n";                // Post-Answer-Media
 
