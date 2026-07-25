@@ -16,17 +16,78 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
   `VoipClient.SendMessageAsync(...)` and the `IVoipClient.IncomingMessage` event.
 - **SIP `PUBLISH` (RFC 3903, CF-066b)**: publish event state (e.g. presence) via
   `VoipClient.PublishAsync(...)`, returning a `PublishResult` with the assigned SIP-ETag and
-  granted lifetime. The refresh / modify / remove wire lifecycle (SIP-`If-Match`) is implemented
-  in the SIP layer; a public entry point to drive it from the facade is still pending (#76).
+  granted lifetime — plus the full soft-state lifecycle via `RefreshPublicationAsync`,
+  `ModifyPublicationAsync` and `RemovePublicationAsync` (`SIP-If-Match`, RFC 3903 §4/§6).
+  All available on `IVoipClient` and on `IPhoneLine` for a specific line.
 - **REFER transfer progress subscription (RFC 3515 / 6665, CF-045)**: an incoming REFER now carries
   an `IReferSubscription` (`TransferRequestedEventArgs.Subscription`) that reports the referred
   call's progress, with an auto-timeout for an unresolved subscription.
 
+### Fixed
+- **SIP:** re-ACK on a retransmitted 2xx of a confirmed dialog (RFC 3261 §13.2.2.4, #3) — a lost
+  initial ACK no longer lets the UAS retransmit until timeout and tear the call down.
+- **SIP:** digest retry on the refresh paths (#4) — a 401/407 on a session-timer refresh UPDATE
+  (RFC 4028) no longer terminates a healthy dialog with BYE, and the SUBSCRIBE refresh
+  (RFC 6665) retries with credentials; the artificial 60-second `Expires` clamp was removed and a
+  refresh-delay floor prevents a busy loop.
+- **SIP:** the `+sip.instance` contact parameter is emitted as a bare token (RFC 5626 §4.1, #5) —
+  the parameter *name* is no longer quoted, which strict registrars could reject.
+- **SIP:** the INVITE auth retry no longer adopts the To-tag of the 401 response
+  (RFC 3261 §12.1.2) — this had made **all authenticated outbound calls** fail with
+  `481 Call/Transaction Does Not Exist` against strict registrars such as Asterisk.
+- **SRTP:** SRTCP uses an 80-bit auth tag for every suite (RFC 4568 §6.2, #6) — the 32-bit
+  truncation of RFC 3711 §5.2 applies to SRTP only. Fixes mutual RTCP auth failures with
+  libsrtp-based peers once `AES_CM_128_HMAC_SHA1_32` is negotiated.
+- **SRTP:** SDES keying over insecure signalling now warns (RFC 4568 §7), with an opt-in
+  `RequireSecureSignalingForSdes` that fails closed.
+- **TURN:** Send indications are no longer required to carry MESSAGE-INTEGRITY (RFC 8656 §10, #7);
+  they are permission-checked like ChannelData, which had rejected RFC-conformant third-party
+  clients on the indication data path.
+- **TURN:** a configurable `TurnServerOptions.PublicRelayAddress` (#8) replaces the silent
+  loopback fallback that advertised an unreachable relay address in multi-host deployments.
+- **Core:** a failed or cancelled transfer no longer wedges the call in `Transferring` (#9); the
+  attended transfer gained the missing `Connected` state guard, and `CallStateRules` is back in
+  sync with the API guards.
+- **Core:** no media-session leak when a call terminates while ICE selection is still running
+  (#10); a per-call generation counter also ensures only the newest negotiation installs a session.
+- **Audio:** G.722 is transcoded statefully across frame boundaries (#11) — the ADPCM predictor
+  state is no longer reset every 20 ms frame, removing audible artefacts.
+- **RTP:** the media sockets' kernel receive buffer is no longer fixed at 8 KiB (#12) and is
+  configurable, preventing kernel drops at video bitrates.
+- **Media metrics:** late-arriving packets are no longer counted as unrecoverable loss (F002).
+- **SIP stack hardening (#13)**, a batch of RFC-conformance and robustness fixes:
+  - Transport-failure classification is now precise (`SipTransactionTransportException` only), so a
+    non-transport error such as a failed PRACK no longer triggers candidate failover and a synthetic
+    503.
+  - A re-INVITE or UPDATE offer that cannot be answered is rejected with **488 Not Acceptable Here**
+    (RFC 3264 §6 / RFC 3311 §5.2) instead of returning a fresh offer as the answer.
+  - A response without a top-`Via` branch no longer matches a client transaction (RFC 3261 §17.1.3).
+  - An explicitly configured transaction `Timeout` is honoured even when it equals 64×T1.
+  - Trusted-registrar DNS resolution moved off the inbound dispatch thread, with bounded retry
+    back-off — an inbound INVITE before the first registration no longer blocks the transport.
+  - `Dispose` on the stream and WebSocket connections joins the receive loop with a bounded timeout
+    instead of blocking indefinitely.
+  - The WebSocket listener retries the bind on a fresh port, closing the TOCTOU window between the
+    port probe and the actual bind.
+  - Redirect fan-out is capped (a malicious 3xx with many Contacts can no longer expand into an
+    unbounded chain of INVITE transactions); the UAS trust model is documented as an explicit design
+    decision.
+  - Assorted clean-ups: `Random.Shared` instead of `new Random()`, the inbound `User-Agent` is
+    configurable, and dead code (redirect-Contact expression, identity transport normalisation,
+    UAS-level `Max-Forwards` decrement) removed.
+
 ### Changed
 - **Interop coverage**: the Asterisk suite now runs with **all cases green and none skipped**
-  (early media unblocked). Added a two-leg bridged-call suite that verifies **bidirectional,
+  (early media unblocked). Added a **two-leg bridged-call** suite that verifies **bidirectional,
   byte-exact media** through the PBX (RTP counters both ways, local + remote RTCP quality, and
-  byte-identical PCMU payload A→B).
+  byte-identical PCMU payload in both directions), covering DTMF, hold/unhold, attended transfer,
+  codec-mismatch transcoding and an SRTP-SDES variant over the bridged call; a **concurrent-call
+  soak** (N parallel bridged calls); and a PBX-agnostic `IPbxFixture` abstraction so the matrix can
+  be run against further PBXs.
+  - The two-leg **SRTP** content check is excluded from the PR CI job (trait
+    `Category=InteropLocalMedia`): the double SRTP decrypt/re-encrypt at the bridge is not reliably
+    measurable on shared CI runners. It remains a hard local check; the plain two-leg content check
+    and the single-leg SDES tests stay in the CI gate.
 
 ## [4.6.0-preview.2] - 2026-07-22
 
