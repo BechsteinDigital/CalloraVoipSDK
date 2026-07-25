@@ -14,6 +14,9 @@ namespace CalloraVoipSdk.Core.Infrastructure.Sip.Adapters;
 internal sealed class TrustedRegistrarResolver
 {
     private static readonly TimeSpan DefaultRetryBackoff = TimeSpan.FromSeconds(30);
+    // After this many consecutive failed resolutions a host is treated as permanently unresolvable and the empty
+    // result is cached, so reads stop re-attempting. A transient failure recovers well before this.
+    private const int MaxResolveAttempts = 5;
 
     private readonly IReadOnlyList<string> _hosts;
     private readonly Func<string, CancellationToken, Task<IPAddress[]>> _resolve;
@@ -24,6 +27,7 @@ internal sealed class TrustedRegistrarResolver
     private volatile IReadOnlyCollection<IPAddress>? _cached;
     private int _inFlight;
     private long _retryAfterTicks;
+    private int _failedAttempts; // only touched inside the _inFlight-guarded ResolveAsync
 
     /// <summary>
     /// Creates a resolver for the given (already bare) host names. <paramref name="resolve"/> defaults to
@@ -99,10 +103,20 @@ internal sealed class TrustedRegistrarResolver
             }
 
             if (addresses.Count > 0)
+            {
                 _cached = addresses;
+            }
+            else if (++_failedAttempts >= MaxResolveAttempts)
+            {
+                // Give up after a bounded number of retries: cache the empty set so a permanently unresolvable
+                // host stops re-attempting on every read (best-effort matching contributes nothing anyway).
+                _cached = addresses;
+            }
             else
+            {
                 // Transient failure: schedule a retry after the back-off rather than caching the empty result.
                 Volatile.Write(ref _retryAfterTicks, _nowTicks() + _retryBackoffMs);
+            }
         }
         finally
         {
