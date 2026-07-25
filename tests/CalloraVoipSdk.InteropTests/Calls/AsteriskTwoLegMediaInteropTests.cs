@@ -144,25 +144,32 @@ public sealed class AsteriskTwoLegMediaInteropTests
 
         var result = await bridged.RunBidirectionalMediaAsync(TimeSpan.FromSeconds(8));
 
-        var received = result.CalleeReceivedSequences;
-        Assert.NotEmpty(received);
-        // Größter kontiguierlicher Lauf empfangener Marker; Rand-/Playout-Verluste toleriert.
-        var longestRun = LongestContiguousRun(received);
-        Assert.True(longestRun >= 50,
-            $"Nur {longestRun} zusammenhängende markierte Frames end-to-end (von {received.Count} empfangen).");
+        // Beide Richtungen byte-exakt: A→B (Callee empfängt A's Marker) und B→A (Caller empfängt B's).
+        AssertContiguousDelivery(result.CalleeReceivedSequences, "A→B");
+        AssertContiguousDelivery(result.CallerReceivedSequences, "B→A");
 
-        static int LongestContiguousRun(IReadOnlyList<uint> seqs)
+        static void AssertContiguousDelivery(IReadOnlyList<uint> received, string direction)
         {
-            var set = new HashSet<uint>(seqs);
-            var best = 0;
-            foreach (var s in set)
-            {
-                if (set.Contains(s - 1)) continue; // nur Lauf-Anfänge
-                var len = 1;
-                while (set.Contains(s + (uint)len)) len++;
-                best = Math.Max(best, len);
-            }
-            return best;
+            Assert.NotEmpty(received);
+            // Größter zusammenhängender Lauf empfangener Marker; Rand-/Playout-Verluste toleriert.
+            var longestRun = LongestContiguousRun(received);
+            Assert.True(longestRun >= 50,
+                $"{direction}: nur {longestRun} zusammenhängende markierte Frames end-to-end (von {received.Count} empfangen).");
         }
+    }
+
+    /// <summary>Längster zusammenhängender Lauf aufeinanderfolgender Sequenzmarker (O(n)).</summary>
+    private static int LongestContiguousRun(IReadOnlyList<uint> seqs)
+    {
+        var set = new HashSet<uint>(seqs);
+        var best = 0;
+        foreach (var s in set)
+        {
+            if (set.Contains(s - 1)) continue; // nur Lauf-Anfänge
+            var len = 1;
+            while (set.Contains(s + (uint)len)) len++;
+            best = Math.Max(best, len);
+        }
+        return best;
     }
 }
