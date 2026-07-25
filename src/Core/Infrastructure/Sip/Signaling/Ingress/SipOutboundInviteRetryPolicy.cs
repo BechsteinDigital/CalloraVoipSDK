@@ -41,17 +41,22 @@ internal static class SipOutboundInviteRetryPolicy
         exception is SipTransactionTransportException;
 
     /// <summary>
-    /// Enqueues Contact URIs from one redirect response while suppressing duplicates.
+    /// Enqueues Contact URIs from one redirect response while suppressing duplicates. The total number of
+    /// distinct targets (initial plus all redirects) is bounded by <paramref name="maxTargets"/> so a malicious
+    /// or misbehaving 3xx carrying many Contacts cannot fan out into an unbounded chain of INVITE transactions.
     /// </summary>
     public static void EnqueueRedirectTargets(
         SipResponse response,
         Queue<SipOutboundInviteTarget> pendingTargets,
-        HashSet<string> visitedRequestUris)
+        HashSet<string> visitedRequestUris,
+        int maxTargets)
     {
         foreach (var contactRow in response.HeaderValues("Contact"))
         {
             foreach (var token in ProtocolCommonUtilities.SplitCommaSeparatedRespectingQuotes(contactRow))
             {
+                if (visitedRequestUris.Count >= maxTargets)
+                    return;
                 var uri = SipProtocol.ExtractUriFromNameAddr(token);
                 if (string.IsNullOrWhiteSpace(uri))
                     continue;
