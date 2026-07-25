@@ -28,6 +28,13 @@ internal sealed record SipPublishRequest
     /// <summary>Requested publication lifetime in seconds (Expires header, RFC 3903 §4).</summary>
     public int ExpiresSeconds { get; init; } = 3600;
 
+    /// <summary>
+    /// The entity-tag of a prior publication to update (SIP-If-Match, RFC 3903 §4). When set, this is a
+    /// refresh (empty body), a modify (new body), or a remove (<see cref="ExpiresSeconds"/> = 0) of that
+    /// publication rather than an initial one. <see langword="null"/> for an initial PUBLISH.
+    /// </summary>
+    public string? IfMatch { get; init; }
+
     /// <summary>The clear-text password used to answer a 401/407 digest challenge; null skips auth.</summary>
     public string? AuthPassword { get; init; }
 
