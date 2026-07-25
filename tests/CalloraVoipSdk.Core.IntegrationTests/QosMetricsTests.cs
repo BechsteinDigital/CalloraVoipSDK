@@ -107,6 +107,39 @@ public sealed class QosMetricsTests
     }
 
     [Fact]
+    public void Rtt_is_derived_from_the_monotonic_capture_not_the_wall_clock()
+    {
+        var session = new RecordingMediaSession(localSsrc: 0xAA55);
+        var monitor = new CallRtcpQualityMonitor(
+            session, Parameters(), NullLoggerFactory.Instance, new RtcpPacketCodec());
+
+        // The SR send instant is a monotonic instant (set via the seam).
+        var monoSentAt = T0;
+        monitor.RecordLocalSenderReportForTest(monoSentAt, ntpMiddle32: 0x12345678);
+
+        var rr = new RtcpReceiverReport
+        {
+            Ssrc = 0xBB66,
+            ReportBlocks =
+            [
+                new RtcpReportBlock { Ssrc = 0xAA55, LastSr = 0x12345678, DelaySinceLastSr = (uint)(0.5 * 65536) },
+            ],
+        };
+        var datagram = new RtcpPacketCodec().Encode([rr]);
+
+        // The wall-clock capture is decades off (as an NTP step would make it); the RTT must ignore it and use
+        // the monotonic capture: 800 ms elapsed − 500 ms DLSR = 300 ms. Were it computed from the wall clock,
+        // the delta would be hugely negative and discarded (no hint) — this asserts the monotonic path (#14 #8).
+        monitor.ProcessInboundDatagramForTest(
+            datagram,
+            capturedAtUtc: T0.AddYears(-20),
+            capturedAtMono: monoSentAt.AddMilliseconds(800));
+
+        var hint = Assert.Single(session.RoundTripHints);
+        Assert.Equal(300.0, hint.TotalMilliseconds, precision: 0);
+    }
+
+    [Fact]
     public void Receiver_report_with_stale_lsr_does_not_feed_rtt()
     {
         var session = new RecordingMediaSession(localSsrc: 0xAA55);
