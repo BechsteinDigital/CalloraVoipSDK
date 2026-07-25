@@ -174,4 +174,7 @@ internal sealed class FakePhoneLine : IPhoneLine
 
     public Task SendMessageAsync(string targetUri, string body, string contentType = "text/plain", CancellationToken ct = default) =>
         throw new NotSupportedException();
+
+    public Task<CalloraVoipSdk.Core.Domain.Publications.PublishResult> PublishAsync(string eventType, string body, string contentType = "text/plain", int expiresSeconds = 3600, CancellationToken ct = default) =>
+        throw new NotSupportedException();
 }

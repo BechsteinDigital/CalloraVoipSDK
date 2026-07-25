@@ -93,6 +93,7 @@ public sealed class SdkConvenienceResultMappingTests
 
         public Task<ICall> DialAsync(string targetUri, DialOptions? options = null, CancellationToken ct = default) => Dial!(ct);
         public Task SendMessageAsync(string targetUri, string body, string contentType = "text/plain", CancellationToken ct = default) => Task.CompletedTask;
+        public Task<CalloraVoipSdk.Core.Domain.Publications.PublishResult> PublishAsync(string eventType, string body, string contentType = "text/plain", int expiresSeconds = 3600, CancellationToken ct = default) => Task.FromResult(new CalloraVoipSdk.Core.Domain.Publications.PublishResult(null, 0));
         public Task UnregisterAsync(CancellationToken ct = default) => Task.CompletedTask;
     }
 
