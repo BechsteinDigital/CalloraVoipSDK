@@ -102,6 +102,7 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
     /// <inheritdoc />
     public async Task<ISipCallSession> InviteAsync(
         SipInviteRequest request,
+        Action<ISipCallSession>? onSessionCreated = null,
         CancellationToken ct = default)
     {
         ThrowIfDisposed();
@@ -210,6 +211,20 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
                 HookSessionLifecycle(session);
                 _sessionStartTimes[callId] = DateTimeOffset.UtcNow;
                 _sessionTraceIds[callId] = traceId;
+
+                // Bind the session to its channel now — before the INVITE goes out — so the media
+                // adapter observes the early dialog (Ringing/183) live instead of only after 200 OK (F011).
+                // A throwing callback (e.g. ObjectDisposedException from AttachSession on a concurrent
+                // channel dispose) must not leak the session in _sessions.
+                try
+                {
+                    onSessionCreated?.Invoke(session);
+                }
+                catch
+                {
+                    CleanupFailedOutboundSession(callId, session);
+                    throw;
+                }
 
                 try
                 {
@@ -415,7 +430,7 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
                 normalizedRequest,
                 out var unsupportedHeaderValue))
         {
-            var unsupportedHeaders = SipIngressResponseFactory.CreateIngressResponseHeaders(normalizedRequest, statusCode: 420);
+            var unsupportedHeaders = SipIngressResponseHeaders.Create(normalizedRequest, statusCode: 420);
             unsupportedHeaders["Unsupported"] = unsupportedHeaderValue;
             _ = SendIngressResponseAsync(
                 normalizedRequest,
@@ -434,7 +449,7 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
                 out var contentRejectionReasonPhrase,
                 out var contentRejectionHeaders))
         {
-            var rejectionHeaders = SipIngressResponseFactory.CreateIngressResponseHeaders(normalizedRequest, contentRejectionStatusCode);
+            var rejectionHeaders = SipIngressResponseHeaders.Create(normalizedRequest, contentRejectionStatusCode);
             if (contentRejectionHeaders is not null)
             {
                 foreach (var pair in contentRejectionHeaders)
@@ -492,7 +507,7 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
 
         if (string.Equals(normalizedRequest.Method, "OPTIONS", StringComparison.Ordinal))
         {
-            var headers = SipIngressResponseFactory.CreateIngressResponseHeaders(normalizedRequest, statusCode: 200);
+            var headers = SipIngressResponseHeaders.Create(normalizedRequest, statusCode: 200);
             headers["Allow"] = SupportedMethodList;
             headers["Accept"] = SupportedAcceptList;
             _ = SendIngressResponseAsync(
@@ -527,7 +542,7 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
             return;
         }
 
-        if (SipIngressResponseFactory.IsDialogScopedMethod(normalizedRequest.Method))
+        if (IsDialogScopedMethod(normalizedRequest.Method))
         {
             _ = SendIngressResponseAsync(
                 normalizedRequest,
@@ -541,7 +556,7 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
         if (!string.Equals(normalizedRequest.Method, "INVITE", StringComparison.Ordinal)
             && !string.Equals(normalizedRequest.Method, "ACK", StringComparison.Ordinal))
         {
-            var headers = SipIngressResponseFactory.CreateIngressResponseHeaders(normalizedRequest, statusCode: 501);
+            var headers = SipIngressResponseHeaders.Create(normalizedRequest, statusCode: 501);
             headers["Allow"] = SupportedMethodList;
             _ = SendIngressResponseAsync(
                 normalizedRequest,
@@ -913,8 +928,8 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
                     statusCode,
                     reasonPhrase,
                     headers is null
-                        ? SipIngressResponseFactory.CreateIngressResponseHeaders(request, statusCode, remoteEndPoint)
-                        : SipIngressResponseFactory.EnsureIngressResponseToTag(headers, statusCode),
+                        ? SipIngressResponseHeaders.Create(request, statusCode, remoteEndPoint)
+                        : SipIngressResponseHeaders.EnsureToTag(headers, statusCode),
                     body: null,
                     CancellationToken.None)
                 .ConfigureAwait(false);
@@ -928,6 +943,15 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
                 request.Method,
                 request.Header("Call-ID"));
         }
+    }
+
+    /// <summary>
+    /// Returns true when method semantically requires an existing SIP dialog.
+    /// </summary>
+    private static bool IsDialogScopedMethod(string method)
+    {
+        var normalized = method.Trim().ToUpperInvariant();
+        return normalized is "BYE" or "INFO" or "UPDATE" or "PRACK" or "REFER" or "NOTIFY" or "SUBSCRIBE";
     }
 
     /// <summary>
