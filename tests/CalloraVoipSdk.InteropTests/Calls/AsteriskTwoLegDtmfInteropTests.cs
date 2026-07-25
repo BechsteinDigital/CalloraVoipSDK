@@ -1,26 +1,27 @@
 using System.Collections.Concurrent;
 using CalloraVoipSdk.Core.Domain.Calls;
-using CalloraVoipSdk.InteropTests.Asterisk;
 using CalloraVoipSdk.InteropTests.Media;
+using CalloraVoipSdk.InteropTests.Pbx;
 using Xunit;
 
 namespace CalloraVoipSdk.InteropTests.Calls;
 
 /// <summary>
-/// DTMF-End-to-End-Roundtrip über den gebrückten Zwei-Bein-Call (RFC 4733): der Caller sendet die
-/// Ziffern 1-2-3-4 als telephone-event RTP-Pakete, Asterisk relayiert sie über die Bridge und der
-/// Callee empfängt sie über <see cref="ICall.DtmfReceived"/>. Beweist erstmals, dass DTMF nicht nur
-/// SDK-seitig gesendet, sondern auch am Gegenpeer einer echten Bridge vollständig ankommt.
+/// Abstrakte Basis: DTMF-End-to-End-Roundtrip über den gebrückten Zwei-Bein-Call (RFC 4733): der Caller
+/// sendet die Ziffern 1-2-3-4 als telephone-event RTP-Pakete, der PBX relayiert sie über die Bridge
+/// und der Callee empfängt sie über <see cref="ICall.DtmfReceived"/>. Beweist erstmals, dass DTMF
+/// nicht nur SDK-seitig gesendet, sondern auch am Gegenpeer einer echten Bridge vollständig ankommt.
 /// </summary>
-[Trait("Category", "Interop")]
-public sealed class AsteriskTwoLegDtmfInteropTests
+public abstract class TwoLegDtmfMatrix
 {
+    protected abstract IPbxFixture CreatePbx(int bridgePairs = 1);
+
     [DockerRequiredFact]
     public async Task Dtmf_TraversesBridge_CallerToCallee()
     {
-        await using var asterisk = new AsteriskContainer();
-        await asterisk.StartAsync();
-        await using var bridged = await TwoLegBridgedCall.StartAsync(asterisk);
+        await using var pbx = CreatePbx();
+        await pbx.StartAsync();
+        await using var bridged = await TwoLegBridgedCall.StartAsync(pbx);
 
         // RFC 4733 telephone-event muss auf beiden Legs verhandelt sein.
         Assert.NotNull(bridged.CallerCall.MediaParameters!.TelephoneEventPayloadType);
@@ -32,7 +33,7 @@ public sealed class AsteriskTwoLegDtmfInteropTests
         // RTP-Pfad warm halten, während die telephone-events fließen.
         await using var flow = bridged.StartBidirectionalMedia();
 
-        // Ziffern 1-2-3-4 vom Caller senden (250 ms Abstand, damit Asterisk sie einzeln relayt).
+        // Ziffern 1-2-3-4 vom Caller senden (250 ms Abstand, damit der PBX sie einzeln relayt).
         var tones = new[] { new DtmfTone('1'), new DtmfTone('2'), new DtmfTone('3'), new DtmfTone('4') };
         foreach (var tone in tones)
         {
@@ -48,4 +49,11 @@ public sealed class AsteriskTwoLegDtmfInteropTests
         var digits = string.Concat(received);
         Assert.Equal("1234", digits);
     }
+}
+
+/// <summary>Fährt die DTMF-Matrix gegen einen echten Asterisk.</summary>
+[Trait("Category", "Interop")]
+public sealed class AsteriskTwoLegDtmfMatrix : TwoLegDtmfMatrix
+{
+    protected override IPbxFixture CreatePbx(int bridgePairs = 1) => new AsteriskPbxFixture(bridgePairs);
 }
