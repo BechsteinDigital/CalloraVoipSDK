@@ -56,4 +56,24 @@ public sealed class AsteriskTwoLegMediaInteropTests
         Assert.Equal(0, bridged.CallerCall.MediaParameters!.PayloadType);  // PCMU beidseitig
         Assert.Equal(0, bridged.CalleeCall.MediaParameters!.PayloadType);
     }
+
+    [DockerRequiredFact]
+    public async Task BridgedCall_FlowsRtpInBothDirections()
+    {
+        await using var asterisk = new AsteriskContainer();
+        await asterisk.StartAsync();
+        await using var bridged = await TwoLegBridgedCall.StartAsync(asterisk);
+
+        await bridged.RunBidirectionalMediaAsync();
+
+        AssertBidirectionalRtp(bridged.CallerCall, "Caller");
+        AssertBidirectionalRtp(bridged.CalleeCall, "Callee");
+
+        static void AssertBidirectionalRtp(CalloraVoipSdk.Core.Domain.Calls.ICall call, string label)
+        {
+            var rtp = call.RtpStatistics;
+            Assert.True(rtp is { PacketsSent: > 0 }, $"{label}: keine gesendeten RTP-Pakete.");
+            Assert.True(rtp is { PacketsReceived: > 0 }, $"{label}: keine empfangenen RTP-Pakete.");
+        }
+    }
 }
