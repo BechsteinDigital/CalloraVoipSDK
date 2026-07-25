@@ -106,7 +106,17 @@ public sealed class AsteriskTwoLegMediaInteropTests
         await asterisk.StartAsync();
         await using var bridged = await TwoLegBridgedCall.StartAsync(asterisk);
 
-        await bridged.RunBidirectionalMediaAsync(TimeSpan.FromSeconds(10));
+        await using var flow = bridged.StartBidirectionalMedia();
+
+        // RTT braucht ≥2 SR/RR-Zyklen (RFC 3550 §6.4.1) — länger als Jitter/Loss (1 RR). Auf beiden
+        // Legs pollen, bis RTT befüllt ist, mit großzügigem Deadline (unter Last dauert RTCP länger).
+        var deadline = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(30);
+        while (DateTimeOffset.UtcNow < deadline
+               && (bridged.CallerCall.QualitySnapshot.RoundTripTimeMs is null
+                   || bridged.CalleeCall.QualitySnapshot.RoundTripTimeMs is null))
+        {
+            await Task.Delay(500);
+        }
 
         AssertRemoteReport(bridged.CallerCall, "Caller");
         AssertRemoteReport(bridged.CalleeCall, "Callee");
