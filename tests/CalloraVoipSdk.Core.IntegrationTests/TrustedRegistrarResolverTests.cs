@@ -58,6 +58,30 @@ public sealed class TrustedRegistrarResolverTests
     }
 
     [Fact]
+    public void A_permanently_unresolvable_host_gives_up_and_stops_retrying()
+    {
+        var now = 0L;
+        var attempts = 0;
+        var resolver = Resolver(
+            (_, _) => { attempts++; return Task.FromException<IPAddress[]>(new Exception("dns down")); },
+            clock: () => now);
+
+        // Drive many reads, elapsing the back-off each time.
+        for (var i = 0; i < 20; i++)
+        {
+            now += 60_000; // past the 30 s back-off
+            resolver.Addresses();
+        }
+
+        // Attempts are bounded (does not keep hammering DNS forever) and, once given up, no read re-attempts.
+        var attemptsAtGiveUp = attempts;
+        Assert.InRange(attemptsAtGiveUp, 1, 5);
+        now += 60_000;
+        Assert.Empty(resolver.Addresses());
+        Assert.Equal(attemptsAtGiveUp, attempts);
+    }
+
+    [Fact]
     public void No_configured_host_caches_empty_and_never_resolves()
     {
         var attempts = 0;
