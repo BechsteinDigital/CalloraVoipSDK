@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using Microsoft.Extensions.Logging;
@@ -17,6 +18,11 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
 {
     private static readonly TimeSpan DefaultSendInterval = TimeSpan.FromSeconds(5);
 
+    // Anchor for the default monotonic clock (RTT/DLSR deltas). Mirrors Infrastructure's MonotonicClock, kept
+    // local here because the Application layer must not reference Infrastructure (DDD layering); the absolute
+    // value is irrelevant since only differences are consumed.
+    private static readonly long MonotonicOrigin = Stopwatch.GetTimestamp();
+
     private readonly ICallMediaSession _mediaSession;
     private readonly IPEndPoint _localRtcpEndPoint;
     private readonly IPEndPoint _remoteRtcpEndPoint;
@@ -26,6 +32,7 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
     private readonly ILogger<CallRtcpQualityMonitor> _logger;
     private readonly IRtcpPacketCodec _codec;
     private readonly TimeSpan _sendInterval;
+    private readonly Func<DateTimeOffset> _monotonicNow;
     private readonly CancellationTokenSource _cts = new();
     private readonly object _sync = new();
 
@@ -42,9 +49,11 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
     private CallQualitySnapshot _latestSnapshot;
     private CallMediaRtpSnapshot _latestRtpSnapshot;
     private bool _hasRtpSnapshot;
-    private DateTimeOffset? _lastLocalSrSentAtUtc;
+    // Monotonic (not wall-clock) instants for the RTT and DLSR deltas (RFC 3550 §6.4.1), so a system-clock step
+    // mid-call cannot corrupt them; the wire NTP timestamps and snapshot times stay on the wall clock.
+    private DateTimeOffset? _lastLocalSrSentAtMono;
     private uint _lastLocalSrMiddle32;
-    private DateTimeOffset? _lastRemoteSrReceivedAtUtc;
+    private DateTimeOffset? _lastRemoteSrReceivedAtMono;
     private uint _lastRemoteSrMiddle32;
     private int _started;
     private int _disposed;
@@ -62,7 +71,8 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
         CallMediaParameters mediaParameters,
         ILoggerFactory loggerFactory,
         IRtcpPacketCodec codec,
-        TimeSpan? sendInterval = null)
+        TimeSpan? sendInterval = null,
+        Func<DateTimeOffset>? monotonicNow = null)
     {
         ArgumentNullException.ThrowIfNull(mediaSession);
         ArgumentNullException.ThrowIfNull(mediaParameters);
@@ -80,8 +90,14 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
         _sendInterval = sendInterval is { } explicitInterval && explicitInterval > TimeSpan.Zero
             ? explicitInterval
             : DefaultSendInterval;
+        _monotonicNow = monotonicNow ?? DefaultMonotonicNow;
         _latestSnapshot = CallQualitySnapshot.CreateEmpty(DateTimeOffset.UtcNow, _rtcpMux);
     }
+
+    // A monotonically non-decreasing instant (RTT/DLSR deltas), immune to wall-clock steps. Injectable via the
+    // constructor for deterministic tests; the default is a process-local Stopwatch clock.
+    private static DateTimeOffset DefaultMonotonicNow()
+        => DateTimeOffset.UnixEpoch + Stopwatch.GetElapsedTime(MonotonicOrigin);
 
     /// <summary>
     /// Starts RTCP sender/receiver loops.
@@ -236,7 +252,7 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
                     continue;
                 }
 
-                HandleInboundDatagram(received.Buffer, DateTimeOffset.UtcNow);
+                HandleInboundDatagram(received.Buffer, DateTimeOffset.UtcNow, _monotonicNow());
             }
         }
         catch (Exception ex)
@@ -248,8 +264,9 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
     private async Task SendReportAsync(CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
+        var monotonicNow = _monotonicNow();
         var rtpSnapshot = _mediaSession.GetRtpSnapshot();
-        var packets = BuildCompoundReport(rtpSnapshot, now, out var localSrMiddle32, out var sentSenderReport);
+        var packets = BuildCompoundReport(rtpSnapshot, now, monotonicNow, out var localSrMiddle32, out var sentSenderReport);
         var datagram = _codec.Encode(packets);
 
         try
@@ -289,7 +306,7 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
             lock (_sync)
             {
                 _lastLocalSrMiddle32 = localSrMiddle32;
-                _lastLocalSrSentAtUtc = now;
+                _lastLocalSrSentAtMono = monotonicNow;
             }
         }
 
@@ -299,10 +316,13 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
     private IReadOnlyList<RtcpPacket> BuildCompoundReport(
         CallMediaRtpSnapshot rtpSnapshot,
         DateTimeOffset capturedAtUtc,
+        DateTimeOffset capturedAtMono,
         out uint localSrMiddle32,
         out bool sentSenderReport)
     {
-        var reportBlocks = BuildReportBlocks(rtpSnapshot, capturedAtUtc);
+        // DLSR is a delay (a delta against the monotonic instant we received the remote SR); the wire NTP
+        // timestamp below stays wall-clock so peers read a real time-of-day (RFC 3550 §6.4.1).
+        var reportBlocks = BuildReportBlocks(rtpSnapshot, capturedAtMono);
         var sdes = new RtcpSdesPacket
         {
             Chunks =
@@ -344,7 +364,7 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
         return [receiverReport, sdes];
     }
 
-    private IReadOnlyList<RtcpReportBlock> BuildReportBlocks(CallMediaRtpSnapshot rtpSnapshot, DateTimeOffset capturedAtUtc)
+    private IReadOnlyList<RtcpReportBlock> BuildReportBlocks(CallMediaRtpSnapshot rtpSnapshot, DateTimeOffset nowMono)
     {
         if (rtpSnapshot.RemoteSsrc is not { } remoteSsrc)
             return [];
@@ -354,8 +374,8 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
         lock (_sync)
         {
             lsr = _lastRemoteSrMiddle32;
-            dlsr = _lastRemoteSrReceivedAtUtc is { } receivedAt
-                ? ToDlsr(capturedAtUtc - receivedAt)
+            dlsr = _lastRemoteSrReceivedAtMono is { } receivedAt
+                ? ToDlsr(nowMono - receivedAt)
                 : 0;
         }
 
@@ -374,23 +394,33 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
     }
 
     private void OnRtcpMuxDatagramReceived(byte[] datagram)
-        => HandleInboundDatagram(datagram, DateTimeOffset.UtcNow);
+        => HandleInboundDatagram(datagram, DateTimeOffset.UtcNow, _monotonicNow());
 
-    /// <summary>Test seam: processes one inbound RTCP datagram as if received off the wire.</summary>
-    internal void ProcessInboundDatagramForTest(byte[] datagram, DateTimeOffset capturedAtUtc)
-        => HandleInboundDatagram(datagram, capturedAtUtc);
+    /// <summary>
+    /// Test seam: processes one inbound RTCP datagram as if received off the wire, with the same instant used as
+    /// both the wall-clock (snapshot) and monotonic (RTT) capture time.
+    /// </summary>
+    internal void ProcessInboundDatagramForTest(byte[] datagram, DateTimeOffset capturedAt)
+        => HandleInboundDatagram(datagram, capturedAt, capturedAt);
+
+    /// <summary>
+    /// Test seam: processes one inbound RTCP datagram with distinct wall-clock and monotonic capture instants,
+    /// so a test can prove the RTT is derived from the monotonic clock and not the wall clock.
+    /// </summary>
+    internal void ProcessInboundDatagramForTest(byte[] datagram, DateTimeOffset capturedAtUtc, DateTimeOffset capturedAtMono)
+        => HandleInboundDatagram(datagram, capturedAtUtc, capturedAtMono);
 
     /// <summary>Test seam: records the local sender-report state normally set by the send loop.</summary>
-    internal void RecordLocalSenderReportForTest(DateTimeOffset sentAtUtc, uint ntpMiddle32)
+    internal void RecordLocalSenderReportForTest(DateTimeOffset sentAtMono, uint ntpMiddle32)
     {
         lock (_sync)
         {
-            _lastLocalSrSentAtUtc = sentAtUtc;
+            _lastLocalSrSentAtMono = sentAtMono;
             _lastLocalSrMiddle32 = ntpMiddle32;
         }
     }
 
-    private void HandleInboundDatagram(byte[] datagram, DateTimeOffset capturedAtUtc)
+    private void HandleInboundDatagram(byte[] datagram, DateTimeOffset capturedAtUtc, DateTimeOffset capturedAtMono)
     {
         if (datagram.Length == 0)
             return;
@@ -415,11 +445,11 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
             switch (packet)
             {
                 case RtcpSenderReport senderReport:
-                    HandleSenderReport(senderReport, rtpSnapshot.LocalSsrc, capturedAtUtc);
+                    HandleSenderReport(senderReport, rtpSnapshot.LocalSsrc, capturedAtMono);
                     break;
 
                 case RtcpReceiverReport receiverReport:
-                    HandleReceiverReport(receiverReport, rtpSnapshot.LocalSsrc, capturedAtUtc);
+                    HandleReceiverReport(receiverReport, rtpSnapshot.LocalSsrc, capturedAtMono);
                     break;
 
                 case RtcpExtendedReport extendedReport:
@@ -431,19 +461,19 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
         PublishSnapshot(rtpSnapshot, capturedAtUtc, rtcpActive: true);
     }
 
-    private void HandleSenderReport(RtcpSenderReport senderReport, uint localSsrc, DateTimeOffset capturedAtUtc)
+    private void HandleSenderReport(RtcpSenderReport senderReport, uint localSsrc, DateTimeOffset capturedAtMono)
     {
         lock (_sync)
         {
             _lastRemoteSrMiddle32 = ToMiddle32Bits(senderReport.NtpTimestamp);
-            _lastRemoteSrReceivedAtUtc = capturedAtUtc;
+            _lastRemoteSrReceivedAtMono = capturedAtMono;
         }
 
-        UpdateRemoteQualityMetrics(senderReport.ReportBlocks, localSsrc, capturedAtUtc);
+        UpdateRemoteQualityMetrics(senderReport.ReportBlocks, localSsrc, capturedAtMono);
     }
 
-    private void HandleReceiverReport(RtcpReceiverReport receiverReport, uint localSsrc, DateTimeOffset capturedAtUtc)
-        => UpdateRemoteQualityMetrics(receiverReport.ReportBlocks, localSsrc, capturedAtUtc);
+    private void HandleReceiverReport(RtcpReceiverReport receiverReport, uint localSsrc, DateTimeOffset capturedAtMono)
+        => UpdateRemoteQualityMetrics(receiverReport.ReportBlocks, localSsrc, capturedAtMono);
 
     private void HandleExtendedReport(RtcpExtendedReport report, uint localSsrc)
     {
@@ -467,7 +497,7 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
     private void UpdateRemoteQualityMetrics(
         IReadOnlyList<RtcpReportBlock> blocks,
         uint localSsrc,
-        DateTimeOffset capturedAtUtc)
+        DateTimeOffset capturedAtMono)
     {
         var block = blocks.FirstOrDefault(b => b.Ssrc == localSsrc);
         if (block is null)
@@ -477,23 +507,25 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
         var remoteLossPercent = block.FractionLost * 100.0 / 256.0;
         double? roundTripTimeMs = null;
 
-        DateTimeOffset? lastLocalSrSentAtUtc = null;
+        DateTimeOffset? lastLocalSrSentAtMono = null;
         uint expectedLastSr = 0;
         lock (_sync)
         {
-            if (_lastLocalSrSentAtUtc.HasValue)
+            if (_lastLocalSrSentAtMono.HasValue)
             {
-                lastLocalSrSentAtUtc = _lastLocalSrSentAtUtc.Value;
+                lastLocalSrSentAtMono = _lastLocalSrSentAtMono.Value;
                 expectedLastSr = _lastLocalSrMiddle32;
             }
         }
 
         if (block.LastSr != 0 &&
-            lastLocalSrSentAtUtc.HasValue &&
+            lastLocalSrSentAtMono.HasValue &&
             block.LastSr == expectedLastSr)
         {
             var dlsr = TimeSpan.FromSeconds(block.DelaySinceLastSr / 65536.0);
-            var computedRtt = capturedAtUtc - lastLocalSrSentAtUtc.Value - dlsr;
+            // Monotonic delta (RFC 3550 §6.4.1): both instants come from _monotonicNow, so a wall-clock step
+            // between sending our SR and this report arriving cannot corrupt the RTT.
+            var computedRtt = capturedAtMono - lastLocalSrSentAtMono.Value - dlsr;
             if (computedRtt > TimeSpan.Zero)
                 roundTripTimeMs = computedRtt.TotalMilliseconds;
         }
