@@ -64,6 +64,13 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
     private SipDialogState _state;
     private SipDialogTerminationReason? _lastTerminationReason;
     internal int _disposed;
+    // Cancelled on Dispose so session-scoped background work (e.g. the REFER subscription auto-timeout) stops
+    // instead of firing into a torn-down dialog. Left undisposed (plain CTS, no unmanaged resource) so the token
+    // stays readable after teardown.
+    private readonly CancellationTokenSource _shutdownCts = new();
+
+    /// <summary>Token cancelled when this session is disposed; drives session-scoped background cancellation.</summary>
+    internal CancellationToken ShutdownToken => _shutdownCts.Token;
     /// <summary>
     /// Creates outbound SIP call session.
     /// </summary>
@@ -918,6 +925,7 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        _shutdownCts.Cancel();
         _reliableProvisionalManager.Dispose();
         _sessionTimerManager.Dispose();
         _inboundService.Dispose();

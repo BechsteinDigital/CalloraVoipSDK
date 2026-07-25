@@ -96,6 +96,8 @@ internal sealed class AckTestSipCallSessionContext : ISipCallSessionContext
 
     public bool IsDisposed => false;
 
+    public CancellationToken SessionShutdownToken => CancellationToken.None;
+
     public int NextLocalCSeq() => Interlocked.Increment(ref _nextLocalCSeq);
 
     public void TransitionTo(

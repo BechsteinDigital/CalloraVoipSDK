@@ -15,7 +15,7 @@ namespace CalloraVoipSdk.Core.Infrastructure.Sip.Signaling;
 /// (<see cref="SipReferHandler"/>'s NOTIFY sender) swallows its own transport failures, so the chain never faults
 /// and one lost NOTIFY does not abort the subscription. Once started, an auto-timeout (the advertised 60 s
 /// lifetime) fires a <c>terminated;reason=timeout</c> NOTIFY if the application never reports a terminal outcome;
-/// a terminal report or <see cref="Cancel"/> cancels it.
+/// a terminal report, <see cref="Cancel"/>, or the owning session's teardown cancels it.
 /// </remarks>
 internal sealed class SipReferSubscription : IReferSubscription
 {
@@ -34,6 +34,7 @@ internal sealed class SipReferSubscription : IReferSubscription
     private readonly Func<string, string, CancellationToken, Task> _sendNotify;
     private readonly TimeSpan _timeout;
     private readonly Func<TimeSpan, CancellationToken, Task> _delay;
+    private readonly CancellationToken _sessionShutdown;
     private readonly object _gate = new();
     private readonly List<(string SubState, string Sipfrag)> _pending = [];
     private Task _sendTail = Task.CompletedTask;
@@ -58,16 +59,19 @@ internal sealed class SipReferSubscription : IReferSubscription
     /// Creates the handle bound to a NOTIFY sender. <paramref name="sendNotify"/> takes the
     /// <c>Subscription-State</c> header value and the sipfrag body and must not throw. <paramref name="timeout"/>
     /// and <paramref name="delay"/> are injectable for testing; production uses the advertised 60 s lifetime and
-    /// <see cref="Task.Delay(TimeSpan, CancellationToken)"/>.
+    /// <see cref="Task.Delay(TimeSpan, CancellationToken)"/>. <paramref name="sessionShutdown"/> cancels the
+    /// auto-timeout when the owning session is torn down, so it never fires into a dead dialog.
     /// </summary>
     public SipReferSubscription(
         Func<string, string, CancellationToken, Task> sendNotify,
         TimeSpan? timeout = null,
-        Func<TimeSpan, CancellationToken, Task>? delay = null)
+        Func<TimeSpan, CancellationToken, Task>? delay = null,
+        CancellationToken sessionShutdown = default)
     {
         _sendNotify = sendNotify;
         _timeout = timeout ?? DefaultTimeout;
         _delay = delay ?? Task.Delay;
+        _sessionShutdown = sessionShutdown;
     }
 
     /// <inheritdoc />
@@ -174,6 +178,13 @@ internal sealed class SipReferSubscription : IReferSubscription
 
     private async Task RunTimeoutAsync(CancellationToken ct)
     {
+        // Session teardown cancels the armed timeout so it never fires into a dead dialog. The registration is
+        // scoped to this task (disposed on exit), so a completed/terminated subscription leaves nothing on the
+        // long-lived session token.
+        using var shutdownLink = _sessionShutdown.CanBeCanceled
+            ? _sessionShutdown.Register(static s => ((CancellationTokenSource)s!).Cancel(), _timeoutCts)
+            : default;
+
         try { await _delay(_timeout, ct).ConfigureAwait(false); }
         catch (OperationCanceledException) { return; }
 

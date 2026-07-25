@@ -142,6 +142,8 @@ internal sealed class SipCallSessionContextAdapter : ISipCallSessionContext
 
     public bool IsDisposed => Volatile.Read(ref _session._disposed) != 0;
 
+    public CancellationToken SessionShutdownToken => _session.ShutdownToken;
+
     public int NextLocalCSeq() => _session.NextLocalCSeq();
 
     public void TransitionTo(SipDialogState next, SipDialogTerminationReason? terminationReason) =>
