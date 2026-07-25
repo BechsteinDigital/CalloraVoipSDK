@@ -111,7 +111,7 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
 
         if (_rtcpMux)
         {
-            _mediaSession.RtcpMuxDatagramReceived += OnRtcpMuxDatagramReceived;
+            _mediaSession.RtcpCompoundReceived += OnRtcpCompoundReceived;
         }
         else
         {
@@ -164,7 +164,7 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
             return;
 
-        _mediaSession.RtcpMuxDatagramReceived -= OnRtcpMuxDatagramReceived;
+        _mediaSession.RtcpCompoundReceived -= OnRtcpCompoundReceived;
         _cts.Cancel();
         _udp?.Dispose();
 
@@ -393,33 +393,28 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
         return [block];
     }
 
-    private void OnRtcpMuxDatagramReceived(byte[] datagram)
-        => HandleInboundDatagram(datagram, DateTimeOffset.UtcNow, _monotonicNow());
+    // The session decodes each inbound RTCP compound once and hands us the shared, read-only packet list
+    // (RtcpCompoundReceived) — no per-consumer re-parse of the same bytes.
+    private void OnRtcpCompoundReceived(IReadOnlyList<RtcpPacket> packets)
+        => HandleRtcpPackets(packets, DateTimeOffset.UtcNow, _monotonicNow());
 
     /// <summary>
     /// Test seam: processes one inbound RTCP datagram as if received off the wire, with the same instant used as
     /// both the wall-clock (snapshot) and monotonic (RTT) capture time.
     /// </summary>
     internal void ProcessInboundDatagramForTest(byte[] datagram, DateTimeOffset capturedAt)
-        => HandleInboundDatagram(datagram, capturedAt, capturedAt);
+        => ProcessInboundDatagramForTest(datagram, capturedAt, capturedAt);
 
     /// <summary>
     /// Test seam: processes one inbound RTCP datagram with distinct wall-clock and monotonic capture instants,
-    /// so a test can prove the RTT is derived from the monotonic clock and not the wall clock.
+    /// so a test can prove the RTT is derived from the monotonic clock and not the wall clock. Decodes the bytes
+    /// (the production path receives the compound already decoded via <see cref="OnRtcpCompoundReceived"/>).
     /// </summary>
     internal void ProcessInboundDatagramForTest(byte[] datagram, DateTimeOffset capturedAtUtc, DateTimeOffset capturedAtMono)
         => HandleInboundDatagram(datagram, capturedAtUtc, capturedAtMono);
 
-    /// <summary>Test seam: records the local sender-report state normally set by the send loop.</summary>
-    internal void RecordLocalSenderReportForTest(DateTimeOffset sentAtMono, uint ntpMiddle32)
-    {
-        lock (_sync)
-        {
-            _lastLocalSrSentAtMono = sentAtMono;
-            _lastLocalSrMiddle32 = ntpMiddle32;
-        }
-    }
-
+    // Non-RTCP-MUX path (a dedicated RTCP socket) and the test seams: decode a raw datagram here, then dispatch.
+    // In RTCP-MUX mode the session decodes once and delivers via OnRtcpCompoundReceived, so no decode happens here.
     private void HandleInboundDatagram(byte[] datagram, DateTimeOffset capturedAtUtc, DateTimeOffset capturedAtMono)
     {
         if (datagram.Length == 0)
@@ -437,6 +432,21 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
             return;
         }
 
+        HandleRtcpPackets(packets, capturedAtUtc, capturedAtMono);
+    }
+
+    /// <summary>Test seam: records the local sender-report state normally set by the send loop.</summary>
+    internal void RecordLocalSenderReportForTest(DateTimeOffset sentAtMono, uint ntpMiddle32)
+    {
+        lock (_sync)
+        {
+            _lastLocalSrSentAtMono = sentAtMono;
+            _lastLocalSrMiddle32 = ntpMiddle32;
+        }
+    }
+
+    private void HandleRtcpPackets(IReadOnlyList<RtcpPacket> packets, DateTimeOffset capturedAtUtc, DateTimeOffset capturedAtMono)
+    {
         Interlocked.Increment(ref _rtcpPacketsReceived);
         var rtpSnapshot = _mediaSession.GetRtpSnapshot();
 

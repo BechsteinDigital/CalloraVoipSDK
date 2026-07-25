@@ -209,7 +209,7 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
             () => KeyFrameRequested?.Invoke(),
             OnRetransmitRequested,
             loggerFactory.CreateLogger<VideoKeyFrameFeedback>(), _lifetimeCts.Token);
-        _rtp.ControlPacketReceived += _keyFrameFeedback.OnControlDatagram;
+        _rtp.RtcpCompoundReceived += _keyFrameFeedback.OnRtcpPackets;
 
         // Transport-cc feedback (draft-holmer): when the a=extmap was negotiated for this m-line,
         // report inbound arrivals to the sender for congestion control over the same RTCP-mux channel.
@@ -224,7 +224,7 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
             // Sender side of transport-cc: record each stamped send (PacketSent, primary only) and
             // fold inbound feedback reports (ControlPacketReceived) into the congestion estimators.
             _transportCcCongestion = new TransportCcCongestionController(
-                transportCcExtensionId, new RtcpPacketCodec(),
+                transportCcExtensionId,
                 new TransportCcSendHistory(TransportCcSendHistoryCapacity),
                 new TransportCcDelayTrendEstimator(TransportCcDelaySmoothing, TransportCcOveruseThresholdMicros),
                 new TransportCcLossEstimator(TransportCcLossSmoothing),
@@ -234,7 +234,7 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
                 Stopwatch.GetTimestamp, Stopwatch.Frequency,
                 loggerFactory.CreateLogger<TransportCcCongestionController>());
             _rtp.PacketSent += _transportCcCongestion.OnPacketSent;
-            _rtp.ControlPacketReceived += _transportCcCongestion.OnControlDatagram;
+            _rtp.RtcpCompoundReceived += _transportCcCongestion.OnRtcpPackets;
             _transportCcCongestion.RecommendedBitrateChanged += OnCongestionRecommendationChanged;
         }
 
@@ -484,11 +484,11 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
 
         _lifetimeCts.Cancel();
         _rtp.PacketReceived -= OnPacketReceived;
-        _rtp.ControlPacketReceived -= _keyFrameFeedback.OnControlDatagram;
+        _rtp.RtcpCompoundReceived -= _keyFrameFeedback.OnRtcpPackets;
         if (_transportCcCongestion is not null)
         {
             _rtp.PacketSent -= _transportCcCongestion.OnPacketSent;
-            _rtp.ControlPacketReceived -= _transportCcCongestion.OnControlDatagram;
+            _rtp.RtcpCompoundReceived -= _transportCcCongestion.OnRtcpPackets;
             _transportCcCongestion.RecommendedBitrateChanged -= OnCongestionRecommendationChanged;
         }
         if (_retransmitBuffer is not null)

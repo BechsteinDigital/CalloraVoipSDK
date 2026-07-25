@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using System.Collections.ObjectModel;
 using System.Runtime.InteropServices;
 using CalloraVoipSdk.Core.Application.Media;
+using CalloraVoipSdk.Core.Application.Media.Rtcp.Packets;
 using CalloraVoipSdk.Core.Application.Media.Sessions;
 using CalloraVoipSdk.Core.Domain.Calls;
 using CalloraVoipSdk.Core.Infrastructure.Common.Timing;
@@ -93,7 +94,7 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
     public event Action<CallMediaRuntimeMetrics>? RuntimeMetricsUpdated;
 
     /// <inheritdoc />
-    public event Action<byte[]>? RtcpMuxDatagramReceived;
+    public event Action<IReadOnlyList<RtcpPacket>>? RtcpCompoundReceived;
 
     /// <inheritdoc />
     public event Action? MediaConsentLost;
@@ -185,7 +186,7 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
         var logger = loggerFactory.CreateLogger<RtpSession>();
         _rtp = new RtpSession(options, new RtpPacketCodec(), logger);
         _rtp.PacketReceived += OnPacketReceived;
-        _rtp.ControlPacketReceived += OnControlPacketReceived;
+        _rtp.RtcpCompoundReceived += OnRtcpCompoundReceived;
 
         // ICE on the media 5-tuple (RFC 8445 §7.3 inbound checks + RFC 7675 consent): the attachment
         // answers inbound checks and runs consent freshness on this same socket.
@@ -406,18 +407,15 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
         HandleJitterBufferAddResult(addResult, packet);
     }
 
-    private void OnControlPacketReceived(byte[] datagram)
+    private void OnRtcpCompoundReceived(IReadOnlyList<RtcpPacket> packets)
     {
-        if (datagram.Length == 0)
-            return;
-
         try
         {
-            RtcpMuxDatagramReceived?.Invoke(datagram);
+            RtcpCompoundReceived?.Invoke(packets);
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Unhandled exception while dispatching RTCP-MUX datagram.");
+            _logger.LogDebug(ex, "Unhandled exception while dispatching decoded RTCP compound.");
         }
     }
 
@@ -427,7 +425,7 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
 
         _rtp.PacketReceived -= OnPacketReceived;
-        _rtp.ControlPacketReceived -= OnControlPacketReceived;
+        _rtp.RtcpCompoundReceived -= OnRtcpCompoundReceived;
         if (_iceMedia.IsActive)
             _rtp.StunPacketReceived -= _iceMedia.OnStunPacketReceived;
         await _iceMedia.DisposeAsync().ConfigureAwait(false);
@@ -466,7 +464,7 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
         FrameReceived = null;
         DtmfReceived = null;
         RuntimeMetricsUpdated = null;
-        RtcpMuxDatagramReceived = null;
+        RtcpCompoundReceived = null;
         MediaConsentLost = null;
         MediaConnectivityDegraded = null;
         MediaConnectivityRecovered = null;
