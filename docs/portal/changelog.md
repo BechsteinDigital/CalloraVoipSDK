@@ -6,6 +6,19 @@ The authoritative changelog lives in the repository:
 ## Release highlights
 
 ### Unreleased
+- **SIP PUBLISH soft-state lifecycle (RFC 3903 §4/§6):** `RefreshPublicationAsync`,
+  `ModifyPublicationAsync` and `RemovePublicationAsync` drive an existing publication via
+  `SIP-If-Match` — a publication can now be kept alive, changed or withdrawn, not just created.
+  See [Presence & event state](guides/presence-publish.md).
+- **SIP stack hardening:** precise transport-failure classification, 488 on an unanswerable
+  re-INVITE/UPDATE offer (RFC 3264), `Via`-branch-strict response matching (RFC 3261 §17.1.3),
+  registrar DNS off the inbound dispatch thread, bounded `Dispose` joins, WebSocket listener bind
+  retry, and a redirect fan-out cap.
+- **Interop:** two-leg scenario tests over the bridged call (DTMF, hold/unhold, attended transfer,
+  codec-mismatch transcoding), a concurrent-call soak, and a PBX-agnostic `IPbxFixture` abstraction
+  so the matrix can run against further PBXs.
+
+### 4.6.0-preview.3 — 2026-07-25
 - **Early media (RFC 3960):** a 180/183 carrying SDP now starts a **receive-only** media session
   before the call is answered — network announcements and ringback reach the app pre-answer.
   New surface: `IPhoneLine.OutboundCallRinging` (a call handle while `DialAsync` is still
@@ -14,9 +27,8 @@ The authoritative changelog lives in the repository:
 - **SIP MESSAGE (RFC 3428):** send and receive out-of-dialog instant messages —
   `VoipClient.SendMessageAsync(...)` and the `IncomingMessage` event.
   See [Instant messages](guides/messaging.md).
-- **SIP PUBLISH (RFC 3903):** publish event state such as presence, with the full soft-state
-  lifecycle — `PublishAsync` plus `RefreshPublicationAsync` / `ModifyPublicationAsync` /
-  `RemovePublicationAsync` (`SIP-If-Match`). See [Presence & event state](guides/presence-publish.md).
+- **SIP PUBLISH (RFC 3903):** publish event state such as presence via `PublishAsync`, returning the
+  assigned SIP-ETag and granted lifetime. See [Presence & event state](guides/presence-publish.md).
 - **REFER transfer progress (RFC 3515 / 6665):** an incoming REFER now carries an
   `IReferSubscription` (`TransferRequestedEventArgs.Subscription`) reporting the referred call's
   progress, with an auto-timeout bound to the session lifetime — instead of an optimistic
@@ -38,13 +50,8 @@ The authoritative changelog lives in the repository:
     failure; no media-session leak when a call terminates during ICE selection; G.722 is transcoded
     statefully across frames (removing audible artefacts); and the media sockets' kernel receive
     buffer is no longer capped at 8 KiB.
-- **SIP stack hardening:** precise transport-failure classification, 488 on an unanswerable
-  re-INVITE/UPDATE offer (RFC 3264), `Via`-branch-strict response matching (RFC 3261 §17.1.3),
-  registrar DNS off the inbound dispatch thread, bounded `Dispose` joins, WebSocket listener bind
-  retry, and a redirect fan-out cap.
 - **Interop:** the Asterisk matrix runs with **no skipped cases**, and a **two-leg bridged-call**
-  suite now verifies bidirectional, byte-exact media through the PBX (plus DTMF, hold, attended
-  transfer, codec-mismatch transcoding and SRTP over the bridge), alongside a concurrent-call soak.
+  suite verifies bidirectional, byte-exact media through the PBX.
   See the [interop matrix](interop/matrix.md).
 
 ### 4.6.0-preview.2 — 2026-07-22

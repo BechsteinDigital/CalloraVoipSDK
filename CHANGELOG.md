@@ -7,6 +7,51 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
 ## [Unreleased]
 
 ### Added
+- **SIP `PUBLISH` soft-state lifecycle (RFC 3903 §4/§6, CF-066b)**: `RefreshPublicationAsync`,
+  `ModifyPublicationAsync` and `RemovePublicationAsync` drive an existing publication via
+  `SIP-If-Match`, on `IVoipClient` and on `IPhoneLine`. Until now only the initial `PublishAsync`
+  was reachable from the facade, so a publication could not be kept alive, changed or withdrawn.
+
+### Fixed
+- **SIP stack hardening (#13)**, a batch of RFC-conformance and robustness fixes:
+  - Transport-failure classification is now precise (`SipTransactionTransportException` only), so a
+    non-transport error such as a failed PRACK no longer triggers candidate failover and a synthetic
+    503.
+  - A re-INVITE or UPDATE offer that cannot be answered is rejected with **488 Not Acceptable Here**
+    (RFC 3264 §6 / RFC 3311 §5.2) instead of returning a fresh offer as the answer.
+  - A response without a top-`Via` branch no longer matches a client transaction (RFC 3261 §17.1.3).
+  - An explicitly configured transaction `Timeout` is honoured even when it equals 64×T1.
+  - Trusted-registrar DNS resolution moved off the inbound dispatch thread, with bounded retry
+    back-off — an inbound INVITE before the first registration no longer blocks the transport.
+  - `Dispose` on the stream and WebSocket connections joins the receive loop with a bounded timeout
+    instead of blocking indefinitely.
+  - The WebSocket listener retries the bind on a fresh port, closing the TOCTOU window between the
+    port probe and the actual bind.
+  - Redirect fan-out is capped (a malicious 3xx with many Contacts can no longer expand into an
+    unbounded chain of INVITE transactions); the UAS trust model is documented as an explicit design
+    decision.
+  - Assorted clean-ups: `Random.Shared` instead of `new Random()`, the inbound `User-Agent` is
+    configurable, and dead code (redirect-Contact expression, identity transport normalisation,
+    UAS-level `Max-Forwards` decrement) removed.
+- **Convenience:** the registration auth failure reason is now read from the line state instead of a
+  missable event, closing a race where `ConnectResult.Error` could stay null (F005b follow-up).
+
+### Changed
+- **Interop coverage**: two-leg scenario tests over the bridged call (DTMF end-to-end, hold/unhold,
+  attended transfer, codec-mismatch transcoding), a **concurrent-call soak** (N parallel bridged
+  calls), and a PBX-agnostic **`IPbxFixture`** abstraction so the matrix can be run against further
+  PBXs (FreeSWITCH next).
+  - The two-leg **SRTP** content check is excluded from the PR CI job (trait
+    `Category=InteropLocalMedia`): the double SRTP decrypt/re-encrypt at the bridge is not reliably
+    measurable on shared CI runners. It remains a hard local check; the plain two-leg content check
+    and the single-leg SDES tests stay in the CI gate.
+
+## [4.6.0-preview.3] - 2026-07-25
+
+Adds early media, SIP MESSAGE, SIP PUBLISH and REFER progress reporting, and closes every
+interop- and stability-critical finding of the full source audit. No breaking API changes.
+
+### Added
 - **Early media (RFC 3960, F011)**: a 180/183 response carrying SDP now starts a **receive-only**
   media session before the call is answered. New public surface: `IPhoneLine.OutboundCallRinging`
   (a pre-answer call handle while `DialAsync` is still blocking), `ICall.EarlyMediaSdp` (the early
@@ -16,12 +61,11 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
   `VoipClient.SendMessageAsync(...)` and the `IVoipClient.IncomingMessage` event.
 - **SIP `PUBLISH` (RFC 3903, CF-066b)**: publish event state (e.g. presence) via
   `VoipClient.PublishAsync(...)`, returning a `PublishResult` with the assigned SIP-ETag and
-  granted lifetime — plus the full soft-state lifecycle via `RefreshPublicationAsync`,
-  `ModifyPublicationAsync` and `RemovePublicationAsync` (`SIP-If-Match`, RFC 3903 §4/§6).
-  All available on `IVoipClient` and on `IPhoneLine` for a specific line.
+  granted lifetime. (The facade methods to refresh, modify or remove a publication follow in the
+  next release.)
 - **REFER transfer progress subscription (RFC 3515 / 6665, CF-045)**: an incoming REFER now carries
   an `IReferSubscription` (`TransferRequestedEventArgs.Subscription`) that reports the referred
-  call's progress, with an auto-timeout for an unresolved subscription.
+  call's progress, with an auto-timeout bound to the session lifetime.
 
 ### Fixed
 - **SIP:** re-ACK on a retransmitted 2xx of a confirmed dialog (RFC 3261 §13.2.2.4, #3) — a lost
@@ -55,39 +99,15 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
 - **RTP:** the media sockets' kernel receive buffer is no longer fixed at 8 KiB (#12) and is
   configurable, preventing kernel drops at video bitrates.
 - **Media metrics:** late-arriving packets are no longer counted as unrecoverable loss (F002).
-- **SIP stack hardening (#13)**, a batch of RFC-conformance and robustness fixes:
-  - Transport-failure classification is now precise (`SipTransactionTransportException` only), so a
-    non-transport error such as a failed PRACK no longer triggers candidate failover and a synthetic
-    503.
-  - A re-INVITE or UPDATE offer that cannot be answered is rejected with **488 Not Acceptable Here**
-    (RFC 3264 §6 / RFC 3311 §5.2) instead of returning a fresh offer as the answer.
-  - A response without a top-`Via` branch no longer matches a client transaction (RFC 3261 §17.1.3).
-  - An explicitly configured transaction `Timeout` is honoured even when it equals 64×T1.
-  - Trusted-registrar DNS resolution moved off the inbound dispatch thread, with bounded retry
-    back-off — an inbound INVITE before the first registration no longer blocks the transport.
-  - `Dispose` on the stream and WebSocket connections joins the receive loop with a bounded timeout
-    instead of blocking indefinitely.
-  - The WebSocket listener retries the bind on a fresh port, closing the TOCTOU window between the
-    port probe and the actual bind.
-  - Redirect fan-out is capped (a malicious 3xx with many Contacts can no longer expand into an
-    unbounded chain of INVITE transactions); the UAS trust model is documented as an explicit design
-    decision.
-  - Assorted clean-ups: `Random.Shared` instead of `new Random()`, the inbound `User-Agent` is
-    configurable, and dead code (redirect-Contact expression, identity transport normalisation,
-    UAS-level `Max-Forwards` decrement) removed.
+- **NAT:** the corrective re-REGISTER is applied on UDP only (F010) — over TCP/TLS the established
+  connection carries the routing (RFC 5626), so rewriting the contact to the reflected SNAT address
+  no longer breaks registration behind NAT.
 
 ### Changed
-- **Interop coverage**: the Asterisk suite now runs with **all cases green and none skipped**
-  (early media unblocked). Added a **two-leg bridged-call** suite that verifies **bidirectional,
-  byte-exact media** through the PBX (RTP counters both ways, local + remote RTCP quality, and
-  byte-identical PCMU payload in both directions), covering DTMF, hold/unhold, attended transfer,
-  codec-mismatch transcoding and an SRTP-SDES variant over the bridged call; a **concurrent-call
-  soak** (N parallel bridged calls); and a PBX-agnostic `IPbxFixture` abstraction so the matrix can
-  be run against further PBXs.
-  - The two-leg **SRTP** content check is excluded from the PR CI job (trait
-    `Category=InteropLocalMedia`): the double SRTP decrypt/re-encrypt at the bridge is not reliably
-    measurable on shared CI runners. It remains a hard local check; the plain two-leg content check
-    and the single-leg SDES tests stay in the CI gate.
+- **Interop coverage**: the Asterisk suite runs with **all cases green and none skipped** (early
+  media unblocked). Added a **two-leg bridged-call** suite that verifies **bidirectional,
+  byte-exact media** through the PBX — RTP counters both ways, local and remote RTCP quality, and
+  byte-identical PCMU payload in both directions.
 
 ## [4.6.0-preview.2] - 2026-07-22
 
