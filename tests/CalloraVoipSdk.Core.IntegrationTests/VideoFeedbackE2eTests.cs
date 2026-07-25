@@ -21,19 +21,25 @@ public sealed class VideoFeedbackE2eTests
     private static readonly RtcpPacketCodec RtcpCodec = new();
     private static readonly RtpPacketCodec RtpCodec = new();
 
+    // FreeUdpPort() liest den Port über einen sofort geschlossenen Probe-Socket — zwischen Probe und
+    // dem echten Bind (Session-Start / Peer-Bind) kann ein parallel laufender Test denselben Port
+    // belegen (TOCTOU → SocketError.AddressAlreadyInUse). Auf dem geteilten CI-Runner (ubuntu) trat das
+    // intermittierend auf. Der Aufbau wird daher bei EADDRINUSE mit frischen Ports wiederholt — analog
+    // zu RtpMediaLoopback.StartAsync im Soak-Harness.
+    private const int PortBindAttempts = 8;
+
     [Fact]
     public async Task Inbound_pli_raises_keyframe_request_on_the_video_stream()
     {
-        var localVideoPort = FreeUdpPort();
-        await using var session = CreateSession(localVideoPort, remoteVideoPort: FreeUdpPort());
+        var setup = await StartSessionWithRetryAsync();
+        await using var session = setup.Session;
 
         var keyframeRequested = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         session.Video!.KeyFrameRequested += () => keyframeRequested.TrySetResult();
-        await session.StartAsync();
 
         using var peer = new UdpClient();
         var pli = RtcpCodec.Encode([new RtcpPictureLossIndication { SenderSsrc = 0x1, MediaSsrc = 0x2 }]);
-        await peer.SendAsync(pli, new IPEndPoint(IPAddress.Loopback, localVideoPort));
+        await peer.SendAsync(pli, new IPEndPoint(IPAddress.Loopback, setup.LocalVideoPort));
 
         await keyframeRequested.Task.WaitAsync(TimeSpan.FromSeconds(5));
     }
@@ -41,14 +47,12 @@ public sealed class VideoFeedbackE2eTests
     [Fact]
     public async Task Detected_sequence_gap_sends_a_pli_to_the_peer()
     {
-        var localVideoPort = FreeUdpPort();
-        var peerPort = FreeUdpPort();
-        await using var session = CreateSession(localVideoPort, peerPort);
-        await session.StartAsync();
+        var setup = await StartSessionWithBoundPeerAsync();
+        await using var session = setup.Session;
+        using var peer = setup.Peer;
 
-        using var peer = new UdpClient(new IPEndPoint(IPAddress.Loopback, peerPort));
         const uint peerSsrc = 0x0BADF00D;
-        var target = new IPEndPoint(IPAddress.Loopback, localVideoPort);
+        var target = new IPEndPoint(IPAddress.Loopback, setup.LocalVideoPort);
 
         // First a delivered packet establishes the receive baseline, then a gap (seq +2)
         // must make the stream ask the peer for a keyframe.
@@ -70,14 +74,12 @@ public sealed class VideoFeedbackE2eTests
     [Fact]
     public async Task Detected_sequence_gap_sends_a_nack_for_the_missing_packet()
     {
-        var localVideoPort = FreeUdpPort();
-        var peerPort = FreeUdpPort();
-        await using var session = CreateSession(localVideoPort, peerPort);
-        await session.StartAsync();
+        var setup = await StartSessionWithBoundPeerAsync();
+        await using var session = setup.Session;
+        using var peer = setup.Peer;
 
-        using var peer = new UdpClient(new IPEndPoint(IPAddress.Loopback, peerPort));
         const uint peerSsrc = 0x0BADF00D;
-        var target = new IPEndPoint(IPAddress.Loopback, localVideoPort);
+        var target = new IPEndPoint(IPAddress.Loopback, setup.LocalVideoPort);
 
         // seq 100 delivered, then 102 → 101 is missing.
         await peer.SendAsync(VideoRtpPacket(seq: 100, peerSsrc), target);
@@ -99,6 +101,60 @@ public sealed class VideoFeedbackE2eTests
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Baut eine gestartete Video-Session (Peer bindet keinen festen Port). Wiederholt bei
+    /// <see cref="SocketError.AddressAlreadyInUse"/> mit frischen Ports (TOCTOU-Absicherung).
+    /// </summary>
+    private static async Task<(RtpCallMediaSession Session, int LocalVideoPort)> StartSessionWithRetryAsync()
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            var localVideoPort = FreeUdpPort();
+            RtpCallMediaSession? session = null;
+            try
+            {
+                session = CreateSession(localVideoPort, remoteVideoPort: FreeUdpPort());
+                await session.StartAsync();
+                return (session, localVideoPort);
+            }
+            catch (SocketException ex)
+                when (ex.SocketErrorCode == SocketError.AddressAlreadyInUse && attempt < PortBindAttempts)
+            {
+                if (session is not null)
+                    await session.DisposeAsync();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Baut eine gestartete Video-Session samt Peer, der auf <c>peerPort</c> bindet. Wiederholt bei
+    /// <see cref="SocketError.AddressAlreadyInUse"/> mit frischen Ports (TOCTOU-Absicherung).
+    /// </summary>
+    private static async Task<(RtpCallMediaSession Session, UdpClient Peer, int LocalVideoPort)> StartSessionWithBoundPeerAsync()
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            var localVideoPort = FreeUdpPort();
+            var peerPort = FreeUdpPort();
+            RtpCallMediaSession? session = null;
+            UdpClient? peer = null;
+            try
+            {
+                session = CreateSession(localVideoPort, peerPort);
+                await session.StartAsync();
+                peer = new UdpClient(new IPEndPoint(IPAddress.Loopback, peerPort));
+                return (session, peer, localVideoPort);
+            }
+            catch (SocketException ex)
+                when (ex.SocketErrorCode == SocketError.AddressAlreadyInUse && attempt < PortBindAttempts)
+            {
+                peer?.Dispose();
+                if (session is not null)
+                    await session.DisposeAsync();
+            }
+        }
+    }
 
     private static RtpCallMediaSession CreateSession(int localVideoPort, int remoteVideoPort)
     {
