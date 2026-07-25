@@ -2,6 +2,7 @@ using CalloraVoipSdk;
 using CalloraVoipSdk.Core.Domain.Lines;
 using CalloraVoipSdk.Core.Domain.Security;
 using CalloraVoipSdk.InteropTests.Asterisk;
+using CalloraVoipSdk.InteropTests.Media;
 using Xunit;
 
 using DomainSipTransport = CalloraVoipSdk.Core.Domain.Lines.SipTransport;
@@ -40,5 +41,19 @@ public sealed class AsteriskTwoLegMediaInteropTests
             new ConnectOptions { Timeout = TimeSpan.FromSeconds(20) });
 
         Assert.True(reg.IsSuccess, $"Registrierung 6003 fehlgeschlagen: Status={reg.Status}");
+    }
+
+    [DockerRequiredFact]
+    public async Task BridgedCall_ConnectsBothLegs()
+    {
+        await using var asterisk = new AsteriskContainer();
+        await asterisk.StartAsync();
+
+        await using var bridged = await TwoLegBridgedCall.StartAsync(asterisk);
+
+        Assert.Equal(CalloraVoipSdk.Core.Domain.Calls.CallState.Connected, bridged.CallerCall.State);
+        Assert.Equal(CalloraVoipSdk.Core.Domain.Calls.CallState.Connected, bridged.CalleeCall.State);
+        Assert.Equal(0, bridged.CallerCall.MediaParameters!.PayloadType);  // PCMU beidseitig
+        Assert.Equal(0, bridged.CalleeCall.MediaParameters!.PayloadType);
     }
 }
