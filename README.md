@@ -88,7 +88,8 @@ Available in the repository today:
 - In-dialog operations: `INFO`, `OPTIONS`, `SUBSCRIBE`, `NOTIFY`
 - Messaging & presence: SIP `MESSAGE` (RFC 3428) send & receive
   (`VoipClient.SendMessageAsync` / `IncomingMessage` event) and SIP `PUBLISH` (RFC 3903, e.g.
-  presence — publish / refresh / modify / remove via `VoipClient.PublishAsync`)
+  presence) with the full soft-state lifecycle — `PublishAsync` plus `RefreshPublicationAsync` /
+  `ModifyPublicationAsync` / `RemovePublicationAsync` (`SIP-If-Match`)
 - Media stack: RTP sessions, sender, receiver, `MediaConnector`, cross-connect
 - Media encryption: SRTP via **SDES** (RFC 4568) or **DTLS-SRTP** (RFC 5763, opt-in via
   `VoipConfiguration.OfferDtlsSrtp`) as both caller and callee, encrypted/authenticated
