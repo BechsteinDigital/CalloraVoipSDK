@@ -30,9 +30,10 @@ self-hostable STUN/TURN server on top of the stable SIP + RTP core.
 > a broad interop matrix — validate for your environment first. The production-proven NAT path is
 > symmetric RTP (comedia), which needs no ICE or STUN. The SIP + RTP core is additionally exercised
 > by an **automated interop suite against a real Asterisk (PJSIP) container in CI** — calls, media,
-> codecs, SRTP-SDES, DTMF, transfer, session timers and TCP/TLS (see the
-> [interop matrix](interop/matrix.md); known gap: early media). Known gaps and interop defects are
-> tracked openly in the [issue tracker](https://github.com/BechsteinDigital/callora-voip-sdk/issues).
+> codecs, SRTP-SDES, DTMF, transfer, session timers, early media and TCP/TLS, plus a two-leg bridged
+> call with byte-exact bidirectional media (see the [interop matrix](interop/matrix.md); currently
+> all cases green, none skipped). Known gaps and interop defects are tracked openly in the
+> [issue tracker](https://github.com/BechsteinDigital/callora-voip-sdk/issues).
 
 **Core (SIP + RTP):**
 
@@ -40,6 +41,8 @@ self-hostable STUN/TURN server on top of the stable SIP + RTP core.
 |-----------|--------|
 | SIP Register / Dial / Accept / Hangup | ✅ Stable |
 | Hold / Unhold / Blind + Attended Transfer | ✅ Stable |
+| REFER transfer progress subscription (RFC 3515 / 6665) | ✅ Stable |
+| Early media (RFC 3960): pre-answer receive-only media + DTMF in the early dialog | ✅ Stable |
 | RTP media transport | ✅ Stable |
 | SRTP + SRTCP media encryption (SDES, offer & answer; RFC 4568 / RFC 3711) | ✅ Stable |
 | DTLS-SRTP media encryption (RFC 5763, opt-in) | 🧪 Preview |
@@ -49,6 +52,8 @@ self-hostable STUN/TURN server on top of the stable SIP + RTP core.
 | Module registry (`client.Modules`) as plugin extension point | ✅ Stable |
 | Configurable audio codec preference | ✅ Stable |
 | DTMF send/receive (RFC 4733) | ✅ Stable |
+| SIP MESSAGE send & receive (RFC 3428) | ✅ Stable |
+| SIP PUBLISH: event-state publish / refresh / modify / remove (RFC 3903) | ✅ Stable |
 | RTCP quality metrics (measured jitter, loss, round-trip time) | ✅ Stable |
 | Recording + Playback (WAV/MP3) | ✅ Stable |
 | Linux + Windows audio devices | ✅ Stable |

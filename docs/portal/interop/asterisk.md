@@ -12,11 +12,15 @@
   encrypted media), DTMF (RFC 4733) receive + negotiation.
 - **In-call** — hold/unhold (re-INVITE), blind & attended transfer (REFER/Replaces),
   session-timer negotiation (RFC 4028).
+- **Early media** (RFC 3960) — pre-answer receive-only media from a 180/183 SDP (plain and
+  SRTP-SDES) plus DTMF in the early dialog.
 - **Transport** — UDP, TCP and TLS.
+- **Two-leg bridged media** — a separate suite bridges two SDK legs through the PBX and verifies
+  **bidirectional, byte-exact** media (RTP counters both ways, local + remote RTCP quality, and
+  byte-identical PCMU payload A→B).
 
-**Known gap:** early media (183 Session Progress) — the SDK does not yet set up a media session
-from the 183 SDP; tracked in the [issue tracker](https://github.com/BechsteinDigital/callora-voip-sdk/issues).
-Run your own acceptance test for anything you depend on before production.
+The suite currently runs with **all cases green and none skipped**. Still, run your own acceptance
+test for anything you depend on before production.
 
 ## Example `pjsip.conf` peer
 
