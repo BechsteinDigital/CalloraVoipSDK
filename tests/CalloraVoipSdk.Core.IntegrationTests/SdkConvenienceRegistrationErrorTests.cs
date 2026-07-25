@@ -59,7 +59,7 @@ public sealed class SdkConvenienceRegistrationErrorTests
         public void SetInboundHandler(Action<ICallChannel, string> onInbound) { }
         public void SetMessageHandler(Action<SipInstantMessage> onMessage) { }
         public Task SendMessageAsync(string targetUri, string body, string contentType, CancellationToken ct = default) => Task.CompletedTask;
-        public Task<PublishResult> PublishAsync(string eventType, string body, string contentType, int expiresSeconds, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<PublishResult> PublishAsync(string eventType, string body, string contentType, int expiresSeconds, string? ifMatch = null, CancellationToken ct = default) => throw new NotSupportedException();
         public void Dispose() { }
     }
 
