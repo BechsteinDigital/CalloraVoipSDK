@@ -201,9 +201,7 @@ internal sealed class RtcpPacketCodec : IRtcpPacketCodec
 
                 if (itemType == RtcpSdesItemType.End)
                 {
-                    // Skip padding to next 4-byte boundary
-                    var chunkStart = (offset - 5) & ~3; // re-align from SSRC start
-                    // Simpler: just align offset to next multiple of 4 relative to body start
+                    // Skip padding to the next 4-byte boundary.
                     while (offset % 4 != 0) offset++;
                     break;
                 }
@@ -420,12 +418,14 @@ internal sealed class RtcpPacketCodec : IRtcpPacketCodec
 
     private static byte[] EncodeChunk(RtcpSdesChunk chunk)
     {
-        // Calculate raw body size: SSRC(4) + items + END(1), then round up to 4 bytes
-        var itemBytes = chunk.Items.Sum(item =>
-        {
-            var utf8 = Encoding.UTF8.GetByteCount(item.Value);
-            return 1 + 1 + utf8; // type + length + value
-        });
+        // Each SDES item value is length-prefixed by a single byte, so it cannot exceed 255 bytes (RFC 3550
+        // §6.5). Clamp the UTF-8 value once and reuse it for both sizing and writing, so a value > 255 bytes is
+        // truncated rather than emitting a wrapped length byte that no longer matches the written content.
+        var items = chunk.Items
+            .Select(item => (item.ItemType, Value: ClampToByteLength(item.Value)))
+            .ToArray();
+
+        var itemBytes = items.Sum(item => 1 + 1 + item.Value.Length); // type + length + value
 
         var raw     = 4 + itemBytes + 1;  // SSRC + items + END
         var padded  = RoundUp4(raw);
@@ -434,10 +434,9 @@ internal sealed class RtcpPacketCodec : IRtcpPacketCodec
         BinaryPrimitives.WriteUInt32BigEndian(buf.AsSpan(0), chunk.Ssrc);
         var offset = 4;
 
-        foreach (var item in chunk.Items)
+        foreach (var (itemType, valueBytes) in items)
         {
-            var valueBytes = Encoding.UTF8.GetBytes(item.Value);
-            buf[offset++] = (byte)item.ItemType;
+            buf[offset++] = (byte)itemType;
             buf[offset++] = (byte)valueBytes.Length;
             valueBytes.CopyTo(buf, offset);
             offset += valueBytes.Length;
@@ -449,8 +448,10 @@ internal sealed class RtcpPacketCodec : IRtcpPacketCodec
 
     private static byte[] EncodeBye(RtcpByePacket bye)
     {
+        // The BYE reason is length-prefixed by a single byte (RFC 3550 §6.6), so clamp it to 255 bytes rather
+        // than emitting a wrapped length byte that would corrupt the packet.
         var reasonBytes = bye.Reason is not null
-            ? Encoding.UTF8.GetBytes(bye.Reason)
+            ? ClampToByteLength(bye.Reason)
             : [];
 
         var raw   = 4 + bye.Sources.Count * 4
@@ -483,4 +484,15 @@ internal sealed class RtcpPacketCodec : IRtcpPacketCodec
     // -------------------------------------------------------------------------
 
     private static int RoundUp4(int n) => (n + 3) & ~3;
+
+    /// <summary>
+    /// Encodes a string as UTF-8 and clamps it to at most 255 bytes — the maximum a single-byte RTCP length
+    /// prefix (SDES item value, BYE reason) can represent (RFC 3550 §6.5/§6.6). A pathologically long value is
+    /// truncated at the byte boundary so the emitted length byte always matches the written content.
+    /// </summary>
+    private static byte[] ClampToByteLength(string value)
+    {
+        var bytes = Encoding.UTF8.GetBytes(value);
+        return bytes.Length <= 255 ? bytes : bytes[..255];
+    }
 }
