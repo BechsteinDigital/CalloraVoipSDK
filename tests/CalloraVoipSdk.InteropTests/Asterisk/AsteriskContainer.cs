@@ -7,8 +7,8 @@ namespace CalloraVoipSdk.InteropTests.Asterisk;
 
 /// <summary>
 /// Startet einen Asterisk-Container (PJSIP, andrius/asterisk:22) mit einer minimalen SIP-Konfiguration
-/// (UDP + TCP Transport, Endpoint 6001 mit Digest-Auth) und einem Dialplan für Non-Happy-Path-Calls.
-/// Nur für Interop-Tests.
+/// (UDP/TCP/TLS-Transport; Endpoints 6001 Plain RTP, 6002 SRTP/SDES, 6003 Bridge/PCMU-only — je Digest-Auth)
+/// und einem Dialplan für Non-Happy-Path- und Zwei-Bein-Bridge-Calls. Nur für Interop-Tests.
 /// </summary>
 public sealed class AsteriskContainer : IAsyncDisposable
 {
@@ -43,6 +43,10 @@ public sealed class AsteriskContainer : IAsyncDisposable
         "allow=ulaw,alaw,g722\n" +               // mehrere Codecs → Negotiation-Tests wählen per SDK-Präferenz
         "auth=6001\n" +
         "aors=6001\n" +
+        // direct_media=no: Asterisk bleibt im Medienpfad (RTP-Relay) statt die gebrückten Legs per
+        // re-INVITE auf direkte Endpoint-zu-Endpoint-Media umzustellen — sonst empfängt kein Leg RTP
+        // (Zwei-Bein-Test). No-op für app-basierte 6001-Calls (Milliwatt etc.), die Asterisk selbst bedient.
+        "direct_media=no\n" +
         "\n" +
         "[6001]\n" +
         "type=auth\n" +
@@ -74,6 +78,27 @@ public sealed class AsteriskContainer : IAsyncDisposable
         "\n" +
         "[6002]\n" +
         "type=aor\n" +
+        "max_contacts=1\n" +
+        "\n" +
+        // Dritter Endpoint: Plain RTP, PCMU-only. Ziel der Zwei-Bein-Bridge — PCMU auf beiden Legs
+        // garantiert Same-Codec-Passthrough für die byte-exakte Inhaltsverifikation.
+        "[6003]\n" +
+        "type=endpoint\n" +
+        "context=default\n" +
+        "disallow=all\n" +
+        "allow=ulaw\n" +
+        "auth=6003\n" +
+        "aors=6003\n" +
+        "direct_media=no\n" +                     // s. 6001: Relay erzwingen, sonst fließt kein Bridge-RTP
+        "\n" +
+        "[6003]\n" +
+        "type=auth\n" +
+        "auth_type=userpass\n" +
+        "username=6003\n" +
+        "password=secret\n" +
+        "\n" +
+        "[6003]\n" +
+        "type=aor\n" +
         "max_contacts=1\n";
 
     // Dialplan für Call-Tests. Kontext [default] passt zu context=default am Endpoint 6001.
@@ -100,7 +125,8 @@ public sealed class AsteriskContainer : IAsyncDisposable
                                                   //   Latenz). 10 s geben BEIDEN Pfaden Puffer vor dem Answer;
                                                   //   Wait(4) ließ das SDES-Early-Media-Fenster kollabieren.
         "same => n,Answer()\n" +                  // → 200 OK
-        "same => n,Milliwatt()\n";                // Post-Answer-Media
+        "same => n,Milliwatt()\n" +               // Post-Answer-Media
+        "exten => 6003,1,Dial(PJSIP/6003,30)\n";  // brückt den Anruf an den zweiten registrierten SDK-Endpoint
 
     private readonly IContainer _container;
     private readonly FileInfo _pjsipConfFile;
@@ -152,6 +178,12 @@ public sealed class AsteriskContainer : IAsyncDisposable
 
     /// <summary>Passwort des SDES-Endpoints (Digest-Auth).</summary>
     public string SdesPassword => "secret";
+
+    /// <summary>Benutzername des dritten Plain-RTP-Endpoints (PCMU-only), Ziel der Zwei-Bein-Bridge.</summary>
+    public string BridgeUsername => "6003";
+
+    /// <summary>Passwort des Bridge-Endpoints (Digest-Auth).</summary>
+    public string BridgePassword => "secret";
 
     /// <summary>Docker-Host (meist 127.0.0.1/localhost) für den Port-gemappten UDP-Zugang.</summary>
     public string Host => _container.Hostname;
