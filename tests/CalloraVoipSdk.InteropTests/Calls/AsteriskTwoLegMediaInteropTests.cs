@@ -111,7 +111,10 @@ public abstract class TwoLegMediaMatrix
         await pbx.StartAsync();
         await using var bridged = await TwoLegBridgedCall.StartAsync(pbx);
 
-        var result = await bridged.RunBidirectionalMediaAsync(TimeSpan.FromSeconds(8));
+        // Poll bis ≥50 zusammenhängende Marker je Richtung (robust gegen langsamen Media-Ramp und
+        // verstreute Verluste unter CI-Last; stoppt früh, sobald erreicht), Deadline 30 s.
+        await using var flow = bridged.StartCapturingMedia();
+        var result = await PollUntilContiguousBothAsync(flow, 50, TimeSpan.FromSeconds(30));
 
         // Beide Richtungen byte-exakt: A→B (Callee empfängt A's Marker) und B→A (Caller empfängt B's).
         AssertContiguousDelivery(result.CalleeReceivedSequences, "A→B");
@@ -138,12 +141,17 @@ public abstract class TwoLegMediaMatrix
         AssertSrtp(bridged.CallerCall, "Caller");
         AssertSrtp(bridged.CalleeCall, "Callee");
 
-        var result = await bridged.RunBidirectionalMediaAsync(TimeSpan.FromSeconds(8));
+        // Poll bis ≥50 zusammenhängende Marker je Richtung. Der SDES-Bridge-Pfad (SRTP-Keying auf
+        // beiden Legs + Decrypt/Re-Encrypt) rampt unter CI-Last langsam/schwankend hoch → festes
+        // Fenster war fragil; Poll-mit-Deadline (30 s) ist robust, Assertion (≥50) unverändert.
+        await using var flow = bridged.StartCapturingMedia();
+        var result = await PollUntilContiguousBothAsync(flow, 50, TimeSpan.FromSeconds(30));
 
-        // Verschlüsseltes Media floss in beide Richtungen (Empfang = entschlüsselt gezählt).
-        AssertBidirectionalRtp(bridged.CallerCall, "Caller");
-        AssertBidirectionalRtp(bridged.CalleeCall, "Callee");
-        // Inhalt byte-exakt nach Entschlüsselung (PBX terminiert SDES je Leg, relayt Klartext-PCMU).
+        // Verschlüsseltes Media floss byte-exakt in BEIDE Richtungen: ≥50 zusammenhängende, nach
+        // Entschlüsselung byte-exakte Marker je Seite beweisen bidirektionalen SRTP-Fluss stärker als
+        // ein reiner Paketzähler (PBX terminiert SDES je Leg, relayt Klartext-PCMU). Der Zähler-Nachweis
+        // (RtpStatistics) liegt separat in BridgedCall_FlowsRtpInBothDirections mit festem Fenster — hier
+        // würde er den Poll-Frühabbruch mit noch nicht befüllten RTCP-Zählern kollidieren lassen.
         Assert.True(LongestContiguousRun(result.CalleeReceivedSequences) >= 50,
             $"A→B verschlüsselter Inhalt nicht durchgängig ({result.CalleeReceivedSequences.Count} empfangen).");
         Assert.True(LongestContiguousRun(result.CallerReceivedSequences) >= 50,
@@ -153,12 +161,6 @@ public abstract class TwoLegMediaMatrix
         {
             Assert.True(call.MediaParameters!.IsSrtpNegotiated, $"{label}: SRTP nicht verhandelt.");
             Assert.Equal("RTP/SAVP", call.MediaParameters!.MediaProfile);
-        }
-
-        static void AssertBidirectionalRtp(CalloraVoipSdk.Core.Domain.Calls.ICall call, string label)
-        {
-            var rtp = call.RtpStatistics;
-            Assert.True(rtp is { PacketsSent: > 0, PacketsReceived: > 0 }, $"{label}: kein bidirektionales SRTP-RTP.");
         }
     }
 
@@ -205,6 +207,32 @@ public abstract class TwoLegMediaMatrix
             best = Math.Max(best, len);
         }
         return best;
+    }
+
+    /// <summary>
+    /// Pollt einen laufenden <see cref="TwoLegBridgedCall.CapturingMediaFlow"/>, bis in BEIDEN
+    /// Richtungen ein zusammenhängender Marker-Lauf ≥ <paramref name="target"/> beobachtet wurde oder
+    /// <paramref name="deadline"/> abläuft. Robust gegen langsamen Media-Ramp und verstreute Verluste
+    /// unter Last: der kumulative Empfangs-Set wächst monoton, sobald irgendwo ein lückenloser Lauf
+    /// von <paramref name="target"/> Frames ankam, ist die Bedingung erfüllt. Gibt die letzte
+    /// Momentaufnahme zurück (für die abschließenden Assertions).
+    /// </summary>
+    protected static async Task<TwoLegMediaResult> PollUntilContiguousBothAsync(
+        TwoLegBridgedCall.CapturingMediaFlow flow, int target, TimeSpan deadline)
+    {
+        var end = DateTime.UtcNow + deadline;
+        IReadOnlyList<uint> callee = Array.Empty<uint>();
+        IReadOnlyList<uint> caller = Array.Empty<uint>();
+        do
+        {
+            callee = flow.SnapshotCalleeReceived();
+            caller = flow.SnapshotCallerReceived();
+            if (LongestContiguousRun(callee) >= target && LongestContiguousRun(caller) >= target)
+                break;
+            await Task.Delay(TimeSpan.FromMilliseconds(500));
+        }
+        while (DateTime.UtcNow < end);
+        return new TwoLegMediaResult(callee, caller);
     }
 }
 
