@@ -41,5 +41,11 @@ internal interface ISipCallSignalingService : IDisposable
     /// Sends an out-of-dialog SIP MESSAGE (RFC 3428) and returns the final response status code (2xx on success).
     /// </summary>
     Task<int> SendMessageAsync(SipMessageRequest request, CancellationToken ct = default);
+
+    /// <summary>
+    /// Sends an out-of-dialog SIP PUBLISH (RFC 3903) and returns the final status plus the SIP-ETag/Expires
+    /// a 2xx event state compositor returned.
+    /// </summary>
+    Task<SipPublishResult> PublishAsync(SipPublishRequest request, CancellationToken ct = default);
 }
 
