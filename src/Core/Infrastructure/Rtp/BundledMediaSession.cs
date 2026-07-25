@@ -3,6 +3,7 @@ using CalloraVoipSdk.Core.Application.Media.Rtcp;
 using CalloraVoipSdk.Core.Application.Media.Rtcp.Packets;
 using CalloraVoipSdk.Core.Application.Media.Rtcp.Wire;
 using CalloraVoipSdk.Core.Infrastructure.Common.Relay;
+using CalloraVoipSdk.Core.Infrastructure.Common.Timing;
 using CalloraVoipSdk.Core.Infrastructure.Dtls;
 using CalloraVoipSdk.Core.Infrastructure.Rtcp.Wire;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
@@ -361,7 +362,9 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     // receive loop; a malformed compound must not tear it down, so decode failures are swallowed with a log.
     private void OnControlPacketReceived(byte[] rtcp)
     {
-        var arrival = DateTimeOffset.UtcNow;
+        // Monotonic arrival for the RTT delta (matched against the SR's monotonic send instant) so a system-
+        // clock step between sending our SR and its echo arriving cannot corrupt the derived RTT.
+        var arrival = MonotonicClock.Now;
 
         IReadOnlyList<RtcpPacket> packets;
         try
