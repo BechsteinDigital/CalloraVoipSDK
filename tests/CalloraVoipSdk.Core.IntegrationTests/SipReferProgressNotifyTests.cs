@@ -94,6 +94,40 @@ public sealed class SipReferProgressNotifyTests
     }
 
     [Fact]
+    public async Task An_accepted_refer_reports_pending_then_transitions_to_active_on_progress()
+    {
+        // RFC 6665 §4.1.3: ReportPending makes the immediate NOTIFY pending; the first progress report → active.
+        var (service, engine, transport) = Build(
+            transferAccepted: true,
+            report: s => { s.ReportPending(); s.ReportRinging(); s.ReportSuccess(); });
+
+        await service.HandleInboundRequestAsync(new IPEndPoint(IPAddress.Loopback, 5060), Refer(), default);
+
+        Assert.Contains(engine.Responses, r => r.StatusCode == 202);
+
+        var notifies = Notifies(transport);
+        Assert.Equal(3, notifies.Count);
+        Assert.StartsWith("pending", notifies[0].Headers["Subscription-State"]);
+        Assert.Equal("SIP/2.0 100 Trying", notifies[0].Body);
+        Assert.StartsWith("active", notifies[1].Headers["Subscription-State"]);
+        Assert.Equal("SIP/2.0 180 Ringing", notifies[1].Body);
+        Assert.StartsWith("terminated", notifies[2].Headers["Subscription-State"]);
+        Assert.Equal("SIP/2.0 200 OK", notifies[2].Body);
+    }
+
+    [Fact]
+    public async Task An_accepted_refer_that_only_reports_pending_sends_a_single_pending_notify()
+    {
+        var (service, _, transport) = Build(transferAccepted: true, report: s => s.ReportPending());
+
+        await service.HandleInboundRequestAsync(new IPEndPoint(IPAddress.Loopback, 5060), Refer(), default);
+
+        var notify = Assert.Single(Notifies(transport));
+        Assert.StartsWith("pending", notify.Headers["Subscription-State"]);
+        Assert.Equal("SIP/2.0 100 Trying", notify.Body);
+    }
+
+    [Fact]
     public async Task An_accepted_refer_relays_a_reported_referred_call_failure()
     {
         var (service, _, transport) = Build(transferAccepted: true, report: s => s.ReportFailure(486));
