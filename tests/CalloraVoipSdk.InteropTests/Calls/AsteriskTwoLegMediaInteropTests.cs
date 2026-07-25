@@ -76,4 +76,27 @@ public sealed class AsteriskTwoLegMediaInteropTests
             Assert.True(rtp is { PacketsReceived: > 0 }, $"{label}: keine empfangenen RTP-Pakete.");
         }
     }
+
+    [DockerRequiredFact]
+    public async Task BridgedCall_PopulatesLocalRtcpQuality()
+    {
+        await using var asterisk = new AsteriskContainer();
+        await asterisk.StartAsync();
+        await using var bridged = await TwoLegBridgedCall.StartAsync(asterisk);
+
+        await bridged.RunBidirectionalMediaAsync(TimeSpan.FromSeconds(10));
+
+        AssertLocalQuality(bridged.CallerCall, "Caller");
+        AssertLocalQuality(bridged.CalleeCall, "Callee");
+
+        static void AssertLocalQuality(CalloraVoipSdk.Core.Domain.Calls.ICall call, string label)
+        {
+            var q = call.QualitySnapshot;
+            Assert.True(q.RtcpActive, $"{label}: RTCP nicht aktiv.");
+            Assert.True(double.IsFinite(q.LocalReceiveJitterMs) && q.LocalReceiveJitterMs >= 0,
+                $"{label}: implausibler Jitter {q.LocalReceiveJitterMs}.");
+            Assert.InRange(q.LocalReceivePacketLossPercent, 0.0, 100.0);
+        }
+    }
+
 }
