@@ -39,12 +39,9 @@ internal sealed class RtpSession : IRtpSession
     // the established pattern for these leaf wire codecs (e.g. BundledMediaSession's RtcpPacketCodec).
     private readonly IRtcpPacketCodec _rtcpCodec = new RtcpPacketCodec();
 
-    // One sequence validator per observed SSRC, accessed only on the single receive loop thread.
-    // Capped and LRU-evicted so a peer spoofing a stream of distinct SSRCs cannot grow this table
-    // without bound (memory DoS). A real session sees a handful of SSRCs; 64 is generous headroom.
-    private const int MaxTrackedSsrcs = 64;
-    private readonly Dictionary<uint, RtpTrackedSsrc> _validators = new();
-    private long _ssrcActivityClock;
+    // Per-SSRC RFC 3550 §A.1 sequence validators, capped + LRU-evicted (memory-DoS bound). Accessed only on the
+    // single receive-loop thread. See RtpTrackedSsrcTable.
+    private readonly RtpTrackedSsrcTable _ssrcTable;
 
     // Symmetric RTP / comedia (RFC dodging NAT without ICE): once a valid RTP packet
     // arrives, remember its actual source and send back there instead of the SDP-advertised
@@ -80,6 +77,10 @@ internal sealed class RtpSession : IRtpSession
     private Task? _receiveLoop;
     private CancellationTokenSource? _loopCts;
     private int _started;
+    // Coordinates StartAsync's _loopCts/_receiveLoop writes with DisposeAsync's reads so a Start racing a Dispose
+    // never orphans the loop, and a Start after disposal does not spin up a loop on the disposed socket.
+    private readonly object _lifecycleSync = new();
+    private bool _disposed;
     private long _packetsSent;
     private long _octetsSent;
     private int _lastSentTimestamp;
@@ -145,6 +146,7 @@ internal sealed class RtpSession : IRtpSession
             options.TransportWideCcExtensionId, options.MidExtensionId, options.Mid);
         _codec   = codec;
         _logger  = logger;
+        _ssrcTable = new RtpTrackedSsrcTable(logger);
         _ssrc    = options.Ssrc ?? (uint)Random.Shared.Next();
 
         _outboundSrtp  = options.OutboundSrtp;
@@ -181,12 +183,17 @@ internal sealed class RtpSession : IRtpSession
         if (Interlocked.Exchange(ref _started, 1) != 0)
             return Task.CompletedTask;
 
-        // Link the caller token with an internal source so DisposeAsync can stop the receive
-        // loop by cancellation before the socket is disposed — cancelling the pending
-        // Socket.ReceiveFromAsync yields a clean OperationCanceledException, whereas disposing
-        // the socket underneath a pending Memory-based receive can surface as a raw fault.
-        _loopCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        _receiveLoop = RunReceiveLoopAsync(_loopCts.Token);
+        // Link the caller token with an internal source so DisposeAsync can stop the receive loop by cancellation
+        // before the socket is disposed. Assigned under _lifecycleSync so a concurrent DisposeAsync either observes
+        // the loop (and drains it) or wins first, marking _disposed so this Start does not spin up a doomed loop.
+        lock (_lifecycleSync)
+        {
+            if (_disposed)
+                return Task.CompletedTask;
+
+            _loopCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            _receiveLoop = RunReceiveLoopAsync(_loopCts.Token);
+        }
         return Task.CompletedTask;
     }
 
@@ -267,10 +274,10 @@ internal sealed class RtpSession : IRtpSession
     internal uint LocalSsrc => Volatile.Read(ref _ssrc);
 
     /// <summary>Number of distinct inbound SSRCs currently tracked (test/diagnostic seam).</summary>
-    internal int TrackedSsrcCount => _validators.Count;
+    internal int TrackedSsrcCount => _ssrcTable.Count;
 
     /// <summary>True when the given SSRC currently has a sequence validator (test/diagnostic seam).</summary>
-    internal bool IsSsrcTracked(uint ssrc) => _validators.ContainsKey(ssrc);
+    internal bool IsSsrcTracked(uint ssrc) => _ssrcTable.Contains(ssrc);
 
     /// <summary>
     /// Feeds one inbound datagram through the receive pipeline synchronously, bypassing the socket.
@@ -674,19 +681,7 @@ internal sealed class RtpSession : IRtpSession
         }
 
         // Sequence number validation (RFC 3550 §A.1)
-        if (!_validators.TryGetValue(packet.Ssrc, out var tracked))
-        {
-            if (_validators.Count >= MaxTrackedSsrcs)
-                EvictLeastRecentlyActiveSsrc();
-
-            tracked = new RtpTrackedSsrc(new RtpSequenceValidator(), ++_ssrcActivityClock);
-            _validators[packet.Ssrc] = tracked;
-        }
-        else
-        {
-            tracked.LastActivity = ++_ssrcActivityClock;
-        }
-
+        var tracked = _ssrcTable.GetOrAdd(packet.Ssrc);
         var result = tracked.Validator.Validate(packet.SequenceNumber);
         switch (result)
         {
@@ -719,31 +714,9 @@ internal sealed class RtpSession : IRtpSession
         }
     }
 
-    // Removes the least-recently-active SSRC so the validator table stays bounded. Runs only when
-    // the cap is reached, on the receive loop thread (same as all _validators access), so no lock.
-    private void EvictLeastRecentlyActiveSsrc()
-    {
-        uint evictKey = 0;
-        var oldestActivity = long.MaxValue;
-        foreach (var entry in _validators)
-        {
-            if (entry.Value.LastActivity < oldestActivity)
-            {
-                oldestActivity = entry.Value.LastActivity;
-                evictKey = entry.Key;
-            }
-        }
-
-        _validators.Remove(evictKey);
-        _logger.LogDebug(
-            "RTP validator table reached {Max} SSRCs; evicted least-recently-active SSRC={Ssrc:X8}.",
-            MaxTrackedSsrcs,
-            evictKey);
-    }
-
     // RFC 3550 §8.2: a third party is transmitting with our SSRC. Send a best-effort RTCP BYE for the
     // departing SSRC, then adopt a fresh one with a re-seeded sequence number and timestamp so our outbound
-    // stream is unambiguous again. Runs on the receive loop (same thread as all _validators access); the
+    // stream is unambiguous again. Runs on the receive loop (same thread as all _ssrcTable access); the
     // sequence/timestamp/SSRC swap takes _sendSync so a concurrent send observes a consistent triple.
     private void ResolveSsrcCollision(uint collidingSsrc)
     {
@@ -754,7 +727,7 @@ internal sealed class RtpSession : IRtpSession
         {
             newSsrc = (uint)Random.Shared.Next();
         }
-        while (newSsrc == oldSsrc || _validators.ContainsKey(newSsrc));
+        while (newSsrc == oldSsrc || _ssrcTable.Contains(newSsrc));
 
         lock (_sendSync)
         {
@@ -861,16 +834,29 @@ internal sealed class RtpSession : IRtpSession
 
     public async ValueTask DisposeAsync()
     {
+        // Capture the loop state under _lifecycleSync (idempotent, and race-safe against a concurrent StartAsync:
+        // once _disposed is set a racing Start returns without creating a loop).
+        CancellationTokenSource? loopCts;
+        Task? receiveLoop;
+        lock (_lifecycleSync)
+        {
+            if (_disposed)
+                return;
+            _disposed = true;
+            loopCts = _loopCts;
+            receiveLoop = _receiveLoop;
+        }
+
         // Stop the receive loop by cancellation first, then dispose the socket only after the
         // loop has drained — avoids disposing the socket underneath a pending receive.
-        _loopCts?.Cancel();
-        if (_receiveLoop is not null)
+        loopCts?.Cancel();
+        if (receiveLoop is not null)
         {
-            try { await _receiveLoop.ConfigureAwait(false); }
+            try { await receiveLoop.ConfigureAwait(false); }
             catch (OperationCanceledException) { }
         }
 
-        _loopCts?.Dispose();
+        loopCts?.Dispose();
         _udp.Dispose();
         ControlPacketReceived = null;
         StunPacketReceived = null;
