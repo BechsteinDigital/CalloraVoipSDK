@@ -6,6 +6,26 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
 
 ## [Unreleased]
 
+### Added
+- **Early media (RFC 3960, F011)**: a 180/183 response carrying SDP now starts a **receive-only**
+  media session before the call is answered. New public surface: `IPhoneLine.OutboundCallRinging`
+  (a pre-answer call handle while `DialAsync` is still blocking), `ICall.EarlyMediaSdp` (the early
+  SDP), and DTMF in the early dialog (`ICall.SendDtmfAsync` while `Ringing` — IVR / AI outbound).
+  Verified end-to-end against a real Asterisk (plain and SRTP-SDES early media).
+- **SIP `MESSAGE` (RFC 3428, CF-066a)**: send and receive out-of-dialog instant messages —
+  `VoipClient.SendMessageAsync(...)` and the `IVoipClient.IncomingMessage` event.
+- **SIP `PUBLISH` (RFC 3903, CF-066b)**: publish event state (e.g. presence) with full
+  refresh / modify / remove lifecycle — `VoipClient.PublishAsync(...)` returning `PublishResult`.
+- **REFER transfer progress subscription (RFC 3515 / 6665, CF-045)**: an incoming REFER now carries
+  an `IReferSubscription` (`TransferRequestedEventArgs.Subscription`) that reports the referred
+  call's progress, with an auto-timeout for an unresolved subscription.
+
+### Changed
+- **Interop coverage**: the Asterisk suite now runs with **all cases green and none skipped**
+  (early media unblocked). Added a two-leg bridged-call suite that verifies **bidirectional,
+  byte-exact media** through the PBX (RTP counters both ways, local + remote RTCP quality, and
+  byte-identical PCMU payload A→B).
+
 ## [4.6.0-preview.2] - 2026-07-22
 
 A large RFC-compliance and hardening release on top of the preview.1 WebRTC facade
