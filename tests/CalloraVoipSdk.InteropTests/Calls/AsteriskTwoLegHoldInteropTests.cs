@@ -1,24 +1,25 @@
 using CalloraVoipSdk.Core.Domain.Calls;
-using CalloraVoipSdk.InteropTests.Asterisk;
 using CalloraVoipSdk.InteropTests.Media;
+using CalloraVoipSdk.InteropTests.Pbx;
 using Xunit;
 
 namespace CalloraVoipSdk.InteropTests.Calls;
 
 /// <summary>
-/// Hold/Unhold auf dem Caller-Leg eines gebrückten Zwei-Bein-Calls mit anschließendem
+/// Abstrakte Basis: Hold/Unhold auf dem Caller-Leg eines gebrückten Zwei-Bein-Calls mit anschließendem
 /// Medienfluss-Nachweis: beweist, dass nach einer re-INVITE-Hold/Unhold-Sequenz (sendonly →
 /// sendrecv) der bidirektionale RTP-Fluss über die Bridge vollständig wieder aufgenommen wird.
 /// </summary>
-[Trait("Category", "Interop")]
-public sealed class AsteriskTwoLegHoldInteropTests
+public abstract class TwoLegHoldMatrix
 {
+    protected abstract IPbxFixture CreatePbx(int bridgePairs = 1);
+
     [DockerRequiredFact]
     public async Task Hold_Then_Unhold_ResumesBidirectionalMedia()
     {
-        await using var asterisk = new AsteriskContainer();
-        await asterisk.StartAsync();
-        await using var bridged = await TwoLegBridgedCall.StartAsync(asterisk);
+        await using var pbx = CreatePbx();
+        await pbx.StartAsync();
+        await using var bridged = await TwoLegBridgedCall.StartAsync(pbx);
 
         // Baseline: Media fließt vor dem Hold (8 s = Mindestdauer für RTCP-Befüllung von RtpStatistics).
         await bridged.RunBidirectionalMediaAsync(TimeSpan.FromSeconds(8));
@@ -33,7 +34,7 @@ public sealed class AsteriskTwoLegHoldInteropTests
         await WaitForStateAsync(bridged.CallerCall, CallState.Connected);
         Assert.Equal(CallState.Connected, bridged.CallerCall.State);
 
-        // Kurze Stabilisierungsphase nach Unhold, damit Asterisk den Medienpfad wieder einrichtet.
+        // Kurze Stabilisierungsphase nach Unhold, damit der PBX den Medienpfad wieder einrichtet.
         await Task.Delay(500);
 
         // Media muss wieder fließen: der Callee empfängt nach Unhold mehr Pakete als direkt davor.
@@ -51,4 +52,11 @@ public sealed class AsteriskTwoLegHoldInteropTests
         while (call.State != target && DateTimeOffset.UtcNow < deadline)
             await Task.Delay(100);
     }
+}
+
+/// <summary>Fährt die Hold/Unhold-Matrix gegen einen echten Asterisk.</summary>
+[Trait("Category", "Interop")]
+public sealed class AsteriskTwoLegHoldMatrix : TwoLegHoldMatrix
+{
+    protected override IPbxFixture CreatePbx(int bridgePairs = 1) => new AsteriskPbxFixture(bridgePairs);
 }

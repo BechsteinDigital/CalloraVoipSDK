@@ -1,17 +1,18 @@
-using CalloraVoipSdk.Core.Domain.Security;
-using CalloraVoipSdk.InteropTests.Asterisk;
 using CalloraVoipSdk.InteropTests.Media;
+using CalloraVoipSdk.InteropTests.Pbx;
 using Xunit;
 
 namespace CalloraVoipSdk.InteropTests.Soak;
 
 /// <summary>
-/// Concurrent-Call-Soak: N parallele gebrückte Calls gegen einen echten Asterisk-Container, jeder auf
-/// eigenem Endpoint-Paar, jeder mit beidseitigem RTP-Fluss. Beweist, dass SDK und PBX unter Last
-/// (viele simultane Registrierungen, Dial-Requests, Bridge-Setups, Media-Sessions) stabil bleiben.
+/// Abstrakte Basis: Concurrent-Call-Soak. N parallele gebrückte Calls gegen einen PBX-Container,
+/// jeder auf eigenem Endpoint-Paar, jeder mit beidseitigem RTP-Fluss. Beweist, dass SDK und PBX
+/// unter Last (viele simultane Registrierungen, Dial-Requests, Bridge-Setups, Media-Sessions) stabil bleiben.
 /// </summary>
-public sealed class AsteriskConcurrentCallSoakTests
+public abstract class ConcurrentCallSoakMatrix
 {
+    protected abstract IPbxFixture CreatePbx(int bridgePairs = 1);
+
     // ── Öffentliche Test-Einstiegspunkte ─────────────────────────────────────────────────────────
 
     /// <summary>
@@ -32,16 +33,17 @@ public sealed class AsteriskConcurrentCallSoakTests
 
     // ── Kern-Implementierung ──────────────────────────────────────────────────────────────────────
 
-    private static async Task RunConcurrentSoakAsync(int callCount)
+    private async Task RunConcurrentSoakAsync(int callCount)
     {
-        // Einen einzigen Asterisk-Container mit callCount Soak-Endpoint-Paaren (sc{i}/se{i}).
-        await using var asterisk = new AsteriskContainer(extraBridgePairs: callCount);
-        await asterisk.StartAsync();
+        // Einen einzigen PBX-Container mit callCount Bridge-Paaren:
+        // Paar 0 = Basis (6001/6003), Paare 1..callCount-1 = Soak-Endpoint-Paare.
+        await using var pbx = CreatePbx(callCount);
+        await pbx.StartAsync();
 
         // Alle callCount Calls parallel starten; kleine Staggerung (50 ms/Paar) dämpft den
-        // Thundering-Herd-Effekt beim simultanen Registrierungssturm gegen Asterisk.
+        // Thundering-Herd-Effekt beim simultanen Registrierungssturm gegen den PBX.
         var tasks = Enumerable.Range(0, callCount)
-            .Select(i => RunOneAsync(asterisk, i, staggerDelay: TimeSpan.FromMilliseconds(i * 50)));
+            .Select(i => RunOneAsync(pbx, i, staggerDelay: TimeSpan.FromMilliseconds(i * 50)));
         var results = await Task.WhenAll(tasks);
 
         var failures = results.Where(r => r.Error is not null).ToArray();
@@ -52,25 +54,14 @@ public sealed class AsteriskConcurrentCallSoakTests
     }
 
     private static async Task<(int Index, string? Error)> RunOneAsync(
-        AsteriskContainer asterisk, int i, TimeSpan staggerDelay)
+        IPbxFixture pbx, int i, TimeSpan staggerDelay)
     {
         if (staggerDelay > TimeSpan.Zero)
             await Task.Delay(staggerDelay);
 
         try
         {
-            // Soak-Profil für Paar i: Plain RTP / PCMU, Caller=sc{i}, Callee=se{i}.
-            var profile = new TwoLegProfile(
-                CallerUser: asterisk.SoakCallerUser(i),
-                CallerPass: asterisk.SoakPassword,
-                CalleeUser: asterisk.SoakCalleeUser(i),
-                CalleePass: asterisk.SoakPassword,
-                BridgeExtension: asterisk.SoakBridgeExtension(i),
-                SrtpPolicy: SrtpPolicy.Disabled,
-                CallerCodecs: new[] { "PCMU" },
-                CalleeCodecs: new[] { "PCMU" });
-
-            await using var bridged = await TwoLegBridgedCall.StartAsync(asterisk, profile);
+            await using var bridged = await TwoLegBridgedCall.StartAsync(pbx, PbxMediaMode.Plain, pairIndex: i);
             await bridged.RunBidirectionalMediaAsync(TimeSpan.FromSeconds(8));
 
             // Beide Legs müssen RTP empfangen haben.
@@ -98,4 +89,10 @@ public sealed class AsteriskConcurrentCallSoakTests
         var raw = Environment.GetEnvironmentVariable("INTEROP_SOAK_CONCURRENT_CALLS");
         return int.TryParse(raw, out var n) && n > 0 ? n : defaultCount;
     }
+}
+
+/// <summary>Fährt die Concurrent-Call-Soak-Matrix gegen einen echten Asterisk.</summary>
+public sealed class AsteriskConcurrentCallSoakMatrix : ConcurrentCallSoakMatrix
+{
+    protected override IPbxFixture CreatePbx(int bridgePairs = 1) => new AsteriskPbxFixture(bridgePairs);
 }
