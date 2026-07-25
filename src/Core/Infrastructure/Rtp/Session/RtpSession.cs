@@ -79,6 +79,7 @@ internal sealed class RtpSession : IRtpSession
     private uint _timestamp;
     private Task? _receiveLoop;
     private CancellationTokenSource? _loopCts;
+    private int _started;
     private long _packetsSent;
     private long _octetsSent;
     private int _lastSentTimestamp;
@@ -175,6 +176,11 @@ internal sealed class RtpSession : IRtpSession
     /// <inheritdoc />
     public Task StartAsync(CancellationToken cancellationToken = default)
     {
+        // Idempotent: a second StartAsync must not replace _loopCts/_receiveLoop and orphan the first receive
+        // loop (which would then run un-cancelled until the socket is disposed) — mirrors the bundle guard (HARD-C5).
+        if (Interlocked.Exchange(ref _started, 1) != 0)
+            return Task.CompletedTask;
+
         // Link the caller token with an internal source so DisposeAsync can stop the receive
         // loop by cancellation before the socket is disposed — cancelling the pending
         // Socket.ReceiveFromAsync yields a clean OperationCanceledException, whereas disposing
@@ -183,6 +189,9 @@ internal sealed class RtpSession : IRtpSession
         _receiveLoop = RunReceiveLoopAsync(_loopCts.Token);
         return Task.CompletedTask;
     }
+
+    /// <summary>Test-only: the receive-loop task, to assert <see cref="StartAsync"/> idempotency (no orphaned loop).</summary>
+    internal Task? ReceiveLoopForTest => _receiveLoop;
 
     // -------------------------------------------------------------------------
     // Send
