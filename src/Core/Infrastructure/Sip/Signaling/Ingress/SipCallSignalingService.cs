@@ -22,6 +22,9 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
 
     private const string DefaultInboundUserAgent = "CalloraVoipSdk/1.0";
     private static readonly TimeSpan DefaultInboundSessionTimeout = TimeSpan.FromSeconds(30);
+    // Upper bound on distinct outbound-INVITE targets (initial + all 3xx redirects) so a 3xx carrying many
+    // Contacts cannot fan out into an unbounded chain of INVITE transactions (RFC 3261 §8.1.3.4 hardening).
+    private const int MaxRedirectTargets = 8;
 
     private readonly string _inboundUserAgent;
     private readonly ISipTransportRuntime _transport;
@@ -255,7 +258,8 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
                         SipOutboundInviteRetryPolicy.EnqueueRedirectTargets(
                             response,
                             pendingTargets,
-                            visitedRequestUris);
+                            visitedRequestUris,
+                            MaxRedirectTargets);
                         break;
                     }
 
@@ -618,6 +622,10 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
         if (string.IsNullOrWhiteSpace(remoteUri) || string.IsNullOrWhiteSpace(toUri))
             return;
 
+        // DESIGN DECISION (#13): inbound requests are authorised by served-user + identity-trust/peer matching
+        // (trunk IP, TrustedRegistrarAddresses), NOT by issuing a 401/407 digest challenge to the peer. This suits
+        // the trusted-trunk / peered-registrar deployment model. Adding UAS-side digest challenge of inbound
+        // requests is a deliberate, separate feature decision, not an oversight.
         // RFC 3261 §8.2.2.1: Reject INVITE to unknown users with 404 Not Found.
         if (!_userIdentityPolicy.IsServedUser(normalizedRequest.RequestUri))
         {
