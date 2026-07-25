@@ -128,54 +128,16 @@ public sealed class TwoLegBridgedCall : IAsyncDisposable
     /// <summary>
     /// Sendet <paramref name="duration"/> lang markierte PCMU-Frames in BEIDE Richtungen (Kadenz
     /// <paramref name="frameInterval"/>, Default 20 ms) und sammelt die je Seite empfangenen Marker.
-    /// Läuft lang genug, dass RTCP-Reports die Metriken befüllen (Default 8 s).
+    /// Läuft lang genug, dass RTCP-Reports die Metriken befüllen (Default 8 s). Festes Messfenster —
+    /// für Inhalts-Tests mit Schwellwert unter Last stattdessen <see cref="StartCapturingMedia"/> + Poll.
     /// </summary>
     public async Task<TwoLegMediaResult> RunBidirectionalMediaAsync(
         TimeSpan? duration = null, TimeSpan? frameInterval = null)
     {
         var runFor = duration ?? TimeSpan.FromSeconds(8);
-        var interval = frameInterval ?? TimeSpan.FromMilliseconds(20);
-
-        var calleeSeq = new List<uint>();
-        var callerSeq = new List<uint>();
-        var gate = new object();
-
-        using var recvAtCallee = _calleeClient.Media.CreateReceiver();
-        using var recvAtCaller = _callerClient.Media.CreateReceiver();
-        recvAtCallee.FrameReceived += (_, e) =>
-        {
-            if (e.Frame.Payload.Length < 4) return;
-            lock (gate) calleeSeq.Add(MarkedPcmuSource.ReadSequence(e.Frame.Payload.Span));
-        };
-        recvAtCaller.FrameReceived += (_, e) =>
-        {
-            if (e.Frame.Payload.Length < 4) return;
-            lock (gate) callerSeq.Add(MarkedPcmuSource.ReadSequence(e.Frame.Payload.Span));
-        };
-        recvAtCallee.AttachToCall(CalleeCall);
-        recvAtCaller.AttachToCall(CallerCall);
-
-        using var sendFromCaller = _callerClient.Media.CreateSender();
-        using var sendFromCallee = _calleeClient.Media.CreateSender();
-        sendFromCaller.AttachToCall(CallerCall);
-        sendFromCallee.AttachToCall(CalleeCall);
-
-        var srcA = new MarkedPcmuSource(CallerCall.MediaParameters!.PayloadType);
-        var srcB = new MarkedPcmuSource(CalleeCall.MediaParameters!.PayloadType);
-        using var cts = new CancellationTokenSource(runFor);
-        try
-        {
-            while (!cts.IsCancellationRequested)
-            {
-                await sendFromCaller.SendAsync(srcA.Next(), cts.Token);
-                await sendFromCallee.SendAsync(srcB.Next(), cts.Token);
-                await Task.Delay(interval, cts.Token);
-            }
-        }
-        catch (OperationCanceledException) { /* Ende der Laufdauer */ }
-
-        lock (gate)
-            return new TwoLegMediaResult(calleeSeq.ToArray(), callerSeq.ToArray());
+        await using var flow = StartCapturingMedia(frameInterval);
+        await Task.Delay(runFor);
+        return new TwoLegMediaResult(flow.SnapshotCalleeReceived(), flow.SnapshotCallerReceived());
     }
 
     /// <summary>
@@ -185,6 +147,96 @@ public sealed class TwoLegBridgedCall : IAsyncDisposable
     /// </summary>
     public MediaFlow StartBidirectionalMedia(TimeSpan? frameInterval = null) =>
         new(_callerClient, _calleeClient, CallerCall, CalleeCall, frameInterval ?? TimeSpan.FromMilliseconds(20));
+
+    /// <summary>
+    /// Wie <see cref="StartBidirectionalMedia"/>, erfasst aber zusätzlich die je Seite empfangenen
+    /// Sequenzmarker (mit den je Leg verhandelten Payload-Types). Für Inhalts-Tests, die bis zu einer
+    /// Deadline pollen, statt über ein festes Fenster zu messen — robust gegen langsamen Media-Ramp und
+    /// verstreute Paketverluste unter Last (der kumulative Empfangs-Set wächst monoton).
+    /// </summary>
+    public CapturingMediaFlow StartCapturingMedia(TimeSpan? frameInterval = null) =>
+        new(_callerClient, _calleeClient, CallerCall, CalleeCall, frameInterval ?? TimeSpan.FromMilliseconds(20));
+
+    /// <summary>
+    /// Laufendes bidirektionales Media-Handle, das die je Seite empfangenen Marker sammelt und
+    /// Momentaufnahmen anbietet; stoppt den Sende-Loop und löst die Empfänger beim Dispose.
+    /// </summary>
+    public sealed class CapturingMediaFlow : IAsyncDisposable
+    {
+        private readonly IMediaReceiver _recvAtCallee;
+        private readonly IMediaReceiver _recvAtCaller;
+        private readonly IMediaSender _sendA;
+        private readonly IMediaSender _sendB;
+        private readonly List<uint> _calleeSeq = new();
+        private readonly List<uint> _callerSeq = new();
+        private readonly object _gate = new();
+        private readonly CancellationTokenSource _cts = new();
+        private readonly Task _loop;
+
+        internal CapturingMediaFlow(VoipClient a, VoipClient b, ICall callA, ICall callB, TimeSpan interval)
+        {
+            _recvAtCallee = b.Media.CreateReceiver();
+            _recvAtCaller = a.Media.CreateReceiver();
+            _recvAtCallee.FrameReceived += (_, e) =>
+            {
+                if (e.Frame.Payload.Length < 4) return;
+                lock (_gate) _calleeSeq.Add(MarkedPcmuSource.ReadSequence(e.Frame.Payload.Span));
+            };
+            _recvAtCaller.FrameReceived += (_, e) =>
+            {
+                if (e.Frame.Payload.Length < 4) return;
+                lock (_gate) _callerSeq.Add(MarkedPcmuSource.ReadSequence(e.Frame.Payload.Span));
+            };
+            _recvAtCallee.AttachToCall(callB);
+            _recvAtCaller.AttachToCall(callA);
+
+            _sendA = a.Media.CreateSender();
+            _sendB = b.Media.CreateSender();
+            _sendA.AttachToCall(callA);
+            _sendB.AttachToCall(callB);
+            _loop = RunAsync(callA.MediaParameters!.PayloadType, callB.MediaParameters!.PayloadType, interval, _cts.Token);
+        }
+
+        private async Task RunAsync(int payloadTypeA, int payloadTypeB, TimeSpan interval, CancellationToken ct)
+        {
+            var srcA = new MarkedPcmuSource(payloadTypeA);
+            var srcB = new MarkedPcmuSource(payloadTypeB);
+            try
+            {
+                while (!ct.IsCancellationRequested)
+                {
+                    await _sendA.SendAsync(srcA.Next(), ct);
+                    await _sendB.SendAsync(srcB.Next(), ct);
+                    await Task.Delay(interval, ct);
+                }
+            }
+            catch (OperationCanceledException) { /* Ende bei Dispose */ }
+        }
+
+        /// <summary>Momentaufnahme der bei B (A→B) empfangenen Sequenzmarker.</summary>
+        public IReadOnlyList<uint> SnapshotCalleeReceived()
+        {
+            lock (_gate) return _calleeSeq.ToArray();
+        }
+
+        /// <summary>Momentaufnahme der bei A (B→A) empfangenen Sequenzmarker.</summary>
+        public IReadOnlyList<uint> SnapshotCallerReceived()
+        {
+            lock (_gate) return _callerSeq.ToArray();
+        }
+
+        /// <inheritdoc />
+        public async ValueTask DisposeAsync()
+        {
+            _cts.Cancel();
+            try { await _loop.ConfigureAwait(false); } catch { /* best effort */ }
+            _cts.Dispose();
+            _sendA.Dispose();
+            _sendB.Dispose();
+            _recvAtCallee.Dispose();
+            _recvAtCaller.Dispose();
+        }
+    }
 
     /// <summary>Laufendes bidirektionales Media-Handle; stoppt den Sende-Loop beim Dispose.</summary>
     public sealed class MediaFlow : IAsyncDisposable
