@@ -159,6 +159,41 @@ stalls signaling and registration for the line. Off-load real work to your own t
 
 
 
+  <a id="CalloraVoipSdk_Core_Domain_Lines_IPhoneLine_LastReconnectFailure_" data-uid="CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.LastReconnectFailure*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Lines_IPhoneLine_LastReconnectFailure" data-uid="CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.LastReconnectFailure">
+  LastReconnectFailure
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/IPhoneLine.cs/#L70"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The reason for the last permanent registration/reconnect failure, or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> if the
+line never failed. Captured as state before the <a class="xref" href="CalloraVoipSdk.Core.Domain.Lines.LineState.html#CalloraVoipSdk_Core_Domain_Lines_LineState_Failed">Failed</a> transition, so a
+consumer that only observes the terminal Failed state can read the cause race-free even if it missed
+the <a class="xref" href="CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.html#CalloraVoipSdk_Core_Domain_Lines_IPhoneLine_LineReconnectFailed">LineReconnectFailed</a> event (e.g. a fast failure that fired before it subscribed).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">LineReconnectFailedEventArgs? LastReconnectFailure { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="CalloraVoipSdk.Core.Domain.Events.LineReconnectFailedEventArgs.html">LineReconnectFailedEventArgs</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
   <a id="CalloraVoipSdk_Core_Domain_Lines_IPhoneLine_LineId_" data-uid="CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.LineId*"></a>
 
   <h3 id="CalloraVoipSdk_Core_Domain_Lines_IPhoneLine_LineId" data-uid="CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.LineId">
@@ -231,7 +266,7 @@ stalls signaling and registration for the line. Off-load real work to your own t
 
   <h3 id="CalloraVoipSdk_Core_Domain_Lines_IPhoneLine_DialAsync_System_String_CalloraVoipSdk_Core_Domain_Calls_DialOptions_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.DialAsync(System.String,CalloraVoipSdk.Core.Domain.Calls.DialOptions,System.Threading.CancellationToken)">
   DialAsync(string, DialOptions?, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/IPhoneLine.cs/#L75"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/IPhoneLine.cs/#L83"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Places an outbound call from this line to <code class="paramref">targetUri</code> and returns the new call
@@ -278,7 +313,7 @@ already in <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallState.html
 
   <h3 id="CalloraVoipSdk_Core_Domain_Lines_IPhoneLine_ModifyPublicationAsync_System_String_System_String_System_String_System_String_System_Int32_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.ModifyPublicationAsync(System.String,System.String,System.String,System.String,System.Int32,System.Threading.CancellationToken)">
   ModifyPublicationAsync(string, string, string, string, int, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/IPhoneLine.cs/#L121"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/IPhoneLine.cs/#L129"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Modifies a prior publication by replacing its body via SIP-If-Match (RFC 3903). The
@@ -333,7 +368,7 @@ already in <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallState.html
 
   <h3 id="CalloraVoipSdk_Core_Domain_Lines_IPhoneLine_PublishAsync_System_String_System_String_System_String_System_Int32_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.PublishAsync(System.String,System.String,System.String,System.Int32,System.Threading.CancellationToken)">
   PublishAsync(string, string, string, int, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/IPhoneLine.cs/#L97"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/IPhoneLine.cs/#L105"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Publishes event state for this line's address-of-record via SIP PUBLISH (RFC 3903 event state
@@ -385,7 +420,7 @@ publication), for example presence. Returns the SIP-ETag and granted lifetime fo
 
   <h3 id="CalloraVoipSdk_Core_Domain_Lines_IPhoneLine_RefreshPublicationAsync_System_String_System_String_System_Int32_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.RefreshPublicationAsync(System.String,System.String,System.Int32,System.Threading.CancellationToken)">
   RefreshPublicationAsync(string, string, int, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/IPhoneLine.cs/#L108"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/IPhoneLine.cs/#L116"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Refreshes a prior publication's lifetime via SIP-If-Match (RFC 3903), retaining the existing event state.
@@ -434,7 +469,7 @@ The <code class="paramref">etag</code> is the SIP-ETag from a prior PublishAsync
 
   <h3 id="CalloraVoipSdk_Core_Domain_Lines_IPhoneLine_RemovePublicationAsync_System_String_System_String_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.RemovePublicationAsync(System.String,System.String,System.Threading.CancellationToken)">
   RemovePublicationAsync(string, string, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/IPhoneLine.cs/#L131"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/IPhoneLine.cs/#L139"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Removes a prior publication via SIP-If-Match with Expires: 0 (RFC 3903). The <code class="paramref">etag</code>
@@ -480,7 +515,7 @@ is the SIP-ETag from a prior PublishAsync/refresh.</p>
 
   <h3 id="CalloraVoipSdk_Core_Domain_Lines_IPhoneLine_SendMessageAsync_System_String_System_String_System_String_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.SendMessageAsync(System.String,System.String,System.String,System.Threading.CancellationToken)">
   SendMessageAsync(string, string, string, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/IPhoneLine.cs/#L85"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/IPhoneLine.cs/#L93"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Sends an out-of-dialog SIP MESSAGE (RFC 3428 pager-mode instant message) from this line.</p>
@@ -528,7 +563,7 @@ is the SIP-ETag from a prior PublishAsync/refresh.</p>
 
   <h3 id="CalloraVoipSdk_Core_Domain_Lines_IPhoneLine_UnregisterAsync_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.UnregisterAsync(System.Threading.CancellationToken)">
   UnregisterAsync(CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/IPhoneLine.cs/#L137"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/IPhoneLine.cs/#L145"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Unregisters this line (sends REGISTER with Expires: 0) and stops automatic re-registration.</p>

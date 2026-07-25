@@ -5069,6 +5069,19 @@ references:
   commentId: E:CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.IncomingMessage
   fullName: CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.IncomingMessage
   nameWithType: IPhoneLine.IncomingMessage
+- uid: CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.LastReconnectFailure
+  name: LastReconnectFailure
+  href: _api/CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.html#CalloraVoipSdk_Core_Domain_Lines_IPhoneLine_LastReconnectFailure
+  commentId: P:CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.LastReconnectFailure
+  fullName: CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.LastReconnectFailure
+  nameWithType: IPhoneLine.LastReconnectFailure
+- uid: CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.LastReconnectFailure*
+  name: LastReconnectFailure
+  href: _api/CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.html#CalloraVoipSdk_Core_Domain_Lines_IPhoneLine_LastReconnectFailure_
+  commentId: Overload:CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.LastReconnectFailure
+  isSpec: "True"
+  fullName: CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.LastReconnectFailure
+  nameWithType: IPhoneLine.LastReconnectFailure
 - uid: CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.LineId
   name: LineId
   href: _api/CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.html#CalloraVoipSdk_Core_Domain_Lines_IPhoneLine_LineId
