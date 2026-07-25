@@ -25,6 +25,7 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
     private readonly HttpListener? _wsListener;
     private readonly HttpListener? _wssListener;
     private readonly IPEndPoint _wsLocalEndPoint;
+    private const int WebSocketListenerBindAttempts = 5;
     private readonly IPEndPoint _wssLocalEndPoint;
     private readonly TlsConfiguration? _tlsConfiguration;
     private readonly X509Certificate2? _tlsCertificate;
@@ -344,37 +345,44 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
             return null;
 
         var scheme = secure ? "https" : "http";
-        var port = SipTransportRuntimeUtilities.AllocateEphemeralPort();
-        var listener = new HttpListener();
-        listener.Prefixes.Add($"{scheme}://+:{port}/");
-        try
+        var transportName = secure ? SipTransportProtocol.Wss : SipTransportProtocol.Ws;
+
+        // HttpListener needs a concrete port in its prefix, so an ephemeral port is probed and then bound — an
+        // unavoidable TOCTOU window, and the probe is per-socket while the "+:" bind is system-wide. Retry on a
+        // fresh port so a port that raced away (or is taken on another interface) does not fail startup outright.
+        for (var attempt = 1; attempt <= WebSocketListenerBindAttempts; attempt++)
         {
-            listener.Start();
-            localEndPoint = new IPEndPoint(IPAddress.Any, port);
-            _logger.LogInformation(
-                "SIP {Transport} listener started on {EndPoint}.",
-                secure ? SipTransportProtocol.Wss : SipTransportProtocol.Ws,
-                localEndPoint);
-            return listener;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(
-                ex,
-                "SIP {Transport} listener failed to start on port {Port}.",
-                secure ? SipTransportProtocol.Wss : SipTransportProtocol.Ws,
-                port);
+            var port = SipTransportRuntimeUtilities.AllocateEphemeralPort();
+            var listener = new HttpListener();
+            listener.Prefixes.Add($"{scheme}://+:{port}/");
             try
             {
-                listener.Close();
+                listener.Start();
+                localEndPoint = new IPEndPoint(IPAddress.Any, port);
+                _logger.LogInformation("SIP {Transport} listener started on {EndPoint}.", transportName, localEndPoint);
+                return listener;
             }
-            catch (Exception closeEx)
+            catch (Exception ex)
             {
-                _logger.LogDebug(closeEx, "Failed closing SIP {Transport} listener.", secure ? "WSS" : "WS");
+                _logger.LogWarning(
+                    ex,
+                    "SIP {Transport} listener failed to start on port {Port} (attempt {Attempt}/{Max}).",
+                    transportName,
+                    port,
+                    attempt,
+                    WebSocketListenerBindAttempts);
+                try
+                {
+                    listener.Close();
+                }
+                catch (Exception closeEx)
+                {
+                    _logger.LogDebug(closeEx, "Failed closing SIP {Transport} listener.", transportName);
+                }
             }
-
-            return null;
         }
+
+        return null;
     }
 
     /// <summary>
