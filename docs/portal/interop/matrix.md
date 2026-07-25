@@ -9,7 +9,7 @@ interop test.
 
 | Platform | Status | Notes |
 |----------|--------|-------|
-| **Asterisk** | ✅ Full SIP/RTP flow automated in CI | Real PJSIP Asterisk container (Testcontainers): register (happy + failure), in/outbound calls with live RTP, codec negotiation (PCMU/PCMA/G722), SRTP-SDES, DTMF (RFC 4733), hold/unhold, blind & attended transfer, session timers (RFC 4028), TCP/TLS transport. Known gap: early media (183). See the [Asterisk page](asterisk.md) |
+| **Asterisk** | ✅ Full SIP/RTP flow automated in CI | Real PJSIP Asterisk container (Testcontainers), **all cases green / none skipped**: register (happy + failure), in/outbound calls with live RTP, codec negotiation (PCMU/PCMA/G722), SRTP-SDES, DTMF (RFC 4733), hold/unhold, blind & attended transfer, session timers (RFC 4028), early media (RFC 3960), TCP/TLS transport, plus a two-leg bridged call with byte-exact bidirectional media. See the [Asterisk page](asterisk.md) |
 | **AVM FRITZ!Box** | ✅ Verified against a live device (manual) | Register, dial, two-way audio, DTMF against real hardware; source of several hardening fixes. Not an automated CI test |
 | sipgate | ⚙️ Guidance only — not yet formally verified | Standard trunk registration expected to work; see the page |
 | FreeSWITCH | ⚙️ Guidance only — not yet formally verified | Standard SIP profile expected to work |
