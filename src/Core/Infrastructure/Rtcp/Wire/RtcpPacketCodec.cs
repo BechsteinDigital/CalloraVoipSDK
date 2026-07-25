@@ -488,11 +488,20 @@ internal sealed class RtcpPacketCodec : IRtcpPacketCodec
     /// <summary>
     /// Encodes a string as UTF-8 and clamps it to at most 255 bytes — the maximum a single-byte RTCP length
     /// prefix (SDES item value, BYE reason) can represent (RFC 3550 §6.5/§6.6). A pathologically long value is
-    /// truncated at the byte boundary so the emitted length byte always matches the written content.
+    /// truncated at a UTF-8 codepoint boundary (never mid-codepoint) so the emitted length byte matches the
+    /// written content and the value stays valid UTF-8.
     /// </summary>
     private static byte[] ClampToByteLength(string value)
     {
         var bytes = Encoding.UTF8.GetBytes(value);
-        return bytes.Length <= 255 ? bytes : bytes[..255];
+        if (bytes.Length <= 255)
+            return bytes;
+
+        // Walk back from the 255-byte limit past any UTF-8 continuation bytes (10xxxxxx) so the cut lands on a
+        // codepoint boundary rather than splitting a multi-byte character.
+        var length = 255;
+        while (length > 0 && (bytes[length] & 0xC0) == 0x80)
+            length--;
+        return bytes[..length];
     }
 }

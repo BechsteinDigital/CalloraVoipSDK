@@ -37,6 +37,32 @@ public sealed class RtcpSdesByeLengthClampTests
     }
 
     [Fact]
+    public void An_over_long_multibyte_sdes_value_is_clamped_at_a_codepoint_boundary()
+    {
+        // 200 × 'ä' = 400 UTF-8 bytes; the clamp must cut at a 2-byte-codepoint boundary (254 bytes = 127 'ä'),
+        // never mid-codepoint (which would decode to a replacement character).
+        var packet = new RtcpSdesPacket
+        {
+            Chunks =
+            [
+                new RtcpSdesChunk
+                {
+                    Ssrc = 0x1234_5678,
+                    Items = [new RtcpSdesItem { ItemType = RtcpSdesItemType.CName, Value = new string('ä', 200) }],
+                },
+            ],
+        };
+
+        var codec = new RtcpPacketCodec();
+        var decoded = codec.Decode(codec.Encode([packet]));
+
+        var value = Assert.Single(Assert.Single(Assert.IsType<RtcpSdesPacket>(Assert.Single(decoded)).Chunks).Items).Value;
+        Assert.True(Encoding.UTF8.GetByteCount(value) <= 255);
+        Assert.DoesNotContain('�', value);    // no split codepoint (UTF-8 replacement char)
+        Assert.All(value, c => Assert.Equal('ä', c));
+    }
+
+    [Fact]
     public void An_over_long_bye_reason_is_clamped_to_255_bytes_and_round_trips()
     {
         var packet = new RtcpByePacket { Sources = [0x1234_5678], Reason = new string('b', 300) };
