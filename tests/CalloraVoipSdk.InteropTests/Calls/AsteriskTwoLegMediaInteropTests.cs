@@ -193,6 +193,36 @@ public sealed class AsteriskTwoLegMediaInteropTests
         }
     }
 
+    [DockerRequiredFact]
+    public async Task MismatchedCodecBridgedCall_StillFlowsViaTranscoding()
+    {
+        await using var asterisk = new AsteriskContainer();
+        await asterisk.StartAsync();
+        await using var bridged = await TwoLegBridgedCall.StartAsync(asterisk, TwoLegProfile.CodecMismatch(asterisk));
+
+        // Codec-Mismatch: Caller G.722 (PT 9) vs. Callee PCMU (PT 0) → Asterisk MUSS transcodieren.
+        Assert.Equal(9, bridged.CallerCall.MediaParameters!.PayloadType);
+        Assert.Equal(0, bridged.CalleeCall.MediaParameters!.PayloadType);
+
+        var result = await bridged.RunBidirectionalMediaAsync(TimeSpan.FromSeconds(8));
+
+        // Trotz Transcoding fließt Media in beide Richtungen.
+        AssertBidirectionalRtp(bridged.CallerCall, "Caller");
+        AssertBidirectionalRtp(bridged.CalleeCall, "Callee");
+
+        // ABER: Inhalt NICHT byte-exakt — das Transcoding (G.722↔PCMU) zerstört die eingebetteten
+        // Marker, anders als der Same-Codec-Passthrough (dort ≥50 zusammenhängend).
+        var calleeRun = LongestContiguousRun(result.CalleeReceivedSequences);
+        Assert.True(calleeRun < 50,
+            $"Erwartet: Transcoding zerstört die Marker; längster Lauf {calleeRun} (von {result.CalleeReceivedSequences.Count}).");
+
+        static void AssertBidirectionalRtp(CalloraVoipSdk.Core.Domain.Calls.ICall call, string label)
+        {
+            var rtp = call.RtpStatistics;
+            Assert.True(rtp is { PacketsSent: > 0, PacketsReceived: > 0 }, $"{label}: kein bidirektionales RTP.");
+        }
+    }
+
     /// <summary>Längster zusammenhängender Lauf aufeinanderfolgender Sequenzmarker (O(n)).</summary>
     private static int LongestContiguousRun(IReadOnlyList<uint> seqs)
     {
