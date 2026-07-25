@@ -7,7 +7,7 @@ namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
 /// <para>
 /// RTT is computed exactly as the SIP path's <c>CallRtcpQualityMonitor</c> does it (RFC 3550 §6.4.1): each
 /// emitted Sender Report is recorded per sending SSRC as its LSR (the middle 32 bits of the SR's NTP
-/// timestamp) plus the wall-clock instant it went out; when a peer echoes that LSR back in a report block's
+/// timestamp) plus the monotonic instant it went out; when a peer echoes that LSR back in a report block's
 /// <c>LastSR</c> field and reports how long it held it (<c>DLSR</c>), the round trip is
 /// <c>arrival − sentAt − DLSR</c>. A block whose <c>LastSR</c> does not match the last SR we recorded for that
 /// SSRC (the peer echoed an older report, or none yet) yields no RTT that interval — the peer's reported loss
@@ -23,9 +23,11 @@ internal sealed class BundledOutboundQualityTracker
 {
     private readonly object _sync = new();
 
-    // Per local (sending) SSRC: the middle-32 of the last SR we emitted for it and when it went out. The
-    // remote echoes that middle-32 back as a report block's LastSR; matching it lets us compute RTT.
-    private readonly Dictionary<uint, (uint Middle32, DateTimeOffset SentAtUtc)> _lastLocalSr = new();
+    // Per local (sending) SSRC: the middle-32 of the last SR we emitted for it and the monotonic instant it
+    // went out. The remote echoes that middle-32 back as a report block's LastSR; matching it lets us compute
+    // RTT. The instant is monotonic (not wall-clock) so a system-clock step between send and the echoed report
+    // arriving cannot corrupt the RTT (RFC 3550 §6.4.1) — see MonotonicClock.
+    private readonly Dictionary<uint, (uint Middle32, DateTimeOffset SentAt)> _lastLocalSr = new();
 
     // Per local (sending) SSRC: the most recently derived RTT and the loss the peer last reported on that
     // stream (RFC 3550 §6.4.1). Keyed per SSRC because a report block is per our sending source — a global
@@ -39,12 +41,15 @@ internal sealed class BundledOutboundQualityTracker
     /// </summary>
     /// <param name="ssrc">The sending synchronisation source the SR reported for.</param>
     /// <param name="srMiddle32">The middle 32 bits of the SR's NTP timestamp (the value the peer echoes as LSR).</param>
-    /// <param name="sentAtUtc">The wall-clock instant the SR was emitted, used with DLSR to derive RTT.</param>
-    public void RecordLocalSenderReport(uint ssrc, uint srMiddle32, DateTimeOffset sentAtUtc)
+    /// <param name="sentAt">
+    /// The monotonic instant the SR was emitted (not wall-clock), used with the report's arrival and DLSR to
+    /// derive RTT immune to a system-clock step (RFC 3550 §6.4.1).
+    /// </param>
+    public void RecordLocalSenderReport(uint ssrc, uint srMiddle32, DateTimeOffset sentAt)
     {
         lock (_sync)
         {
-            _lastLocalSr[ssrc] = (srMiddle32, sentAtUtc);
+            _lastLocalSr[ssrc] = (srMiddle32, sentAt);
         }
     }
 
@@ -58,9 +63,12 @@ internal sealed class BundledOutboundQualityTracker
     /// <param name="fractionLost">The peer's fraction lost on our stream (1/256 fixed point).</param>
     /// <param name="lastSr">The LSR the peer echoed (middle 32 bits of our last SR's NTP timestamp; 0 if none).</param>
     /// <param name="delaySinceLastSr">The peer's DLSR in 1/65536-second units.</param>
-    /// <param name="arrivalUtc">The instant this report arrived, used with the recorded send time to derive RTT.</param>
+    /// <param name="arrival">
+    /// The monotonic instant this report arrived (same clock as the recorded send time), used with the send
+    /// time to derive RTT without wall-clock skew.
+    /// </param>
     public void RecordRemoteReportBlock(
-        uint aboutLocalSsrc, byte fractionLost, uint lastSr, uint delaySinceLastSr, DateTimeOffset arrivalUtc)
+        uint aboutLocalSsrc, byte fractionLost, uint lastSr, uint delaySinceLastSr, DateTimeOffset arrival)
     {
         lock (_sync)
         {
@@ -77,9 +85,10 @@ internal sealed class BundledOutboundQualityTracker
             if (lastSr != 0 && localSr.Middle32 == lastSr)
             {
                 var dlsr = TimeSpan.FromSeconds(delaySinceLastSr / 65536.0);
-                var roundTrip = arrivalUtc - localSr.SentAtUtc - dlsr;
-                // A non-positive result means clock skew or a stale/duplicated report — discard it rather than
-                // publish a negative or zero RTT (the prior RTT for this SSRC, if any, is kept).
+                var roundTrip = arrival - localSr.SentAt - dlsr;
+                // A non-positive result means a stale/duplicated report or a DLSR overrun — discard it rather
+                // than publish a negative or zero RTT (the prior RTT for this SSRC, if any, is kept). Clock skew
+                // no longer produces this now that both instants are monotonic.
                 if (roundTrip > TimeSpan.Zero)
                     rtt = roundTrip.TotalMilliseconds;
             }
