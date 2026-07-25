@@ -97,6 +97,43 @@ public interface IVoipClient : IDisposable
     /// <returns>The assigned entity-tag and granted lifetime; faults on a non-2xx or no response.</returns>
     Task<PublishResult> PublishAsync(string eventType, string body, string contentType = "text/plain", int expiresSeconds = 3600, CancellationToken ct = default);
 
+    /// <summary>
+    /// Refreshes a prior publication's lifetime (RFC 3903 SIP-If-Match) for the first registered line, retaining
+    /// its event state. Register a line first, or use <see cref="IPhoneLine.RefreshPublicationAsync"/> for a
+    /// specific line. The <paramref name="etag"/> is the SIP-ETag from a prior PublishAsync/refresh.
+    /// </summary>
+    /// <param name="eventType">The event package (Event header, e.g. <c>presence</c>).</param>
+    /// <param name="etag">The SIP-ETag of the publication to refresh.</param>
+    /// <param name="expiresSeconds">Requested publication lifetime in seconds. Defaults to 3600.</param>
+    /// <param name="ct">Cancels the refresh.</param>
+    /// <returns>The assigned entity-tag and granted lifetime; faults on a non-2xx or no response.</returns>
+    Task<PublishResult> RefreshPublicationAsync(string eventType, string etag, int expiresSeconds = 3600, CancellationToken ct = default);
+
+    /// <summary>
+    /// Modifies a prior publication by replacing its body (RFC 3903 SIP-If-Match) for the first registered line.
+    /// Register a line first, or use <see cref="IPhoneLine.ModifyPublicationAsync"/> for a specific line. The
+    /// <paramref name="etag"/> is the SIP-ETag from a prior PublishAsync/refresh.
+    /// </summary>
+    /// <param name="eventType">The event package (Event header, e.g. <c>presence</c>).</param>
+    /// <param name="etag">The SIP-ETag of the publication to modify.</param>
+    /// <param name="body">The replacement event-state document to publish (for example a PIDF body).</param>
+    /// <param name="contentType">The body's MIME type; defaults to <c>text/plain</c>.</param>
+    /// <param name="expiresSeconds">Requested publication lifetime in seconds. Defaults to 3600.</param>
+    /// <param name="ct">Cancels the modify.</param>
+    /// <returns>The assigned entity-tag and granted lifetime; faults on a non-2xx or no response.</returns>
+    Task<PublishResult> ModifyPublicationAsync(string eventType, string etag, string body, string contentType = "text/plain", int expiresSeconds = 3600, CancellationToken ct = default);
+
+    /// <summary>
+    /// Removes a prior publication (RFC 3903 SIP-If-Match with Expires: 0) for the first registered line.
+    /// Register a line first, or use <see cref="IPhoneLine.RemovePublicationAsync"/> for a specific line. The
+    /// <paramref name="etag"/> is the SIP-ETag from a prior PublishAsync/refresh.
+    /// </summary>
+    /// <param name="eventType">The event package (Event header, e.g. <c>presence</c>).</param>
+    /// <param name="etag">The SIP-ETag of the publication to remove.</param>
+    /// <param name="ct">Cancels the remove.</param>
+    /// <returns>A task that completes when the peer answers 2xx; it faults on a non-2xx or no response.</returns>
+    Task RemovePublicationAsync(string eventType, string etag, CancellationToken ct = default);
+
     /// <summary>Attaches default audio routing to the specified call.</summary>
     Task AttachDefaultAudioAsync(ICall call, CancellationToken ct = default);
 

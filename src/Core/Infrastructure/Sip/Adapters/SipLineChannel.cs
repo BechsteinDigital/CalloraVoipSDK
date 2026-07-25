@@ -245,7 +245,7 @@ internal sealed class SipLineChannel : ILineChannel
 
     /// <inheritdoc />
     public async Task<Domain.Publications.PublishResult> PublishAsync(
-        string eventType, string body, string contentType, int expiresSeconds, CancellationToken ct = default)
+        string eventType, string body, string contentType, int expiresSeconds, string? ifMatch = null, CancellationToken ct = default)
     {
         ThrowIfDisposed();
         ArgumentException.ThrowIfNullOrWhiteSpace(eventType);
@@ -263,6 +263,7 @@ internal sealed class SipLineChannel : ILineChannel
                     Body = body ?? string.Empty,
                     ContentType = string.IsNullOrWhiteSpace(contentType) ? "text/plain" : contentType,
                     ExpiresSeconds = expiresSeconds,
+                    IfMatch = string.IsNullOrWhiteSpace(ifMatch) ? null : ifMatch,
                     Transport = MapTransport(_account.Transport),
                 },
                 ct)

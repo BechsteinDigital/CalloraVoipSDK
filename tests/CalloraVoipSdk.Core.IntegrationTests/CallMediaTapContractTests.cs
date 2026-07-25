@@ -178,4 +178,13 @@ internal sealed class FakePhoneLine : IPhoneLine
 
     public Task<CalloraVoipSdk.Core.Domain.Publications.PublishResult> PublishAsync(string eventType, string body, string contentType = "text/plain", int expiresSeconds = 3600, CancellationToken ct = default) =>
         throw new NotSupportedException();
+
+    public Task<CalloraVoipSdk.Core.Domain.Publications.PublishResult> RefreshPublicationAsync(string eventType, string etag, int expiresSeconds = 3600, CancellationToken ct = default) =>
+        throw new NotSupportedException();
+
+    public Task<CalloraVoipSdk.Core.Domain.Publications.PublishResult> ModifyPublicationAsync(string eventType, string etag, string body, string contentType = "text/plain", int expiresSeconds = 3600, CancellationToken ct = default) =>
+        throw new NotSupportedException();
+
+    public Task RemovePublicationAsync(string eventType, string etag, CancellationToken ct = default) =>
+        throw new NotSupportedException();
 }
