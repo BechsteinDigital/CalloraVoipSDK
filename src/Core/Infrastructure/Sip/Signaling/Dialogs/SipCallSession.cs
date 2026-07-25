@@ -526,9 +526,7 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
                 includeContentType: false);
             redirectHeaders.Remove("Record-Route");
             redirectHeaders["Contact"] = string.Join(", ",
-                contactUris.Select(u => u.TrimStart('<').TrimEnd('>') is var stripped && u.Contains('<')
-                    ? u
-                    : $"<{u}>"));
+                contactUris.Select(u => u.Contains('<') ? u : $"<{u}>"));
             var reasonPhrase = statusCode switch
             {
                 300 => "Multiple Choices",

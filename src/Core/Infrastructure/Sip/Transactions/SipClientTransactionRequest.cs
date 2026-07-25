@@ -40,9 +40,11 @@ internal sealed class SipClientTransactionRequest
     public SipTransportProtocol Transport { get; init; } = SipTransportProtocol.Udp;
 
     /// <summary>
-    /// Overall timeout waiting for final response.
+    /// Overall timeout waiting for the final response. <see langword="null"/> derives the RFC 3261 64*T1
+    /// transaction timeout from <see cref="T1"/>; a non-null value is an explicit override (even when it equals
+    /// the 64*T1 default), so setting it to 32 s no longer silently reverts to 64*T1 for a non-default T1.
     /// </summary>
-    public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(32);
+    public TimeSpan? Timeout { get; init; }
 
     /// <summary>
     /// RFC3261 timer T1 baseline.
