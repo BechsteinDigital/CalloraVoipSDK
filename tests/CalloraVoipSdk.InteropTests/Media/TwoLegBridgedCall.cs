@@ -152,6 +152,58 @@ public sealed class TwoLegBridgedCall : IAsyncDisposable
             return new TwoLegMediaResult(calleeSeq.ToArray(), callerSeq.ToArray());
     }
 
+    /// <summary>
+    /// Startet einen kontinuierlichen bidirektionalen Sende-Loop (markiertes PCMU, Default 20 ms) im
+    /// Hintergrund und gibt ein Handle zurück, das den Loop beim Dispose stoppt. Für Tests, die auf
+    /// zeitabhängige RTCP-Metriken (z. B. RTT über ≥2 SR/RR-Zyklen) mit Deadline pollen müssen.
+    /// </summary>
+    public MediaFlow StartBidirectionalMedia(TimeSpan? frameInterval = null) =>
+        new(_callerClient, _calleeClient, CallerCall, CalleeCall, frameInterval ?? TimeSpan.FromMilliseconds(20));
+
+    /// <summary>Laufendes bidirektionales Media-Handle; stoppt den Sende-Loop beim Dispose.</summary>
+    public sealed class MediaFlow : IAsyncDisposable
+    {
+        private readonly IMediaSender _sendA;
+        private readonly IMediaSender _sendB;
+        private readonly CancellationTokenSource _cts = new();
+        private readonly Task _loop;
+
+        internal MediaFlow(VoipClient a, VoipClient b, ICall callA, ICall callB, TimeSpan interval)
+        {
+            _sendA = a.Media.CreateSender();
+            _sendB = b.Media.CreateSender();
+            _sendA.AttachToCall(callA);
+            _sendB.AttachToCall(callB);
+            _loop = RunAsync(interval, _cts.Token);
+        }
+
+        private async Task RunAsync(TimeSpan interval, CancellationToken ct)
+        {
+            var srcA = new MarkedPcmuSource();
+            var srcB = new MarkedPcmuSource();
+            try
+            {
+                while (!ct.IsCancellationRequested)
+                {
+                    await _sendA.SendAsync(srcA.Next(), ct);
+                    await _sendB.SendAsync(srcB.Next(), ct);
+                    await Task.Delay(interval, ct);
+                }
+            }
+            catch (OperationCanceledException) { /* Ende bei Dispose */ }
+        }
+
+        /// <inheritdoc />
+        public async ValueTask DisposeAsync()
+        {
+            _cts.Cancel();
+            try { await _loop.ConfigureAwait(false); } catch { /* best effort */ }
+            _cts.Dispose();
+            _sendA.Dispose();
+            _sendB.Dispose();
+        }
+    }
+
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
