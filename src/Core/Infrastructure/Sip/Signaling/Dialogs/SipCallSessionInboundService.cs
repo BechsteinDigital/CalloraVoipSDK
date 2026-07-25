@@ -291,12 +291,31 @@ internal sealed class SipCallSessionInboundService
                 return;
             }
 
+            var localEndPoint = _context.Transport.GetLocalEndPoint(_context.SignalingTransport);
+            var negotiatedAnswer = _context.SdpProvider.TryNegotiateAnswer(request.Body, localEndPoint, false);
+            if (!string.IsNullOrWhiteSpace(request.Body) && negotiatedAnswer is null)
+            {
+                // RFC 3264 §6 / RFC 3261 §21.4.26: a re-INVITE offer we cannot answer is rejected with 488 Not
+                // Acceptable Here — sending a fresh offer as if it were the answer would violate offer/answer. The
+                // existing session continues unchanged (RFC 3261 §14.2), so no state transition follows.
+                var notAcceptableHeaders = _headers.CreateResponseHeadersFromRequest(request, localTag, includeContentType: false);
+                await _context.ServerTransactions.SendResponseAsync(
+                        request,
+                        remoteEndPoint,
+                        _context.SignalingTransport,
+                        statusCode: 488,
+                        reasonPhrase: "Not Acceptable Here",
+                        notAcceptableHeaders,
+                        body: null,
+                        ct)
+                    .ConfigureAwait(false);
+                return;
+            }
+
             var responseHeaders = _headers.CreateResponseHeadersFromRequest(request, localTag, includeContentType: true);
             SipSessionTimerPolicy.ApplyResponseHeaders(responseHeaders, normalizedSessionExpires);
-            var localEndPoint = _context.Transport.GetLocalEndPoint(_context.SignalingTransport);
-            var responseBody =
-                _context.SdpProvider.TryNegotiateAnswer(request.Body, localEndPoint, false)
-                ?? _context.SdpProvider.BuildOffer(localEndPoint, false);
+            // Offerless re-INVITE (empty body): carry our offer in the 2xx (RFC 3261 §13.2.1); otherwise the answer.
+            var responseBody = negotiatedAnswer ?? _context.SdpProvider.BuildOffer(localEndPoint, false);
             await _context.ServerTransactions.SendResponseAsync(
                     request,
                     remoteEndPoint,
@@ -682,16 +701,32 @@ internal sealed class SipCallSessionInboundService
         }
 
         var includeSdp = !string.IsNullOrWhiteSpace(request.Body);
-        var headers = _headers.CreateResponseHeadersFromRequest(request, localTag, includeContentType: includeSdp);
-        SipSessionTimerPolicy.ApplyResponseHeaders(headers, normalizedSessionExpires);
         string? body = null;
         if (includeSdp)
         {
             var localEndPoint = _context.Transport.GetLocalEndPoint(_context.SignalingTransport);
-            body =
-                _context.SdpProvider.TryNegotiateAnswer(request.Body, localEndPoint, false)
-                ?? _context.SdpProvider.BuildOffer(localEndPoint, false);
+            body = _context.SdpProvider.TryNegotiateAnswer(request.Body, localEndPoint, false);
+            if (body is null)
+            {
+                // RFC 3311 §5.2 / RFC 3264: an UPDATE offer we cannot answer is rejected with 488 Not Acceptable
+                // Here, not a fresh offer sent as the answer. The existing session is unaffected.
+                var notAcceptableHeaders = _headers.CreateResponseHeadersFromRequest(request, localTag, includeContentType: false);
+                await _context.ServerTransactions.SendResponseAsync(
+                        request,
+                        remoteEndPoint,
+                        _context.SignalingTransport,
+                        statusCode: 488,
+                        reasonPhrase: "Not Acceptable Here",
+                        notAcceptableHeaders,
+                        body: null,
+                        ct)
+                    .ConfigureAwait(false);
+                return;
+            }
         }
+
+        var headers = _headers.CreateResponseHeadersFromRequest(request, localTag, includeContentType: includeSdp);
+        SipSessionTimerPolicy.ApplyResponseHeaders(headers, normalizedSessionExpires);
 
         await _context.ServerTransactions.SendResponseAsync(
                 request,
