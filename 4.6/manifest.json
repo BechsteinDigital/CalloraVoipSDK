@@ -2734,10 +2734,30 @@
     },
     {
       "type": "Conceptual",
+      "source_relative_path": "docs/portal/guides/messaging.md",
+      "output": {
+        ".html": {
+          "relative_path": "guides/messaging.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
       "source_relative_path": "docs/portal/guides/nat-and-trunks.md",
       "output": {
         ".html": {
           "relative_path": "guides/nat-and-trunks.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/guides/presence-publish.md",
+      "output": {
+        ".html": {
+          "relative_path": "guides/presence-publish.html"
         }
       },
       "version": ""

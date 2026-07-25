@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Instant messages (SIP MESSAGE) | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Instant messages (SIP MESSAGE) | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/portal/guides/messaging.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="instant-messages-sip-message">Instant messages (SIP MESSAGE)</h1>
+
+<p>Send and receive out-of-dialog SIP <code>MESSAGE</code> requests (RFC 3428 pager-mode instant
+messaging). MESSAGE is <strong>stateless</strong> — it opens no call or dialog; each message is a
+standalone request. You can send and receive messages whenever a line is registered,
+with no call in progress.</p>
+<h2 id="send-a-message">Send a message</h2>
+<pre><code class="lang-csharp">// From the first registered line:
+await client.SendMessageAsync(&quot;sip:bob@example.com&quot;, &quot;Hello from Callora&quot;);
+
+// Or from a specific line, with an explicit content type:
+await line.SendMessageAsync(&quot;sip:bob@example.com&quot;, &quot;Hello&quot;, contentType: &quot;text/plain&quot;);
+</code></pre>
+<p><code>SendMessageAsync</code> completes when the peer answers a <code>2xx</code>; it <strong>faults</strong> on a non-2xx
+final response or if no response arrives (wrap it in <code>try/catch</code> to surface delivery
+failures). Register a line first — the message is sent from that line's identity.</p>
+<h2 id="receive-messages">Receive messages</h2>
+<pre><code class="lang-csharp">client.IncomingMessage += (sender, e) =&gt;
+{
+    SipInstantMessage msg = e.Message;
+    Console.WriteLine($&quot;{msg.From} -&gt; {msg.To}: {msg.Body} ({msg.ContentType})&quot;);
+};
+</code></pre>
+<p>The SDK has already answered the incoming MESSAGE <code>200 OK</code> <strong>before</strong> the event fires —
+the handler only consumes the content. <code>SipInstantMessage</code> is an immutable value object:</p>
+<table>
+<thead>
+<tr>
+<th>Property</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>From</code></td>
+<td>Sender address (the MESSAGE <code>From</code> header)</td>
+</tr>
+<tr>
+<td><code>To</code></td>
+<td>Recipient the message was addressed to (the <code>To</code> header)</td>
+</tr>
+<tr>
+<td><code>Body</code></td>
+<td>The message text/content</td>
+</tr>
+<tr>
+<td><code>ContentType</code></td>
+<td>MIME type of <code>Body</code> (default <code>text/plain</code>)</td>
+</tr>
+<tr>
+<td><code>CallId</code></td>
+<td><code>Call-ID</code> of the request — a correlation token only; no dialog is created</td>
+</tr>
+</tbody>
+</table>
+<h2 id="notes">Notes</h2>
+<ul>
+<li><strong>Out-of-dialog.</strong> MESSAGE is not tied to a call; it needs only a registered line.</li>
+<li><strong>Content type.</strong> The default is <code>text/plain</code>; set <code>contentType</code> for other payloads
+(for example <code>application/im-iscomposing+xml</code> for typing indicators).</li>
+<li><strong>Best-effort delivery.</strong> Per RFC 3428 a <code>2xx</code> means the next hop accepted the message,
+not that a human read it. There is no built-in delivery receipt.</li>
+<li><strong>Threading.</strong> The <code>IncomingMessage</code> handler runs on a SIP signaling thread — keep it
+short and hand heavy work to your own queue.</li>
+</ul>
+<h2 id="see-also">See also</h2>
+<ul>
+<li><a href="presence-publish.html">Presence &amp; event state (SIP PUBLISH)</a> — publish presence/event state.</li>
+<li><a href="inbound-calls.html">Handling inbound calls</a> — the parallel <code>IncomingCall</code> event.</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/portal/guides/messaging.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>
