@@ -553,7 +553,7 @@ internal sealed class SipClientTransactionExecutor : ISipClientTransactionExecut
     /// <summary>
     /// Returns true when an inbound response matches transaction identity.
     /// </summary>
-    private static bool MatchesTransaction(
+    internal static bool MatchesTransaction(
         SipResponse response,
         string callId,
         int requestCSeq,
@@ -581,11 +581,11 @@ internal sealed class SipClientTransactionExecutor : ISipClientTransactionExecut
         if (string.IsNullOrWhiteSpace(requestBranch))
             return true;
 
+        // RFC 3261 §17.1.3: a response matches the client transaction only when its top-Via branch is present
+        // AND equal to the request's branch. A response without a branch is not a match (previously accepted).
         var responseBranch = SipProtocol.ExtractViaBranch(response.Header("Via"));
-        if (string.IsNullOrWhiteSpace(responseBranch))
-            return true;
-
-        return string.Equals(responseBranch, requestBranch, StringComparison.Ordinal);
+        return !string.IsNullOrWhiteSpace(responseBranch)
+            && string.Equals(responseBranch, requestBranch, StringComparison.Ordinal);
     }
 
     /// <summary>
