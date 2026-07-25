@@ -1,5 +1,6 @@
 using System.Net;
 using Microsoft.Extensions.Logging;
+using CalloraVoipSdk.Core.Domain.Calls;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Authentication;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Transport;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Transactions.Server;
@@ -151,8 +152,8 @@ internal sealed class SipCallSessionContextAdapter : ISipCallSessionContext
     public void NotifyDtmfReceived(byte toneCode, int durationMilliseconds) =>
         _session.RaiseDtmfReceived(toneCode, durationMilliseconds);
 
-    public bool NotifyTransferRequested(string referTo, string referredBy) =>
-        _session.RaiseTransferRequested(referTo, referredBy);
+    public bool NotifyTransferRequested(string referTo, string referredBy, IReferSubscription subscription) =>
+        _session.RaiseTransferRequested(referTo, referredBy, subscription);
 
     public bool NotifySubscriptionRequested(string eventType, int expiresSeconds, string? acceptHeader) =>
         _session.RaiseSubscriptionRequested(eventType, expiresSeconds, acceptHeader);

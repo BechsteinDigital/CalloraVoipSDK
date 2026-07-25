@@ -13,6 +13,13 @@ public sealed class TransferRequestedEventArgs : EventArgs
     /// <summary>Set to <c>true</c> in the event handler to accept the transfer.</summary>
     public bool   Accept    { get; set; }
 
-    internal TransferRequestedEventArgs(string targetUri, ICall call)
-        => (TargetUri, Call) = (targetUri, call);
+    /// <summary>
+    /// Live handle to the REFER's implicit subscription (RFC 3515 / RFC 6665). After accepting, the
+    /// application places the referred call itself and reports its progress and final outcome through
+    /// this handle so the transferor sees the real status. Reporting is optional.
+    /// </summary>
+    public IReferSubscription Subscription { get; }
+
+    internal TransferRequestedEventArgs(string targetUri, ICall call, IReferSubscription subscription)
+        => (TargetUri, Call, Subscription) = (targetUri, call, subscription);
 }

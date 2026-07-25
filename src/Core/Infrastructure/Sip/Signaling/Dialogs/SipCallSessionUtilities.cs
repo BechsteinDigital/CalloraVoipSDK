@@ -16,6 +16,13 @@ internal static class SipCallSessionUtilities
     {
         return statusCode switch
         {
+            100 => "Trying",
+            180 => "Ringing",
+            181 => "Call Is Being Forwarded",
+            182 => "Queued",
+            183 => "Session Progress",
+            200 => "OK",
+            202 => "Accepted",
             400 => "Bad Request",
             403 => "Forbidden",
             404 => "Not Found",
