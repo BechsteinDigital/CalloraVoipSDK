@@ -60,7 +60,8 @@ internal sealed class SipReferHandler
 
         // Handle created before the callback so the consumer may report synchronously inside the transfer
         // handler; such reports are buffered and flushed by StartAsync after the 202.
-        var subscription = new SipReferSubscription(SendReferNotifyMessageAsync);
+        var subscription = new SipReferSubscription(
+            SendReferNotifyMessageAsync, sessionShutdown: _context.SessionShutdownToken);
         var acceptTransfer = _context.NotifyTransferRequested(referTo, referredBy, subscription);
 
         var responseHeaders = _headers.CreateResponseHeadersFromRequest(request, localTag, includeContentType: false);

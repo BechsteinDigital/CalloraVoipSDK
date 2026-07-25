@@ -230,4 +230,24 @@ public sealed class SipReferProgressNotifyTests
         Assert.DoesNotContain(sends, s => s.State == "terminated;reason=timeout");
         Assert.Contains(sends, s => s.State.StartsWith("terminated") && s.Sipfrag == "SIP/2.0 200 OK");
     }
+
+    [Fact]
+    public async Task Session_teardown_cancels_the_auto_timeout()
+    {
+        var (sends, sender) = RecordingSender();
+        var fire = new TaskCompletionSource();
+        using var session = new CancellationTokenSource();
+        var subscription = new SipReferSubscription(
+            sender, TimeSpan.FromSeconds(60), (_, ct) => fire.Task.WaitAsync(ct), session.Token);
+
+        await subscription.StartAsync(default);   // active/100 + arms the (blocked) timeout
+        session.Cancel();                          // session teardown must cancel the armed timeout
+        // Bounded so a regression (shutdown not wired) fails fast instead of hanging on the blocked delay.
+        await subscription.WaitForTimeoutAsync().WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert.DoesNotContain(sends, s => s.State == "terminated;reason=timeout");
+        var only = Assert.Single(sends);
+        Assert.StartsWith("active", only.State);
+        Assert.Equal("SIP/2.0 100 Trying", only.Sipfrag);
+    }
 }
