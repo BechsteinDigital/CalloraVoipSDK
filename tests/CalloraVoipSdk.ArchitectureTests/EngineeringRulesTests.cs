@@ -204,8 +204,8 @@ public sealed class EngineeringRulesTests
         // zu bewerten.
         "src/Core/Application/Media/MediaConnection.cs",
         "src/Core/Infrastructure/Media/Mp3TranscodingWriter.cs",
-        "src/Core/Infrastructure/Sip/Transport/SipStreamConnection.cs",
-        "src/Core/Infrastructure/Sip/Transport/SipWebSocketConnection.cs",
+        // #13: SipStreamConnection/SipWebSocketConnection Dispose now use a bounded _receiveLoop.Wait(timeout)
+        // instead of an unbounded GetAwaiter().GetResult(), so they are no longer sync-over-async violations.
     ];
 
     [Fact]
