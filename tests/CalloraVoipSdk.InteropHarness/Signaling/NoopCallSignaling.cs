@@ -29,6 +29,9 @@ internal sealed class NoopCallSignaling : ISipCallSignalingService
     public Task<int> SendMessageAsync(SipMessageRequest request, CancellationToken ct = default) => Task.FromResult(200);
 
     /// <inheritdoc />
+    public Task<SipPublishResult> PublishAsync(SipPublishRequest request, CancellationToken ct = default) => Task.FromResult(new SipPublishResult(200, null, 0));
+
+    /// <inheritdoc />
     public void Dispose() { }
 }
 
