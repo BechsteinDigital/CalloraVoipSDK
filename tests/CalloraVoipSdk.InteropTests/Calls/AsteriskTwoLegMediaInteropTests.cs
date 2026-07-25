@@ -158,6 +158,41 @@ public sealed class AsteriskTwoLegMediaInteropTests
         }
     }
 
+    [DockerRequiredFact]
+    public async Task SdesBridgedCall_FlowsEncryptedMediaBothDirections()
+    {
+        await using var asterisk = new AsteriskContainer();
+        await asterisk.StartAsync();
+        await using var bridged = await TwoLegBridgedCall.StartAsync(asterisk, TwoLegProfile.Sdes(asterisk));
+
+        // Beide Legs verhandelten verschlüsseltes Media (RFC 4568 SDES → RTP/SAVP).
+        AssertSrtp(bridged.CallerCall, "Caller");
+        AssertSrtp(bridged.CalleeCall, "Callee");
+
+        var result = await bridged.RunBidirectionalMediaAsync(TimeSpan.FromSeconds(8));
+
+        // Verschlüsseltes Media floss in beide Richtungen (Empfang = entschlüsselt gezählt).
+        AssertBidirectionalRtp(bridged.CallerCall, "Caller");
+        AssertBidirectionalRtp(bridged.CalleeCall, "Callee");
+        // Inhalt byte-exakt nach Entschlüsselung (Asterisk terminiert SDES je Leg, relayt Klartext-PCMU).
+        Assert.True(LongestContiguousRun(result.CalleeReceivedSequences) >= 50,
+            $"A→B verschlüsselter Inhalt nicht durchgängig ({result.CalleeReceivedSequences.Count} empfangen).");
+        Assert.True(LongestContiguousRun(result.CallerReceivedSequences) >= 50,
+            $"B→A verschlüsselter Inhalt nicht durchgängig ({result.CallerReceivedSequences.Count} empfangen).");
+
+        static void AssertSrtp(CalloraVoipSdk.Core.Domain.Calls.ICall call, string label)
+        {
+            Assert.True(call.MediaParameters!.IsSrtpNegotiated, $"{label}: SRTP nicht verhandelt.");
+            Assert.Equal("RTP/SAVP", call.MediaParameters!.MediaProfile);
+        }
+
+        static void AssertBidirectionalRtp(CalloraVoipSdk.Core.Domain.Calls.ICall call, string label)
+        {
+            var rtp = call.RtpStatistics;
+            Assert.True(rtp is { PacketsSent: > 0, PacketsReceived: > 0 }, $"{label}: kein bidirektionales SRTP-RTP.");
+        }
+    }
+
     /// <summary>Längster zusammenhängender Lauf aufeinanderfolgender Sequenzmarker (O(n)).</summary>
     private static int LongestContiguousRun(IReadOnlyList<uint> seqs)
     {
