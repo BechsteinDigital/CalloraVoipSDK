@@ -134,7 +134,55 @@ internal sealed class PhoneLine : IPhoneLine, IDisposable
         => _channel.SendMessageAsync(targetUri, body, contentType, ct);
 
     public Task<Publications.PublishResult> PublishAsync(string eventType, string body, string contentType = "text/plain", int expiresSeconds = 3600, CancellationToken ct = default)
-        => _channel.PublishAsync(eventType, body, contentType, expiresSeconds, ct);
+        => _channel.PublishAsync(eventType, body, contentType, expiresSeconds, ct: ct);
+
+    /// <summary>
+    /// Refreshes a prior publication's lifetime via SIP PUBLISH with SIP-If-Match (RFC 3903 §4.1), sending an
+    /// empty body so the server retains the existing event state. The <paramref name="etag"/> is the SIP-ETag
+    /// from a prior <see cref="PublishAsync"/>/refresh; returns the new SIP-ETag and granted lifetime.
+    /// </summary>
+    /// <param name="eventType">The event package (Event header, e.g. <c>presence</c>).</param>
+    /// <param name="etag">The SIP-ETag of the publication to refresh.</param>
+    /// <param name="expiresSeconds">Requested publication lifetime in seconds. Defaults to 3600.</param>
+    /// <param name="ct">Cancels the refresh.</param>
+    /// <returns>The assigned entity-tag and granted lifetime; faults on a non-2xx or no response.</returns>
+    public Task<Publications.PublishResult> RefreshPublicationAsync(string eventType, string etag, int expiresSeconds = 3600, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(etag);
+        return _channel.PublishAsync(eventType, string.Empty, "text/plain", expiresSeconds, ifMatch: etag, ct);
+    }
+
+    /// <summary>
+    /// Replaces a prior publication's body via SIP PUBLISH with SIP-If-Match (RFC 3903 §4.1). The
+    /// <paramref name="etag"/> is the SIP-ETag from a prior <see cref="PublishAsync"/>/refresh; returns the new
+    /// SIP-ETag and granted lifetime.
+    /// </summary>
+    /// <param name="eventType">The event package (Event header, e.g. <c>presence</c>).</param>
+    /// <param name="etag">The SIP-ETag of the publication to modify.</param>
+    /// <param name="body">The replacement event-state document to publish (for example a PIDF body).</param>
+    /// <param name="contentType">The body's MIME type; defaults to <c>text/plain</c>.</param>
+    /// <param name="expiresSeconds">Requested publication lifetime in seconds. Defaults to 3600.</param>
+    /// <param name="ct">Cancels the modify.</param>
+    /// <returns>The assigned entity-tag and granted lifetime; faults on a non-2xx or no response.</returns>
+    public Task<Publications.PublishResult> ModifyPublicationAsync(string eventType, string etag, string body, string contentType = "text/plain", int expiresSeconds = 3600, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(etag);
+        return _channel.PublishAsync(eventType, body, contentType, expiresSeconds, ifMatch: etag, ct);
+    }
+
+    /// <summary>
+    /// Removes a prior publication via SIP PUBLISH with SIP-If-Match and Expires: 0 (RFC 3903 §4.1). The
+    /// <paramref name="etag"/> is the SIP-ETag from a prior <see cref="PublishAsync"/>/refresh.
+    /// </summary>
+    /// <param name="eventType">The event package (Event header, e.g. <c>presence</c>).</param>
+    /// <param name="etag">The SIP-ETag of the publication to remove.</param>
+    /// <param name="ct">Cancels the remove.</param>
+    /// <returns>A task that completes when the peer answers 2xx; it faults on a non-2xx or no response.</returns>
+    public async Task RemovePublicationAsync(string eventType, string etag, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(etag);
+        await _channel.PublishAsync(eventType, string.Empty, "text/plain", expiresSeconds: 0, ifMatch: etag, ct).ConfigureAwait(false);
+    }
 
     public Task UnregisterAsync(CancellationToken ct = default)
         // Real de-registration: stop the refresh loop AND await the REGISTER Expires:0 round-trip

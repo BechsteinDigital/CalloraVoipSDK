@@ -236,6 +236,12 @@ internal interface ISipCallSessionContext
     bool IsDisposed { get; }
 
     /// <summary>
+    /// Token cancelled when the parent session is disposed. Session-scoped background work (e.g. the REFER
+    /// subscription auto-timeout) links to it so it stops instead of firing into a torn-down dialog.
+    /// </summary>
+    CancellationToken SessionShutdownToken { get; }
+
+    /// <summary>
     /// Increments and returns next local CSeq.
     /// </summary>
     int NextLocalCSeq();

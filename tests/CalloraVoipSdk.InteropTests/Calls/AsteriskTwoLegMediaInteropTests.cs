@@ -144,25 +144,67 @@ public sealed class AsteriskTwoLegMediaInteropTests
 
         var result = await bridged.RunBidirectionalMediaAsync(TimeSpan.FromSeconds(8));
 
-        var received = result.CalleeReceivedSequences;
-        Assert.NotEmpty(received);
-        // Größter kontiguierlicher Lauf empfangener Marker; Rand-/Playout-Verluste toleriert.
-        var longestRun = LongestContiguousRun(received);
-        Assert.True(longestRun >= 50,
-            $"Nur {longestRun} zusammenhängende markierte Frames end-to-end (von {received.Count} empfangen).");
+        // Beide Richtungen byte-exakt: A→B (Callee empfängt A's Marker) und B→A (Caller empfängt B's).
+        AssertContiguousDelivery(result.CalleeReceivedSequences, "A→B");
+        AssertContiguousDelivery(result.CallerReceivedSequences, "B→A");
 
-        static int LongestContiguousRun(IReadOnlyList<uint> seqs)
+        static void AssertContiguousDelivery(IReadOnlyList<uint> received, string direction)
         {
-            var set = new HashSet<uint>(seqs);
-            var best = 0;
-            foreach (var s in set)
-            {
-                if (set.Contains(s - 1)) continue; // nur Lauf-Anfänge
-                var len = 1;
-                while (set.Contains(s + (uint)len)) len++;
-                best = Math.Max(best, len);
-            }
-            return best;
+            Assert.NotEmpty(received);
+            // Größter zusammenhängender Lauf empfangener Marker; Rand-/Playout-Verluste toleriert.
+            var longestRun = LongestContiguousRun(received);
+            Assert.True(longestRun >= 50,
+                $"{direction}: nur {longestRun} zusammenhängende markierte Frames end-to-end (von {received.Count} empfangen).");
         }
+    }
+
+    [DockerRequiredFact]
+    public async Task SdesBridgedCall_FlowsEncryptedMediaBothDirections()
+    {
+        await using var asterisk = new AsteriskContainer();
+        await asterisk.StartAsync();
+        await using var bridged = await TwoLegBridgedCall.StartAsync(asterisk, TwoLegProfile.Sdes(asterisk));
+
+        // Beide Legs verhandelten verschlüsseltes Media (RFC 4568 SDES → RTP/SAVP).
+        AssertSrtp(bridged.CallerCall, "Caller");
+        AssertSrtp(bridged.CalleeCall, "Callee");
+
+        var result = await bridged.RunBidirectionalMediaAsync(TimeSpan.FromSeconds(8));
+
+        // Verschlüsseltes Media floss in beide Richtungen (Empfang = entschlüsselt gezählt).
+        AssertBidirectionalRtp(bridged.CallerCall, "Caller");
+        AssertBidirectionalRtp(bridged.CalleeCall, "Callee");
+        // Inhalt byte-exakt nach Entschlüsselung (Asterisk terminiert SDES je Leg, relayt Klartext-PCMU).
+        Assert.True(LongestContiguousRun(result.CalleeReceivedSequences) >= 50,
+            $"A→B verschlüsselter Inhalt nicht durchgängig ({result.CalleeReceivedSequences.Count} empfangen).");
+        Assert.True(LongestContiguousRun(result.CallerReceivedSequences) >= 50,
+            $"B→A verschlüsselter Inhalt nicht durchgängig ({result.CallerReceivedSequences.Count} empfangen).");
+
+        static void AssertSrtp(CalloraVoipSdk.Core.Domain.Calls.ICall call, string label)
+        {
+            Assert.True(call.MediaParameters!.IsSrtpNegotiated, $"{label}: SRTP nicht verhandelt.");
+            Assert.Equal("RTP/SAVP", call.MediaParameters!.MediaProfile);
+        }
+
+        static void AssertBidirectionalRtp(CalloraVoipSdk.Core.Domain.Calls.ICall call, string label)
+        {
+            var rtp = call.RtpStatistics;
+            Assert.True(rtp is { PacketsSent: > 0, PacketsReceived: > 0 }, $"{label}: kein bidirektionales SRTP-RTP.");
+        }
+    }
+
+    /// <summary>Längster zusammenhängender Lauf aufeinanderfolgender Sequenzmarker (O(n)).</summary>
+    private static int LongestContiguousRun(IReadOnlyList<uint> seqs)
+    {
+        var set = new HashSet<uint>(seqs);
+        var best = 0;
+        foreach (var s in set)
+        {
+            if (set.Contains(s - 1)) continue; // nur Lauf-Anfänge
+            var len = 1;
+            while (set.Contains(s + (uint)len)) len++;
+            best = Math.Max(best, len);
+        }
+        return best;
     }
 }
