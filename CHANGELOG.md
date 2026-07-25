@@ -14,8 +14,10 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
   Verified end-to-end against a real Asterisk (plain and SRTP-SDES early media).
 - **SIP `MESSAGE` (RFC 3428, CF-066a)**: send and receive out-of-dialog instant messages —
   `VoipClient.SendMessageAsync(...)` and the `IVoipClient.IncomingMessage` event.
-- **SIP `PUBLISH` (RFC 3903, CF-066b)**: publish event state (e.g. presence) with full
-  refresh / modify / remove lifecycle — `VoipClient.PublishAsync(...)` returning `PublishResult`.
+- **SIP `PUBLISH` (RFC 3903, CF-066b)**: publish event state (e.g. presence) via
+  `VoipClient.PublishAsync(...)`, returning a `PublishResult` with the assigned SIP-ETag and
+  granted lifetime. The refresh / modify / remove wire lifecycle (SIP-`If-Match`) is implemented
+  in the SIP layer; a public entry point to drive it from the facade is still pending (#76).
 - **REFER transfer progress subscription (RFC 3515 / 6665, CF-045)**: an incoming REFER now carries
   an `IReferSubscription` (`TransferRequestedEventArgs.Subscription`) that reports the referred
   call's progress, with an auto-timeout for an unresolved subscription.

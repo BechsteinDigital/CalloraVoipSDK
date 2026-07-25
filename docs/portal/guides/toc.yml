@@ -2,6 +2,10 @@
   href: making-calls.md
 - name: Handling inbound calls
   href: inbound-calls.md
+- name: Instant messages (MESSAGE)
+  href: messaging.md
+- name: Presence & event state (PUBLISH)
+  href: presence-publish.md
 - name: Audio devices
   href: audio-devices.md
 - name: Media tap
