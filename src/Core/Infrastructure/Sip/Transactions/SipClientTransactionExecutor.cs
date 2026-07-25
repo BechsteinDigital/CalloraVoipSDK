@@ -513,7 +513,7 @@ internal sealed class SipClientTransactionExecutor : ISipClientTransactionExecut
                 "SIP client transaction send failed for {Method} on {CallId}.",
                 method,
                 callId);
-            throw new InvalidOperationException(
+            throw new SipTransactionTransportException(
                 $"SIP transaction send failed for {method}.",
                 transportException);
         }
