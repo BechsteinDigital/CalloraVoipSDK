@@ -180,4 +180,54 @@ public sealed class SipReferProgressNotifyTests
         Assert.Contains(engine.Responses, r => r.StatusCode == 202);
         Assert.Empty(Notifies(transport));
     }
+
+    // ── Auto-timeout (direct SipReferSubscription unit tests with an injected delay) ────────────────
+
+    private static (List<(string State, string Sipfrag)> Sends, Func<string, string, CancellationToken, Task> Sender)
+        RecordingSender()
+    {
+        var sends = new List<(string State, string Sipfrag)>();
+        Task Send(string state, string sipfrag, CancellationToken _)
+        {
+            lock (sends) sends.Add((state, sipfrag));
+            return Task.CompletedTask;
+        }
+        return (sends, Send);
+    }
+
+    [Fact]
+    public async Task An_accepted_refer_that_is_never_resolved_auto_terminates_on_timeout()
+    {
+        var (sends, sender) = RecordingSender();
+        var fire = new TaskCompletionSource();
+        var subscription = new SipReferSubscription(
+            sender, TimeSpan.FromSeconds(60), (_, ct) => fire.Task.WaitAsync(ct));
+
+        await subscription.StartAsync(default);   // active/100 + arms the (blocked) timeout
+        fire.SetResult();                          // elapse the timeout
+        await subscription.WaitForTimeoutAsync();  // deterministic: completes after the terminated send
+
+        Assert.Equal(2, sends.Count);
+        Assert.StartsWith("active", sends[0].State);
+        Assert.Equal("SIP/2.0 100 Trying", sends[0].Sipfrag);
+        Assert.Equal("terminated;reason=timeout", sends[1].State);
+        Assert.Equal("SIP/2.0 408 Request Timeout", sends[1].Sipfrag);
+    }
+
+    [Fact]
+    public async Task A_reported_outcome_cancels_the_auto_timeout()
+    {
+        var (sends, sender) = RecordingSender();
+        var fire = new TaskCompletionSource();
+        var subscription = new SipReferSubscription(
+            sender, TimeSpan.FromSeconds(60), (_, ct) => fire.Task.WaitAsync(ct));
+
+        await subscription.StartAsync(default);
+        subscription.ReportSuccess();              // cancels the armed timeout
+        await subscription.WaitForTimeoutAsync();  // returns cancelled — no timeout NOTIFY
+        await subscription.WaitForSendsAsync();
+
+        Assert.DoesNotContain(sends, s => s.State == "terminated;reason=timeout");
+        Assert.Contains(sends, s => s.State.StartsWith("terminated") && s.Sipfrag == "SIP/2.0 200 OK");
+    }
 }
