@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using CalloraVoipSdk.Core.Domain.Calls;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Sip.Signaling;
 
@@ -48,12 +49,13 @@ internal sealed class SipCallSessionEventDispatcher
         object sender,
         string referTo,
         string referredBy,
+        IReferSubscription subscription,
         string callId)
     {
         if (handler is null)
             return false;
 
-        var args = new SipTransferRequestedEventArgs(referTo, referredBy);
+        var args = new SipTransferRequestedEventArgs(referTo, referredBy, subscription);
         try
         {
             handler.Invoke(sender, args);

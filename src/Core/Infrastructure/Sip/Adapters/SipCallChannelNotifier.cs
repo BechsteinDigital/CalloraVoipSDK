@@ -17,7 +17,7 @@ internal sealed class SipCallChannelNotifier
     private Action<CallState>? _onStateChange;
     private Action<byte, int>? _onDtmf;
     private Action<bool>? _onRemoteHold;
-    private Func<string, string, bool>? _onTransfer;
+    private Func<string, string, IReferSubscription, bool>? _onTransfer;
 
     /// <summary>Binds the consumer callbacks and flushes any buffered state/remote-hold events.</summary>
     public void Bind(CallChannelCallbacks callbacks)
@@ -81,11 +81,11 @@ internal sealed class SipCallChannelNotifier
     }
 
     /// <summary>Asks the consumer whether to accept a transfer request; <c>false</c> when unbound.</summary>
-    public bool NotifyTransferRequested(string referTo, string referredBy)
+    public bool NotifyTransferRequested(string referTo, string referredBy, IReferSubscription subscription)
     {
-        Func<string, string, bool>? handler;
+        Func<string, string, IReferSubscription, bool>? handler;
         lock (_sync) handler = _onTransfer;
-        return handler?.Invoke(referTo, referredBy) ?? false;
+        return handler?.Invoke(referTo, referredBy, subscription) ?? false;
     }
 
     /// <summary>Clears buffers and handlers on channel teardown.</summary>

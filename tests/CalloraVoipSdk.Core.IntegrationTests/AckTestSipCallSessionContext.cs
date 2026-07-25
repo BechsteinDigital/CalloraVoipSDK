@@ -115,7 +115,23 @@ internal sealed class AckTestSipCallSessionContext : ISipCallSessionContext
 
     public bool TransferAccepted { get; init; }
 
-    public bool NotifyTransferRequested(string referTo, string referredBy) => TransferAccepted;
+    /// <summary>
+    /// Optional consumer simulation invoked with the REFER subscription handle when the transfer is accepted.
+    /// When unset, an accepted transfer defaults to reporting success (<c>active</c>/100 then <c>terminated</c>/200).
+    /// </summary>
+    public Action<IReferSubscription>? OnTransferSubscription { get; init; }
+
+    public bool NotifyTransferRequested(string referTo, string referredBy, IReferSubscription subscription)
+    {
+        if (TransferAccepted)
+        {
+            if (OnTransferSubscription is not null)
+                OnTransferSubscription(subscription);
+            else
+                subscription.ReportSuccess();
+        }
+        return TransferAccepted;
+    }
 
     public bool NotifySubscriptionRequested(string eventType, int expiresSeconds, string? acceptHeader) => false;
 
