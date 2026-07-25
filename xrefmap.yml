@@ -4994,6 +4994,22 @@ references:
   commentId: E:CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.OutboundCallRinging
   fullName: CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.OutboundCallRinging
   nameWithType: IPhoneLine.OutboundCallRinging
+- uid: CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.PublishAsync(System.String,System.String,System.String,System.Int32,System.Threading.CancellationToken)
+  name: PublishAsync(string, string, string, int, CancellationToken)
+  href: _api/CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.html#CalloraVoipSdk_Core_Domain_Lines_IPhoneLine_PublishAsync_System_String_System_String_System_String_System_Int32_System_Threading_CancellationToken_
+  commentId: M:CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.PublishAsync(System.String,System.String,System.String,System.Int32,System.Threading.CancellationToken)
+  name.vb: PublishAsync(String, String, String, Integer, CancellationToken)
+  fullName: CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.PublishAsync(string, string, string, int, System.Threading.CancellationToken)
+  fullName.vb: CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.PublishAsync(String, String, String, Integer, System.Threading.CancellationToken)
+  nameWithType: IPhoneLine.PublishAsync(string, string, string, int, CancellationToken)
+  nameWithType.vb: IPhoneLine.PublishAsync(String, String, String, Integer, CancellationToken)
+- uid: CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.PublishAsync*
+  name: PublishAsync
+  href: _api/CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.html#CalloraVoipSdk_Core_Domain_Lines_IPhoneLine_PublishAsync_
+  commentId: Overload:CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.PublishAsync
+  isSpec: "True"
+  fullName: CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.PublishAsync
+  nameWithType: IPhoneLine.PublishAsync
 - uid: CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.SendMessageAsync(System.String,System.String,System.String,System.Threading.CancellationToken)
   name: SendMessageAsync(string, string, string, CancellationToken)
   href: _api/CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.html#CalloraVoipSdk_Core_Domain_Lines_IPhoneLine_SendMessageAsync_System_String_System_String_System_String_System_Threading_CancellationToken_
@@ -5791,6 +5807,63 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage.To
   nameWithType: SipInstantMessage.To
+- uid: CalloraVoipSdk.Core.Domain.Publications
+  name: CalloraVoipSdk.Core.Domain.Publications
+  href: _api/CalloraVoipSdk.Core.Domain.Publications.html
+  commentId: N:CalloraVoipSdk.Core.Domain.Publications
+  fullName: CalloraVoipSdk.Core.Domain.Publications
+  nameWithType: CalloraVoipSdk.Core.Domain.Publications
+- uid: CalloraVoipSdk.Core.Domain.Publications.PublishResult
+  name: PublishResult
+  href: _api/CalloraVoipSdk.Core.Domain.Publications.PublishResult.html
+  commentId: T:CalloraVoipSdk.Core.Domain.Publications.PublishResult
+  fullName: CalloraVoipSdk.Core.Domain.Publications.PublishResult
+  nameWithType: PublishResult
+- uid: CalloraVoipSdk.Core.Domain.Publications.PublishResult.#ctor(System.String,System.Int32)
+  name: PublishResult(string?, int)
+  href: _api/CalloraVoipSdk.Core.Domain.Publications.PublishResult.html#CalloraVoipSdk_Core_Domain_Publications_PublishResult__ctor_System_String_System_Int32_
+  commentId: M:CalloraVoipSdk.Core.Domain.Publications.PublishResult.#ctor(System.String,System.Int32)
+  name.vb: New(String, Integer)
+  fullName: CalloraVoipSdk.Core.Domain.Publications.PublishResult.PublishResult(string?, int)
+  fullName.vb: CalloraVoipSdk.Core.Domain.Publications.PublishResult.New(String, Integer)
+  nameWithType: PublishResult.PublishResult(string?, int)
+  nameWithType.vb: PublishResult.New(String, Integer)
+- uid: CalloraVoipSdk.Core.Domain.Publications.PublishResult.#ctor*
+  name: PublishResult
+  href: _api/CalloraVoipSdk.Core.Domain.Publications.PublishResult.html#CalloraVoipSdk_Core_Domain_Publications_PublishResult__ctor_
+  commentId: Overload:CalloraVoipSdk.Core.Domain.Publications.PublishResult.#ctor
+  isSpec: "True"
+  name.vb: New
+  fullName: CalloraVoipSdk.Core.Domain.Publications.PublishResult.PublishResult
+  fullName.vb: CalloraVoipSdk.Core.Domain.Publications.PublishResult.New
+  nameWithType: PublishResult.PublishResult
+  nameWithType.vb: PublishResult.New
+- uid: CalloraVoipSdk.Core.Domain.Publications.PublishResult.ETag
+  name: ETag
+  href: _api/CalloraVoipSdk.Core.Domain.Publications.PublishResult.html#CalloraVoipSdk_Core_Domain_Publications_PublishResult_ETag
+  commentId: P:CalloraVoipSdk.Core.Domain.Publications.PublishResult.ETag
+  fullName: CalloraVoipSdk.Core.Domain.Publications.PublishResult.ETag
+  nameWithType: PublishResult.ETag
+- uid: CalloraVoipSdk.Core.Domain.Publications.PublishResult.ETag*
+  name: ETag
+  href: _api/CalloraVoipSdk.Core.Domain.Publications.PublishResult.html#CalloraVoipSdk_Core_Domain_Publications_PublishResult_ETag_
+  commentId: Overload:CalloraVoipSdk.Core.Domain.Publications.PublishResult.ETag
+  isSpec: "True"
+  fullName: CalloraVoipSdk.Core.Domain.Publications.PublishResult.ETag
+  nameWithType: PublishResult.ETag
+- uid: CalloraVoipSdk.Core.Domain.Publications.PublishResult.ExpiresSeconds
+  name: ExpiresSeconds
+  href: _api/CalloraVoipSdk.Core.Domain.Publications.PublishResult.html#CalloraVoipSdk_Core_Domain_Publications_PublishResult_ExpiresSeconds
+  commentId: P:CalloraVoipSdk.Core.Domain.Publications.PublishResult.ExpiresSeconds
+  fullName: CalloraVoipSdk.Core.Domain.Publications.PublishResult.ExpiresSeconds
+  nameWithType: PublishResult.ExpiresSeconds
+- uid: CalloraVoipSdk.Core.Domain.Publications.PublishResult.ExpiresSeconds*
+  name: ExpiresSeconds
+  href: _api/CalloraVoipSdk.Core.Domain.Publications.PublishResult.html#CalloraVoipSdk_Core_Domain_Publications_PublishResult_ExpiresSeconds_
+  commentId: Overload:CalloraVoipSdk.Core.Domain.Publications.PublishResult.ExpiresSeconds
+  isSpec: "True"
+  fullName: CalloraVoipSdk.Core.Domain.Publications.PublishResult.ExpiresSeconds
+  nameWithType: PublishResult.ExpiresSeconds
 - uid: CalloraVoipSdk.Core.Domain.Security
   name: CalloraVoipSdk.Core.Domain.Security
   href: _api/CalloraVoipSdk.Core.Domain.Security.html
@@ -8133,6 +8206,22 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.IVoipClient.PolicyManager
   nameWithType: IVoipClient.PolicyManager
+- uid: CalloraVoipSdk.IVoipClient.PublishAsync(System.String,System.String,System.String,System.Int32,System.Threading.CancellationToken)
+  name: PublishAsync(string, string, string, int, CancellationToken)
+  href: _api/CalloraVoipSdk.IVoipClient.html#CalloraVoipSdk_IVoipClient_PublishAsync_System_String_System_String_System_String_System_Int32_System_Threading_CancellationToken_
+  commentId: M:CalloraVoipSdk.IVoipClient.PublishAsync(System.String,System.String,System.String,System.Int32,System.Threading.CancellationToken)
+  name.vb: PublishAsync(String, String, String, Integer, CancellationToken)
+  fullName: CalloraVoipSdk.IVoipClient.PublishAsync(string, string, string, int, System.Threading.CancellationToken)
+  fullName.vb: CalloraVoipSdk.IVoipClient.PublishAsync(String, String, String, Integer, System.Threading.CancellationToken)
+  nameWithType: IVoipClient.PublishAsync(string, string, string, int, CancellationToken)
+  nameWithType.vb: IVoipClient.PublishAsync(String, String, String, Integer, CancellationToken)
+- uid: CalloraVoipSdk.IVoipClient.PublishAsync*
+  name: PublishAsync
+  href: _api/CalloraVoipSdk.IVoipClient.html#CalloraVoipSdk_IVoipClient_PublishAsync_
+  commentId: Overload:CalloraVoipSdk.IVoipClient.PublishAsync
+  isSpec: "True"
+  fullName: CalloraVoipSdk.IVoipClient.PublishAsync
+  nameWithType: IVoipClient.PublishAsync
 - uid: CalloraVoipSdk.IVoipClient.QualityManager
   name: QualityManager
   href: _api/CalloraVoipSdk.IVoipClient.html#CalloraVoipSdk_IVoipClient_QualityManager
@@ -9320,6 +9409,22 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.VoipClient.PolicyManager
   nameWithType: VoipClient.PolicyManager
+- uid: CalloraVoipSdk.VoipClient.PublishAsync(System.String,System.String,System.String,System.Int32,System.Threading.CancellationToken)
+  name: PublishAsync(string, string, string, int, CancellationToken)
+  href: _api/CalloraVoipSdk.VoipClient.html#CalloraVoipSdk_VoipClient_PublishAsync_System_String_System_String_System_String_System_Int32_System_Threading_CancellationToken_
+  commentId: M:CalloraVoipSdk.VoipClient.PublishAsync(System.String,System.String,System.String,System.Int32,System.Threading.CancellationToken)
+  name.vb: PublishAsync(String, String, String, Integer, CancellationToken)
+  fullName: CalloraVoipSdk.VoipClient.PublishAsync(string, string, string, int, System.Threading.CancellationToken)
+  fullName.vb: CalloraVoipSdk.VoipClient.PublishAsync(String, String, String, Integer, System.Threading.CancellationToken)
+  nameWithType: VoipClient.PublishAsync(string, string, string, int, CancellationToken)
+  nameWithType.vb: VoipClient.PublishAsync(String, String, String, Integer, CancellationToken)
+- uid: CalloraVoipSdk.VoipClient.PublishAsync*
+  name: PublishAsync
+  href: _api/CalloraVoipSdk.VoipClient.html#CalloraVoipSdk_VoipClient_PublishAsync_
+  commentId: Overload:CalloraVoipSdk.VoipClient.PublishAsync
+  isSpec: "True"
+  fullName: CalloraVoipSdk.VoipClient.PublishAsync
+  nameWithType: VoipClient.PublishAsync
 - uid: CalloraVoipSdk.VoipClient.QualityManager
   name: QualityManager
   href: _api/CalloraVoipSdk.VoipClient.html#CalloraVoipSdk_VoipClient_QualityManager

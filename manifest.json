@@ -1160,6 +1160,34 @@
     },
     {
       "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Publications.PublishResult.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Publications.PublishResult.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Publications.PublishResult",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Publications.PublishResult.yml\" sourcestartlinenumber=\"1\">Outcome of a successful SIP PUBLISH (RFC 3903 event state publication). Carries the entity-tag and\ngranted lifetime the event state compositor returned, which identify the publication for a later\nrefresh, modify or remove (SIP-If-Match).</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Publications.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Publications.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Publications",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
       "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Security.SrtpDecisionReasonCodes.yml",
       "output": {
         ".html": {
