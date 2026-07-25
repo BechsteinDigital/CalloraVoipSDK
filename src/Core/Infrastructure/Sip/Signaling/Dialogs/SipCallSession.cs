@@ -1,5 +1,6 @@
 using System.Net;
 using Microsoft.Extensions.Logging;
+using CalloraVoipSdk.Core.Domain.Calls;
 using CalloraVoipSdk.Core.Infrastructure.Common.Protocols;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Authentication;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Transport;
@@ -808,8 +809,8 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
     /// <summary>
     /// Raises transfer-request event and returns caller acceptance.
     /// </summary>
-    internal bool RaiseTransferRequested(string referTo, string referredBy)
-        => _eventDispatcher.RaiseTransferRequested(TransferRequested, this, referTo, referredBy, CallId);
+    internal bool RaiseTransferRequested(string referTo, string referredBy, IReferSubscription subscription)
+        => _eventDispatcher.RaiseTransferRequested(TransferRequested, this, referTo, referredBy, subscription, CallId);
 
     /// <summary>
     /// Raises subscription-request event and returns caller acceptance.

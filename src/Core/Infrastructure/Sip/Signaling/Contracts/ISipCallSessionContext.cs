@@ -1,5 +1,6 @@
 using System.Net;
 using Microsoft.Extensions.Logging;
+using CalloraVoipSdk.Core.Domain.Calls;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Authentication;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Transport;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Transactions.Server;
@@ -257,9 +258,11 @@ internal interface ISipCallSessionContext
     void NotifyDtmfReceived(byte toneCode, int durationMilliseconds);
 
     /// <summary>
-    /// Raises REFER transfer request on the parent session and returns acceptance decision.
+    /// Raises REFER transfer request on the parent session and returns acceptance decision. The
+    /// <paramref name="subscription"/> handle is surfaced to the SDK consumer for progress reporting
+    /// on the REFER's implicit subscription (RFC 3515 / RFC 6665).
     /// </summary>
-    bool NotifyTransferRequested(string referTo, string referredBy);
+    bool NotifyTransferRequested(string referTo, string referredBy, IReferSubscription subscription);
 
     /// <summary>
     /// Raises SUBSCRIBE request on the parent session and returns acceptance decision.

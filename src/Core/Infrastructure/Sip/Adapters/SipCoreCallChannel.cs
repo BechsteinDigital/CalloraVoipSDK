@@ -674,7 +674,7 @@ internal sealed class SipCoreCallChannel : ICallChannel
     private void HandleSessionTransferRequested(object? sender, SipTransferRequestedEventArgs e)
     {
         if (Volatile.Read(ref _disposed) != 0) return;
-        e.Accept = _notifier.NotifyTransferRequested(e.ReferTo, e.ReferredBy);
+        e.Accept = _notifier.NotifyTransferRequested(e.ReferTo, e.ReferredBy, e.Subscription);
     }
 
     /// <summary>
