@@ -99,4 +99,29 @@ public sealed class AsteriskTwoLegMediaInteropTests
         }
     }
 
+    [DockerRequiredFact]
+    public async Task BridgedCall_PopulatesRemoteRtcpReport()
+    {
+        await using var asterisk = new AsteriskContainer();
+        await asterisk.StartAsync();
+        await using var bridged = await TwoLegBridgedCall.StartAsync(asterisk);
+
+        await bridged.RunBidirectionalMediaAsync(TimeSpan.FromSeconds(10));
+
+        AssertRemoteReport(bridged.CallerCall, "Caller");
+        AssertRemoteReport(bridged.CalleeCall, "Callee");
+
+        // Der SDK parst Asterisks RTCP RR/SR: Peer-Sicht (Jitter/Loss) + RTT werden befüllt.
+        // MOS bleibt null (Asterisk sendet kein RTCP-XR VoIP-Metrics) → hier bewusst nicht asserted.
+        static void AssertRemoteReport(CalloraVoipSdk.Core.Domain.Calls.ICall call, string label)
+        {
+            var q = call.QualitySnapshot;
+            Assert.True(q.RemoteReportJitterMs is >= 0,
+                $"{label}: RemoteReportJitterMs nicht befüllt/implausibel ({q.RemoteReportJitterMs?.ToString() ?? "null"}).");
+            Assert.True(q.RemoteReportPacketLossPercent is >= 0 and <= 100,
+                $"{label}: RemoteReportPacketLossPercent nicht befüllt/implausibel ({q.RemoteReportPacketLossPercent?.ToString() ?? "null"}).");
+            Assert.True(q.RoundTripTimeMs is >= 0,
+                $"{label}: RoundTripTimeMs nicht befüllt ({q.RoundTripTimeMs?.ToString() ?? "null"}).");
+        }
+    }
 }
