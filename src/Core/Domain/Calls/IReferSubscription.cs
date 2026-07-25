@@ -22,6 +22,13 @@ namespace CalloraVoipSdk.Core.Domain.Calls;
 /// </remarks>
 public interface IReferSubscription
 {
+    /// <summary>Marks the subscription as pending (RFC 6665 §4.1.3): the transfer was accepted but the referred
+    /// call has not started yet. Makes the immediate NOTIFY carry <c>Subscription-State: pending</c> instead of
+    /// <c>active</c>. Only effective when called synchronously inside the transfer handler, before the first
+    /// NOTIFY is sent; the first subsequent progress report transitions the subscription to <c>active</c>.
+    /// Ignored once the subscription is already active or terminated.</summary>
+    void ReportPending();
+
     /// <summary>Reports that the referred call is being tried — an <c>active</c> NOTIFY with the
     /// sipfrag <c>SIP/2.0 100 Trying</c>. Ignored once the subscription has terminated.</summary>
     void ReportTrying();
