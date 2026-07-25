@@ -121,6 +121,9 @@ internal sealed class PhoneLine : IPhoneLine, IDisposable
     public Task SendMessageAsync(string targetUri, string body, string contentType = "text/plain", CancellationToken ct = default)
         => _channel.SendMessageAsync(targetUri, body, contentType, ct);
 
+    public Task<Publications.PublishResult> PublishAsync(string eventType, string body, string contentType = "text/plain", int expiresSeconds = 3600, CancellationToken ct = default)
+        => _channel.PublishAsync(eventType, body, contentType, expiresSeconds, ct);
+
     public Task UnregisterAsync(CancellationToken ct = default)
         // Real de-registration: stop the refresh loop AND await the REGISTER Expires:0 round-trip
         // (RFC 3261 §10.2.2), so the returned task reflects the binding removal (HARD-E1) rather than

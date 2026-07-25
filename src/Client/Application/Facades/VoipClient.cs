@@ -488,6 +488,17 @@ public sealed class VoipClient : IVoipClient
         return line.SendMessageAsync(targetUri, body, contentType, ct);
     }
 
+    /// <inheritdoc />
+    public Task<Core.Domain.Publications.PublishResult> PublishAsync(
+        string eventType, string body, string contentType = "text/plain", int expiresSeconds = 3600, CancellationToken ct = default)
+    {
+        ThrowIfDisposed();
+        var line = Lines.All.FirstOrDefault()
+            ?? throw new InvalidOperationException(
+                "No registered line to publish from. Register a line first, or use IPhoneLine.PublishAsync.");
+        return line.PublishAsync(eventType, body, contentType, expiresSeconds, ct);
+    }
+
     /// <summary>
     /// Convenience outbound flow: dials a target and waits until the call reaches connected state.
     /// Existing <see cref="IPhoneLine.DialAsync"/> remains unchanged.

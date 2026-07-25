@@ -243,6 +243,37 @@ internal sealed class SipLineChannel : ILineChannel
             throw new InvalidOperationException($"SIP MESSAGE to '{targetUri}' failed with status {status}.");
     }
 
+    /// <inheritdoc />
+    public async Task<Domain.Publications.PublishResult> PublishAsync(
+        string eventType, string body, string contentType, int expiresSeconds, CancellationToken ct = default)
+    {
+        ThrowIfDisposed();
+        ArgumentException.ThrowIfNullOrWhiteSpace(eventType);
+
+        // RFC 3903: a UA publishes state for its own address-of-record (the presentity Request-URI).
+        var addressOfRecord = $"sip:{_account.Username}@{_account.SipServer}";
+        var result = await _callSignalingService.PublishAsync(
+                new SipPublishRequest
+                {
+                    LocalUsername = _account.Username,
+                    LocalDomain = _account.SipServer,
+                    AuthPassword = _account.Password,
+                    RemoteUri = addressOfRecord,
+                    EventType = eventType,
+                    Body = body ?? string.Empty,
+                    ContentType = string.IsNullOrWhiteSpace(contentType) ? "text/plain" : contentType,
+                    ExpiresSeconds = expiresSeconds,
+                    Transport = MapTransport(_account.Transport),
+                },
+                ct)
+            .ConfigureAwait(false);
+
+        if (result.StatusCode is < 200 or >= 300)
+            throw new InvalidOperationException($"SIP PUBLISH for event '{eventType}' failed with status {result.StatusCode}.");
+
+        return new Domain.Publications.PublishResult(result.ETag, result.ExpiresSeconds);
+    }
+
     /// <summary>
     /// Builds an outbound call channel that will attach to one SIP dialog session.
     /// </summary>
