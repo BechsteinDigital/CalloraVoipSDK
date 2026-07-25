@@ -486,7 +486,17 @@ internal sealed class SipCallSessionInboundService
             return;
         }
 
-        var acceptTransfer = _context.NotifyTransferRequested(referTo, referredBy);
+        // RFC 4488: if UAC sent Refer-Sub: false (and norefersub was accepted), no implicit subscription is
+        // created — the handle stays inert so consumer progress reports produce no NOTIFY.
+        var referSubHeader = request.Header("Refer-Sub");
+        var subscriptionSuppressed = !string.IsNullOrWhiteSpace(referSubHeader)
+            && referSubHeader.TrimStart().StartsWith("false", StringComparison.OrdinalIgnoreCase);
+
+        // Handle created before the callback so the consumer may report synchronously inside the transfer
+        // handler; such reports are buffered and flushed by StartAsync after the 202.
+        var subscription = new SipReferSubscription(SendReferNotifyMessageAsync);
+        var acceptTransfer = _context.NotifyTransferRequested(referTo, referredBy, subscription);
+
         var responseHeaders = _headers.CreateResponseHeadersFromRequest(request, localTag, includeContentType: false);
         var statusCode = acceptTransfer ? 202 : 603;
         var reasonPhrase = acceptTransfer ? "Accepted" : "Decline";
@@ -501,12 +511,25 @@ internal sealed class SipCallSessionInboundService
                 ct)
             .ConfigureAwait(false);
 
-        // RFC 4488: if UAC sent Refer-Sub: false (and norefersub was accepted), skip implicit NOTIFY.
-        var referSubHeader = request.Header("Refer-Sub");
-        var subscriptionSuppressed = !string.IsNullOrWhiteSpace(referSubHeader)
-            && referSubHeader.TrimStart().StartsWith("false", StringComparison.OrdinalIgnoreCase);
-        if (!subscriptionSuppressed)
-            await SendReferNotifyAsync(acceptTransfer, ct).ConfigureAwait(false);
+        if (subscriptionSuppressed)
+        {
+            subscription.Cancel();
+            return;
+        }
+
+        if (acceptTransfer)
+        {
+            // RFC 3515 §2.4.4 / RFC 6665: emit the immediate active/100 Trying, then relay whatever progress and
+            // outcome the consumer reports through the handle (none → the transferor's subscription lapses at expiry).
+            await subscription.StartAsync(ct).ConfigureAwait(false);
+        }
+        else
+        {
+            // A declined REFER (603) terminates the subscription immediately with a single NOTIFY.
+            subscription.Cancel();
+            await SendReferNotifyMessageAsync("terminated;reason=noresource", "SIP/2.0 603 Decline", ct)
+                .ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -812,28 +835,6 @@ internal sealed class SipCallSessionInboundService
                 body: null,
                 ct)
             .ConfigureAwait(false);
-    }
-
-    /// <summary>
-    /// Sends one NOTIFY message for REFER subscription completion.
-    /// </summary>
-    private async Task SendReferNotifyAsync(bool accepted, CancellationToken ct)
-    {
-        if (accepted)
-        {
-            // RFC 3515 §2.4.4 / RFC 6665: an accepted REFER creates an implicit subscription. The referee first
-            // reports the referred action is in progress (Subscription-State: active, sipfrag 100 Trying) and then
-            // its completion (Subscription-State: terminated) — not a single terminated NOTIFY. This SDK delegates
-            // the referred INVITE to the application and does not track its transaction, so completion is reported
-            // optimistically as 200 OK once the transfer has been accepted. Per-request progress reporting (real
-            // referred-call status, and the RFC 6665 pending state) is a follow-up requiring a consumer API.
-            await SendReferNotifyMessageAsync("active;expires=60", "SIP/2.0 100 Trying", ct).ConfigureAwait(false);
-            await SendReferNotifyMessageAsync("terminated;reason=noresource", "SIP/2.0 200 OK", ct).ConfigureAwait(false);
-        }
-        else
-        {
-            await SendReferNotifyMessageAsync("terminated;reason=noresource", "SIP/2.0 603 Decline", ct).ConfigureAwait(false);
-        }
     }
 
     /// <summary>

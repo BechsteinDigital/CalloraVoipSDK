@@ -418,9 +418,9 @@ internal sealed class Call : ICall, IDisposable
     /// Raises transfer requests and returns whether the request is accepted.
     /// Handler is snapshotted before invocation to prevent null-reference races.
     /// </summary>
-    internal bool RaiseTransferRequested(string referTo, string referredBy)
+    internal bool RaiseTransferRequested(string referTo, string referredBy, IReferSubscription subscription)
     {
-        var args    = new TransferRequestedEventArgs(referTo, this);
+        var args    = new TransferRequestedEventArgs(referTo, this, subscription);
         var handler = TransferRequested;
         handler?.Invoke(this, args);
         return args.Accept;
