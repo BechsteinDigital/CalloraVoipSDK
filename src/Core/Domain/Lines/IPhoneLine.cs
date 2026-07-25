@@ -35,6 +35,13 @@ public interface IPhoneLine
     event EventHandler<IncomingCallEventArgs>?         IncomingCall;
 
     /// <summary>
+    /// Raised when an outbound call reaches Ringing (early dialog) before it is answered, giving the
+    /// caller a handle to observe early media / call state while DialAsync still awaits the 200 OK.
+    /// Runs synchronously on the signaling thread; keep the handler fast and non-blocking (see remarks).
+    /// </summary>
+    event EventHandler<OutboundCallRingingEventArgs>? OutboundCallRinging;
+
+    /// <summary>
     /// Raised when an inbound out-of-dialog SIP MESSAGE (RFC 3428 pager-mode IM) arrives for this line
     /// (signaling thread). The SDK has already answered it 200 OK; no reply is required. Keep the handler
     /// fast (see remarks).
