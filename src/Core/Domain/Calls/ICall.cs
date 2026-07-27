@@ -53,6 +53,17 @@ public interface ICall
     IPhoneLine Line { get; }
 
     /// <summary>
+    /// Why this call terminated, or <see langword="null"/> until it reaches
+    /// <see cref="CallState.Terminated"/> (and null when the cause could not be determined). The value
+    /// is protocol-neutral — it classifies both local and remote terminations (busy, no-answer, reject,
+    /// normal completion) — and is already populated when the
+    /// <see cref="CallStateChangedEventArgs.NewState"/> of <see cref="StateChanged"/> is
+    /// <see cref="CallState.Terminated"/>, so a handler can read it there. The same reason is also carried
+    /// on that event's <see cref="CallStateChangedEventArgs.TerminationReason"/>.
+    /// </summary>
+    CallTerminationReason? TerminationReason { get; }
+
+    /// <summary>
     /// Negotiated media parameters (codec, endpoints). Set once
     /// <see cref="CallState.Connected"/> is reached; null before that.
     /// </summary>

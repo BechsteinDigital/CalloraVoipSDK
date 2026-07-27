@@ -95,9 +95,9 @@ public sealed class PhoneLineOutboundRingingTests
     // Captures the OnStateChange callback the Call aggregate binds, and lets the test drive transitions.
     private sealed class StateDrivingCallChannel : ICallChannel
     {
-        private Action<CallState>? _onStateChange;
+        private Action<CallState, CallTerminationReason?>? _onStateChange;
 
-        public void Drive(CallState state) => _onStateChange?.Invoke(state);
+        public void Drive(CallState state) => _onStateChange?.Invoke(state, null);
 
         public void BindCallbacks(CallChannelCallbacks callbacks) => _onStateChange = callbacks.OnStateChange;
 

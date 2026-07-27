@@ -89,6 +89,7 @@ public sealed class PhoneLineHangupObservationTests
         public CallId CallId { get; } = CallId.New();
         public CallState State => CallState.Ringing;
         public CallMediaParameters? MediaParameters => null;
+        public CallTerminationReason? TerminationReason => null;
         public CallIceState IceConnectionState => CallIceState.Disabled;
 
         public event EventHandler<CallStateChangedEventArgs>? StateChanged { add { } remove { } }

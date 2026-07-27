@@ -14,6 +14,17 @@ public sealed class CallStateChangedEventArgs : EventArgs
     /// <summary>The call whose state changed.</summary>
     public ICall     Call     { get; }
 
-    internal CallStateChangedEventArgs(CallState old, CallState next, ICall call)
-        => (OldState, NewState, Call) = (old, next, call);
+    /// <summary>
+    /// Why the call terminated, populated only on the transition to <see cref="CallState.Terminated"/>
+    /// (protocol-neutral, covering both local and remote terminations); <see langword="null"/> for every
+    /// other transition, and for a terminating transition whose cause could not be determined.
+    /// </summary>
+    public CallTerminationReason? TerminationReason { get; }
+
+    internal CallStateChangedEventArgs(
+        CallState old,
+        CallState next,
+        ICall call,
+        CallTerminationReason? terminationReason = null)
+        => (OldState, NewState, Call, TerminationReason) = (old, next, call, terminationReason);
 }
