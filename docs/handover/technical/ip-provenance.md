@@ -44,7 +44,7 @@ Konkret liegen als Eigencode im Baum (jeweils eigenes Wire-Codec- und Parser-/St
   SipSorcerys `ClientCallRinging` vergleicht — reine Doku-Referenz, kein Code. (Weitere Treffer bei
   einer naiven Textsuche liegen ausschließlich in Build-Artefakten unter `bin/`/`obj/` und stammen
   aus ebendiesem XML-Doku-Kommentar; kein Quellcode.)
-- Strategische Vorgabe hierzu (verifiziert in `docs/SDK_PRODUCT_MEMORY.md`, Abschnitt „Strategic
+- Strategische Vorgabe hierzu (verifiziert in `docs/archive/status-raw/SDK_PRODUCT_MEMORY.md`, Abschnitt „Strategic
   Technology Direction", Z. 54–57):
   - *„Final target: own SIP/RTP/SRTP stack (no runtime dependency on SipSorcery)."*
   - *„SipSorcery may be used as learning/reference material for protocol behavior."*
@@ -191,7 +191,7 @@ Blocker.
 - `LICENSE`, `THIRD-PARTY-NOTICES.md` (Repo-Root)
 - `src/Directory.Build.props` (Version, Autor, Company, `PackageLicenseFile`, PackageTags)
 - `src/**/*.csproj` (alle `PackageReference` — vollständige Liste in §2)
-- `docs/SDK_PRODUCT_MEMORY.md`, Abschnitt „Strategic Technology Direction" (Z. 54–57)
+- `docs/archive/status-raw/SDK_PRODUCT_MEMORY.md`, Abschnitt „Strategic Technology Direction" (Z. 54–57)
 - Code-Erdung via graphify: eigene Wire-Codecs/Parser unter `src/Core/Infrastructure/{Sip,Sdp,Rtp,Stun,Turn,Srtp}/*`;
   BouncyCastle nur unter `src/Core/Infrastructure/Dtls/*` (+ `Common/Protocols/ProtocolCommonUtilities.cs`);
   Concentus nur in `src/Core/Application/Media/Sessions/OpusPayloadCodec.cs`
