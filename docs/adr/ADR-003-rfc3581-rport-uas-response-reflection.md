@@ -1,8 +1,8 @@
 # ADR-003: RFC 3581 §4 – rport/received Reflection in UAS Responses
 
-**Status:** Accepted  
-**Date:** 2026-04-09  
-**RFC reference:** RFC 3581 §4 (Symmetric Response Routing)
+Status: Accepted
+Date: 2026-04-09
+RFC reference: RFC 3581 §4 (Symmetric Response Routing)
 
 ---
 
