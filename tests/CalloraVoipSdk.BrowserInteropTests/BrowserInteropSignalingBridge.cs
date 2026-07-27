@@ -15,6 +15,7 @@ public sealed class BridgeMessage
     [JsonPropertyName("candidate")] public string? Candidate { get; set; }
     [JsonPropertyName("bytesReceived")] public long? BytesReceived { get; set; }
     [JsonPropertyName("packetsReceived")] public long? PacketsReceived { get; set; }
+    [JsonPropertyName("framesDecoded")] public long? FramesDecoded { get; set; }
 }
 
 /// <summary>
