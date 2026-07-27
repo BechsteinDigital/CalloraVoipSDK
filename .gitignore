@@ -103,6 +103,9 @@ docs/*
 !docs/portal
 !docs/audit/
 !docs/maintainers/
+!docs/handover/
+!docs/adr/
+!docs/reference/
 
 AGENTS.md
 CLAUDE.md
