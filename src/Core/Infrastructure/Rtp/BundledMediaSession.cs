@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Net;
 using CalloraVoipSdk.Core.Application.Media.Rtcp;
 using CalloraVoipSdk.Core.Application.Media.Rtcp.Packets;
@@ -38,15 +37,11 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     private readonly IRtcpPacketCodec _rtcpCodec;
     private readonly BundledVideoTrack? _video;
 
-    // Transport-wide congestion control (transport-cc / RFC 8888), one instance for the WHOLE bundle because
-    // transport-cc numbers the transport, not a stream. Null unless the a=extmap was negotiated. The controller
-    // folds inbound feedback into a delay-trend + loss signal and a recommended bitrate (sender side); the
-    // feedback sender reports our inbound arrivals to the peer for its own controller (receive side).
-    private readonly TransportCcCongestionController? _transportCcCongestion;
-    private readonly TransportCcFeedbackSender? _transportCcFeedback;
-    // Cancels the transport-cc feedback loop's in-flight sends at teardown (the sender's own dispose stops the
-    // loop; this token aborts a send already awaiting the transport). Signalled first in DisposeAsync.
-    private readonly CancellationTokenSource _lifetimeCts = new();
+    // Transport-wide congestion control (transport-cc / RFC 8888), one plane for the WHOLE bundle because
+    // transport-cc numbers the transport, not a stream. Null unless the a=extmap was negotiated. See
+    // BundledCongestionPlane — the sender-side controller (recommended bitrate) and the receive-side feedback
+    // sender, with their own lifetime token; OnControlPacketReceived fans decoded feedback into it.
+    private readonly BundledCongestionPlane? _congestion;
 
     private readonly string _audioMid;
     private readonly uint _audioSsrc;
@@ -133,20 +128,6 @@ internal sealed class BundledMediaSession : IAsyncDisposable
 
     /// <summary>Raised when a consent check is answered again after a degrade.</summary>
     public event Action? MediaConnectivityRecovered;
-
-    // Transport-cc congestion-control tuning (delay-trend EWMA + fixed overuse threshold + loss EWMA, then an
-    // AIMD recommended-bitrate policy). Mirrors the single-stream VideoRtpStream defaults so both media paths
-    // behave alike; an adaptive threshold / SCReAM (RFC 8298) is the later accuracy upgrade.
-    private const int TransportCcSendHistoryCapacity = 4096;
-    private const double TransportCcDelaySmoothing = 0.1;
-    private const long TransportCcOveruseThresholdMicros = 5_000; // 5 ms
-    private const double TransportCcLossSmoothing = 0.1;
-    private const long TransportCcInitialVideoBitrateBps = 1_000_000; // 1 Mbps start
-    private const long TransportCcMinVideoBitrateBps = 100_000;       // 100 kbps floor
-    private const long TransportCcMaxVideoBitrateBps = 5_000_000;     // 5 Mbps ceiling
-    private const long TransportCcBitrateIncreaseStepBps = 100_000;   // additive probe per healthy report
-    private const double TransportCcBitrateDecreaseFactor = 0.85;     // multiplicative back-off on congestion
-    private const double TransportCcBitrateLossThreshold = 0.1;       // ≥10% loss backs off regardless of delay
 
     public BundledMediaSession(
         BundledMediaSessionOptions options,
@@ -257,32 +238,13 @@ internal sealed class BundledMediaSession : IAsyncDisposable
             router.RegisterTrack(video.Mid, _video.OnRtpPacket);
         }
 
-        // Transport-wide congestion control (transport-cc / RFC 8888), one per bundle. Only when the a=extmap
-        // was negotiated (so the transport actually stamps a transport-wide sequence) — otherwise both planes
-        // stay off. Sender side: record each stamped outbound send (PacketSent) and fold inbound feedback reports
-        // (fanned out from OnControlPacketReceived) into the delay-trend + loss estimators → a recommended
-        // bitrate. Receive side: read every inbound packet's transport-wide sequence (RtpPacketReceived, across
-        // all MIDs) and, timer-driven, report the arrivals to the peer over the shared fail-closed SRTCP send.
+        // Transport-wide congestion control (transport-cc / RFC 8888), one plane per bundle. Only when the
+        // a=extmap was negotiated (so the transport actually stamps a transport-wide sequence) — otherwise the
+        // plane stays off. See BundledCongestionPlane: it wires the sender-side controller to PacketSent and the
+        // receive-side feedback sender to inbound RTP; OnControlPacketReceived fans decoded feedback into it.
         if (options.TransportWideCcExtensionId is { } transportCcExtensionId)
-        {
-            _transportCcCongestion = new TransportCcCongestionController(
-                transportCcExtensionId,
-                new TransportCcSendHistory(TransportCcSendHistoryCapacity),
-                new TransportCcDelayTrendEstimator(TransportCcDelaySmoothing, TransportCcOveruseThresholdMicros),
-                new TransportCcLossEstimator(TransportCcLossSmoothing),
-                new CongestionBitrateController(
-                    TransportCcInitialVideoBitrateBps, TransportCcMinVideoBitrateBps, TransportCcMaxVideoBitrateBps,
-                    TransportCcBitrateIncreaseStepBps, TransportCcBitrateDecreaseFactor, TransportCcBitrateLossThreshold),
-                Stopwatch.GetTimestamp, Stopwatch.Frequency,
-                loggerFactory.CreateLogger<TransportCcCongestionController>());
-            _outbound.PacketSent += _transportCcCongestion.OnPacketSent;
-
-            _transportCcFeedback = new TransportCcFeedbackSender(
-                _rtcpCodec, transportCcExtensionId, options.Audio.Ssrc, _outbound.SendRtcpAsync,
-                Stopwatch.GetTimestamp, Stopwatch.Frequency,
-                loggerFactory.CreateLogger<TransportCcFeedbackSender>(), _lifetimeCts.Token);
-            _inbound.RtpPacketReceived += _transportCcFeedback.OnVideoPacketReceived;
-        }
+            _congestion = new BundledCongestionPlane(
+                transportCcExtensionId, _outbound, _inbound, _rtcpCodec, options.Audio.Ssrc, loggerFactory);
 
         // One shared DTLS association keys every track; one shared ICE agent keeps the group alive.
         _dtls = new BundledDtlsKeying(
@@ -466,7 +428,7 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         // And to the transport-wide congestion controller: any transport-cc feedback report in the compound
         // (RFC 8888) updates its delay-trend + loss estimators and the recommended bitrate. Same thread — no
         // added confinement concern.
-        _transportCcCongestion?.OnRtcpPackets(packets);
+        _congestion?.OnRtcpPackets(packets);
     }
 
     // Feeds the peer's reception report blocks (about our outbound streams) into the outbound quality tracker.
@@ -707,7 +669,7 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     /// and coarse network quality. Internal for now — surfacing it on the public WebRTC peer facade is a
     /// documented follow-up (mirrors the single-stream <c>VideoRtpStream.Congestion</c> internal accessor).
     /// </summary>
-    internal TransportCcCongestionController? Congestion => _transportCcCongestion;
+    internal TransportCcCongestionController? Congestion => _congestion?.Controller;
 
     /// <summary>Point-in-time transport counters aggregated from the outbound and inbound pipelines.</summary>
     public BundledMediaStats SnapshotStats() => new(
@@ -809,7 +771,7 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         _rtcpReporter.Start();
         // Start the transport-cc receive-side feedback loop (RFC 8888), when negotiated. Its SRTCP send fails
         // closed the same way, so early ticks before keying are harmless (an empty batch or a suppressed send).
-        _transportCcFeedback?.Start();
+        _congestion?.Start();
         _dtls.Start(cancellationToken);
     }
 
@@ -915,17 +877,15 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         // Refresh(0) rides the transport's control send, so the transport must still be alive to carry it.
         if (Volatile.Read(ref _relayKeepAlive) is { } keepAlive)
             await keepAlive.DisposeAsync().ConfigureAwait(false);
-        // Stop the transport-cc feedback loop before the transport it rides is torn down (its SRTCP send goes
-        // through the transport): signal the lifetime token so any in-flight send aborts, then await the loop.
-        await _lifetimeCts.CancelAsync().ConfigureAwait(false);
-        if (_transportCcFeedback is not null)
-            await _transportCcFeedback.DisposeAsync().ConfigureAwait(false);
+        // Stop the transport-cc congestion plane before the transport it rides is torn down (its SRTCP feedback
+        // send goes through the transport): its dispose signals the lifetime token and awaits the loop.
+        if (_congestion is not null)
+            await _congestion.DisposeAsync().ConfigureAwait(false);
         // Stop the periodic Sender Reports before the transport it rides is torn down (its SRTCP send goes
         // through the transport), and before DTLS zeroes the outbound SRTCP key.
         await _rtcpReporter.DisposeAsync().ConfigureAwait(false);
         await _dtls.DisposeAsync().ConfigureAwait(false);
         _video?.Dispose();
         await _transport.DisposeAsync().ConfigureAwait(false);
-        _lifetimeCts.Dispose();
     }
 }
