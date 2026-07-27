@@ -92,13 +92,12 @@ Für jede Testzeile wird ein frischer Asterisk-Container gestartet. Die Tests
 laufen absichtlich seriell. Dadurch teilen sich die Implementierungen weder
 Registrierungskontakte noch Dialog- oder Medienzustand.
 
-Der Cancellation-Test ist weiterhin eine Charakterisierungsmatrix und kein
-künstlich grüner Gleichstand: Der erwartete Unterschied beim `CANCEL` und
-externen Channel-Cleanup ist als Capability pro Stack hinterlegt. Auch auf
-`origin/main` nach Merge von PR #107 sendete Callora im realen
-Asterisk-Lauf kein `CANCEL`; eine temporäre Parity-Assertion schlug gezielt
-fehl. Dadurch bleibt der aktuelle Callora-Nachteil sichtbar, bis ein Wire-Test
-die Korrektur tatsächlich belegt.
+Der Cancellation-Test ist jetzt ein einheitlicher Parity-Vertrag: Alle drei
+Stacks müssen `Canceled`, ein Asterisk-sichtbares SIP-`CANCEL`, externen
+Channel-Cleanup und einen RTP-führenden Folgeanruf liefern. Callora muss
+zusätzlich `DialResult.TerminationReason` als `Canceled` mit SIP 487 erhalten.
+Vor dem Follow-up-Fix war diese identische Assertion für Callora reproduzierbar
+rot; auf `origin/main` `37d7c803` besteht sie 3/3.
 
 ## Fairness des Vergleichs
 
@@ -191,10 +190,10 @@ Die Bridge-API ist auf allen Seiten bidirektional verdrahtet; der Test weist
 gezielt die Richtung Quell-Leg → Echo-Leg nach, ohne eine künstliche
 Echo-Schleife zwischen zwei Echo-Applikationen zu erzeugen.
 
-Die ursprüngliche vollständige 48/48-Messung basiert auf dem in
-[RESULTS.md](RESULTS.md) genannten Main-Commit. Die Nachvalidierung auf
-`be0eb18e` umfasst die inzwischen gemergten PRs #105 und #107:
-Termination-Reasons bestanden die gezielten kanonischen und vergleichenden
-Tests; der reale Cancellation-Wire-Vertrag blieb trotz PR #107 rot.
+Die ursprüngliche Messung und die Zwischenstände bleiben in
+[RESULTS.md](RESULTS.md) nachvollziehbar. Der aktuelle vollständige 48/48-Lauf
+basiert auf `origin/main` `37d7c803` einschließlich der Follow-ups zu PR #107
+und PR #114: Termination-Reasons und der reale Cancellation-Wire-Vertrag sind
+in den gezielten kanonischen sowie vergleichenden Tests grün.
 
 Die gemessenen Ergebnisse stehen in [RESULTS.md](RESULTS.md).
