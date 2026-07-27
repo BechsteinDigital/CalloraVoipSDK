@@ -105,3 +105,11 @@ Kausalkette Ende-zu-Ende gegen den echten Code bestätigt (Verdict **CONFIRMED**
 **Verifikation (an den Fund angepasst):** Weil headless Chrome kein mDNS triggert, ist der Browser-E2E-Test für mDNS **nicht machbar** — stattdessen: (a) 6 Unit-Tests der RFC-Regeln (gemockter Lookup) + 2 Peer-Tests (`.local` → Resolver gerufen; IP-Pfad unverändert); (b) **echter OS-Nachweis** ohne Browser: `System.Net.Dns` löst einen realen avahi-`.local`-Namen (`nobara-pc.local` → `192.168.178.76`) auf, belegt die OS-mDNS-Integration von Option A. Wo kein OS-mDNS (CI ohne avahi) → Candidate verworfen wie bisher, verhaltensbewahrend, kein Regress. 76/76 WebRtc+Resolver-Tests grün.
 
 **Paket-1-Präzisierung:** der dortige `--disable-features=WebRtcHideLocalIpsWithMdns`-Flag war unnötig (Chrome schickt bei Media-Permission eh echte IPs) — harmlos belassen. Design/Plan: `docs/audit/2026-07-27-webrtc-mdns-resolution-{design,plan}.md`.
+
+## Coverage-Notiz WebRTC VP8-Video-Browser-Interop (GA-Reifung Paket 3, 2026-07-27)
+
+**Bidirektionaler VP8-Video-Nachweis gegen echten headless Chrome** — erweitert den Audio-Nachweis aus Paket 1. Die `CalloraVoipSdk.WebRtc`-Fassade (SDK-Offerer, `EnableVideo=true, VideoCodecs=["VP8"]`) tauscht VP8-Video mit echtem Chrome (fake-device Testpattern): **Browser→SDK** via `RemoteTrack` (Kind=Video, ≥10 Frames), **SDK→Browser** via keyframe-bewusstes **Echo** (`SendVideoFrameAsync` ab dem ersten `IsKeyFrame`). **★ Dekodier-Nachweis erreicht:** der Browser meldet `inbound-rtp(video).bytesReceived > 0` UND **`framesDecoded > 0`** — er dekodiert das vom SDK gesendete Video tatsächlich. 3× stabil (14–16 s).
+
+**measure-first-Ergebnis:** das Keyframe-Risiko war beherrschbar — das Echo-ab-erstem-`IsKeyFrame` liefert dem Browser einen dekodierbaren Stream (Keyframe zuerst), `framesDecoded>0` beim ersten Anlauf. Der im Design vorgesehene Transport-Fallback (nur bytesReceived) war nicht nötig.
+
+**Neu:** `peer-video.html` (fake-device `getUserMedia({video})`, getStats video → `framesDecoded`), `BridgeMessage.FramesDecoded`, `WebRtcVideoBrowserInteropTests`. Video-only, VP8, SDK-Offerer. **Lokal-first** (`Category=BrowserInterop`, aus allen Nicht-Browser-CI-Jobs ausgeschlossen). Paket-1-Audio-Test unberührt (4/4 BrowserInterop grün), **keine `src/`-Änderung**. Design/Plan: `docs/audit/2026-07-27-webrtc-video-interop-{design,plan}.md`.
