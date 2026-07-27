@@ -24,10 +24,9 @@ gegen einen Referenz-Stack (Asterisk/FreeSWITCH/Browser) verifiziert*. Eine Inte
 gegen reale Gegenstellen steht noch aus (siehe [ADR-058](../../adr/ADR-058-layered-test-interop-soak-model.md)).
 
 **Primärquellen dieser Verdichtung:**
-- Code-belegtes Gap-Register (Datei:Zeile, gesamter Infrastructure-Baum):
-  `../../archive/RFC_CONFORMANCE_GAP_AUDIT_2026-07-19.md`
-- ADR-Verzeichnis: [`../../adr/README.md`](../../adr/README.md)
-- SIP-Kapitelstatus (konservativ): `../../archive/RFC3261_CHAPTER_STATUS.md`
+- ADR-Verzeichnis (getrackter, code-verifizierter Beleg): [`../../adr/README.md`](../../adr/README.md)
+- Code-belegtes RFC-Konformitäts-Gap-Register (Datei:Zeile, gesamter Infrastructure-Baum) — intern archiviert, nicht Teil des Pakets (auf Anfrage/NDA).
+- SIP-Kapitelstatus (RFC 3261, konservativ) — intern archiviert, nicht Teil des Pakets (auf Anfrage/NDA).
 
 ---
 

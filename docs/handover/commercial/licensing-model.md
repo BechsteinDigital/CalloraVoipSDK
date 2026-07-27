@@ -17,7 +17,7 @@ zwischen **Modell/Richtung** (strategische Absicht, noch nicht verbindlich) und
 
 ## 1. Lizenzstufen (Richtung / Vision)
 
-Quelle: `docs/_internal/CEO_VISION.md`, Abschnitt „Lizenzmodell (Richtung)".
+Quelle: interne CEO-Vision (auf Anfrage/NDA), Abschnitt „Lizenzmodell (Richtung)".
 Dies ist die strategische Ausrichtung, **nicht** ein aktiv verkauftes Preismodell.
 
 | Stufe | Zielgruppe (angedacht) | Charakter |
@@ -160,7 +160,7 @@ nach — über **signierte Modul-Lizenzen** (§2.2), nicht über die Engine-Lize
 | Modul-Registry (`IVoipClientModule`/`ModuleRegistry`) im SDK | **belegt (real)** | `src/Client/Application/...`, `ModuleRegistryTests.cs` |
 | Host-zentrierter Plattform-Split (Engine OSS + Host + Plugins) | **Konzept (Accepted ADR)** | ADR-007 |
 | Community Module Store, signierte Lizenzen, Stripe-Connect | **Konzept / Cross-Repo, Platzhalter/Demo** | ADR-008 (Proposed) |
-| Lizenzstufen Developer/Commercial/OEM + Zusatzangebote | **Richtung / Vision** | `CEO_VISION.md` |
+| Lizenzstufen Developer/Commercial/OEM + Zusatzangebote | **Richtung / Vision** | interne CEO-Vision (auf Anfrage/NDA) |
 
 ---
 

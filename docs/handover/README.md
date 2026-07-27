@@ -47,7 +47,7 @@ Schönfärberei.
   „Architecture Decisions" in der veröffentlichten DocFX-Doku enthalten.
 - **Technische Referenz:** [reference/](../reference/README.md) (SemVer-Policy, Plugin-Contract,
   WebSocket-Protokoll, Entscheidungs-Inventar).
-- **Nutzer-/Consumer-Doku:** das DocFX-Portal unter `../portal/`.
+- **Nutzer-/Consumer-Doku:** das DocFX-Portal → [`../portal/index.md`](../portal/index.md).
 
 ## Bewusst nicht Teil dieses Pakets
 

@@ -31,10 +31,10 @@ und das Interop-/Soak-Register).
 
 **Primärquellen:**
 - Interop-/Soak-Fehlerregister: [`../../audit/INTEROP_SOAK_AUDIT.md`](../../audit/INTEROP_SOAK_AUDIT.md) (F001–F011)
-- Code-Findings-Register (Marker → Code:Zeile): [`../../audit/CODE_FINDINGS_REGISTER.md`](../../audit/CODE_FINDINGS_REGISTER.md)
-- Audit-Hardening-Backlog (Pakete A–I): `../../AUDIT_HARDENING_BACKLOG.md` (intern; siehe audit/CODE_FINDINGS_REGISTER.md)
+- Code-Findings-Register (Marker → Code:Zeile, getrackter Paket-Beleg): [`../../audit/CODE_FINDINGS_REGISTER.md`](../../audit/CODE_FINDINGS_REGISTER.md)
+- Audit-Hardening-Backlog (Pakete A–I) — intern, nicht Teil des Pakets (auf Anfrage/NDA); der öffentliche Beleg ist das [Code-Findings-Register](../../audit/CODE_FINDINGS_REGISTER.md).
 - ADR-Verzeichnis (inkl. Errata + „honest open edges"): [`../../adr/README.md`](../../adr/README.md)
-- Archivierte Engineering-Logs: `../../archive/agent-log/`
+- Archivierte Engineering-Logs — intern, nicht Teil des Pakets (auf Anfrage/NDA).
 
 ---
 
