@@ -69,18 +69,20 @@ internal sealed class IceInboundStunHandler
     public IceRole Role => (IceRole)Volatile.Read(ref _role);
 
     /// <summary>
-    /// Raised with the sender's address when an inbound check with USE-CANDIDATE nominates the pair and
-    /// this agent is the controlled one (RFC 8445 §7.3.1.5) — the controlled agent adopts that source as
-    /// the nominated remote. Fires on the transport receive-loop thread.
+    /// Raised with the sender's address (and the reply path the check arrived on) when an inbound check with
+    /// USE-CANDIDATE nominates the pair and this agent is the controlled one (RFC 8445 §7.3.1.5) — the controlled
+    /// agent adopts that source as the nominated remote and routes consent over the same path. The reply path is
+    /// non-null when the check came relayed, so consent for a relay-nominated pair goes back through the relay.
+    /// Fires on the transport receive-loop thread.
     /// </summary>
-    public event Action<IPEndPoint>? PairNominated;
+    public event Action<IPEndPoint, Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>?>? PairNominated;
 
     /// <summary>
-    /// Raised with the sender's address when an inbound check is authenticated and accepted, so the
-    /// transport can trigger a connectivity check back to confirm the pair bidirectionally
-    /// (RFC 8445 §7.3.1.4). Fires on the transport receive-loop thread.
+    /// Raised with the sender's address (and the reply path the check arrived on) when an inbound check is
+    /// authenticated and accepted, so the transport can trigger a connectivity check back to confirm the pair
+    /// bidirectionally (RFC 8445 §7.3.1.4) over the same path. Fires on the transport receive-loop thread.
     /// </summary>
-    public event Action<IPEndPoint>? CheckAccepted;
+    public event Action<IPEndPoint, Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>?>? CheckAccepted;
 
     /// <summary>
     /// Handles one STUN datagram demuxed off the media transport. Matches the transport's
@@ -114,13 +116,13 @@ internal sealed class IceInboundStunHandler
 
         if (result.NominatePair)
         {
-            try { PairNominated?.Invoke(source); }
+            try { PairNominated?.Invoke(source, replyVia); }
             catch (Exception ex) { _logger.LogError(ex, "Unhandled exception in ICE PairNominated handler."); }
         }
 
         if (result.Accepted)
         {
-            try { CheckAccepted?.Invoke(source); }
+            try { CheckAccepted?.Invoke(source, replyVia); }
             catch (Exception ex) { _logger.LogError(ex, "Unhandled exception in ICE CheckAccepted handler."); }
         }
 

@@ -145,7 +145,7 @@ public sealed class IceInboundStunHandlerTests
 
         var nominated = 0;
         IPEndPoint? nominatedSource = null;
-        handler.PairNominated += source => { nominatedSource = source; Interlocked.Increment(ref nominated); };
+        handler.PairNominated += (source, _) => { nominatedSource = source; Interlocked.Increment(ref nominated); };
         session.StunPacketReceived += (d, s) => handler.OnStunPacketReceived(d, s);
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
@@ -215,5 +215,40 @@ public sealed class IceInboundStunHandlerTests
 
         Assert.NotNull(rawSent);
         Assert.Equal(StunMessageClass.SuccessResponse, Codec.Decode(rawSent!)!.MessageClass);
+    }
+
+    [Fact]
+    public async Task Use_candidate_check_over_a_reply_path_nominates_with_that_path()
+    {
+        var handler = HandlerWithSend((_, _, _) => ValueTask.CompletedTask);
+        Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>? nominatedVia = null;
+        var nominated = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        handler.PairNominated += (_, replyVia) => { nominatedVia = replyVia; nominated.TrySetResult(); };
+
+        // A relayed USE-CANDIDATE check carries the reply path; the controlled agent adopts the pair AND the path,
+        // so consent freshness for the relay-nominated pair goes back through the relay (Slice 2 / K3).
+        Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask> replyPath = (_, _, _) => ValueTask.CompletedTask;
+        handler.OnStunPacketReceived(
+            BuildCheck(peerControlling: true, peerTieBreaker: 2, useCandidate: true),
+            new IPEndPoint(IPAddress.Loopback, 40003), replyPath);
+        await nominated.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Same(replyPath, nominatedVia);   // the nomination carries the check's reply path, not null
+    }
+
+    [Fact]
+    public async Task Use_candidate_check_over_the_direct_path_nominates_without_a_reply_path()
+    {
+        var handler = HandlerWithSend((_, _, _) => ValueTask.CompletedTask);
+        var hadReplyVia = true;
+        var nominated = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        handler.PairNominated += (_, replyVia) => { hadReplyVia = replyVia is not null; nominated.TrySetResult(); };
+
+        handler.OnStunPacketReceived(
+            BuildCheck(peerControlling: true, peerTieBreaker: 2, useCandidate: true),
+            new IPEndPoint(IPAddress.Loopback, 40004));   // no replyVia → direct nomination, direct consent
+        await nominated.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.False(hadReplyVia);   // a direct check nominates with the direct path (null), unchanged behaviour
     }
 }

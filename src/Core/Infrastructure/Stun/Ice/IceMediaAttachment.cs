@@ -148,7 +148,9 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
     // RFC 8445 §7.3.1.4: a valid inbound check from a source other than the nominated remote reveals
     // a peer-reflexive path; trigger one confirming connectivity check back to it (learn-once per
     // source). The nominated remote is already validated continuously by consent freshness.
-    private void OnInboundCheckAccepted(IPEndPoint source)
+    private void OnInboundCheckAccepted(
+        IPEndPoint source,
+        Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>? replyVia)
     {
         if (_consent is null || source.Equals(Volatile.Read(ref _nominatedRemote)))
             return;
@@ -156,14 +158,19 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
             return;
 
         _logger.LogDebug("ICE triggered check to peer-reflexive source {Source} (RFC 8445 §7.3.1.4).", source);
-        _ = SendTriggeredCheckAsync(source);
+        _ = SendTriggeredCheckAsync(source, replyVia);
     }
 
-    private async Task SendTriggeredCheckAsync(IPEndPoint source)
+    private async Task SendTriggeredCheckAsync(
+        IPEndPoint source,
+        Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>? replyVia)
     {
         try
         {
-            var confirmed = await _consent!.SendCheckAsync(source, useCandidate: false, CancellationToken.None).ConfigureAwait(false);
+            // Confirm over the path the check arrived on: relay-framed when it came through our relay, else direct.
+            var confirmed = replyVia is not null
+                ? await _consent!.SendCheckVia(replyVia, source, useCandidate: false, CancellationToken.None).ConfigureAwait(false)
+                : await _consent!.SendCheckAsync(source, useCandidate: false, CancellationToken.None).ConfigureAwait(false);
             _logger.LogDebug("ICE triggered check to {Source} {Result}.", source, confirmed ? "confirmed" : "unanswered");
         }
         catch (Exception ex)
@@ -250,9 +257,14 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
     }
 
     // Adopts the pair the controlling peer nominates via its inbound USE-CANDIDATE check (RFC 8445 §7.3.1.5).
-    // A controlled agent sends back to the source of the check over the shared media socket, so its nomination
-    // always uses the direct send path.
-    private void Nominate(IPEndPoint remoteEndPoint) => NominateInternal(remoteEndPoint, sendVia: null);
+    // A controlled agent sends back over the path the check arrived on (RFC 8445 role-agnostic routing): the
+    // direct socket for a host/srflx check, or relay-framed (replyVia) when the check came through this agent's
+    // own TURN relay — so a controlled agent's relay candidate works without a nomination driver, and consent
+    // freshness follows the same relay path.
+    private void Nominate(
+        IPEndPoint remoteEndPoint,
+        Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>? replyVia)
+        => NominateInternal(remoteEndPoint, sendVia: replyVia);
 
     // Nominates a checked/adopted remote pair (RFC 8445 §8): redirects consent freshness onto it (over the
     // given send path — relay-framed or direct) and reports it so the transport send target and DTLS follow.
