@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Callora Browser Interop Peer</title></head>
+<body>
+<h1 id="status">init</h1>
+<script>
+(async () => {
+  const set = (s) => { document.getElementById('status').textContent = s; };
+  // WS zur Signaling-Bridge (dieselbe Origin, Pfad /ws).
+  const ws = new WebSocket(`ws://${location.host}/ws`);
+  const pc = new RTCPeerConnection({ iceServers: [] });   // host-only ICE, kein STUN
+
+  // fake-device Audio (Chrome-Flag --use-fake-device-for-media-stream liefert einen Sinuston).
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+  for (const track of stream.getTracks()) pc.addTrack(track, stream);
+
+  pc.onicecandidate = (e) => {
+    if (e.candidate) ws.send(JSON.stringify({ type: 'candidate', candidate: e.candidate.candidate }));
+  };
+  pc.onconnectionstatechange = () => set('pc:' + pc.connectionState);
+
+  ws.onmessage = async (ev) => {
+    const msg = JSON.parse(ev.data);
+    if (msg.type === 'offer') {
+      await pc.setRemoteDescription({ type: 'offer', sdp: msg.sdp });
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      ws.send(JSON.stringify({ type: 'answer', sdp: answer.sdp }));
+    } else if (msg.type === 'candidate') {
+      try { await pc.addIceCandidate({ candidate: msg.candidate, sdpMLineIndex: 0 }); } catch (e) {}
+    }
+  };
+
+  ws.onopen = () => {
+    set('ws:open');
+    ws.send(JSON.stringify({ type: 'ready' }));
+    // Periodisch inbound-rtp (audio) melden — der Nachweis für SDK->Browser-Media.
+    setInterval(async () => {
+      const stats = await pc.getStats();
+      stats.forEach((r) => {
+        if (r.type === 'inbound-rtp' && r.kind === 'audio') {
+          ws.send(JSON.stringify({
+            type: 'stats',
+            bytesReceived: r.bytesReceived || 0,
+            packetsReceived: r.packetsReceived || 0,
+          }));
+        }
+      });
+    }, 500);
+  };
+})();
+</script>
+</body>
+</html>
