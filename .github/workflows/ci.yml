@@ -85,3 +85,38 @@ jobs:
         # InteropFreeSwitch ausgeschlossen: FreeSWITCH-Matrix lokal-first (noch nicht im PR-CI-Gate,
         # bis über mehrere Läufe stabil) — läuft lokal grün gegen echtes FreeSWITCH.
         run: dotnet test tests/CalloraVoipSdk.InteropTests/CalloraVoipSdk.InteropTests.csproj --configuration Release --no-build -f net10.0 --filter "Category=Interop&Category!=InteropLocalMedia&Category!=InteropFreeSwitch" --nologo --verbosity minimal
+
+  browser-interop:
+    runs-on: ubuntu-latest
+    # Video (VP8) decode kann unter CI-CPU-Druck bis ~90 s je Test brauchen; großzügiger Job-Puffer.
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
+
+      - name: Restore
+        run: dotnet restore CalloraVoipSdk.sln
+
+      - name: Build
+        run: dotnet build CalloraVoipSdk.sln --configuration Release --no-restore
+
+      - name: Install Playwright Chromium + system deps
+        # Befüllt ~/.cache/ms-playwright/chromium-* (wo BrowserRequiredFactAttribute den Browser sucht);
+        # --with-deps installiert die headless-Chromium-Ubuntu-Pakete (libnss3/libgbm1/... via apt).
+        run: pwsh tests/CalloraVoipSdk.BrowserInteropTests/bin/Release/net10.0/playwright.ps1 install chromium --with-deps
+
+      - name: Browser interop tests (Playwright/headless Chrome)
+        # Bisher lokal-first aus dem Haupt-Gate (Category!=BrowserInterop); hier als eigener Linux-Job
+        # mit Browser-Install ins PR-CI-Gate gehoben. Der build-and-test-Job schließt sie weiterhin aus,
+        # also kein Doppellauf.
+        run: dotnet test tests/CalloraVoipSdk.BrowserInteropTests/CalloraVoipSdk.BrowserInteropTests.csproj --configuration Release --no-build -f net10.0 --filter "Category=BrowserInterop" --nologo --verbosity minimal
