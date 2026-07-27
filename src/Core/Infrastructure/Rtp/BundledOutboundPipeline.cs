@@ -217,6 +217,44 @@ internal sealed class BundledOutboundPipeline
     /// <exception cref="InvalidOperationException">No track is registered for <paramref name="mid"/>.</exception>
     public uint ReserveTrackTimestamp(string mid, uint units) => ResolveTrack(mid, rid: null).ReserveTimestamp(units);
 
+    /// <summary>
+    /// Sends one already-built RTX repair packet (RFC 4588 §4) over the shared transport: it carries its own
+    /// SSRC, rtx payload type, and rtx sequence number and is <em>not</em> routed through a track (no MID/RID
+    /// stamp, no cursor advance) — the peer demuxes the repair stream by payload type and SSRC via the
+    /// <c>a=ssrc-group:FID</c> pairing (RFC 5576), not the MID. It rides the same shared outbound SRTP context
+    /// as the primary streams: that context keys ROC and replay per SSRC (RFC 3711 §3.2.1), so the fresh rtx
+    /// SSRC simply gets its own state — no separate context is needed. Fails closed exactly like a media send:
+    /// until the DTLS-SRTP key is installed — or if the context is disposed mid-send during teardown — the
+    /// packet is suppressed and counted, never leaving as plaintext.
+    /// </summary>
+    public async ValueTask SendRtxAsync(RtpPacket rtx, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(rtx);
+
+        if (Volatile.Read(ref _outboundSrtp) is not { } outboundSrtp)
+        {
+            Interlocked.Increment(ref _suppressedSends);
+            _logger.LogDebug("Suppressing outbound RTX: no SRTP context installed yet.");
+            return;
+        }
+
+        var datagram = _codec.Encode(rtx);
+        try
+        {
+            datagram = outboundSrtp.Protect(datagram);
+        }
+        catch (ObjectDisposedException)
+        {
+            Interlocked.Increment(ref _suppressedSends);
+            _logger.LogDebug("Suppressing outbound RTX: SRTP context disposed during teardown.");
+            return;
+        }
+
+        await _sender.SendAsync(datagram, cancellationToken).ConfigureAwait(false);
+        Interlocked.Increment(ref _packetsSent);
+        Interlocked.Add(ref _bytesSent, datagram.Length);
+    }
+
     private BundledOutboundTrack ResolveTrack(string mid, string? rid)
     {
         ArgumentException.ThrowIfNullOrEmpty(mid);

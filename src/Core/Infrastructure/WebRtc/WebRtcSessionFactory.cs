@@ -4,6 +4,7 @@ using CalloraVoipSdk.Core.Infrastructure.Common.Relay;
 using CalloraVoipSdk.Core.Infrastructure.Dtls;
 using CalloraVoipSdk.Core.Infrastructure.Rtp;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
+using CalloraVoipSdk.Core.Infrastructure.Sdp;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Models;
 using CalloraVoipSdk.Core.Infrastructure.Stun.Ice;
 using Microsoft.Extensions.Logging;
@@ -281,6 +282,17 @@ internal static class WebRtcSessionFactory
                 string.Join(",", sendRids));
         }
 
+        // RTX repair payload type (RFC 4588 §8.1): the negotiated rtx format whose apt points at the chosen
+        // primary codec, read from our (local) description so we resend on the number both sides agreed. Only
+        // wired when the peer also advertised Generic NACK — without NACK feedback no NACK arrives to answer.
+        byte? rtxPayloadType = null;
+        if (remoteSupportsNack
+            && VideoCodecCatalog.TryFindRtxPayloadType(video, codec.PayloadType) is { } rtxPt
+            && rtxPt is >= 0 and <= 127)
+        {
+            rtxPayloadType = (byte)rtxPt;
+        }
+
         return new BundledTrackConfig
         {
             Mid = video.Mid,
@@ -289,6 +301,7 @@ internal static class WebRtcSessionFactory
             VideoCodecName = codec.Name,
             RemoteSupportsNack = remoteSupportsNack,
             RemoteSupportsPli = remoteSupportsPli,
+            RtxPayloadType = rtxPayloadType,
         };
     }
 
