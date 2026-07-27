@@ -19,9 +19,12 @@ gekennzeichnet. Abdeckungsstufen:
 | **Teilweise** | Kernpfad umgesetzt und belegt; benannte Corner-Cases / MUST- oder SHOULD-Details offen. |
 | **Nicht** | Nicht oder nur als Stub vorhanden. |
 
-**Wichtiger Vorbehalt:** „Voll/Teilweise" bedeutet *im Code belegt*, **nicht** *durch Interop-Test
-gegen einen Referenz-Stack (Asterisk/FreeSWITCH/Browser) verifiziert*. Eine Interop-/Soak-Suite
-gegen reale Gegenstellen steht noch aus (siehe [ADR-058](../../adr/ADR-058-layered-test-interop-soak-model.md)).
+**Wichtiger Vorbehalt:** „Voll/Teilweise" bedeutet *im Code belegt*, **nicht** automatisch *durch
+Interop-Test gegen einen Referenz-Stack verifiziert*. Für den **SIP-/Audio-Kern** existiert eine
+reale Interop-/Soak-Suite gegen **zwei echte SIP-Stacks** — **Asterisk** (im PR-CI-Gate) **und
+FreeSWITCH** (lokal-first, gleiche `IPbxFixture`-Szenario-Matrix) — siehe
+[ADR-058](../../adr/ADR-058-layered-test-interop-soak-model.md). Für den **WebRTC-/TURN-/Browser-Pfad**
+steht ein Interop-Nachweis gegen reale Gegenstellen weiterhin **ganz aus**.
 
 **Primärquellen dieser Verdichtung:**
 - ADR-Verzeichnis (getrackter, code-verifizierter Beleg): [`../../adr/README.md`](../../adr/README.md)
@@ -121,6 +124,9 @@ TLS-/Zertifikats-Sicherheit (RFC 5922 + BCP 195).
 **Bewusst out-of-scope:** SIP-Proxy-Rolle (§16), S/MIME, ein großer Block an Extension-RFCs
 (MESSAGE, PUBLISH, Presence/MWI-Event-Packages, STIR/PASSporT u. a. — siehe SIP-Open-Topics-Register).
 
-**Interop-Vorbehalt:** Alle „Voll/Teilweise"-Angaben sind Code-Belege, keine gegen einen
-Referenz-Stack getesteten Compliance-Aussagen. Die L0–L4-Interop-/Soak-Suite
-([ADR-058](../../adr/ADR-058-layered-test-interop-soak-model.md)) steht aus.
+**Interop-Vorbehalt:** Alle „Voll/Teilweise"-Angaben sind primär Code-Belege. Für den
+**SIP-/Audio-Kern** sind sie zusätzlich gegen **zwei echte SIP-Stacks** abgesichert — **Asterisk**
+(im PR-CI-Gate) **und FreeSWITCH** (lokal-first, gleiche `IPbxFixture`-Szenario-Matrix; identischer
+Testcode auf zwei Herstellern = Konformitätssignal) über die L0–L4-Interop-/Soak-Suite
+([ADR-058](../../adr/ADR-058-layered-test-interop-soak-model.md)). Offen bleiben: weitere Stacks
+(3CX/Fritzbox), FreeSWITCH-CI-Gating und der gesamte **WebRTC-/TURN-/Browser-Interop-Nachweis**.

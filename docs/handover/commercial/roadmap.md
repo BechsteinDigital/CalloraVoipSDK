@@ -14,7 +14,7 @@ Diese Seite zeigt dem Käufer **drei Dinge zusammen**: die geplante Phasen-Roadm
 | Begriff | Bedeutung |
 |---------|-----------|
 | **Gebaut & getestet** | Produktionstyp im `src/`-Baum, durch ADR und/oder Repo-Tests belegt. Kein bekannter Blocker im Kernpfad. |
-| **Interop-verifiziert** | Zusätzlich end-to-end gegen einen echten Referenz-Stack bewiesen (aktuell: nur der SIP-/Audio-Kern gegen Asterisk). |
+| **Interop-verifiziert** | Zusätzlich end-to-end gegen echte Referenz-Stacks bewiesen (aktuell: der SIP-/Audio-Kern gegen **zwei** Stacks — Asterisk im PR-CI-Gate und FreeSWITCH lokal-first). |
 | **Prototyp / ungetestet** | Baustein existiert im Code, aber nicht in den Produktionspfad verdrahtet oder nicht durch echten E2E-/Wire-Test abgesichert. |
 | **Nicht gebaut** | Kein Produktionstyp — nur Roadmap/Vision/ADR-Vorschlag. |
 
@@ -28,7 +28,7 @@ Die Produktrichtung stammt aus der CEO-Vision (intern, nicht Teil des Pakets): e
 
 **Vision:** register / dial / accept / hangup / transfer / conference / media routing als Ersatz für teure oder unflexible Fremd-SDKs.
 
-**Ist-Stand: weitgehend gebaut & getestet; der Audio-/SIP-Kern ist zusätzlich gegen einen echten Asterisk interop-verifiziert.**
+**Ist-Stand: weitgehend gebaut & getestet; der Audio-/SIP-Kern ist zusätzlich gegen zwei echte SIP-Stacks (Asterisk im CI-Gate + FreeSWITCH lokal-first) interop-verifiziert.**
 
 | Baustein | Stand | Beleg |
 |----------|-------|-------|
@@ -37,17 +37,17 @@ Die Produktrichtung stammt aus der CEO-Vision (intern, nicht Teil des Pakets): e
 | RTP/RTCP, SRTP (SDES), DTLS-SRTP, SRTCP, Jitter-Buffer, Media-Hotpath-Hardening | Gebaut & getestet | Matrix §3–4; [ADR-026](../../adr/ADR-026-srtp-media-path-fail-closed-hardening.md), [ADR-028](../../adr/ADR-028-dtls-srtp-foundation.md)…[ADR-031](../../adr/ADR-031-srtcp-crypto-core-and-rtcp-path-wiring.md) |
 | Audio-Codecs (G.711 µ-law/A-law, Opus via Concentus), Devices, Media-Tap, Bridge-Transcoding, Konferenz/Mixing | Gebaut & getestet | Matrix §8; [ADR-049](../../adr/ADR-049-opus-codec-integration-concentus.md), [ADR-050](../../adr/ADR-050-bridge-audio-transcoding-opus-mulaw.md), [ADR-059](../../adr/ADR-059-public-media-tap-contract.md) |
 | `VoipClient`/`IVoipClient` als zentrale Runtime-Facade, DDD-Layering, API-Versionierung | Gebaut & getestet | Matrix §12; [ADR-006](../../adr/ADR-006-api-versioning-strategy.md), [ADR-014](../../adr/ADR-014-ddd-layering-gated-baselines.md) |
-| **SIP-/Audio-Kern gegen echten Asterisk (2-Bein-Media bidirektional)** | **Interop-verifiziert** | Risiko-Register §2; [ADR-058](../../adr/ADR-058-layered-test-interop-soak-model.md) (29 grün) |
+| **SIP-/Audio-Kern gegen zwei echte SIP-Stacks (Asterisk im CI-Gate + FreeSWITCH lokal-first, 2-Bein-Media bidirektional)** | **Interop-verifiziert** | Risiko-Register §2; [ADR-058](../../adr/ADR-058-layered-test-interop-soak-model.md) (Asterisk 29 grün; FreeSWITCH gleiche `IPbxFixture`-Szenario-Matrix) |
 
 **Ehrliche Rest-Kanten der Phase 1** (Details im [Risiko-Register](../technical/risks-and-open-items.md)):
 
-- **Interop nur gegen Asterisk.** FreeSWITCH / 3CX / Fritzbox sind geplant, aber noch nicht als grüne Suite belegt (Risiko-Register §2, mittel).
+- **Interop gegen zwei Stacks belegt, mit Rest-Kanten.** Der SIP-/Audio-Kern ist gegen **Asterisk** (im PR-CI-Gate) **und FreeSWITCH** (lokal-first, gleiche `IPbxFixture`-Szenario-Matrix) grün — identischer Testcode auf zwei Herstellern = Konformitätssignal. Offen: die **Aufnahme von FreeSWITCH ins PR-CI-Gate** (heute lokal-first) und **weitere Stacks** (3CX / Fritzbox), noch nicht als grüne Suite belegt (Risiko-Register §2, niedrig bzw. niedrig–mittel).
 - **CORE-011 Soak/Interop/Chaos-CI-Gate offen.** Das ist das letzte offene GA-Bedingungs-Item; die Interop-Suite existiert (Asterisk), ein durchgängiges Soak-/Chaos-CI-Gate ist noch nicht als geschlossen belegt (Risiko-Register §9, mittel; `AUDIT_HARDENING_BACKLOG` Paket I).
 - **Session-Timer-Refresher-Enforcement-Loop** nur teilweise: Aushandlung/Offer-Emission belegt, der aktive session-beendende Refresh-Timer nicht end-to-end (Matrix §1; [ADR-023](../../adr/ADR-023-session-timer-negotiation.md)).
 - **ICE-Consent-Freshness/Restart auf dem SIP-Pfad = unverdrahtete Primitive.** RFC-7675-Verhalten wird für SIP-Calls **nicht** behauptet (nur BUNDLE/WebRTC-Pfad live; [ADR-041](../../adr/ADR-041-consent-freshness-and-ice-restart-primitives.md)).
 - **Opus ist managed** (Concentus, kein Hardware-Codec), Tuning nicht konfigurierbar, PLC/FEC bei Loss ungenutzt, laut [ADR-049](../../adr/ADR-049-opus-codec-integration-concentus.md) nicht produktionsbewiesen.
 
-> **Einordnung für den Käufer:** Phase 1 ist die reife Schicht des Produkts. Der Kern ist funktional vollständig und der Audio-/SIP-Pfad ist der **einzige** Teil des SDK mit einem echten Referenz-Interop-Nachweis. Die offenen Punkte sind Interop-Breite, das formale Stabilitäts-CI-Gate und einzelne unverdrahtete SIP-Pfad-Primitive — keine strukturellen Lücken.
+> **Einordnung für den Käufer:** Phase 1 ist die reife Schicht des Produkts. Der Kern ist funktional vollständig und der Audio-/SIP-Pfad ist der **einzige** Teil des SDK mit einem echten Referenz-Interop-Nachweis — und dort gleich gegen **zwei** unabhängige Stacks (Asterisk + FreeSWITCH). Die offenen Punkte sind FreeSWITCH-CI-Gating, weitere Interop-Breite (3CX/Fritzbox), das formale Stabilitäts-CI-Gate und einzelne unverdrahtete SIP-Pfad-Primitive — keine strukturellen Lücken.
 
 ### Phase 2 — Dialer + Contact-Center-Enablement
 
@@ -128,7 +128,7 @@ Alle Posten sind mit ADR/Register belegt; die relative Einordnung (§4) nennt Re
 | 8 | **Differenzierungsmodule** (Privacy/Risk/Intelligence/Policy) | Phase-3-Kern; kein `src/`-Projekt. Media-Tap ([ADR-059](../../adr/ADR-059-public-media-tap-contract.md)) ist der vorgesehene Integrationspunkt. | Matrix §13; CEO_VISION (intern, nicht Teil des Pakets) Phase 3 |
 | 9 | **RTX + Keyframe-Feedback über den BUNDLE** (H4) und **TWCC-über-BUNDLE-Verdrahtung** | RTX/PLI/NACK für `BundledVideoTrack` und die TWCC-Verdrahtung über den geteilten Transport sind offene Backlog-Items (auf dem separaten Video-Pfad ist Loss-Recovery via [ADR-045](../../adr/ADR-045-video-loss-recovery-nack-pli-rtx.md) gebaut). Design-forked (SESSION_HANDOFF #7 Slice 3–6). | Risiko-Register §5/§9; SESSION_HANDOFF #7 |
 | 10 | **CORE-011 Soak/Interop/Chaos-CI-Gate** | Letztes offenes GA-Bedingungs-Item; formales Stabilitäts-Gate als CI noch nicht als geschlossen belegt. | Risiko-Register §9 (Mittel); `AUDIT_HARDENING_BACKLOG` Paket I |
-| 11 | **Interop-Breite über Asterisk hinaus** | FreeSWITCH/3CX/Fritzbox als grüne Interop-Suite ausstehend. | Risiko-Register §2 (Mittel); [ADR-058](../../adr/ADR-058-layered-test-interop-soak-model.md) |
+| 11 | **FreeSWITCH-CI-Gating + Interop-Breite** | FreeSWITCH ist bereits lokal-first grün (gleiche `IPbxFixture`-Szenario-Matrix wie Asterisk), aber noch nicht ins PR-CI-Interop-Gate aufgenommen; 3CX/Fritzbox als weitere grüne Interop-Suite ausstehend. | Risiko-Register §2 (Niedrig bzw. Niedrig–Mittel); [ADR-058](../../adr/ADR-058-layered-test-interop-soak-model.md) |
 
 ---
 
@@ -140,7 +140,7 @@ Diese Reihenfolge ist eine **Empfehlung aus technischer Abhängigkeit und Wirkbe
 
 1. **Zuerst validieren, was schon gebaut ist**, bevor Neues gebaut wird — der höchste Wert liegt darin, den vorhandenen WebRTC-/TURN-Code von „code-complete" auf „interop-verifiziert" zu heben:
    - **Posten 1 (Browser-Interop)** und **Posten 2 (echter TURN-E2E)** sind die beiden **Hoch**-Risiken und die eigentlichen Freigabe-Blocker für jeden WebRTC-/NAT-Produktiveinsatz. Sie sind primär **Test-/Harness-Arbeit**, kein Neubau — der Datenpfad existiert bereits.
-   - **Posten 10 (CORE-011 CI-Gate)** und **Posten 11 (Interop-Breite)** heben denselben Reifehebel für den bereits interop-verifizierten SIP-/Audio-Kern.
+   - **Posten 10 (CORE-011 CI-Gate)** und **Posten 11 (FreeSWITCH-CI-Gating + Interop-Breite)** heben denselben Reifehebel für den bereits gegen zwei Stacks interop-verifizierten SIP-/Audio-Kern.
 
 2. **Danach die kleineren, abgegrenzten Verdrahtungs-Posten**, die auf vorhandenen Bausteinen aufsetzen: **Posten 9** (RTX/TWCC über BUNDLE, design-forked) und **Posten 7** (recv-side Simulcast-Demux) — jeweils begrenzter Wirkbereich, Bausteine teils vorhanden.
 
@@ -165,7 +165,7 @@ Diese Reihenfolge ist eine **Empfehlung aus technischer Abhängigkeit und Wirkbe
 
 ## Zusammenfassung für den Käufer
 
-- **Phase 1 ist reif und teil-interop-verifiziert:** SIP-Signaling + Audio-Media sind gebaut, getestet und der SIP-/Audio-Kern ist gegen einen echten Asterisk end-to-end bewiesen. Offene Punkte sind Interop-Breite, das CORE-011-CI-Gate und einzelne unverdrahtete SIP-Pfad-Primitive.
+- **Phase 1 ist reif und teil-interop-verifiziert:** SIP-Signaling + Audio-Media sind gebaut, getestet und der SIP-/Audio-Kern ist gegen **zwei echte SIP-Stacks** end-to-end bewiesen — **Asterisk** (im PR-CI-Gate) **und FreeSWITCH** (lokal-first, gleiche Szenario-Matrix); identischer Testcode auf zwei Herstellern = Konformitätssignal. Offene Punkte sind FreeSWITCH-CI-Gating, weitere Interop-Breite (3CX/Fritzbox), das CORE-011-CI-Gate und einzelne unverdrahtete SIP-Pfad-Primitive.
 - **Phase 2 ist enabled, nicht produktisiert:** Recording/Playback/Device-Controls/Quality-APIs/Media-Tap/`ModuleRegistry` tragen als Fundament; die Dialer-/Contact-Center-Fachlogik ist Aufsatz-Roadmap.
 - **Phase 3 ist Vision:** die vier Differenzierungsmodule haben keinen `src/`-Code; der Media-Tap ist der gebaute Integrationspunkt.
 - **WebRTC/TURN ist transport-vollständig, aber interop-ungetestet:** BUNDLE, Fassade, Send-Side-Simulcast, TURN-Control-Stack und die Server-Hosting-Fassade sind SDK↔SDK gebaut & getestet; **kein Browser- und kein Echt-TURN-Server-Nachweis** — daher **kein „production-ready"-Claim für WebRTC** (Guardrail [ADR-009](../../adr/ADR-009-webrtc-browser-peer-roadmap.md)).
