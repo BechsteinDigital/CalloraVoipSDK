@@ -1,8 +1,8 @@
 # ADR-008: Community Module Store Architecture
 
-**Status:** Proposed
-**Date:** 2026-07-11
-**Related:** module registry (`IVoipClientModule`, `ModuleRegistry`), licensing (`CalloraVoipSdk.Licensing.*`), store backend (`store-backend/`)
+Status: Proposed
+Date: 2026-07-11
+Related: module registry (`IVoipClientModule`, `ModuleRegistry`), licensing (`CalloraVoipSdk.Licensing.*`), store backend (`store-backend/`)
 
 ---
 

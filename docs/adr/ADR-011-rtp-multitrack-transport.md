@@ -82,3 +82,21 @@ review + tests). B2c-in-2 (primitive extraction) refactors `RtpSession` internal
 - Single-stream `RtpSession` behaviour stays byte-identical through the extraction (test suite green).
 - Per-SSRC SRTP change reviewed against replay/ROC correctness with per-SSRC tests.
 - No `a=group:BUNDLE` offered until `BundledMediaTransport` serves both tracks (B5 after B2c-in/B3/B4).
+
+## Errata (2026-07-27, verified against code during ADR backfill)
+
+The sub-slice plan was written before code; two later mechanism choices diverge from the prose here
+(decision unchanged, wording lagged the final placement):
+
+- **B4 — video as a track.** Implemented as a *new* `BundledVideoTrack` riding the shared transport,
+  **not** by converting `VideoRtpStream`. `VideoRtpStream` is retained deliberately as the non-BUNDLE
+  separate-m-line video path (per ADR-010's guardrail). The decision (video as a track on the shared
+  transport) holds; the mechanism is a parallel type. See ADR-043…048 (video path) and ADR-046.
+- **B5 — SDP BUNDLE generation.** Lives on `SdpOfferAnswerNegotiator`, driven by
+  `SdpMediaOptions.Bundle` (`Infrastructure/Sdp/OfferAnswer/`) — not on the SIP `SdpMediaNegotiationOptions.Bundle`
+  named in the plan (that field does not exist). This is consistent with ADR-010's "no BUNDLE code in
+  the SIP signaling core" guardrail; the plan prose predates the SIP/WebRTC split.
+
+Per-SSRC SRTP (Crux #1) and the `BundledMediaTransport`-alongside-`RtpSession` model (Crux #2) were
+verified as implemented essentially as written (`SrtpContext` per-SSRC `SrtpSsrcState`, shared
+DTLS/ICE via `BundledDtlsKeying`/`BundledIceControl`).
