@@ -248,6 +248,17 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
                     OutboundCallStarted?.Invoke(this, new SipIncomingInviteEventArgs(session));
                     return session;
                 }
+                catch (Exception) when (ct.IsCancellationRequested)
+                {
+                    // Caller cancelled the in-flight INVITE. The transaction layer reports a cancelled wait
+                    // as a TimeoutException (the token linked into WaitForFinalResponseAsync), so key off the
+                    // token, not the exception type. Unlike the failure paths below, leave the session alive
+                    // and channel-bound so the caller's HangupAsync can put a wire-CANCEL on the wire
+                    // (RFC 3261 §9.1) and reach Terminated(487); disposing here strands the UAS dialog (the
+                    // Asterisk channel stays up) with no CANCEL. The lifecycle hook removes it on Terminated.
+                    _logger.LogDebug("Outbound INVITE {CallId} cancelled in flight; keeping the session cancelable.", callId);
+                    throw new OperationCanceledException(ct);
+                }
                 catch (SipFinalResponseException finalResponseEx)
                 {
                     CleanupFailedOutboundSession(callId, session);
