@@ -194,10 +194,11 @@ private key); see <a class="xref" href="CalloraVoipSdk.WebRtc.WebRtcOptions.html
 
   <h3 id="CalloraVoipSdk_DependencyInjection_CalloraWebRtcBuilder_WithIceServers_CalloraVoipSdk_IceServerConfiguration___" data-uid="CalloraVoipSdk.DependencyInjection.CalloraWebRtcBuilder.WithIceServers(CalloraVoipSdk.IceServerConfiguration[])">
   WithIceServers(params IceServerConfiguration[])
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/CalloraWebRtcBuilder.cs/#L101"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/CalloraWebRtcBuilder.cs/#L111"><i class="bi bi-code-slash"></i></a>
   </h3>
 
-  <div class="markdown level1 summary"><p>Adds one or more fully-specified ICE servers (STUN/TURN), accumulating with any already configured.</p>
+  <div class="markdown level1 summary"><p>Adds one or more fully-specified ICE servers (STUN/TURN), accumulating with any already configured.
+A TURN entry with a non-UDP transport is rejected — only UDP TURN is supported for relay gathering.</p>
 </div>
   <div class="markdown level1 conceptual"></div>
 
@@ -225,6 +226,12 @@ private key); see <a class="xref" href="CalloraVoipSdk.WebRtc.WebRtcOptions.html
 
 
 
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>A TURN entry uses a non-UDP transport (TCP/TLS TURN is not yet implemented).</p>
+</dd>
+  </dl>
 
 
 
@@ -311,12 +318,14 @@ servers already configured; see <a class="xref" href="CalloraVoipSdk.WebRtc.WebR
 
   <h3 id="CalloraVoipSdk_DependencyInjection_CalloraWebRtcBuilder_WithTurnServer_System_String_System_String_System_String_System_Nullable_System_Int32__CalloraVoipSdk_IceTransport_" data-uid="CalloraVoipSdk.DependencyInjection.CalloraWebRtcBuilder.WithTurnServer(System.String,System.String,System.String,System.Nullable{System.Int32},CalloraVoipSdk.IceTransport)">
   WithTurnServer(string, string, string, int?, IceTransport)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/CalloraWebRtcBuilder.cs/#L80"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/CalloraWebRtcBuilder.cs/#L83"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Adds a TURN server for relay candidate gathering (RFC 8656), with the long-term credentials the
-allocation authenticates with. Accumulates with any servers already configured. Only UDP TURN is used for
-relay gathering today; a non-UDP entry is ignored by the gatherer until TCP/TLS TURN lands.</p>
+allocation authenticates with. Accumulates with any servers already configured. Only UDP TURN is
+supported for relay gathering — a TCP/TLS transport is rejected up front (the TCP/TLS relay data path
+is not yet wired into the WebRTC media bundle), so a misconfiguration fails loudly instead of silently
+gathering no relay candidate.</p>
 </div>
   <div class="markdown level1 conceptual"></div>
 
@@ -339,7 +348,7 @@ relay gathering today; a non-UDP entry is ignored by the gatherer until TCP/TLS 
     <dd><p>Optional explicit port; the TURN default (3478) is used when null.</p>
 </dd>
     <dt><code>transport</code> <a class="xref" href="CalloraVoipSdk.IceTransport.html">IceTransport</a></dt>
-    <dd><p>The transport to reach the server on; defaults to UDP.</p>
+    <dd><p>The transport to reach the server on; only <a class="xref" href="CalloraVoipSdk.IceTransport.html#CalloraVoipSdk_IceTransport_Udp">Udp</a> is supported.</p>
 </dd>
   </dl>
 
@@ -356,6 +365,12 @@ relay gathering today; a non-UDP entry is ignored by the gatherer until TCP/TLS 
 
 
 
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p><code class="paramref">transport</code> is not UDP (TCP/TLS TURN is not yet implemented).</p>
+</dd>
+  </dl>
 
 
 
