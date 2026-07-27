@@ -29,6 +29,14 @@ internal sealed class VideoKeyFrameFeedback
     private readonly CancellationToken _lifetime;
 
     private long _lastPliSentTimestamp = long.MinValue;
+    private long _nacksSent;
+    private long _plisSent;
+
+    /// <summary>Generic NACK feedback messages sent to the peer on detected inbound loss (RFC 4585 §6.2.1).</summary>
+    public long NacksSent => Interlocked.Read(ref _nacksSent);
+
+    /// <summary>PLI keyframe requests sent to the peer on detected inbound loss (RFC 4585 §6.3.1), after throttling.</summary>
+    public long PlisSent => Interlocked.Read(ref _plisSent);
 
     public VideoKeyFrameFeedback(
         IRtcpPacketCodec codec,
@@ -117,6 +125,7 @@ internal sealed class VideoKeyFrameFeedback
                 MediaSsrc = remoteSsrc,
                 Entries = BuildNackEntries(missingSequenceNumbers),
             };
+            Interlocked.Increment(ref _nacksSent);
             _ = SendAsync(nack, "NACK");
         }
 
@@ -131,6 +140,7 @@ internal sealed class VideoKeyFrameFeedback
             return;
 
         _lastPliSentTimestamp = now;
+        Interlocked.Increment(ref _plisSent);
         _ = SendAsync(new RtcpPictureLossIndication { SenderSsrc = _localSsrc, MediaSsrc = remoteSsrc }, "PLI");
     }
 

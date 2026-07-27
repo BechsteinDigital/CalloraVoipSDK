@@ -149,8 +149,14 @@ internal sealed class PeerConnection : IPeerConnection
             SelectedRemoteCandidate = _peer.RemoteMediaEndPoint?.ToString(),
             FramesPerSecond = framesPerSecond,
             KeyFrames = s.KeyFrames,
-            // Dropped frames, NACK/PLI/FIR and available-bitrate stay null until their subsystems (bundle video
-            // feedback, transport-cc) are wired.
+            FramesDropped = s.FramesDropped,
+            // Video RTCP feedback we sent the peer on detected inbound loss (RFC 4585) and the sender-side
+            // congestion estimate (transport-cc / RFC 8888) — both null until a video track / the extension is
+            // negotiated. FirCount stays null: the bundle honours an inbound FIR as a keyframe request but never
+            // generates FIR (PLI is the keyframe fallback), so there is no sent-FIR count to report.
+            NackCount = s.NacksSent,
+            PliCount = s.PlisSent,
+            AvailableOutgoingBitrateBps = s.AvailableOutgoingBitrateBps,
         };
     }
 

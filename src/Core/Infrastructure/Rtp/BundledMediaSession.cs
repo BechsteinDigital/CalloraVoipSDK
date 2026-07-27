@@ -673,11 +673,14 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     /// </summary>
     internal TransportCcCongestionController? Congestion => _congestion?.Controller;
 
-    /// <summary>Point-in-time transport counters aggregated from the outbound and inbound pipelines.</summary>
+    /// <summary>Point-in-time transport counters aggregated from the outbound and inbound pipelines, the video
+    /// track's frame/feedback counters, and the sender-side congestion controller's recommended bitrate.</summary>
     public BundledMediaStats SnapshotStats() => new(
         _outbound.PacketsSent, _outbound.BytesSent, _outbound.SuppressedSends,
         _inbound.RtpPacketsReceived, _inbound.RtpBytesReceived, _inbound.DroppedDatagrams,
-        _video?.FramesReceived, _video?.KeyFrames);
+        _video?.FramesReceived, _video?.KeyFrames,
+        _video?.FramesDropped, _video?.NacksSent, _video?.PlisSent,
+        Congestion?.RecommendedBitrateBps);
 
     /// <summary>
     /// Point-in-time derived quality: the RTCP outbound metrics (RFC 3550 §6.4.1 — round-trip time and the loss

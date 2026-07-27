@@ -111,6 +111,42 @@ public sealed class VideoKeyFrameFeedbackTests
         Assert.Contains(kinds, p => p is RtcpPictureLossIndication);
     }
 
+    // ── Sent-feedback counters (getStats NackCount / PliCount) ───────────────────
+
+    [Fact]
+    public void Loss_counts_the_sent_nack_and_pli()
+    {
+        var feedback = CreateFeedback(() => { }, out _, supportsNack: true, supportsPli: true);
+
+        feedback.OnLoss(0x7, [200, 201]);
+
+        Assert.Equal(1, feedback.NacksSent);
+        Assert.Equal(1, feedback.PlisSent);
+    }
+
+    [Fact]
+    public void Throttled_pli_counts_once_but_each_nack_counts()
+    {
+        var feedback = CreateFeedback(() => { }, out _, supportsNack: true, supportsPli: true);
+
+        feedback.OnLoss(0x7, [200]);
+        feedback.OnLoss(0x7, [201]); // second PLI collapsed by the 500 ms throttle; the NACK is sent again
+
+        Assert.Equal(2, feedback.NacksSent);
+        Assert.Equal(1, feedback.PlisSent);
+    }
+
+    [Fact]
+    public void Gated_off_feedback_is_not_counted()
+    {
+        var feedback = CreateFeedback(() => { }, out _, supportsNack: false, supportsPli: false);
+
+        feedback.OnLoss(0x7, [200, 201]);
+
+        Assert.Equal(0, feedback.NacksSent);
+        Assert.Equal(0, feedback.PlisSent);
+    }
+
     [Fact]
     public void Nack_bitmask_spans_more_than_one_entry_for_a_wide_gap()
     {
