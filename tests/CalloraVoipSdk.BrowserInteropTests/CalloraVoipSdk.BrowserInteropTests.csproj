@@ -21,5 +21,6 @@
 
   <ItemGroup>
     <None Update="peer.html" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="peer-video.html" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
