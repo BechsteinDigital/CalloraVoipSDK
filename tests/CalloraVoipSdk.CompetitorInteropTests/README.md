@@ -76,7 +76,8 @@ Jedes Szenario wird einmal mit Callora, Ozeki und SIPSorcery ausgeführt:
 8. Medien-Bridge von einem Milliwatt-Quell-Leg zu einem Echo-Leg
 9. Hold/Unhold per re-INVITE mit öffentlichem Zustandswechsel,
    Asterisk-sichtbarem `sendonly`/`inactive` → `sendrecv` und fortgesetztem RTP
-10. Remote-Ablehnung mit 486, 403 und 404: prompter Fehler,
+10. Remote-Ablehnung mit 486, 403 und 404: öffentlicher SIP-Status,
+    normalisierte Kategorie (`Busy`, `Rejected`, `Failed`), prompter Fehler,
     Channel-Cleanup und erfolgreicher Folgeanruf über dieselbe Registrierung
 11. Caller-seitige Cancellation während des Klingelns: normalisierter
     Abbruchstatus, SIP-`CANCEL` und Channel-Cleanup sowie erfolgreicher
@@ -91,11 +92,13 @@ Für jede Testzeile wird ein frischer Asterisk-Container gestartet. Die Tests
 laufen absichtlich seriell. Dadurch teilen sich die Implementierungen weder
 Registrierungskontakte noch Dialog- oder Medienzustand.
 
-Der Cancellation-Test ist eine Charakterisierungsmatrix und kein künstlich
-grüner Gleichstand: Der erwartete Unterschied beim `CANCEL` und externen
-Channel-Cleanup ist als Capability pro Stack hinterlegt. Dadurch bleibt der
-aktuelle Callora-Nachteil sichtbar und eine spätere Verhaltensänderung fällt
-im Test auf.
+Der Cancellation-Test ist weiterhin eine Charakterisierungsmatrix und kein
+künstlich grüner Gleichstand: Der erwartete Unterschied beim `CANCEL` und
+externen Channel-Cleanup ist als Capability pro Stack hinterlegt. Auch auf
+`origin/main` nach Merge von PR #107 sendete Callora im realen
+Asterisk-Lauf kein `CANCEL`; eine temporäre Parity-Assertion schlug gezielt
+fehl. Dadurch bleibt der aktuelle Callora-Nachteil sichtbar, bis ein Wire-Test
+die Korrektur tatsächlich belegt.
 
 ## Fairness des Vergleichs
 
@@ -143,10 +146,14 @@ Muster jetzt auch für tiefergehende Call-Steuerung: Managed Dial, typisiertes
 `ICall.HoldAsync`/`UnholdAsync`, beobachtbarer Zustand und derselbe
 Asterisk-Medienpfad greifen ohne internen API-Zugriff ineinander. Der
 Remote-BYE-Slice nutzt denselben öffentlichen Call-Zustand, um ein vom Peer
-beendetes Gespräch ohne stack-spezifischen internen Zugriff zu erkennen. Beim
-PBX-Neustart werden außerdem `IPhoneLine.State`, `SipAccount.RegistrationExpiry`
-und `ReregisterOptions` direkt genutzt; die Komfortregistrierung bleibt damit
-bis zur steuerbaren Recovery-Oberfläche durchlässig.
+beendetes Gespräch ohne stack-spezifischen internen Zugriff zu erkennen. Die
+Ablehnungsmatrix nutzt zusätzlich `ICall.TerminationReason`: 486, 403 und 404
+bleiben über die Komfortoperation als roher SIP-Status und
+protokollneutrale Kategorie unterscheidbar. Ein kanonischer Asterisk-Test
+belegt außerdem Remote-BYE als `Completed` und `TerminatedBy.Remote`. Beim
+PBX-Neustart werden `IPhoneLine.State`, `SipAccount.RegistrationExpiry` und
+`ReregisterOptions` direkt genutzt; die Komfortregistrierung bleibt damit bis
+zur steuerbaren Recovery-Oberfläche durchlässig.
 
 Nicht vergleichend geprüft wurden die übrigen öffentlichen Escape Hatches wie
 Transfer, In-Dialog-`INFO`/`OPTIONS`/`SUBSCRIBE`/`NOTIFY`, Custom-Header,
@@ -166,8 +173,8 @@ Lizenz- oder Kostenbenchmark. Nicht abgedeckt sind insbesondere:
 - Parallelität mit vielen Calls, Turbo-Dialing und Race Conditions
 - Transfer, Remote-Hold/Glare, Fax, Konferenzmischung und In-Band-DTMF
 - Transportabbruch während aktiver Calls und wiederholte Fehlerstürme
-- Granularität der öffentlich sichtbaren SIP-Fehlerursache; der gemeinsame
-  Vertrag normalisiert 486, 403 und 404 bewusst zu `Failed`
+- `Retry-After`, Q.850-Sonderfälle und nicht-SIP-basierte
+  Beendigungsursachen außerhalb der geprüften 486/403/404-/BYE-Pfade
 - Authentifizierung, Mandantentrennung und die REST-Oberfläche des Dialers
 - fachliche Gleichwertigkeit aller 77 WebMethods des alten ASMX-Dialers
 - Supportqualität, Lizenzkosten oder Produktionsfreigabe
@@ -184,9 +191,10 @@ Die Bridge-API ist auf allen Seiten bidirektional verdrahtet; der Test weist
 gezielt die Richtung Quell-Leg → Echo-Leg nach, ohne eine künstliche
 Echo-Schleife zwischen zwei Echo-Applikationen zu erzeugen.
 
-Als Callora-Basis gilt der oben genannte Main-Commit. Der noch offene PR #105
-zur detaillierteren Beendigungsursache gehört nicht zu diesem Messstand. Er
-adressiert außerdem nicht den separat beobachteten Cleanup bei
-caller-seitiger Cancellation.
+Die ursprüngliche vollständige 48/48-Messung basiert auf dem in
+[RESULTS.md](RESULTS.md) genannten Main-Commit. Die Nachvalidierung auf
+`be0eb18e` umfasst die inzwischen gemergten PRs #105 und #107:
+Termination-Reasons bestanden die gezielten kanonischen und vergleichenden
+Tests; der reale Cancellation-Wire-Vertrag blieb trotz PR #107 rot.
 
 Die gemessenen Ergebnisse stehen in [RESULTS.md](RESULTS.md).

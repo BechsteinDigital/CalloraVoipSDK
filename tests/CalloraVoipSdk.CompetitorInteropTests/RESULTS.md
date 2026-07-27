@@ -16,8 +16,10 @@ Umgebung:
 - `Ozeki.SDK.Linux`-NuGet 10.5.1, SHA-256
   `a8a3f67cf52925a24e1fdc9e3f439b653e46f5c68bedae2040030bbe3a908ace`
 - Asterisk-Container `andrius/asterisk:22`
-- Callora-Checkout auf Commit
+- vollständiger 48/48-Basislauf mit Callora auf Commit
   `80f5e20067d40c2d459d2c68372fdf6dfb282d96`
+- Nachvalidierung von Cancellation und Termination-Reasons auf
+  `be0eb18e` (`origin/main`, PR #105 und #107 gemergt)
 
 Der Callora-Checkout lief in einem eigenen Worktree auf Basis des nach der
 Handover-Historienbereinigung neu geschriebenen `origin/main`. Unter `src/`
@@ -37,6 +39,22 @@ Passed! - Failed: 0, Passed: 48, Skipped: 0, Total: 48
 Duration: 3 m 38 s
 ```
 
+Die Nachvalidierung auf `be0eb18e` ergab:
+
+- gemeinsamer 486/403/404-Reason-Vertrag: 9/9 PASS
+- kanonischer Callora-Asterisk-Reason-Block auf .NET 9 und .NET 10:
+  jeweils 6/6 PASS; darunter 403, 404 und Remote-BYE
+- temporär auf Parität gestellte Cancellation-Assertion: 2/3 PASS;
+  ausschließlich Callora scheiterte weiterhin an fehlendem Wire-`CANCEL`
+- zwei vollständige Wiederholungsläufe: 45/48 und 47/48; die jeweils
+  wechselnden Fehler betrafen PBX-Recovery beziehungsweise einmal
+  SIPSorcery-Hold, nicht den neuen Reason-Vertrag
+- direkter Wiederholungslauf der betroffenen PBX-/Hold-Szenarien: 6/6 PASS
+
+Die wechselnden Full-Run-Fehler sind damit kein reproduzierbarer
+Stack-Funktionsverlust, aber ein Beleg dafür, dass der aktuelle explizite
+Recovery-/Hold-Test noch kein ausreichend stabiles Release-Gate ist.
+
 | Szenario | Callora | Ozeki 10.5.1 | SIPSorcery |
 |---|---:|---:|---:|
 | Registrierung | PASS | PASS | PASS |
@@ -48,7 +66,7 @@ Duration: 3 m 38 s
 | WAV-Recording | PASS | PASS | PASS |
 | Medien-Bridge | PASS | PASS | PASS |
 | Hold/Unhold + SDP + RTP-Resume | PASS | PASS | PASS |
-| 486/403/404 + Cleanup + erfolgreicher Folgeanruf | PASS | PASS | PASS |
+| 486/403/404 + Status/Kategorie + Cleanup + erfolgreicher Folgeanruf | PASS | PASS | PASS |
 | Caller-Cancellation: `Canceled` + erfolgreicher Folgeanruf | PASS | PASS | PASS |
 | Caller-Cancellation: SIP-`CANCEL` + externer Channel-Cleanup | **FAIL** | PASS | PASS |
 | Remote-BYE + Cleanup + erfolgreicher Folgeanruf | PASS | PASS | PASS |
@@ -66,11 +84,14 @@ Hold/Unhold-Slice im gezielten Staging-Lauf, im vollständigen Lauf und nach
 Übernahme in den kanonischen Ordner mit insgesamt 9/9 erfolgreichen
 Stack-Ausführungen.
 
-Die Remote-Rejection-Matrix bestand im gezielten Lauf und im vollständigen
-Lauf mit 18/18 erfolgreichen Stack-Ausführungen. In jedem Fall endete die
-Ablehnung vor dem Zehn-Sekunden-Connect-Timeout, Asterisk meldete anschließend
-null aktive Channels, die Registrierung blieb bestehen und ein Folgeanruf
-empfing wieder RTP.
+Die Remote-Rejection-Matrix bestand zunächst als Cleanup-/Recovery-Vertrag und
+auf `be0eb18e` zusätzlich als gezielter Reason-Vertrag mit 9/9
+Stack-Ausführungen. Alle drei Stacks lieferten 486, 403 und 404 über ihre
+öffentliche Oberfläche; der gemeinsame Vertrag normalisierte sie zu
+`Busy`, `Rejected` und `Failed`. In jedem Fall endete die Ablehnung vor dem
+Zehn-Sekunden-Connect-Timeout, Asterisk meldete anschließend null aktive
+Channels, die Registrierung blieb bestehen und ein Folgeanruf empfing wieder
+RTP.
 
 Die Caller-Cancellation bestand als Charakterisierung im gezielten Lauf mit
 3/3 und danach im vollständigen Lauf. Alle Stacks meldeten innerhalb von acht
@@ -80,7 +101,10 @@ Asterisk sichtbares SIP-`CANCEL` und räumten den Channel auf. Callora tat
 beides nicht: Der `noanswer`-Channel blieb länger als fünf Sekunden bestehen.
 Der vor der Charakterisierung verwendete identische Parity-Assert scheiterte
 für Callora reproduzierbar in zwei von zwei Läufen, darunter einmal noch nach
-acht Sekunden.
+acht Sekunden. Nach Merge von PR #107 wurde die Parity-Assertion erneut
+aktiviert: Ozeki und SIPSorcery bestanden, Callora scheiterte weiterhin mit
+`Canceled`, lokalem `Terminated`, leerem `TerminationReason`, keinem
+Wire-`CANCEL` und weiter aktivem Asterisk-Channel.
 
 Der Remote-BYE-Slice bestand im gezielten Lauf mit 3/3 und danach im
 vollständigen Lauf. Asterisk beendete jeweils ein bereits aufgebautes Gespräch
@@ -110,12 +134,12 @@ Tondatei-Erzeugung.
 
 | Stack | Zugeordnete Dateien | Nichtleere Zeilen |
 |---|---|---:|
-| Callora | `Adapters/CalloraStack.cs` | 307 |
-| Ozeki 10.5.1 | `Adapters/OzekiStack.cs` | 512 |
-| SIPSorcery | `Adapters/SipSorceryStack.cs` + `Adapters/SipSorceryPcmuWaveCodec.cs` | 679 |
+| Callora | `Adapters/CalloraStack.cs` | 332 |
+| Ozeki 10.5.1 | `Adapters/OzekiStack.cs` | 518 |
+| SIPSorcery | `Adapters/SipSorceryStack.cs` + `Adapters/SipSorceryPcmuWaveCodec.cs` | 697 |
 
-Für genau diesen Slice benötigt Ozeki damit rund **1,67-mal** und SIPSorcery
-rund **2,21-mal** so viel funktionalen Adaptercode wie Callora. Das sind keine
+Für genau diesen Slice benötigt Ozeki damit rund **1,56-mal** und SIPSorcery
+rund **2,10-mal** so viel funktionalen Adaptercode wie Callora. Das sind keine
 allgemeinen Bibliotheksmetriken, sondern Messwerte dieses Vertrags.
 
 Nur für den neuen Hold/Unhold-Vertrag kamen stack-spezifisch drei nichtleere
@@ -125,10 +149,12 @@ stellen die Funktion ebenfalls öffentlich bereit; ihre synchron ausgelösten
 Operationen und stack-spezifischen Hold-Zustände mussten im gemeinsamen
 awaitbaren Vertrag zusätzlich adaptiert werden.
 
-Für die neue Remote-Rejection-/Recovery-Matrix war keine zusätzliche
-stack-spezifische Adapterzeile erforderlich. Alle drei vorhandenen Adapter
-erfüllten den normalisierten `Failed`- und Wiederverwendbarkeitsvertrag; neu
-hinzu kamen ausschließlich gemeinsamer Dialplan und gemeinsame Assertions.
+Die erste Remote-Rejection-/Recovery-Matrix benötigte keine zusätzliche
+stack-spezifische Adapterzeile. Die spätere Reason-Nachvalidierung fügte
+dagegen 25 nichtleere Zeilen bei Callora, sechs bei Ozeki und 18 bei
+SIPSorcery hinzu: Callora mappt seinen neuen `ICall.TerminationReason`,
+Ozeki `CallStateChangedArgs.StatusCode/Reason/Error` und SIPSorcery
+`ClientCallFailed` samt `SIPResponse` in denselben Snapshot-Vertrag.
 
 Für den Cancellation-Vertrag kamen gegenüber diesem Stand fünf nichtleere
 Zeilen bei Callora, zwei bei Ozeki und vier bei SIPSorcery hinzu. Callora
@@ -166,7 +192,7 @@ Ozekis reproduzierbarer Linux-Weg umfasst zusätzlich:
 | Enger `/usr/share/Ozeki.{…}`-Pfadshim in C | 183 |
 | Summe | 252 |
 
-Dieser Aufwand ist nicht in den 512 funktionalen Ozeki-Zeilen versteckt. Bei
+Dieser Aufwand ist nicht in den 518 funktionalen Ozeki-Zeilen versteckt. Bei
 einer systemweiten Paketinstallation entfällt die Extraktion, nicht aber
 automatisch das Berechtigungsproblem des Runtime-Verzeichnisses.
 
@@ -212,16 +238,18 @@ Callora:
 - Hold/Unhold ist als awaitbarer `ICall`-Workflow einschließlich typisiertem
   `OnHold`-Zustand direkt verfügbar. Asterisk beobachtete `sendonly`/`inactive`
   und anschließend `sendrecv`; RTP lief nach Unhold weiter.
-- 486, 403 und 404 werden ohne Exception als `DialStatus.Failed` beendet. Der
-  Client blieb registriert und war unmittelbar für einen erfolgreichen
-  Folgeanruf wiederverwendbar.
+- 486, 403 und 404 werden ohne Exception als `DialStatus.Failed` beendet.
+  Über `DialResult.Call.TerminationReason` bleiben gleichzeitig die rohen
+  Statuscodes sowie `Busy`, `Rejected` und `Failed` verfügbar. Der Client
+  blieb registriert und war unmittelbar für einen erfolgreichen Folgeanruf
+  wiederverwendbar.
 - Eine caller-seitige Cancellation wird prompt als `DialStatus.Canceled`
   zurückgegeben; dieselbe Registrierung bleibt für einen erfolgreichen
   Folgeanruf verwendbar.
-- Ein Remote-BYE wird über den bestehenden `ICall.State` ohne zusätzlichen
-  Callora-spezifischen Adapterpfad sichtbar. Der Call endete lokal, Asterisk
-  hatte keinen aktiven Channel mehr und dieselbe Registrierung trug den
-  RTP-führenden Folgeanruf.
+- Ein Remote-BYE wird über `ICall.State` und `ICall.TerminationReason` ohne
+  internen Zugriff sichtbar: `Completed`, kein künstlicher SIP-Status und
+  `TerminatedBy.Remote`. Asterisk hatte keinen aktiven Channel mehr und
+  dieselbe Registrierung trug den RTP-führenden Folgeanruf.
 - Beim PBX-Ausfall wechselte `IPhoneLine.State` nach rund 5,1 Sekunden aus
   `Registered`. Nach dem Neustart stellte der eingebaute Re-Register-Loop den
   Asterisk-Contact automatisch in rund 1,4 Sekunden wieder her; der Folgeanruf
@@ -230,19 +258,17 @@ Callora:
 - Nachteil im geprüften Managed Workflow: Erfolgt die Cancellation während
   `PhoneLine.DialAsync`, sendet der Client kein SIP-`CANCEL`. Der Asterisk-
   Channel blieb länger als fünf beziehungsweise im Wiederholungslauf acht
-  Sekunden bestehen, obwohl der lokale Workflow schon beendet war.
-- Nachteil des geprüften öffentlichen `DialResult`: Die drei unterschiedlichen
-  SIP-Antworten werden zu `Failed` zusammengefasst; ein Remote-Statuscode ist
-  dort nicht verfügbar. Für statusabhängige Retry-/Routing-Policies fehlt
-  damit auf dieser Komfortebene noch Granularität.
+  Sekunden bestehen, obwohl der lokale Workflow schon beendet war. PR #107
+  änderte den Fake-Channel-Pfad, nicht dieses reale Ergebnis: Im
+  Asterisk-Lauf war der Call bereits `Terminated` und ohne Reason, bevor
+  `PhoneLine` den vorgesehenen Hangup-/CANCEL-Pfad erreichen konnte.
 
-Der offene PR
+PR
 [#105](https://github.com/BechsteinDigital/callora-voip-sdk/pull/105)
-schlägt für den zuletzt genannten Punkt einen öffentlichen
-`CallTerminationReason` vor. Er gehört nicht zum gemessenen Main-Stand und
-war bei dieser Auswertung noch nicht validiert: Sein Interop-Check scheiterte
-im Busy-Test an einem nicht gesetzten Reason. Der PR betrifft nicht den hier
-beobachteten fehlenden SIP-`CANCEL` bei caller-seitiger Cancellation.
+ist inzwischen gemergt und im neuen Main-Stand validiert. Der gemeinsame
+Reason-Vertrag bestand für Callora mit 486/403/404; der kanonische
+Asterisk-Block bestand zusätzlich mit lokalem und Remote-BYE. Die zuvor
+festgestellte Granularitätslücke ist für diese Pfade damit geschlossen.
 
 Ozeki SDK Linux 10.5.1:
 
@@ -257,8 +283,8 @@ Ozeki SDK Linux 10.5.1:
   awaitbare Operationen übersetzt werden.
 - Alle drei Remote-Ablehnungen wurden extern sauber beendet und ein Folgeanruf
   funktionierte. `CallStateChangedArgs` stellt zusätzlich Statuscode,
-  `CallError` und Reason bereit; diese Granularität normalisiert der
-  Vergleichsadapter bewusst weg.
+  `CallError` und Reason bereit; der Vergleichsadapter nutzt den Statuscode
+  jetzt für denselben 486/403/404-Kategorievertrag.
 - Bei caller-seitiger Cancellation löste der Adapter `HangUp()` aus. Asterisk
   sah das SIP-`CANCEL`, räumte den Channel auf und der Folgeanruf funktionierte.
 - Der öffentliche `IPhoneCall.CallState` folgte dem Remote-BYE bis zum
@@ -289,8 +315,8 @@ SIPSorcery:
   `SIPTransport` beendet.
 - Die Remote-Ablehnungen wurden explizit durch Schließen der MediaSession und
   Dispose des User-Agents bereinigt; der Folgeanruf funktionierte.
-  `ClientCallFailed` kann zusätzlich die SIP-Response liefern, wird im
-  gemeinsamen `Failed`-Vertrag aber nicht ausgewertet.
+  `ClientCallFailed` liefert zusätzlich die SIP-Response; der Adapter nutzt
+  sie jetzt für denselben 486/403/404-Kategorievertrag.
 - Bei caller-seitiger Cancellation muss die Anwendung `Cancel()`, das
   Beobachten des laufenden Call-Tasks sowie MediaSession- und User-Agent-
   Cleanup selbst orchestrieren. Damit waren SIP-`CANCEL`, Channel-Cleanup und
@@ -316,9 +342,10 @@ Frame-Injection und Bridging ab.
 
 Die Fehler-/Lifecycle-Erweiterung zeigt außerdem: Alle drei Stacks verkraften
 486, 403 und 404 ohne verwaisten Asterisk-Channel oder vergiftete
-Registrierung. Calloras Managed Workflow benötigt dafür keinen zusätzlichen
-Adaptercode. Der Vorteil ist ein einfacher, wiederverwendbarer Lebenszyklus;
-der konkrete Nachteil ist die zu grobe Fehlerursache auf `DialResult`.
+Registrierung. Der neue Reason-Vertrag belegt zusätzlich, dass alle drei die
+rohen Statuscodes liefern können. Callora kombiniert `DialStatus.Failed` mit
+`DialResult.Call.TerminationReason` und bietet damit sowohl den einfachen
+Managed Workflow als auch typisierte Retry-/Routing-Entscheidungen.
 
 Beim aktiven Abbruch ist das Bild differenzierter: Callora besitzt bereits
 den passenden Domänenstatus und bleibt lokal wiederverwendbar, erfüllt aber
@@ -330,9 +357,8 @@ Nachteil von Callora, nicht nur eine kosmetische Statusdifferenz.
 Beim Remote-BYE herrscht dagegen funktionale Parität: Alle drei öffentlichen
 Call-Modelle reflektieren die Peer-seitige Beendigung, räumen den externen
 Channel auf und lassen die bestehende Registrierung weiterverwenden. Callora
-benötigt dafür keine zusätzliche Lifecycle-Orchestrierung im Adapter. Die
-genaue Beendigungsursache ist auf dem gemessenen Main-Stand weiterhin nicht
-Teil dieses Vergleichsvertrags; der offene PR #105 bleibt davon getrennt.
+benötigt dafür keine zusätzliche Lifecycle-Orchestrierung im Adapter und
+klassifiziert den Vorgang zusätzlich als `Completed` durch den Remote-Peer.
 
 Beim PBX-Neustart hat Callora den stärksten beobachtbaren Recovery-Vertrag:
 Der typisierte Line-State zeigte den Ausfall am schnellsten, der öffentliche
@@ -340,7 +366,11 @@ Re-Register-Loop stellte den Contact ohne Anwendungsaktion wieder her und der
 Folgeanruf funktionierte. SIPSorcery verhielt sich ebenfalls transparent,
 erkannte den Ausfall mit den gemeinsamen Lease-Werten aber später. Ozeki
 registrierte sich technisch wieder, ließ den Consumer während des
-20-Sekunden-Ausfalls jedoch im erfolgreichen öffentlichen Zustand.
+20-Sekunden-Ausfalls jedoch im erfolgreichen öffentlichen Zustand. Die
+Nachvalidierung zeigte allerdings wechselnde Full-Run-Timeouts bei allen drei
+Stacks, die im direkten 6/6-Wiederholungslauf verschwanden. Die
+Recovery-Produkteigenschaften bleiben beobachtet; der Test selbst braucht
+stabilere Wiederholungs- und Diagnosekriterien, bevor er ein hartes Gate ist.
 
 Ozeki 10.5.1 ist gegenüber dem historischen Bestand deutlich aufgewertet:
 native .NET-10-Pakete, direkter Medienpfad und weniger Adaptercode. Funktional
@@ -360,35 +390,41 @@ Callora tut es hier mit der kleinsten funktionalen Integrationsfläche, während
 Ozeki 10.5.1 den Abstand zur historischen Version sichtbar verkleinert. Die
 neuen Slices stärken das Progressive-API-Argument: Calloras Managed Dial und
 tieferes `ICall`-Verhalten lassen sich ohne Abstraktionsbruch kombinieren. Sie
-zeigen aber auch konkrete Lücken bei detaillierten Remote-Fehlerursachen und
-beim SIP-Cleanup eines aktiv abgebrochenen Wahlversuchs. Noch nicht bewiesen
-ist eine generelle Überlegenheit der übrigen Escape Hatches: Transfer,
-In-Dialog-SIP, Custom-Header, Telemetrie, eigene Devices, Module, ICE und
-WebRTC wurden in diesem Dreiervergleich nicht systematisch gegenübergestellt.
+zeigen zugleich, dass detaillierte Remote-Fehlerursachen inzwischen auf
+demselben Call-Objekt erreichbar sind. Offen bleibt der SIP-Cleanup eines
+aktiv abgebrochenen Wahlversuchs. Noch nicht bewiesen ist eine generelle
+Überlegenheit der übrigen Escape Hatches: Transfer, In-Dialog-SIP,
+Custom-Header, Telemetrie, eigene Devices, Module, ICE und WebRTC wurden in
+diesem Dreiervergleich nicht systematisch gegenübergestellt.
 
 ## Konkreter Callora-Handlungsbedarf
 
-Aus der vollständigen Fünferreihe folgen zwei Produktkorrekturen und zwei
-Absicherungs-/Dokumentationsaufgaben:
+Aus der vollständigen Fünferreihe und der Nachvalidierung folgt noch eine
+Produktkorrektur sowie Test-/Dokumentationsarbeit:
 
 1. Caller-Cancellation während `PhoneLine.DialAsync` muss den bereits intern
    erzeugten beziehungsweise klingelnden Call erreichen und ein SIP-`CANCEL`
    senden. `HangupOnCancellation=true` darf nicht lokal `Canceled` melden,
-   während der Remote-Channel weiterklingelt.
-2. Der mit PR #105 vorgeschlagene `CallTerminationReason` muss interop-grün
-   fertiggestellt werden. Insbesondere darf der Busy-Pfad keinen leeren Reason
-   liefern; 486, 403 und 404 müssen auf der öffentlichen Komfortebene
-   unterscheidbar werden.
-3. Calloras reguläre Interop-CI sollte die beiden Findings dauerhaft sichern:
-   Cancellation muss Wire-`CANCEL` plus null Asterisk-Channels prüfen; ein
-   PBX-Neustart muss State-Verlust, neuen Contact und RTP-Folgeanruf prüfen.
+   während der Remote-Channel weiterklingelt. Die Nachverfolgung zeigt den
+   verbliebenen Bruch vor `PhoneLine`: Der allgemeine Exception-Pfad in
+   `SipCallSignalingService.InviteAsync` räumt bei Token-Cancellation die
+   Session auf; dadurch erreicht der Call `Terminated` ohne Reason, der
+   nachgelagerte `PhoneLine`-Filter überspringt den CANCEL-Pfad.
+2. Calloras reguläre Interop-CI braucht einen L4-Regressionstest, der die
+   Cancellation gegen Asterisk erst nach sichtbarem Ringing auslöst und
+   sowohl Wire-`CANCEL` als auch null aktive Channels prüft. Der
+   Fake-`ICallChannel`-Test aus PR #107 reicht dafür nachweislich nicht.
+3. Der PBX-Restart-/Hold-Block sollte als wiederholbarer Benchmark stabilisiert
+   werden: mehrere Versuche, Zeitreihen für Contact/State, eindeutige
+   Cleanup-Diagnostik und getrennte Setup-/Recovery-Budgets statt eines
+   einzigen harten Fensters.
 4. README und Portal-Dokumentation sollten den bewiesenen Progressive-API-Pfad
    zeigen: Managed Dial plus `ICall` für Hold/Remote-BYE sowie
+   `ICall.TerminationReason` für 486/403/404,
    `IPhoneLine.State`, `LineReconnecting`, `RegistrationExpiry` und
    `ReregisterOptions` für kontrollierbare Recovery. Der
    Cancellation-Cleanup darf erst nach Punkt 1 als Garantie beschrieben
    werden.
 
-Für Hold/Unhold, Remote-Ablehnung mit Wiederverwendung, Remote-BYE und
-automatische PBX-Recovery wurde in diesem Slice kein weiterer
-Callora-Produktfix sichtbar.
+Für Hold/Unhold, Remote-Ablehnung samt Reason, Remote-BYE und automatische
+PBX-Recovery wurde in diesem Slice kein weiterer Callora-Produktfix sichtbar.
