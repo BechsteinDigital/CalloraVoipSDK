@@ -25,6 +25,8 @@ public sealed class BundledVideoRtxRetransmitTests
     // Retention filters on the video stream's send SSRC, so the outbound track and the video track share it.
     private const uint VideoSsrc = 0x0B0B0B0B;
     private const uint RemoteSsrc = 0x0D0D0D0D;
+    // A bundle-wide-distinct repair SSRC as the factory would allocate it (≠ audio/video primary).
+    private const uint BundleRtxSsrc = 0x0C0C0C0C;
 
     private static readonly RtpPacketCodec RtpCodec = new();
 
@@ -62,6 +64,33 @@ public sealed class BundledVideoRtxRetransmitTests
         Assert.Equal(first.SequenceNumber, recovered!.SequenceNumber); // OSN restores the original sequence
         Assert.Equal(VideoPayloadType, recovered.PayloadType);
         Assert.Equal(first.Payload.ToArray(), recovered.Payload.ToArray());
+    }
+
+    [Fact]
+    public async Task The_repair_stream_carries_the_bundle_wide_rtx_ssrc_the_factory_allocated()
+    {
+        // The session factory owns bundle-wide SSRC allocation and hands the track a repair SSRC distinct from
+        // every other outbound SSRC (RFC 4588 §4 / RFC 3550 §8.1). The track must send RTX on exactly that SSRC,
+        // not one it picked itself — so the repair stream is the one the peer expects.
+        var sender = new CapturingSender();
+        var pipeline = Outbound(sender);
+        using var track = VideoTrack(pipeline, remoteSupportsNack: true, rtxPayloadType: RtxPayloadType, rtxSsrc: BundleRtxSsrc);
+
+        await track.SendFrameAsync(new byte[] { 0x10, 0xAA, 0xBB, 0xCC }, rtpTimestamp: 3000);
+        var first = sender.Captured.Select(d => RtpCodec.Decode(d)).First(p => p.PayloadType == VideoPayloadType);
+
+        track.OnRtcpPackets(new RtcpPacket[]
+        {
+            new RtcpGenericNack
+            {
+                SenderSsrc = RemoteSsrc,
+                MediaSsrc = VideoSsrc,
+                Entries = new[] { new RtcpNackEntry { PacketId = first.SequenceNumber, LostPacketBitmask = 0 } },
+            },
+        });
+
+        var repair = Assert.Single(await WaitForRtxAsync(sender, expected: 1));
+        Assert.Equal(BundleRtxSsrc, repair.Ssrc); // the supplied repair SSRC, not a self-picked one
     }
 
     [Fact]
@@ -146,9 +175,9 @@ public sealed class BundledVideoRtxRetransmitTests
     // ── harness ──────────────────────────────────────────────────────────────────
 
     private static BundledVideoTrack VideoTrack(
-        BundledOutboundPipeline pipeline, bool remoteSupportsNack, byte? rtxPayloadType) =>
+        BundledOutboundPipeline pipeline, bool remoteSupportsNack, byte? rtxPayloadType, uint? rtxSsrc = null) =>
         new("video", "VP8", VideoPayloadType, VideoSsrc, remoteSupportsNack, remoteSupportsPli: false,
-            pipeline, reorderWindowDepth: 32, NullLoggerFactory.Instance, rtxPayloadType);
+            pipeline, reorderWindowDepth: 32, NullLoggerFactory.Instance, rtxPayloadType, rtxSsrc);
 
     // A minimal outbound pipeline over the capturing sender with identity SRTP/SRTCP contexts installed so the
     // RTP sends (and the RTX resend) go through the fail-closed protect path and the captured datagram is the
