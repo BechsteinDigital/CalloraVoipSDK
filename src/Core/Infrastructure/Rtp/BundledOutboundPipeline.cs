@@ -27,7 +27,15 @@ internal sealed class BundledOutboundPipeline
     private readonly ConcurrentDictionary<BundledOutboundTrackKey, BundledOutboundTrack> _tracks = new();
     private readonly IRtpPacketCodec _codec;
     private readonly IBundledDatagramSender _sender;
+    private readonly bool _stampsTransportCc;
     private readonly ILogger<BundledOutboundPipeline> _logger;
+
+    // The transport-wide-cc sequence counter (transport-cc / RFC 8888): a SINGLE monotonic counter shared
+    // across every track on this bundled transport, since transport-cc numbers the whole transport, not a
+    // per-stream stream. -1 before the first stamped send so the first packet takes sequence 0. Advanced with
+    // Interlocked because concurrent sends on different tracks share it. Only used when transport-cc was
+    // negotiated (_stampsTransportCc); otherwise no extension is stamped and the wire bytes are unchanged.
+    private int _transportCcSequence = -1;
 
     private ISrtpContext? _outboundSrtp;
     private ISrtcpContext? _outboundSrtcp;
@@ -40,14 +48,24 @@ internal sealed class BundledOutboundPipeline
     /// <summary>Raised after a packet has actually been sent, so an RTX buffer (RFC 4588) can retain it.</summary>
     public event Action<RtpPacket>? PacketSent;
 
+    /// <param name="codec">Encodes each built RTP packet before SRTP protection.</param>
+    /// <param name="sender">The shared 5-tuple send seam (B3).</param>
+    /// <param name="logger">Logger.</param>
+    /// <param name="stampsTransportCc">
+    /// Whether outgoing media packets carry a transport-wide-cc sequence number (transport-cc / RFC 8888): true
+    /// only when the <c>a=extmap</c> for the transport-wide extension was negotiated on the bundle. When false
+    /// no counter is advanced and the wire bytes are byte-identical to before (the tracks stamp MID/RID only).
+    /// </param>
     public BundledOutboundPipeline(
         IRtpPacketCodec codec,
         IBundledDatagramSender sender,
-        ILogger<BundledOutboundPipeline> logger)
+        ILogger<BundledOutboundPipeline> logger,
+        bool stampsTransportCc = false)
     {
         _codec  = codec  ?? throw new ArgumentNullException(nameof(codec));
         _sender = sender ?? throw new ArgumentNullException(nameof(sender));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _stampsTransportCc = stampsTransportCc;
     }
 
     /// <summary>Sends suppressed because no outbound SRTP context was installed yet (fail-closed).</summary>
@@ -283,7 +301,16 @@ internal sealed class BundledOutboundPipeline
             return;
         }
 
-        var packet = track.BuildPacket(payload, marker, payloadType, timestampOverride, advanceTimestamp);
+        // Allocate the transport-wide-cc sequence number (transport-cc / RFC 8888) for this packet from the one
+        // shared counter — only when negotiated, and only after the fail-closed check so a suppressed send does
+        // not consume a number (a hole in the transport-wide sequence would look like loss to the peer's
+        // congestion estimator). RTX repair packets are deliberately never numbered here (SendRtxAsync bypasses
+        // this path), matching the single-stream reference where only primary media carries the extension.
+        ushort? transportCcSequence = _stampsTransportCc
+            ? unchecked((ushort)Interlocked.Increment(ref _transportCcSequence))
+            : null;
+
+        var packet = track.BuildPacket(payload, marker, payloadType, timestampOverride, advanceTimestamp, transportCcSequence);
         var datagram = _codec.Encode(packet);
 
         try

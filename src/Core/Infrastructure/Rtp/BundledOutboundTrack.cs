@@ -173,12 +173,19 @@ internal sealed class BundledOutboundTrack
     /// Whether to advance the timestamp cursor by one packet's samples afterwards. Media frames advance;
     /// packets carrying an explicit timestamp (a shared video frame timestamp) do not.
     /// </param>
+    /// <param name="transportCcSequence">
+    /// The transport-wide sequence number (transport-cc / RFC 8888) to stamp on this packet, or
+    /// <see langword="null"/> when the extension was not negotiated. It is a single counter shared across
+    /// every track on the bundled transport (transport-cc is transport-wide, not per-stream), so the caller
+    /// — <see cref="BundledOutboundPipeline"/> — allocates it, not the per-track cursor here.
+    /// </param>
     public RtpPacket BuildPacket(
         ReadOnlyMemory<byte> payload,
         bool marker,
         byte payloadType,
         uint? timestampOverride,
-        bool advanceTimestamp)
+        bool advanceTimestamp,
+        ushort? transportCcSequence = null)
     {
         lock (_sendSync)
         {
@@ -197,9 +204,10 @@ internal sealed class BundledOutboundTrack
                 Timestamp       = timestamp,
                 Ssrc            = _ssrc,
                 Payload         = payload,
-                // Stamp MID (and, once wired, transport-cc) before SRTP: RFC 3711 authenticates but does
-                // not encrypt the header extension, so the peer reads the MID in the clear to demux.
-                HeaderExtension = _stamper.Build(transportCcSequence: null),
+                // Stamp MID (and, when negotiated, the transport-wide-cc sequence) before SRTP: RFC 3711
+                // authenticates but does not encrypt the header extension, so the peer reads the MID in the
+                // clear to demux and the transport-wide sequence to build congestion feedback.
+                HeaderExtension = _stamper.Build(transportCcSequence),
             };
         }
     }
