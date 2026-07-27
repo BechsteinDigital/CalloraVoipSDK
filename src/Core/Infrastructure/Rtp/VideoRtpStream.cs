@@ -99,8 +99,9 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
     private readonly VideoReorderBuffer? _reorderBuffer;
 
     // Arrival-order tracking, for fast NACK/PLI loss signalling (RFC 4585).
-    private ushort _lastSequence;
-    private bool _hasReceived;
+    // Arrival-order loss detection (RFC 4585): classifies forward gaps as loss and reorders/duplicates as
+    // benign, tracking the highest sequence seen so a reorder does not trigger a spurious NACK/PLI cascade.
+    private readonly VideoArrivalLossTracker _arrivalLoss = new();
 
     // Delivery-order tracking, for release-order discontinuity → depacketiser reset.
     private ushort _lastDeliveredSequence;
@@ -396,15 +397,12 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
 
         _remoteMediaSsrc = packet.Ssrc;
 
-        // Arrival-order loss signalling (RFC 4585): on a genuine forward gap request retransmit
-        // at once — before the reorder window can slide past it — and request a keyframe. A
-        // reorder or duplicate is not loss (LossReport returns null): the reorder window corrects
-        // it downstream, so it raises neither a NACK nor a PLI. Ordered delivery and the
-        // depacketiser reset are handled downstream, not here.
-        if (_hasReceived && LossReport(_lastSequence, packet.SequenceNumber) is { } missing)
+        // Arrival-order loss signalling (RFC 4585): on a genuine forward gap request retransmit at once —
+        // before the reorder window can slide past it — and request a keyframe. A reorder or duplicate is not
+        // loss (Track returns null): the reorder window corrects it downstream, so it raises neither a NACK nor
+        // a PLI. Ordered delivery and the depacketiser reset are handled downstream, not here.
+        if (_arrivalLoss.Track(packet.SequenceNumber) is { } missing)
             _keyFrameFeedback.OnLoss(packet.Ssrc, missing);
-        _lastSequence = packet.SequenceNumber;
-        _hasReceived = true;
 
         // Report the arrival to transport-cc congestion control (a no-op when the extension was not
         // negotiated). Runs on this receive-loop thread — the sender's single consumer.
@@ -521,43 +519,4 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
         _sendSync.Dispose();
         _lifetimeCts.Dispose();
     }
-
-    // Beyond this many missing packets a NACK is pointless — the loss is better recovered
-    // with a keyframe (PLI), so we stop enumerating and let the throttled PLI carry it.
-    private const int MaxEnumeratedLoss = 256;
-
-    // A backward sequence step (a reorder) wraps the forward distance to at least this value;
-    // treated as reordering, not loss. Half the 16-bit space is the reorder/loss boundary.
-    private const int ReorderBoundary = 0x8000;
-
-    /// <summary>
-    /// Classifies a newly arrived sequence number against the last one for loss reporting:
-    /// <list type="bullet">
-    /// <item><see langword="null"/> — in-order, a duplicate, or a reorder (a backward step is
-    /// not loss): nothing to report.</item>
-    /// <item>empty — a forward loss burst larger than <see cref="MaxEnumeratedLoss"/>: report as
-    /// a PLI only (naming every packet in a NACK is pointless; a keyframe recovers faster).</item>
-    /// <item>a list — the missing sequence numbers of a small forward gap: NACK them (plus PLI).</item>
-    /// </list>
-    /// Suppressing the reorder case is what stops a reordered packet from provoking a spurious
-    /// NACK and keyframe request now that the reorder window corrects reordering downstream.
-    /// A forward loss burst of at least half the sequence space (≥ <see cref="ReorderBoundary"/>)
-    /// is indistinguishable from a backward step under 16-bit serial-number arithmetic and is
-    /// therefore treated as a reorder — a pathological case that never arises in a live stream.
-    /// </summary>
-    internal static IReadOnlyList<ushort>? LossReport(ushort last, ushort current)
-    {
-        var gap = (ushort)(current - last); // forward distance; a reorder wraps to a large value
-        if (gap < 2 || gap >= ReorderBoundary)
-            return null; // in-order (1), duplicate (0), or reorder (backward step)
-
-        if (gap > MaxEnumeratedLoss)
-            return Array.Empty<ushort>(); // forward loss too large to enumerate → PLI only
-
-        var missing = new ushort[gap - 1];
-        for (var i = 0; i < missing.Length; i++)
-            missing[i] = (ushort)(last + i + 1);
-        return missing;
-    }
-
 }
