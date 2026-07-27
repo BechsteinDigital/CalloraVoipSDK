@@ -32,8 +32,9 @@ statt ihn an eine fremde Bibliothek, eine Cloud-CPaaS-API oder eine Blackbox-PBX
 
 Der kommerzielle Wert liegt in genau dieser **Souveränität**:
 
-- **Kontrolle** — voller Zugriff auf Signaling, Medienpfad und Call-Lifecycle statt
-  auf eine gekapselte High-Level-API.
+- **Kontrolle ohne Zwang zur Komplexität** — fertige Workflows für den Einstieg und
+  öffentliche, typisierte Call-, Medien- und Erweiterungsverträge für Produktlogik,
+  die tiefer gehen muss.
 - **Privacy / EU** — self-hostbar; Gesprächsdaten und Medien müssen weder eine fremde
   Cloud noch eine außereuropäische Jurisdiktion durchlaufen. Das ist der Aufhänger der
   „your data stays yours"-Positionierung (siehe auch [ADR-008](../../adr/ADR-008-community-module-store.md),
@@ -105,7 +106,32 @@ transport-only-Video, WebRTC-Browser-Interop) stehen detailliert in der
 [Fähigkeiten- und Reifegrad-Matrix](../technical/capabilities-matrix.md). Diese
 Positionierungsseite ersetzt diese Matrix nicht und behauptet keinen höheren Reifegrad.
 
-### 4.2 Differenzierungsmodule — **Vision, nicht gebaut**
+### 4.2 Progressive API — Komfort und kontrollierte Tiefe (gebaut)
+
+Der Core ist nicht nur eine gekapselte High-Level-API. Er stellt drei miteinander
+kombinierbare Nutzungstiefen bereit:
+
+| Nutzungstiefe | Öffentliche Oberfläche | Produktnutzen |
+|---------------|-------------------------|---------------|
+| **Managed Workflows** | `ConnectAsync`, `DialAndWaitUntilConnectedAsync`, Default-Audio, Playback, Recording | wenig Integrationscode für Standardabläufe |
+| **Typisierte Call-Steuerung** | `IPhoneLine`, `ICall`, Transfer, DTMF, In-Dialog-Aktionen, ausgehandelte Medien-, Quality- und ICE-Zustände, ausgehende Custom-Header | eigene Routing-, Kampagnen- und Contact-Center-Logik |
+| **Medien- und Extension-Seams** | `IMediaReceiver`, `IMediaSender`, `MediaConnector`, eigene Audio-Devices und Telemetrie-Sinks, `ModuleRegistry` | Bots, STT/TTS, Medienrouting, Observability und separate Module |
+
+Die Ebenen schließen einander nicht aus: Ein Produkt kann den komfortablen Dial-Workflow
+nutzen und nur für einzelne Calls einen Media-Tap oder tiefere Call-Steuerung ergänzen.
+Das ist die belegbare Differenzierung: **einfache Dinge bleiben einfach, anspruchsvolle
+Produktlogik bleibt möglich, ohne die SDK zu ersetzen.**
+
+Die Grenze ist ebenfalls Teil der Positionierung. Öffentliche Call-, Medien- und
+Extension-Verträge sind unterstützt; interne Transport-, Parser- und Wire-Typen werden
+nicht als beliebig manipulierbare Low-Level-API exponiert. Der aktuelle Asterisk-Nachweis
+belegt die Kombination aus High-Level-Workflow, `ICall`, Media-Tap/-Injection und Bridge,
+nicht jedoch einen vollständigen Escape-Hatch-Vergleich gegen Ozeki oder SIPSorcery.
+Technische Details:
+[Progressive API](../../portal/concepts/progressive-api.md) und
+[Fähigkeiten-Matrix, Abschnitt 12](../technical/capabilities-matrix.md#12-öffentliche-api--facade).
+
+### 4.3 Differenzierungsmodule — **Vision, nicht gebaut**
 
 > **Wichtiger Due-Diligence-Hinweis:** Die vier Differenzierungsmodule sind **strategisches
 > Zielbild (Vision), kein vorhandenes Produkt.** Es existiert **kein `src/`-Projekt** für sie.
@@ -132,7 +158,7 @@ selbst ebenfalls **noch nicht gebaut** ist.
 Reihenfolge und Zeithorizont der Vision-Ebene: siehe [Roadmap](roadmap.md).
 Kommerzielle Verpackung (Tiers, Add-ons, White-Label): siehe [Lizenzmodell](licensing-model.md).
 
-### 4.3 Plattform-Richtung (Vision)
+### 4.4 Plattform-Richtung (Vision)
 
 Über SDK und Module hinaus ist eine **host-zentrierte Plattform** vorgezeichnet: schlanke
 OSS-Engine + kommerzielle Host-/SaaS-Schicht (Tenants, Entitlements, Plugin-Lifecycle) +
@@ -164,8 +190,10 @@ Feature-für-Feature-Parität. Die belegbare Feature-Abdeckung steht in der
 Der Unterschied zu Cloud-CPaaS-APIs und zu SDKs, die auf einem Fremd-Stack aufsetzen,
 ist der **eigene, souveräne Stack**:
 
-- **Kontrolle** — Signaling und Medienpfad liegen beim Kunden, nicht hinter einer
-  gekapselten Fremd-API. Anpassungen bis auf Protokollebene sind möglich.
+- **Kontrolle** — Signaling und Medienpfad laufen im eigenen Prozess. Der öffentliche
+  Vertrag reicht von Managed Workflows über typisierte Call-Steuerung bis zu codierten
+  Media-Taps und Extension-Seams. Beliebige Wire-Manipulation ist keine öffentliche
+  SDK-Zusage und würde eine Core-Erweiterung erfordern.
 - **Privacy** — self-hostbar; keine erzwungene Weitergabe von Gesprächsdaten an eine
   fremde Cloud. Das ist die harte Grundlage der Privacy-Positionierung — und der Grund,
   warum die (noch zu bauenden) Privacy-/Intelligence-Module gerade *hier* Wert schöpfen
@@ -177,8 +205,9 @@ ist der **eigene, souveräne Stack**:
 - **Unabhängigkeit** — keine Per-Minute-Abrechnung im Medienpfad, kein Vendor-Lock-in
   auf einen Cloud-Anbieter oder einen fremden SIP-Stack.
 
-Kurzfassung: **Fremd-SDK / CPaaS = Bequemlichkeit gegen Kontrolle. CalloraVoipSdk =
-Kontrolle, Privacy und EU-Souveränität als Produktkern.** Für die adressierten Zielkunden
+Kurzfassung: **Cloud-CPaaS tauscht häufig Bequemlichkeit gegen Kontrolle.
+CalloraVoipSdk verbindet einen bequemen Happy Path mit kontrollierter technischer Tiefe,
+Privacy und EU-Souveränität als Produktkern.** Für die adressierten Zielkunden
 (regulierte Branchen, Voice-AI mit Datenschutzdruck, OEMs, die keinen Lock-in wollen) ist
 das der entscheidende Hebel.
 
