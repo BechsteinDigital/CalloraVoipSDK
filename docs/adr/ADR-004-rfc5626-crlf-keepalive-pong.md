@@ -1,8 +1,8 @@
 # ADR-004: RFC 5626 §4.4.1 – CRLF Keepalive Pong on Stream Transports
 
-**Status:** Accepted  
-**Date:** 2026-04-09  
-**RFC reference:** RFC 5626 §4.4.1 (CRLF Keep-Alive Mechanism)
+Status: Accepted
+Date: 2026-04-09
+RFC reference: RFC 5626 §4.4.1 (CRLF Keep-Alive Mechanism)
 
 ---
 

@@ -1,9 +1,9 @@
 # ADR-006: API Versioning and Compatibility Strategy
 
-- Status: Accepted
-- Date: 2026-04-14
-- Owners: Core SDK Team
-- Related: CORE-114, CORE-215
+Status: Accepted
+Date: 2026-04-14
+Owners: Core SDK Team
+Related: CORE-114, CORE-215
 
 ## Context
 
@@ -28,8 +28,9 @@ Breaking changes after adoption must be intentional, documented and detectable b
 - Removal of obsolete API increments `MAJOR` (after `1.0`).
 
 4. API surface gate
-- `PublicApiSurfaceTests` compares the current API against `tests/CalloraVoipSdk.Core.Tests/PublicApi.approved.txt`.
-- Any public API change requires explicit baseline update in the same PR.
+- Intent: any public API change is detectable before merge and requires an explicit, reviewed baseline update in the same PR.
+- **NOT IMPLEMENTED as originally specified (verified 2026-07-27):** the originally-decided `PublicApiSurfaceTests` diff against a `PublicApi.approved.txt` baseline was never built — neither the test, the baseline file, nor a `CalloraVoipSdk.Core.Tests` project exist in the tree. See Errata.
+- Actually enforced governance today: the `CalloraVoipSdk.ArchitectureTests` suite (`EngineeringRulesTests` + `SourceScan`, shrink-only baselines, run as a dedicated CI step before the main suite). This enforces the engineering rules (layering, file size, silent-catch, sync-over-async) — it is **not** an API-surface diff. Public API changes are currently governed by review + `[Obsolete]` discipline + CHANGELOG, not by an automated surface gate.
 
 5. Changelog discipline
 - `CHANGELOG.md` is mandatory for consumer-visible changes.
@@ -40,3 +41,12 @@ Breaking changes after adoption must be intentional, documented and detectable b
 - API drift is visible immediately in tests and code review.
 - Additive changes stay possible, but are explicit.
 - Existing consumers get predictable migration windows via `[Obsolete]` before removals.
+
+## Errata (2026-07-27)
+
+During the docs consolidation / ADR backfill, §4's claimed automated API-surface gate
+(`PublicApiSurfaceTests` vs. `PublicApi.approved.txt`) was verified against the code and found
+**not implemented** (no such test, baseline, or `CalloraVoipSdk.Core.Tests` project). The
+decision's *intent* stands, but the enforcement described was aspirational. §4 has been corrected
+to state the actual governance (review + `[Obsolete]` + CHANGELOG; `ArchitectureTests` for
+engineering-rule gates). Building a real public-API-surface gate remains open follow-up work.

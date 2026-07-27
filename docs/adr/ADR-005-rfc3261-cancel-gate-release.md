@@ -1,8 +1,8 @@
 # ADR-005: RFC 3261 §9.1 – Release Operation Gate Before INVITE Transaction
 
-**Status:** Accepted  
-**Date:** 2026-04-09  
-**RFC reference:** RFC 3261 §9.1 (Canceling a Request – UAC Behavior)
+Status: Accepted
+Date: 2026-04-09
+RFC reference: RFC 3261 §9.1 (Canceling a Request – UAC Behavior)
 
 ---
 
