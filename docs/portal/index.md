@@ -69,6 +69,17 @@ self-hostable STUN/TURN server on top of the stable SIP + RTP core.
 | ICE for NAT traversal (RFC 8445/7675: role + tie-breaker, check-list FSM, nomination, inbound/triggered checks, consent freshness, restart) | 🧪 Preview — opt-in, unproven in production |
 | Backend/API for signed plugin marketplace + tenant entitlements | 📋 Roadmap |
 
+## Choose your integration depth
+
+CalloraVoipSdk uses a progressive API. Start with managed workflows for registration,
+dialing, default audio, playback and recording. When the product needs more control, the
+same call remains available through typed `IPhoneLine`/`ICall` contracts, encoded media
+receivers/senders, cross-connect, custom devices, telemetry and modules.
+
+The boundary is deliberate: supported call, media and extension seams are public, while
+transport/parser implementation types and arbitrary wire mutation remain internal.
+[Choose the right depth →](concepts/progressive-api.md)
+
 ## SDK Structure
 
 **CalloraVoipSdk.Core** — Sovereign calling foundation
@@ -121,4 +132,4 @@ await client.AttachDefaultAudioAsync(dialResult.Call);
 await dialResult.Call.HangupAsync();
 ```
 
-[→ Getting Started](getting-started/install.md) · [Core Concepts](concepts/voipclient.md) · [Guides](guides/making-calls.md) · [Interop](interop/matrix.md) · [Production](production/lifecycle-dispose.md)
+[→ Getting Started](getting-started/install.md) · [Progressive API](concepts/progressive-api.md) · [Core Concepts](concepts/voipclient.md) · [Guides](guides/making-calls.md) · [Interop](interop/matrix.md) · [Production](production/lifecycle-dispose.md)
