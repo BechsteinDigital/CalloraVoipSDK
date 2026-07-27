@@ -8,7 +8,10 @@ using DomainSipTransport = CalloraVoipSdk.Core.Domain.Lines.SipTransport;
 
 namespace CalloraVoipSdk.InteropTests.Pbx;
 
-[Trait("Category", "InteropFreeSwitch")]
+// Category=Interop: sonst entkommt der Test dem Haupt-CI-Job-Filter (Category!=Interop) und läuft
+// im Nicht-Docker-Job (Windows/Ubuntu, keine FreeSWITCH-Images) → ImageNotFound. InteropFreeSwitch
+// hält ihn zusätzlich aus dem dedizierten Interop-Job (lokal-first). Konsistent mit den Matrix-Subklassen.
+[Trait("Category", "Interop"), Trait("Category", "InteropFreeSwitch")]
 public sealed class FreeSwitchPbxFixtureTests
 {
     [DockerRequiredFact]
