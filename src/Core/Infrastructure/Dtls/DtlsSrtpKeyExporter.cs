@@ -28,7 +28,7 @@ internal static class DtlsSrtpKeyExporter
 
         var suite = DtlsSrtpProfiles.ToCryptoSuite(protectionProfile);
         var keyLength = SrtpCryptoSuiteNames.KeyLength(suite);
-        const int saltLength = SrtpCryptoSuiteNames.SaltLength;
+        var saltLength = SrtpCryptoSuiteNames.SaltLength(suite); // 14 for AES-CM, 12 for AEAD-GCM (RFC 7714)
 
         // RFC 5764 §4.2: 2 * (SRTPSecurityParams.master_key_len + master_salt_len).
         var material = context.ExportKeyingMaterial(

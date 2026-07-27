@@ -30,4 +30,16 @@ internal enum SrtpCryptoSuite
     /// 256-bit master key, 112-bit master salt (RFC 6188).
     /// </summary>
     AesCm256HmacSha1_32,
+
+    /// <summary>
+    /// AEAD AES-128 in Galois/Counter Mode (RFC 7714). 128-bit master key, <b>96-bit</b> master salt,
+    /// intrinsic 128-bit authentication tag — no separate HMAC key. DTLS-SRTP protection profile 0x0007.
+    /// </summary>
+    AeadAes128Gcm,
+
+    /// <summary>
+    /// AEAD AES-256 in Galois/Counter Mode (RFC 7714). 256-bit master key, <b>96-bit</b> master salt,
+    /// intrinsic 128-bit authentication tag. DTLS-SRTP protection profile 0x0008.
+    /// </summary>
+    AeadAes256Gcm,
 }
