@@ -21,11 +21,16 @@ namespace CalloraVoipSdk.Core.IntegrationTests;
 /// </summary>
 public sealed class TurnRelayKeepAliveE2eTests
 {
-    // Short server lifetimes so refresh cadence (lifetime/2 = 1 s) and expiry happen within a few seconds.
-    private const uint LifetimeSeconds = 2;
-    private static readonly TimeSpan PastOneLifetimeWithKeepalive = TimeSpan.FromSeconds(3);  // > lifetime, ~3 refreshes
-    private static readonly TimeSpan WellPastExpiryNoKeepalive = TimeSpan.FromSeconds(5);     // >> lifetime + sweep
-    private static readonly TimeSpan RelayTimeout = TimeSpan.FromSeconds(3);
+    // Short server lifetimes so the refresh cadence (lifetime/2 = 2 s) and expiry happen within a handful of seconds.
+    // The margins are deliberately ~2 s (not the earlier ~1 s): this is a real wall-clock E2E in the PR-CI gate, where
+    // many test assemblies run in parallel across TFMs. Thread-pool starvation / GC pauses can delay a Task.Delay
+    // continuation or a refresh round-trip by 1 s+, which under the earlier 2 s-lifetime/1 s-cadence would slip a
+    // refresh past the sweep and drop the final datagram (observed flake on net9.0 only, 1/1516). A ~2 s headroom
+    // between refresh and expiry absorbs that jitter while keeping the two tests to a handful of seconds.
+    private const uint LifetimeSeconds = 4;
+    private static readonly TimeSpan PastOneLifetimeWithKeepalive = TimeSpan.FromSeconds(6);  // > lifetime, ~3 refreshes
+    private static readonly TimeSpan WellPastExpiryNoKeepalive = TimeSpan.FromSeconds(9);     // >> lifetime + sweep
+    private static readonly TimeSpan RelayTimeout = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan DropWindow = TimeSpan.FromMilliseconds(800);
 
     private static TurnServer CreateShortLifetimeServer(StunMessageCodec codec)
@@ -97,7 +102,7 @@ public sealed class TurnRelayKeepAliveE2eTests
             finally { gate.Release(); }
         }
 
-        // Real loops, real cadence (lifetime/2 = 1 s), real server. No injected clock.
+        // Real loops, real cadence (lifetime/2 = 2 s), real server. No injected clock.
         await using var allocationLoop = new TurnAllocationRefreshLoop(
             async (_, lifetime, ct) =>
                 new TurnRefreshResult { LifetimeSeconds = await Gated(() => client.RefreshAsync(lifetime, ct)) },
