@@ -154,6 +154,31 @@ internal sealed class SdkConvenienceOrchestrator : IDisposable
         {
             call = await line.DialAsync(targetUri, dialOptions, linkedCts.Token).ConfigureAwait(false);
 
+            // Caller cancellation during a ringing dial no longer surfaces as a rethrow: DialAsync now
+            // sends the CANCEL itself (RFC 3261 §9.1) and returns the terminated call. Map that to
+            // Canceled here — otherwise the returned Terminated state below would mis-map to Failed
+            // (F009). The call handle is surfaced so hangupOnCancellation is a no-op safety net and the
+            // caller can inspect the cancelled call.
+            if (ct.IsCancellationRequested)
+            {
+                if (hangupOnCancellation)
+                    await TryHangupAsync(call).ConfigureAwait(false);
+
+                return new CallConnectOutcome(CallConnectStatus.Canceled, call, call.State, null);
+            }
+
+            // The connect timeout elapsed while the dial was still ringing: DialAsync CANCELled the INVITE
+            // (RFC 3261 §9.1) and returned the terminated call the same way as a caller cancellation. Map it
+            // to Timeout — otherwise the returned Terminated state below mis-maps to Failed (F008). Caller
+            // cancellation (checked above) wins when both the caller token and the timeout fired.
+            if (timeoutCts.IsCancellationRequested)
+            {
+                if (hangupOnTimeout)
+                    await TryHangupAsync(call).ConfigureAwait(false);
+
+                return new CallConnectOutcome(CallConnectStatus.Timeout, call, call.State, null);
+            }
+
             var waiter = new TaskCompletionSource<CallState>(TaskCreationOptions.RunContinuationsAsynchronously);
             EventHandler<CallStateChangedEventArgs> onStateChanged = (_, args) =>
             {

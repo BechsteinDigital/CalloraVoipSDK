@@ -39,7 +39,8 @@ public sealed class SdkConvenienceResultMappingTests
     }
 
     // F009: caller cancellation → Canceled even when the dial surfaces a non-OperationCanceledException
-    // (as it does when the auto-CANCEL aborts the INVITE and a synthetic SIP failure is raised).
+    // (defensive: an older DialAsync could rethrow a synthetic SIP failure after the auto-CANCEL; the
+    // ct.IsCancellationRequested catch-branch must still win over the Failed fallback).
     [Fact]
     public async Task DialAndWait_CallerCancel_NonOceException_YieldsCanceled()
     {
