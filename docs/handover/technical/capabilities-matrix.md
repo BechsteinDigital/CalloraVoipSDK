@@ -23,10 +23,15 @@ im PR-CI-Interop-Gate, 29 grün inkl. bidirektionaler Zwei-Bein-Media) **und Fre
 Media-Matrix 7/7, DTMF, Hold/Unhold, Attended-Transfer, Concurrent-Soak) besteht auf beiden Stacks;
 identischer Testcode auf zwei Herstellern ist ein starkes **Standard-Konformitätssignal**.
 **Noch aus stehen** die **Breite** gegen weitere Referenz-Stacks (3CX / Fritzbox), die **Aufnahme von
-FreeSWITCH ins PR-CI-Gate** (heute lokal-first, analog `SoakLong`; Asterisk ist im Gate), ein
-durchgängiges **Soak-/Chaos-CI-Gate** sowie **jeglicher WebRTC-/TURN-Nachweis gegen einen realen
-Stack oder Browser** (siehe [ADR-058](../../adr/ADR-058-layered-test-interop-soak-model.md)). Wo ein
-produktionskritischer Interop-Nachweis fehlt, ist das in der Caveat-Spalte ausdrücklich vermerkt.
+FreeSWITCH ins PR-CI-Gate** (heute lokal-first, analog `SoakLong`; Asterisk ist im Gate) sowie ein
+durchgängiges **Soak-/Chaos-CI-Gate** (siehe [ADR-058](../../adr/ADR-058-layered-test-interop-soak-model.md)).
+**Für den WebRTC-/TURN-Pfad gibt es seit 2026-07-27 einen ersten realen Interop-Nachweis:** der
+TURN-Relay-Datenpfad ist gegen einen **echten in-Process-`TurnServer`** über Loopback E2E-belegt, und
+der WebRTC-Kern ist gegen einen **echten Chrome** (Connect + bidir. Audio, lokal-first) validiert (siehe
+[`../../audit/INTEROP_SOAK_AUDIT.md`](../../audit/INTEROP_SOAK_AUDIT.md)). Das ist **kein**
+production-ready-Beleg — Video-Browser-Interop, die Browser-Offerer-Richtung, die CI-Aufnahme und ein
+Nachweis gegen einen externen coturn bleiben offen. Wo ein produktionskritischer Interop-Nachweis fehlt,
+ist das in der Caveat-Spalte ausdrücklich vermerkt.
 
 ### Reifegrad-Stufen
 
@@ -86,7 +91,7 @@ produktionskritischer Interop-Nachweis fehlt, ist das in der Caveat-Spalte ausdr
 | SRTCP-Kontext (Protect/Unprotect, Index, Auth-Tag) | Gebaut & getestet | [ADR-031](../../adr/ADR-031-srtcp-crypto-core-and-rtcp-path-wiring.md); `SrtcpContext` | — |
 | SDES-Keying (RFC 4568 inline), Offer/Answer, Fail-Closed keyless-Reject | Gebaut & getestet | [ADR-025](../../adr/ADR-025-sdes-offer-answer-negotiation.md); `SdpCryptoAttribute`, `SrtpKeyMaterial` | — |
 | SRTP-Kontinuität über Re-INVITE (Hold/Unhold-Key-Stabilität, Peer-Rekey) | Gebaut & getestet | [ADR-027](../../adr/ADR-027-srtp-continuity-reinvite-rekey.md) | — |
-| DTLS-SRTP-Handshake (RFC 5763/5764), Zert-Fingerprint, Keying-Precedence | Gebaut & getestet | [ADR-028](../../adr/ADR-028-dtls-srtp-foundation.md), [ADR-029](../../adr/ADR-029-dtls-srtp-signaling-and-keying-precedence.md), [ADR-030](../../adr/ADR-030-dtls-srtp-media-wiring.md); `DtlsCertificate`, `DtlsSrtpHandshaker` | Kein Browser-Interop-Nachweis des DTLS-Handshakes (s. WebRTC). Per-Context-Key-Zeroing als Follow-up offen. |
+| DTLS-SRTP-Handshake (RFC 5763/5764), Zert-Fingerprint, Keying-Precedence | Gebaut & getestet | [ADR-028](../../adr/ADR-028-dtls-srtp-foundation.md), [ADR-029](../../adr/ADR-029-dtls-srtp-signaling-and-keying-precedence.md), [ADR-030](../../adr/ADR-030-dtls-srtp-media-wiring.md); `DtlsCertificate`, `DtlsSrtpHandshaker` | Der DTLS-SRTP-Handshake ist im **Audio-Browser-Interop-Lauf** gegen einen echten Chrome durchlaufen (s. WebRTC §10, lokal-first); ein **breiter** Browser-Konformitätsnachweis (Firefox, GCM-only-Profile) steht aus. Per-Context-Key-Zeroing als Follow-up offen. |
 
 ## 5. ICE / NAT-Traversal
 
@@ -104,12 +109,13 @@ produktionskritischer Interop-Nachweis fehlt, ist das in der Caveat-Spalte ausdr
 | TURN-Client: Allocate / CreatePermission / ChannelBind / Refresh (RFC 5766/8656) | Gebaut & getestet | [ADR-055](../../adr/ADR-055-turn-control-stack-allocation-permission-keepalive.md); `TurnClient`, `TurnRelayControlClient` | — |
 | TURN-Relay als First-Class-ICE-Kandidat (UDP-Gathering, Send-Path) | Gebaut & getestet | [ADR-054](../../adr/ADR-054-turn-relay-as-ice-candidate.md); `TurnIceRelayAllocator`, `TurnRelayCandidateSendPath`, `TurnAllocationProbe` | Send-Path byte-identisch zu direct, wenn kein relay injiziert. |
 | Allocation-Refresh / Teardown-Keepalive-Loop | Gebaut & getestet | [ADR-055](../../adr/ADR-055-turn-control-stack-allocation-permission-keepalive.md); `TurnAllocationRefreshLoop`, `IRelayKeepAlive` | — |
-| Post-Nomination-Whole-Socket-Relay-Transition (ChannelBind → ChannelData) | Prototyp / ungetestet | [ADR-056](../../adr/ADR-056-post-nomination-whole-socket-relay-transition.md); `BundledMediaTransport.EnterRelayMode`, `SetRelayChannel` | Transport-Primitive + Orchestrierung einzeln getestet; **kein voller Session-ChannelData-Roundtrip in einem schnellen Test** (Relay-Nominierung über echten Socket ist timeout-gebunden). **Kein Real-Server-E2E, kein Browser-Interop → kein Production-Ready-Claim.** Re-Nomination relay→direct nach Commit ist *geschlossen*, nicht sauber re-transitioniert. |
+| Post-Nomination-Whole-Socket-Relay-Transition (ChannelBind → ChannelData) | Prototyp / ungetestet | [ADR-056](../../adr/ADR-056-post-nomination-whole-socket-relay-transition.md); `BundledMediaTransport.EnterRelayMode`, `SetRelayChannel` | Transport-Primitive + Orchestrierung einzeln getestet; **kein voller Session-ChannelData-Roundtrip in einem schnellen Test** (Relay-Nominierung über echten Socket ist timeout-gebunden). Der **Relay-Control-/Datenpfad selbst** (Allocation/Permission/ChannelBind/Keepalive/ChannelData) ist inzwischen gegen einen echten in-Process-`TurnServer` E2E-belegt (s. u.); **kein externer-coturn-E2E, kein TURN-über-Browser-Call → kein Production-Ready-Claim.** Re-Nomination relay→direct nach Commit ist *geschlossen*, nicht sauber re-transitioniert. |
 | Controlled-Agent-Relay (Answerer besitzt den Relay) | Nicht gebaut | [ADR-054](../../adr/ADR-054-turn-relay-as-ice-candidate.md) „Controlled-agent relay gap" | Nur der **controlling** Agent treibt Nomination + installiert Relay-Permissions. Offerer-relay ↔ Answerer-direct **funktioniert**; Answerer-besitzt-Relay bei direktem Offerer **nicht** — braucht Design, nicht gebaut. |
 | TCP/TLS-TURN **Control**-Pfad (Allocate/Refresh) | Gebaut & getestet | [ADR-060](../../adr/ADR-060-webrtc-facade-completion-and-server-hosting.md); `TurnClient` über Stream-Transport | E2E gegen Stream-Transport-`TurnServer` belegt (Control). |
 | TCP/TLS-TURN **relay-DATA**-Pfad (Media über Stream-Relay) | Nicht gebaut | SESSION_HANDOFF „großes Feature, Design-Runde nötig" | Media fließt durch **keine** TCP/TLS-TURN-Verbindung. Braucht persistenten Stream-Relay-Transport (ChannelData-Framing + eigener Receive-Loop) parallel zum UDP-Socket. WebRTC-`TurnAllocationProbe` ist UDP-gebunden → TCP/TLS-Relay-Gathering fehlt ganz. |
 | RFC 6062 `TurnTcpDataConnection` (öffentliche `ITurnClient`-API) | Teilweise | `TurnTcpDataConnection`, `OpenTcpDataConnectionAsync` | Öffentliche Capability vorhanden, aber **kein VoIP-Media-Use-Case** (relayt TCP-Daten, nicht UDP-Media). |
-| Voll-E2E-Relay gegen echten `TurnServer` (Wire-ChannelData-Roundtrip) | Nicht gebaut | SESSION_HANDOFF „4d-6 offen" | Steht aus; jede Slice bisher nur gegen Fake-TURN getestet. |
+| Relay-Datenpfad gegen echten in-Process-`TurnServer` (Loopback) | Gebaut & getestet | [`../../audit/INTEROP_SOAK_AUDIT.md`](../../audit/INTEROP_SOAK_AUDIT.md); `TurnServerE2eTests`, `TurnPublicRelayAddressTests`, `TurnServerIndicationAuthE2eTests`, `TurnRelayKeepAliveE2eTests` | Vier reale-Server-E2E-Tests: Allocation/Relay, Public-Relay-Address, Indication-Auth, Keepalive/Refresh past Lifetime + ChannelData-Zustellung (CF-003, „closes the only-fake-server-coverage gap"). Schließt die frühere „nur-Fake-Server"-Lücke. |
+| Voll-E2E-Relay gegen **externen** Produktions-TURN-Server (coturn) + TURN-über-Browser-Call | Nicht gebaut | SESSION_HANDOFF „4d-6 offen"; [`../../audit/INTEROP_SOAK_AUDIT.md`](../../audit/INTEROP_SOAK_AUDIT.md) | Steht aus: der reale-Server-E2E oben läuft gegen den **eigenen** in-Process-`TurnServer`; ein Nachweis gegen einen externen `coturn` und ein TURN-durchquerender Browser-Call fehlen (Browser-E2E lief host-only ohne STUN/TURN). |
 
 ## 7. Video-Media-Pfad
 
@@ -151,7 +157,7 @@ produktionskritischer Interop-Nachweis fehlt, ist das in der Caveat-Spalte ausdr
 | Fluente ICE-Server-Konfiguration (STUN/TURN) | Gebaut & getestet | [ADR-060](../../adr/ADR-060-webrtc-facade-completion-and-server-hosting.md); `CalloraWebRtcBuilder.WithStunServer/WithTurnServer/WithIceServers` | — |
 | Send-Side-Simulcast | Gebaut & getestet | [ADR-060](../../adr/ADR-060-webrtc-facade-completion-and-server-hosting.md); `BundledVideoTrack`-Simulcast | Siehe Video: recv-side Demux fehlt. |
 | SDK↔SDK-Peer-Loopback (BUNDLE, DTLS-SRTP, ICE) | Gebaut & getestet | [ADR-009](../../adr/ADR-009-webrtc-browser-peer-roadmap.md); `WebRtcPeerLoopbackTests` | — |
-| **Browser-Interop (SDK ↔ echter Browser)** | Nicht gebaut | [ADR-009](../../adr/ADR-009-webrtc-browser-peer-roadmap.md) Consequences | **Kein Browser-Interop-Nachweis.** ADR-009 wörtlich: „‚Reif' heißt Code + Tests, **nicht browser-validiert**; die Interop-Validierung bleibt Pflicht vor jedem Produktions-Claim." Bewiesen ist nur SDK↔SDK. |
+| **Browser-Interop (SDK ↔ echter Browser) — Audio, SDK-Offerer** | Teilweise | [`../../audit/INTEROP_SOAK_AUDIT.md`](../../audit/INTEROP_SOAK_AUDIT.md) (Coverage-Notiz Paket 1); `tests/CalloraVoipSdk.BrowserInteropTests` (Playwright/headless Chromium); [ADR-009](../../adr/ADR-009-webrtc-browser-peer-roadmap.md) | **Audio-Browser-Interop bewiesen (lokal-first):** SDK-Offerer ↔ echter Chrome-Answerer, volle Kette Signaling→ICE→DTLS→SRTP, **bidir. Opus-Audio** (Echo-Muster; 3× stabil). Dabei behobener GA-Blocker: SDK löst Chromes `.local`-mDNS-Candidates jetzt auf (RFC 8828). **Grenzen:** nur **Audio** (Video/VP8 offen), nur **SDK-Offerer** (Browser-Offerer offen), Loopback host-only (kein STUN/TURN), Kategorie `BrowserInterop` **aus allen CI-Jobs ausgeschlossen** (noch nicht CI-gated). **Kein production-ready-Claim.** |
 | **SCTP-DataChannels** | Nicht gebaut | [ADR-009](../../adr/ADR-009-webrtc-browser-peer-roadmap.md) „späterer Slice" | Kein Produktionstyp — nur als späterer Roadmap-Slice vermerkt. |
 
 ## 11. Server-Hosting (TURN / STUN)
@@ -167,6 +173,11 @@ produktionskritischer Interop-Nachweis fehlt, ist das in der Caveat-Spalte ausdr
 | Fähigkeit | Reifegrad | Beleg (ADR / Code) | Einschränkung / Caveat |
 |-----------|-----------|--------------------|------------------------|
 | `VoipClient` / `IVoipClient` (zentrale Runtime-Facade) | Gebaut & getestet | [ADR-006](../../adr/ADR-006-api-versioning-strategy.md); `VoipClient`, `IVoipClient` | — |
+| Managed Workflows (Registrierung, Dial-and-wait, Default-Audio, Playback, Recording) | Gebaut & getestet | `VoipClient.ConnectAsync`, `DialAndWaitUntilConnectedAsync`, `AttachDefaultAudioAsync`; `IMediaManager.StartCallPlaybackAsync/StartCallRecordingAsync`; [Asterisk-Interop-Matrix](../../portal/interop/matrix.md) | Belegt Komfortpfade, nicht automatisch jede tiefere Protokollvariante. |
+| Typisierte Call-Steuerung und Observability | Gebaut & getestet | `IPhoneLine`, `ICall`, `DialOptions`; Hold/Transfer/DTMF/In-Dialog-Aktionen; `MediaParameters`, `RtpStatistics`, `QualitySnapshot`, ICE-Events | Event-Handler laufen auf Signaling-/Media-Threads und dürfen nicht blockieren. Outbound Custom-Header sind unterstützt; inbound siehe offene Lücke unten. |
+| Öffentlicher Media-Tap, Injection und Cross-Connect | Gebaut & getestet | [ADR-059](../../adr/ADR-059-public-media-tap-contract.md); `IMediaReceiver`, `IMediaSender`, `MediaConnector`; [Asterisk-Interop](../../portal/interop/asterisk.md) | Codierte Payloads, kein PCM. Receive-Events sind synchron; Buffering/Backpressure und Codec-(De-)Codierung liegen beim Consumer. |
+| Öffentliche Device-, Telemetrie- und Modul-Seams | Gebaut; Registry getestet | `CalloraBuilder.WithAudioDevice<T>()`, `WithTelemetrySink<T>()`; `IVoipClientModule`, `ModuleRegistry`; `ModuleRegistryTests`; [ADR-007](../../adr/ADR-007-host-centric-platform-split.md) | Die Seams sind gebaut; ein fremder Device-/Telemetry-Adapter ist nicht Teil des Asterisk-Vergleichs. Daraus folgt außerdem kein Nachweis eines konkreten Differenzierungsmoduls. |
+| Progressive API-Grenze | Dokumentiert & architekturgesichert | [Progressive API](../../portal/concepts/progressive-api.md); [ADR-014](../../adr/ADR-014-ddd-layering-gated-baselines.md); DocFX-Filter | Kontrollierte Tiefe statt beliebiger Wire-Manipulation: Parser, Transport und RTP-Implementierungen bleiben intern. |
 | DDD-Layering, gated shrink-only Baselines (Arch-Tests) | Gebaut & getestet | [ADR-014](../../adr/ADR-014-ddd-layering-gated-baselines.md); `EngineeringRulesTests` | — |
 | `ICallRegistry` Domain-Port (DIP) | Gebaut & getestet | [ADR-015](../../adr/ADR-015-icallregistry-domain-port-dip.md) | — |
 | API-Versionierung / Kompatibilitätsstrategie | Gebaut & getestet | [ADR-006](../../adr/ADR-006-api-versioning-strategy.md) | ADR-006 §4 trägt eine dokumentierte Errata (API-Surface-Gate-Prosa wich vom Code ab). |
@@ -188,10 +199,10 @@ produktionskritischer Interop-Nachweis fehlt, ist das in der Caveat-Spalte ausdr
 
 Diese Punkte sind für die Due Diligence besonders relevant und in der Matrix oben belegt:
 
-1. **Kein Browser-Interop-Nachweis.** WebRTC ist SDK↔SDK bewiesen (Loopback + BUNDLE + DTLS-SRTP), aber nie gegen einen echten Browser validiert ([ADR-009](../../adr/ADR-009-webrtc-browser-peer-roadmap.md)). Kein Produktions-Claim.
+1. **Browser-Interop nur Audio + SDK-Offerer bewiesen, nicht production-ready.** Der WebRTC-Kern ist gegen einen **echten Chrome** validiert — SDK-Offerer ↔ Browser-Answerer, Connect + **bidir. Opus-Audio** (lokal-first, `BrowserInterop`, nicht CI-gated); der dabei gefundene mDNS-`.local`-Blocker ist behoben (RFC 8828). **Offen** bleiben Video/VP8-Browser-Interop, die Browser-Offerer-Richtung und die CI-Aufnahme → **kein production-ready/GA-Claim** ([ADR-009](../../adr/ADR-009-webrtc-browser-peer-roadmap.md); [Audit](../../audit/INTEROP_SOAK_AUDIT.md) Coverage-Notizen Paket 1+2).
 2. **Native Video-Codecs = transport-only.** VP8/H.264 werden (de-)packetisiert, aber nicht encodiert/decodiert.
 3. **Recv-side Simulcast-Demux fehlt** — Simulcast ist nur sendeseitig.
-4. **TURN-Relay-Datenpfad ist Prototyp-Stufe:** Post-Nomination-Whole-Socket-Transition ist gebaut, aber ohne Real-Server-E2E; **Controlled-Agent-Relay-Gap** (Answerer-besitzt-Relay nicht gebaut); **kein TCP/TLS-Relay-Datenpfad**.
+4. **TURN-Relay-Datenpfad: Kern real-server-E2E-belegt, Rest offen.** Der Relay-Datenpfad (Allocation/Permission/ChannelBind/Keepalive/ChannelData) ist gegen einen **echten in-Process-`TurnServer`** über Loopback E2E-belegt (vier Tests); **offen** bleiben ein Nachweis gegen einen **externen coturn** + TURN-über-Browser-Call, die Post-Nomination-Whole-Socket-Transition als voller Session-Roundtrip, der **Controlled-Agent-Relay-Gap** (Answerer-besitzt-Relay nicht gebaut) und ein **TCP/TLS-Relay-Datenpfad**.
 5. **ICE-Consent-Freshness/Restart auf dem SIP-Pfad = unverdrahtete Primitive** — RFC-7675-Verhalten wird für SIP-Calls nicht behauptet (nur BUNDLE/WebRTC-Pfad live).
 6. **Inbound/Outbound TWCC im BUNDLE-Pfad nicht verdrahtet** (`transportWideCcExtensionId == null`); Feedback/Estimator existieren.
 7. **Differenzierungsmodule (Privacy/Risk/Intelligence/Policy) sind Vision, nicht gebaut** — kein `src/`-Projekt, nur Portal-/Marketing-Doku.

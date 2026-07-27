@@ -56,6 +56,7 @@ CI-verdrahtet sind drei Kategorien (belegt über Attribut-Vorkommen im `tests/`-
 | `SoakLong` | langer Soak (Stunden/Zyklen) | nightly (`soak.yml`) | 6 |
 | `Interop` | Docker-Fremd-Stack (**Asterisk**) | eigener CI-Job (im PR-CI-Interop-Gate) | 16 |
 | `InteropFreeSwitch` | Docker-Fremd-Stack (**FreeSWITCH**, `safarov/freeswitch:latest`) | lokal-first, **noch nicht** im PR-CI-Gate (analog `SoakLong`) | — |
+| `BrowserInterop` | echter Browser-Peer (**headless Chromium** via Playwright) | lokal-first, **aus allen CI-Jobs ausgeschlossen** (Haupt-Job + Release-Gate je `&Category!=BrowserInterop`) | — |
 
 Die Trait-Zählungen sind die im Quellcode gesetzten `Trait`-Attribute; Theorien expandieren zur
 Laufzeit auf mehr Einzelfälle. Die `Interop`-Suite enthält zusätzlich `[DockerRequiredFact]`-Fakten
@@ -72,7 +73,7 @@ die Aufnahme ins Gate ist ein separater Folge-Schritt, sobald über mehrere CI-L
 
 ## 2. Testprojekte (real vorhanden)
 
-Sieben Testprojekte, alle unter `tests/` verifiziert. Die Zahlen sind Quelldatei- und
+Acht Testprojekte, alle unter `tests/` verifiziert. Die Zahlen sind Quelldatei- und
 Testattribut-Zählungen (`[Fact]`/`[Theory]`/`[DockerRequiredFact]`), ohne `bin/obj`. Sie sind
 **konservative Untergrenzen** der ausgeführten Testfälle, weil Theorien mehrere Fälle je Attribut
 erzeugen — nicht als absolute Gesamt-Testzahl zu lesen.
@@ -85,6 +86,7 @@ erzeugen — nicht als absolute Gesamt-Testzahl zu lesen.
 | `CalloraVoipSdk.SoakTests` | Dauer-/Last-Läufe (`SoakShort`/`SoakLong`), Trend-Asserts | 20 | ~44 | net8/9/10 |
 | `CalloraVoipSdk.InteropTests` | L4-Interop gegen echtes Asterisk **und FreeSWITCH** (Docker/Testcontainers, geteilte `IPbxFixture`) | 21 | ~38 | net8/9/10 |
 | `CalloraVoipSdk.ArchitectureTests` | mechanische Engineering-Gates (siehe §4) | 2 | 7 | net8/9/10 |
+| `CalloraVoipSdk.BrowserInteropTests` | WebRTC-Interop gegen **echten Browser** (Playwright/headless Chromium): SDK-Offerer ↔ Browser-Answerer, Connect + bidir. Audio — Kategorie `BrowserInterop`, **lokal-first, aus allen CI-Jobs ausgeschlossen** | — | — | net10 |
 | `CalloraVoipSdk.InteropHarness` | gemeinsames Fundament (Fixtures, Metrik-Sampler, Audit-Sink) — **kein Testträger** | 20 | 0 | net8/9/10 |
 
 Grobe Kategorien der Abdeckung: das Schwergewicht liegt auf den **in-process-Integrationstests**
@@ -262,9 +264,22 @@ Dokumentationsschicht, kein Gate** — seine Findings brechen den Build nicht.
 
 Die Register führen ihre eigenen Grenzen. Explizit ausgewiesen:
 
-- **Browser-Interop (WebRTC gegen echte Browser)** ist nicht CI-verdrahtet. Der WebRTC-Peer ist
-  signalisierungs-neutral entwickelt und in-process getestet; eine end-to-end-Validierung gegen
-  Chrome/Firefox-Peers ist offen (ADR-009-Roadmap). Kein "production-ready"-Claim für Browser-Peer.
+- **Browser-Interop (WebRTC gegen echten Browser)** ist **erstmals bewiesen, aber lokal-first und
+  nicht CI-gated.** Das Projekt `CalloraVoipSdk.BrowserInteropTests` (Playwright/headless Chromium)
+  zeigt SDK-Offerer ↔ echter Chrome-Answerer, volle Kette Signaling→ICE→DTLS→SRTP, **bidir. Opus-Audio**
+  (Echo-Muster; Assertions: SDK `Connected`, Browser→SDK ≥ 20 Frames, SDK→Browser `bytesReceived>0`;
+  3× stabil, 15–19 s). Dabei fand + behob der Lauf einen echten GA-Blocker (SDK löst Chromes
+  `.local`-mDNS-Candidates jetzt auf statt sie zu droppen, RFC 8828). **Grenzen:** Kategorie
+  `BrowserInterop` **aus allen CI-Jobs ausgeschlossen** (nicht regressions-gated), nur **Audio**
+  (Video/VP8 offen), nur **SDK-Offerer** (Browser-Offerer offen), Loopback host-only (kein STUN/TURN).
+  **Kein "production-ready"-Claim für den Browser-Pfad** — die CI-Aufnahme + Video/Browser-Offerer sind
+  Folge-Slices ([`../../audit/INTEROP_SOAK_AUDIT.md`](../../audit/INTEROP_SOAK_AUDIT.md), Coverage-Notiz
+  Paket 1; ADR-009-Roadmap).
+- **TURN-Relay gegen echten in-Process-Server:** vier reale-Server-E2E-Tests belegen den Relay-Datenpfad
+  über Loopback (`TurnServerE2eTests`, `TurnPublicRelayAddressTests`, `TurnServerIndicationAuthE2eTests`,
+  `TurnRelayKeepAliveE2eTests` inkl. Refresh past Lifetime + ChannelData-Zustellung, CF-003 „closes the
+  only-fake-server-coverage gap"). **Offen** bleibt der Nachweis gegen einen **externen Produktions-TURN-
+  Server** (coturn) und ein TURN-durchquerender Browser-Call (der Browser-E2E lief host-only ohne STUN/TURN).
 - **Akustische Audio-Qualität** wird **nicht** gemessen. Audio wird SDK-seitig via `IMediaSender`
   injiziert (kein Mikrofon, kein Codec-Encode) — die Tests messen den **Transport-/Medienpfad**,
   nicht MOS aus echtem Audio. Opus läuft transport-only (opake Payload).

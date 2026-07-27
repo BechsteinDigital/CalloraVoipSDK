@@ -8,22 +8,25 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace CalloraVoipSdk.Core.IntegrationTests;
 
 /// <summary>
-/// Receive-side transport-cc feedback sender: records stamped inbound arrivals and, once a feedback
-/// interval elapses, builds and sends a decodable transport-cc RTCP report — with a monotonic
-/// feedback counter — while ignoring packets that carry no (or a different) transport-cc extension.
-/// Driven by an injected clock so the interval logic is deterministic.
+/// Receive-side transport-cc feedback sender: records stamped inbound arrivals and, on the periodic flush,
+/// builds and sends a decodable transport-cc RTCP report (with a monotonic feedback counter) while ignoring
+/// packets that carry no (or a different) transport-cc extension. The flush is timer-driven and decoupled from
+/// arrivals (#14 #9: a packet-triggered send never flushes the tail once the stream pauses); the deterministic
+/// report tests drive the flush directly, and a loop test proves the timer flushes without a further packet.
 /// </summary>
 public sealed class TransportCcFeedbackSenderTests
 {
     private const byte ExtId = 5;
-    private const long Frequency = 1_000_000; // arrival ticks are microseconds → interval = 100_000
+    private const long Frequency = 1_000_000; // arrival ticks are microseconds
     private const uint LocalSsrc = 0xAAAA;
     private const uint RemoteSsrc = 0x1234;
 
-    private static TransportCcFeedbackSender Sender(List<byte[]> sent, Func<long> clock) =>
+    private static TransportCcFeedbackSender Sender(
+        List<byte[]> sent, Func<long> clock, ILogger? logger = null,
+        Func<TimeSpan, CancellationToken, Task>? delay = null) =>
         new(new RtcpPacketCodec(), ExtId, LocalSsrc,
             (data, _) => { sent.Add(data.ToArray()); return ValueTask.CompletedTask; },
-            clock, Frequency, NullLogger.Instance, CancellationToken.None);
+            clock, Frequency, logger ?? NullLogger.Instance, CancellationToken.None, delay);
 
     private static RtpPacket Stamped(byte extId, ushort transportSeq, ushort rtpSeq) => new()
     {
@@ -38,17 +41,18 @@ public sealed class TransportCcFeedbackSenderTests
         Assert.IsType<RtcpTransportFeedback>(Assert.Single(new RtcpPacketCodec().Decode(datagram)));
 
     [Fact]
-    public void Sends_a_decodable_report_after_the_interval_but_not_before()
+    public void Records_arrivals_and_sends_a_decodable_report_on_flush()
     {
         var sent = new List<byte[]>();
         long clock = 0;
         var sender = Sender(sent, () => clock);
 
-        clock = 0;       sender.OnVideoPacketReceived(Stamped(ExtId, 100, 1));
-        clock = 50_000;  sender.OnVideoPacketReceived(Stamped(ExtId, 101, 2)); // 50 ms < interval
-        Assert.Empty(sent);
+        clock = 0;      sender.OnRtpPacketReceived(Stamped(ExtId, 100, 1));
+        clock = 50_000; sender.OnRtpPacketReceived(Stamped(ExtId, 101, 2));
+        clock = 100_000; sender.OnRtpPacketReceived(Stamped(ExtId, 102, 3));
+        Assert.Empty(sent); // nothing until a flush
 
-        clock = 150_000; sender.OnVideoPacketReceived(Stamped(ExtId, 102, 3)); // 150 ms ≥ interval
+        sender.FlushForTest();
 
         var feedback = Decode(Assert.Single(sent));
         Assert.Equal(LocalSsrc, feedback.SenderSsrc);
@@ -58,15 +62,25 @@ public sealed class TransportCcFeedbackSenderTests
     }
 
     [Fact]
+    public void A_flush_before_any_packet_sends_nothing()
+    {
+        var sent = new List<byte[]>();
+        var sender = Sender(sent, () => 0);
+
+        sender.FlushForTest();
+
+        Assert.Empty(sent);
+    }
+
+    [Fact]
     public void Ignores_packets_without_the_transport_cc_extension()
     {
         var sent = new List<byte[]>();
-        long clock = 0;
-        var sender = Sender(sent, () => clock);
+        var sender = Sender(sent, () => 0);
 
-        sender.OnVideoPacketReceived(new RtpPacket { PayloadType = 96, SequenceNumber = 1 });
-        clock = 500_000;
-        sender.OnVideoPacketReceived(new RtpPacket { PayloadType = 96, SequenceNumber = 2 });
+        sender.OnRtpPacketReceived(new RtpPacket { PayloadType = 96, SequenceNumber = 1 });
+        sender.OnRtpPacketReceived(new RtpPacket { PayloadType = 96, SequenceNumber = 2 });
+        sender.FlushForTest();
 
         Assert.Empty(sent);
     }
@@ -75,11 +89,11 @@ public sealed class TransportCcFeedbackSenderTests
     public void Ignores_a_different_extension_id()
     {
         var sent = new List<byte[]>();
-        long clock = 0;
-        var sender = Sender(sent, () => clock);
+        var sender = Sender(sent, () => 0);
 
-        clock = 0;       sender.OnVideoPacketReceived(Stamped(7, 100, 1)); // sender expects id 5
-        clock = 500_000; sender.OnVideoPacketReceived(Stamped(7, 101, 2));
+        sender.OnRtpPacketReceived(Stamped(7, 100, 1)); // sender expects id 5
+        sender.OnRtpPacketReceived(Stamped(7, 101, 2));
+        sender.FlushForTest();
 
         Assert.Empty(sent);
     }
@@ -92,9 +106,10 @@ public sealed class TransportCcFeedbackSenderTests
         var sender = Sender(sent, () => clock);
 
         // Two received packets ~10 s apart → a receive delta beyond the signed-int16 range the wire
-        // format allows: the report cannot be encoded and must be skipped, not crash the receive path.
-        clock = 0;          sender.OnVideoPacketReceived(Stamped(ExtId, 100, 1));
-        clock = 10_000_000; sender.OnVideoPacketReceived(Stamped(ExtId, 101, 2));
+        // format allows: the report cannot be encoded and must be skipped, not crash the send path.
+        clock = 0;          sender.OnRtpPacketReceived(Stamped(ExtId, 100, 1));
+        clock = 10_000_000; sender.OnRtpPacketReceived(Stamped(ExtId, 101, 2));
+        sender.FlushForTest();
 
         Assert.Empty(sent);
     }
@@ -106,9 +121,10 @@ public sealed class TransportCcFeedbackSenderTests
         long clock = 0;
         var sender = Sender(sent, () => clock);
 
-        clock = 0;       sender.OnVideoPacketReceived(Stamped(ExtId, 100, 1));
-        clock = 150_000; sender.OnVideoPacketReceived(Stamped(ExtId, 101, 2)); // report #1
-        clock = 300_000; sender.OnVideoPacketReceived(Stamped(ExtId, 102, 3)); // report #2
+        clock = 0;       sender.OnRtpPacketReceived(Stamped(ExtId, 100, 1));
+        sender.FlushForTest();                                       // report #0
+        clock = 150_000; sender.OnRtpPacketReceived(Stamped(ExtId, 101, 2));
+        sender.FlushForTest();                                       // report #1
 
         Assert.Equal(2, sent.Count);
         Assert.Equal(0, Decode(sent[0]).FeedbackPacketCount);
@@ -120,21 +136,121 @@ public sealed class TransportCcFeedbackSenderTests
     {
         var sent = new List<byte[]>();
         var logger = new CapturingLogger();
-        long clock = 0;
-        var sender = new TransportCcFeedbackSender(
-            new RtcpPacketCodec(), ExtId, LocalSsrc,
-            (data, _) => { sent.Add(data.ToArray()); return ValueTask.CompletedTask; },
-            () => clock, Frequency, logger, CancellationToken.None);
+        var sender = Sender(sent, () => 0, logger);
 
-        // More arrivals than the ring buffer holds (1024) before the interval elapses: the oldest
-        // are overwritten. The report still goes out (no crash) and the overflow is logged once.
+        // More arrivals than the ring buffer holds (1024) before a flush: the oldest are overwritten.
+        // The report still goes out (no crash) and the overflow is logged once.
         for (ushort i = 0; i < 1100; i++)
-            sender.OnVideoPacketReceived(Stamped(ExtId, i, i));
-        clock = 150_000;
-        sender.OnVideoPacketReceived(Stamped(ExtId, 1100, 1100));
+            sender.OnRtpPacketReceived(Stamped(ExtId, i, i));
+        sender.FlushForTest();
 
         Assert.NotEmpty(sent);
         Assert.Contains(LogLevel.Debug, logger.Levels);
+    }
+
+    [Fact]
+    public async Task The_loop_flushes_pending_feedback_on_a_tick_without_a_further_packet()
+    {
+        // The #9 tail case: arrivals are recorded, then the stream goes quiet. A packet-triggered sender would
+        // never flush them; the timer loop must. One tick fires, then the delay blocks so exactly one flush runs.
+        var sent = new List<byte[]>();
+        var sendGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var ticks = 0;
+
+        await using var sender = new TransportCcFeedbackSender(
+            new RtcpPacketCodec(), ExtId, LocalSsrc,
+            (data, _) => { sent.Add(data.ToArray()); sendGate.TrySetResult(); return ValueTask.CompletedTask; },
+            () => 0, Frequency, NullLogger.Instance, CancellationToken.None,
+            delay: (_, ct) => Interlocked.Increment(ref ticks) == 1 ? Task.CompletedTask : Task.Delay(Timeout.Infinite, ct));
+
+        sender.OnRtpPacketReceived(Stamped(ExtId, 100, 1));
+        sender.OnRtpPacketReceived(Stamped(ExtId, 101, 2));
+        sender.Start(); // no further packet — the loop must flush on the tick
+
+        await sendGate.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal([(ushort)100, 101], Decode(Assert.Single(sent)).Statuses.Select(s => s.SequenceNumber).ToArray());
+    }
+
+    // ── Adaptive feedback interval (libwebrtc RemoteEstimatorProxy: ~5 % overhead, clamped [50, 250] ms) ─────
+
+    private static RtpPacket StampedWithPayload(ushort transportSeq, ushort rtpSeq, int payloadLength) => new()
+    {
+        PayloadType = 96,
+        SequenceNumber = rtpSeq,
+        Ssrc = RemoteSsrc,
+        Payload = new byte[payloadLength],
+        HeaderExtension = OneByteRtpHeaderExtensions.Encode(
+            [OneByteRtpHeaderExtensions.TransportSequenceNumber(ExtId, transportSeq)]),
+    };
+
+    [Fact]
+    public void With_no_arrivals_the_interval_is_the_default_100_ms()
+    {
+        var sender = Sender(new List<byte[]>(), () => 0);
+
+        Assert.Equal(TimeSpan.FromMilliseconds(100), sender.NextIntervalForTest());
+    }
+
+    [Fact]
+    public void High_inbound_bitrate_shrinks_the_interval_towards_the_50_ms_floor()
+    {
+        long clock = 0;
+        var sender = Sender(new List<byte[]>(), () => clock);
+
+        // Pump a high inbound rate across the bitrate window: ~1200-byte packets every ~2 ms ≈ 4.8 Mbit/s.
+        for (ushort i = 0; i < 250; i++)
+        {
+            clock = i * 2_000L; // 2 ms apart (Frequency = 1e6 ticks/s → microseconds)
+            sender.OnRtpPacketReceived(StampedWithPayload(i, i, payloadLength: 1200));
+        }
+
+        var interval = sender.NextIntervalForTest();
+        Assert.Equal(TimeSpan.FromMilliseconds(50), interval); // clamped at the floor under heavy traffic
+    }
+
+    [Fact]
+    public void Low_inbound_bitrate_grows_the_interval_towards_the_250_ms_ceiling()
+    {
+        long clock = 0;
+        var sender = Sender(new List<byte[]>(), () => clock);
+
+        // A trickle: tiny packets, sparsely — the target ~5 % feedback share pushes the interval to the ceiling.
+        clock = 0;       sender.OnRtpPacketReceived(StampedWithPayload(0, 0, payloadLength: 10));
+        clock = 200_000; sender.OnRtpPacketReceived(StampedWithPayload(1, 1, payloadLength: 10));
+
+        var interval = sender.NextIntervalForTest();
+        Assert.Equal(TimeSpan.FromMilliseconds(250), interval); // clamped at the ceiling under light traffic
+    }
+
+    [Theory]
+    [InlineData(10, 1)]      // trickle → ceiling
+    [InlineData(1200, 2000)] // flood → floor
+    [InlineData(300, 8000)]  // moderate → somewhere between the bounds
+    public void The_interval_always_stays_within_50_and_250_ms(int payloadLength, long spacingMicros)
+    {
+        long clock = 0;
+        var sender = Sender(new List<byte[]>(), () => clock);
+
+        for (ushort i = 0; i < 200; i++)
+        {
+            clock = i * spacingMicros;
+            sender.OnRtpPacketReceived(StampedWithPayload(i, i, payloadLength));
+        }
+
+        var interval = sender.NextIntervalForTest();
+        Assert.InRange(interval.TotalMilliseconds, 50, 250);
+    }
+
+    [Fact]
+    public async Task DisposeAsync_stops_the_loop()
+    {
+        var sender = Sender(new List<byte[]>(), () => 0,
+            delay: (_, ct) => Task.Delay(Timeout.Infinite, ct)); // loop parks in the delay
+        sender.Start();
+
+        var stopped = await Record.ExceptionAsync(async () => await sender.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5)));
+
+        Assert.Null(stopped);
     }
 
     private sealed class CapturingLogger : ILogger

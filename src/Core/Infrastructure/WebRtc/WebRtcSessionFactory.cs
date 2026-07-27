@@ -4,6 +4,7 @@ using CalloraVoipSdk.Core.Infrastructure.Common.Relay;
 using CalloraVoipSdk.Core.Infrastructure.Dtls;
 using CalloraVoipSdk.Core.Infrastructure.Rtp;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
+using CalloraVoipSdk.Core.Infrastructure.Sdp;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Models;
 using CalloraVoipSdk.Core.Infrastructure.Stun.Ice;
 using Microsoft.Extensions.Logging;
@@ -135,6 +136,13 @@ internal static class WebRtcSessionFactory
                 "bundle transport and inbound audio is still received).", localAudio.Direction, remoteAudio.Direction);
 
         var videoTrack = TryBuildVideoTrack(localDescription, remoteDescription, audioSsrc, loggerFactory);
+        var localVideoSection = localDescription.Media.FirstOrDefault(m => m.MediaType.Equals("video", Ci));
+
+        // Transport-wide-cc (transport-cc / RFC 8888): the negotiated a=extmap id on the video m-line, when the
+        // extension survived offer/answer. Enables one transport-wide sequence stamp across the bundle plus the
+        // congestion controller and receive-side feedback. Null (not negotiated, or an audio-only bundle) leaves
+        // the transport un-stamped and the congestion plane off.
+        var transportCcExtensionId = videoTrack is not null ? TransportCcExtensionId(localVideoSection) : null;
 
         // A simulcast video track (RFC 8853) needs the negotiated RID header-extension id (RFC 8852) to
         // stamp each layer's RID on outbound packets; without it in our own description we cannot key the
@@ -142,8 +150,7 @@ internal static class WebRtcSessionFactory
         byte? ridExtensionId = null;
         if (videoTrack is { Encodings.Count: > 0 })
         {
-            var localVideo = localDescription.Media.FirstOrDefault(m => m.MediaType.Equals("video", Ci));
-            ridExtensionId = RidExtensionId(localVideo);
+            ridExtensionId = RidExtensionId(localVideoSection);
             if (ridExtensionId is null)
             {
                 loggerFactory.CreateLogger(typeof(WebRtcSessionFactory)).LogWarning(
@@ -160,6 +167,7 @@ internal static class WebRtcSessionFactory
             RemoteEndPoint = remoteEndPoint,
             MidExtensionId = midExtensionId.Value,
             RidExtensionId = ridExtensionId,
+            TransportWideCcExtensionId = transportCcExtensionId,
             Audio = audioTrack,
             AudioSendEnabled = audioSendEnabled,
             Video = videoTrack,
@@ -238,6 +246,12 @@ internal static class WebRtcSessionFactory
         if (codec is null)
             return null;
 
+        // RTCP feedback (RFC 4585) is advertised at the media-section level (a=rtcp-fb), not on the codec:
+        // the peer's ANSWER/OFFER video m-line names what it will act on, so gate outbound NACK/PLI on it —
+        // never send feedback the peer did not offer. Mirrors the SIP path's CallVideoParameters derivation.
+        var remoteSupportsNack = RemoteSupportsNack(remoteVideo);
+        var remoteSupportsPli = RemoteSupportsPli(remoteVideo);
+
         // Send-side simulcast (RFC 8853) only activates for the layers the remote ANSWER confirmed as recv
         // (and only if it echoed the RID header extension, RFC 8852) — never for our offered layers alone.
         // Stamping RIDs the peer cannot demux would break its reception; an unconfirmed offer falls back to a
@@ -263,6 +277,8 @@ internal static class WebRtcSessionFactory
                     Ssrc = encodings[0].Ssrc, // primary; per-layer SSRCs carry the actual sends
                     PayloadType = (byte)codec.PayloadType,
                     VideoCodecName = codec.Name,
+                    RemoteSupportsNack = remoteSupportsNack,
+                    RemoteSupportsPli = remoteSupportsPli,
                     Encodings = encodings,
                 };
             }
@@ -273,14 +289,48 @@ internal static class WebRtcSessionFactory
                 string.Join(",", sendRids));
         }
 
+        // RTX repair payload type (RFC 4588 §8.1): the negotiated rtx format whose apt points at the chosen
+        // primary codec, read from our (local) description so we resend on the number both sides agreed. Only
+        // wired when the peer also advertised Generic NACK — without NACK feedback no NACK arrives to answer.
+        byte? rtxPayloadType = null;
+        if (remoteSupportsNack
+            && VideoCodecCatalog.TryFindRtxPayloadType(video, codec.PayloadType) is { } rtxPt
+            && rtxPt is >= 0 and <= 127)
+        {
+            rtxPayloadType = (byte)rtxPt;
+        }
+
+        var videoSsrc = NewSsrc(distinctFrom: audioSsrc);
+        // The RTX repair stream carries its own SSRC (RFC 4588 §4), which must be distinct from every other
+        // outbound SSRC on the bundle — not merely the primary (RFC 3550 §8.1). Allocate it against the full
+        // set of SSRCs already issued on this bundle (audio + this video primary); the factory owns the
+        // bundle-wide allocation, so the track no longer has to guess with only the primary to avoid.
+        uint? rtxSsrc = rtxPayloadType is not null
+            ? NewSsrc(new HashSet<uint> { audioSsrc, videoSsrc })
+            : null;
+
         return new BundledTrackConfig
         {
             Mid = video.Mid,
-            Ssrc = NewSsrc(distinctFrom: audioSsrc),
+            Ssrc = videoSsrc,
             PayloadType = (byte)codec.PayloadType,
             VideoCodecName = codec.Name,
+            RemoteSupportsNack = remoteSupportsNack,
+            RemoteSupportsPli = remoteSupportsPli,
+            RtxPayloadType = rtxPayloadType,
+            RtxSsrc = rtxSsrc,
         };
     }
+
+    // The peer advertised Generic NACK (a=rtcp-fb:… nack) with no parameter — RFC 4585 §6.2.1.
+    private static bool RemoteSupportsNack(SdpMediaDescription? remoteVideo) =>
+        remoteVideo is not null && remoteVideo.RtcpFeedback.Any(
+            f => f.FeedbackType.Equals("nack", Ci) && f.Parameter is null);
+
+    // The peer advertised Picture Loss Indication (a=rtcp-fb:… nack pli) — RFC 4585 §6.3.1.
+    private static bool RemoteSupportsPli(SdpMediaDescription? remoteVideo) =>
+        remoteVideo is not null && remoteVideo.RtcpFeedback.Any(
+            f => f.FeedbackType.Equals("nack", Ci) && string.Equals(f.Parameter, "pli", Ci));
 
     // The subset of our offered send RIDs the remote answer confirmed as recv (RFC 8853): it must echo the
     // RID header extension (RFC 8852) — else it cannot demux the layers — and list the RID as recv via
@@ -317,6 +367,17 @@ internal static class WebRtcSessionFactory
     {
         var rid = media?.Extensions.FirstOrDefault(e => string.Equals(e.Uri, RtpHeaderExtensionUris.Rid, StringComparison.Ordinal));
         return rid is not null && rid.Id is >= 1 and <= 14 ? (byte)rid.Id : null;
+    }
+
+    // The negotiated transport-wide-cc header-extension id (transport-cc / RFC 8888) on a media section, or
+    // null when the extension was not negotiated. Read from our own (local) description so the id we stamp
+    // matches the one both sides agreed on (RFC 8285 §5 keeps the same id across offer/answer). Mirrors
+    // <see cref="RidExtensionId"/> / <see cref="MidExtensionId"/>.
+    private static byte? TransportCcExtensionId(SdpMediaDescription? media)
+    {
+        var tcc = media?.Extensions.FirstOrDefault(
+            e => string.Equals(e.Uri, RtpHeaderExtensionUris.TransportWideCc, StringComparison.Ordinal));
+        return tcc is not null && tcc.Id is >= 1 and <= 14 ? (byte)tcc.Id : null;
     }
 
     // Local DTLS role from both a=setup values (RFC 4145 §4 / RFC 5763 §5): a concrete local role wins;

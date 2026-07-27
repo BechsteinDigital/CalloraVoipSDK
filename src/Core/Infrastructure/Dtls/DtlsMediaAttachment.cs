@@ -259,6 +259,12 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
                     _rtxInboundSrtp = new SrtpContext(result.Keys.RemoteKeys);
                     onRtx(_rtxOutboundSrtp, _rtxInboundSrtp);
                 }
+
+                // Every context above has now derived its session keys from these master halves,
+                // and this SDK never re-keys within a session — wipe the master key/salt so the
+                // exported DTLS-SRTP secret does not linger on the managed heap (RFC 3711 §9.4).
+                // The retained _result keeps only the (non-secret) DTLS transport alive for teardown.
+                result.Keys.Dispose();
             }
             catch (OperationCanceledException)
             {

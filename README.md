@@ -33,7 +33,7 @@ It exposes a stable, developer-friendly API through `VoipClient` while keeping t
 > environment before production. Known gaps and interop defects are tracked openly in the
 > [issue tracker](../../issues) — bug reports and interop feedback are especially welcome.
 
-**Contents:** [Why](#why-calloravoipsdk) · [Features](#current-feature-set) · [Install](#installation) · [Quickstart](#quickstart) · [Architecture](#architecture) · [Contributing](#contributing) · [Security](#security) · [License](#license)
+**Contents:** [Why](#why-calloravoipsdk) · [Progressive API](#progressive-api-simple-first-deeper-when-needed) · [Features](#current-feature-set) · [Install](#installation) · [Quickstart](#quickstart) · [Architecture](#architecture) · [Contributing](#contributing) · [Security](#security) · [License](#license)
 
 ## What's new in 4.6 (preview)
 
@@ -65,6 +65,24 @@ CalloraVoipSdk is built for developers who need more than a black-box telephony 
 - Runtime audio device control for Linux and Windows
 - DDD-oriented architecture with clear boundaries
 - Extensive RFC-oriented unit and compliance tests
+
+## Progressive API: simple first, deeper when needed
+
+CalloraVoipSdk does not force an early choice between a black-box wrapper and a raw
+protocol stack. Start with managed workflows, then use deeper public contracts only
+where the product needs them:
+
+| Integration depth | Public surface | Typical use |
+|---|---|---|
+| Managed workflows | `ConnectAsync`, `DialAndWaitUntilConnectedAsync`, default audio, playback and recording | Softphones, dialers and standard call flows |
+| Typed call control | `IPhoneLine`, `ICall`, transfers, DTMF, in-dialog SIP actions, negotiated media, quality/ICE state and outbound custom headers | Contact-center logic, routing, diagnostics and protocol-aware workflows |
+| Media and extension seams | `IMediaReceiver`, `IMediaSender`, `MediaConnector`, custom `IAudioDevice` and telemetry implementations, `ModuleRegistry` | Voice bots, custom media routing, observability and separately shipped modules |
+
+The levels can be mixed per call; using a convenience method does not close off the
+lower-level contracts. SIP/RTP implementation classes and arbitrary wire mutation remain
+internal, so this is controlled extensibility rather than an unstable exposure of the
+entire transport stack. See [Progressive API](docs/portal/concepts/progressive-api.md)
+for the decision guide and the media-threading constraints.
 
 ## Typical use cases
 
@@ -166,13 +184,17 @@ The solution follows a DDD-oriented structure:
 
 ## Public API boundary
 
-For SDK consumers, `VoipClient` is the central entry point.
+For SDK consumers, `VoipClient` is the central entry point, not the only useful
+abstraction. Its typed sub-facades and public domain/media contracts form the supported
+progressive API:
 
-- `VoipClient` is the supported integration surface
-- `Infrastructure` types are internal implementation details
-- `Application` types are only exposed where necessary for practical SDK usage
+- `VoipClient` provides lifecycle ownership and managed workflows
+- `IPhoneLine` and `ICall` provide typed call control and observable state
+- public media, device, telemetry and module contracts are supported extension seams
+- transport, parser and wire-level implementation classes remain internal details
 
-This keeps the external API compact and stable while allowing internal evolution.
+This boundary keeps common integrations compact while still supporting advanced product
+logic without depending on internal implementation types.
 
 ## Versioning
 
