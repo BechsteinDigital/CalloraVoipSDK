@@ -136,6 +136,13 @@ internal static class WebRtcSessionFactory
                 "bundle transport and inbound audio is still received).", localAudio.Direction, remoteAudio.Direction);
 
         var videoTrack = TryBuildVideoTrack(localDescription, remoteDescription, audioSsrc, loggerFactory);
+        var localVideoSection = localDescription.Media.FirstOrDefault(m => m.MediaType.Equals("video", Ci));
+
+        // Transport-wide-cc (transport-cc / RFC 8888): the negotiated a=extmap id on the video m-line, when the
+        // extension survived offer/answer. Enables one transport-wide sequence stamp across the bundle plus the
+        // congestion controller and receive-side feedback. Null (not negotiated, or an audio-only bundle) leaves
+        // the transport un-stamped and the congestion plane off.
+        var transportCcExtensionId = videoTrack is not null ? TransportCcExtensionId(localVideoSection) : null;
 
         // A simulcast video track (RFC 8853) needs the negotiated RID header-extension id (RFC 8852) to
         // stamp each layer's RID on outbound packets; without it in our own description we cannot key the
@@ -143,8 +150,7 @@ internal static class WebRtcSessionFactory
         byte? ridExtensionId = null;
         if (videoTrack is { Encodings.Count: > 0 })
         {
-            var localVideo = localDescription.Media.FirstOrDefault(m => m.MediaType.Equals("video", Ci));
-            ridExtensionId = RidExtensionId(localVideo);
+            ridExtensionId = RidExtensionId(localVideoSection);
             if (ridExtensionId is null)
             {
                 loggerFactory.CreateLogger(typeof(WebRtcSessionFactory)).LogWarning(
@@ -161,6 +167,7 @@ internal static class WebRtcSessionFactory
             RemoteEndPoint = remoteEndPoint,
             MidExtensionId = midExtensionId.Value,
             RidExtensionId = ridExtensionId,
+            TransportWideCcExtensionId = transportCcExtensionId,
             Audio = audioTrack,
             AudioSendEnabled = audioSendEnabled,
             Video = videoTrack,
@@ -350,6 +357,17 @@ internal static class WebRtcSessionFactory
     {
         var rid = media?.Extensions.FirstOrDefault(e => string.Equals(e.Uri, RtpHeaderExtensionUris.Rid, StringComparison.Ordinal));
         return rid is not null && rid.Id is >= 1 and <= 14 ? (byte)rid.Id : null;
+    }
+
+    // The negotiated transport-wide-cc header-extension id (transport-cc / RFC 8888) on a media section, or
+    // null when the extension was not negotiated. Read from our own (local) description so the id we stamp
+    // matches the one both sides agreed on (RFC 8285 §5 keeps the same id across offer/answer). Mirrors
+    // <see cref="RidExtensionId"/> / <see cref="MidExtensionId"/>.
+    private static byte? TransportCcExtensionId(SdpMediaDescription? media)
+    {
+        var tcc = media?.Extensions.FirstOrDefault(
+            e => string.Equals(e.Uri, RtpHeaderExtensionUris.TransportWideCc, StringComparison.Ordinal));
+        return tcc is not null && tcc.Id is >= 1 and <= 14 ? (byte)tcc.Id : null;
     }
 
     // Local DTLS role from both a=setup values (RFC 4145 §4 / RFC 5763 §5): a concrete local role wins;
