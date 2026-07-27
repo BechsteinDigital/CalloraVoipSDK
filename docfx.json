@@ -23,6 +23,11 @@
         "dest": "."
       },
       {
+        "files": ["**.md", "**.yml"],
+        "src": "docs/adr",
+        "dest": "adr"
+      },
+      {
         "files": ["_api/**.yml", "_api/index.md"],
         "src": "docs/portal"
       }
