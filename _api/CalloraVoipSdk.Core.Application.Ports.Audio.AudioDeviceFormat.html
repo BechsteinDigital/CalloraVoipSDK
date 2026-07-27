@@ -2,11 +2,11 @@
 <html>
   <head>
     <meta charset="utf-8">
-      <title>Class TelemetryManager | CalloraVoipSdk </title>
+      <title>Class AudioDeviceFormat | CalloraVoipSdk </title>
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <meta name="title" content="Class TelemetryManager | CalloraVoipSdk ">
+      <meta name="title" content="Class AudioDeviceFormat | CalloraVoipSdk ">
       
-      <meta name="description" content="Telemetry facade for SIP events, metrics, and call-detail records.">
+      <meta name="description" content="Runtime device format applied to capture/playback streams.">
       <link rel="icon" href="../favicon.ico">
       <link rel="stylesheet" href="../public/docfx.min.css">
       <link rel="stylesheet" href="../public/main.css">
@@ -16,7 +16,7 @@
       <meta name="docfx:rel" content="../">
       
       
-      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/new/main/apiSpec/new?filename=CalloraVoipSdk_TelemetryManager.md&amp;value=---%0Auid%3A%20CalloraVoipSdk.TelemetryManager%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/new/main/apiSpec/new?filename=CalloraVoipSdk_Core_Application_Ports_Audio_AudioDeviceFormat.md&amp;value=---%0Auid%3A%20CalloraVoipSdk.Core.Application.Ports.Audio.AudioDeviceFormat%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
       <meta name="loc:inThisArticle" content="In this article">
       <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
       <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
@@ -84,25 +84,25 @@
           <nav id="breadcrumb"></nav>
         </div>
 
-        <article data-uid="CalloraVoipSdk.TelemetryManager">
+        <article data-uid="CalloraVoipSdk.Core.Application.Ports.Audio.AudioDeviceFormat">
 
 
 
-  <h1 id="CalloraVoipSdk_TelemetryManager" data-uid="CalloraVoipSdk.TelemetryManager" class="text-break">
-Class TelemetryManager  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Application/Managers/TelemetryManager.cs/#L8"><i class="bi bi-code-slash"></i></a>
+  <h1 id="CalloraVoipSdk_Core_Application_Ports_Audio_AudioDeviceFormat" data-uid="CalloraVoipSdk.Core.Application.Ports.Audio.AudioDeviceFormat" class="text-break">
+Class AudioDeviceFormat  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Ports/Audio/AudioDeviceFormat.cs/#L6"><i class="bi bi-code-slash"></i></a>
   </h1>
 
   <div class="facts text-secondary">
-    <dl><dt>Namespace</dt><dd><a class="xref" href="CalloraVoipSdk.html">CalloraVoipSdk</a></dd></dl>
-  <dl><dt>Assembly</dt><dd>CalloraVoipSdk.Client.dll</dd></dl>
+    <dl><dt>Namespace</dt><dd><a class="xref" href="CalloraVoipSdk.html">CalloraVoipSdk</a>.<a class="xref" href="CalloraVoipSdk.Core.html">Core</a>.<a class="xref" href="CalloraVoipSdk.Core.Application.html">Application</a>.<a class="xref" href="CalloraVoipSdk.Core.Application.Ports.html">Ports</a>.<a class="xref" href="CalloraVoipSdk.Core.Application.Ports.Audio.html">Audio</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>CalloraVoipSdk.Core.dll</dd></dl>
   </div>
 
-  <div class="markdown summary"><p>Telemetry facade for SIP events, metrics, and call-detail records.</p>
+  <div class="markdown summary"><p>Runtime device format applied to capture/playback streams.</p>
 </div>
   <div class="markdown conceptual"></div>
 
   <div class="codewrapper">
-    <pre><code class="lang-csharp hljs">public sealed class TelemetryManager : ITelemetryManager</code></pre>
+    <pre><code class="lang-csharp hljs">public sealed class AudioDeviceFormat</code></pre>
   </div>
 
 
@@ -112,16 +112,10 @@ Class TelemetryManager  <a class="header-action link-secondary" title="View sour
     <dt>Inheritance</dt>
     <dd>
       <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
-      <div><span class="xref">TelemetryManager</span></div>
+      <div><span class="xref">AudioDeviceFormat</span></div>
     </dd>
   </dl>
 
-  <dl class="typelist implements">
-    <dt>Implements</dt>
-    <dd>
-      <div><a class="xref" href="CalloraVoipSdk.ITelemetryManager.html">ITelemetryManager</a></div>
-    </dd>
-  </dl>
 
 
   <dl class="typelist inheritedMembers">
@@ -152,32 +146,30 @@ Class TelemetryManager  <a class="header-action link-secondary" title="View sour
 
 
 
-  <h2 class="section" id="events">Events
+  <h2 class="section" id="fields">Fields
 </h2>
 
 
 
-  <h3 id="CalloraVoipSdk_TelemetryManager_CdrPublished" data-uid="CalloraVoipSdk.TelemetryManager.CdrPublished">
-  CdrPublished
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Application/Managers/TelemetryManager.cs/#L30"><i class="bi bi-code-slash"></i></a>
+  <h3 id="CalloraVoipSdk_Core_Application_Ports_Audio_AudioDeviceFormat_Default" data-uid="CalloraVoipSdk.Core.Application.Ports.Audio.AudioDeviceFormat.Default">
+  Default
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Ports/Audio/AudioDeviceFormat.cs/#L11"><i class="bi bi-code-slash"></i></a>
   </h3>
 
-  <div class="markdown level1 summary"><p>Raised when one SIP call-detail record is published.</p>
+  <div class="markdown level1 summary"><p>Default mono 16-bit telephony format (8 kHz).</p>
 </div>
   <div class="markdown level1 conceptual"></div>
 
   <div class="codewrapper">
-    <pre><code class="lang-csharp hljs">public event EventHandler&lt;SipCdrRecord&gt;? CdrPublished</code></pre>
+    <pre><code class="lang-csharp hljs">public static readonly AudioDeviceFormat Default</code></pre>
   </div>
 
 
 
 
-
-
-  <h4 class="section">Event Type</h4>
+  <h4 class="section">Field Value</h4>
   <dl class="parameters">
-    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.eventhandler-1">EventHandler</a>&lt;<a class="xref" href="CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipCdrRecord.html">SipCdrRecord</a>&gt;</dt>
+    <dt><a class="xref" href="CalloraVoipSdk.Core.Application.Ports.Audio.AudioDeviceFormat.html">AudioDeviceFormat</a></dt>
     <dd></dd>
   </dl>
 
@@ -188,27 +180,33 @@ Class TelemetryManager  <a class="header-action link-secondary" title="View sour
 
 
 
-  <h3 id="CalloraVoipSdk_TelemetryManager_EventPublished" data-uid="CalloraVoipSdk.TelemetryManager.EventPublished">
-  EventPublished
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Application/Managers/TelemetryManager.cs/#L20"><i class="bi bi-code-slash"></i></a>
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="CalloraVoipSdk_Core_Application_Ports_Audio_AudioDeviceFormat_BitsPerSample_" data-uid="CalloraVoipSdk.Core.Application.Ports.Audio.AudioDeviceFormat.BitsPerSample*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Application_Ports_Audio_AudioDeviceFormat_BitsPerSample" data-uid="CalloraVoipSdk.Core.Application.Ports.Audio.AudioDeviceFormat.BitsPerSample">
+  BitsPerSample
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Ports/Audio/AudioDeviceFormat.cs/#L21"><i class="bi bi-code-slash"></i></a>
   </h3>
 
-  <div class="markdown level1 summary"><p>Raised when one SIP event record is published.</p>
+  <div class="markdown level1 summary"><p>PCM bit depth per sample. Current platform implementations support 16.</p>
 </div>
   <div class="markdown level1 conceptual"></div>
 
   <div class="codewrapper">
-    <pre><code class="lang-csharp hljs">public event EventHandler&lt;SipEventRecord&gt;? EventPublished</code></pre>
+    <pre><code class="lang-csharp hljs">public int BitsPerSample { get; init; }</code></pre>
   </div>
 
 
 
 
 
-
-  <h4 class="section">Event Type</h4>
+  <h4 class="section">Property Value</h4>
   <dl class="parameters">
-    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.eventhandler-1">EventHandler</a>&lt;<a class="xref" href="CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipEventRecord.html">SipEventRecord</a>&gt;</dt>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
     <dd></dd>
   </dl>
 
@@ -219,29 +217,63 @@ Class TelemetryManager  <a class="header-action link-secondary" title="View sour
 
 
 
-  <h3 id="CalloraVoipSdk_TelemetryManager_MetricPublished" data-uid="CalloraVoipSdk.TelemetryManager.MetricPublished">
-  MetricPublished
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Application/Managers/TelemetryManager.cs/#L25"><i class="bi bi-code-slash"></i></a>
+  <a id="CalloraVoipSdk_Core_Application_Ports_Audio_AudioDeviceFormat_Channels_" data-uid="CalloraVoipSdk.Core.Application.Ports.Audio.AudioDeviceFormat.Channels*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Application_Ports_Audio_AudioDeviceFormat_Channels" data-uid="CalloraVoipSdk.Core.Application.Ports.Audio.AudioDeviceFormat.Channels">
+  Channels
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Ports/Audio/AudioDeviceFormat.cs/#L26"><i class="bi bi-code-slash"></i></a>
   </h3>
 
-  <div class="markdown level1 summary"><p>Raised when one SIP metric record is published.</p>
+  <div class="markdown level1 summary"><p>Channel count. Current SDK call audio is mono (1).</p>
 </div>
   <div class="markdown level1 conceptual"></div>
 
   <div class="codewrapper">
-    <pre><code class="lang-csharp hljs">public event EventHandler&lt;SipMetricRecord&gt;? MetricPublished</code></pre>
+    <pre><code class="lang-csharp hljs">public int Channels { get; init; }</code></pre>
   </div>
 
 
 
 
 
-
-  <h4 class="section">Event Type</h4>
+  <h4 class="section">Property Value</h4>
   <dl class="parameters">
-    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.eventhandler-1">EventHandler</a>&lt;<a class="xref" href="CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipMetricRecord.html">SipMetricRecord</a>&gt;</dt>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
     <dd></dd>
   </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Application_Ports_Audio_AudioDeviceFormat_SampleRate_" data-uid="CalloraVoipSdk.Core.Application.Ports.Audio.AudioDeviceFormat.SampleRate*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Application_Ports_Audio_AudioDeviceFormat_SampleRate" data-uid="CalloraVoipSdk.Core.Application.Ports.Audio.AudioDeviceFormat.SampleRate">
+  SampleRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Ports/Audio/AudioDeviceFormat.cs/#L16"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sample rate in Hz.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int SampleRate { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
 
 
 
@@ -253,7 +285,7 @@ Class TelemetryManager  <a class="header-action link-secondary" title="View sour
 </article>
 
         <div class="contribution d-print-none">
-          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Application/Managers/TelemetryManager.cs/#L8" class="edit-link">Edit this page</a>
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Ports/Audio/AudioDeviceFormat.cs/#L6" class="edit-link">Edit this page</a>
         </div>
 
 

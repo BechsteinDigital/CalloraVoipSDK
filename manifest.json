@@ -1177,6 +1177,104 @@
     },
     {
       "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Application.Ports.Audio.AudioConnectionParameters.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Application.Ports.Audio.AudioConnectionParameters.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Application.Ports.Audio.AudioConnectionParameters",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Application.Ports.Audio.AudioConnectionParameters.yml\" sourcestartlinenumber=\"1\">Codec and stream parameters passed to <xref href=\"CalloraVoipSdk.Core.Application.Ports.Audio.IAudioDevice.Connect(CalloraVoipSdk.Core.Application.Media.IMediaReceiver%2cCalloraVoipSdk.Core.Application.Media.IMediaSender%2cCalloraVoipSdk.Core.Application.Ports.Audio.AudioConnectionParameters)\" data-throw-if-not-resolved=\"false\"></xref> so the\ndevice can open hardware streams at the correct sample rate and apply the right codec.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Application.Ports.Audio.AudioDeviceDescriptor.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Application.Ports.Audio.AudioDeviceDescriptor.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Application.Ports.Audio.AudioDeviceDescriptor",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Application.Ports.Audio.AudioDeviceDescriptor.yml\" sourcestartlinenumber=\"1\">Describes one selectable audio endpoint for runtime input/output switching.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Application.Ports.Audio.AudioDeviceFormat.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Application.Ports.Audio.AudioDeviceFormat.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Application.Ports.Audio.AudioDeviceFormat",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Application.Ports.Audio.AudioDeviceFormat.yml\" sourcestartlinenumber=\"1\">Runtime device format applied to capture/playback streams.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Application.Ports.Audio.AudioDeviceRuntimeSnapshot.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Application.Ports.Audio.AudioDeviceRuntimeSnapshot.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Application.Ports.Audio.AudioDeviceRuntimeSnapshot",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Application.Ports.Audio.AudioDeviceRuntimeSnapshot.yml\" sourcestartlinenumber=\"1\">Snapshot of runtime audio device state used by SDK diagnostics and UI controls.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Application.Ports.Audio.IAudioDevice.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Application.Ports.Audio.IAudioDevice.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Application.Ports.Audio.IAudioDevice",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Application.Ports.Audio.IAudioDevice.yml\" sourcestartlinenumber=\"1\">Audio device abstraction used by the application layer.\nImplement this interface to plug in platform-specific audio I/O.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Application.Ports.Audio.IAudioDeviceRuntimeControl.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Application.Ports.Audio.IAudioDeviceRuntimeControl.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Application.Ports.Audio.IAudioDeviceRuntimeControl",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Application.Ports.Audio.IAudioDeviceRuntimeControl.yml\" sourcestartlinenumber=\"1\">Optional runtime control port for audio devices.\nProvides hot-switch, mute, volume, and format controls while calls are active.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Application.Ports.Audio.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Application.Ports.Audio.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Application.Ports.Audio",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
       "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Calls.CallActionResult.yml",
       "output": {
         ".html": {
@@ -1873,6 +1971,76 @@
       "Uid": null,
       "IsMRef": true,
       "Title": "CalloraVoipSdk.Core.Domain.Security",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Infrastructure.Sip.Observability.ISipTelemetrySink.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Infrastructure.Sip.Observability.ISipTelemetrySink.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Infrastructure.Sip.Observability.ISipTelemetrySink",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Infrastructure.Sip.Observability.ISipTelemetrySink.yml\" sourcestartlinenumber=\"1\">Sink for SIP observability artifacts (events, metrics, CDR).</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipCdrRecord.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipCdrRecord.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipCdrRecord",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipCdrRecord.yml\" sourcestartlinenumber=\"1\">Call detail record emitted for SIP dialog lifecycles.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipEventRecord.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipEventRecord.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipEventRecord",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipEventRecord.yml\" sourcestartlinenumber=\"1\">Structured SIP event record for diagnostics and event-stream consumers.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipMetricRecord.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipMetricRecord.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipMetricRecord",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipMetricRecord.yml\" sourcestartlinenumber=\"1\">Simple metric data point for SIP counters/timers.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Infrastructure.Sip.Observability.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Infrastructure.Sip.Observability.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Infrastructure.Sip.Observability",
       "Summary": null
     },
     {
@@ -3222,6 +3390,16 @@
       "output": {
         ".html": {
           "relative_path": "concepts/modules.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/concepts/progressive-api.md",
+      "output": {
+        ".html": {
+          "relative_path": "concepts/progressive-api.html"
         }
       },
       "version": ""

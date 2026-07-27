@@ -219,6 +219,14 @@ all cases green, none skipped). Known gaps and interop defects are tracked openl
 </tr>
 </tbody>
 </table>
+<h2 id="choose-your-integration-depth">Choose your integration depth</h2>
+<p>CalloraVoipSdk uses a progressive API. Start with managed workflows for registration,
+dialing, default audio, playback and recording. When the product needs more control, the
+same call remains available through typed <code>IPhoneLine</code>/<code>ICall</code> contracts, encoded media
+receivers/senders, cross-connect, custom devices, telemetry and modules.</p>
+<p>The boundary is deliberate: supported call, media and extension seams are public, while
+transport/parser implementation types and arbitrary wire mutation remain internal.
+<a href="concepts/progressive-api.html">Choose the right depth →</a></p>
 <h2 id="sdk-structure">SDK Structure</h2>
 <p><strong>CalloraVoipSdk.Core</strong> — Sovereign calling foundation</p>
 <p>Clean DDD architecture: Domain → Application → Infrastructure → public <code>VoipClient</code> facade.
@@ -263,7 +271,7 @@ if (!dialResult.IsSuccess || dialResult.Call is null)
 await client.AttachDefaultAudioAsync(dialResult.Call);
 await dialResult.Call.HangupAsync();
 </code></pre>
-<p><a href="getting-started/install.html">→ Getting Started</a> · <a href="concepts/voipclient.html">Core Concepts</a> · <a href="guides/making-calls.html">Guides</a> · <a href="interop/matrix.html">Interop</a> · <a href="production/lifecycle-dispose.html">Production</a></p>
+<p><a href="getting-started/install.html">→ Getting Started</a> · <a href="concepts/progressive-api.html">Progressive API</a> · <a href="concepts/voipclient.html">Core Concepts</a> · <a href="guides/making-calls.html">Guides</a> · <a href="interop/matrix.html">Interop</a> · <a href="production/lifecycle-dispose.html">Production</a></p>
 
 </article>
 
