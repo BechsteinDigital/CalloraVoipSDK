@@ -112,6 +112,19 @@ internal sealed class PhoneLine : IPhoneLine, IDisposable
         {
             await _channel.StartOutboundDialAsync(channel, targetUri, options, ct);
         }
+        catch (Exception ex) when (ct.IsCancellationRequested && call.State != CallState.Terminated)
+        {
+            // Caller cancelled while the outbound INVITE was still pending/ringing. A plain local
+            // teardown would leave the peer ringing until its own timeout — RFC 3261 §9.1 requires a
+            // CANCEL for the in-flight INVITE. Route the abort through the call's hangup, which the
+            // signaling channel maps to a CANCEL for an Inviting/Ringing outbound dialog (487), then
+            // return the now-terminated call so the caller/convenience layer keeps a handle instead of
+            // losing it to a rethrow. The channel hangup runs on its own uncancelled token, so the
+            // CANCEL is not itself aborted by the already-cancelled caller token.
+            _logger.LogDebug(ex, "Outbound dial to {Uri} cancelled on [{User}]; sending CANCEL.", targetUri, Account.Username);
+            await CancelPendingDialAsync(call).ConfigureAwait(false);
+            return call;
+        }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Outbound dial to {Uri} failed on [{User}]", targetUri, Account.Username);
@@ -228,6 +241,24 @@ internal sealed class PhoneLine : IPhoneLine, IDisposable
         _onCallCreated?.Invoke(call, channel);
 
         return call;
+    }
+
+    // Aborts a still-pending outbound dial after caller cancellation: sends CANCEL through the call's
+    // hangup (the channel maps a pending/ringing outbound INVITE to a SIP CANCEL, RFC 3261 §9.1) and
+    // guarantees the call ends Terminated even if the CANCEL send faults. A CANCEL failure must not
+    // vanish from this critical path — it is logged rather than silently dropped (HARD-E2), and the
+    // local terminal transition still runs so the returned call is always in a terminal state.
+    private async Task CancelPendingDialAsync(Call call)
+    {
+        try
+        {
+            await call.HangupAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "CANCEL for cancelled dial failed on line [{User}].", Account.Username);
+            call.TransitionTo(CallState.Terminated);
+        }
     }
 
     // Observes a fire-and-forget hangup started from a synchronous path (inbound rejection, dispose):
