@@ -1,3 +1,4 @@
+using CalloraVoipSdk.Core.Application.Media.Rtcp.Packets;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packetisation;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
 using Microsoft.Extensions.Logging;
@@ -50,6 +51,12 @@ internal sealed class BundledVideoTrack : IDisposable
 
     /// <summary>Raised with a reassembled encoded frame, its RTP timestamp, and whether it is a key frame.</summary>
     public event Action<byte[], uint, bool>? FrameReceived;
+
+    /// <summary>
+    /// Raised when the peer requests a key frame via an inbound PLI/FIR (RFC 4585/5104); the app should
+    /// encode and send a key frame.
+    /// </summary>
+    public event Action? KeyFrameRequested;
 
     /// <summary>Total reassembled inbound frames delivered.</summary>
     public long FramesReceived => Interlocked.Read(ref _framesReceived);
@@ -179,6 +186,29 @@ internal sealed class BundledVideoTrack : IDisposable
             DeliverOrdered(released);
     }
 
+    /// <summary>
+    /// Handles the decoded inbound RTCP compound (already SRTCP-unprotected and parsed once by the session):
+    /// a PLI or FIR anywhere in it (RFC 4585/5104) is treated as a request to send a key frame on this
+    /// stream, mirroring the single-stream <c>VideoKeyFrameFeedback</c>. Runs on the bundle receive loop.
+    /// </summary>
+    public void OnRtcpPackets(IReadOnlyList<RtcpPacket> packets)
+    {
+        ArgumentNullException.ThrowIfNull(packets);
+
+        // Any PLI/FIR here means "send a keyframe". NACK/RTX are out of scope for this slice.
+        if (!packets.Any(p => p is RtcpPictureLossIndication or RtcpFullIntraRequest))
+            return;
+
+        try
+        {
+            KeyFrameRequested?.Invoke();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled exception in bundled video KeyFrameRequested handler.");
+        }
+    }
+
     // Delivers one packet in sequence order to the depacketiser. A discontinuity is a gap the reorder
     // window could not fill: the frame under assembly is torn, so reset before feeding on.
     private void DeliverOrdered(RtpPacket packet)
@@ -216,6 +246,7 @@ internal sealed class BundledVideoTrack : IDisposable
     public void Dispose()
     {
         FrameReceived = null;
+        KeyFrameRequested = null;
         _single?.Dispose();
         foreach (var layer in _layers.Values)
             layer.Dispose();

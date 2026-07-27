@@ -113,6 +113,7 @@ public sealed class WebRtcRecordingTests
         public event EventHandler<RemoteTrack>? TrackReceived { add { } remove { } }
         public event EventHandler<string>? LocalIceCandidateDiscovered { add { } remove { } }
         public event EventHandler<DtmfTone>? DtmfReceived { add { } remove { } }
+        public event EventHandler? VideoKeyFrameRequested { add { } remove { } }
         public string CreateOffer() => string.Empty;
         public Task AddIceCandidateAsync(string candidate, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<string> SetRemoteDescriptionAsync(string remoteSdp, CancellationToken cancellationToken = default) => Task.FromResult(string.Empty);
