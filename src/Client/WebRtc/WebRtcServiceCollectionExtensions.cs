@@ -22,7 +22,10 @@ public static class WebRtcServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        services.AddOptions<WebRtcOptions>();
+        // Validate at host start (symmetry with AddCalloraVoip): a malformed ICE-server entry surfaces here
+        // instead of only when the first peer is created.
+        services.AddOptions<WebRtcOptions>().ValidateOnStart();
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IValidateOptions<WebRtcOptions>, WebRtcOptionsValidator>());
         if (configure is not null)
         {
             services.Configure(configure);

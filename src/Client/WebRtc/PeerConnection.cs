@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using CalloraVoipSdk.Core.Infrastructure.Rtp;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Models;
@@ -22,6 +23,11 @@ internal sealed class PeerConnection : IPeerConnection
     private readonly BitrateMeter _incomingBitrate = new();
     private readonly RateMeter _frameRate = new();
     private readonly object _statsSync = new();
+    // Guards the event-handler multicast fields against lost handlers under concurrent subscribe/unsubscribe.
+    // The default field-like event accessors this replaces used a plain += / -=, which is not atomic, so
+    // two threads racing on subscribe could drop a handler. Every add/remove and every fire snapshots under
+    // this lock (invoking outside it, so a handler cannot deadlock by re-subscribing).
+    private readonly object _eventSync = new();
     private EventHandler<PeerConnectionState>? _connectionStateChanged;
     private EventHandler<RemoteTrack>? _trackReceived;
     private EventHandler<string>? _localIceCandidateDiscovered;
@@ -34,7 +40,7 @@ internal sealed class PeerConnection : IPeerConnection
         ArgumentNullException.ThrowIfNull(logger);
         _peer = peer;
         _onDisposed = onDisposed;
-        _tracks = new RemoteTrackSet(track => _trackReceived?.Invoke(this, track));
+        _tracks = new RemoteTrackSet(RaiseTrackReceived);
         _taps = new MediaTapSet(logger);
         _peer.ConnectionStateChanged += OnInternalStateChanged;
         _peer.AudioReceived += OnAudioReceived;
@@ -50,32 +56,32 @@ internal sealed class PeerConnection : IPeerConnection
 
     public event EventHandler<PeerConnectionState>? ConnectionStateChanged
     {
-        add => _connectionStateChanged += value;
-        remove => _connectionStateChanged -= value;
+        add { lock (_eventSync) _connectionStateChanged += value; }
+        remove { lock (_eventSync) _connectionStateChanged -= value; }
     }
 
     public event EventHandler<RemoteTrack>? TrackReceived
     {
-        add => _trackReceived += value;
-        remove => _trackReceived -= value;
+        add { lock (_eventSync) _trackReceived += value; }
+        remove { lock (_eventSync) _trackReceived -= value; }
     }
 
     public event EventHandler<string>? LocalIceCandidateDiscovered
     {
-        add => _localIceCandidateDiscovered += value;
-        remove => _localIceCandidateDiscovered -= value;
+        add { lock (_eventSync) _localIceCandidateDiscovered += value; }
+        remove { lock (_eventSync) _localIceCandidateDiscovered -= value; }
     }
 
     public event EventHandler<DtmfTone>? DtmfReceived
     {
-        add => _dtmfReceived += value;
-        remove => _dtmfReceived -= value;
+        add { lock (_eventSync) _dtmfReceived += value; }
+        remove { lock (_eventSync) _dtmfReceived -= value; }
     }
 
     public event EventHandler? VideoKeyFrameRequested
     {
-        add => _videoKeyFrameRequested += value;
-        remove => _videoKeyFrameRequested -= value;
+        add { lock (_eventSync) _videoKeyFrameRequested += value; }
+        remove { lock (_eventSync) _videoKeyFrameRequested -= value; }
     }
 
     public string CreateOffer() => _peer.CreateOffer();
@@ -110,7 +116,10 @@ internal sealed class PeerConnection : IPeerConnection
         double? outgoing, incoming, framesPerSecond;
         lock (_statsSync)
         {
-            var nowTicks = DateTime.UtcNow.Ticks;
+            // Monotone clock for rate deltas (RFC-agnostic, but consistent with the Core media path which
+            // was moved off wall-clock): a wall-clock NTP step would otherwise inflate or negate a bitrate.
+            // The meters only consume the delta, so any monotone unit works as long as it is 100 ns ticks.
+            var nowTicks = MonotonicTicks();
             outgoing = _outgoingBitrate.Sample(s.BytesSent, nowTicks);
             incoming = _incomingBitrate.Sample(s.BytesReceived, nowTicks);
             framesPerSecond = s.FramesReceived is { } frames ? _frameRate.Sample(frames, nowTicks) : null;
@@ -267,18 +276,42 @@ internal sealed class PeerConnection : IPeerConnection
     }
 
     private void OnInternalStateChanged(WebRtcConnectionState state)
-        => _connectionStateChanged?.Invoke(this, Map(state));
+    {
+        EventHandler<PeerConnectionState>? handler;
+        lock (_eventSync) handler = _connectionStateChanged;
+        handler?.Invoke(this, Map(state));
+    }
 
     private void OnLocalIceCandidate(string candidate)
-        => _localIceCandidateDiscovered?.Invoke(this, candidate);
+    {
+        EventHandler<string>? handler;
+        lock (_eventSync) handler = _localIceCandidateDiscovered;
+        handler?.Invoke(this, candidate);
+    }
 
     private void OnDtmfReceived(byte toneCode, int durationMs)
-        => _dtmfReceived?.Invoke(this, new DtmfTone(toneCode, durationMs));
+    {
+        EventHandler<DtmfTone>? handler;
+        lock (_eventSync) handler = _dtmfReceived;
+        handler?.Invoke(this, new DtmfTone(toneCode, durationMs));
+    }
 
     // Send-side feedback (RFC 4585/5104): the peer asked for a key frame. Surfaced as a top-level event
     // (like DtmfReceived) rather than on a remote track — it targets our encoder, not an inbound stream.
     private void OnVideoKeyFrameRequested()
-        => _videoKeyFrameRequested?.Invoke(this, EventArgs.Empty);
+    {
+        EventHandler? handler;
+        lock (_eventSync) handler = _videoKeyFrameRequested;
+        handler?.Invoke(this, EventArgs.Empty);
+    }
+
+    // Snapshotted TrackReceived fire path used by the RemoteTrackSet when a remote track materialises.
+    private void RaiseTrackReceived(RemoteTrack track)
+    {
+        EventHandler<RemoteTrack>? handler;
+        lock (_eventSync) handler = _trackReceived;
+        handler?.Invoke(this, track);
+    }
 
     // Inbound media is projected onto the W3C track model via the RemoteTrackSet: the remote a=msid names
     // the track, and the set raises TrackReceived once per kind before the first frame flows.
@@ -300,6 +333,15 @@ internal sealed class PeerConnection : IPeerConnection
     // RFC 8830: a stream id of "-" means the track belongs to no MediaStream.
     private static string? StreamId(SdpMsid? msid)
         => msid is null || msid.StreamId == "-" ? null : msid.StreamId;
+
+    // Scales the monotone high-resolution counter to 100 ns ticks so the rate meters keep their documented
+    // tick contract while being immune to wall-clock jumps. Only successive deltas are consumed, so the
+    // absolute origin is irrelevant.
+    private static readonly double TicksPerStopwatchTick = (double)TimeSpan.TicksPerSecond / Stopwatch.Frequency;
+
+    // Internal (not private) so a test can pin that the rate clock is the uptime-based monotone counter and
+    // not the wall clock: its magnitude is the process uptime in 100 ns ticks, far below DateTime.UtcNow.Ticks.
+    internal static long MonotonicTicks() => (long)(Stopwatch.GetTimestamp() * TicksPerStopwatchTick);
 
     private static PeerConnectionState Map(WebRtcConnectionState state) => state switch
     {

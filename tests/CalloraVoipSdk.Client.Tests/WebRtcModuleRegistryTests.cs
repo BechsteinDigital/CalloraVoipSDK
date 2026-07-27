@@ -61,13 +61,15 @@ public sealed class WebRtcModuleRegistryTests
     }
 
     [Fact]
-    public void DI_registered_modules_are_auto_attached_to_the_client()
+    public async Task DI_registered_modules_are_auto_attached_to_the_client()
     {
         var services = new ServiceCollection();
         services.AddCalloraWebRtc();
         services.AddSingleton<IWebRtcClientModule, FakeWebRtcModule>();
 
-        using var provider = services.BuildServiceProvider();
+        // await using: the WebRtcClient singleton is async-disposable only (peers dispose asynchronously),
+        // so the container must be torn down on the async path.
+        await using var provider = services.BuildServiceProvider();
         var rtc = provider.GetRequiredService<IWebRtcClient>();
 
         Assert.True(rtc.Modules.TryGet<IFakeWebRtcFeature>(out var feature));

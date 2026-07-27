@@ -152,224 +152,229 @@ public sealed class VoipClient : IVoipClient
             ?? NullLoggerFactory.Instance;
         _logger = logFactory.CreateLogger<VoipClient>();
 
-        var injectedAudioDevice = ResolveService<IAudioDevice>(services);
-        if (ReferenceEquals(config.AudioDevice, SilenceAudioDevice.Instance)
-            && injectedAudioDevice is not null)
-        {
-            _audioDevice = injectedAudioDevice;
-            _ownsAudioDevice = false;
-        }
-        else
-        {
-            _audioDevice = PlatformAudioDeviceFactory.Resolve(
-                config.AudioDevice,
-                config.EnableAutomaticAudioDeviceSelection,
-                _logger,
-                out _ownsAudioDevice);
-        }
-
-        _audioDeviceRuntimeControl = _audioDevice as IAudioDeviceRuntimeControl;
-
-        var transportFactory = ResolveService<ISipTransportFactory>(services)
-            ?? new SipTransportFactory();
+        // Any failure after this point (transport bind, DTLS identity, ICE agent, line-manager factory,
+        // module attach) leaks the resources already built — open SIP sockets, the owned audio device,
+        // orchestrators. Wrapping the whole construction disposes whatever was built and rethrows the
+        // original error. Dispose() is null-tolerant, so a throw mid-init still tears down cleanly. C#
+        // permits assigning the readonly fields inside this try because it is still the constructor body.
         try
         {
-            _transportRuntime = transportFactory.Create(
-                config.Tls, logFactory, MapTransport(config.DefaultTransport));
-        }
-        catch (Exception ex) when (IsTransportInitializationFailure(ex))
-        {
-            throw new VoipClientInitializationException(
-                "SIP transport initialization failed. Check local socket permissions and SIP listener binding configuration.",
-                ex);
-        }
-
-        var digestAuthenticator = ResolveService<ISipDigestAuthenticator>(services)
-            ?? new SipDigestAuthentication();
-        var telemetry = new ClientTelemetrySink(
-            ResolveService<ISipTelemetrySink>(services)
-            ?? NullSipTelemetrySink.Instance);
-        TelemetryManager = new TelemetryManager(telemetry);
-
-        var resolvedRegistrationService = ResolveService<ISipRegistrationService>(services);
-        if (resolvedRegistrationService is null)
-        {
-            _registrationService = new SipRegistrationService(
-                _transportRuntime,
-                digestAuthenticator,
-                logFactory,
-                telemetry);
-            _ownsRegistrationService = true;
-        }
-        else
-        {
-            _registrationService = resolvedRegistrationService;
-            _ownsRegistrationService = false;
-        }
-
-        var sdpNegotiator = ResolveService<ISdpNegotiator>(services)
-            ?? new SdpNegotiator(logFactory.CreateLogger<SdpNegotiator>());
-        var sdpProvider = new SipSessionSdpProvider
-        {
-            BuildOffer = (ep, hold) => sdpNegotiator.BuildDefaultSdp(ep, hold, null),
-            TryNegotiateAnswer = (offer, ep, hold) =>
-                offer is null ? null : sdpNegotiator.TryBuildNegotiatedAnswer(offer, ep, hold, null),
-            TryParseMediaParameters = sdpNegotiator.TryParseMediaParameters,
-            IsRemoteHold = sdpNegotiator.IsRemoteHoldSdp,
-        };
-
-        ICallIceAgent? iceAgent = ResolveService<ICallIceAgent>(services);
-        if (iceAgent is null && config.Ice.Enabled)
-        {
-            var stunClient = ResolveService<IStunClient>(services)
-                ?? new StunClient(
-                    new StunMessageCodec(),
-                    logFactory.CreateLogger<StunClient>());
-            var stunProbe = ResolveService<IIceStunProbe>(services)
-                ?? new StunIceProbe(stunClient, logFactory);
-            var turnRelayAllocator = ResolveService<IIceTurnRelayAllocator>(services);
-            var iceTelemetry = ResolveService<IIceTelemetrySink>(services)
-                ?? new SipIceTelemetrySink(telemetry);
-            if (turnRelayAllocator is null
-                && config.Ice.Servers.Any(static s => s.Type == IceServerType.Turn))
+            var injectedAudioDevice = ResolveService<IAudioDevice>(services);
+            if (ReferenceEquals(config.AudioDevice, SilenceAudioDevice.Instance)
+                && injectedAudioDevice is not null)
             {
-                var turnClient = ResolveService<ITurnClient>(services)
-                    ?? new TurnClient(
-                        new StunMessageCodec(),
-                        logFactory.CreateLogger<TurnClient>());
-                turnRelayAllocator = new TurnIceRelayAllocator(turnClient, logFactory);
+                _audioDevice = injectedAudioDevice;
+                _ownsAudioDevice = false;
+            }
+            else
+            {
+                _audioDevice = PlatformAudioDeviceFactory.Resolve(
+                    config.AudioDevice,
+                    config.EnableAutomaticAudioDeviceSelection,
+                    _logger,
+                    out _ownsAudioDevice);
             }
 
-            iceAgent = new CallIceAgent(config.Ice, stunProbe, logFactory, turnRelayAllocator, iceTelemetry);
-        }
+            _audioDeviceRuntimeControl = _audioDevice as IAudioDeviceRuntimeControl;
 
-        var resolvedCallSignalingService = ResolveService<ISipCallSignalingService>(services);
-        if (resolvedCallSignalingService is null)
-        {
-            _callSignalingService = new SipCallSignalingService(
-                _transportRuntime,
-                digestAuthenticator,
-                logFactory,
-                sdpProvider,
-                telemetry,
-                inboundUserAgent: config.UserAgent);
-            _ownsCallSignalingService = true;
-        }
-        else
-        {
-            _callSignalingService = resolvedCallSignalingService;
-            _ownsCallSignalingService = false;
-        }
-
-        // Managers are exposed through interfaces (HARD-E5); construction keeps concrete locals where a
-        // manager's constructor requires the concrete peer type.
-        var callManager = new CallManager();
-        Calls = callManager;
-        callManager.CallStateChanged += (s, e) => CallStateChanged?.Invoke(s, e);
-
-        var audioFileCodecs = ResolveService<IAudioFileCodecRegistry>(services)
-            ?? new AudioFileCodecRegistry();
-        var mediaManager = new MediaManager(logFactory, audioFileCodecs);
-        Media = mediaManager;
-        var moduleManager = new ModuleManager(mediaManager);
-        ModuleManager = moduleManager;
-        SessionManager = new SessionManager(callManager, moduleManager.Playback, moduleManager.Recording);
-        DeviceManager = new DeviceManager(GetAudioDeviceRuntimeControl, ThrowIfDisposed);
-        QualityManager = new QualityManager();
-        PolicyManager = new PolicyManager(config.SrtpPolicy);
-
-        // Application media orchestrator: creates and manages RTP sessions per call.
-        var bridgeTapCodec = config.BridgeAudioFormat == BridgeAudioFormat.Pcmu
-            ? PayloadCodecKind.Pcmu
-            : (PayloadCodecKind?)null;
-        // DTLS-SRTP identity (RFC 5763): one ephemeral certificate per client instance.
-        // Its fingerprint is signaled via SDP a=fingerprint (answers always, offers when
-        // OfferDtlsSrtp is set); the handshaker keys DTLS-negotiated call legs.
-        var dtlsHandshaker = ResolveService<IDtlsSrtpHandshaker>(services)
-            ?? new DtlsSrtpHandshaker(logFactory.CreateLogger<DtlsSrtpHandshaker>());
-        // Precedence: an internally DI-registered certificate, then a caller-supplied one from config
-        // (HARD-E7, opt-in stable identity), else a fresh ephemeral ECDSA P-256 (WebRTC privacy default).
-        var dtlsCertificate = ResolveService<DtlsCertificate>(services)
-            ?? (config.DtlsCertificate is { } suppliedDtlsCertificate
-                ? DtlsCertificate.FromX509(suppliedDtlsCertificate)
-                : DtlsCertificate.GenerateEcdsaP256());
-        var dtlsSignalingOptions = new SdpDtlsNegotiationOptions
-        {
-            FingerprintAlgorithm = dtlsCertificate.Fingerprint.Algorithm,
-            FingerprintValue = dtlsCertificate.Fingerprint.Value,
-        };
-        var mediaSessionFactory = ResolveService<ICallMediaSessionFactory>(services)
-            ?? new RtpCallMediaSessionFactory(logFactory, bridgeTapCodec, dtlsHandshaker, dtlsCertificate);
-        var rtcpPacketCodec = ResolveService<IRtcpPacketCodec>(services)
-            ?? new RtcpPacketCodec();
-        var mediaSupervision = new MediaSupervisionOptions
-        {
-            InboundMediaTimeout = config.InboundMediaTimeout,
-            HangupHeldCallOnSilence = config.HangupHeldCallOnMediaSilence
-        };
-        _mediaOrchestrator = new CallMediaOrchestrator(
-            mediaSessionFactory, logFactory, rtcpPacketCodec, iceAgent, mediaSupervision);
-        Calls.CallStateChanged += _mediaOrchestrator.OnCallStateChanged;
-
-        var lineManager = new PhoneLineManager(account =>
-        {
-            var channel = new SipLineChannel(
-                account,
-                config.UserAgent,
-                _registrationService,
-                _callSignalingService,
-                sdpNegotiator,
-                iceAgent,
-                config.SrtpPolicy,
-                telemetry,
-                logFactory,
-                config.PreferredAudioCodecs,
-                dtlsSignalingOptions,
-                config.OfferDtlsSrtp,
-                config.EnableVideo,
-                config.PreferredVideoCodecs,
-                config.RequireSecureSignalingForSdes);
-
-            return new PhoneLine(
-                account,
-                channel,
-                callManager,
-                config.MaxConcurrentCallsPerLine,
-                logFactory,
-                onCallCreated: (call, callChannel) =>
-                    _mediaOrchestrator.AttachCall(call, callChannel));
-        });
-        Lines = lineManager;
-
-        Lines.IncomingCall += (s, e) => IncomingCall?.Invoke(s, e);
-        Lines.IncomingMessage += (s, e) => IncomingMessage?.Invoke(s, e);
-
-        // Video is transport-only: the SDK ships no codec, so the video device is optional and resolved
-        // purely from DI (no platform-factory fallback like audio). When absent, AttachDefaultVideoAsync
-        // fails closed. The application registers an IVideoDevice (its codec package) to enable it.
-        var injectedVideoDevice = ResolveService<IVideoDevice>(services);
-        _convenienceOrchestrator = new SdkConvenienceOrchestrator(
-            lineManager, mediaManager, _audioDevice, logFactory, injectedVideoDevice);
-
-        // Module registration is the last construction step so OnAttached sees a fully built client.
-        Modules = new ModuleRegistry(this);
-        var injectedModules = ResolveService<IEnumerable<IVoipClientModule>>(services);
-        if (injectedModules is not null)
-        {
+            var transportFactory = ResolveService<ISipTransportFactory>(services)
+                ?? new SipTransportFactory();
             try
+            {
+                _transportRuntime = transportFactory.Create(
+                    config.Tls, logFactory, MapTransport(config.DefaultTransport));
+            }
+            catch (Exception ex) when (IsTransportInitializationFailure(ex))
+            {
+                throw new VoipClientInitializationException(
+                    "SIP transport initialization failed. Check local socket permissions and SIP listener binding configuration.",
+                    ex);
+            }
+
+            var digestAuthenticator = ResolveService<ISipDigestAuthenticator>(services)
+                ?? new SipDigestAuthentication();
+            var telemetry = new ClientTelemetrySink(
+                ResolveService<ISipTelemetrySink>(services)
+                ?? NullSipTelemetrySink.Instance);
+            TelemetryManager = new TelemetryManager(telemetry);
+
+            var resolvedRegistrationService = ResolveService<ISipRegistrationService>(services);
+            if (resolvedRegistrationService is null)
+            {
+                _registrationService = new SipRegistrationService(
+                    _transportRuntime,
+                    digestAuthenticator,
+                    logFactory,
+                    telemetry);
+                _ownsRegistrationService = true;
+            }
+            else
+            {
+                _registrationService = resolvedRegistrationService;
+                _ownsRegistrationService = false;
+            }
+
+            var sdpNegotiator = ResolveService<ISdpNegotiator>(services)
+                ?? new SdpNegotiator(logFactory.CreateLogger<SdpNegotiator>());
+            var sdpProvider = new SipSessionSdpProvider
+            {
+                BuildOffer = (ep, hold) => sdpNegotiator.BuildDefaultSdp(ep, hold, null),
+                TryNegotiateAnswer = (offer, ep, hold) =>
+                    offer is null ? null : sdpNegotiator.TryBuildNegotiatedAnswer(offer, ep, hold, null),
+                TryParseMediaParameters = sdpNegotiator.TryParseMediaParameters,
+                IsRemoteHold = sdpNegotiator.IsRemoteHoldSdp,
+            };
+
+            ICallIceAgent? iceAgent = ResolveService<ICallIceAgent>(services);
+            if (iceAgent is null && config.Ice.Enabled)
+            {
+                var stunClient = ResolveService<IStunClient>(services)
+                    ?? new StunClient(
+                        new StunMessageCodec(),
+                        logFactory.CreateLogger<StunClient>());
+                var stunProbe = ResolveService<IIceStunProbe>(services)
+                    ?? new StunIceProbe(stunClient, logFactory);
+                var turnRelayAllocator = ResolveService<IIceTurnRelayAllocator>(services);
+                var iceTelemetry = ResolveService<IIceTelemetrySink>(services)
+                    ?? new SipIceTelemetrySink(telemetry);
+                if (turnRelayAllocator is null
+                    && config.Ice.Servers.Any(static s => s.Type == IceServerType.Turn))
+                {
+                    var turnClient = ResolveService<ITurnClient>(services)
+                        ?? new TurnClient(
+                            new StunMessageCodec(),
+                            logFactory.CreateLogger<TurnClient>());
+                    turnRelayAllocator = new TurnIceRelayAllocator(turnClient, logFactory);
+                }
+
+                iceAgent = new CallIceAgent(config.Ice, stunProbe, logFactory, turnRelayAllocator, iceTelemetry);
+            }
+
+            var resolvedCallSignalingService = ResolveService<ISipCallSignalingService>(services);
+            if (resolvedCallSignalingService is null)
+            {
+                _callSignalingService = new SipCallSignalingService(
+                    _transportRuntime,
+                    digestAuthenticator,
+                    logFactory,
+                    sdpProvider,
+                    telemetry,
+                    inboundUserAgent: config.UserAgent);
+                _ownsCallSignalingService = true;
+            }
+            else
+            {
+                _callSignalingService = resolvedCallSignalingService;
+                _ownsCallSignalingService = false;
+            }
+
+            // Managers are exposed through interfaces (HARD-E5); construction keeps concrete locals where a
+            // manager's constructor requires the concrete peer type.
+            var callManager = new CallManager();
+            Calls = callManager;
+            callManager.CallStateChanged += (s, e) => CallStateChanged?.Invoke(s, e);
+
+            var audioFileCodecs = ResolveService<IAudioFileCodecRegistry>(services)
+                ?? new AudioFileCodecRegistry();
+            var mediaManager = new MediaManager(logFactory, audioFileCodecs);
+            Media = mediaManager;
+            var moduleManager = new ModuleManager(mediaManager);
+            ModuleManager = moduleManager;
+            SessionManager = new SessionManager(callManager, moduleManager.Playback, moduleManager.Recording);
+            DeviceManager = new DeviceManager(GetAudioDeviceRuntimeControl, ThrowIfDisposed);
+            QualityManager = new QualityManager();
+            PolicyManager = new PolicyManager(config.SrtpPolicy);
+
+            // Application media orchestrator: creates and manages RTP sessions per call.
+            var bridgeTapCodec = config.BridgeAudioFormat == BridgeAudioFormat.Pcmu
+                ? PayloadCodecKind.Pcmu
+                : (PayloadCodecKind?)null;
+            // DTLS-SRTP identity (RFC 5763): one ephemeral certificate per client instance.
+            // Its fingerprint is signaled via SDP a=fingerprint (answers always, offers when
+            // OfferDtlsSrtp is set); the handshaker keys DTLS-negotiated call legs.
+            var dtlsHandshaker = ResolveService<IDtlsSrtpHandshaker>(services)
+                ?? new DtlsSrtpHandshaker(logFactory.CreateLogger<DtlsSrtpHandshaker>());
+            // Precedence: an internally DI-registered certificate, then a caller-supplied one from config
+            // (HARD-E7, opt-in stable identity), else a fresh ephemeral ECDSA P-256 (WebRTC privacy default).
+            var dtlsCertificate = ResolveService<DtlsCertificate>(services)
+                ?? (config.DtlsCertificate is { } suppliedDtlsCertificate
+                    ? DtlsCertificate.FromX509(suppliedDtlsCertificate)
+                    : DtlsCertificate.GenerateEcdsaP256());
+            var dtlsSignalingOptions = new SdpDtlsNegotiationOptions
+            {
+                FingerprintAlgorithm = dtlsCertificate.Fingerprint.Algorithm,
+                FingerprintValue = dtlsCertificate.Fingerprint.Value,
+            };
+            var mediaSessionFactory = ResolveService<ICallMediaSessionFactory>(services)
+                ?? new RtpCallMediaSessionFactory(logFactory, bridgeTapCodec, dtlsHandshaker, dtlsCertificate);
+            var rtcpPacketCodec = ResolveService<IRtcpPacketCodec>(services)
+                ?? new RtcpPacketCodec();
+            var mediaSupervision = new MediaSupervisionOptions
+            {
+                InboundMediaTimeout = config.InboundMediaTimeout,
+                HangupHeldCallOnSilence = config.HangupHeldCallOnMediaSilence
+            };
+            _mediaOrchestrator = new CallMediaOrchestrator(
+                mediaSessionFactory, logFactory, rtcpPacketCodec, iceAgent, mediaSupervision);
+            Calls.CallStateChanged += _mediaOrchestrator.OnCallStateChanged;
+
+            var lineManager = new PhoneLineManager(account =>
+            {
+                var channel = new SipLineChannel(
+                    account,
+                    config.UserAgent,
+                    _registrationService,
+                    _callSignalingService,
+                    sdpNegotiator,
+                    iceAgent,
+                    config.SrtpPolicy,
+                    telemetry,
+                    logFactory,
+                    config.PreferredAudioCodecs,
+                    dtlsSignalingOptions,
+                    config.OfferDtlsSrtp,
+                    config.EnableVideo,
+                    config.PreferredVideoCodecs,
+                    config.RequireSecureSignalingForSdes);
+
+                return new PhoneLine(
+                    account,
+                    channel,
+                    callManager,
+                    config.MaxConcurrentCallsPerLine,
+                    logFactory,
+                    onCallCreated: (call, callChannel) =>
+                        _mediaOrchestrator.AttachCall(call, callChannel));
+            });
+            Lines = lineManager;
+
+            Lines.IncomingCall += (s, e) => IncomingCall?.Invoke(s, e);
+            Lines.IncomingMessage += (s, e) => IncomingMessage?.Invoke(s, e);
+
+            // Video is transport-only: the SDK ships no codec, so the video device is optional and resolved
+            // purely from DI (no platform-factory fallback like audio). When absent, AttachDefaultVideoAsync
+            // fails closed. The application registers an IVideoDevice (its codec package) to enable it.
+            var injectedVideoDevice = ResolveService<IVideoDevice>(services);
+            _convenienceOrchestrator = new SdkConvenienceOrchestrator(
+                lineManager, mediaManager, _audioDevice, logFactory, injectedVideoDevice);
+
+            // Module registration is the last construction step so OnAttached sees a fully built client.
+            Modules = new ModuleRegistry(this);
+            var injectedModules = ResolveService<IEnumerable<IVoipClientModule>>(services);
+            if (injectedModules is not null)
             {
                 foreach (var module in injectedModules)
                 {
                     Modules.Register(module);
                 }
             }
-            catch
-            {
-                // Third-party module code failed during attach: release already
-                // constructed runtime resources, then surface the original error.
-                Dispose();
-                throw;
-            }
+        }
+        catch
+        {
+            // Any construction step failed (transport, DTLS, ICE, line factory, third-party module
+            // attach): release whatever was already built, then surface the original error unchanged.
+            Dispose();
+            throw;
         }
     }
 
@@ -543,6 +548,8 @@ public sealed class VoipClient : IVoipClient
         CancellationToken ct = default)
     {
         ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(line);
+        ArgumentException.ThrowIfNullOrWhiteSpace(targetUri);
         options ??= DialWaitOptions.Default;
 
         var outcome = await _convenienceOrchestrator
@@ -759,21 +766,31 @@ public sealed class VoipClient : IVoipClient
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
             return;
 
-        _convenienceOrchestrator.Dispose();
-        _mediaOrchestrator.Dispose();
-        Lines.Dispose();
+        // Null-tolerant: Dispose() also runs from a failed constructor (see the ctor's catch), where an
+        // early throw can leave later fields unassigned. DisposeSafely no-ops on null, so partial init
+        // still releases everything already built. In the normal path all fields are set, so behaviour is
+        // byte-identical to disposing each member directly, and the _owns* guards are preserved.
+        DisposeSafely(_convenienceOrchestrator);
+        DisposeSafely(_mediaOrchestrator);
+        DisposeSafely(Lines);
 
         if (_ownsCallSignalingService)
-            _callSignalingService.Dispose();
+            DisposeSafely(_callSignalingService);
 
-        if (_ownsRegistrationService && _registrationService is IDisposable disposableRegistrationService)
-            disposableRegistrationService.Dispose();
+        if (_ownsRegistrationService)
+            DisposeSafely(_registrationService);
 
-        _transportRuntime.Dispose();
+        DisposeSafely(_transportRuntime);
 
-        if (_ownsAudioDevice && _audioDevice is IDisposable disposable)
-            disposable.Dispose();
+        if (_ownsAudioDevice)
+            DisposeSafely(_audioDevice);
     }
+
+    /// <summary>
+    /// Disposes <paramref name="candidate"/> if it is a non-null <see cref="IDisposable"/>; otherwise a no-op.
+    /// Tolerates the partially initialised state left by a constructor that threw before every field was set.
+    /// </summary>
+    private static void DisposeSafely(object? candidate) => (candidate as IDisposable)?.Dispose();
 
     private async Task InvokeIncomingHandlerAsync(ICall call, Func<ICall, Task> handler)
     {
