@@ -78,14 +78,22 @@ internal sealed class BundledIceControl : IAsyncDisposable
     /// <summary>
     /// Adds a relay ICE local candidate after construction (RFC 8445 §5.1.1.2) — the answerer path, whose TURN
     /// allocation only finished gathering once the session already existed, so the relay path could not be
-    /// supplied to the constructor like the offerer's. The controlling agent then checks the relayed pair
-    /// alongside the direct one and, if no direct pair works, nominates it. No-op on a controlled agent or when
-    /// ICE is inactive. Forwarded to the ICE attachment.
+    /// supplied to the constructor like the offerer's. A controlling agent then checks the relayed pair alongside
+    /// the direct one and, if no direct pair works, nominates it. A controlled agent adds no driver candidate but
+    /// records the send path (so an inbound relay-received nomination replies over the relay) and proactively
+    /// permissions the offerer's remote-candidate IPs via <paramref name="ensurePermission"/> so their inbound
+    /// relay checks are not dropped (RFC 8656 §9). No-op when ICE is inactive. Forwarded to the ICE attachment.
     /// </summary>
     /// <param name="relaySend">The relay local candidate's TURN-framed send path (RFC 8656 §10).</param>
+    /// <param name="ensurePermission">
+    /// Installs a TURN permission (RFC 8656 §9) for a peer IP over the allocation, used by a controlled agent to
+    /// proactively permission offerer remote-candidate IPs. <see langword="null"/> leaves proactive permissioning
+    /// off (a controlling agent installs permissions itself as it relays outbound checks).
+    /// </param>
     public void AddRelayLocalCandidate(
-        Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask> relaySend)
-        => _attachment.AddRelayLocalCandidate(relaySend);
+        Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask> relaySend,
+        Func<IPAddress, CancellationToken, Task>? ensurePermission = null)
+        => _attachment.AddRelayLocalCandidate(relaySend, ensurePermission);
 
     /// <summary>Detaches from the inbound STUN feed and disposes the consent session.</summary>
     public async ValueTask DisposeAsync()

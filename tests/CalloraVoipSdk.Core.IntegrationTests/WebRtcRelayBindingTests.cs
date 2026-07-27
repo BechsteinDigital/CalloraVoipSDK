@@ -1,7 +1,10 @@
 using System.Net;
 using CalloraVoipSdk.Core.Infrastructure.Common.Relay;
+using CalloraVoipSdk.Core.Infrastructure.Rtp;
+using CalloraVoipSdk.Core.Infrastructure.Rtp.Wire;
 using CalloraVoipSdk.Core.Infrastructure.Stun.Attributes;
 using CalloraVoipSdk.Core.Infrastructure.Stun.Auth;
+using CalloraVoipSdk.Core.Infrastructure.Stun.Ice;
 using CalloraVoipSdk.Core.Infrastructure.Stun.Messages;
 using CalloraVoipSdk.Core.Infrastructure.Stun.Wire;
 using CalloraVoipSdk.Core.Infrastructure.Turn.Attributes;
@@ -184,6 +187,124 @@ public sealed class WebRtcRelayBindingTests
         await binding.KeepAlive.DisposeAsync();
 
         Assert.True(Volatile.Read(ref permissionCount) >= 2); // installed once, then refreshed at least once
+    }
+
+    [Fact]
+    public async Task CreateFactory_exposes_a_proactive_permission_installer_for_the_answerer_path()
+    {
+        // K4/K5: the binding must carry EnsurePermission so a controlled (answerer) agent can proactively
+        // permission the offerer's remote-candidate IPs (RFC 8656 §9) before their inbound relay checks arrive.
+        var codec = new StunMessageCodec();
+        var allocation = new TurnAllocateResult
+        {
+            RelayedEndPoint = new IPEndPoint(IPAddress.Parse("198.51.100.9"), 49152),
+            LifetimeSeconds = 600,
+            EffectiveCredentials = new StunCredentials
+            {
+                Username = "user", Password = "pass", Realm = "callora.example", Nonce = "nonce-1"
+            },
+        };
+
+        var factory = WebRtcRelayBinding.CreateFactory(Server, allocation, NullLoggerFactory.Instance);
+
+        var permissionRequests = new List<byte[]>();
+        RelayIceBinding? binding = null;
+        ValueTask TargetedSend(ReadOnlyMemory<byte> datagram, IPEndPoint target, CancellationToken ct)
+        {
+            Assert.Equal(Server, target);
+            var raw = datagram.ToArray();
+            var message = codec.Decode(raw);
+            if (message is { MessageClass: StunMessageClass.Request }
+                && (TurnMessageMethod)(ushort)message.MessageMethod == TurnMessageMethod.CreatePermission)
+            {
+                permissionRequests.Add(raw);
+                binding!.OnControl(EmptySuccess(codec, message));
+            }
+
+            return ValueTask.CompletedTask;
+        }
+
+        binding = factory(TargetedSend);
+        Assert.NotNull(binding);
+        Assert.NotNull(binding.EnsurePermission);
+
+        // Drive the proactive installer directly (the answerer path calls it per offerer candidate IP): a real
+        // CreatePermission for the peer IP round-trips to the (fake) server, MESSAGE-INTEGRITY-authenticated.
+        await binding.EnsurePermission!(Peer.Address, CancellationToken.None);
+
+        var permission = Assert.Single(permissionRequests.Where(b => IsCreatePermissionFor(codec, b, Peer)));
+        var authKey = allocation.EffectiveCredentials!.WithRealmAndNonce("callora.example", "nonce-1").DeriveHmacKey();
+        Assert.True(codec.VerifyIntegrity(permission, authKey),
+            "the proactive CreatePermission must carry a MESSAGE-INTEGRITY from the allocation credentials");
+    }
+
+    [Fact]
+    public async Task Answerer_control_wiring_proactively_permissions_an_offerer_remote_candidate_ip()
+    {
+        // The full K5 chain against the real relay binding: a controlled (answerer) BundledIceControl adopts the
+        // binding's relay send path + permission installer, then an offerer remote candidate is added. Its IP must
+        // be proactively permissioned on the (fake) TURN server — the inbound-check-reception precondition — via
+        // the same EnsurePermission the send path uses, without the answerer ever relaying an outbound check.
+        var codec = new StunMessageCodec();
+        var offererIp = IPAddress.Parse("203.0.113.42");
+        var offererCandidate = new IPEndPoint(offererIp, 50000);
+        var allocation = new TurnAllocateResult
+        {
+            RelayedEndPoint = new IPEndPoint(IPAddress.Parse("198.51.100.9"), 49152),
+            LifetimeSeconds = 600,
+            EffectiveCredentials = new StunCredentials
+            {
+                Username = "user", Password = "pass", Realm = "callora.example", Nonce = "nonce-1"
+            },
+        };
+
+        var factory = WebRtcRelayBinding.CreateFactory(Server, allocation, NullLoggerFactory.Instance);
+
+        var permissioned = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
+        RelayIceBinding? binding = null;
+        ValueTask TargetedSend(ReadOnlyMemory<byte> datagram, IPEndPoint target, CancellationToken ct)
+        {
+            var raw = datagram.ToArray();
+            var message = codec.Decode(raw);
+            if (message is { MessageClass: StunMessageClass.Request }
+                && (TurnMessageMethod)(ushort)message.MessageMethod == TurnMessageMethod.CreatePermission)
+            {
+                if (IsCreatePermissionFor(codec, raw, offererCandidate))
+                    permissioned.TrySetResult(raw);
+                binding!.OnControl(EmptySuccess(codec, message));
+            }
+
+            return ValueTask.CompletedTask;
+        }
+
+        binding = factory(TargetedSend);
+        Assert.NotNull(binding);
+
+        // A controlled (answerer) ICE control: IceControlling false → no nomination driver, so AddRelayLocalCandidate
+        // takes the proactive-permission branch. The direct send is a no-op (nothing is relayed outbound here).
+        var pipeline = Pipeline();
+        var iceParameters = new IceMediaParameters(
+            new IPEndPoint(IPAddress.Loopback, 51000), IceEnabled: true, IceControlling: false,
+            LocalIceUfrag: "answ", LocalIcePwd: "answPassword", RemoteIceUfrag: "offr", RemoteIcePwd: "offrPassword");
+
+        await using var ice = new BundledIceControl(
+            iceParameters, pipeline,
+            (_, _, _) => ValueTask.CompletedTask, NullLoggerFactory.Instance);
+
+        ice.AddRelayLocalCandidate(binding.RelaySend, binding.EnsurePermission);
+        ice.AddRemoteCandidate(new IceRemoteCandidate(offererCandidate, Priority: 100));
+
+        var permission = await permissioned.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var authKey = allocation.EffectiveCredentials!.WithRealmAndNonce("callora.example", "nonce-1").DeriveHmacKey();
+        Assert.True(codec.VerifyIntegrity(permission, authKey),
+            "the proactively installed CreatePermission must be authenticated with the allocation credentials");
+    }
+
+    private static BundledInboundPipeline Pipeline()
+    {
+        var demux = BundledRtpDemultiplexerFactory.Create(3, new Dictionary<string, IReadOnlyCollection<int>>());
+        var router = new BundledTrackRouter(demux);
+        return new BundledInboundPipeline(router, new RtpPacketCodec(), NullLogger<BundledInboundPipeline>.Instance);
     }
 
     [Fact]

@@ -25,9 +25,16 @@ namespace CalloraVoipSdk.Core.Infrastructure.Common.Relay;
 /// is still in direct mode (the ChannelBind request reaches the server unframed via the binding's send path).
 /// <see langword="null"/> leaves the session unable to switch to the relay data path.
 /// </param>
+/// <param name="EnsurePermission">
+/// Installs a TURN permission (RFC 8656 §9) for a peer IP over the allocation, deduplicated per IP. A controlled
+/// (answerer) agent uses it to proactively permission the offerer's remote-candidate IPs so their inbound relay
+/// checks are not dropped by the TURN server (§9) before the answerer can reply. <see langword="null"/> leaves
+/// proactive permissioning off (a controlling agent installs permissions itself as it relays outbound checks).
+/// </param>
 internal sealed record RelayIceBinding(
     IRelayIndicationChannel Indication,
     Action<ReadOnlyMemory<byte>> OnControl,
     Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask> RelaySend,
     IRelayKeepAlive? KeepAlive = null,
-    Func<IPEndPoint, CancellationToken, Task<RelayChannelBinding>>? BindChannel = null);
+    Func<IPEndPoint, CancellationToken, Task<RelayChannelBinding>>? BindChannel = null,
+    Func<IPAddress, CancellationToken, Task>? EnsurePermission = null);

@@ -40,6 +40,18 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
     // AddRelayLocalCandidate (answerer late adoption). Written on the gather thread, read on the driver loop —
     // accessed under Volatile so the read sees the store the relay candidate's Check closure was built with.
     private Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>? _relaySend;
+    // Installs a TURN permission (RFC 8656 §9) for a peer IP over this agent's relay allocation. Set together
+    // with _relaySend on a controlled (answerer) agent that adopts a relay candidate, so the agent proactively
+    // permissions every offerer remote-candidate IP BEFORE the offerer's inbound relay check arrives — without
+    // it the TURN server silently drops the inbound check (§9). Null on the controlling path (the send path
+    // installs the permission itself when it sends a relayed check) and when no relay allocation was gathered.
+    // Volatile: written on the adoption thread, read on the trickle thread (AddRemoteCandidate).
+    private Func<IPAddress, CancellationToken, Task>? _ensurePermission;
+    // The IPs of remote candidates seen so far, so that when a relay candidate is adopted late (answerer path,
+    // where the offer's SDP remote candidates and early trickle arrive BEFORE the relay's permission installer
+    // exists) the already-known peer IPs are proactively permissioned at adoption time — otherwise their inbound
+    // relay checks would be dropped. Deduplicated per IP; entries are cheap (a handful of offerer candidates).
+    private readonly ConcurrentDictionary<IPAddress, byte> _seenRemoteAddresses = new();
     private readonly ILogger<IceMediaAttachment> _logger;
 
     /// <summary>
@@ -195,38 +207,106 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
 
     /// <summary>
     /// Adds a remote candidate discovered after negotiation (RFC 8838 trickle) to the connectivity-check
-    /// list, so it is checked (and possibly nominated) rather than trusted by raw priority. No-op on a
-    /// controlled agent — which has no driver and adopts the pair the controlling peer nominates — or when
-    /// ICE is inactive.
+    /// list, so it is checked (and possibly nominated) rather than trusted by raw priority. On a controlling
+    /// agent the nomination driver picks it up. On a controlled agent — which has no driver and adopts the pair
+    /// the controlling peer nominates — it has no driver effect, but when this agent has a relay candidate its
+    /// peer IP is proactively permissioned on the relay (RFC 8656 §9) so the offerer's inbound relay check
+    /// reaches it rather than being dropped by the TURN server. Its IP is recorded either way so a relay
+    /// candidate adopted later can back-fill the permission. No-op on driver/permission when ICE is inactive.
     /// </summary>
     /// <param name="candidate">The trickled remote candidate.</param>
-    public void AddRemoteCandidate(IceRemoteCandidate candidate) => _nominationDriver?.AddCandidate(candidate);
+    public void AddRemoteCandidate(IceRemoteCandidate candidate)
+    {
+        var address = candidate.EndPoint.Address;
+        _seenRemoteAddresses.TryAdd(address, 0);
+
+        _nominationDriver?.AddCandidate(candidate);
+
+        // Controlling agents install the permission when the send path relays a check, so this only matters for
+        // the controlled (answerer) agent, which never sends a relay check itself and must open the inbound path
+        // proactively. When the relay candidate is adopted after this candidate is seen, AddRelayLocalCandidate
+        // back-fills the permission instead (it reads _seenRemoteAddresses).
+        if (_nominationDriver is null && Volatile.Read(ref _ensurePermission) is { } ensure)
+            _ = InstallRemotePermissionAsync(ensure, address);
+    }
+
+    // Installs the proactive TURN permission (RFC 8656 §9) for a remote candidate IP on a controlled agent's
+    // relay. Fire-and-forget: a check retransmits, and the permission install dedups per IP, so a transient
+    // failure is retried by the next candidate/adoption cycle rather than tearing anything down. Logs (never a
+    // silent catch) so a persistent failure is diagnosable.
+    private async Task InstallRemotePermissionAsync(
+        Func<IPAddress, CancellationToken, Task> ensurePermission, IPAddress peerAddress)
+    {
+        try
+        {
+            await ensurePermission(peerAddress, CancellationToken.None).ConfigureAwait(false);
+            _logger.LogDebug(
+                "Proactively installed a TURN relay permission for offerer candidate {Peer} (RFC 8656 §9).", peerAddress);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(
+                ex, "Proactive TURN relay permission for offerer candidate {Peer} failed; the inbound relay check may be dropped.",
+                peerAddress);
+        }
+    }
 
     /// <summary>
     /// Adds the relay ICE local candidate after construction (RFC 8445 §5.1.1.2) — the answerer path, whose
     /// TURN allocation only finishes gathering once this attachment already exists, so its relay path could not
-    /// be seeded at construction the way the offerer's is. Stores the relay send path so a later relay
-    /// nomination redirects consent freshness through it, then hands the nomination driver a relay local
-    /// candidate (type preference 0, below host/srflx) paired against every remote — so a relayed pair is
-    /// checked and, if no direct pair works, nominated. No-op on a controlled agent (no driver — it adopts the
-    /// pair the controlling peer nominates) or when consent/ICE is inactive. Call at most once: a connection is
-    /// offerer XOR answerer for a given allocation, and the offerer already seeded its relay candidate.
+    /// be seeded at construction the way the offerer's is. Stores the relay send path (so a later relay
+    /// nomination redirects consent freshness through it) and the permission installer <b>before</b> the
+    /// no-driver guard, so both the controlling and the controlled path see them.
+    /// <para>
+    /// On a controlling agent it then hands the nomination driver a relay local candidate (type preference 0,
+    /// below host/srflx) paired against every remote — so a relayed pair is checked and, if no direct pair
+    /// works, nominated. On a controlled agent (no driver — it adopts the pair the controlling peer nominates)
+    /// there is no driver candidate to add, but the stored send path still lets an inbound relay-received
+    /// nomination reply and run consent over the relay, and the permission installer opens the inbound path:
+    /// every remote candidate IP already seen (the offer's SDP candidates and early trickle, which arrive before
+    /// the answerer's allocation finishes gathering) is proactively permissioned now (RFC 8656 §9), and later
+    /// candidates permission themselves through <see cref="AddRemoteCandidate"/>. No-op when consent/ICE is
+    /// inactive. Call at most once: a connection is offerer XOR answerer for a given allocation.
+    /// </para>
     /// </summary>
     /// <param name="relaySend">
     /// The relay local candidate's TURN-framed send path — <c>(datagram, remoteTarget, ct)</c>, framing the
     /// datagram to the remote through the TURN allocation (Send indication, RFC 8656 §10).
     /// </param>
+    /// <param name="ensurePermission">
+    /// Installs a TURN permission (RFC 8656 §9) for a peer IP over the relay allocation, deduplicated per IP.
+    /// Used on a controlled agent to proactively permission offerer remote-candidate IPs so their inbound relay
+    /// checks are not dropped by the TURN server. <see langword="null"/> leaves proactive permissioning off
+    /// (the controlling path installs permissions as it sends relayed checks).
+    /// </param>
     public void AddRelayLocalCandidate(
-        Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask> relaySend)
+        Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask> relaySend,
+        Func<IPAddress, CancellationToken, Task>? ensurePermission = null)
     {
         ArgumentNullException.ThrowIfNull(relaySend);
-        if (_nominationDriver is null || _consent is null)
+        if (_consent is null)
             return;
 
-        // Store before handing the candidate to the driver so a relay nomination that fires as soon as the new
-        // pair is checked observes the send path for OnDriverNominated's consent redirect. Volatile pairs with
-        // the read there; the driver's _gate additionally orders the pair's visibility.
+        // Store the send path and the permission installer BEFORE the driver guard, so the controlled agent
+        // (no driver) still records both: the send path lets an inbound relay-received nomination reply and run
+        // consent over the relay, and the installer opens the inbound path for offerer IPs. Volatile pairs with
+        // the reads on the driver loop (_relaySend) and the trickle thread (_ensurePermission).
         Volatile.Write(ref _relaySend, relaySend);
+        Volatile.Write(ref _ensurePermission, ensurePermission);
+
+        if (_nominationDriver is null)
+        {
+            // Controlled agent: no driver candidate to add. Back-fill permissions for remote candidates already
+            // seen before the allocation finished gathering (the offer's SDP candidates + early trickle), so the
+            // offerer's inbound relay checks reach us. Later candidates permission themselves in AddRemoteCandidate.
+            if (ensurePermission is not null)
+            {
+                foreach (var address in _seenRemoteAddresses.Keys)
+                    _ = InstallRemotePermissionAsync(ensurePermission, address);
+            }
+            return;
+        }
+
         _nominationDriver.AddLocalCandidate(new IceLocalCandidate
         {
             Type = RelayCandidateType,

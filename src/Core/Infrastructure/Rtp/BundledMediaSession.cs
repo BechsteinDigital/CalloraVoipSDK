@@ -584,7 +584,10 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         }
 
         _transport.SetIndicationRelay(binding.Indication, binding.OnControl);
-        _ice.AddRelayLocalCandidate(binding.RelaySend);
+        // Hand the ICE agent both the relay send path and the per-peer permission installer: a controlled
+        // (answerer) agent uses the installer to proactively permission the offerer's remote-candidate IPs
+        // (RFC 8656 §9) so their inbound relay checks reach it rather than being dropped by the TURN server.
+        _ice.AddRelayLocalCandidate(binding.RelaySend, binding.EnsurePermission);
         // Retain the binding so a later relay-pair nomination can ChannelBind + switch the transport.
         Volatile.Write(ref _relayBinding, binding);
 
