@@ -40,13 +40,6 @@ public sealed class ComparisonScenarios
         { StackKind.Ozeki, "nonexistent", 404, ComparisonTerminationCategory.Failed },
     };
 
-    public static TheoryData<StackKind, bool> CancellationCleanupExpectations => new()
-    {
-        { StackKind.Callora, false },
-        { StackKind.SipSorcery, true },
-        { StackKind.Ozeki, true },
-    };
-
     public static TheoryData<StackKind, bool> PbxOutageDetectionExpectations => new()
     {
         { StackKind.Callora, true },
@@ -172,10 +165,9 @@ public sealed class ComparisonScenarios
     }
 
     [Theory]
-    [MemberData(nameof(CancellationCleanupExpectations))]
+    [MemberData(nameof(Stacks))]
     public async Task Caller_cancellation_observes_wire_cleanup_and_stack_reusability(
-        StackKind kind,
-        bool expectsCancelCleanup)
+        StackKind kind)
     {
         await using var asterisk = await StartAsteriskAsync().ConfigureAwait(false);
         await asterisk.EnablePjsipLoggerAsync().ConfigureAwait(false);
@@ -193,6 +185,14 @@ public sealed class ComparisonScenarios
         stopwatch.Stop();
         Assert.Equal(DialAttemptStatus.Canceled, canceled.Status);
         Assert.Null(canceled.Call);
+        if (kind == StackKind.Callora)
+        {
+            Assert.NotNull(canceled.TerminationReason);
+            Assert.Equal(
+                ComparisonTerminationCategory.Canceled,
+                canceled.TerminationReason!.Category);
+            Assert.Equal(487, canceled.TerminationReason.SipStatusCode);
+        }
         Assert.InRange(
             stopwatch.Elapsed,
             TimeSpan.FromMilliseconds(500),
@@ -206,8 +206,12 @@ public sealed class ComparisonScenarios
                 TimeSpan.FromSeconds(5))
             .ConfigureAwait(false);
         var logs = await asterisk.GetLogsAsync().ConfigureAwait(false);
-        Assert.Equal(expectsCancelCleanup, logs.Contains("CANCEL sip:", StringComparison.OrdinalIgnoreCase));
-        Assert.Equal(expectsCancelCleanup, channelWasCleaned);
+        Assert.True(
+            logs.Contains("CANCEL sip:", StringComparison.OrdinalIgnoreCase),
+            $"{stack.Name} sent no SIP CANCEL after caller cancellation.");
+        Assert.True(
+            channelWasCleaned,
+            $"{stack.Name} left the canceled Asterisk channel active.");
 
         var recovery = await stack
             .DialAsync(asterisk.Target("answer"), TimeSpan.FromSeconds(10))
