@@ -58,3 +58,10 @@ public sealed class AsteriskTwoLegTransferMatrix : TwoLegTransferMatrix
 {
     protected override IPbxFixture CreatePbx(int bridgePairs = 1) => new AsteriskPbxFixture(bridgePairs);
 }
+
+/// <summary>Fährt die Attended-Transfer-Matrix gegen echtes FreeSWITCH.</summary>
+[Trait("Category", "Interop"), Trait("Category", "InteropFreeSwitch")]
+public sealed class FreeSwitchTwoLegTransferMatrix : TwoLegTransferMatrix
+{
+    protected override IPbxFixture CreatePbx(int bridgePairs = 1) => new FreeSwitchPbxFixture(bridgePairs);
+}
