@@ -61,6 +61,28 @@ public sealed class DtlsSrtpKeyExporterTests
         Assert.True(material.AsSpan().IndexOfAnyExcept((byte)0) < 0, "aggregate keying material was not wiped");
     }
 
+    [Fact]
+    public void Disposing_the_negotiated_keys_wipes_both_master_halves()
+    {
+        var material = BuildMaterial();
+
+        var keys = DtlsSrtpKeyExporter.SplitKeyingMaterial(
+            material, SrtpCryptoSuite.AesCm128HmacSha1_80, KeyLength, SaltLength, isClient: true);
+
+        // Sanity: the per-context master halves still hold their bytes before disposal.
+        Assert.True(keys.LocalKeys.MasterKey.Span.IndexOfAnyExcept((byte)0) >= 0);
+        Assert.True(keys.RemoteKeys.MasterKey.Span.IndexOfAnyExcept((byte)0) >= 0);
+
+        keys.Dispose();
+
+        // Once the SRTP/SRTCP contexts have derived their session keys, disposing the negotiated keys
+        // wipes the retained per-context master key/salt buffers (RFC 3711 §9.4) — nothing lingers.
+        Assert.True(keys.LocalKeys.MasterKey.Span.IndexOfAnyExcept((byte)0) < 0, "local master key was not wiped");
+        Assert.True(keys.LocalKeys.MasterSalt.Span.IndexOfAnyExcept((byte)0) < 0, "local master salt was not wiped");
+        Assert.True(keys.RemoteKeys.MasterKey.Span.IndexOfAnyExcept((byte)0) < 0, "remote master key was not wiped");
+        Assert.True(keys.RemoteKeys.MasterSalt.Span.IndexOfAnyExcept((byte)0) < 0, "remote master salt was not wiped");
+    }
+
     private static byte[] Repeat(byte value, int count)
     {
         var buffer = new byte[count];

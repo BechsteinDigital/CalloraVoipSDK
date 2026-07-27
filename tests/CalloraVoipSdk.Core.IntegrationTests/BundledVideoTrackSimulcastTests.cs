@@ -147,7 +147,7 @@ public sealed class BundledVideoTrackSimulcastTests
     }
 
     private static SrtpKeyMaterial Material() =>
-        new() { MasterKey = MasterKey, MasterSalt = MasterSalt, Suite = SrtpCryptoSuite.AesCm128HmacSha1_80 };
+        new(MasterKey, MasterSalt, SrtpCryptoSuite.AesCm128HmacSha1_80);
 
     private sealed class DiscardSender : IBundledDatagramSender
     {

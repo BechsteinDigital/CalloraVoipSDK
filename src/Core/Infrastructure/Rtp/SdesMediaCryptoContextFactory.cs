@@ -43,10 +43,21 @@ internal static class SdesMediaCryptoContextFactory
         if (TryParseKeyMaterial(srtpSuite, localKeyParams, remoteKeyParams) is not { } keys)
             return (null, null, null, null);
 
-        logger.LogInformation(
-            "SRTP and SRTCP enabled for media session (suite {Suite}).", srtpSuite);
-        return (new SrtpContext(keys.Local), new SrtpContext(keys.Remote),
-                new SrtcpContext(keys.Local), new SrtcpContext(keys.Remote));
+        // Each master half feeds both an SRTP and an SRTCP context (RFC 3711 §4.3.2); wipe the
+        // master key/salt once all four have derived their session keys — this SDK never re-keys
+        // within a session (RFC 3711 §9.4). try/finally so a mid-construction throw still wipes.
+        try
+        {
+            logger.LogInformation(
+                "SRTP and SRTCP enabled for media session (suite {Suite}).", srtpSuite);
+            return (new SrtpContext(keys.Local), new SrtpContext(keys.Remote),
+                    new SrtcpContext(keys.Local), new SrtcpContext(keys.Remote));
+        }
+        finally
+        {
+            keys.Local.Dispose();
+            keys.Remote.Dispose();
+        }
     }
 
     /// <summary>
@@ -62,8 +73,18 @@ internal static class SdesMediaCryptoContextFactory
         if (TryParseKeyMaterial(srtpSuite, localKeyParams, remoteKeyParams) is not { } keys)
             return (null, null);
 
-        logger.LogInformation("SRTP enabled for the RTX repair stream (suite {Suite}).", srtpSuite);
-        return (new SrtpContext(keys.Local), new SrtpContext(keys.Remote));
+        // Wipe the master key/salt once both repair-stream contexts have derived their session
+        // keys (RFC 3711 §9.4). try/finally so a mid-construction throw still wipes.
+        try
+        {
+            logger.LogInformation("SRTP enabled for the RTX repair stream (suite {Suite}).", srtpSuite);
+            return (new SrtpContext(keys.Local), new SrtpContext(keys.Remote));
+        }
+        finally
+        {
+            keys.Local.Dispose();
+            keys.Remote.Dispose();
+        }
     }
 
     /// <summary>
