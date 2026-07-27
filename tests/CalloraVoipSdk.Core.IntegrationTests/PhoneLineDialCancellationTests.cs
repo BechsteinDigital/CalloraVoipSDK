@@ -62,6 +62,32 @@ public sealed class PhoneLineDialCancellationTests
         Assert.True(callChannel.HangupCount >= 1); // CANCEL was sent for the pending INVITE
     }
 
+    // F008 regression: the connect timeout (not a caller cancellation) fires while ringing. DialAsync
+    // now CANCELs and returns the terminated call for the timeout's linked token exactly as for a caller
+    // cancellation, so the convenience must distinguish the two and map the timeout to Timeout — not the
+    // Failed the returned Terminated state would otherwise yield.
+    [Fact]
+    public async Task DialAndWait_ConnectTimeoutWhileRinging_YieldsTimeout_WithReachableCall()
+    {
+        var callChannel = new HangupObservingCallChannel();
+        var lineChannel = new BlockingRingingLineChannel(callChannel);
+        var line = NewLine(lineChannel);
+
+        using var orchestrator = new SdkConvenienceOrchestrator(
+            new PhoneLineManager(_ => throw new NotSupportedException("no register here")),
+            new MediaManager(), new NoopAudioDevice(), NullLoggerFactory.Instance, videoDevice: null);
+
+        // No caller cancellation — the short connect timeout elapses while the dial is still ringing.
+        var outcome = await orchestrator.DialAndWaitUntilConnectedAsync(
+            line, "sip:bob@example.com", dialOptions: null, TimeSpan.FromMilliseconds(200),
+            hangupOnTimeout: false, hangupOnCancellation: false, CancellationToken.None);
+
+        Assert.Equal(CallConnectStatus.Timeout, outcome.Status); // F008: Timeout, not Failed
+        Assert.NotNull(outcome.Call);
+        Assert.Equal(CallState.Terminated, outcome.Call!.State);
+        Assert.True(callChannel.HangupCount >= 1);               // CANCEL was still sent for the pending INVITE
+    }
+
     private static PhoneLine NewLine(ILineChannel channel)
     {
         var line = new PhoneLine(

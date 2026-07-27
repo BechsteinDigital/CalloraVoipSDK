@@ -167,6 +167,18 @@ internal sealed class SdkConvenienceOrchestrator : IDisposable
                 return new CallConnectOutcome(CallConnectStatus.Canceled, call, call.State, null);
             }
 
+            // The connect timeout elapsed while the dial was still ringing: DialAsync CANCELled the INVITE
+            // (RFC 3261 §9.1) and returned the terminated call the same way as a caller cancellation. Map it
+            // to Timeout — otherwise the returned Terminated state below mis-maps to Failed (F008). Caller
+            // cancellation (checked above) wins when both the caller token and the timeout fired.
+            if (timeoutCts.IsCancellationRequested)
+            {
+                if (hangupOnTimeout)
+                    await TryHangupAsync(call).ConfigureAwait(false);
+
+                return new CallConnectOutcome(CallConnectStatus.Timeout, call, call.State, null);
+            }
+
             var waiter = new TaskCompletionSource<CallState>(TaskCreationOptions.RunContinuationsAsynchronously);
             EventHandler<CallStateChangedEventArgs> onStateChanged = (_, args) =>
             {
