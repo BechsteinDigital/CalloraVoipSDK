@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Callora Browser Interop Offerer Peer</title></head>
+<body>
+<h1 id="status">init</h1>
+<script>
+(async () => {
+  const set = (s) => { document.getElementById('status').textContent = s; };
+  const ws = new WebSocket(`ws://${location.host}/ws`);
+  const send = (o) => { try { ws.send(JSON.stringify(o)); } catch (e) {} };
+  const log = (m) => { console.log('[offerer] ' + m); send({ type: 'log', candidate: String(m) }); };
+  window.onerror = (m) => log('window.onerror: ' + m);
+
+  const pc = new RTCPeerConnection({ iceServers: [] });   // host-only ICE, kein STUN
+  pc.onicecandidate = (e) => { if (e.candidate) send({ type: 'candidate', candidate: e.candidate.candidate }); };
+  pc.oniceconnectionstatechange = () => log('ice:' + pc.iceConnectionState);
+  pc.onconnectionstatechange = () => { set('pc:' + pc.connectionState); log('pc:' + pc.connectionState); };
+
+  // Der Browser ist hier OFFERER: er erzeugt das Offer. Die Answer kommt vom SDK.
+  // Remote-Candidates (vom SDK) dürfen erst NACH setRemoteDescription(answer) angewandt werden —
+  // sonst wirft addIceCandidate. Daher puffern, bis die Answer gesetzt ist.
+  let remoteDescriptionSet = false;
+  const pendingRemote = [];
+  const applyCandidate = async (c) => {
+    try { await pc.addIceCandidate({ candidate: c, sdpMLineIndex: 0 }); }
+    catch (e) { log('addIceCandidate failed: ' + e); }
+  };
+
+  ws.onmessage = async (ev) => {
+    const msg = JSON.parse(ev.data);
+    if (msg.type === 'answer') {
+      log('answer received');
+      await pc.setRemoteDescription({ type: 'answer', sdp: msg.sdp });
+      remoteDescriptionSet = true;
+      while (pendingRemote.length) await applyCandidate(pendingRemote.shift());
+      log('answer applied, ' + 'flushed remote candidates');
+    } else if (msg.type === 'candidate') {
+      if (remoteDescriptionSet) await applyCandidate(msg.candidate);
+      else pendingRemote.push(msg.candidate);
+    }
+  };
+
+  try {
+    // fake-device Audio (Chrome-Flag --use-fake-device-for-media-stream liefert einen Sinuston).
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    for (const track of stream.getTracks()) pc.addTrack(track, stream);
+    log('getUserMedia ok, tracks=' + stream.getTracks().length);
+  } catch (e) {
+    log('getUserMedia FAILED: ' + e);
+  }
+
+  const startOffer = async () => {
+    set('ws:open');
+    // Proaktiv Offer erzeugen und senden (der Browser treibt die Verhandlung).
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    send({ type: 'offer', sdp: offer.sdp });
+    log('offer sent');
+    // getStats: der Browser empfängt das SDK-Echo -> inbound-rtp audio.
+    setInterval(async () => {
+      const stats = await pc.getStats();
+      stats.forEach((r) => {
+        if (r.type === 'inbound-rtp' && r.kind === 'audio') {
+          send({ type: 'stats', bytesReceived: r.bytesReceived || 0, packetsReceived: r.packetsReceived || 0 });
+        }
+      });
+    }, 500);
+  };
+  if (ws.readyState === WebSocket.OPEN) startOffer();
+  else ws.onopen = startOffer;
+})();
+</script>
+</body>
+</html>
