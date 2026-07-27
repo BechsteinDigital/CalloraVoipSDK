@@ -543,8 +543,11 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             }
             EnqueueRemoteCandidate(new IPEndPoint(ip, port), priority);
         }
-        catch (OperationCanceledException) { /* peer disposed or token cancelled */ }
-        catch (ObjectDisposedException) { /* peer disposed (CTS read during teardown race) — benign */ }
+        catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
+        {
+            // Peer disposed mid-resolution (token cancelled, or CTS read during the teardown race) — expected.
+            _logger.LogTrace("mDNS (.local) ICE candidate resolution abandoned during peer teardown.");
+        }
         catch (Exception ex)
         {
             _logger.LogDebug(ex, "Resolving an mDNS (.local) trickled ICE candidate failed.");
@@ -923,7 +926,8 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     {
         // Cancel any in-flight background mDNS (.local) resolutions so they cannot outlive the peer.
         // Idempotent: a second dispose sees an already-disposed CTS (Cancel would throw) — swallow it.
-        try { _mdnsLifetime.Cancel(); } catch (ObjectDisposedException) { /* already disposed */ }
+        try { _mdnsLifetime.Cancel(); }
+        catch (ObjectDisposedException) { _logger.LogTrace("mDNS lifetime CTS already disposed (double dispose)."); }
 
         BundledMediaSession? session;
         UdpClient? orphanSocket;
