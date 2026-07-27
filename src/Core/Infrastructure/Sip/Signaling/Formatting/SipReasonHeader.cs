@@ -83,7 +83,13 @@ internal static class SipReasonHeader
     }
 
     /// <summary>
-    /// Builds one SIP protocol reason from a status code and reason phrase.
+    /// Builds one SIP protocol reason from a status code and reason phrase. The status is carried in
+    /// <see cref="SipDialogTerminationReason.SipStatusCode"/> as well as in the RFC 3326
+    /// <see cref="SipDialogTerminationReason.Cause"/>, so a locally originated termination (a CANCEL 487,
+    /// a local 486 reject, a 408 timeout) classifies on its real status — the authoritative signal
+    /// (#103) — instead of falling back to the connected-gate and mis-reporting Failed. Only the
+    /// protocol/cause/text are serialized onto the wire Reason header, so the status is a classification
+    /// hint that never changes the emitted header.
     /// </summary>
     public static SipDialogTerminationReason CreateSipStatusReason(
         int statusCode,
@@ -91,7 +97,8 @@ internal static class SipReasonHeader
         new(
             protocol: "SIP",
             cause: statusCode,
-            text: reasonPhrase);
+            text: reasonPhrase,
+            sipStatusCode: statusCode);
 
     /// <summary>
     /// Removes one optional surrounding quote pair and unescapes quoted-pair escapes.
