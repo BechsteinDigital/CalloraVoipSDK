@@ -87,6 +87,7 @@ internal sealed class BundledVideoTrack : IDisposable
     private ushort _lastDeliveredSequence;
     private long _framesReceived;
     private long _keyFrames;
+    private long _framesDropped;
 
     /// <summary>Raised with a reassembled encoded frame, its RTP timestamp, and whether it is a key frame.</summary>
     public event Action<byte[], uint, bool>? FrameReceived;
@@ -102,6 +103,19 @@ internal sealed class BundledVideoTrack : IDisposable
 
     /// <summary>Total inbound key frames delivered.</summary>
     public long KeyFrames => Interlocked.Read(ref _keyFrames);
+
+    /// <summary>
+    /// Frames discarded because a reorder gap the window could not fill tore the frame under assembly, so the
+    /// depacketiser was reset before feeding on. The receiver-side "frames dropped" metric for this transport-only
+    /// path (a partially-assembled frame is never emitted after a discontinuity).
+    /// </summary>
+    public long FramesDropped => Interlocked.Read(ref _framesDropped);
+
+    /// <summary>Generic NACK feedback messages this stream has sent to the peer on detected inbound loss.</summary>
+    public long NacksSent => _keyFrameFeedback.NacksSent;
+
+    /// <summary>PLI keyframe requests this stream has sent to the peer on detected inbound loss (throttled).</summary>
+    public long PlisSent => _keyFrameFeedback.PlisSent;
 
     /// <summary>Whether this track sends multiple simulcast encodings (RFC 8853).</summary>
     public bool IsSimulcast => _layers.Count > 0;
@@ -413,7 +427,10 @@ internal sealed class BundledVideoTrack : IDisposable
     private void DeliverOrdered(RtpPacket packet)
     {
         if (_hasDelivered && packet.SequenceNumber != unchecked((ushort)(_lastDeliveredSequence + 1)))
+        {
             _depacketiser.Reset();
+            Interlocked.Increment(ref _framesDropped);
+        }
         _lastDeliveredSequence = packet.SequenceNumber;
         _hasDelivered = true;
 

@@ -47,12 +47,14 @@ public sealed class WebRtcStatsTests
         Assert.Null(stats.JitterMs);                     // no inbound media → no clock established yet
         Assert.Null(stats.FramesPerSecond);              // no video track yet
         Assert.Null(stats.KeyFrames);                    // no video track yet
-        Assert.Null(stats.FramesDropped);                // frame-drop accounting — deferred
-        Assert.Null(stats.NackCount);                    // bundle video feedback — deferred
+        Assert.Null(stats.FramesDropped);                // no video track yet
+        Assert.Null(stats.NackCount);                    // no video track yet
+        Assert.Null(stats.PliCount);                     // no video track yet
+        Assert.Null(stats.FirCount);                     // FIR is never generated (PLI is the fallback)
         Assert.Equal("new", stats.IceState);             // derived from connectivity (S2)
         Assert.Null(stats.SelectedLocalCandidate);       // no bound endpoint yet
         Assert.Null(stats.SelectedRemoteCandidate);
-        Assert.Null(stats.AvailableOutgoingBitrateBps);  // transport-cc — later slice
+        Assert.Null(stats.AvailableOutgoingBitrateBps);  // no session / transport-cc not negotiated yet
         Assert.Empty(stats.MediaStreams);                // no session → no per-stream quality (CF-004f)
     }
 }

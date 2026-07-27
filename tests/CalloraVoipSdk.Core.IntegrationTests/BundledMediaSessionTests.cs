@@ -70,6 +70,12 @@ public sealed class BundledMediaSessionTests
         // Stats video counters (S4): the server received frames including the IDR key frame.
         Assert.True(server.SnapshotStats().FramesReceived > 0, "server should have received video frames");
         Assert.True(server.SnapshotStats().KeyFrames > 0, "server should have received the key frame");
+
+        // getStats video feedback/drop counters: present (non-null) once a video track exists; zero here because
+        // the loopback is lossless (no reorder gap → no torn frame; no detected loss → no NACK/PLI sent).
+        Assert.Equal(0L, server.SnapshotStats().FramesDropped);
+        Assert.Equal(0L, server.SnapshotStats().NacksSent);
+        Assert.Equal(0L, server.SnapshotStats().PlisSent);
     }
 
     [Fact]
@@ -113,6 +119,12 @@ public sealed class BundledMediaSessionTests
         }
 
         await recommendationUpdated.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        // getStats: the sender-side congestion estimate is surfaced through the stats snapshot — non-null because
+        // transport-cc was negotiated, and positive (a controller always holds a target bitrate).
+        var recommendedBitrate = client.SnapshotStats().AvailableOutgoingBitrateBps;
+        Assert.NotNull(recommendedBitrate);
+        Assert.True(recommendedBitrate > 0, $"expected a positive recommended bitrate, got {recommendedBitrate}");
     }
 
     // ── harness ──────────────────────────────────────────────────────────────────
