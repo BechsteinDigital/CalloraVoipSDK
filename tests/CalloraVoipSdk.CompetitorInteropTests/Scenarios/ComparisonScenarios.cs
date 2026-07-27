@@ -23,17 +23,21 @@ public sealed class ComparisonScenarios
         StackKind.Ozeki,
     };
 
-    public static TheoryData<StackKind, string> RemoteRejections => new()
+    public static TheoryData<
+        StackKind,
+        string,
+        int,
+        ComparisonTerminationCategory> RemoteRejections => new()
     {
-        { StackKind.Callora, "busy" },
-        { StackKind.Callora, "decline" },
-        { StackKind.Callora, "nonexistent" },
-        { StackKind.SipSorcery, "busy" },
-        { StackKind.SipSorcery, "decline" },
-        { StackKind.SipSorcery, "nonexistent" },
-        { StackKind.Ozeki, "busy" },
-        { StackKind.Ozeki, "decline" },
-        { StackKind.Ozeki, "nonexistent" },
+        { StackKind.Callora, "busy", 486, ComparisonTerminationCategory.Busy },
+        { StackKind.Callora, "decline", 403, ComparisonTerminationCategory.Rejected },
+        { StackKind.Callora, "nonexistent", 404, ComparisonTerminationCategory.Failed },
+        { StackKind.SipSorcery, "busy", 486, ComparisonTerminationCategory.Busy },
+        { StackKind.SipSorcery, "decline", 403, ComparisonTerminationCategory.Rejected },
+        { StackKind.SipSorcery, "nonexistent", 404, ComparisonTerminationCategory.Failed },
+        { StackKind.Ozeki, "busy", 486, ComparisonTerminationCategory.Busy },
+        { StackKind.Ozeki, "decline", 403, ComparisonTerminationCategory.Rejected },
+        { StackKind.Ozeki, "nonexistent", 404, ComparisonTerminationCategory.Failed },
     };
 
     public static TheoryData<StackKind, bool> CancellationCleanupExpectations => new()
@@ -126,7 +130,9 @@ public sealed class ComparisonScenarios
     [MemberData(nameof(RemoteRejections))]
     public async Task Remote_rejection_cleans_up_and_stack_remains_reusable(
         StackKind kind,
-        string extension)
+        string extension,
+        int expectedSipStatusCode,
+        ComparisonTerminationCategory expectedCategory)
     {
         await using var asterisk = await StartAsteriskAsync().ConfigureAwait(false);
         await using var stack = await CreateRegisteredStackAsync(kind, asterisk).ConfigureAwait(false);
@@ -139,6 +145,10 @@ public sealed class ComparisonScenarios
         stopwatch.Stop();
         Assert.Equal(DialAttemptStatus.Failed, rejected.Status);
         Assert.Null(rejected.Call);
+        Assert.NotNull(rejected.TerminationReason);
+        Assert.Equal(expectedSipStatusCode, rejected.TerminationReason!.SipStatusCode);
+        Assert.Equal(expectedCategory, rejected.TerminationReason.Category);
+        Assert.Equal(ComparisonTerminatedBy.Remote, rejected.TerminationReason.TerminatedBy);
         Assert.InRange(stopwatch.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(8));
         Assert.Equal(0, stack.ActiveCallCount);
         Assert.True(stack.IsRegistered, $"{stack.Name} lost registration after {extension} rejection.");

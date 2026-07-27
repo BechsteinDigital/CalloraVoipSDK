@@ -93,17 +93,22 @@ public sealed class OzekiStack : IComparisonStack
         observedStates.Enqueue($"{stopwatch.ElapsedMilliseconds}ms {call.CallState}");
         var completion = new TaskCompletionSource<DialAttemptStatus>(
             TaskCreationOptions.RunContinuationsAsynchronously);
+        ComparisonTerminationReason? terminationReason = null;
 
         void OnCallStateChanged(object? sender, CallStateChangedArgs args)
         {
             observedStates.Enqueue(
-                $"{stopwatch.ElapsedMilliseconds}ms {args.State} ({args.Reason})");
+                $"{stopwatch.ElapsedMilliseconds}ms {args.State} " +
+                $"({args.StatusCode} {args.Reason}; {args.Error})");
             if (IsConnectedState(args.State))
             {
                 completion.TrySetResult(DialAttemptStatus.Connected);
             }
             else if (IsTerminalState(args.State))
             {
+                terminationReason = ComparisonTerminationReason.FromRemoteSipResponse(
+                    args.StatusCode > 0 ? args.StatusCode : null,
+                    $"{args.Reason}; {args.Error}");
                 completion.TrySetResult(DialAttemptStatus.Failed);
             }
         }
@@ -146,7 +151,8 @@ public sealed class OzekiStack : IComparisonStack
                     DialAttemptStatus.Failed,
                     Detail:
                         $"Ozeki call ended in {call.CallState}. " +
-                        $"States: {string.Join(" -> ", observedStates)}");
+                        $"States: {string.Join(" -> ", observedStates)}",
+                    TerminationReason: terminationReason);
             }
 
             return new DialAttempt(

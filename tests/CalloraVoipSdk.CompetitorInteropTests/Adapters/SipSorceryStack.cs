@@ -84,6 +84,19 @@ public sealed class SipSorceryStack : IComparisonStack
         var mediaSession = CreateMediaSession(mediaEndpoint);
         var timeoutSeconds = Math.Max(1, checked((int)Math.Ceiling(connectTimeout.TotalSeconds)));
         var startedAt = DateTimeOffset.UtcNow;
+        ComparisonTerminationReason? terminationReason = null;
+
+        void OnClientCallFailed(
+            ISIPClientUserAgent userAgent,
+            string error,
+            SIPResponse response)
+        {
+            terminationReason = ComparisonTerminationReason.FromRemoteSipResponse(
+                response?.StatusCode,
+                response is null ? error : $"{response.ReasonPhrase}; {error}");
+        }
+
+        userAgent.ClientCallFailed += OnClientCallFailed;
 
         bool connected;
         Task<bool>? callTask = null;
@@ -99,6 +112,7 @@ public sealed class SipSorceryStack : IComparisonStack
         }
         catch (OperationCanceledException)
         {
+            userAgent.ClientCallFailed -= OnClientCallFailed;
             userAgent.Cancel();
             if (callTask is not null)
             {
@@ -126,6 +140,7 @@ public sealed class SipSorceryStack : IComparisonStack
         }
         catch
         {
+            userAgent.ClientCallFailed -= OnClientCallFailed;
             mediaSession.Close("Dial failed.");
             userAgent.Dispose();
             throw;
@@ -133,15 +148,20 @@ public sealed class SipSorceryStack : IComparisonStack
 
         if (!connected)
         {
+            userAgent.ClientCallFailed -= OnClientCallFailed;
             mediaSession.Close("Dial did not connect.");
             userAgent.Dispose();
             var elapsed = DateTimeOffset.UtcNow - startedAt;
             var status = elapsed >= connectTimeout - TimeSpan.FromSeconds(1)
                 ? DialAttemptStatus.Timeout
                 : DialAttemptStatus.Failed;
-            return new DialAttempt(status, Detail: $"Call returned false after {elapsed.TotalSeconds:F1}s.");
+            return new DialAttempt(
+                status,
+                Detail: $"Call returned false after {elapsed.TotalSeconds:F1}s.",
+                TerminationReason: terminationReason);
         }
 
+        userAgent.ClientCallFailed -= OnClientCallFailed;
         return new DialAttempt(
             DialAttemptStatus.Connected,
             Track(userAgent, mediaSession, mediaEndpoint));

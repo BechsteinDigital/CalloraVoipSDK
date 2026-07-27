@@ -143,6 +143,9 @@ public sealed class AsteriskContainer : IAsyncDisposable
                                                   // auf langsamem CI fiel Ziffer 1 sonst weg (Wait(2) war zu knapp).
         "same => n,SendDTMF(1234)\n" +            // sendet 1-2-3-4 als telephone-event
         "same => n,Wait(30)\n" +                  // Call offen halten für den Empfang
+        "exten => remotehangup,1,Answer()\n" +     // → 200 OK, danach Peer-seitiges BYE
+        "same => n,Wait(2)\n" +
+        "same => n,Hangup()\n" +
         "exten => earlymedia,1,Progress()\n" +    // → 183 Session Progress mit SDP (Early Media)
         "same => n,Playtones(dial)\n" +           // Dial-Ton als Early-Media-RTP vor dem 200 OK (Playtones
                                                   //   antwortet NICHT — Wait() hält das Fenster wirklich offen)

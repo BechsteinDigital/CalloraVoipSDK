@@ -15,6 +15,50 @@ public enum DialAttemptStatus
     Failed,
 }
 
+public enum ComparisonTerminationCategory
+{
+    Completed,
+    Busy,
+    NoAnswer,
+    Rejected,
+    Canceled,
+    Failed,
+}
+
+public enum ComparisonTerminatedBy
+{
+    Local,
+    Remote,
+    Unknown,
+}
+
+public sealed record ComparisonTerminationReason(
+    int? SipStatusCode,
+    ComparisonTerminationCategory Category,
+    ComparisonTerminatedBy TerminatedBy,
+    string? Detail = null)
+{
+    public static ComparisonTerminationReason FromRemoteSipResponse(
+        int? statusCode,
+        string? detail = null) =>
+        new(
+            statusCode,
+            CategoryForSipStatus(statusCode),
+            ComparisonTerminatedBy.Remote,
+            detail);
+
+    private static ComparisonTerminationCategory CategoryForSipStatus(int? statusCode) =>
+        statusCode switch
+        {
+            486 or 600 => ComparisonTerminationCategory.Busy,
+            408 or 480 => ComparisonTerminationCategory.NoAnswer,
+            487 => ComparisonTerminationCategory.Canceled,
+            403 or 603 => ComparisonTerminationCategory.Rejected,
+            >= 100 and < 400 => ComparisonTerminationCategory.Completed,
+            _ => ComparisonTerminationCategory.Failed,
+        };
+}
+
 public sealed record SipTestAccount(
     string Server,
     int Port,
@@ -25,7 +69,8 @@ public sealed record SipTestAccount(
 public sealed record DialAttempt(
     DialAttemptStatus Status,
     IComparisonCall? Call = null,
-    string? Detail = null);
+    string? Detail = null,
+    ComparisonTerminationReason? TerminationReason = null);
 
 public interface IComparisonStack : IAsyncDisposable
 {

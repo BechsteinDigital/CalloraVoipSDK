@@ -93,7 +93,10 @@ public sealed class CalloraStack : IComparisonStack
                 DialStatus.Canceled => DialAttemptStatus.Canceled,
                 _ => DialAttemptStatus.Failed,
             },
-            Detail: result.Status.ToString());
+            Detail:
+                $"{result.Status}; final={result.FinalCallState}; " +
+                $"call={result.Call?.State}; reason={result.Call?.TerminationReason}",
+            TerminationReason: MapTerminationReason(result.Call?.TerminationReason));
     }
 
     public async Task<IComparisonCall> WaitForIncomingAndAnswerAsync(
@@ -196,6 +199,29 @@ public sealed class CalloraStack : IComparisonStack
 
         return tracked;
     }
+
+    private static ComparisonTerminationReason? MapTerminationReason(
+        CallTerminationReason? reason) =>
+        reason is null
+            ? null
+            : new ComparisonTerminationReason(
+                reason.SipStatusCode,
+                reason.Category switch
+                {
+                    CallTerminationCategory.Completed => ComparisonTerminationCategory.Completed,
+                    CallTerminationCategory.Busy => ComparisonTerminationCategory.Busy,
+                    CallTerminationCategory.NoAnswer => ComparisonTerminationCategory.NoAnswer,
+                    CallTerminationCategory.Rejected => ComparisonTerminationCategory.Rejected,
+                    CallTerminationCategory.Canceled => ComparisonTerminationCategory.Canceled,
+                    _ => ComparisonTerminationCategory.Failed,
+                },
+                reason.TerminatedBy switch
+                {
+                    CallTerminatedBy.Local => ComparisonTerminatedBy.Local,
+                    CallTerminatedBy.Remote => ComparisonTerminatedBy.Remote,
+                    _ => ComparisonTerminatedBy.Unknown,
+                },
+                reason.ReasonPhrase);
 
     private sealed class CalloraCall : IComparisonCall
     {
