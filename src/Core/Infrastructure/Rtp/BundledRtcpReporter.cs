@@ -1,5 +1,6 @@
 using CalloraVoipSdk.Core.Application.Media.Rtcp.Packets;
 using CalloraVoipSdk.Core.Application.Media.Rtcp.Wire;
+using CalloraVoipSdk.Core.Infrastructure.Common.Timing;
 using Microsoft.Extensions.Logging;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
@@ -63,6 +64,7 @@ internal sealed class BundledRtcpReporter : IAsyncDisposable
     private readonly RtcpTransmissionInterval _intervalCalculator;
     private readonly Func<TimeSpan, CancellationToken, Task> _delay;
     private readonly Func<DateTimeOffset> _utcNow;
+    private readonly Func<DateTimeOffset> _monotonicNow;
     private readonly ILogger<BundledRtcpReporter> _logger;
     private readonly CancellationTokenSource _cts = new();
     private readonly object _gate = new();
@@ -97,8 +99,14 @@ internal sealed class BundledRtcpReporter : IAsyncDisposable
     /// <param name="utcNow">The wall clock read for the SR NTP timestamp; injectable for deterministic tests.</param>
     /// <param name="onSenderReportSent">
     /// Optional callback invoked for each emitted Sender Report with (sending SSRC, the SR's LSR — the middle 32
-    /// bits of its NTP timestamp — , the wall-clock send instant). Feeds the outbound quality tracker's RTT
+    /// bits of its NTP timestamp — , the monotonic send instant). Feeds the outbound quality tracker's RTT
     /// computation (RFC 3550 §6.4.1); null when RTT is not tracked.
+    /// </param>
+    /// <param name="monotonicNow">
+    /// The monotonic clock read for the RTT send instant handed to <paramref name="onSenderReportSent"/>; kept
+    /// separate from <paramref name="utcNow"/> (which stamps the on-wire NTP/RTP timestamps) so a system-clock
+    /// step cannot corrupt the derived RTT. Injectable for deterministic tests; defaults to the process
+    /// monotonic clock.
     /// </param>
     public BundledRtcpReporter(
         Func<IReadOnlyList<BundledSenderReportInfo>> snapshotSenderReports,
@@ -111,7 +119,8 @@ internal sealed class BundledRtcpReporter : IAsyncDisposable
         TimeSpan? interval = null,
         Func<TimeSpan, CancellationToken, Task>? delay = null,
         Func<DateTimeOffset>? utcNow = null,
-        Action<uint, uint, DateTimeOffset>? onSenderReportSent = null)
+        Action<uint, uint, DateTimeOffset>? onSenderReportSent = null,
+        Func<DateTimeOffset>? monotonicNow = null)
     {
         _snapshotSenderReports = snapshotSenderReports ?? throw new ArgumentNullException(nameof(snapshotSenderReports));
         _snapshotReceptionBlocks = snapshotReceptionBlocks ?? throw new ArgumentNullException(nameof(snapshotReceptionBlocks));
@@ -127,6 +136,7 @@ internal sealed class BundledRtcpReporter : IAsyncDisposable
         _intervalCalculator = new RtcpTransmissionInterval(_interval, DefaultRtcpBandwidthBitsPerSecond);
         _delay = delay ?? Task.Delay;
         _utcNow = utcNow ?? (() => DateTimeOffset.UtcNow);
+        _monotonicNow = monotonicNow ?? (() => MonotonicClock.Now);
         _logger = loggerFactory.CreateLogger<BundledRtcpReporter>();
     }
 
@@ -243,6 +253,9 @@ internal sealed class BundledRtcpReporter : IAsyncDisposable
         List<RtcpSdesChunk> sdesChunks)
     {
         var srMiddle32 = ToMiddle32Bits(ntp);
+        // One monotonic instant shared by every SR in this compound (they share the same NTP timestamp too),
+        // read separately from the wall-clock `now` so the RTT it feeds is immune to a system-clock step.
+        var monotonicSentAt = _monotonicNow();
         var blockOffset = 0;
         foreach (var sender in senders)
         {
@@ -263,8 +276,9 @@ internal sealed class BundledRtcpReporter : IAsyncDisposable
             sdesChunks.Add(SdesChunk(sender.Ssrc));
 
             // Publish this SR's LSR + send instant so the quality tracker can match a peer's echoed report and
-            // derive RTT (RFC 3550 §6.4.1). All SRs in one compound share the same NTP timestamp/send instant.
-            _onSenderReportSent?.Invoke(sender.Ssrc, srMiddle32, now);
+            // derive RTT (RFC 3550 §6.4.1). The instant is monotonic, not the wall-clock `now` used for the
+            // on-wire NTP/RTP timestamps, so a system-clock step cannot corrupt the derived RTT.
+            _onSenderReportSent?.Invoke(sender.Ssrc, srMiddle32, monotonicSentAt);
         }
 
         return blockOffset;

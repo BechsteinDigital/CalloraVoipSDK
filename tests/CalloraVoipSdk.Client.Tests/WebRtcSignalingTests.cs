@@ -109,6 +109,7 @@ public sealed class WebRtcSignalingTests
         public event EventHandler<RemoteTrack>? TrackReceived { add { } remove { } }
         public event EventHandler<string>? LocalIceCandidateDiscovered { add { } remove { } }
         public event EventHandler<DtmfTone>? DtmfReceived { add { } remove { } }
+        public event EventHandler? VideoKeyFrameRequested { add { } remove { } }
 
         public string CreateOffer() { OfferCreated = true; return "OFFER"; }
 

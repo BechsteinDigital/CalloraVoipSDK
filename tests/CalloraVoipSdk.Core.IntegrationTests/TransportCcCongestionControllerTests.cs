@@ -1,5 +1,5 @@
+using CalloraVoipSdk.Core.Application.Media.Rtcp.Packets;
 using CalloraVoipSdk.Core.Domain.Calls;
-using CalloraVoipSdk.Core.Infrastructure.Rtcp.Wire;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.CongestionControl;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -21,7 +21,7 @@ public sealed class TransportCcCongestionControllerTests
             increaseStepBps: 100_000, decreaseFactor: 0.5, lossThreshold: 0.1);
 
     private static TransportCcCongestionController Controller(Func<long> clock, CongestionBitrateController? bitrate = null) =>
-        new(ExtId, new RtcpPacketCodec(), new TransportCcSendHistory(64),
+        new(ExtId, new TransportCcSendHistory(64),
             new TransportCcDelayTrendEstimator(1.0, 100), new TransportCcLossEstimator(1.0),
             bitrate ?? Bitrate(), clock, 1_000_000, NullLogger.Instance);
 
@@ -36,12 +36,13 @@ public sealed class TransportCcCongestionControllerTests
     private static TransportCcArrival Arrival(ushort seq, long micros) =>
         new() { SequenceNumber = seq, ArrivalTimestamp = micros };
 
-    private static byte[] FeedbackDatagram(params TransportCcArrival[] arrivals)
+    // The session decodes once and hands the controller a packet list; build that list directly (no encode).
+    private static IReadOnlyList<RtcpPacket> FeedbackPackets(params TransportCcArrival[] arrivals)
     {
         var feedback = TransportCcFeedbackBuilder.Build(
             arrivals, senderSsrc: 0xAAAA, mediaSsrc: 0x1234, feedbackPacketCount: 0,
             epochTimestamp: 0, ticksPerSecond: 1_000_000);
-        return new RtcpPacketCodec().Encode([feedback]);
+        return [feedback];
     }
 
     [Fact]
@@ -55,8 +56,7 @@ public sealed class TransportCcCongestionControllerTests
         clock = 2_000; controller.OnPacketSent(Stamped(3));
 
         // Peer inter-arrival 1250 µs vs inter-send 1000 µs → +250 µs gradient per packet.
-        controller.OnControlDatagram(
-            FeedbackDatagram(Arrival(1, 10_000), Arrival(2, 11_250), Arrival(3, 12_500)));
+        controller.OnRtcpPackets(FeedbackPackets(Arrival(1, 10_000), Arrival(2, 11_250), Arrival(3, 12_500)));
 
         Assert.Equal(CongestionSignal.Overusing, controller.Signal);
         Assert.True(controller.DelayTrendMicros > 100);
@@ -73,8 +73,7 @@ public sealed class TransportCcCongestionControllerTests
         clock = 2_000; controller.OnPacketSent(Stamped(3));
 
         // Inter-arrival 1000 µs == inter-send 1000 µs → zero gradient.
-        controller.OnControlDatagram(
-            FeedbackDatagram(Arrival(1, 10_000), Arrival(2, 11_000), Arrival(3, 12_000)));
+        controller.OnRtcpPackets(FeedbackPackets(Arrival(1, 10_000), Arrival(2, 11_000), Arrival(3, 12_000)));
 
         Assert.Equal(CongestionSignal.Normal, controller.Signal);
     }
@@ -89,7 +88,7 @@ public sealed class TransportCcCongestionControllerTests
         clock = 1_000; controller.OnPacketSent(Stamped(3));
 
         // Arrivals for 1 and 3 only → the builder fills seq 2 as not-received: 1 of 3 lost.
-        controller.OnControlDatagram(FeedbackDatagram(Arrival(1, 10_000), Arrival(3, 12_000)));
+        controller.OnRtcpPackets(FeedbackPackets(Arrival(1, 10_000), Arrival(3, 12_000)));
 
         Assert.True(controller.LossRatio > 0);
     }
@@ -101,22 +100,14 @@ public sealed class TransportCcCongestionControllerTests
         var controller = Controller(() => clock);
 
         // No OnPacketSent → send history empty → nothing correlates → trend unchanged.
-        controller.OnControlDatagram(FeedbackDatagram(Arrival(1, 10_000), Arrival(2, 11_500)));
+        controller.OnRtcpPackets(FeedbackPackets(Arrival(1, 10_000), Arrival(2, 11_500)));
 
         Assert.Equal(CongestionSignal.Normal, controller.Signal);
         Assert.Equal(0, controller.DelayTrendMicros, 6);
     }
 
-    [Fact]
-    public void A_malformed_datagram_is_dropped_without_disturbing_the_signal()
-    {
-        long clock = 0;
-        var controller = Controller(() => clock);
-
-        controller.OnControlDatagram([0xFF, 0xFF, 0xFF]); // truncated RTCP header
-
-        Assert.Equal(CongestionSignal.Normal, controller.Signal);
-    }
+    // (Malformed-datagram handling moved to RtpSession, which decodes the compound once before dispatch;
+    //  the controller now receives an already-parsed packet list via OnRtcpPackets.)
 
     [Fact]
     public void Overuse_feedback_lowers_the_recommended_bitrate_and_marks_quality_poor()
@@ -130,8 +121,7 @@ public sealed class TransportCcCongestionControllerTests
         clock = 1_000; controller.OnPacketSent(Stamped(2));
         clock = 2_000; controller.OnPacketSent(Stamped(3));
 
-        controller.OnControlDatagram(
-            FeedbackDatagram(Arrival(1, 10_000), Arrival(2, 11_250), Arrival(3, 12_500)));
+        controller.OnRtcpPackets(FeedbackPackets(Arrival(1, 10_000), Arrival(2, 11_250), Arrival(3, 12_500)));
 
         Assert.Equal(CongestionSignal.Overusing, controller.Signal);
         Assert.Equal(500_000, controller.RecommendedBitrateBps); // 1_000_000 × 0.5 back-off
@@ -149,8 +139,7 @@ public sealed class TransportCcCongestionControllerTests
         clock = 1_000; controller.OnPacketSent(Stamped(2));
         clock = 2_000; controller.OnPacketSent(Stamped(3));
 
-        controller.OnControlDatagram(
-            FeedbackDatagram(Arrival(1, 10_000), Arrival(2, 11_000), Arrival(3, 12_000)));
+        controller.OnRtcpPackets(FeedbackPackets(Arrival(1, 10_000), Arrival(2, 11_000), Arrival(3, 12_000)));
 
         Assert.Equal(CongestionSignal.Normal, controller.Signal);
         Assert.Equal(1_100_000, controller.RecommendedBitrateBps); // +100_000 additive probe
@@ -168,16 +157,15 @@ public sealed class TransportCcCongestionControllerTests
     [Fact]
     public void Rejects_invalid_construction()
     {
-        var codec = new RtcpPacketCodec();
         var history = new TransportCcSendHistory(64);
         var trend = new TransportCcDelayTrendEstimator(0.5, 100);
         var loss = new TransportCcLossEstimator(0.5);
 
         Assert.Throws<ArgumentNullException>(() => new TransportCcCongestionController(
-            ExtId, codec, history, trend, loss, Bitrate(), null!, 1_000_000, NullLogger.Instance));
+            ExtId, history, trend, loss, Bitrate(), null!, 1_000_000, NullLogger.Instance));
         Assert.Throws<ArgumentNullException>(() => new TransportCcCongestionController(
-            ExtId, codec, history, trend, loss, null!, () => 0, 1_000_000, NullLogger.Instance));
+            ExtId, history, trend, loss, null!, () => 0, 1_000_000, NullLogger.Instance));
         Assert.Throws<ArgumentOutOfRangeException>(() => new TransportCcCongestionController(
-            ExtId, codec, history, trend, loss, Bitrate(), () => 0, 0, NullLogger.Instance));
+            ExtId, history, trend, loss, Bitrate(), () => 0, 0, NullLogger.Instance));
     }
 }

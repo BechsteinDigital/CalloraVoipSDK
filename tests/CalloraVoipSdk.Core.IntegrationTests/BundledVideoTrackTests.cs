@@ -85,7 +85,8 @@ public sealed class BundledVideoTrackTests
     // ── harness ──────────────────────────────────────────────────────────────────
 
     private static BundledVideoTrack VideoTrack(BundledOutboundPipeline outbound) =>
-        new("video", "H264", VideoPayloadType, outbound, ReorderDepth, NullLogger<BundledVideoTrack>.Instance);
+        new("video", "H264", VideoPayloadType, VideoSsrc, remoteSupportsNack: false, remoteSupportsPli: false,
+            outbound, ReorderDepth, NullLoggerFactory.Instance);
 
     // Outbound pipeline over the given send seam, with the video BundledOutboundTrack registered.
     private static BundledOutboundPipeline OutboundOver(IBundledDatagramSender sender)
@@ -114,7 +115,7 @@ public sealed class BundledVideoTrackTests
             inbound, NullLogger<BundledMediaTransport>.Instance);
 
     private static SrtpKeyMaterial Material() =>
-        new() { MasterKey = MasterKey, MasterSalt = MasterSalt, Suite = SrtpCryptoSuite.AesCm128HmacSha1_80 };
+        new(MasterKey, MasterSalt, SrtpCryptoSuite.AesCm128HmacSha1_80);
 
     private static byte[] Nal(byte header, int bodyLength)
     {

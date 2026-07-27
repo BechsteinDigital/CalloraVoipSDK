@@ -46,6 +46,12 @@ public interface IPeerConnection : IAsyncDisposable
     /// </summary>
     event EventHandler<DtmfTone>? DtmfReceived;
 
+    /// <summary>
+    /// Raised when the remote peer requests a key frame via an inbound PLI/FIR (RFC 4585/5104). This targets
+    /// the local encoder — the app should encode and send a key frame so the peer can recover its video.
+    /// </summary>
+    event EventHandler? VideoKeyFrameRequested;
+
     /// <summary>Produces a local WebRTC offer (BUNDLE, DTLS-SRTP, ICE, rtcp-mux) for the app to signal out.</summary>
     string CreateOffer();
 

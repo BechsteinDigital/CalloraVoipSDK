@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using CalloraVoipSdk.Core.Infrastructure.Srtp.Crypto;
 using Org.BouncyCastle.Tls;
 
@@ -33,19 +34,44 @@ internal static class DtlsSrtpKeyExporter
         var material = context.ExportKeyingMaterial(
             ExporterLabel, context_value: null, length: 2 * (keyLength + saltLength));
 
-        var clientKey = material.AsMemory(0, keyLength);
-        var serverKey = material.AsMemory(keyLength, keyLength);
-        var clientSalt = material.AsMemory(2 * keyLength, saltLength);
-        var serverSalt = material.AsMemory(2 * keyLength + saltLength, saltLength);
+        return SplitKeyingMaterial(material, suite, keyLength, saltLength, isClient);
+    }
 
-        var (localKey, localSalt) = isClient ? (clientKey, clientSalt) : (serverKey, serverSalt);
-        var (remoteKey, remoteSalt) = isClient ? (serverKey, serverSalt) : (clientKey, clientSalt);
+    /// <summary>
+    /// Splits the concatenated <c>EXTRACTOR-dtls_srtp</c> output (<c>client_write_key || server_write_key ||
+    /// client_write_salt || server_write_salt</c>) into the local/remote halves, copying each half into its own
+    /// buffer and then wiping <paramref name="material"/>. Copying (rather than returning aliasing views) is what
+    /// lets the concatenated block — which carries <em>both</em> endpoints' write keys and salts — be zeroed here
+    /// instead of lingering on the managed heap for the lifetime of the SRTP contexts. Internal for testing.
+    /// </summary>
+    internal static DtlsSrtpNegotiatedKeys SplitKeyingMaterial(
+        byte[] material, SrtpCryptoSuite suite, int keyLength, int saltLength, bool isClient)
+    {
+        ArgumentNullException.ThrowIfNull(material);
 
-        return new DtlsSrtpNegotiatedKeys
+        try
         {
-            Suite = suite,
-            LocalKeys = new SrtpKeyMaterial { MasterKey = localKey, MasterSalt = localSalt, Suite = suite },
-            RemoteKeys = new SrtpKeyMaterial { MasterKey = remoteKey, MasterSalt = remoteSalt, Suite = suite },
-        };
+            // Independent copies so the returned key material does not alias — and thereby retain — the full
+            // exported block that the finally below wipes.
+            var clientKey = material.AsSpan(0, keyLength).ToArray();
+            var serverKey = material.AsSpan(keyLength, keyLength).ToArray();
+            var clientSalt = material.AsSpan(2 * keyLength, saltLength).ToArray();
+            var serverSalt = material.AsSpan(2 * keyLength + saltLength, saltLength).ToArray();
+
+            var (localKey, localSalt) = isClient ? (clientKey, clientSalt) : (serverKey, serverSalt);
+            var (remoteKey, remoteSalt) = isClient ? (serverKey, serverSalt) : (clientKey, clientSalt);
+
+            return new DtlsSrtpNegotiatedKeys
+            {
+                Suite = suite,
+                LocalKeys = new SrtpKeyMaterial(localKey, localSalt, suite),
+                RemoteKeys = new SrtpKeyMaterial(remoteKey, remoteSalt, suite),
+            };
+        }
+        finally
+        {
+            // Key hygiene: the aggregate exporter secret is no longer needed once the halves are copied out.
+            CryptographicOperations.ZeroMemory(material);
+        }
     }
 }

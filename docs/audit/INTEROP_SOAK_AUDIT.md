@@ -106,6 +106,14 @@ Kausalkette Ende-zu-Ende gegen den echten Code bestätigt (Verdict **CONFIRMED**
 
 **Paket-1-Präzisierung:** der dortige `--disable-features=WebRtcHideLocalIpsWithMdns`-Flag war unnötig (Chrome schickt bei Media-Permission eh echte IPs) — harmlos belassen. Design/Plan: `docs/audit/2026-07-27-webrtc-mdns-resolution-{design,plan}.md`.
 
+## Coverage-Notiz WebRTC VP8-Video-Browser-Interop (GA-Reifung Paket 3, 2026-07-27)
+
+**Bidirektionaler VP8-Video-Nachweis gegen echten headless Chrome** — erweitert den Audio-Nachweis aus Paket 1. Die `CalloraVoipSdk.WebRtc`-Fassade (SDK-Offerer, `EnableVideo=true, VideoCodecs=["VP8"]`) tauscht VP8-Video mit echtem Chrome (fake-device Testpattern): **Browser→SDK** via `RemoteTrack` (Kind=Video, ≥10 Frames), **SDK→Browser** via keyframe-bewusstes **Echo** (`SendVideoFrameAsync` ab dem ersten `IsKeyFrame`). **★ Dekodier-Nachweis erreicht:** der Browser meldet `inbound-rtp(video).bytesReceived > 0` UND **`framesDecoded > 0`** — er dekodiert das vom SDK gesendete Video tatsächlich. 3× stabil (14–16 s).
+
+**measure-first-Ergebnis:** das Keyframe-Risiko war beherrschbar — das Echo-ab-erstem-`IsKeyFrame` liefert dem Browser einen dekodierbaren Stream (Keyframe zuerst), `framesDecoded>0` beim ersten Anlauf. Der im Design vorgesehene Transport-Fallback (nur bytesReceived) war nicht nötig.
+
+**Neu:** `peer-video.html` (fake-device `getUserMedia({video})`, getStats video → `framesDecoded`), `BridgeMessage.FramesDecoded`, `WebRtcVideoBrowserInteropTests`. Video-only, VP8, SDK-Offerer. **Lokal-first** (`Category=BrowserInterop`, aus allen Nicht-Browser-CI-Jobs ausgeschlossen). Paket-1-Audio-Test unberührt (4/4 BrowserInterop grün), **keine `src/`-Änderung**. Design/Plan: `docs/audit/2026-07-27-webrtc-video-interop-{design,plan}.md`.
+
 ## Coverage-Notiz WebRTC Browser-Offerer-Interop (GA-Reifung Paket 4, 2026-07-27)
 
 **Gegenrichtung zum Audio-Nachweis aus Paket 1 bewiesen: der Browser ist Offerer, die SDK-Fassade ist Answerer.** Der Browser ruft `createOffer`; der SDK-Peer nimmt die Offer über `SetRemoteDescriptionAsync` entgegen (ohne vorheriges `CreateOffer`) und erzeugt die Answer als Rückgabewert — DTLS-Rolle `active`, ICE-Rolle `controlled`. Volle Kette Signaling→ICE→DTLS→SRTP, **Opus-Audio bidirektional** (Browser→SDK ≥20 `RemoteTrack`-Frames + SDK→Browser `bytesReceived>0` per Echo). 3× stabil.

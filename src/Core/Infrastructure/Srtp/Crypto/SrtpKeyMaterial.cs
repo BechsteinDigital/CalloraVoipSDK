@@ -1,25 +1,57 @@
+using System.Security.Cryptography;
+
 namespace CalloraVoipSdk.Core.Infrastructure.Srtp.Crypto;
 
 /// <summary>
 /// Master key and salt for one SRTP crypto context (RFC 3711 §3.2.1).
-/// Passed in from SDP SDES negotiation (RFC 4568 §6.1).
+/// Passed in from SDP SDES negotiation (RFC 4568 §6.1) or exported from a DTLS-SRTP
+/// handshake (RFC 5764 §4.2).
 /// </summary>
-internal sealed class SrtpKeyMaterial
+/// <remarks>
+/// Owns the two backing buffers holding the master key and salt in the clear, so a consumer
+/// can wipe them (<see cref="Dispose"/>) once the session keys have been derived (RFC 3711 §4.3)
+/// and the master material is no longer needed — there is no per-session re-keying in this SDK.
+/// <see cref="MasterKey"/>/<see cref="MasterSalt"/> alias those buffers and therefore read as
+/// all-zero after disposal; derive before you dispose.
+/// </remarks>
+internal sealed class SrtpKeyMaterial : IDisposable
 {
-    /// <summary>
-    /// Master key — 16 bytes for AES-128 suites, 32 bytes for AES-256 suites (RFC 3711 §3.2.1).
-    /// </summary>
-    public required ReadOnlyMemory<byte> MasterKey { get; init; }
+    private readonly byte[] _masterKey;
+    private readonly byte[] _masterSalt;
+    private bool _disposed;
 
     /// <summary>
-    /// Master salt — always 14 bytes (112 bits) (RFC 3711 §3.2.1).
+    /// Creates key material that takes ownership of <paramref name="masterKey"/> and
+    /// <paramref name="masterSalt"/> — the arrays are wiped in place on <see cref="Dispose"/>,
+    /// so the caller must not reuse or retain them elsewhere.
     /// </summary>
-    public required ReadOnlyMemory<byte> MasterSalt { get; init; }
+    /// <param name="masterKey">Master key — 16 bytes for AES-128 suites, 32 for AES-256 (RFC 3711 §3.2.1).</param>
+    /// <param name="masterSalt">Master salt — always 14 bytes (112 bits) (RFC 3711 §3.2.1).</param>
+    /// <param name="suite">Crypto suite that determines how this key material is used.</param>
+    public SrtpKeyMaterial(byte[] masterKey, byte[] masterSalt, SrtpCryptoSuite suite)
+    {
+        ArgumentNullException.ThrowIfNull(masterKey);
+        ArgumentNullException.ThrowIfNull(masterSalt);
+        _masterKey = masterKey;
+        _masterSalt = masterSalt;
+        Suite = suite;
+    }
+
+    /// <summary>
+    /// Master key — 16 bytes for AES-128 suites, 32 bytes for AES-256 suites (RFC 3711 §3.2.1).
+    /// Reads all-zero after <see cref="Dispose"/>.
+    /// </summary>
+    public ReadOnlyMemory<byte> MasterKey => _masterKey;
+
+    /// <summary>
+    /// Master salt — always 14 bytes (112 bits) (RFC 3711 §3.2.1). Reads all-zero after <see cref="Dispose"/>.
+    /// </summary>
+    public ReadOnlyMemory<byte> MasterSalt => _masterSalt;
 
     /// <summary>
     /// Crypto suite that determines how this key material is used.
     /// </summary>
-    public required SrtpCryptoSuite Suite { get; init; }
+    public SrtpCryptoSuite Suite { get; }
 
     /// <summary>
     /// Parses a base64-encoded SDES key-param string into key material.
@@ -35,19 +67,41 @@ internal sealed class SrtpKeyMaterial
 
         var raw = Convert.FromBase64String(keyParam[prefix.Length..].Split('|')[0]);
 
-        var keyLength = suite is SrtpCryptoSuite.AesCm256HmacSha1_80 or SrtpCryptoSuite.AesCm256HmacSha1_32
-            ? 32 : 16;
-        const int saltLength = 14;
-
-        if (raw.Length < keyLength + saltLength)
-            throw new FormatException(
-                $"SRTP inline key too short: {raw.Length} bytes, expected at least {keyLength + saltLength}.");
-
-        return new SrtpKeyMaterial
+        try
         {
-            MasterKey  = raw[..keyLength],
-            MasterSalt = raw[keyLength..(keyLength + saltLength)],
-            Suite      = suite,
-        };
+            var keyLength = suite is SrtpCryptoSuite.AesCm256HmacSha1_80 or SrtpCryptoSuite.AesCm256HmacSha1_32
+                ? 32 : 16;
+            const int saltLength = 14;
+
+            if (raw.Length < keyLength + saltLength)
+                throw new FormatException(
+                    $"SRTP inline key too short: {raw.Length} bytes, expected at least {keyLength + saltLength}.");
+
+            // Copy the key and salt into their own owned buffers so the plaintext master material can
+            // be wiped when this instance is disposed, then wipe the base64-decoded staging array below.
+            return new SrtpKeyMaterial(
+                raw[..keyLength].ToArray(),
+                raw[keyLength..(keyLength + saltLength)].ToArray(),
+                suite);
+        }
+        finally
+        {
+            // The decoded staging array held the master key + salt in the clear; wipe it once the
+            // owned copies (or the exception) leave — never let it linger on the managed heap.
+            CryptographicOperations.ZeroMemory(raw);
+        }
+    }
+
+    /// <summary>
+    /// Zeroes the master key and salt in place (RFC 3711 §9.4 key hygiene). Idempotent. Call only
+    /// after the session keys have been derived — the accessors read all-zero afterwards.
+    /// </summary>
+    public void Dispose()
+    {
+        if (_disposed)
+            return;
+        _disposed = true;
+        CryptographicOperations.ZeroMemory(_masterKey);
+        CryptographicOperations.ZeroMemory(_masterSalt);
     }
 }
