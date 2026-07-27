@@ -58,22 +58,12 @@ internal sealed class VideoKeyFrameFeedback
     }
 
     /// <summary>
-    /// Handles an inbound RTCP datagram (already SRTCP-unprotected): a PLI or FIR anywhere
-    /// in the compound packet is treated as a keyframe request for this stream. Malformed
-    /// datagrams are dropped — RTCP feedback must never break the receive path.
+    /// Handles the decoded inbound RTCP compound (already SRTCP-unprotected and parsed once by the session): a
+    /// PLI or FIR anywhere in it is treated as a keyframe request for this stream.
     /// </summary>
-    public void OnControlDatagram(byte[] datagram)
+    public void OnRtcpPackets(IReadOnlyList<RtcpPacket> packets)
     {
-        IReadOnlyList<RtcpPacket> packets;
-        try
-        {
-            packets = _codec.Decode(datagram);
-        }
-        catch (ArgumentException ex)
-        {
-            _logger.LogDebug(ex, "Dropping malformed inbound video RTCP datagram.");
-            return;
-        }
+        ArgumentNullException.ThrowIfNull(packets);
 
         // A dedicated single-stream video RTCP channel: any PLI/FIR here means "send a
         // keyframe", regardless of the media SSRC a lenient peer may have set.

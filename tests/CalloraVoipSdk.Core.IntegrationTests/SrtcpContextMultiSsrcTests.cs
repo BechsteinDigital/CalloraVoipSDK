@@ -36,12 +36,10 @@ public sealed class SrtcpContextMultiSsrcTests
         Assert.Throws<SrtpReplayException>(() => receiver.UnprotectRtcp(audio1));
     }
 
-    private static SrtpKeyMaterial Material() => new()
-    {
-        MasterKey = Convert.FromHexString("E1F97A0D3E018BE0D64FA32C06DE4139"),
-        MasterSalt = Convert.FromHexString("0EC675AD498AFEEBB6960B3AABE6"),
-        Suite = SrtpCryptoSuite.AesCm128HmacSha1_80,
-    };
+    private static SrtpKeyMaterial Material() => new(
+        Convert.FromHexString("E1F97A0D3E018BE0D64FA32C06DE4139"),
+        Convert.FromHexString("0EC675AD498AFEEBB6960B3AABE6"),
+        SrtpCryptoSuite.AesCm128HmacSha1_80);
 
     // Minimal 8-byte RTCP receiver report: header (V=2, PT=201) + sender SSRC, no payload.
     private static byte[] Rtcp(uint ssrc)

@@ -51,6 +51,38 @@ internal sealed record BundledTrackConfig
     public string? VideoCodecName { get; init; }
 
     /// <summary>
+    /// True when the peer advertised Generic NACK (<c>a=rtcp-fb:* nack</c>, RFC 4585) for this video
+    /// m-line: the track may report detected inbound loss so the peer can retransmit. Ignored for an
+    /// audio m-line; defaults to <see langword="false"/> so feedback the peer did not offer is never sent.
+    /// </summary>
+    public bool RemoteSupportsNack { get; init; }
+
+    /// <summary>
+    /// True when the peer advertised Picture Loss Indication (<c>a=rtcp-fb:* nack pli</c>, RFC 4585 §6.3.1)
+    /// for this video m-line: the track may request a keyframe (a throttled PLI) on detected inbound loss.
+    /// Ignored for an audio m-line; defaults to <see langword="false"/>.
+    /// </summary>
+    public bool RemoteSupportsPli { get; init; }
+
+    /// <summary>
+    /// The negotiated RTX repair payload type (RFC 4588) for this video m-line — the <c>a=rtpmap</c> rtx
+    /// format whose <c>a=fmtp … apt</c> points at <see cref="PayloadType"/>, or <see langword="null"/> when
+    /// RTX was not negotiated. When present the track retains its sent packets and answers an inbound Generic
+    /// NACK by resending them on a separate RTX stream (own SSRC + this payload type, OSN-prefixed). Ignored
+    /// for an audio m-line and for simulcast tracks (RTX per encoding is follow-up work).
+    /// </summary>
+    public byte? RtxPayloadType { get; init; }
+
+    /// <summary>
+    /// The RTX repair stream's own synchronisation source (RFC 4588 §4), allocated distinct from every other
+    /// outbound SSRC on the bundle (audio, video primary — RFC 3550 §8.1), or <see langword="null"/> when RTX
+    /// was not negotiated or the caller lets the track pick one. Set by the session factory, which owns the
+    /// bundle-wide SSRC allocation; when null the track falls back to a repair SSRC distinct only from
+    /// <see cref="Ssrc"/>.
+    /// </summary>
+    public uint? RtxSsrc { get; init; }
+
+    /// <summary>
     /// Send-side simulcast encodings for a video m-line (RFC 8853): each names an <c>a=rid</c> layer
     /// carried on its own SSRC under the shared MID. Empty for a non-simulcast track — the single stream
     /// then uses <see cref="Ssrc"/> / <see cref="PayloadType"/> directly. All layers share the codec and

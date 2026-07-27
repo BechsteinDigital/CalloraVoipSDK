@@ -1,6 +1,7 @@
 using System.Net;
 using CalloraVoipSdk.Core.Application.Calls;
 using CalloraVoipSdk.Core.Application.Media;
+using CalloraVoipSdk.Core.Application.Media.Rtcp.Packets;
 using CalloraVoipSdk.Core.Application.Media.Rtcp.Wire;
 using CalloraVoipSdk.Core.Domain.Calls;
 using CalloraVoipSdk.Core.Domain.Events;
@@ -383,7 +384,7 @@ public sealed class CallMediaOrchestratorVideoWiringTests
         public event Action<CallAudioFrame>? FrameReceived;
         public event Action<byte, int>? DtmfReceived;
         public event Action<CallMediaRuntimeMetrics>? RuntimeMetricsUpdated;
-        public event Action<byte[]>? RtcpMuxDatagramReceived;
+        public event Action<IReadOnlyList<RtcpPacket>>? RtcpCompoundReceived;
         public event Action? MediaConsentLost;
         public event Action? MediaConnectivityDegraded;
         public event Action? MediaConnectivityRecovered;
@@ -414,7 +415,7 @@ public sealed class CallMediaOrchestratorVideoWiringTests
         public event Action<CallAudioFrame>? FrameReceived;
         public event Action<byte, int>? DtmfReceived;
         public event Action<CallMediaRuntimeMetrics>? RuntimeMetricsUpdated;
-        public event Action<byte[]>? RtcpMuxDatagramReceived;
+        public event Action<IReadOnlyList<RtcpPacket>>? RtcpCompoundReceived;
 #pragma warning restore CS0067
 
         public event Action? MediaConsentLost;

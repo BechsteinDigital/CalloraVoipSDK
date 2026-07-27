@@ -3,8 +3,10 @@ using CalloraVoipSdk.Core.Application.Media.Rtcp;
 using CalloraVoipSdk.Core.Application.Media.Rtcp.Packets;
 using CalloraVoipSdk.Core.Application.Media.Rtcp.Wire;
 using CalloraVoipSdk.Core.Infrastructure.Common.Relay;
+using CalloraVoipSdk.Core.Infrastructure.Common.Timing;
 using CalloraVoipSdk.Core.Infrastructure.Dtls;
 using CalloraVoipSdk.Core.Infrastructure.Rtcp.Wire;
+using CalloraVoipSdk.Core.Infrastructure.Rtp.CongestionControl;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Session;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Wire;
@@ -34,6 +36,13 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     private readonly BundledOutboundQualityTracker _outboundQuality;
     private readonly IRtcpPacketCodec _rtcpCodec;
     private readonly BundledVideoTrack? _video;
+
+    // Transport-wide congestion control (transport-cc / RFC 8888), one plane for the WHOLE bundle because
+    // transport-cc numbers the transport, not a stream. Null unless the a=extmap was negotiated. See
+    // BundledCongestionPlane — the sender-side controller (recommended bitrate) and the receive-side feedback
+    // sender, with their own lifetime token; OnControlPacketReceived fans decoded feedback into it.
+    private readonly BundledCongestionPlane? _congestion;
+
     private readonly string _audioMid;
     private readonly uint _audioSsrc;
     private readonly bool _audioSendEnabled;
@@ -98,6 +107,12 @@ internal sealed class BundledMediaSession : IAsyncDisposable
 
     /// <summary>Raised with each reassembled inbound video frame (frame, RTP timestamp, is-key-frame).</summary>
     public event Action<byte[], uint, bool>? VideoFrameReceived;
+
+    /// <summary>
+    /// Raised when the peer requests a key frame via an inbound PLI/FIR (RFC 4585/5104) on the video track;
+    /// the app should encode and send a key frame.
+    /// </summary>
+    public event Action? VideoKeyFrameRequested;
 
     /// <summary>Raised when the shared DTLS handshake fails — media stays blocked (fail closed).</summary>
     public event Action? HandshakeFailed;
@@ -178,9 +193,11 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         if (relayBinding is not null)
             _transport.SetIndicationRelay(relayBinding.Indication, relayBinding.OnControl);
 
-        // Outbound: a per-track sender for each m-line, stamping its MID.
+        // Outbound: a per-track sender for each m-line, stamping its MID (and, when negotiated, the one
+        // transport-wide-cc sequence the pipeline advances across all tracks).
         _outbound = new BundledOutboundPipeline(
-            new RtpPacketCodec(), _transport, loggerFactory.CreateLogger<BundledOutboundPipeline>());
+            new RtpPacketCodec(), _transport, loggerFactory.CreateLogger<BundledOutboundPipeline>(),
+            stampsTransportCc: options.TransportWideCcExtensionId is not null);
         _outbound.RegisterTrack(options.Audio.Mid, BuildOutboundTrack(options, options.Audio));
 
         if (options.Video is { } video)
@@ -199,21 +216,37 @@ internal sealed class BundledMediaSession : IAsyncDisposable
                         BuildEncodingTrack(options, video.Mid, encoding.Ssrc, video.PayloadType, encoding.Rid, ridExtensionId));
 
                 _video = new BundledVideoTrack(
-                    video.Mid, codecName, video.PayloadType,
+                    video.Mid, codecName, video.PayloadType, video.Ssrc,
+                    video.RemoteSupportsNack, video.RemoteSupportsPli,
                     video.Encodings.Select(e => e.Rid).ToArray(),
-                    _outbound, options.VideoReorderDepth, loggerFactory.CreateLogger<BundledVideoTrack>());
+                    _outbound, options.VideoReorderDepth, loggerFactory);
             }
             else
             {
                 _outbound.RegisterTrack(video.Mid, BuildOutboundTrack(options, video));
                 _video = new BundledVideoTrack(
-                    video.Mid, codecName, video.PayloadType, _outbound, options.VideoReorderDepth,
-                    loggerFactory.CreateLogger<BundledVideoTrack>());
+                    video.Mid, codecName, video.PayloadType, video.Ssrc,
+                    video.RemoteSupportsNack, video.RemoteSupportsPli,
+                    _outbound, options.VideoReorderDepth, loggerFactory,
+                    // RTX repair stream (RFC 4588): retain sent packets and resend on an inbound NACK. Wired for
+                    // the non-simulcast track only — per-encoding simulcast RTX is follow-up work. Its repair
+                    // SSRC is allocated bundle-wide-distinct by the factory (RFC 3550 §8.1).
+                    rtxPayloadType: video.RtxPayloadType,
+                    rtxSsrc: video.RtxSsrc);
             }
 
             _video.FrameReceived += (frame, timestamp, isKeyFrame) => VideoFrameReceived?.Invoke(frame, timestamp, isKeyFrame);
+            _video.KeyFrameRequested += () => VideoKeyFrameRequested?.Invoke();
             router.RegisterTrack(video.Mid, _video.OnRtpPacket);
         }
+
+        // Transport-wide congestion control (transport-cc / RFC 8888), one plane per bundle. Only when the
+        // a=extmap was negotiated (so the transport actually stamps a transport-wide sequence) — otherwise the
+        // plane stays off. See BundledCongestionPlane: it wires the sender-side controller to PacketSent and the
+        // receive-side feedback sender to inbound RTP; OnControlPacketReceived fans decoded feedback into it.
+        if (options.TransportWideCcExtensionId is { } transportCcExtensionId)
+            _congestion = new BundledCongestionPlane(
+                transportCcExtensionId, _outbound, _inbound, _rtcpCodec, options.Audio.Ssrc, loggerFactory);
 
         // One shared DTLS association keys every track; one shared ICE agent keeps the group alive.
         _dtls = new BundledDtlsKeying(
@@ -361,7 +394,9 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     // receive loop; a malformed compound must not tear it down, so decode failures are swallowed with a log.
     private void OnControlPacketReceived(byte[] rtcp)
     {
-        var arrival = DateTimeOffset.UtcNow;
+        // Monotonic arrival for the RTT delta (matched against the SR's monotonic send instant) so a system-
+        // clock step between sending our SR and its echo arriving cannot corrupt the derived RTT.
+        var arrival = MonotonicClock.Now;
 
         IReadOnlyList<RtcpPacket> packets;
         try
@@ -387,6 +422,15 @@ internal sealed class BundledMediaSession : IAsyncDisposable
                     break;
             }
         }
+
+        // Fan the already-decoded compound out to the video track for RTCP feedback (PLI/FIR → keyframe
+        // request). Runs on this same receive-loop thread, so the track's confinement is preserved.
+        _video?.OnRtcpPackets(packets);
+
+        // And to the transport-wide congestion controller: any transport-cc feedback report in the compound
+        // (RFC 8888) updates its delay-trend + loss estimators and the recommended bitrate. Same thread — no
+        // added confinement concern.
+        _congestion?.OnRtcpPackets(packets);
     }
 
     // Feeds the peer's reception report blocks (about our outbound streams) into the outbound quality tracker.
@@ -455,7 +499,7 @@ internal sealed class BundledMediaSession : IAsyncDisposable
 
     private static BundledOutboundTrack BuildOutboundTrack(BundledMediaSessionOptions options, BundledTrackConfig track) =>
         new(track.Ssrc, track.PayloadType, track.SamplesPerPacket,
-            new RtpOutboundHeaderExtensionStamper(transportWideCcExtensionId: null, options.MidExtensionId, track.Mid),
+            new RtpOutboundHeaderExtensionStamper(options.TransportWideCcExtensionId, options.MidExtensionId, track.Mid),
             options.InitialSequenceNumber, options.InitialTimestamp,
             clockRate: track.VideoCodecName is null ? (uint)Math.Max(0, track.ClockRate) : VideoRtpClockRate);
 
@@ -466,7 +510,7 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         BundledMediaSessionOptions options, string mid, uint ssrc, byte payloadType, string rid, byte ridExtensionId) =>
         new(ssrc, payloadType, samplesPerPacket: 0,
             new RtpOutboundHeaderExtensionStamper(
-                transportWideCcExtensionId: null, options.MidExtensionId, mid, ridExtensionId, rid),
+                options.TransportWideCcExtensionId, options.MidExtensionId, mid, ridExtensionId, rid),
             options.InitialSequenceNumber, options.InitialTimestamp,
             clockRate: VideoRtpClockRate);
 
@@ -621,6 +665,14 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// The bundle's sender-side transport-wide congestion controller (transport-cc / RFC 8888), or
+    /// <see langword="null"/> when the extension was not negotiated. Exposes the recommended outbound bitrate
+    /// and coarse network quality. Internal for now — surfacing it on the public WebRTC peer facade is a
+    /// documented follow-up (mirrors the single-stream <c>VideoRtpStream.Congestion</c> internal accessor).
+    /// </summary>
+    internal TransportCcCongestionController? Congestion => _congestion?.Controller;
+
     /// <summary>Point-in-time transport counters aggregated from the outbound and inbound pipelines.</summary>
     public BundledMediaStats SnapshotStats() => new(
         _outbound.PacketsSent, _outbound.BytesSent, _outbound.SuppressedSends,
@@ -719,6 +771,9 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         // Start emitting periodic Sender Reports (RFC 3550 §6.4). Its SRTCP send fails closed until the DTLS
         // handshake below installs the outbound SRTCP key, so an early start just suppresses the first ticks.
         _rtcpReporter.Start();
+        // Start the transport-cc receive-side feedback loop (RFC 8888), when negotiated. Its SRTCP send fails
+        // closed the same way, so early ticks before keying are harmless (an empty batch or a suppressed send).
+        _congestion?.Start();
         _dtls.Start(cancellationToken);
     }
 
@@ -824,6 +879,10 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         // Refresh(0) rides the transport's control send, so the transport must still be alive to carry it.
         if (Volatile.Read(ref _relayKeepAlive) is { } keepAlive)
             await keepAlive.DisposeAsync().ConfigureAwait(false);
+        // Stop the transport-cc congestion plane before the transport it rides is torn down (its SRTCP feedback
+        // send goes through the transport): its dispose signals the lifetime token and awaits the loop.
+        if (_congestion is not null)
+            await _congestion.DisposeAsync().ConfigureAwait(false);
         // Stop the periodic Sender Reports before the transport it rides is torn down (its SRTCP send goes
         // through the transport), and before DTLS zeroes the outbound SRTCP key.
         await _rtcpReporter.DisposeAsync().ConfigureAwait(false);

@@ -1,3 +1,4 @@
+using CalloraVoipSdk.Core.Application.Media.Rtcp.Packets;
 using CalloraVoipSdk.Core.Domain.Calls;
 
 namespace CalloraVoipSdk.Core.Application.Media;
@@ -60,9 +61,10 @@ internal interface ICallMediaSession : IAsyncDisposable
     event Action<CallMediaRuntimeMetrics>? RuntimeMetricsUpdated;
 
     /// <summary>
-    /// Raised when an RTCP datagram is received on the RTP socket in RTCP-MUX mode.
+    /// Raised when an RTCP compound is received on the RTP socket in RTCP-MUX mode, decoded once by the session
+    /// and shared as a read-only list so consumers do not re-parse the datagram.
     /// </summary>
-    event Action<byte[]>? RtcpMuxDatagramReceived;
+    event Action<IReadOnlyList<RtcpPacket>>? RtcpCompoundReceived;
 
     /// <summary>
     /// Raised once when RFC 7675 ICE consent is lost for this leg's media path and transmission ceases.

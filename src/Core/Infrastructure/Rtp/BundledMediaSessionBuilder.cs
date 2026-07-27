@@ -96,6 +96,8 @@ internal static class BundledMediaSessionBuilder
                 Ssrc = videoSsrc.Value,
                 PayloadType = (byte)video.PayloadType,
                 VideoCodecName = video.CodecName,
+                RemoteSupportsNack = video.RemoteSupportsNack,
+                RemoteSupportsPli = video.RemoteSupportsPli,
             };
         }
 

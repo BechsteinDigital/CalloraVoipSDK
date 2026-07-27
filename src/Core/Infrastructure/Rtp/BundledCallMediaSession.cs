@@ -1,4 +1,5 @@
 using CalloraVoipSdk.Core.Application.Media;
+using CalloraVoipSdk.Core.Application.Media.Rtcp.Packets;
 using CalloraVoipSdk.Core.Domain.Calls;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
 
@@ -42,7 +43,7 @@ internal sealed class BundledCallMediaSession : ICallMediaSession
     public event Action<CallMediaRuntimeMetrics>? RuntimeMetricsUpdated { add { } remove { } }
 
     /// <inheritdoc />
-    public event Action<byte[]>? RtcpMuxDatagramReceived { add { } remove { } }
+    public event Action<IReadOnlyList<RtcpPacket>>? RtcpCompoundReceived { add { } remove { } }
 
     /// <inheritdoc />
     public event Action? MediaConsentLost;
