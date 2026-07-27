@@ -140,4 +140,55 @@ public sealed class StunMessageCodecWireBoundsTests
         Assert.True(decoded!.Attributes.Count < floodCount, "attribute flood was not capped");
         Assert.Equal(64, decoded.Attributes.Count);
     }
+
+    // ── SIP-15 A2: encode length must not silently overflow the 16-bit field ───
+
+    private static Core.Infrastructure.Stun.Messages.StunMessage BuildOversizedMessage()
+    {
+        // A single opaque attribute whose value overruns the 16-bit STUN message-length field
+        // (RFC 5389 §6). value(65_532) + attr header(4) = 65_536 > 65_535 → the encoder must reject
+        // rather than truncate-cast the body length into a corrupt ushort.
+        var oversized = new UnknownRawAttribute(0x7F00) { Value = new byte[65_532] };
+        return new Core.Infrastructure.Stun.Messages.StunMessage
+        {
+            MessageClass  = Core.Infrastructure.Stun.Messages.StunMessageClass.Request,
+            MessageMethod = Core.Infrastructure.Stun.Messages.StunMessageMethod.Binding,
+            TransactionId = new byte[12],
+            Attributes    = [oversized],
+        };
+    }
+
+    [Fact]
+    public void Encode_message_body_over_16_bits_throws_instead_of_truncating()
+    {
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => new StunMessageCodec().Encode(BuildOversizedMessage()));
+        Assert.Contains("65535", ex.Message);
+    }
+
+    [Fact]
+    public void EncodeWithIntegrity_message_body_over_16_bits_throws_instead_of_truncating()
+    {
+        var key = new byte[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 };
+        Assert.Throws<InvalidOperationException>(
+            () => new StunMessageCodec().EncodeWithIntegrity(BuildOversizedMessage(), key, addFingerprint: true));
+    }
+
+    [Fact]
+    public void Encode_body_just_under_the_16_bit_limit_still_encodes()
+    {
+        // value(65_528, already 4-aligned) + attr header(4) = 65_532 body bytes — the largest body a
+        // single padded attribute can produce — stays inside the 16-bit field and must encode.
+        var nearLimit = new UnknownRawAttribute(0x7F00) { Value = new byte[65_528] };
+        var message = new Core.Infrastructure.Stun.Messages.StunMessage
+        {
+            MessageClass  = Core.Infrastructure.Stun.Messages.StunMessageClass.Request,
+            MessageMethod = Core.Infrastructure.Stun.Messages.StunMessageMethod.Binding,
+            TransactionId = new byte[12],
+            Attributes    = [nearLimit],
+        };
+
+        var encoded = new StunMessageCodec().Encode(message);
+        Assert.Equal(65_532, BinaryPrimitives.ReadUInt16BigEndian(encoded.AsSpan(2)));
+    }
 }

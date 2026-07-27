@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Net;
 using System.Net.Sockets;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Stun.Client;
@@ -52,7 +53,7 @@ internal static class DnsSrvQuery
 
         try
         {
-            var txId  = (ushort)Random.Shared.Next(0, 65535);
+            var txId  = NextTransactionId();
             var query = BuildQuery(txId, srvName);
 
             using var udp = new UdpClient(dnsServer.AddressFamily);
@@ -76,6 +77,20 @@ internal static class DnsSrvQuery
     }
 
     // ── DNS query construction ─────────────────────────────────────────────────
+
+    /// <summary>
+    /// Generates a cryptographically strong DNS query ID across the full 16-bit range (0..65535).
+    /// RFC 5452 §10 requires the query ID to be unpredictable to an off-path attacker to close the
+    /// DNS-spoofing/cache-poisoning window; a non-crypto PRNG (<see cref="Random"/>) is unsuitable.
+    /// Uses a CSPRNG and reads the whole 0..0xFFFF range — <c>Random.Shared.Next(0, 65535)</c> both
+    /// excluded 0xFFFF (exclusive upper bound) and was predictable.
+    /// </summary>
+    internal static ushort NextTransactionId()
+    {
+        Span<byte> bytes = stackalloc byte[sizeof(ushort)];
+        RandomNumberGenerator.Fill(bytes);
+        return BinaryPrimitives.ReadUInt16BigEndian(bytes);
+    }
 
     private static byte[] BuildQuery(ushort txId, string name)
     {
