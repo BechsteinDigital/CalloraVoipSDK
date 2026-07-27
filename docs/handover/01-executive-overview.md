@@ -70,9 +70,13 @@ echten Browser; native Video-Codecs sind **transport-only** (kein Encode/Decode)
 Die **Differenzierungsmodule** (Privacy / Risk / Intelligence / Policy) sind
 **Vision, nicht gebaut** — es existiert dafür kein `src/`-Projekt.
 
-Wichtig für die DD: **„getestet" heißt hier durch Repo-Tests belegt — nicht durch
-Interop gegen reale Referenz-Stacks (Asterisk/FreeSWITCH/3CX/Browser) oder unter
-Soak-Last.** Eine solche Interop-/Soak-Suite steht noch aus. Die vollständige,
+Wichtig für die DD: **„getestet" heißt hier durch Repo-Tests belegt.** Für den
+**SIP-/Audio-Kern** kommt ein echter Interop-Nachweis hinzu: Er ist gegen einen
+**echten Asterisk** (`andrius/asterisk:22`, eigener CI-Interop-Job) interop-verifiziert
+(Register/INVITE/Hold/Transfer/DTMF/Session-Timer/Early-Media, inkl. bidirektionaler
+Zwei-Bein-Media). **Noch aus stehen:** die **Breite** gegen weitere Referenz-Stacks
+(FreeSWITCH/3CX/Fritzbox), ein durchgängiges **Soak-/Chaos-CI-Gate**, sowie jeglicher
+**WebRTC-/TURN-Nachweis gegen einen realen Stack oder Browser**. Die vollständige,
 fähigkeit-für-fähigkeit belegte Einschätzung mit Reifegrad-Stufen steht in der
 → [Fähigkeiten- und Reifegrad-Matrix](technical/capabilities-matrix.md);
 die zusammengefassten Kernlücken und offenen Punkte in der
@@ -88,17 +92,24 @@ Das Paket besteht aus einem **technischen** und einem **kaufmännischen** Teil.
 
 | Seite | Inhalt |
 |-------|--------|
-| [`capabilities-matrix.md`](technical/capabilities-matrix.md) | Ehrliche Fähigkeiten- und Reifegrad-Matrix, je Fähigkeit gegen Code + ADR belegt (Grundregel „Doku ≤ Nachweis"). |
 | [`architecture.md`](technical/architecture.md) | Schichtenmodell, Modulgrenzen und wesentliche Bausteine des SIP-/RTP-/SRTP-Stacks. |
+| [`capabilities-matrix.md`](technical/capabilities-matrix.md) | Ehrliche Fähigkeiten- und Reifegrad-Matrix, je Fähigkeit gegen Code + ADR belegt (Grundregel „Doku ≤ Nachweis"). |
 | [`protocol-conformance.md`](technical/protocol-conformance.md) | RFC-Abdeckung und Konformitätsstand des Signaling-/Media-Pfads. |
 | [`quality-and-testing.md`](technical/quality-and-testing.md) | Teststrategie, Testabdeckung und Grenzen des vorhandenen Nachweises. |
 | [`risks-and-open-items.md`](technical/risks-and-open-items.md) | Konsolidierte Kernlücken, technische Risiken und offene Arbeitspakete. |
+| [`build-run-extend.md`](technical/build-run-extend.md) | Bauen/Testen/Ausführen + Erweiterungspunkte (Module, Media-Tap, DI, WebRTC/Hosting). |
+| [`ip-provenance.md`](technical/ip-provenance.md) | Eigener Stack, Laufzeit-Abhängigkeiten mit Lizenzen, SDK-Lizenz, ehrliche IP-Hinweise. |
 
 ### Kaufmännischer Teil (`commercial/`)
 
 | Seite | Inhalt |
 |-------|--------|
-| [`product-positioning.md`](commercial/product-positioning.md) | Marktpositionierung, Zielkunden, Abgrenzung und Lizenzmodell. |
+| [`product-positioning.md`](commercial/product-positioning.md) | Marktpositionierung, Zielkunden, Abgrenzung und Differenzierung. |
+| [`roadmap.md`](commercial/roadmap.md) | Phasen-Roadmap + realer Stand + verbleibende Arbeit. |
+| [`licensing-model.md`](commercial/licensing-model.md) | Lizenzstufen (Richtung), Modul-Store, technische Lizenzgrundlage (Apache-2.0, SemVer). |
+| [`rnd-compliance-value.md`](commercial/rnd-compliance-value.md) | Verdichtete F&E-Tiefe + DSGVO/EU-AI-Act-Haltung. |
+
+Vollständige Navigation mit Leseempfehlung: → [`README.md`](README.md).
 
 ### Ergänzende Quellen
 
