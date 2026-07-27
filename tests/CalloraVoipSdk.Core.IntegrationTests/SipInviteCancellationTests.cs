@@ -76,6 +76,12 @@ public sealed class SipInviteCancellationTests
         var cancel = await transport.WaitForRequestAsync("CANCEL", TimeSpan.FromSeconds(2));
         Assert.Equal("CANCEL", cancel.Method);
         Assert.Equal(SipDialogState.Terminated, session.State);
+
+        // The local CANCEL termination must carry the SIP status (487) — not only in the RFC 3326 Cause —
+        // so the public surface classifies it as Canceled. Before this fix the locally created reason left
+        // SipStatusCode null, so BuildTerminationReason fell back to the connected-gate and reported Failed
+        // (caught by the L4 Asterisk interop test, invisible to the fake-channel path).
+        Assert.Equal(487, session.LastTerminationReason?.SipStatusCode);
     }
 
     private static async Task WaitForStateAsync(
