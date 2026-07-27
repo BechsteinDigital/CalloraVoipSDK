@@ -45,7 +45,11 @@ internal sealed class InMemoryStunCredentialProvider : IStunCredentialProvider
             return false;
         }
 
-        // For short-term auth, match USERNAME and prefer short-term entries.
+        // For short-term auth (no realm), only a short-term entry is valid. A long-term entry with
+        // the same username derives a different HMAC key — MD5(user ":" realm ":" pass) (RFC 5389
+        // §10.2.3) versus SASLprep(pass) (§10.1.1) — so the earlier "any username match" fallback
+        // could hand back the wrong credential *type* and break MESSAGE-INTEGRITY verification. Match
+        // strictly on username AND short-term type; never cross the credential-type boundary.
         var shortTerm = _credentials.FirstOrDefault(c =>
             !c.IsLongTerm
             && string.Equals(c.Username, username, StringComparison.Ordinal));
@@ -53,16 +57,6 @@ internal sealed class InMemoryStunCredentialProvider : IStunCredentialProvider
         if (shortTerm is not null)
         {
             credentials = shortTerm;
-            return true;
-        }
-
-        // Fall back to any username match for compatibility.
-        var any = _credentials.FirstOrDefault(c =>
-            string.Equals(c.Username, username, StringComparison.Ordinal));
-
-        if (any is not null)
-        {
-            credentials = any;
             return true;
         }
 

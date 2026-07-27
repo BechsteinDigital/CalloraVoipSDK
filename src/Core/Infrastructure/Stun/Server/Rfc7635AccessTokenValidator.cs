@@ -318,11 +318,16 @@ internal sealed class Rfc7635AccessTokenValidator : IStunAccessTokenValidator
         return true;
     }
 
-    private static DateTimeOffset DecodeRfc7635Timestamp(ulong raw)
+    // internal for direct wire-decode unit coverage (InternalsVisibleTo); the production caller is
+    // TryParsePlaintext above.
+    internal static DateTimeOffset DecodeRfc7635Timestamp(ulong raw)
     {
+        // RFC 7635 §6.2: the 64-bit timestamp is seconds-since-epoch in the high 48 bits and a
+        // 16-bit fraction of a second in the low 16 bits, i.e. the fraction is scaled by 2^16.
+        // The divisor is therefore 65536 (1 << 16), not 64000.
         ulong seconds = raw >> 16;
         ulong fractions = raw & 0xFFFF;
-        long ticks = (long)((fractions * TimeSpan.TicksPerSecond) / 64000UL);
+        long ticks = (long)((fractions * TimeSpan.TicksPerSecond) / (1UL << 16));
         return DateTimeOffset.UnixEpoch.AddSeconds((long)seconds).AddTicks(ticks);
     }
 

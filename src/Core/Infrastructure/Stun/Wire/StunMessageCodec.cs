@@ -232,6 +232,16 @@ internal sealed class StunMessageCodec : IStunMessageCodec
                           + (addIntegrity   ? StunWireConstants.AttributeHeaderSize + 20 : 0)
                           + (addFingerprint ? StunWireConstants.AttributeHeaderSize + 4  : 0);
 
+        // RFC 5389 §6: the STUN message length is a 16-bit field. Reject rather than silently
+        // truncate-cast a body larger than 65535 bytes, which would emit a corrupt length word and
+        // desynchronise every downstream parser (K4 — fail loud at the wire boundary). The adjusted
+        // length writes for MESSAGE-INTEGRITY/FINGERPRINT below only re-express this same body length
+        // (their attributes are already counted in totalLen), so guarding it here covers them all.
+        int bodyLength = totalLen - StunWireConstants.HeaderSize;
+        if (bodyLength > ushort.MaxValue)
+            throw new InvalidOperationException(
+                $"STUN message length ({bodyLength} bytes) exceeds the 16-bit field (65535 bytes).");
+
         var buffer = new byte[totalLen];
         var span   = buffer.AsSpan();
 
