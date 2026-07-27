@@ -124,6 +124,11 @@ internal sealed class BundledVideoTrack : IDisposable
     /// negotiated. When present the track retains its sent packets and answers an inbound Generic NACK by
     /// resending them on a separate RTX stream (own SSRC, this payload type, OSN-prefixed).
     /// </param>
+    /// <param name="rtxSsrc">
+    /// The RTX repair stream's SSRC, allocated bundle-wide-distinct by the session factory (RFC 4588 §4 /
+    /// RFC 3550 §8.1). When <see langword="null"/> the track picks a repair SSRC distinct from
+    /// <paramref name="localSsrc"/> only — the fallback for callers that do not own the bundle SSRC set.
+    /// </param>
     public BundledVideoTrack(
         string mid,
         string codecName,
@@ -134,7 +139,8 @@ internal sealed class BundledVideoTrack : IDisposable
         BundledOutboundPipeline outbound,
         int reorderWindowDepth,
         ILoggerFactory loggerFactory,
-        byte? rtxPayloadType = null)
+        byte? rtxPayloadType = null,
+        uint? rtxSsrc = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(mid);
         ArgumentNullException.ThrowIfNull(loggerFactory);
@@ -151,13 +157,14 @@ internal sealed class BundledVideoTrack : IDisposable
         _videoPayloadType = payloadType;
 
         // RTX repair stream (RFC 4588): retain sent packets so an inbound NACK can be answered by resending
-        // them, and pick an unpredictable full-range repair SSRC (RFC 3550 §8.1) distinct from this stream's.
+        // them on a repair SSRC. The factory allocates that SSRC distinct from every outbound SSRC on the
+        // bundle (RFC 3550 §8.1); absent one, fall back to a full-range SSRC distinct from this stream's.
         // The retransmit callback below then resends; without RTX it stays a no-op (feedback built plain).
         if (rtxPayloadType is { } rtxPt)
         {
             _rtxPayloadType = rtxPt;
             _rtxConfigured = true;
-            _rtxSsrc = RtpRandom.NextSsrc(distinctFrom: localSsrc);
+            _rtxSsrc = rtxSsrc ?? RtpRandom.NextSsrc(distinctFrom: localSsrc);
             _retransmitBuffer = new RtpRetransmissionBuffer();
             // Retain only THIS stream's sent packets, keyed by sequence number. The pipeline's PacketSent fires
             // for every SSRC on the shared bundle (audio, other video), but an inbound NACK names this stream's

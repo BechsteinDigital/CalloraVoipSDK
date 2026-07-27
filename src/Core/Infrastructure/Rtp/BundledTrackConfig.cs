@@ -74,6 +74,15 @@ internal sealed record BundledTrackConfig
     public byte? RtxPayloadType { get; init; }
 
     /// <summary>
+    /// The RTX repair stream's own synchronisation source (RFC 4588 §4), allocated distinct from every other
+    /// outbound SSRC on the bundle (audio, video primary — RFC 3550 §8.1), or <see langword="null"/> when RTX
+    /// was not negotiated or the caller lets the track pick one. Set by the session factory, which owns the
+    /// bundle-wide SSRC allocation; when null the track falls back to a repair SSRC distinct only from
+    /// <see cref="Ssrc"/>.
+    /// </summary>
+    public uint? RtxSsrc { get; init; }
+
+    /// <summary>
     /// Send-side simulcast encodings for a video m-line (RFC 8853): each names an <c>a=rid</c> layer
     /// carried on its own SSRC under the shared MID. Empty for a non-simulcast track — the single stream
     /// then uses <see cref="Ssrc"/> / <see cref="PayloadType"/> directly. All layers share the codec and

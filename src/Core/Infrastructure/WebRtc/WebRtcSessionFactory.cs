@@ -300,15 +300,25 @@ internal static class WebRtcSessionFactory
             rtxPayloadType = (byte)rtxPt;
         }
 
+        var videoSsrc = NewSsrc(distinctFrom: audioSsrc);
+        // The RTX repair stream carries its own SSRC (RFC 4588 §4), which must be distinct from every other
+        // outbound SSRC on the bundle — not merely the primary (RFC 3550 §8.1). Allocate it against the full
+        // set of SSRCs already issued on this bundle (audio + this video primary); the factory owns the
+        // bundle-wide allocation, so the track no longer has to guess with only the primary to avoid.
+        uint? rtxSsrc = rtxPayloadType is not null
+            ? NewSsrc(new HashSet<uint> { audioSsrc, videoSsrc })
+            : null;
+
         return new BundledTrackConfig
         {
             Mid = video.Mid,
-            Ssrc = NewSsrc(distinctFrom: audioSsrc),
+            Ssrc = videoSsrc,
             PayloadType = (byte)codec.PayloadType,
             VideoCodecName = codec.Name,
             RemoteSupportsNack = remoteSupportsNack,
             RemoteSupportsPli = remoteSupportsPli,
             RtxPayloadType = rtxPayloadType,
+            RtxSsrc = rtxSsrc,
         };
     }
 
