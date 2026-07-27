@@ -12,7 +12,8 @@
   window.onerror = (m) => log('window.onerror: ' + m);
 
   const pc = new RTCPeerConnection({ iceServers: [] });   // host-only ICE, kein STUN
-  pc.onicecandidate = (e) => { if (e.candidate) send({ type: 'candidate', candidate: e.candidate.candidate }); };
+  // Firefox feuert am Ende ein leeres candidate (""); Chrome liefert dort null. Nur echte senden.
+  pc.onicecandidate = (e) => { if (e.candidate && e.candidate.candidate) send({ type: 'candidate', candidate: e.candidate.candidate }); };
   pc.oniceconnectionstatechange = () => log('ice:' + pc.iceConnectionState);
   pc.onconnectionstatechange = () => { set('pc:' + pc.connectionState); log('pc:' + pc.connectionState); };
 
@@ -60,7 +61,7 @@
     setInterval(async () => {
       const stats = await pc.getStats();
       stats.forEach((r) => {
-        if (r.type === 'inbound-rtp' && r.kind === 'audio') {
+        if (r.type === 'inbound-rtp' && (r.kind || r.mediaType) === 'audio') {   // Firefox: mediaType statt kind
           send({ type: 'stats', bytesReceived: r.bytesReceived || 0, packetsReceived: r.packetsReceived || 0 });
         }
       });

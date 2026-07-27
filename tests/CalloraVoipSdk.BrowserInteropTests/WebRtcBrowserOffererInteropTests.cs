@@ -18,14 +18,16 @@ public sealed class WebRtcBrowserOffererInteropTests
     private volatile BridgeMessage? _lastStats;
     private BridgeMessage? LastStats { get => _lastStats; set => _lastStats = value; }
 
-    [BrowserRequiredFact]
-    public async Task BrowserOfferer_Connects_And_Exchanges_Audio_With_SdkAnswerer()
+    [ChromiumFact] public Task Offerer_Chromium() => RunOffererInterop(BrowserEngine.Chromium);
+    [FirefoxFact]  public Task Offerer_Firefox()  => RunOffererInterop(BrowserEngine.Firefox);
+
+    private async Task RunOffererInterop(BrowserEngine engine)
     {
         // 1. SDK-Peer als ANSWERER — es wird bewusst KEIN CreateOffer() gerufen. Die Answerer-Rolle
         //    erkennt der Peer daran, dass keine lokale Offer aussteht.
         var client = new WebRtcClient(new WebRtcConfiguration
         {
-            LocalEndPoint = new IPEndPoint(IPAddress.Loopback, 0),
+            LocalEndPoint = new IPEndPoint(InteropNetwork.LocalIPv4(), 0),
             AudioCodecs = ["opus"],
         });
         await using var peer = client.CreatePeer();
@@ -78,7 +80,7 @@ public sealed class WebRtcBrowserOffererInteropTests
         });
 
         // 3. Browser starten -> er lädt peer-offerer.html, öffnet WS, sendet proaktiv das Offer.
-        await using var browser = new BrowserPeer();
+        await using var browser = new BrowserPeer(engine);
         await browser.NavigateAsync(bridge.BaseUri);
 
         // 4. Auf die eigene Answer warten (Offer verarbeitet), dann lokale Candidates trickeln + StartAsync.

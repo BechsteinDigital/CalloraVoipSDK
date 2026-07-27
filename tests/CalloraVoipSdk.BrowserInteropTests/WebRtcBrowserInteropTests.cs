@@ -11,13 +11,16 @@ public sealed class WebRtcBrowserInteropTests
     private volatile BridgeMessage? _lastStats;
     private BridgeMessage? LastStats { get => _lastStats; set => _lastStats = value; }
 
-    [BrowserRequiredFact]
-    public async Task SdkOfferer_Connects_And_Exchanges_Audio_With_RealBrowser()
+    [ChromiumFact] public Task Audio_Chromium() => RunAudioInterop(BrowserEngine.Chromium);
+    [FirefoxFact]  public Task Audio_Firefox()  => RunAudioInterop(BrowserEngine.Firefox);
+
+    private async Task RunAudioInterop(BrowserEngine engine)
     {
-        // 1. SDK-Peer (Offerer). LocalEndPoint measure-first: Loopback zuerst (beide Peers auf 127.0.0.1).
+        // 1. SDK-Peer (Offerer). Bind auf die host-IPv4: Firefox generiert keine 127.0.0.1-Candidates,
+        //    also müssen beide Seiten dieselbe LAN-Adresse anbieten (siehe InteropNetwork).
         var client = new WebRtcClient(new WebRtcConfiguration
         {
-            LocalEndPoint = new IPEndPoint(IPAddress.Loopback, 0),
+            LocalEndPoint = new IPEndPoint(InteropNetwork.LocalIPv4(), 0),
             AudioCodecs = ["opus"],
         });
         await using var peer = client.CreatePeer();
@@ -74,7 +77,7 @@ public sealed class WebRtcBrowserInteropTests
         });
 
         // 3. Browser starten -> er lädt peer.html, öffnet WS, sendet "ready".
-        await using var browser = new BrowserPeer();
+        await using var browser = new BrowserPeer(engine);
         await browser.NavigateAsync(bridge.BaseUri);
         await browserReady.Task.WaitAsync(TimeSpan.FromSeconds(20));
 

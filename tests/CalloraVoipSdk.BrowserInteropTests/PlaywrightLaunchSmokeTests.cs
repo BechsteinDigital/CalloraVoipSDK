@@ -6,15 +6,14 @@ namespace CalloraVoipSdk.BrowserInteropTests;
 [Trait("Category", "BrowserInterop")]
 public sealed class PlaywrightLaunchSmokeTests
 {
-    [BrowserRequiredFact]
-    public async Task Chromium_Launches_Headless_And_Loads_Blank_Page()
+    [ChromiumFact] public Task Chromium_Launches() => LaunchesHeadless(BrowserEngine.Chromium);
+    [FirefoxFact]  public Task Firefox_Launches()  => LaunchesHeadless(BrowserEngine.Firefox);
+    [WebKitFact]   public Task WebKit_Launches()   => LaunchesHeadless(BrowserEngine.WebKit);
+
+    private static async Task LaunchesHeadless(BrowserEngine engine)
     {
         using var playwright = await Playwright.CreateAsync();
-        await using var browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
-        {
-            Headless = true,
-            ExecutablePath = BrowserRequiredFactAttribute.ChromiumPath,
-        });
+        await using var browser = await engine.LaunchAsync(playwright);
         var page = await browser.NewPageAsync();
         await page.SetContentAsync("<html><body><h1 id='t'>ok</h1></body></html>");
         var text = await page.InnerTextAsync("#t");

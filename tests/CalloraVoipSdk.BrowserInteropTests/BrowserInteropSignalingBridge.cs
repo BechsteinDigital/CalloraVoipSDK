@@ -87,14 +87,26 @@ public sealed class BrowserInteropSignalingBridge : IAsyncDisposable
     private async Task ReceiveLoopAsync(WebSocket ws)
     {
         var buf = new byte[16 * 1024];
+        using var frame = new MemoryStream();
         while (ws.State == WebSocketState.Open && !_cts.IsCancellationRequested)
         {
             WebSocketReceiveResult r;
             try { r = await ws.ReceiveAsync(buf, _cts.Token).ConfigureAwait(false); }
             catch { break; }
             if (r.MessageType == WebSocketMessageType.Close) break;
-            var text = Encoding.UTF8.GetString(buf, 0, r.Count);
-            var msg = JsonSerializer.Deserialize<BridgeMessage>(text, Json);
+
+            // Eine WS-Nachricht kann über mehrere Frames kommen (große Video-SDPs überschreiten den Buffer) —
+            // bis EndOfMessage sammeln, sonst parst man ein abgeschnittenes JSON und verliert die Nachricht.
+            frame.Write(buf, 0, r.Count);
+            if (!r.EndOfMessage) continue;
+            var text = Encoding.UTF8.GetString(frame.GetBuffer(), 0, (int)frame.Length);
+            frame.SetLength(0);
+
+            // Eine einzelne unparsebare Nachricht darf die Empfangsschleife nicht abbrechen —
+            // sonst gingen alle nachfolgenden Nachrichten (z. B. die Stats-Updates) verloren.
+            BridgeMessage? msg;
+            try { msg = JsonSerializer.Deserialize<BridgeMessage>(text, Json); }
+            catch (JsonException) { continue; }
             if (msg is not null) await Inbound.Writer.WriteAsync(msg).ConfigureAwait(false);
         }
         Inbound.Writer.TryComplete();
