@@ -92,8 +92,8 @@ public sealed class BundledVideoTrackSimulcastTests
     {
         var (outbound, _) = SimulcastOutbound();
         using var video = new BundledVideoTrack(
-            "video", "H264", VideoPayloadType, outbound, reorderWindowDepth: 32,
-            NullLogger<BundledVideoTrack>.Instance);
+            "video", "H264", VideoPayloadType, SsrcHi, remoteSupportsNack: false, remoteSupportsPli: false,
+            outbound, reorderWindowDepth: 32, NullLoggerFactory.Instance);
 
         Assert.False(video.IsSimulcast);
         Assert.Empty(video.SendRids);
@@ -102,8 +102,8 @@ public sealed class BundledVideoTrackSimulcastTests
     // ── harness ──────────────────────────────────────────────────────────────────
 
     private static BundledVideoTrack SimulcastTrack(BundledOutboundPipeline outbound, params string[] rids) =>
-        new("video", "H264", VideoPayloadType, rids, outbound, reorderWindowDepth: 32,
-            NullLogger<BundledVideoTrack>.Instance);
+        new("video", "H264", VideoPayloadType, SsrcHi, remoteSupportsNack: false, remoteSupportsPli: false,
+            rids, outbound, reorderWindowDepth: 32, NullLoggerFactory.Instance);
 
     // An outbound pipeline with two per-rid video tracks under MID "video", each stamping its MID+RID.
     private static (BundledOutboundPipeline pipeline, List<RtpPacket> sent) SimulcastOutbound()

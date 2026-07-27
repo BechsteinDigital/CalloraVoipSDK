@@ -206,16 +206,18 @@ internal sealed class BundledMediaSession : IAsyncDisposable
                         BuildEncodingTrack(options, video.Mid, encoding.Ssrc, video.PayloadType, encoding.Rid, ridExtensionId));
 
                 _video = new BundledVideoTrack(
-                    video.Mid, codecName, video.PayloadType,
+                    video.Mid, codecName, video.PayloadType, video.Ssrc,
+                    video.RemoteSupportsNack, video.RemoteSupportsPli,
                     video.Encodings.Select(e => e.Rid).ToArray(),
-                    _outbound, options.VideoReorderDepth, loggerFactory.CreateLogger<BundledVideoTrack>());
+                    _outbound, options.VideoReorderDepth, loggerFactory);
             }
             else
             {
                 _outbound.RegisterTrack(video.Mid, BuildOutboundTrack(options, video));
                 _video = new BundledVideoTrack(
-                    video.Mid, codecName, video.PayloadType, _outbound, options.VideoReorderDepth,
-                    loggerFactory.CreateLogger<BundledVideoTrack>());
+                    video.Mid, codecName, video.PayloadType, video.Ssrc,
+                    video.RemoteSupportsNack, video.RemoteSupportsPli,
+                    _outbound, options.VideoReorderDepth, loggerFactory);
             }
 
             _video.FrameReceived += (frame, timestamp, isKeyFrame) => VideoFrameReceived?.Invoke(frame, timestamp, isKeyFrame);

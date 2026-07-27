@@ -238,6 +238,12 @@ internal static class WebRtcSessionFactory
         if (codec is null)
             return null;
 
+        // RTCP feedback (RFC 4585) is advertised at the media-section level (a=rtcp-fb), not on the codec:
+        // the peer's ANSWER/OFFER video m-line names what it will act on, so gate outbound NACK/PLI on it —
+        // never send feedback the peer did not offer. Mirrors the SIP path's CallVideoParameters derivation.
+        var remoteSupportsNack = RemoteSupportsNack(remoteVideo);
+        var remoteSupportsPli = RemoteSupportsPli(remoteVideo);
+
         // Send-side simulcast (RFC 8853) only activates for the layers the remote ANSWER confirmed as recv
         // (and only if it echoed the RID header extension, RFC 8852) — never for our offered layers alone.
         // Stamping RIDs the peer cannot demux would break its reception; an unconfirmed offer falls back to a
@@ -263,6 +269,8 @@ internal static class WebRtcSessionFactory
                     Ssrc = encodings[0].Ssrc, // primary; per-layer SSRCs carry the actual sends
                     PayloadType = (byte)codec.PayloadType,
                     VideoCodecName = codec.Name,
+                    RemoteSupportsNack = remoteSupportsNack,
+                    RemoteSupportsPli = remoteSupportsPli,
                     Encodings = encodings,
                 };
             }
@@ -279,8 +287,20 @@ internal static class WebRtcSessionFactory
             Ssrc = NewSsrc(distinctFrom: audioSsrc),
             PayloadType = (byte)codec.PayloadType,
             VideoCodecName = codec.Name,
+            RemoteSupportsNack = remoteSupportsNack,
+            RemoteSupportsPli = remoteSupportsPli,
         };
     }
+
+    // The peer advertised Generic NACK (a=rtcp-fb:… nack) with no parameter — RFC 4585 §6.2.1.
+    private static bool RemoteSupportsNack(SdpMediaDescription? remoteVideo) =>
+        remoteVideo is not null && remoteVideo.RtcpFeedback.Any(
+            f => f.FeedbackType.Equals("nack", Ci) && f.Parameter is null);
+
+    // The peer advertised Picture Loss Indication (a=rtcp-fb:… nack pli) — RFC 4585 §6.3.1.
+    private static bool RemoteSupportsPli(SdpMediaDescription? remoteVideo) =>
+        remoteVideo is not null && remoteVideo.RtcpFeedback.Any(
+            f => f.FeedbackType.Equals("nack", Ci) && string.Equals(f.Parameter, "pli", Ci));
 
     // The subset of our offered send RIDs the remote answer confirmed as recv (RFC 8853): it must echo the
     // RID header extension (RFC 8852) — else it cannot demux the layers — and list the RID as recv via

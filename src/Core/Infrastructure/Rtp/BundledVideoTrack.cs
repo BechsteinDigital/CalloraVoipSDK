@@ -1,4 +1,5 @@
 using CalloraVoipSdk.Core.Application.Media.Rtcp.Packets;
+using CalloraVoipSdk.Core.Infrastructure.Rtcp.Wire;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packetisation;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
 using Microsoft.Extensions.Logging;
@@ -33,6 +34,13 @@ internal sealed class BundledVideoTrack : IDisposable
     private readonly IVideoDepacketiser _depacketiser;
     private readonly VideoReorderBuffer _reorderBuffer;
     private readonly ILogger<BundledVideoTrack> _logger;
+
+    // RTCP keyframe/loss feedback for this stream (RFC 4585/5104), mirroring the single-stream
+    // VideoRtpStream: inbound PLI/FIR → KeyFrameRequested; detected inbound loss → outbound NACK/PLI.
+    private readonly VideoKeyFrameFeedback _keyFrameFeedback;
+    private readonly VideoArrivalLossTracker _arrivalLoss = new();
+    // Cancels in-flight feedback sends when the track is disposed, so a NACK/PLI never races teardown.
+    private readonly CancellationTokenSource _lifetimeCts = new();
 
     // The non-simulcast single stream (RID null), or null when this is a simulcast track.
     private readonly BundledVideoSendEncoding? _single;
@@ -71,48 +79,79 @@ internal sealed class BundledVideoTrack : IDisposable
     public IReadOnlyCollection<string> SendRids => _layers.Keys.ToArray();
 
     /// <summary>Builds a non-simulcast video track (one RTP stream on the video MID).</summary>
+    /// <param name="mid">The video m-line's MID token.</param>
+    /// <param name="codecName">The negotiated video codec ("H264"/"VP8").</param>
+    /// <param name="payloadType">The negotiated RTP payload type.</param>
+    /// <param name="localSsrc">This stream's outbound SSRC — the SenderSsrc of any outbound NACK/PLI.</param>
+    /// <param name="remoteSupportsNack">Whether the peer advertised Generic NACK (RFC 4585) for this m-line.</param>
+    /// <param name="remoteSupportsPli">Whether the peer advertised PLI (RFC 4585 §6.3.1) for this m-line.</param>
+    /// <param name="outbound">The bundle's outbound pipeline (RTP sends and the SRTCP-protected RTCP send path).</param>
+    /// <param name="reorderWindowDepth">The inbound reorder window depth in packets.</param>
+    /// <param name="loggerFactory">Builds the loggers for the track and its feedback path.</param>
     public BundledVideoTrack(
         string mid,
         string codecName,
         byte payloadType,
+        uint localSsrc,
+        bool remoteSupportsNack,
+        bool remoteSupportsPli,
         BundledOutboundPipeline outbound,
         int reorderWindowDepth,
-        ILogger<BundledVideoTrack> logger)
+        ILoggerFactory loggerFactory)
     {
         ArgumentException.ThrowIfNullOrEmpty(mid);
+        ArgumentNullException.ThrowIfNull(loggerFactory);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(reorderWindowDepth);
         _mid = mid;
         _outbound = outbound ?? throw new ArgumentNullException(nameof(outbound));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _logger = loggerFactory.CreateLogger<BundledVideoTrack>();
 
         var (packetiser, depacketiser) = VideoPayloadFormat.Create(codecName);
         _depacketiser = depacketiser;
         _reorderBuffer = new VideoReorderBuffer(reorderWindowDepth);
         _single = new BundledVideoSendEncoding(rid: null, payloadType, packetiser);
         _layers = new Dictionary<string, BundledVideoSendEncoding>(StringComparer.Ordinal);
+        _keyFrameFeedback = BuildFeedback(localSsrc, remoteSupportsNack, remoteSupportsPli, loggerFactory);
     }
 
     /// <summary>
     /// Builds a simulcast video track (RFC 8853): one RTP stream per <paramref name="rids"/> layer under
     /// the shared MID, each with its own packetiser and send lock. The receive path stays single-stream.
     /// </summary>
+    /// <param name="mid">The video m-line's MID token.</param>
+    /// <param name="codecName">The negotiated video codec ("H264"/"VP8").</param>
+    /// <param name="payloadType">The negotiated RTP payload type shared by every layer.</param>
+    /// <param name="localSsrc">
+    /// The primary outbound SSRC — the SenderSsrc of any outbound NACK/PLI. The single-stream receive path
+    /// (and thus loss feedback) is shared across the simulcast layers, matching the single-stream receive scope.
+    /// </param>
+    /// <param name="remoteSupportsNack">Whether the peer advertised Generic NACK (RFC 4585) for this m-line.</param>
+    /// <param name="remoteSupportsPli">Whether the peer advertised PLI (RFC 4585 §6.3.1) for this m-line.</param>
+    /// <param name="rids">The <c>a=rid</c> layer ids to send under the shared MID.</param>
+    /// <param name="outbound">The bundle's outbound pipeline (RTP sends and the SRTCP-protected RTCP send path).</param>
+    /// <param name="reorderWindowDepth">The inbound reorder window depth in packets.</param>
+    /// <param name="loggerFactory">Builds the loggers for the track and its feedback path.</param>
     public BundledVideoTrack(
         string mid,
         string codecName,
         byte payloadType,
+        uint localSsrc,
+        bool remoteSupportsNack,
+        bool remoteSupportsPli,
         IReadOnlyList<string> rids,
         BundledOutboundPipeline outbound,
         int reorderWindowDepth,
-        ILogger<BundledVideoTrack> logger)
+        ILoggerFactory loggerFactory)
     {
         ArgumentException.ThrowIfNullOrEmpty(mid);
         ArgumentNullException.ThrowIfNull(rids);
+        ArgumentNullException.ThrowIfNull(loggerFactory);
         if (rids.Count == 0)
             throw new ArgumentException("A simulcast video track needs at least one rid.", nameof(rids));
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(reorderWindowDepth);
         _mid = mid;
         _outbound = outbound ?? throw new ArgumentNullException(nameof(outbound));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _logger = loggerFactory.CreateLogger<BundledVideoTrack>();
 
         // One depacketiser drives the single-stream receive path; each send layer gets its own packetiser
         // (the packetiser is stateful, so layers must not share one).
@@ -127,7 +166,24 @@ internal sealed class BundledVideoTrack : IDisposable
                 throw new ArgumentException($"Duplicate simulcast rid '{rid}'.", nameof(rids));
         }
         _layers = layers;
+        _keyFrameFeedback = BuildFeedback(localSsrc, remoteSupportsNack, remoteSupportsPli, loggerFactory);
     }
+
+    // Builds the RFC 4585/5104 feedback for this stream over the bundle's SRTCP send path, mirroring the
+    // single-stream VideoRtpStream construction. RTX is out of scope for this slice, so the retransmit
+    // callback (inbound NACK) is a no-op; it becomes the RTX resend hook in a later slice.
+    private VideoKeyFrameFeedback BuildFeedback(
+        uint localSsrc, bool remoteSupportsNack, bool remoteSupportsPli, ILoggerFactory loggerFactory) =>
+        new(
+            new RtcpPacketCodec(),
+            localSsrc,
+            remoteSupportsNack,
+            remoteSupportsPli,
+            _outbound.SendRtcpAsync,
+            () => KeyFrameRequested?.Invoke(),
+            _ => { },
+            loggerFactory.CreateLogger<VideoKeyFrameFeedback>(),
+            _lifetimeCts.Token);
 
     /// <summary>
     /// Packetises one encoded frame and sends its payloads over the shared transport on the video MID.
@@ -182,31 +238,28 @@ internal sealed class BundledVideoTrack : IDisposable
     public void OnRtpPacket(RtpPacket packet)
     {
         ArgumentNullException.ThrowIfNull(packet);
+
+        // Arrival-order loss signalling (RFC 4585), on the raw arrival sequence — before the reorder window
+        // can slide past a genuine forward gap. A reorder or duplicate is not loss (Track returns null): the
+        // reorder buffer below corrects it, so it raises neither a NACK nor a PLI. Mirrors VideoRtpStream.
+        if (_arrivalLoss.Track(packet.SequenceNumber) is { } missing)
+            _keyFrameFeedback.OnLoss(packet.Ssrc, missing);
+
         foreach (var released in _reorderBuffer.Insert(packet))
             DeliverOrdered(released);
     }
 
     /// <summary>
     /// Handles the decoded inbound RTCP compound (already SRTCP-unprotected and parsed once by the session):
-    /// a PLI or FIR anywhere in it (RFC 4585/5104) is treated as a request to send a key frame on this
-    /// stream, mirroring the single-stream <c>VideoKeyFrameFeedback</c>. Runs on the bundle receive loop.
+    /// a PLI or FIR anywhere in it (RFC 4585/5104) is treated as a request to send a key frame on this stream
+    /// (surfaced on <see cref="KeyFrameRequested"/>); an inbound Generic NACK is routed to the retransmit path
+    /// (a no-op until RTX is wired). Delegates to the shared <see cref="VideoKeyFrameFeedback"/>, mirroring the
+    /// single-stream video path. Runs on the bundle receive loop.
     /// </summary>
     public void OnRtcpPackets(IReadOnlyList<RtcpPacket> packets)
     {
         ArgumentNullException.ThrowIfNull(packets);
-
-        // Any PLI/FIR here means "send a keyframe". NACK/RTX are out of scope for this slice.
-        if (!packets.Any(p => p is RtcpPictureLossIndication or RtcpFullIntraRequest))
-            return;
-
-        try
-        {
-            KeyFrameRequested?.Invoke();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unhandled exception in bundled video KeyFrameRequested handler.");
-        }
+        _keyFrameFeedback.OnRtcpPackets(packets);
     }
 
     // Delivers one packet in sequence order to the depacketiser. A discontinuity is a gap the reorder
@@ -245,10 +298,14 @@ internal sealed class BundledVideoTrack : IDisposable
     /// </summary>
     public void Dispose()
     {
+        // Cancel any in-flight NACK/PLI send before releasing the send locks, so a feedback send never races
+        // teardown (the SRTCP send path also fails closed on a disposed context).
+        _lifetimeCts.Cancel();
         FrameReceived = null;
         KeyFrameRequested = null;
         _single?.Dispose();
         foreach (var layer in _layers.Values)
             layer.Dispose();
+        _lifetimeCts.Dispose();
     }
 }
