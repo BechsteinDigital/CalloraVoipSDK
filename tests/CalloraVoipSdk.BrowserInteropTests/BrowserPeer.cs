@@ -12,6 +12,9 @@ public sealed class BrowserPeer : IAsyncDisposable
     private IPlaywright? _playwright;
     private IBrowser? _browser;
 
+    /// <summary>Gesammelte Browser-Konsolen-/Fehler-Meldungen (Diagnose bei Fehlschlag).</summary>
+    public System.Collections.Concurrent.ConcurrentQueue<string> Logs { get; } = new();
+
     public async Task NavigateAsync(string url)
     {
         _playwright = await Playwright.CreateAsync();
@@ -28,8 +31,13 @@ public sealed class BrowserPeer : IAsyncDisposable
             ],
         });
         var page = await _browser.NewPageAsync();
+        page.Console += (_, m) => Logs.Enqueue($"[console.{m.Type}] {m.Text}");
+        page.PageError += (_, e) => Logs.Enqueue($"[pageerror] {e}");
         await page.GotoAsync(url);
     }
+
+    /// <summary>Die gesammelten Browser-Logs als ein String (für Assertion-Meldungen).</summary>
+    public string DumpLogs() => string.Join("\n  ", Logs);
 
     public async ValueTask DisposeAsync()
     {
