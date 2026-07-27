@@ -44,6 +44,9 @@ public sealed class AsteriskTestServer : IAsyncDisposable
         "same => n,Wait(30)\n" +
         "exten => busy,1,Busy()\n" +
         "exten => decline,1,Hangup(21)\n" +
+        "exten => remotehangup,1,Answer()\n" +
+        "same => n,Wait(3)\n" +
+        "same => n,Hangup()\n" +
         "exten => noanswer,1,Ringing()\n" +
         "same => n,Wait(3600)\n";
 

@@ -27,7 +27,7 @@ public sealed class CalloraStack : IComparisonStack
 
     public bool IsRegistered => !_disposed && _line is not null;
 
-    public int ActiveCallCount => _calls.Count;
+    public int ActiveCallCount => _calls.Values.Count(call => call.IsConnected);
 
     public async Task RegisterAsync(SipTestAccount account, CancellationToken ct = default)
     {

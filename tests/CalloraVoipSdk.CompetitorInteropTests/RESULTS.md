@@ -33,8 +33,8 @@ Ausgeführt wurde:
 Ergebnis des vollständigen Laufs:
 
 ```text
-Passed! - Failed: 0, Passed: 42, Skipped: 0, Total: 42
-Duration: 2 m 17 s
+Passed! - Failed: 0, Passed: 45, Skipped: 0, Total: 45
+Duration: 2 m 37 s
 ```
 
 | Szenario | Callora | Ozeki 10.5.1 | SIPSorcery |
@@ -51,9 +51,10 @@ Duration: 2 m 17 s
 | 486/403/404 + Cleanup + erfolgreicher Folgeanruf | PASS | PASS | PASS |
 | Caller-Cancellation: `Canceled` + erfolgreicher Folgeanruf | PASS | PASS | PASS |
 | Caller-Cancellation: SIP-`CANCEL` + externer Channel-Cleanup | **FAIL** | PASS | PASS |
+| Remote-BYE + Cleanup + erfolgreicher Folgeanruf | PASS | PASS | PASS |
 | Call- und Registration-Cleanup | PASS | PASS | PASS |
 
-Die 42/42 beziehen sich auf ausführbare Charakterisierungstests. Der
+Die 45/45 beziehen sich auf ausführbare Charakterisierungstests. Der
 unterschiedliche Cleanup-Vertrag ist darin absichtlich stack-spezifisch
 hinterlegt; das **FAIL** in der Ergebnismatrix wird dadurch nicht zu einem
 Parity-PASS umgedeutet.
@@ -78,6 +79,14 @@ beides nicht: Der `noanswer`-Channel blieb länger als fünf Sekunden bestehen.
 Der vor der Charakterisierung verwendete identische Parity-Assert scheiterte
 für Callora reproduzierbar in zwei von zwei Läufen, darunter einmal noch nach
 acht Sekunden.
+
+Der Remote-BYE-Slice bestand im gezielten Lauf mit 3/3 und danach im
+vollständigen Lauf. Asterisk beendete jeweils ein bereits aufgebautes Gespräch
+nach drei Sekunden mit einem auf dem Wire sichtbaren `BYE`. Alle drei Stacks
+wechselten über ihre öffentliche Call-Oberfläche in den getrennten Zustand,
+meldeten null aktive Calls, behielten ihre Registrierung und empfingen im
+Folgeanruf erneut RTP. Asterisk meldete zwischen beiden Gesprächen null aktive
+Channels.
 
 ## Stack-spezifische Codefläche
 
@@ -113,6 +122,13 @@ reicht den bereits modellierten `DialStatus.Canceled` durch. Ozeki und
 SIPSorcery normalisieren ihren Cancellation-Pfad und stoßen den expliziten
 Call-Cleanup an.
 
+Der Remote-BYE-Vertrag benötigte keine zusätzliche nichtleere Adapterzeile.
+Alle drei Adapter konnten den bereits vorhandenen öffentlichen Call-Zustand
+auswerten. Beim Callora-Adapter wurde die bestehende `ActiveCallCount`-
+Definition ohne Größenänderung an die beiden anderen Adapter angeglichen:
+Gezählt werden verbundene statt lediglich noch vom Testadapter gehaltene
+Wrapper.
+
 Der Vertrag wurde ursprünglich anhand des alten Dialer-/Callora-Slice
 formuliert. Die Asterisk-Beobachtungen sind externe
 Verhaltensbeobachtungen; der Codeflächenvorteil kann dagegen auch ausdrücken,
@@ -128,7 +144,7 @@ Ozekis reproduzierbarer Linux-Weg umfasst zusätzlich:
 | Enger `/usr/share/Ozeki.{…}`-Pfadshim in C | 183 |
 | Summe | 252 |
 
-Dieser Aufwand ist nicht in den 505 funktionalen Ozeki-Zeilen versteckt. Bei
+Dieser Aufwand ist nicht in den 507 funktionalen Ozeki-Zeilen versteckt. Bei
 einer systemweiten Paketinstallation entfällt die Extraktion, nicht aber
 automatisch das Berechtigungsproblem des Runtime-Verzeichnisses.
 
@@ -180,6 +196,10 @@ Callora:
 - Eine caller-seitige Cancellation wird prompt als `DialStatus.Canceled`
   zurückgegeben; dieselbe Registrierung bleibt für einen erfolgreichen
   Folgeanruf verwendbar.
+- Ein Remote-BYE wird über den bestehenden `ICall.State` ohne zusätzlichen
+  Callora-spezifischen Adapterpfad sichtbar. Der Call endete lokal, Asterisk
+  hatte keinen aktiven Channel mehr und dieselbe Registrierung trug den
+  RTP-führenden Folgeanruf.
 - Nachteil im geprüften Managed Workflow: Erfolgt die Cancellation während
   `PhoneLine.DialAsync`, sendet der Client kein SIP-`CANCEL`. Der Asterisk-
   Channel blieb länger als fünf beziehungsweise im Wiederholungslauf acht
@@ -214,6 +234,9 @@ Ozeki SDK Linux 10.5.1:
   Vergleichsadapter bewusst weg.
 - Bei caller-seitiger Cancellation löste der Adapter `HangUp()` aus. Asterisk
   sah das SIP-`CANCEL`, räumte den Channel auf und der Folgeanruf funktionierte.
+- Der öffentliche `IPhoneCall.CallState` folgte dem Remote-BYE bis zum
+  terminalen Zustand; Channel-Cleanup, Registrierung und Folgeanruf blieben
+  intakt.
 - Der native .NET-10-Medienpfad funktioniert ohne `System.Drawing.Common` und
   ohne den früheren DMO/G.711-Workaround.
 - Trotz eigenem Linux-Paket setzt der Runtime-Start Schreibzugriff auf einen
@@ -241,6 +264,8 @@ SIPSorcery:
   Beobachten des laufenden Call-Tasks sowie MediaSession- und User-Agent-
   Cleanup selbst orchestrieren. Damit waren SIP-`CANCEL`, Channel-Cleanup und
   der Folgeanruf erfolgreich.
+- `SIPUserAgent.IsCallActive` wechselte nach dem Remote-BYE auf `false`;
+  Asterisk-Cleanup, Registrierung und Folgeanruf waren erfolgreich.
 - Die zusätzliche Arbeit liefert viel Low-Level-Kontrolle, vergrößert aber
   Codefläche und Lifecycle-Verantwortung.
 
@@ -268,6 +293,13 @@ SIPSorcery benötigen etwas mehr Adapterlogik, senden dafür `CANCEL` und
 beenden den Remote-Channel. Für Dialer ist das ein relevanter Call-Lifecycle-
 Nachteil von Callora, nicht nur eine kosmetische Statusdifferenz.
 
+Beim Remote-BYE herrscht dagegen funktionale Parität: Alle drei öffentlichen
+Call-Modelle reflektieren die Peer-seitige Beendigung, räumen den externen
+Channel auf und lassen die bestehende Registrierung weiterverwenden. Callora
+benötigt dafür keine zusätzliche Lifecycle-Orchestrierung im Adapter. Die
+genaue Beendigungsursache ist auf dem gemessenen Main-Stand weiterhin nicht
+Teil dieses Vergleichsvertrags; der offene PR #105 bleibt davon getrennt.
+
 Ozeki 10.5.1 ist gegenüber dem historischen Bestand deutlich aufgewertet:
 native .NET-10-Pakete, direkter Medienpfad und weniger Adaptercode. Funktional
 liegt es in diesem Slice eng bei Callora. Seine größten Nachteile sind hier
@@ -281,13 +313,13 @@ Medien- und Lifecycle-Implementierung.
 
 Bewiesen ist damit nicht, dass nur Callora diese Aufgaben lösen kann. Bewiesen
 ist enger: Alle drei lösen denselben realen SIP-/RTP-Vertrag einschließlich
-lokalem Hold/Unhold und terminalen Remote-Ablehnungen; Callora tut es hier mit
-der kleinsten funktionalen Integrationsfläche, während Ozeki 10.5.1 den
-Abstand zur historischen Version sichtbar verkleinert. Die neuen Slices
-stärken das Progressive-API-Argument: Calloras Managed Dial und tieferes
-`ICall`-Verhalten lassen sich ohne Abstraktionsbruch kombinieren. Sie zeigen
-aber auch konkrete Lücken bei detaillierten Remote-Fehlerursachen und beim
-SIP-Cleanup eines aktiv abgebrochenen Wahlversuchs. Noch nicht bewiesen ist
-eine generelle Überlegenheit der übrigen Escape Hatches: Transfer,
+lokalem Hold/Unhold, terminalen Remote-Ablehnungen und Peer-seitigem BYE;
+Callora tut es hier mit der kleinsten funktionalen Integrationsfläche, während
+Ozeki 10.5.1 den Abstand zur historischen Version sichtbar verkleinert. Die
+neuen Slices stärken das Progressive-API-Argument: Calloras Managed Dial und
+tieferes `ICall`-Verhalten lassen sich ohne Abstraktionsbruch kombinieren. Sie
+zeigen aber auch konkrete Lücken bei detaillierten Remote-Fehlerursachen und
+beim SIP-Cleanup eines aktiv abgebrochenen Wahlversuchs. Noch nicht bewiesen
+ist eine generelle Überlegenheit der übrigen Escape Hatches: Transfer,
 In-Dialog-SIP, Custom-Header, Telemetrie, eigene Devices, Module, ICE und
 WebRTC wurden in diesem Dreiervergleich nicht systematisch gegenübergestellt.

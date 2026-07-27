@@ -198,6 +198,49 @@ public sealed class ComparisonScenarios
 
     [Theory]
     [MemberData(nameof(Stacks))]
+    public async Task Remote_bye_ends_call_and_stack_remains_reusable(StackKind kind)
+    {
+        await using var asterisk = await StartAsteriskAsync().ConfigureAwait(false);
+        await asterisk.EnablePjsipLoggerAsync().ConfigureAwait(false);
+        await using var stack = await CreateRegisteredStackAsync(kind, asterisk).ConfigureAwait(false);
+
+        var attempt = await stack
+            .DialAsync(asterisk.Target("remotehangup"), TimeSpan.FromSeconds(10))
+            .ConfigureAwait(false);
+        AssertConnected(stack, attempt);
+        await using var remotelyEndedCall = attempt.Call!;
+
+        await WaitUntilAsync(
+                () => !remotelyEndedCall.IsConnected,
+                TimeSpan.FromSeconds(8),
+                $"{stack.Name} did not expose the remote BYE as a disconnected call.")
+            .ConfigureAwait(false);
+        Assert.Equal(0, stack.ActiveCallCount);
+        Assert.True(stack.IsRegistered, $"{stack.Name} lost registration after the remote BYE.");
+        await WaitUntilAsync(
+                async () => (await asterisk.ShowChannelsAsync().ConfigureAwait(false))
+                    .Contains("0 active channels", StringComparison.OrdinalIgnoreCase),
+                TimeSpan.FromSeconds(8),
+                $"{stack.Name} left an Asterisk channel after the remote BYE.")
+            .ConfigureAwait(false);
+
+        var logs = await asterisk.GetLogsAsync().ConfigureAwait(false);
+        Assert.Contains("BYE sip:", logs, StringComparison.OrdinalIgnoreCase);
+
+        var recovery = await stack
+            .DialAsync(asterisk.Target("answer"), TimeSpan.FromSeconds(10))
+            .ConfigureAwait(false);
+        AssertConnected(stack, recovery);
+        await using var recoveredCall = recovery.Call!;
+        await WaitUntilAsync(
+                () => recoveredCall.ReceivedPacketCount >= 10,
+                TimeSpan.FromSeconds(10),
+                $"{stack.Name} did not receive media after the remote BYE.")
+            .ConfigureAwait(false);
+    }
+
+    [Theory]
+    [MemberData(nameof(Stacks))]
     public async Task Receives_rfc4733_dtmf(StackKind kind)
     {
         await using var asterisk = await StartAsteriskAsync().ConfigureAwait(false);

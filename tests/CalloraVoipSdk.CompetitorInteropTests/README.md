@@ -81,7 +81,9 @@ Jedes Szenario wird einmal mit Callora, Ozeki und SIPSorcery ausgeführt:
 11. Caller-seitige Cancellation während des Klingelns: normalisierter
     Abbruchstatus, SIP-`CANCEL` und Channel-Cleanup sowie erfolgreicher
     Folgeanruf über dieselbe Registrierung
-12. Hangup, Channel-Cleanup und Deregistrierung
+12. Remote-BYE nach aufgebautem Gespräch: öffentlicher Zustandswechsel,
+    Channel-Cleanup und erfolgreicher Folgeanruf über dieselbe Registrierung
+13. Hangup, Channel-Cleanup und Deregistrierung
 
 Für jede Testzeile wird ein frischer Asterisk-Container gestartet. Die Tests
 laufen absichtlich seriell. Dadurch teilen sich die Implementierungen weder
@@ -134,7 +136,9 @@ starten und für einzelne Anforderungen tiefer gehen, ohne die SDK zu ersetzen
 oder interne Typen anzusprechen. Der zusätzliche Hold-Slice belegt dieses
 Muster jetzt auch für tiefergehende Call-Steuerung: Managed Dial, typisiertes
 `ICall.HoldAsync`/`UnholdAsync`, beobachtbarer Zustand und derselbe
-Asterisk-Medienpfad greifen ohne internen API-Zugriff ineinander.
+Asterisk-Medienpfad greifen ohne internen API-Zugriff ineinander. Der
+Remote-BYE-Slice nutzt denselben öffentlichen Call-Zustand, um ein vom Peer
+beendetes Gespräch ohne stack-spezifischen internen Zugriff zu erkennen.
 
 Nicht vergleichend geprüft wurden die übrigen öffentlichen Escape Hatches wie
 Transfer, In-Dialog-`INFO`/`OPTIONS`/`SUBSCRIBE`/`NOTIFY`, Custom-Header,
