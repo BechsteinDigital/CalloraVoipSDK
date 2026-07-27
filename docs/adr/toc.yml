@@ -1,0 +1,156 @@
+- name: Overview
+  href: README.md
+- name: "Architecture, Layering & Process"
+  items:
+    - name: "ADR-013: Role-Based Delivery Workflow (CEO / PO / DEV / Reviewer)"
+      href: ADR-013-role-based-delivery-workflow.md
+    - name: "ADR-014: DDD Layer Direction Enforced by Gated Shrink-Only Baselines"
+      href: ADR-014-ddd-layering-gated-baselines.md
+    - name: "ADR-015: PhoneLine↔CallManager Decoupling via Domain Port `ICallRegistry` (DIP)"
+      href: ADR-015-icallregistry-domain-port-dip.md
+    - name: "ADR-016: Peer-Calibrated Refactoring Backlog — Harden, Don't Rebuild"
+      href: ADR-016-peer-calibrated-refactoring-backlog.md
+    - name: "ADR-057: Audit → Findings-Register → Code-Marker as Durable, Claim-Verified Audit Memory"
+      href: ADR-057-audit-findings-register-marker-discipline.md
+    - name: "ADR-058: Layered L0–L4 Test Model with Interop/Soak Harness and a Document-Don't-Fix Register"
+      href: ADR-058-layered-test-interop-soak-model.md
+- name: "Product, Platform, Versioning & Extensibility"
+  items:
+    - name: "ADR-006: API Versioning and Compatibility Strategy"
+      href: ADR-006-api-versioning-strategy.md
+    - name: "ADR-007: Host-Centric Platform Split (Engine OSS + Host + Plugins)"
+      href: ADR-007-host-centric-platform-split.md
+    - name: "ADR-008: Community Module Store Architecture"
+      href: ADR-008-community-module-store.md
+    - name: "ADR-059: Public Per-Call Media-Tap Contract (Synchronous, Encoded, Fan-Out)"
+      href: ADR-059-public-media-tap-contract.md
+- name: "SIP Signaling"
+  items:
+    - name: "ADR-001: UAS User Identity Policy (RFC 3261 §8.2.2.1)"
+      href: ADR-001-uas-user-identity-policy.md
+    - name: "ADR-002: UAS Redirect (RFC 3261 §8.3) — RedirectAsync on ISipCallSession"
+      href: ADR-002-uas-redirect-redirect-async.md
+    - name: "ADR-003: RFC 3581 §4 – rport/received Reflection in UAS Responses"
+      href: ADR-003-rfc3581-rport-uas-response-reflection.md
+    - name: "ADR-004: RFC 5626 §4.4.1 – CRLF Keepalive Pong on Stream Transports"
+      href: ADR-004-rfc5626-crlf-keepalive-pong.md
+    - name: "ADR-005: RFC 3261 §9.1 – Release Operation Gate Before INVITE Transaction"
+      href: ADR-005-rfc3261-cancel-gate-release.md
+    - name: "ADR-017: REGISTER Expires / Refresh Lifecycle"
+      href: ADR-017-register-expires-lifecycle.md
+    - name: "ADR-018: Challenge-Driven Digest Authentication for REGISTER"
+      href: ADR-018-challenge-driven-digest-auth.md
+    - name: "ADR-019: NAT-Routable Contact and Advertised Media Address"
+      href: ADR-019-nat-routable-contact-and-media-address.md
+    - name: "ADR-020: Dialog Route-Set — Record-Route Echo and In-Dialog Routing"
+      href: ADR-020-dialog-route-set-record-route.md
+    - name: "ADR-021: Trunk-Inbound Line Matching"
+      href: ADR-021-trunk-inbound-matching.md
+    - name: "ADR-022: INVITE Transaction Robustness — Retransmission, Fork, 100rel, Codec"
+      href: ADR-022-invite-transaction-robustness.md
+    - name: "ADR-023: RFC 4028 Session-Timer Negotiation"
+      href: ADR-023-session-timer-negotiation.md
+- name: "SDP Offer/Answer"
+  items:
+    - name: "ADR-024: SDP Offer/Answer Negotiation — Origin Versioning and extmap Id Assignment"
+      href: ADR-024-sdp-offer-answer-origin-and-extmap-negotiation.md
+- name: "Media Security — SDES / SRTP"
+  items:
+    - name: "ADR-025: SDES Offer/Answer Negotiation with Own-Key Answers and Fail-Closed Keyless Rejection"
+      href: ADR-025-sdes-offer-answer-negotiation.md
+    - name: "ADR-026: SRTP Media-Path Wiring — Fail-Closed Keying, Wire-Derived Keys, and Hardening"
+      href: ADR-026-srtp-media-path-fail-closed-hardening.md
+    - name: "ADR-027: SRTP Continuity Across Re-INVITE — Hold/Unhold Key Stability and Peer Rekey"
+      href: ADR-027-srtp-continuity-reinvite-rekey.md
+- name: "Media Security — DTLS-SRTP"
+  items:
+    - name: "ADR-028: DTLS-SRTP Keying Foundation (RFC 5763/5764)"
+      href: ADR-028-dtls-srtp-foundation.md
+    - name: "ADR-029: DTLS-SRTP Signaling, Answer-Role, and Keying-Method Precedence"
+      href: ADR-029-dtls-srtp-signaling-and-keying-precedence.md
+    - name: "ADR-030: DTLS-SRTP Media Wiring and Fail-Closed Context Installation"
+      href: ADR-030-dtls-srtp-media-wiring.md
+- name: "Media Security — SRTCP"
+  items:
+    - name: "ADR-031: SRTCP Crypto Core and RTCP-Path Wiring"
+      href: ADR-031-srtcp-crypto-core-and-rtcp-path-wiring.md
+- name: "RTP Transport & Hardening"
+  items:
+    - name: "ADR-032: Media Hot-Path and SIP-Framer Allocation Avoidance"
+      href: ADR-032-media-hotpath-allocation-avoidance.md
+    - name: "ADR-033: DoS Hardening at the RTP and SIP Wire Boundaries"
+      href: ADR-033-wire-boundary-dos-hardening.md
+    - name: "ADR-034: Secondary-Stream Transport and RFC 8285 One-Byte Header Extensions"
+      href: ADR-034-secondary-stream-and-onebyte-header-extensions.md
+    - name: "ADR-035: RTX Retransmission Mechanics — OSN Encapsulation and the Retransmit Buffer"
+      href: ADR-035-rtx-retransmission-mechanics.md
+- name: "RTCP, Feedback, Congestion & Timing"
+  items:
+    - name: "ADR-036: RTCP Wire Codec — Feedback/XR Framing and Tolerant Compound Decode"
+      href: ADR-036-rtcp-wire-codec-tolerant-decode.md
+    - name: "ADR-037: Jitter-Buffer RTT Convergence Seed"
+      href: ADR-037-rtt-convergence-seed.md
+    - name: "ADR-038: Transport-Wide Congestion Control — Feedback Plane (seq stamping, arrival recording, RTCP feedback)"
+      href: ADR-038-transport-cc-feedback-plane.md
+    - name: "ADR-039: Transport-Wide Congestion Control — Estimator, AIMD Rate Policy, and Recommended-Bitrate API"
+      href: ADR-039-transport-cc-estimator-bitrate-api.md
+    - name: "ADR-061: Monotonic Clock for Time-Based Media and RTCP Computations"
+      href: ADR-061-monotonic-media-clock.md
+- name: "ICE Connectivity"
+  items:
+    - name: "ADR-040: Send-Side ICE State Machine on the SIP Path (RFC 8445)"
+      href: ADR-040-send-side-ice-state-machine.md
+    - name: "ADR-041: ICE Consent-Freshness and Restart as Built-but-Unwired SIP Primitives"
+      href: ADR-041-consent-freshness-and-ice-restart-primitives.md
+    - name: "ADR-042: ICE Verification Discipline and Shared-Socket srflx Gathering"
+      href: ADR-042-ice-verification-and-shared-socket-gathering.md
+- name: "Video Media Path"
+  items:
+    - name: "ADR-043: Video SDP Offer/Answer Negotiation (m=video, rtcp-fb, RTX/apt)"
+      href: ADR-043-video-sdp-negotiation.md
+    - name: "ADR-044: Video Packetisation and Contiguous-Release Reorder Playout"
+      href: ADR-044-video-packetisation-and-reorder-playout.md
+    - name: "ADR-045: Video Loss Recovery — Gated NACK/PLI Feedback and RTX"
+      href: ADR-045-video-loss-recovery-nack-pli-rtx.md
+    - name: "ADR-046: Video Media Security — Per-m-line SDES, RTX Keying, DTLS Precedence"
+      href: ADR-046-video-media-security-sdes-dtls.md
+    - name: "ADR-047: Video ICE — Per-5-tuple Media Layer, Shared Credentials, Full Candidate Gathering"
+      href: ADR-047-video-ice-media-layer-and-candidates.md
+    - name: "ADR-048: Video Media Stream and SIP Channel Activation"
+      href: ADR-048-video-media-stream-and-channel-activation.md
+- name: "Audio Codecs"
+  items:
+    - name: "ADR-049: Opus Audio Codec Integration via Concentus (Managed Encode/Decode)"
+      href: ADR-049-opus-codec-integration-concentus.md
+    - name: "ADR-050: Bridge Audio Transcoding — Wire Codec ↔ µ-law Tap"
+      href: ADR-050-bridge-audio-transcoding-opus-mulaw.md
+- name: "Concurrency & QoS"
+  items:
+    - name: "ADR-051: Event-Dispatch and Object-Lifecycle Concurrency Contract"
+      href: ADR-051-event-dispatch-and-object-lifecycle-concurrency.md
+    - name: "ADR-052: Media Hot-Path Concurrency — Lock-Free Fan-Out and Bounded Drop-Oldest Buffers"
+      href: ADR-052-media-hotpath-lockfree-fanout-and-bounded-buffers.md
+    - name: "ADR-053: QoS as an Observed Metric, Not a Marked Packet"
+      href: ADR-053-qos-observed-not-marked.md
+- name: "BUNDLE & Multi-Track Transport"
+  items:
+    - name: "ADR-010: BUNDLE Media-Transport — Slice-Plan"
+      href: ADR-010-bundle-transport-slice-plan.md
+    - name: "ADR-011: Multi-Track RTP Transport for BUNDLE"
+      href: ADR-011-rtp-multitrack-transport.md
+- name: "WebRTC & Browser Interop"
+  items:
+    - name: "ADR-009: WebRTC Browser-Peer Roadmap"
+      href: ADR-009-webrtc-browser-peer-roadmap.md
+    - name: "ADR-012: WebRTC Public Facade (`WebRtcClient`)"
+      href: ADR-012-webrtc-public-facade.md
+    - name: "ADR-060: WebRTC Facade Completion — Fluent ICE Config, Send-Side Simulcast, and the TURN/STUN Server-Hosting Facade"
+      href: ADR-060-webrtc-facade-completion-and-server-hosting.md
+- name: "TURN Relay"
+  items:
+    - name: "ADR-054: TURN Relay as a First-Class ICE Candidate"
+      href: ADR-054-turn-relay-as-ice-candidate.md
+    - name: "ADR-055: TURN Control Stack — Allocation, Permission, and Keepalive over the Shared Socket"
+      href: ADR-055-turn-control-stack-allocation-permission-keepalive.md
+    - name: "ADR-056: Post-Nomination Whole-Socket Relay Transition (ChannelBind / ChannelData)"
+      href: ADR-056-post-nomination-whole-socket-relay-transition.md

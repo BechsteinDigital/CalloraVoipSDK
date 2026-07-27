@@ -21,6 +21,9 @@
 - name: Architecture
   href: architecture/
   homepage: architecture/overview.md
+- name: Architecture Decisions
+  href: adr/
+  homepage: adr/README.md
 - name: API Reference
   href: _api/
 - name: Changelog
