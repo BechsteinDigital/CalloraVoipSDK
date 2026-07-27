@@ -11,6 +11,7 @@ public enum DialAttemptStatus
 {
     Connected,
     Timeout,
+    Canceled,
     Failed,
 }
 

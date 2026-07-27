@@ -78,11 +78,20 @@ Jedes Szenario wird einmal mit Callora, Ozeki und SIPSorcery ausgeführt:
    Asterisk-sichtbarem `sendonly`/`inactive` → `sendrecv` und fortgesetztem RTP
 10. Remote-Ablehnung mit 486, 403 und 404: prompter Fehler,
     Channel-Cleanup und erfolgreicher Folgeanruf über dieselbe Registrierung
-11. Hangup, Channel-Cleanup und Deregistrierung
+11. Caller-seitige Cancellation während des Klingelns: normalisierter
+    Abbruchstatus, SIP-`CANCEL` und Channel-Cleanup sowie erfolgreicher
+    Folgeanruf über dieselbe Registrierung
+12. Hangup, Channel-Cleanup und Deregistrierung
 
 Für jede Testzeile wird ein frischer Asterisk-Container gestartet. Die Tests
 laufen absichtlich seriell. Dadurch teilen sich die Implementierungen weder
 Registrierungskontakte noch Dialog- oder Medienzustand.
+
+Der Cancellation-Test ist eine Charakterisierungsmatrix und kein künstlich
+grüner Gleichstand: Der erwartete Unterschied beim `CANCEL` und externen
+Channel-Cleanup ist als Capability pro Stack hinterlegt. Dadurch bleibt der
+aktuelle Callora-Nachteil sichtbar und eine spätere Verhaltensänderung fällt
+im Test auf.
 
 ## Fairness des Vergleichs
 
@@ -144,7 +153,7 @@ Lizenz- oder Kostenbenchmark. Nicht abgedeckt sind insbesondere:
 - Transcoding-Qualität und akustische Qualitätsmetriken
 - Parallelität mit vielen Calls, Turbo-Dialing und Race Conditions
 - Transfer, Remote-Hold/Glare, Fax, Konferenzmischung und In-Band-DTMF
-- externe Cancellation, Transportabbruch und wiederholte Fehlerstürme
+- Transportabbruch und wiederholte Fehlerstürme
 - Granularität der öffentlich sichtbaren SIP-Fehlerursache; der gemeinsame
   Vertrag normalisiert 486, 403 und 404 bewusst zu `Failed`
 - Authentifizierung, Mandantentrennung und die REST-Oberfläche des Dialers
@@ -162,5 +171,10 @@ benötigt; daraus folgt keine Aussage über andere Ozeki-Funktionen.
 Die Bridge-API ist auf allen Seiten bidirektional verdrahtet; der Test weist
 gezielt die Richtung Quell-Leg → Echo-Leg nach, ohne eine künstliche
 Echo-Schleife zwischen zwei Echo-Applikationen zu erzeugen.
+
+Als Callora-Basis gilt der oben genannte Main-Commit. Der noch offene PR #105
+zur detaillierteren Beendigungsursache gehört nicht zu diesem Messstand. Er
+adressiert außerdem nicht den separat beobachteten Cleanup bei
+caller-seitiger Cancellation.
 
 Die gemessenen Ergebnisse stehen in [RESULTS.md](RESULTS.md).

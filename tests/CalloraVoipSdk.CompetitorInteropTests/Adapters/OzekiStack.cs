@@ -130,7 +130,9 @@ public sealed class OzekiStack : IComparisonStack
             catch (OperationCanceledException)
             {
                 call.HangUp();
-                throw;
+                return new DialAttempt(
+                    DialAttemptStatus.Canceled,
+                    Detail: $"Ozeki dial was canceled. States: {string.Join(" -> ", observedStates)}");
             }
 
             if (status != DialAttemptStatus.Connected)

@@ -33,8 +33,8 @@ Ausgeführt wurde:
 Ergebnis des vollständigen Laufs:
 
 ```text
-Passed! - Failed: 0, Passed: 39, Skipped: 0, Total: 39
-Duration: 2 m 4 s
+Passed! - Failed: 0, Passed: 42, Skipped: 0, Total: 42
+Duration: 2 m 17 s
 ```
 
 | Szenario | Callora | Ozeki 10.5.1 | SIPSorcery |
@@ -49,7 +49,14 @@ Duration: 2 m 4 s
 | Medien-Bridge | PASS | PASS | PASS |
 | Hold/Unhold + SDP + RTP-Resume | PASS | PASS | PASS |
 | 486/403/404 + Cleanup + erfolgreicher Folgeanruf | PASS | PASS | PASS |
+| Caller-Cancellation: `Canceled` + erfolgreicher Folgeanruf | PASS | PASS | PASS |
+| Caller-Cancellation: SIP-`CANCEL` + externer Channel-Cleanup | **FAIL** | PASS | PASS |
 | Call- und Registration-Cleanup | PASS | PASS | PASS |
+
+Die 42/42 beziehen sich auf ausführbare Charakterisierungstests. Der
+unterschiedliche Cleanup-Vertrag ist darin absichtlich stack-spezifisch
+hinterlegt; das **FAIL** in der Ergebnismatrix wird dadurch nicht zu einem
+Parity-PASS umgedeutet.
 
 Auf dem dokumentierten, bereinigten Main-Commit bestand der neue
 Hold/Unhold-Slice im gezielten Staging-Lauf, im vollständigen Lauf und nach
@@ -62,6 +69,16 @@ Ablehnung vor dem Zehn-Sekunden-Connect-Timeout, Asterisk meldete anschließend
 null aktive Channels, die Registrierung blieb bestehen und ein Folgeanruf
 empfing wieder RTP.
 
+Die Caller-Cancellation bestand als Charakterisierung im gezielten Lauf mit
+3/3 und danach im vollständigen Lauf. Alle Stacks meldeten innerhalb von acht
+Sekunden `Canceled`, behielten ihre Registrierung und schafften anschließend
+einen RTP-führenden Folgeanruf. Ozeki und SIPSorcery sendeten dabei ein auf
+Asterisk sichtbares SIP-`CANCEL` und räumten den Channel auf. Callora tat
+beides nicht: Der `noanswer`-Channel blieb länger als fünf Sekunden bestehen.
+Der vor der Charakterisierung verwendete identische Parity-Assert scheiterte
+für Callora reproduzierbar in zwei von zwei Läufen, darunter einmal noch nach
+acht Sekunden.
+
 ## Stack-spezifische Codefläche
 
 Gezählt wurden nichtleere physische Zeilen der funktionalen C#-Adapter, ohne
@@ -70,12 +87,12 @@ Tondatei-Erzeugung.
 
 | Stack | Zugeordnete Dateien | Nichtleere Zeilen |
 |---|---|---:|
-| Callora | `Adapters/CalloraStack.cs` | 293 |
-| Ozeki 10.5.1 | `Adapters/OzekiStack.cs` | 505 |
-| SIPSorcery | `Adapters/SipSorceryStack.cs` + `Adapters/SipSorceryPcmuWaveCodec.cs` | 675 |
+| Callora | `Adapters/CalloraStack.cs` | 298 |
+| Ozeki 10.5.1 | `Adapters/OzekiStack.cs` | 507 |
+| SIPSorcery | `Adapters/SipSorceryStack.cs` + `Adapters/SipSorceryPcmuWaveCodec.cs` | 679 |
 
-Für genau diesen Slice benötigt Ozeki damit rund **1,72-mal** und SIPSorcery
-rund **2,30-mal** so viel funktionalen Adaptercode wie Callora. Das sind keine
+Für genau diesen Slice benötigt Ozeki damit rund **1,70-mal** und SIPSorcery
+rund **2,28-mal** so viel funktionalen Adaptercode wie Callora. Das sind keine
 allgemeinen Bibliotheksmetriken, sondern Messwerte dieses Vertrags.
 
 Nur für den neuen Hold/Unhold-Vertrag kamen stack-spezifisch drei nichtleere
@@ -90,8 +107,14 @@ stack-spezifische Adapterzeile erforderlich. Alle drei vorhandenen Adapter
 erfüllten den normalisierten `Failed`- und Wiederverwendbarkeitsvertrag; neu
 hinzu kamen ausschließlich gemeinsamer Dialplan und gemeinsame Assertions.
 
+Für den Cancellation-Vertrag kamen gegenüber diesem Stand fünf nichtleere
+Zeilen bei Callora, zwei bei Ozeki und vier bei SIPSorcery hinzu. Callora
+reicht den bereits modellierten `DialStatus.Canceled` durch. Ozeki und
+SIPSorcery normalisieren ihren Cancellation-Pfad und stoßen den expliziten
+Call-Cleanup an.
+
 Der Vertrag wurde ursprünglich anhand des alten Dialer-/Callora-Slice
-formuliert. Die 39 Asterisk-PASS-Ergebnisse sind externe
+formuliert. Die Asterisk-Beobachtungen sind externe
 Verhaltensbeobachtungen; der Codeflächenvorteil kann dagegen auch ausdrücken,
 dass Calloras öffentliche Abstraktionen bereits genau zu diesem Vertrag
 passen. Er ist deshalb ein belastbarer Fit-Messwert, aber kein vollständig
@@ -154,10 +177,25 @@ Callora:
 - 486, 403 und 404 werden ohne Exception als `DialStatus.Failed` beendet. Der
   Client blieb registriert und war unmittelbar für einen erfolgreichen
   Folgeanruf wiederverwendbar.
+- Eine caller-seitige Cancellation wird prompt als `DialStatus.Canceled`
+  zurückgegeben; dieselbe Registrierung bleibt für einen erfolgreichen
+  Folgeanruf verwendbar.
+- Nachteil im geprüften Managed Workflow: Erfolgt die Cancellation während
+  `PhoneLine.DialAsync`, sendet der Client kein SIP-`CANCEL`. Der Asterisk-
+  Channel blieb länger als fünf beziehungsweise im Wiederholungslauf acht
+  Sekunden bestehen, obwohl der lokale Workflow schon beendet war.
 - Nachteil des geprüften öffentlichen `DialResult`: Die drei unterschiedlichen
   SIP-Antworten werden zu `Failed` zusammengefasst; ein Remote-Statuscode ist
   dort nicht verfügbar. Für statusabhängige Retry-/Routing-Policies fehlt
   damit auf dieser Komfortebene noch Granularität.
+
+Der offene PR
+[#105](https://github.com/BechsteinDigital/callora-voip-sdk/pull/105)
+schlägt für den zuletzt genannten Punkt einen öffentlichen
+`CallTerminationReason` vor. Er gehört nicht zum gemessenen Main-Stand und
+war bei dieser Auswertung noch nicht validiert: Sein Interop-Check scheiterte
+im Busy-Test an einem nicht gesetzten Reason. Der PR betrifft nicht den hier
+beobachteten fehlenden SIP-`CANCEL` bei caller-seitiger Cancellation.
 
 Ozeki SDK Linux 10.5.1:
 
@@ -174,6 +212,8 @@ Ozeki SDK Linux 10.5.1:
   funktionierte. `CallStateChangedArgs` stellt zusätzlich Statuscode,
   `CallError` und Reason bereit; diese Granularität normalisiert der
   Vergleichsadapter bewusst weg.
+- Bei caller-seitiger Cancellation löste der Adapter `HangUp()` aus. Asterisk
+  sah das SIP-`CANCEL`, räumte den Channel auf und der Folgeanruf funktionierte.
 - Der native .NET-10-Medienpfad funktioniert ohne `System.Drawing.Common` und
   ohne den früheren DMO/G.711-Workaround.
 - Trotz eigenem Linux-Paket setzt der Runtime-Start Schreibzugriff auf einen
@@ -197,6 +237,10 @@ SIPSorcery:
   Dispose des User-Agents bereinigt; der Folgeanruf funktionierte.
   `ClientCallFailed` kann zusätzlich die SIP-Response liefern, wird im
   gemeinsamen `Failed`-Vertrag aber nicht ausgewertet.
+- Bei caller-seitiger Cancellation muss die Anwendung `Cancel()`, das
+  Beobachten des laufenden Call-Tasks sowie MediaSession- und User-Agent-
+  Cleanup selbst orchestrieren. Damit waren SIP-`CANCEL`, Channel-Cleanup und
+  der Folgeanruf erfolgreich.
 - Die zusätzliche Arbeit liefert viel Low-Level-Kontrolle, vergrößert aber
   Codefläche und Lifecycle-Verantwortung.
 
@@ -217,6 +261,13 @@ Registrierung. Calloras Managed Workflow benötigt dafür keinen zusätzlichen
 Adaptercode. Der Vorteil ist ein einfacher, wiederverwendbarer Lebenszyklus;
 der konkrete Nachteil ist die zu grobe Fehlerursache auf `DialResult`.
 
+Beim aktiven Abbruch ist das Bild differenzierter: Callora besitzt bereits
+den passenden Domänenstatus und bleibt lokal wiederverwendbar, erfüllt aber
+im geprüften Timing seine externe SIP-Cleanup-Verantwortung nicht. Ozeki und
+SIPSorcery benötigen etwas mehr Adapterlogik, senden dafür `CANCEL` und
+beenden den Remote-Channel. Für Dialer ist das ein relevanter Call-Lifecycle-
+Nachteil von Callora, nicht nur eine kosmetische Statusdifferenz.
+
 Ozeki 10.5.1 ist gegenüber dem historischen Bestand deutlich aufgewertet:
 native .NET-10-Pakete, direkter Medienpfad und weniger Adaptercode. Funktional
 liegt es in diesem Slice eng bei Callora. Seine größten Nachteile sind hier
@@ -235,8 +286,8 @@ der kleinsten funktionalen Integrationsfläche, während Ozeki 10.5.1 den
 Abstand zur historischen Version sichtbar verkleinert. Die neuen Slices
 stärken das Progressive-API-Argument: Calloras Managed Dial und tieferes
 `ICall`-Verhalten lassen sich ohne Abstraktionsbruch kombinieren. Sie zeigen
-aber auch eine konkrete Lücke bei detaillierten Remote-Fehlerursachen. Noch
-nicht bewiesen ist eine generelle Überlegenheit der übrigen Escape Hatches:
-Transfer, In-Dialog-SIP, Custom-Header, Telemetrie, eigene Devices, Module, ICE
-und WebRTC wurden in diesem Dreiervergleich nicht systematisch
-gegenübergestellt.
+aber auch konkrete Lücken bei detaillierten Remote-Fehlerursachen und beim
+SIP-Cleanup eines aktiv abgebrochenen Wahlversuchs. Noch nicht bewiesen ist
+eine generelle Überlegenheit der übrigen Escape Hatches: Transfer,
+In-Dialog-SIP, Custom-Header, Telemetrie, eigene Devices, Module, ICE und
+WebRTC wurden in diesem Dreiervergleich nicht systematisch gegenübergestellt.

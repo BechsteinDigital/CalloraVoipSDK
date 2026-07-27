@@ -78,7 +78,12 @@ public sealed class CalloraStack : IComparisonStack
         }
 
         return new DialAttempt(
-            result.Status == DialStatus.Timeout ? DialAttemptStatus.Timeout : DialAttemptStatus.Failed,
+            result.Status switch
+            {
+                DialStatus.Timeout => DialAttemptStatus.Timeout,
+                DialStatus.Canceled => DialAttemptStatus.Canceled,
+                _ => DialAttemptStatus.Failed,
+            },
             Detail: result.Status.ToString());
     }
 

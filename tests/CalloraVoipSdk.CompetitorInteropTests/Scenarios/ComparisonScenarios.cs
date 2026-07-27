@@ -28,6 +28,13 @@ public sealed class ComparisonScenarios
         { StackKind.Ozeki, "nonexistent" },
     };
 
+    public static TheoryData<StackKind, bool> CancellationCleanupExpectations => new()
+    {
+        { StackKind.Callora, false },
+        { StackKind.SipSorcery, true },
+        { StackKind.Ozeki, true },
+    };
+
     [Theory]
     [MemberData(nameof(Stacks))]
     public async Task Registration(StackKind kind)
@@ -136,6 +143,56 @@ public sealed class ComparisonScenarios
                 () => recoveredCall.ReceivedPacketCount >= 10,
                 TimeSpan.FromSeconds(10),
                 $"{stack.Name} did not receive media after recovering from {extension} rejection.")
+            .ConfigureAwait(false);
+    }
+
+    [Theory]
+    [MemberData(nameof(CancellationCleanupExpectations))]
+    public async Task Caller_cancellation_observes_wire_cleanup_and_stack_reusability(
+        StackKind kind,
+        bool expectsCancelCleanup)
+    {
+        await using var asterisk = await StartAsteriskAsync().ConfigureAwait(false);
+        await asterisk.EnablePjsipLoggerAsync().ConfigureAwait(false);
+        await using var stack = await CreateRegisteredStackAsync(kind, asterisk).ConfigureAwait(false);
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+        var stopwatch = Stopwatch.StartNew();
+
+        var canceled = await stack
+            .DialAsync(
+                asterisk.Target("noanswer"),
+                TimeSpan.FromSeconds(30),
+                cancellation.Token)
+            .ConfigureAwait(false);
+
+        stopwatch.Stop();
+        Assert.Equal(DialAttemptStatus.Canceled, canceled.Status);
+        Assert.Null(canceled.Call);
+        Assert.InRange(
+            stopwatch.Elapsed,
+            TimeSpan.FromMilliseconds(500),
+            TimeSpan.FromSeconds(8));
+        Assert.Equal(0, stack.ActiveCallCount);
+        Assert.True(stack.IsRegistered, $"{stack.Name} lost registration after caller cancellation.");
+
+        var channelWasCleaned = await WaitUntilOrTimeoutAsync(
+                async () => (await asterisk.ShowChannelsAsync().ConfigureAwait(false))
+                    .Contains("0 active channels", StringComparison.OrdinalIgnoreCase),
+                TimeSpan.FromSeconds(5))
+            .ConfigureAwait(false);
+        var logs = await asterisk.GetLogsAsync().ConfigureAwait(false);
+        Assert.Equal(expectsCancelCleanup, logs.Contains("CANCEL sip:", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(expectsCancelCleanup, channelWasCleaned);
+
+        var recovery = await stack
+            .DialAsync(asterisk.Target("answer"), TimeSpan.FromSeconds(10))
+            .ConfigureAwait(false);
+        AssertConnected(stack, recovery);
+        await using var recoveredCall = recovery.Call!;
+        await WaitUntilAsync(
+                () => recoveredCall.ReceivedPacketCount >= 10,
+                TimeSpan.FromSeconds(10),
+                $"{stack.Name} did not receive media after recovering from caller cancellation.")
             .ConfigureAwait(false);
     }
 
@@ -413,6 +470,24 @@ public sealed class ComparisonScenarios
         }
 
         Assert.True(await predicate().ConfigureAwait(false), failureMessage);
+    }
+
+    private static async Task<bool> WaitUntilOrTimeoutAsync(
+        Func<Task<bool>> predicate,
+        TimeSpan timeout)
+    {
+        var deadline = DateTimeOffset.UtcNow + timeout;
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            if (await predicate().ConfigureAwait(false))
+            {
+                return true;
+            }
+
+            await Task.Delay(100).ConfigureAwait(false);
+        }
+
+        return await predicate().ConfigureAwait(false);
     }
 
     private static bool HasNoContacts(string output) =>

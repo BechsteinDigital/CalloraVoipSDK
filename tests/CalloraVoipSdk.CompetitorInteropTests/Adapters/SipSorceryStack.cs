@@ -97,7 +97,7 @@ public sealed class SipSorceryStack : IComparisonStack
                 timeoutSeconds);
             connected = await callTask.WaitAsync(ct).ConfigureAwait(false);
         }
-        catch (OperationCanceledException cancellation)
+        catch (OperationCanceledException)
         {
             userAgent.Cancel();
             if (callTask is not null)
@@ -112,13 +112,17 @@ public sealed class SipSorceryStack : IComparisonStack
                 {
                     mediaSession.Close("Dial cancellation cleanup failed.");
                     userAgent.Dispose();
-                    throw new AggregateException(cancellation, observationFailure);
+                    throw new InvalidOperationException(
+                        "SipSorcery dial cancellation cleanup failed.",
+                        observationFailure);
                 }
             }
 
             mediaSession.Close("Dial cancelled.");
             userAgent.Dispose();
-            throw;
+            return new DialAttempt(
+                DialAttemptStatus.Canceled,
+                Detail: "SipSorcery dial was canceled and its User-Agent was disposed.");
         }
         catch
         {
