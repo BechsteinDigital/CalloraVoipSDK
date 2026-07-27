@@ -3,11 +3,12 @@ using Microsoft.Playwright;
 namespace CalloraVoipSdk.BrowserInteropTests;
 
 /// <summary>
-/// Ein echter headless-Chromium-Peer (Playwright), der die von der Signaling-Bridge servierte
-/// <c>peer.html</c> lädt und als WebRTC-Answerer gegen die SDK-Fassade connectet. Startet mit
-/// synthetischer Media (fake-device) und deaktiviertem mDNS (echte host-IP-Candidates).
+/// Ein echter headless-Browser-Peer (Playwright), der die von der Signaling-Bridge servierte
+/// <c>peer.html</c> lädt und als WebRTC-Answerer gegen die SDK-Fassade connectet. Der konkrete Motor
+/// (Chromium, Firefox, WebKit) kommt als <see cref="BrowserEngine"/> herein und liefert die
+/// synthetische Media (fake-device) sowie das deaktivierte mDNS (echte host-IP-Candidates).
 /// </summary>
-public sealed class BrowserPeer : IAsyncDisposable
+public sealed class BrowserPeer(BrowserEngine engine) : IAsyncDisposable
 {
     private IPlaywright? _playwright;
     private IBrowser? _browser;
@@ -18,18 +19,7 @@ public sealed class BrowserPeer : IAsyncDisposable
     public async Task NavigateAsync(string url)
     {
         _playwright = await Playwright.CreateAsync();
-        _browser = await _playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
-        {
-            Headless = true,
-            ExecutablePath = BrowserRequiredFactAttribute.ChromiumPath,
-            Args =
-            [
-                "--use-fake-device-for-media-stream",            // synthetischer Audio/Video-Stream (kein Mikrofon)
-                "--use-fake-ui-for-media-stream",                // getUserMedia auto-grant
-                "--disable-features=WebRtcHideLocalIpsWithMdns", // echte host-IPs statt .local (SDK droppt .local)
-                "--autoplay-policy=no-user-gesture-required",
-            ],
-        });
+        _browser = await engine.LaunchAsync(_playwright);
         var page = await _browser.NewPageAsync();
         page.Console += (_, m) => Logs.Enqueue($"[console.{m.Type}] {m.Text}");
         page.PageError += (_, e) => Logs.Enqueue($"[pageerror] {e}");

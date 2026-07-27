@@ -110,13 +110,14 @@ jobs:
       - name: Build
         run: dotnet build CalloraVoipSdk.sln --configuration Release --no-restore
 
-      - name: Install Playwright Chromium + system deps
-        # Befüllt ~/.cache/ms-playwright/chromium-* (wo BrowserRequiredFactAttribute den Browser sucht);
-        # --with-deps installiert die headless-Chromium-Ubuntu-Pakete (libnss3/libgbm1/... via apt).
-        run: pwsh tests/CalloraVoipSdk.BrowserInteropTests/bin/Release/net10.0/playwright.ps1 install chromium --with-deps
+      - name: Install Playwright Chromium + Firefox + system deps
+        # Befüllt ~/.cache/ms-playwright/{chromium,firefox}-* (wo BrowserEngine die Browser der Matrix sucht);
+        # --with-deps installiert die headless-Ubuntu-Pakete (libnss3/libgbm1/... via apt) für beide Motoren.
+        run: pwsh tests/CalloraVoipSdk.BrowserInteropTests/bin/Release/net10.0/playwright.ps1 install chromium firefox --with-deps
 
-      - name: Browser interop tests (Playwright/headless Chrome)
+      - name: Browser interop tests (Playwright/headless Chrome + Firefox)
         # Bisher lokal-first aus dem Haupt-Gate (Category!=BrowserInterop); hier als eigener Linux-Job
-        # mit Browser-Install ins PR-CI-Gate gehoben. Der build-and-test-Job schließt sie weiterhin aus,
-        # also kein Doppellauf.
+        # mit Browser-Install ins PR-CI-Gate gehoben. Die Matrix fährt jedes Szenario gegen beide Motoren
+        # (per-Browser-Fact skippt einen nicht installierten). Der build-and-test-Job schließt sie weiterhin
+        # aus, also kein Doppellauf.
         run: dotnet test tests/CalloraVoipSdk.BrowserInteropTests/CalloraVoipSdk.BrowserInteropTests.csproj --configuration Release --no-build -f net10.0 --filter "Category=BrowserInterop" --nologo --verbosity minimal

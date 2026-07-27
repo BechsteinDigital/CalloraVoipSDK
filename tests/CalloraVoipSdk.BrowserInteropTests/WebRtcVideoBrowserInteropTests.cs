@@ -12,13 +12,15 @@ public sealed class WebRtcVideoBrowserInteropTests
     private BridgeMessage? LastStats { get => _lastStats; set => _lastStats = value; }
     private volatile bool _videoEchoStarted;
 
-    [BrowserRequiredFact]
-    public async Task SdkOfferer_Exchanges_Vp8Video_And_Browser_Decodes()
+    [ChromiumFact] public Task Video_Chromium() => RunVideoInterop(BrowserEngine.Chromium);
+    [FirefoxFact]  public Task Video_Firefox()  => RunVideoInterop(BrowserEngine.Firefox);
+
+    private async Task RunVideoInterop(BrowserEngine engine)
     {
         // 1. SDK-Peer (Offerer) mit VP8-Video.
         var client = new WebRtcClient(new WebRtcConfiguration
         {
-            LocalEndPoint = new IPEndPoint(IPAddress.Loopback, 0),
+            LocalEndPoint = new IPEndPoint(InteropNetwork.LocalIPv4(), 0),
             AudioCodecs = ["opus"],
             EnableVideo = true,
             VideoCodecs = ["VP8"],
@@ -85,7 +87,7 @@ public sealed class WebRtcVideoBrowserInteropTests
         });
 
         // 3. Browser starten → lädt peer-video.html, öffnet WS, sendet "ready".
-        await using var browser = new BrowserPeer();
+        await using var browser = new BrowserPeer(engine);
         await browser.NavigateAsync(bridge.BaseUri);
         await browserReady.Task.WaitAsync(TimeSpan.FromSeconds(20));
 
