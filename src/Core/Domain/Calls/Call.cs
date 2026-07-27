@@ -417,10 +417,27 @@ internal sealed class Call : ICall, IDisposable
     /// </summary>
     internal void HandleRemoteHoldChanged(bool isOnHold)
     {
-        if (isOnHold && State == CallState.Connected) TransitionTo(CallState.OnHold);
-        if (!isOnHold && State == CallState.OnHold) TransitionTo(CallState.Connected);
+        // Only raise HoldStateChanged when the hold state actually flips. A remote hold indication that
+        // arrives before Connected, or a duplicate hold/unhold that matches the current state, produces
+        // no CallState transition here — and must not re-raise the event for a non-change.
+        bool changed;
+        if (isOnHold && State == CallState.Connected)
+        {
+            TransitionTo(CallState.OnHold);
+            changed = true;
+        }
+        else if (!isOnHold && State == CallState.OnHold)
+        {
+            TransitionTo(CallState.Connected);
+            changed = true;
+        }
+        else
+        {
+            changed = false;
+        }
 
-        RaiseHoldChanged(isOnHold, byRemote: true);
+        if (changed)
+            RaiseHoldChanged(isOnHold, byRemote: true);
     }
 
     /// <summary>
@@ -542,11 +559,29 @@ internal sealed class Call : ICall, IDisposable
     }
 
     /// <summary>
-    /// Sets the negotiated media parameters once the SDP exchange is complete.
-    /// Called by the application media orchestrator.
+    /// Raised whenever <see cref="MediaParameters"/> is (re)assigned — including a mid-call re-INVITE codec
+    /// change that keeps the call <see cref="CallState.Connected"/> and therefore raises no
+    /// <see cref="StateChanged"/>. Lets application media wiring re-apply the negotiated codec on such a
+    /// renegotiation. The handler is snapshotted inside the lock and invoked outside it, matching the other
+    /// internal setters.
+    /// </summary>
+    internal event Action? MediaParametersChanged;
+
+    /// <summary>
+    /// Sets the negotiated media parameters once the SDP exchange is complete, and raises
+    /// <see cref="MediaParametersChanged"/>. Called by the application media orchestrator, both on the
+    /// initial answer and on a mid-call re-INVITE renegotiation.
     /// </summary>
     internal void SetMediaParameters(CallMediaParameters parameters)
-        => MediaParameters = parameters;
+    {
+        Action? handler;
+        lock (_sync)
+        {
+            MediaParameters = parameters;
+            handler         = MediaParametersChanged; // snapshot before releasing lock
+        }
+        handler?.Invoke();
+    }
 
     /// <summary>
     /// Updates the latest quality snapshot and emits <see cref="QualitySnapshotChanged"/>.
@@ -670,18 +705,42 @@ internal sealed class Call : ICall, IDisposable
         lock (_sync) { if (_disposed) return; _disposed = true; }
         if (State != CallState.Terminated)
         {
-            // Best-effort BYE on dispose. Dispose is synchronous so we cannot await; observe the
-            // task's fault via a continuation instead of letting a failed hangup vanish as an
-            // unobserved task exception — a BYE failure during teardown must at least be logged.
-            _ = _channel.HangupAsync().ContinueWith(
-                t => _logger.LogWarning(
-                    t.Exception,
-                    "Best-effort hangup (BYE) on dispose of call {CallId} failed.",
-                    CallId),
-                CancellationToken.None,
-                TaskContinuationOptions.OnlyOnFaulted,
-                TaskScheduler.Default);
+            // Best-effort BYE on dispose, THEN dispose the channel — never both at once. Disposing the
+            // channel synchronously right after a fire-and-forget hangup tore the transport down while
+            // the BYE was still in flight, so the BYE could fail on an already-disposed channel and the
+            // dialog was left dangling on the peer. Dispose is synchronous and cannot await, so sequence
+            // the channel dispose after the hangup completes (bounded) on a detached task instead.
+            _ = HangupThenDisposeChannelAsync();
         }
-        _channel.Dispose();
+        else
+        {
+            _channel.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Sends a best-effort BYE and disposes the channel only once it has completed (or a bounded
+    /// timeout elapses), so the BYE reaches the wire before the transport is torn down. The channel is
+    /// always disposed in the <c>finally</c>, so a hung or failed hangup can never leak it.
+    /// </summary>
+    private async Task HangupThenDisposeChannelAsync()
+    {
+        try
+        {
+            await _channel.HangupAsync()
+                .WaitAsync(TimeSpan.FromSeconds(5))
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Best-effort hangup (BYE) on dispose of call {CallId} failed.",
+                CallId);
+        }
+        finally
+        {
+            _channel.Dispose();
+        }
     }
 }

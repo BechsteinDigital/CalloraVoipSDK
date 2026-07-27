@@ -233,9 +233,20 @@ public sealed class MediaManager : IMediaManager
 
         TrackPlaybackSession(session);
 
-        await Task.Yield();
-        ct.ThrowIfCancellationRequested();
-        return session;
+        // The PlaybackSession starts its loop in its constructor and is already tracked, so a
+        // cancellation (or any fault) observed after construction must dispose it — otherwise the
+        // running, tracked session leaks. Mirrors the protective catch on the recording start path.
+        try
+        {
+            await Task.Yield();
+            ct.ThrowIfCancellationRequested();
+            return session;
+        }
+        catch
+        {
+            await session.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
     }
 
     private async Task<IPlaybackSession> StartConferencePlaybackCoreAsync(
@@ -273,9 +284,20 @@ public sealed class MediaManager : IMediaManager
 
         TrackPlaybackSession(session);
 
-        await Task.Yield();
-        ct.ThrowIfCancellationRequested();
-        return session;
+        // The PlaybackSession starts its loop in its constructor and is already tracked, so a
+        // cancellation (or any fault) observed after construction must dispose it — otherwise the
+        // running, tracked session leaks. Mirrors the protective catch on the recording start path.
+        try
+        {
+            await Task.Yield();
+            ct.ThrowIfCancellationRequested();
+            return session;
+        }
+        catch
+        {
+            await session.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
     }
 
     private bool TryResolveCodec(AudioFileFormat format, out IAudioFileCodec codec)

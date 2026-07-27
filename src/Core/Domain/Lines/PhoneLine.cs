@@ -225,8 +225,13 @@ internal sealed class PhoneLine : IPhoneLine, IDisposable
         }
 
         var call = CreateCall(CallId.New(), CallDirection.Inbound, remoteParty, channel);
-        call.TransitionTo(CallState.Ringing);
+
+        // Register (which subscribes the CallManager's aggregate StateChanged relay) BEFORE the first
+        // Idle→Ringing transition, so the aggregate CallManager.CallStateChanged stream observes that inbound
+        // transition instead of missing it — Register presupposes no particular call state (#17.8). The direct
+        // IncomingCall event still fires exactly once, after the call is both registered and Ringing.
         _callRegistry.Register(call);
+        call.TransitionTo(CallState.Ringing);
         IncomingCall?.Invoke(this, new IncomingCallEventArgs(call));
     }
 
@@ -293,6 +298,16 @@ internal sealed class PhoneLine : IPhoneLine, IDisposable
         lock (_sync)
         {
             if (_state == next) return;
+            // Guard illegal transitions the same way Call.TransitionTo does: log and ignore rather than apply
+            // an out-of-band state change (#17.13).
+            if (!LineStateRules.CanTransition(_state, next))
+            {
+                _logger.LogDebug(
+                    "Line [{User}]: ignored invalid transition {Old} → {New}",
+                    Account.Username, _state, next);
+                return;
+            }
+
             args   = new LineStateChangedEventArgs(_state, next, this);
             _state = next;
         }
