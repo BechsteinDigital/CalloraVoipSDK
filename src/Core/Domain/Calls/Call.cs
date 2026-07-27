@@ -559,11 +559,29 @@ internal sealed class Call : ICall, IDisposable
     }
 
     /// <summary>
-    /// Sets the negotiated media parameters once the SDP exchange is complete.
-    /// Called by the application media orchestrator.
+    /// Raised whenever <see cref="MediaParameters"/> is (re)assigned — including a mid-call re-INVITE codec
+    /// change that keeps the call <see cref="CallState.Connected"/> and therefore raises no
+    /// <see cref="StateChanged"/>. Lets application media wiring re-apply the negotiated codec on such a
+    /// renegotiation. The handler is snapshotted inside the lock and invoked outside it, matching the other
+    /// internal setters.
+    /// </summary>
+    internal event Action? MediaParametersChanged;
+
+    /// <summary>
+    /// Sets the negotiated media parameters once the SDP exchange is complete, and raises
+    /// <see cref="MediaParametersChanged"/>. Called by the application media orchestrator, both on the
+    /// initial answer and on a mid-call re-INVITE renegotiation.
     /// </summary>
     internal void SetMediaParameters(CallMediaParameters parameters)
-        => MediaParameters = parameters;
+    {
+        Action? handler;
+        lock (_sync)
+        {
+            MediaParameters = parameters;
+            handler         = MediaParametersChanged; // snapshot before releasing lock
+        }
+        handler?.Invoke();
+    }
 
     /// <summary>
     /// Updates the latest quality snapshot and emits <see cref="QualitySnapshotChanged"/>.

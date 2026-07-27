@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Concentus;
 using Concentus.Enums;
 
@@ -68,12 +69,12 @@ internal sealed class OpusPayloadCodec
         if ((pcm16.Length & 1) != 0)
             throw new InvalidOperationException("Opus encoder expects PCM16 payload with even byte count.");
 
-        var sampleCount = pcm16.Length / 2;
-        var samples = new short[sampleCount];
-        Buffer.BlockCopy(pcm16.ToArray(), 0, samples, 0, pcm16.Length);
+        // Reinterpret the PCM16 little-endian bytes as int16 samples in place — no intermediate copy. The RTP
+        // media path is always little-endian PCM16 (matching this host's short layout), so the cast is exact.
+        var samples = MemoryMarshal.Cast<byte, short>(pcm16);
 
         var output = new byte[MaxEncodedBytes];
-        var written = _encoder.Encode(samples, sampleCount, output, output.Length);
+        var written = _encoder.Encode(samples, samples.Length, output, output.Length);
         return output[..written];
     }
 }

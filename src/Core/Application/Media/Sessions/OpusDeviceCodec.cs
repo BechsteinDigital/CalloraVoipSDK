@@ -19,7 +19,10 @@ internal sealed class OpusDeviceCodec
     private const int FrameBytes = FrameSamples * 2;
 
     private readonly OpusPayloadCodec _codec = new(OpusPayloadCodec.RtpClockRate);
-    private readonly List<byte> _encodeBacklog = new();
+
+    // Shift-free FIFO backlog: a Queue dequeues from the head in O(1) with no element shifting, unlike a
+    // List whose RemoveRange(0, …) shifted the whole tail down on every emitted frame on the capture path.
+    private readonly Queue<byte> _encodeBacklog = new();
 
     /// <summary>Decodes one inbound Opus payload into PCM16 little-endian bytes (mono, 48 kHz).</summary>
     public byte[] Decode(ReadOnlySpan<byte> opusPayload) => _codec.Decode(opusPayload);
@@ -36,8 +39,9 @@ internal sealed class OpusDeviceCodec
         if ((length & 1) != 0)
             length--;
 
-        if (length > 0)
-            _encodeBacklog.AddRange(pcm16[..length].ToArray());
+        // Enqueue the captured bytes directly (no ToArray copy) — the Queue grows amortized O(1) per byte.
+        for (var i = 0; i < length; i++)
+            _encodeBacklog.Enqueue(pcm16[i]);
 
         if (_encodeBacklog.Count < FrameBytes)
             return [];
@@ -46,8 +50,8 @@ internal sealed class OpusDeviceCodec
         var frame = new byte[FrameBytes];
         while (_encodeBacklog.Count >= FrameBytes)
         {
-            _encodeBacklog.CopyTo(0, frame, 0, FrameBytes);
-            _encodeBacklog.RemoveRange(0, FrameBytes);
+            for (var i = 0; i < FrameBytes; i++)
+                frame[i] = _encodeBacklog.Dequeue();
             packets.Add(_codec.Encode(frame));
         }
 

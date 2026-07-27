@@ -79,9 +79,18 @@ internal sealed class SdkConvenienceOrchestrator : IDisposable
         }
 
         var waiter = new TaskCompletionSource<LineState>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        // The line starts in Unregistered before Register even kicks off the Registering transition, so an
+        // initial Unregistered read (or event) is "not started yet", NOT a failure — it must not complete the
+        // wait, or a still-pending registration mis-reports as Failed (#17.2). Only a *later* Unregistered,
+        // observed after we have seen Registering (a genuine de-registration/loss), is a terminal outcome.
+        var sawRegistering = 0;
         EventHandler<LineStateChangedEventArgs> onStateChanged = (_, args) =>
         {
-            if (ShouldCompleteConnectWait(args.NewState, failFastOnRegistrationFailed))
+            if (args.NewState == LineState.Registering)
+                Volatile.Write(ref sawRegistering, 1);
+
+            if (ShouldCompleteConnectWait(args.NewState, failFastOnRegistrationFailed, Volatile.Read(ref sawRegistering) != 0))
                 waiter.TrySetResult(args.NewState);
         };
 
@@ -97,8 +106,16 @@ internal sealed class SdkConvenienceOrchestrator : IDisposable
         line.LineReconnectFailed += onReconnectFailed;
         try
         {
-            if (ShouldCompleteConnectWait(line.State, failFastOnRegistrationFailed))
-                waiter.TrySetResult(line.State);
+            // Synchronous first read after subscribing, to catch a state reached before the handler attached.
+            // A current state other than the initial Unregistered means registration has already progressed
+            // (StartRegistration fires Registering synchronously), so seed the "has started" flag from it and
+            // treat a still-initial Unregistered as not-yet-started rather than a failure (#17.2).
+            var currentState = line.State;
+            if (currentState != LineState.Unregistered)
+                Volatile.Write(ref sawRegistering, 1);
+
+            if (ShouldCompleteConnectWait(currentState, failFastOnRegistrationFailed, Volatile.Read(ref sawRegistering) != 0))
+                waiter.TrySetResult(currentState);
 
             using var timeoutCts = new CancellationTokenSource(timeout);
             using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
@@ -398,9 +415,12 @@ internal sealed class SdkConvenienceOrchestrator : IDisposable
         }
     }
 
-    private static bool ShouldCompleteConnectWait(LineState state, bool failFastOnRegistrationFailed) =>
+    private static bool ShouldCompleteConnectWait(LineState state, bool failFastOnRegistrationFailed, bool hasStartedRegistering) =>
         state == LineState.Registered
-        || state == LineState.Unregistered
+        // Unregistered is a wait-completing outcome ONLY once registration has actually started and then went
+        // back to Unregistered (a de-registration / lost binding). The initial Unregistered, before Registering
+        // was ever seen, means "not started yet" and must keep waiting for a real terminal state (#17.2).
+        || (state == LineState.Unregistered && hasStartedRegistering)
         // Terminal, non-retryable failure (e.g. permanent auth rejection): always a definitive connect
         // outcome, so complete the wait immediately instead of blocking until the timeout and then
         // mis-reporting Timeout. RegistrationFailed is the RETRYABLE variant, gated by fail-fast (F005).

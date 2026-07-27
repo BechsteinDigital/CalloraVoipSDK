@@ -361,8 +361,33 @@ internal sealed class CallMediaOrchestrator : IDisposable
         foreach (var entry in entries)
         {
             UnwireSession(entry);
-            _ = entry.QualityMonitor.DisposeAsync();
-            _ = entry.Session.DisposeAsync();
+            // Synchronous Dispose cannot await these long-running teardowns without risking a deadlock, but the
+            // fire-and-forget ValueTasks must not swallow a teardown fault — observe and log it instead of
+            // discarding it via `_ =` (#17.12), mirroring the async TeardownMediaAsync path.
+            ObserveDisposeFault(entry.QualityMonitor.DisposeAsync(), "quality monitor");
+            ObserveDisposeFault(entry.Session.DisposeAsync(), "media session");
+        }
+    }
+
+    // Observes a fire-and-forget DisposeAsync started from the synchronous Dispose: the ValueTask cannot be
+    // awaited there, but a teardown fault must not vanish unobserved — it is logged (#17.12). Never faults.
+    private void ObserveDisposeFault(ValueTask disposal, string what)
+    {
+        if (disposal.IsCompletedSuccessfully)
+            return;
+
+        _ = AwaitDisposeAsync(disposal, what);
+    }
+
+    private async Task AwaitDisposeAsync(ValueTask disposal, string what)
+    {
+        try
+        {
+            await disposal.ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error disposing {What} during media orchestrator shutdown.", what);
         }
     }
 
