@@ -248,3 +248,10 @@ public sealed class AsteriskTwoLegMediaMatrix : TwoLegMediaMatrix
 {
     protected override IPbxFixture CreatePbx(int bridgePairs = 1) => new AsteriskPbxFixture(bridgePairs);
 }
+
+/// <summary>Fährt die Zwei-Bein-Media-Matrix gegen echtes FreeSWITCH.</summary>
+[Trait("Category", "Interop"), Trait("Category", "InteropFreeSwitch")]
+public sealed class FreeSwitchTwoLegMediaMatrix : TwoLegMediaMatrix
+{
+    protected override IPbxFixture CreatePbx(int bridgePairs = 1) => new FreeSwitchPbxFixture(bridgePairs);
+}
