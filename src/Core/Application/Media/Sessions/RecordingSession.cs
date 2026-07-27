@@ -150,6 +150,15 @@ internal sealed class RecordingSession : IRecordingSession
         {
             await _writerLoop.WaitAsync(ct).ConfigureAwait(false);
         }
+        catch (OperationCanceledException)
+        {
+            // The caller cancelled the stop. The writer loop runs off _cts — not this ct — so it would
+            // keep reading frames and writing through _writer while the finally below disposes that
+            // writer, an unsynchronized race on a torn-down writer. Cancel the loop and await it to
+            // completion first, so the writer is only disposed once the loop has stopped touching it.
+            _cts.Cancel();
+            await _writerLoop.ConfigureAwait(false);
+        }
         finally
         {
             await _source.DisposeAsync().ConfigureAwait(false);
