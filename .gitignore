@@ -111,7 +111,8 @@ AGENTS.md
 CLAUDE.md
 VoipSdk_Targetstruktur_fuer_KI.md
 
-scripts
+scripts/*
+!scripts/test-interop-browser-safe.sh
 TestResults
 
 # Commercial-module examples depend on paid modules not present in the open SDK; keep their
