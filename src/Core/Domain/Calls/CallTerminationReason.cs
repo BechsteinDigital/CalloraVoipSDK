@@ -16,7 +16,7 @@ public enum CallTerminationCategory
     /// <summary>The call was not answered (SIP 408 Request Timeout / 480 Temporarily Unavailable).</summary>
     NoAnswer,
 
-    /// <summary>The remote party actively declined or refused the call (SIP 603/403/401/407).</summary>
+    /// <summary>The remote party actively declined or refused the call (SIP 603 Decline / 403 Forbidden).</summary>
     Rejected,
 
     /// <summary>The pending invitation was cancelled before completion (SIP 487 Request Terminated).</summary>
@@ -78,14 +78,29 @@ public sealed record CallTerminationReason
     /// Maps a SIP status code to a coarse <see cref="CallTerminationCategory"/> per RFC 3261 §21.
     /// </summary>
     /// <param name="code">
-    /// The terminating SIP status code, or <see langword="null"/> for a normal BYE-based completion.
+    /// The terminating SIP status code, or <see langword="null"/> when the termination carried no SIP
+    /// response status (a BYE-based teardown or a non-SIP fault).
+    /// </param>
+    /// <param name="wasConnected">
+    /// Whether the call had reached the connected/established state before it ended. Only consulted for
+    /// the <paramref name="code"/>-is-<see langword="null"/> case: a null-status teardown is a normal
+    /// completion only if the media session was actually up (a graceful remote BYE). A null-status
+    /// teardown that never connected (dial/ring abort with no SIP failure response — a transport drop or
+    /// an internal fault) is a technical <see cref="CallTerminationCategory.Failed"/>, matching the
+    /// reference-stack consensus (Twilio <c>failed</c>, Ozeki <c>Error</c>), not a false Completed.
+    /// A non-null <paramref name="code"/> is classified purely from the status and ignores this flag.
     /// </param>
     /// <returns>The protocol-neutral category for the status.</returns>
-    public static CallTerminationCategory CategoryForSipStatus(int? code)
+    public static CallTerminationCategory CategoryForSipStatus(int? code, bool wasConnected = true)
     {
-        // A normal completion carries no failure status. Provisional (1xx), success (2xx) and
-        // redirection (3xx, RFC 3261 §21.3 — resolved by the redirecting UAC) are all non-failure.
-        if (code is null || (code >= 100 && code < 400))
+        // No SIP failure status: Completed only if the call was actually connected; otherwise a
+        // never-connected abort with no SIP failure signal is a technical failure, not a completion.
+        if (code is null)
+            return wasConnected ? CallTerminationCategory.Completed : CallTerminationCategory.Failed;
+
+        // Provisional (1xx), success (2xx) and redirection (3xx, RFC 3261 §21.3 — resolved by the
+        // redirecting UAC) are all non-failure status ranges.
+        if (code >= 100 && code < 400)
             return CallTerminationCategory.Completed;
 
         return code switch
@@ -93,9 +108,11 @@ public sealed record CallTerminationReason
             486 or 600 => CallTerminationCategory.Busy,        // RFC 3261 §21.5.6 / §21.6.1 (Busy Here / Busy Everywhere)
             408 or 480 => CallTerminationCategory.NoAnswer,    // RFC 3261 §21.4.7 / §21.5.2 (Request Timeout / Temporarily Unavailable)
             487        => CallTerminationCategory.Canceled,    // RFC 3261 §21.4.26 (Request Terminated — answer to a CANCEL)
-            603        => CallTerminationCategory.Rejected,    // RFC 3261 §21.6.2 (Decline)
-            403        => CallTerminationCategory.Rejected,    // RFC 3261 §21.4.4 (Forbidden)
-            401 or 407 => CallTerminationCategory.Rejected,    // RFC 3261 §21.4.2 / §21.5.5 (Unauthorized / Proxy Auth Required)
+            603        => CallTerminationCategory.Rejected,    // RFC 3261 §21.6.2 (Decline — an active refusal)
+            403        => CallTerminationCategory.Rejected,    // RFC 3261 §21.4.4 (Forbidden — an active refusal)
+            // RFC 3261 §21.4.2 / §21.5.5 (401 Unauthorized / 407 Proxy Authentication Required) are
+            // authentication challenges, not an active decline — a technical failure, not a rejection.
+            401 or 407 => CallTerminationCategory.Failed,
             // Any other 4xx/5xx/6xx (RFC 3261 §21.4/§21.5/§21.6) is an unclassified failure.
             >= 400     => CallTerminationCategory.Failed,
             _          => CallTerminationCategory.Completed,   // <100 is not a valid terminating status; treat as non-failure.

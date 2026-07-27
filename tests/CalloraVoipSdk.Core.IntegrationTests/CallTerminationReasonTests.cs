@@ -49,7 +49,8 @@ public sealed class CallTerminationReasonTests
     public void Remote_busy_486_surfaces_as_Busy_Remote_and_is_readable_in_the_terminated_handler()
     {
         var (call, channel, session) = BuildRingingCall(
-            new SipDialogTerminationReason("SIP", cause: 486, text: "Busy Here"));
+            new SipDialogTerminationReason(
+                "SIP", cause: 486, text: "Busy Here", sipStatusCode: 486, remoteInitiated: true));
 
         CallTerminationReason? seenInHandler = null;
         call.StateChanged += (_, e) =>
@@ -69,6 +70,38 @@ public sealed class CallTerminationReasonTests
 
         // Same reason is durably readable on the call surface afterwards.
         Assert.Same(seenInHandler, call.TerminationReason);
+
+        channel.Dispose();
+    }
+
+    [Fact]
+    public void Busy_486_with_Q850_Reason_header_still_classifies_on_the_SIP_status()
+    {
+        // Reproduces the CI Asterisk interop case (#103) locally without Docker: Asterisk answers a busy
+        // target with 486 AND an RFC 3326 "Reason: Q.850;cause=17" header, so the resolved reason carries
+        // Protocol=Q.850/Cause=17 for detail while SipStatusCode=486 stays authoritative. The channel must
+        // classify on the SIP status (Busy/486), not on the Q.850 cause (which previously → Completed).
+        var (call, channel, session) = BuildRingingCall(
+            new SipDialogTerminationReason(
+                protocol: "Q.850",
+                cause: 17,
+                text: "User busy",
+                sipStatusCode: 486,
+                remoteInitiated: true));
+
+        CallTerminationReason? seenInHandler = null;
+        call.StateChanged += (_, e) =>
+        {
+            if (e.NewState == CallState.Terminated)
+                seenInHandler = e.TerminationReason ?? call.TerminationReason;
+        };
+
+        session.RaiseStateChanged(SipDialogState.Terminated);
+
+        Assert.NotNull(seenInHandler);
+        Assert.Equal(CallTerminationCategory.Busy, seenInHandler!.Category);
+        Assert.Equal(486, seenInHandler.SipStatusCode);
+        Assert.Equal(CallTerminatedBy.Remote, seenInHandler.TerminatedBy);
 
         channel.Dispose();
     }
@@ -101,9 +134,14 @@ public sealed class CallTerminationReasonTests
     }
 
     [Fact]
-    public void Remote_hangup_without_reason_surfaces_as_Completed_Remote()
+    public void Remote_BYE_after_connected_surfaces_as_Completed_Remote()
     {
-        var (call, channel, session) = BuildRingingCall(terminationReason: null);
+        // A graceful remote BYE after the call was established: no SIP failure status, but the inbound
+        // BYE is flagged remote-initiated. Connected + null status → Completed; proven remote → Remote.
+        var (call, channel, session) = BuildRingingCall(
+            new SipDialogTerminationReason("SIP", remoteInitiated: true));
+        session.CurrentState = SipDialogState.Established;
+        session.RaiseStateChanged(SipDialogState.Established);
 
         CallTerminationReason? seenInHandler = null;
         call.StateChanged += (_, e) =>
@@ -118,6 +156,55 @@ public sealed class CallTerminationReasonTests
         Assert.Equal(CallTerminationCategory.Completed, seenInHandler!.Category);
         Assert.Null(seenInHandler.SipStatusCode);
         Assert.Equal(CallTerminatedBy.Remote, seenInHandler.TerminatedBy);
+
+        channel.Dispose();
+    }
+
+    [Fact]
+    public void Null_status_never_connected_surfaces_as_Failed()
+    {
+        // A remote-initiated teardown while still ringing, with no SIP failure status: never connected →
+        // Failed (a technical failure, not a false Completed). Origin is still provably Remote.
+        var (call, channel, session) = BuildRingingCall(
+            new SipDialogTerminationReason("SIP", remoteInitiated: true));
+
+        CallTerminationReason? seenInHandler = null;
+        call.StateChanged += (_, e) =>
+        {
+            if (e.NewState == CallState.Terminated)
+                seenInHandler = e.TerminationReason ?? call.TerminationReason;
+        };
+
+        session.RaiseStateChanged(SipDialogState.Terminated);
+
+        Assert.NotNull(seenInHandler);
+        Assert.Equal(CallTerminationCategory.Failed, seenInHandler!.Category);
+        Assert.Null(seenInHandler.SipStatusCode);
+        Assert.Equal(CallTerminatedBy.Remote, seenInHandler.TerminatedBy);
+
+        channel.Dispose();
+    }
+
+    [Fact]
+    public void Transport_abort_with_no_reason_surfaces_as_Unknown_TerminatedBy()
+    {
+        // A teardown with no SIP status and no remote-initiated proof (a transport loss / internal fault):
+        // never connected → Failed, and origin is not attributable → Unknown, not defaulted to Remote.
+        var (call, channel, session) = BuildRingingCall(terminationReason: null);
+
+        CallTerminationReason? seenInHandler = null;
+        call.StateChanged += (_, e) =>
+        {
+            if (e.NewState == CallState.Terminated)
+                seenInHandler = e.TerminationReason ?? call.TerminationReason;
+        };
+
+        session.RaiseStateChanged(SipDialogState.Terminated);
+
+        Assert.NotNull(seenInHandler);
+        Assert.Equal(CallTerminationCategory.Failed, seenInHandler!.Category);
+        Assert.Null(seenInHandler.SipStatusCode);
+        Assert.Equal(CallTerminatedBy.Unknown, seenInHandler.TerminatedBy);
 
         channel.Dispose();
     }

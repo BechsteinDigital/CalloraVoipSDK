@@ -318,7 +318,8 @@ internal sealed class SipCallSessionTransactionService
             // use a dedicated termination reason so callers can distinguish media errors from
             // call rejections (486/603) or auth failures.
             var terminationReason = finalResponse.Response.StatusCode == 488
-                ? new SipDialogTerminationReason("SIP", cause: 488, text: "Not Acceptable Here")
+                ? new SipDialogTerminationReason(
+                    "SIP", cause: 488, text: "Not Acceptable Here", sipStatusCode: 488, remoteInitiated: true)
                 : SipCallSessionTransactionUtilities.ResolveTerminationReason(
                     finalResponse.Response.Header("Reason"),
                     finalResponse.Response.StatusCode,
