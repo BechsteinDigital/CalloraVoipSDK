@@ -26,6 +26,7 @@ internal sealed class PeerConnection : IPeerConnection
     private EventHandler<RemoteTrack>? _trackReceived;
     private EventHandler<string>? _localIceCandidateDiscovered;
     private EventHandler<DtmfTone>? _dtmfReceived;
+    private EventHandler? _videoKeyFrameRequested;
 
     public PeerConnection(WebRtcPeerConnection peer, ILogger<PeerConnection> logger, Action<IPeerConnection>? onDisposed = null)
     {
@@ -40,6 +41,7 @@ internal sealed class PeerConnection : IPeerConnection
         _peer.VideoFrameReceived += OnVideoReceived;
         _peer.LocalIceCandidateDiscovered += OnLocalIceCandidate;
         _peer.DtmfReceived += OnDtmfReceived;
+        _peer.VideoKeyFrameRequested += OnVideoKeyFrameRequested;
     }
 
     public PeerConnectionState State => Map(_peer.State);
@@ -68,6 +70,12 @@ internal sealed class PeerConnection : IPeerConnection
     {
         add => _dtmfReceived += value;
         remove => _dtmfReceived -= value;
+    }
+
+    public event EventHandler? VideoKeyFrameRequested
+    {
+        add => _videoKeyFrameRequested += value;
+        remove => _videoKeyFrameRequested -= value;
     }
 
     public string CreateOffer() => _peer.CreateOffer();
@@ -222,6 +230,7 @@ internal sealed class PeerConnection : IPeerConnection
         _peer.VideoFrameReceived -= OnVideoReceived;
         _peer.LocalIceCandidateDiscovered -= OnLocalIceCandidate;
         _peer.DtmfReceived -= OnDtmfReceived;
+        _peer.VideoKeyFrameRequested -= OnVideoKeyFrameRequested;
         try
         {
             await _peer.DisposeAsync().ConfigureAwait(false);
@@ -259,6 +268,11 @@ internal sealed class PeerConnection : IPeerConnection
 
     private void OnDtmfReceived(byte toneCode, int durationMs)
         => _dtmfReceived?.Invoke(this, new DtmfTone(toneCode, durationMs));
+
+    // Send-side feedback (RFC 4585/5104): the peer asked for a key frame. Surfaced as a top-level event
+    // (like DtmfReceived) rather than on a remote track — it targets our encoder, not an inbound stream.
+    private void OnVideoKeyFrameRequested()
+        => _videoKeyFrameRequested?.Invoke(this, EventArgs.Empty);
 
     // Inbound media is projected onto the W3C track model via the RemoteTrackSet: the remote a=msid names
     // the track, and the set raises TrackReceived once per kind before the first frame flows.

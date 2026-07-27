@@ -100,6 +100,12 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     /// <summary>Raised with each reassembled inbound video frame (frame, RTP timestamp, is-key-frame).</summary>
     public event Action<byte[], uint, bool>? VideoFrameReceived;
 
+    /// <summary>
+    /// Raised when the peer requests a key frame via an inbound PLI/FIR (RFC 4585/5104) on the video track;
+    /// the app should encode and send a key frame.
+    /// </summary>
+    public event Action? VideoKeyFrameRequested;
+
     /// <summary>Raised when the shared DTLS handshake fails — media stays blocked (fail closed).</summary>
     public event Action? HandshakeFailed;
 
@@ -213,6 +219,7 @@ internal sealed class BundledMediaSession : IAsyncDisposable
             }
 
             _video.FrameReceived += (frame, timestamp, isKeyFrame) => VideoFrameReceived?.Invoke(frame, timestamp, isKeyFrame);
+            _video.KeyFrameRequested += () => VideoKeyFrameRequested?.Invoke();
             router.RegisterTrack(video.Mid, _video.OnRtpPacket);
         }
 
@@ -390,6 +397,10 @@ internal sealed class BundledMediaSession : IAsyncDisposable
                     break;
             }
         }
+
+        // Fan the already-decoded compound out to the video track for RTCP feedback (PLI/FIR → keyframe
+        // request). Runs on this same receive-loop thread, so the track's confinement is preserved.
+        _video?.OnRtcpPackets(packets);
     }
 
     // Feeds the peer's reception report blocks (about our outbound streams) into the outbound quality tracker.

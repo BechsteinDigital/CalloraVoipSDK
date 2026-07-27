@@ -94,6 +94,12 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     public event Action<byte[], uint, bool>? VideoFrameReceived;
 
     /// <summary>
+    /// Raised when the peer requests a key frame via an inbound PLI/FIR (RFC 4585/5104); the app should
+    /// encode and send a key frame.
+    /// </summary>
+    public event Action? VideoKeyFrameRequested;
+
+    /// <summary>
     /// Raised once per fully received inbound DTMF tone (RFC 4733 telephone-event), carrying the tone code
     /// (0–15) and the tone duration in milliseconds. Telephone-event packets are consumed here and never
     /// surfaced as audio on <see cref="AudioReceived"/>.
@@ -722,6 +728,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         session.MediaConnectivityRecovered += () => TransitionTo(WebRtcConnectionState.Connected);
         session.AudioReceived += packet => AudioReceived?.Invoke(packet.Payload.ToArray());
         session.VideoFrameReceived += (frame, timestamp, isKeyFrame) => VideoFrameReceived?.Invoke(frame, timestamp, isKeyFrame);
+        session.VideoKeyFrameRequested += () => VideoKeyFrameRequested?.Invoke();
         session.DtmfReceived += (toneCode, durationMs) => DtmfReceived?.Invoke(toneCode, durationMs);
     }
 
