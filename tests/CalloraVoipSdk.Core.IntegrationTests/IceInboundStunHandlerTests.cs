@@ -85,7 +85,7 @@ public sealed class IceInboundStunHandlerTests
         await using var session = new RtpSession(
             Options(sessionPort, peerPort), new RtpPacketCodec(), NullLogger<RtpSession>.Instance);
         var handler = NewHandler(session, IceRole.Controlled, tieBreaker: 1);
-        session.StunPacketReceived += handler.OnStunPacketReceived;
+        session.StunPacketReceived += (d, s) => handler.OnStunPacketReceived(d, s);
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         await session.StartAsync(cts.Token);
@@ -115,7 +115,7 @@ public sealed class IceInboundStunHandlerTests
         await using var session = new RtpSession(
             Options(sessionPort, peerPort), new RtpPacketCodec(), NullLogger<RtpSession>.Instance);
         var handler = NewHandler(session, IceRole.Controlling, tieBreaker: 100);
-        session.StunPacketReceived += handler.OnStunPacketReceived;
+        session.StunPacketReceived += (d, s) => handler.OnStunPacketReceived(d, s);
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         await session.StartAsync(cts.Token);
@@ -146,7 +146,7 @@ public sealed class IceInboundStunHandlerTests
         var nominated = 0;
         IPEndPoint? nominatedSource = null;
         handler.PairNominated += source => { nominatedSource = source; Interlocked.Increment(ref nominated); };
-        session.StunPacketReceived += handler.OnStunPacketReceived;
+        session.StunPacketReceived += (d, s) => handler.OnStunPacketReceived(d, s);
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         await session.StartAsync(cts.Token);
@@ -162,5 +162,58 @@ public sealed class IceInboundStunHandlerTests
         Assert.Equal(1, Volatile.Read(ref nominated));
         // The controlled agent adopts the source of the USE-CANDIDATE check as the nominated remote.
         Assert.Equal(new IPEndPoint(IPAddress.Loopback, peerPort), nominatedSource);
+    }
+
+    // ── Role-agnostic response routing (Answerer-Relay, RFC 8445): the response takes the path the check
+    //    arrived on — a supplied replyVia (relay-framed) instead of the raw socket send. ────────────────
+
+    private static IceInboundStunHandler HandlerWithSend(
+        Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask> sendRaw)
+        => new(
+            new IceInboundCheckProcessor(new IceInboundBindingResponder(Codec)),
+            sendRaw, LocalUfrag, LocalPassword, tieBreaker: 1, IceRole.Controlled, NullLoggerFactory.Instance);
+
+    [Fact]
+    public async Task Inbound_check_with_a_reply_path_answers_over_that_path_not_the_raw_socket()
+    {
+        byte[]? rawSent = null;
+        var handler = HandlerWithSend((d, _, _) => { rawSent = d.ToArray(); return ValueTask.CompletedTask; });
+
+        var source = new IPEndPoint(IPAddress.Loopback, 40001);
+        byte[]? relaySent = null;
+        IPEndPoint? relayDest = null;
+        var relayed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        ValueTask ReplyVia(ReadOnlyMemory<byte> resp, IPEndPoint dest, CancellationToken ct)
+        {
+            relaySent = resp.ToArray();
+            relayDest = dest;
+            relayed.TrySetResult();
+            return ValueTask.CompletedTask;
+        }
+
+        handler.OnStunPacketReceived(
+            BuildCheck(peerControlling: true, peerTieBreaker: 2, useCandidate: false), source, ReplyVia);
+        await relayed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Null(rawSent);                          // the direct socket send was NOT used
+        Assert.NotNull(relaySent);                     // the response went via the supplied relay reply path
+        Assert.Equal(source, relayDest);               // back to the check's source
+        Assert.Equal(StunMessageClass.SuccessResponse, Codec.Decode(relaySent!)!.MessageClass);
+    }
+
+    [Fact]
+    public async Task Inbound_check_without_a_reply_path_answers_over_the_raw_socket()
+    {
+        byte[]? rawSent = null;
+        var sent = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var handler = HandlerWithSend((d, _, _) => { rawSent = d.ToArray(); sent.TrySetResult(); return ValueTask.CompletedTask; });
+
+        handler.OnStunPacketReceived(
+            BuildCheck(peerControlling: true, peerTieBreaker: 2, useCandidate: false),
+            new IPEndPoint(IPAddress.Loopback, 40002));   // no replyVia → direct
+        await sent.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.NotNull(rawSent);
+        Assert.Equal(StunMessageClass.SuccessResponse, Codec.Decode(rawSent!)!.MessageClass);
     }
 }

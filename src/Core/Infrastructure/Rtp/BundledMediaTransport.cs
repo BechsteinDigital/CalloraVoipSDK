@@ -401,7 +401,14 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IRelayCont
             {
                 // A relayed Data indication: the inner payload came from `peer` through the server. Present the
                 // peer as the source so the ICE/DTLS layers see the peer, never the TURN server it arrived from.
-                _inbound.ProcessInboundDatagram(inner, peer);
+                // Supply the reply path: a connectivity-check response must go back the same way — framed as a
+                // Send indication to the relay server for `peer` (RFC 8656 §10). The permission already exists
+                // (the check reached us through it), so no new permission is needed; role-agnostic response
+                // routing (RFC 8445), so a controlled agent answers over its own relay without a driver.
+                var relay = indication;
+                ValueTask ReplyVia(ReadOnlyMemory<byte> resp, IPEndPoint dest, CancellationToken ct)
+                    => SendUnframedAsync(relay.Wrap(dest, resp.Span), relay.RelayServer, ct);
+                _inbound.ProcessInboundDatagram(inner, peer, ReplyVia);
                 return;
             }
 

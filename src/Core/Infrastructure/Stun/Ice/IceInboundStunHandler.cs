@@ -89,7 +89,16 @@ internal sealed class IceInboundStunHandler
     /// </summary>
     /// <param name="datagram">The received STUN datagram.</param>
     /// <param name="source">The transport address it arrived from.</param>
-    public void OnStunPacketReceived(byte[] datagram, IPEndPoint source)
+    /// <param name="replyVia">
+    /// The path the response must take back to <paramref name="source"/> — supplied by the transport when the
+    /// check arrived relayed (a TURN Data indication), so the response is framed as a Send indication back
+    /// through the same relay (RFC 8445 role-agnostic response routing; the response takes the path the request
+    /// came on). <see langword="null"/> for a direct (host/srflx) check — the response uses the raw socket send.
+    /// </param>
+    public void OnStunPacketReceived(
+        byte[] datagram,
+        IPEndPoint source,
+        Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>? replyVia = null)
     {
         ArgumentNullException.ThrowIfNull(datagram);
         ArgumentNullException.ThrowIfNull(source);
@@ -117,16 +126,21 @@ internal sealed class IceInboundStunHandler
 
         if (result.ResponseBytes is { } response)
         {
-            // Do not await on the receive-loop thread; send the response without blocking it.
-            _ = SendResponseAsync(response, source);
+            // Role-agnostic response routing (RFC 8445, mirroring libwebrtc/pjnath/SIPSorcery): the response
+            // takes the path the request arrived on — relay-framed via replyVia when the check came through a
+            // TURN relay, else the direct socket send. Do not await on the receive loop; send fire-and-forget.
+            _ = SendResponseAsync(response, source, replyVia ?? _sendRaw);
         }
     }
 
-    private async Task SendResponseAsync(byte[] response, IPEndPoint destination)
+    private async Task SendResponseAsync(
+        byte[] response,
+        IPEndPoint destination,
+        Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask> send)
     {
         try
         {
-            await _sendRaw(response, destination, CancellationToken.None).ConfigureAwait(false);
+            await send(response, destination, CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception ex)
         {

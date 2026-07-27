@@ -10,7 +10,7 @@ namespace CalloraVoipSdk.Core.Infrastructure.Stun.Ice;
 /// connectivity checks (RFC 8445 §7.3, <see cref="IceInboundStunHandler"/>) and running consent
 /// freshness (RFC 7675, <see cref="IceMediaConsentSession"/>). A media session builds one of these
 /// from the negotiated parameters, feeds it the STUN datagrams demuxed off the receive loop via
-/// <see cref="OnStunPacketReceived"/>, calls <see cref="Start"/>, and disposes it — keeping the ICE
+/// <see cref="OnStunPacketReceived(byte[], System.Net.IPEndPoint)"/>, calls <see cref="Start"/>, and disposes it — keeping the ICE
 /// wiring out of the media session itself.
 /// </summary>
 internal sealed class IceMediaAttachment : IAsyncDisposable
@@ -306,6 +306,19 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
     /// <c>StunPacketReceived(byte[], IPEndPoint)</c> hook signature.
     /// </summary>
     public void OnStunPacketReceived(byte[] datagram, IPEndPoint source)
+        => OnStunPacketReceived(datagram, source, replyVia: null);
+
+    /// <summary>
+    /// As <see cref="OnStunPacketReceived(byte[], IPEndPoint)"/>, but with the transport-supplied reply path an
+    /// inbound connectivity-check response must take (RFC 8445 role-agnostic routing): the bundle transport
+    /// passes a relay-framing <paramref name="replyVia"/> when the check arrived through a TURN relay indication,
+    /// so the response goes back through the same relay. A consent response (our own check being answered) never
+    /// needs it. Direct checks pass <see langword="null"/> — byte-identical to the plain overload.
+    /// </summary>
+    public void OnStunPacketReceived(
+        byte[] datagram,
+        IPEndPoint source,
+        Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>? replyVia)
     {
         if (_consent is not null
             && datagram.Length >= 2
@@ -315,7 +328,7 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
             return;
         }
 
-        _inbound?.OnStunPacketReceived(datagram, source);
+        _inbound?.OnStunPacketReceived(datagram, source, replyVia);
     }
 
     private void OnConsentLost()

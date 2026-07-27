@@ -34,7 +34,7 @@ internal sealed class BundledInboundPipeline
     private long _rtpBytesReceived;
 
     /// <summary>Raised with an independent copy of a STUN datagram and its source for the ICE layer.</summary>
-    public event Action<byte[], IPEndPoint>? StunPacketReceived;
+    public event Action<byte[], IPEndPoint, Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>?>? StunPacketReceived;
 
     /// <summary>Raised with an independent copy of a DTLS record and its source for the handshake layer.</summary>
     public event Action<byte[], IPEndPoint>? DtlsPacketReceived;
@@ -104,13 +104,20 @@ internal sealed class BundledInboundPipeline
     /// decrypted with the shared contexts and dispatched. Never throws for a malformed or unexpected
     /// datagram — it is dropped and counted so a hostile packet cannot kill the receive loop.
     /// </summary>
-    public void ProcessInboundDatagram(ReadOnlySpan<byte> datagram, IPEndPoint? source)
+    public void ProcessInboundDatagram(
+        ReadOnlySpan<byte> datagram,
+        IPEndPoint? source,
+        Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>? replyVia = null)
     {
         var kind = MediaPacketClassifier.Classify(datagram);
 
         if (source is not null && kind is MediaPacketKind.Stun)
         {
-            DispatchToEndpointHandler(StunPacketReceived, datagram, source, "STUN");
+            // The receive buffer is reused; the ICE handler may authenticate/respond async on its own thread, so
+            // hand it an independent copy. replyVia carries the relay reply path when the check arrived relayed.
+            var copy = datagram.ToArray();
+            try { StunPacketReceived?.Invoke(copy, source, replyVia); }
+            catch (Exception ex) { _logger.LogError(ex, "Unhandled exception in STUN datagram handler."); }
             return;
         }
 
