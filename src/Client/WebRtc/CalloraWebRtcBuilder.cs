@@ -69,20 +69,28 @@ public sealed class CalloraWebRtcBuilder
 
     /// <summary>
     /// Adds a TURN server for relay candidate gathering (RFC 8656), with the long-term credentials the
-    /// allocation authenticates with. Accumulates with any servers already configured. Only UDP TURN is used for
-    /// relay gathering today; a non-UDP entry is ignored by the gatherer until TCP/TLS TURN lands.
+    /// allocation authenticates with. Accumulates with any servers already configured. Only UDP TURN is
+    /// supported for relay gathering — a TCP/TLS transport is rejected up front (the TCP/TLS relay data path
+    /// is not yet wired into the WebRTC media bundle), so a misconfiguration fails loudly instead of silently
+    /// gathering no relay candidate.
     /// </summary>
     /// <param name="host">The TURN server hostname or IP address.</param>
     /// <param name="username">The long-term credential username.</param>
     /// <param name="password">The long-term credential password.</param>
     /// <param name="port">Optional explicit port; the TURN default (3478) is used when null.</param>
-    /// <param name="transport">The transport to reach the server on; defaults to UDP.</param>
+    /// <param name="transport">The transport to reach the server on; only <see cref="IceTransport.Udp"/> is supported.</param>
+    /// <exception cref="ArgumentException"><paramref name="transport"/> is not UDP (TCP/TLS TURN is not yet implemented).</exception>
     public CalloraWebRtcBuilder WithTurnServer(
         string host, string username, string password, int? port = null, IceTransport transport = IceTransport.Udp)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(host);
         ArgumentException.ThrowIfNullOrWhiteSpace(username);
         ArgumentException.ThrowIfNullOrWhiteSpace(password);
+        if (transport != IceTransport.Udp)
+            throw new ArgumentException(
+                $"TURN transport '{transport}' is not supported for WebRTC relay gathering — only UDP is implemented. " +
+                "Pass IceTransport.Udp (the default) or omit the transport argument.",
+                nameof(transport));
         return AddIceServer(new IceServerConfiguration
         {
             Type = IceServerType.Turn,
@@ -96,13 +104,22 @@ public sealed class CalloraWebRtcBuilder
 
     /// <summary>
     /// Adds one or more fully-specified ICE servers (STUN/TURN), accumulating with any already configured.
+    /// A TURN entry with a non-UDP transport is rejected — only UDP TURN is supported for relay gathering.
     /// </summary>
     /// <param name="servers">The ICE server entries to add.</param>
+    /// <exception cref="ArgumentException">A TURN entry uses a non-UDP transport (TCP/TLS TURN is not yet implemented).</exception>
     public CalloraWebRtcBuilder WithIceServers(params IceServerConfiguration[] servers)
     {
         ArgumentNullException.ThrowIfNull(servers);
         foreach (var server in servers)
+        {
             ArgumentNullException.ThrowIfNull(server);
+            if (server.Type == IceServerType.Turn && server.Transport != IceTransport.Udp)
+                throw new ArgumentException(
+                    $"TURN server '{server.Host}' uses transport '{server.Transport}'; only UDP TURN is supported " +
+                    "for WebRTC relay gathering. Use IceTransport.Udp.",
+                    nameof(servers));
+        }
 
         _services.PostConfigure<WebRtcOptions>(options => options.IceServers = [.. options.IceServers, .. servers]);
         return this;

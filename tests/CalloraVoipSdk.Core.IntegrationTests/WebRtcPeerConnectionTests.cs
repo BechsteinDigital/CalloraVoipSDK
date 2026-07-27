@@ -51,6 +51,19 @@ public sealed class WebRtcPeerConnectionTests
     }
 
     [Fact]
+    public async Task A_second_SetRemoteDescription_is_rejected_as_an_unsupported_re_offer()
+    {
+        await using var peer = Peer(Pcmu);
+        await peer.SetRemoteDescriptionAsync(WebRtcOffer());   // first: builds the session
+
+        // Re-Offer / ICE restart is a documented post-GA follow-up: a second SetRemoteDescription must fail loudly
+        // rather than silently overwrite the session (leaking the transport, double-wiring events).
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => peer.SetRemoteDescriptionAsync(WebRtcOffer()));
+        Assert.Contains("Re-Offer", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Offerer_applying_the_answer_returns_its_own_offer_as_local_description()
     {
         // Guards the offerer branch of SetRemoteDescription (HARD-C6): the local description belongs to

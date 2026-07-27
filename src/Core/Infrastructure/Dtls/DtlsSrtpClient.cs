@@ -61,7 +61,9 @@ internal sealed class DtlsSrtpClient : DefaultTlsClient
 
         var profile = useSrtp.ProtectionProfiles[0];
         if (Array.IndexOf(DtlsSrtpProfiles.Supported, profile) < 0)
-            throw new TlsFatalAlert(AlertDescription.illegal_parameter);
+            throw new TlsFatalAlert(
+                AlertDescription.illegal_parameter,
+                DtlsSrtpProfiles.FormatNoCommonProfileError(new[] { profile }));
 
         // RFC 5764 §4.1.3: the server's srtp_mki MUST match the client's offer — we
         // offered an empty MKI, so any non-empty echo is a protocol violation.
