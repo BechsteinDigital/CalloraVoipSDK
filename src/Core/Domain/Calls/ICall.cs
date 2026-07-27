@@ -124,15 +124,18 @@ public interface ICall
     // ── Events ────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Raised when <see cref="State"/> changes. Serialized on the SIP signaling thread. If no
-    /// handler is attached yet, state changes are buffered and replayed in order once one is —
-    /// the initial state is never missed. See the interface remarks for the handler contract.
+    /// Raised when <see cref="State"/> changes. Serialized on the SIP signaling thread. Changes are
+    /// <b>not</b> buffered: a handler attached after a transition does not receive that earlier
+    /// transition. Read <see cref="State"/> for the current value, and subscribe before initiating an
+    /// action to observe every subsequent change. See the interface remarks for the handler contract.
     /// </summary>
     event EventHandler<CallStateChangedEventArgs>?  StateChanged;
 
     /// <summary>
-    /// Raised when the remote party puts the call on or off hold. Serialized on the SIP signaling
-    /// thread; buffered and replayed like <see cref="StateChanged"/> when no handler is attached.
+    /// Raised when the remote party puts the call on or off hold, and only when the hold state
+    /// actually changes (a duplicate or pre-<see cref="CallState.Connected"/> hold indication does not
+    /// re-raise it). Serialized on the SIP signaling thread. Like <see cref="StateChanged"/>, changes
+    /// are not buffered for handlers attached later.
     /// </summary>
     event EventHandler<HoldStateChangedEventArgs>?  HoldStateChanged;
 
