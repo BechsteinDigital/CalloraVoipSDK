@@ -2,6 +2,7 @@ using CalloraVoipSdk.Core.Application.Media.Rtcp.Packets;
 using CalloraVoipSdk.Core.Infrastructure.Rtcp.Wire;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packetisation;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
+using CalloraVoipSdk.Core.Infrastructure.Rtp.Retransmission;
 using Microsoft.Extensions.Logging;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
@@ -26,6 +27,12 @@ namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
 /// under one MID — one per <c>a=rid</c> layer, each on its own SSRC with the RID stamped per packet
 /// (RFC 8852). The receive path stays single-stream; receive-side RID demux is out of scope.
 /// </para>
+/// <para>
+/// RTX retransmission (RFC 4588) is wired for the non-simulcast track when an rtx payload type is negotiated:
+/// it retains this stream's sent packets and, on an inbound Generic NACK, resends them on a separate repair
+/// stream (own SSRC + rtx payload type, OSN-prefixed) over the shared transport. Per-encoding RTX on a
+/// simulcast track is follow-up work; a simulcast track carries no repair stream.
+/// </para>
 /// </remarks>
 internal sealed class BundledVideoTrack : IDisposable
 {
@@ -46,6 +53,17 @@ internal sealed class BundledVideoTrack : IDisposable
     private readonly BundledVideoSendEncoding? _single;
     // The simulcast layers keyed by a=rid, or empty for a non-simulcast track.
     private readonly IReadOnlyDictionary<string, BundledVideoSendEncoding> _layers;
+
+    // RTX retransmission (RFC 4588), non-simulcast only: retains this stream's sent packets so an inbound
+    // Generic NACK can be answered by resending them on a separate repair stream (own SSRC + rtx payload type,
+    // OSN-prefixed). All null when RTX was not negotiated (the retransmit callback stays a no-op) or on a
+    // simulcast track (per-encoding RTX is follow-up work). The repair stream rides the bundle's shared
+    // outbound SRTP context, which keys ROC/replay per SSRC — the fresh rtx SSRC needs no separate context.
+    private readonly RtpRetransmissionBuffer? _retransmitBuffer;
+    private readonly byte _rtxPayloadType;
+    private readonly uint _rtxSsrc;
+    private readonly Action<RtpPacket>? _retainSent;
+    private int _rtxSequence;
 
     // RTP payload budget: MTU minus RTP/SRTP/extension overhead (mirrors the single-stream video path).
     private const int MaxRtpPayloadSize = 1200;
@@ -88,6 +106,11 @@ internal sealed class BundledVideoTrack : IDisposable
     /// <param name="outbound">The bundle's outbound pipeline (RTP sends and the SRTCP-protected RTCP send path).</param>
     /// <param name="reorderWindowDepth">The inbound reorder window depth in packets.</param>
     /// <param name="loggerFactory">Builds the loggers for the track and its feedback path.</param>
+    /// <param name="rtxPayloadType">
+    /// The negotiated RTX repair payload type (RFC 4588), or <see langword="null"/> when RTX was not
+    /// negotiated. When present the track retains its sent packets and answers an inbound Generic NACK by
+    /// resending them on a separate RTX stream (own SSRC, this payload type, OSN-prefixed).
+    /// </param>
     public BundledVideoTrack(
         string mid,
         string codecName,
@@ -97,7 +120,8 @@ internal sealed class BundledVideoTrack : IDisposable
         bool remoteSupportsPli,
         BundledOutboundPipeline outbound,
         int reorderWindowDepth,
-        ILoggerFactory loggerFactory)
+        ILoggerFactory loggerFactory,
+        byte? rtxPayloadType = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(mid);
         ArgumentNullException.ThrowIfNull(loggerFactory);
@@ -111,7 +135,32 @@ internal sealed class BundledVideoTrack : IDisposable
         _reorderBuffer = new VideoReorderBuffer(reorderWindowDepth);
         _single = new BundledVideoSendEncoding(rid: null, payloadType, packetiser);
         _layers = new Dictionary<string, BundledVideoSendEncoding>(StringComparer.Ordinal);
-        _keyFrameFeedback = BuildFeedback(localSsrc, remoteSupportsNack, remoteSupportsPli, loggerFactory);
+
+        // RTX repair stream (RFC 4588): retain sent packets so an inbound NACK can be answered by resending
+        // them, and pick an unpredictable full-range repair SSRC (RFC 3550 §8.1) distinct from this stream's.
+        // The retransmit callback below then resends; without RTX it stays a no-op (feedback built plain).
+        if (rtxPayloadType is { } rtxPt)
+        {
+            _rtxPayloadType = rtxPt;
+            _rtxSsrc = RtpRandom.NextSsrc(distinctFrom: localSsrc);
+            _retransmitBuffer = new RtpRetransmissionBuffer();
+            // Retain only THIS stream's sent packets, keyed by sequence number. The pipeline's PacketSent fires
+            // for every SSRC on the shared bundle (audio, other video), but an inbound NACK names this stream's
+            // SSRC sequence space — retaining another SSRC's packets under the same sequence key would let a NACK
+            // resend an unrelated (e.g. audio) packet as this stream's RTX. Filter to localSsrc.
+            _retainSent = packet =>
+            {
+                if (packet.Ssrc == localSsrc)
+                    _retransmitBuffer.Store(packet);
+            };
+            _outbound.PacketSent += _retainSent;
+            _keyFrameFeedback = BuildFeedback(
+                localSsrc, remoteSupportsNack, remoteSupportsPli, loggerFactory, OnRetransmitRequested);
+        }
+        else
+        {
+            _keyFrameFeedback = BuildFeedback(localSsrc, remoteSupportsNack, remoteSupportsPli, loggerFactory);
+        }
     }
 
     /// <summary>
@@ -170,10 +219,14 @@ internal sealed class BundledVideoTrack : IDisposable
     }
 
     // Builds the RFC 4585/5104 feedback for this stream over the bundle's SRTCP send path, mirroring the
-    // single-stream VideoRtpStream construction. RTX is out of scope for this slice, so the retransmit
-    // callback (inbound NACK) is a no-op; it becomes the RTX resend hook in a later slice.
+    // single-stream VideoRtpStream construction. Inbound NACK is routed to onRetransmitRequested — the RTX
+    // resend hook (RFC 4588) when RTX is negotiated, or a no-op (the default) when it is not or on simulcast.
     private VideoKeyFrameFeedback BuildFeedback(
-        uint localSsrc, bool remoteSupportsNack, bool remoteSupportsPli, ILoggerFactory loggerFactory) =>
+        uint localSsrc,
+        bool remoteSupportsNack,
+        bool remoteSupportsPli,
+        ILoggerFactory loggerFactory,
+        Action<IReadOnlyList<ushort>>? onRetransmitRequested = null) =>
         new(
             new RtcpPacketCodec(),
             localSsrc,
@@ -181,9 +234,47 @@ internal sealed class BundledVideoTrack : IDisposable
             remoteSupportsPli,
             _outbound.SendRtcpAsync,
             () => KeyFrameRequested?.Invoke(),
-            _ => { },
+            onRetransmitRequested ?? (_ => { }),
             loggerFactory.CreateLogger<VideoKeyFrameFeedback>(),
             _lifetimeCts.Token);
+
+    // Answers an inbound Generic NACK (RFC 4585) by resending the requested packets on the RTX repair stream
+    // (RFC 4588 §4): each still in the retention buffer is re-wrapped with the rtx payload type, the repair
+    // SSRC, and a fresh monotonically increasing rtx sequence number, then sent over the shared transport. A
+    // packet no longer in the window is simply not resent. Runs on the bundle receive loop (VideoKeyFrameFeedback
+    // dispatches from OnRtcpPackets); the resend is fire-and-forget so it never blocks that loop.
+    private void OnRetransmitRequested(IReadOnlyList<ushort> sequenceNumbers)
+    {
+        if (_retransmitBuffer is null)
+            return;
+
+        foreach (var seq in sequenceNumbers)
+        {
+            if (!_retransmitBuffer.TryGet(seq, out var original))
+                continue;
+
+            var rtxSeq = unchecked((ushort)Interlocked.Increment(ref _rtxSequence));
+            var rtx = RtxPacketFactory.Encapsulate(original, _rtxPayloadType, _rtxSsrc, rtxSeq);
+            _ = SendRtxAsync(rtx);
+        }
+    }
+
+    private async Task SendRtxAsync(RtpPacket rtx)
+    {
+        try
+        {
+            await _outbound.SendRtxAsync(rtx, _lifetimeCts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // Teardown while retransmitting — nothing to recover.
+            _logger.LogTrace("Bundled RTX retransmission aborted by session teardown.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to send a bundled RTX retransmission.");
+        }
+    }
 
     /// <summary>
     /// Packetises one encoded frame and sends its payloads over the shared transport on the video MID.
@@ -252,9 +343,10 @@ internal sealed class BundledVideoTrack : IDisposable
     /// <summary>
     /// Handles the decoded inbound RTCP compound (already SRTCP-unprotected and parsed once by the session):
     /// a PLI or FIR anywhere in it (RFC 4585/5104) is treated as a request to send a key frame on this stream
-    /// (surfaced on <see cref="KeyFrameRequested"/>); an inbound Generic NACK is routed to the retransmit path
-    /// (a no-op until RTX is wired). Delegates to the shared <see cref="VideoKeyFrameFeedback"/>, mirroring the
-    /// single-stream video path. Runs on the bundle receive loop.
+    /// (surfaced on <see cref="KeyFrameRequested"/>); an inbound Generic NACK is routed to the RTX retransmit
+    /// path (RFC 4588 — resent on this track's repair stream when RTX was negotiated, a no-op otherwise).
+    /// Delegates to the shared <see cref="VideoKeyFrameFeedback"/>, mirroring the single-stream video path.
+    /// Runs on the bundle receive loop.
     /// </summary>
     public void OnRtcpPackets(IReadOnlyList<RtcpPacket> packets)
     {
@@ -298,9 +390,12 @@ internal sealed class BundledVideoTrack : IDisposable
     /// </summary>
     public void Dispose()
     {
-        // Cancel any in-flight NACK/PLI send before releasing the send locks, so a feedback send never races
-        // teardown (the SRTCP send path also fails closed on a disposed context).
+        // Cancel any in-flight NACK/PLI/RTX send before releasing the send locks, so a feedback or retransmit
+        // send never races teardown (the SRTP/SRTCP send path also fails closed on a disposed context).
         _lifetimeCts.Cancel();
+        // Stop retaining sent packets before the pipeline it subscribes to goes away.
+        if (_retainSent is not null)
+            _outbound.PacketSent -= _retainSent;
         FrameReceived = null;
         KeyFrameRequested = null;
         _single?.Dispose();

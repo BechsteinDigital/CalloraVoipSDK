@@ -217,7 +217,10 @@ internal sealed class BundledMediaSession : IAsyncDisposable
                 _video = new BundledVideoTrack(
                     video.Mid, codecName, video.PayloadType, video.Ssrc,
                     video.RemoteSupportsNack, video.RemoteSupportsPli,
-                    _outbound, options.VideoReorderDepth, loggerFactory);
+                    _outbound, options.VideoReorderDepth, loggerFactory,
+                    // RTX repair stream (RFC 4588): retain sent packets and resend on an inbound NACK. Wired for
+                    // the non-simulcast track only — per-encoding simulcast RTX is follow-up work.
+                    rtxPayloadType: video.RtxPayloadType);
             }
 
             _video.FrameReceived += (frame, timestamp, isKeyFrame) => VideoFrameReceived?.Invoke(frame, timestamp, isKeyFrame);
