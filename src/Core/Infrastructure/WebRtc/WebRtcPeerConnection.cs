@@ -517,6 +517,9 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         {
             // mDNS (.local) candidate: resolve in the background (RFC 8838 — candidates arrive asynchronously,
             // so the signalling path must not block on the resolver), bound to the peer lifetime.
+            // No throttle: well-behaved peers send <20 candidates; each task lives at most the resolver
+            // timeout (3 s) and is cancelled on dispose. Flood protection is the caller's concern (connection
+            // rate-limiting above this layer).
             var host = parsed.Address;
             var port = parsed.Port;
             var priority = parsed.Priority;
@@ -540,7 +543,8 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             }
             EnqueueRemoteCandidate(new IPEndPoint(ip, port), priority);
         }
-        catch (OperationCanceledException) { /* peer disposed */ }
+        catch (OperationCanceledException) { /* peer disposed or token cancelled */ }
+        catch (ObjectDisposedException) { /* peer disposed (CTS read during teardown race) — benign */ }
         catch (Exception ex)
         {
             _logger.LogDebug(ex, "Resolving an mDNS (.local) trickled ICE candidate failed.");
@@ -687,11 +691,10 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         adoptInto?.AdoptRelay(WebRtcRelayBinding.CreateFactory(serverEndPoint, allocation, _loggerFactory));
     }
 
-    // Parses an RFC 8829 candidate string ("candidate:…", tolerating a leading "a=") into a component-1
-    // UDP endpoint and its priority, or null when malformed/unusable (wrong component/transport, no port,
-    // unparseable address).
-    // Validates a trickled candidate string and returns the parsed fields (address NOT yet parsed to an IP,
-    // so an mDNS ".local" name is still distinguishable by the caller).
+    // Validates a trickled RFC 8829 candidate string ("candidate:…", tolerating a leading "a=") and returns
+    // the parsed fields (address NOT yet parsed to an IP, so an mDNS ".local" name is still distinguishable
+    // by the caller). Returns null when malformed/unusable (wrong component/transport, non-positive port,
+    // negative priority).
     private static SdpIceCandidate? ParseCandidateFields(string candidate)
     {
         var value = candidate.Trim();

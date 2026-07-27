@@ -44,6 +44,14 @@ public sealed class SystemMdnsResolverTests
     }
 
     [Fact]
+    public async Task Returns_Null_For_Empty_Label_DotLocal()
+    {
+        // ".local" hat genau einen Punkt, aber ein leeres Label — RFC 8828 verlangt "<label>.local".
+        var resolver = WithLookup(_ => [IPAddress.Parse("192.168.1.5")]);
+        Assert.Null(await resolver.ResolveAsync(".local", CancellationToken.None));
+    }
+
+    [Fact]
     public async Task Returns_Null_When_Lookup_Throws()
     {
         var resolver = new SystemMdnsResolver((_, _) => throw new System.Net.Sockets.SocketException());

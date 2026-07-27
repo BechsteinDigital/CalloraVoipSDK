@@ -20,8 +20,8 @@ public sealed class WebRtcMdnsCandidateTests
         public CountingResolver(IPAddress? result) => _result = result;
         public Task<IPAddress?> ResolveAsync(string hostname, CancellationToken ct)
         {
-            Interlocked.Increment(ref Calls);
-            LastHost = hostname;
+            LastHost = hostname;                 // observable state first ...
+            Interlocked.Increment(ref Calls);   // ... then publish via the fence the test spins on
             return Task.FromResult(_result);
         }
     }
@@ -68,5 +68,39 @@ public sealed class WebRtcMdnsCandidateTests
         await Task.Delay(200);
 
         Assert.Equal(0, Volatile.Read(ref resolver.Calls)); // reiner IP-Pfad unverändert
+    }
+
+    [Fact]
+    public async Task Dispose_During_Resolution_Does_Not_Throw_Unobserved()
+    {
+        // Slow resolver, dann Dispose bevor er zurückkehrt → die fire-and-forget-Auflösung muss sauber
+        // abgebrochen werden (unobservierte Ausnahmen aus fire-and-forget würden den Prozess crashen).
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var slow = new SlowResolver(gate.Task);
+        var peer = BuildPeer(slow);
+
+        await peer.AddIceCandidateAsync("candidate:1 1 udp 2113937151 abcd1234.local 54321 typ host");
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(2);
+        while (!slow.Entered && DateTime.UtcNow < deadline) await Task.Delay(10);
+        Assert.True(slow.Entered, "Resolver wurde nicht aufgerufen.");
+
+        await peer.DisposeAsync();   // cancelt _mdnsLifetime → die Auflösung wird abgebrochen
+        gate.TrySetResult();         // lässt den (abgebrochenen) Resolver zurückkehren
+        await Task.Delay(100);       // Zeit für etwaige unobservierte Ausnahmen
+        // Kein Throw, kein Crash = bestanden.
+    }
+
+    private sealed class SlowResolver : IMdnsResolver
+    {
+        public volatile bool Entered;
+        private readonly Task _release;
+        public SlowResolver(Task release) => _release = release;
+        public async Task<IPAddress?> ResolveAsync(string hostname, CancellationToken ct)
+        {
+            Entered = true;
+            await Task.WhenAny(_release, Task.Delay(Timeout.Infinite, ct)).ConfigureAwait(false);
+            ct.ThrowIfCancellationRequested();
+            return IPAddress.Parse("192.168.9.9");
+        }
     }
 }
