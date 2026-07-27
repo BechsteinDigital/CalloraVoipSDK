@@ -24,8 +24,8 @@ public sealed class VideoKeyFrameFeedbackTests
         var requested = 0;
         var feedback = CreateFeedback(onKeyFrameRequested: () => requested++, out _);
 
-        feedback.OnControlDatagram(Codec.Encode(
-            [new RtcpPictureLossIndication { SenderSsrc = 1, MediaSsrc = LocalSsrc }]));
+        feedback.OnRtcpPackets(
+            [new RtcpPictureLossIndication { SenderSsrc = 1, MediaSsrc = LocalSsrc }]);
 
         Assert.Equal(1, requested);
     }
@@ -36,11 +36,11 @@ public sealed class VideoKeyFrameFeedbackTests
         var requested = 0;
         var feedback = CreateFeedback(onKeyFrameRequested: () => requested++, out _);
 
-        feedback.OnControlDatagram(Codec.Encode([new RtcpFullIntraRequest
+        feedback.OnRtcpPackets([new RtcpFullIntraRequest
         {
             SenderSsrc = 1,
             Entries = [new RtcpFirEntry { MediaSsrc = LocalSsrc, SequenceNumber = 3 }],
-        }]));
+        }]);
 
         Assert.Equal(1, requested);
     }
@@ -51,22 +51,14 @@ public sealed class VideoKeyFrameFeedbackTests
         var requested = 0;
         var feedback = CreateFeedback(onKeyFrameRequested: () => requested++, out _);
 
-        feedback.OnControlDatagram(Codec.Encode(
-            [new RtcpReceiverReport { Ssrc = LocalSsrc, ReportBlocks = [] }]));
+        feedback.OnRtcpPackets(
+            [new RtcpReceiverReport { Ssrc = LocalSsrc, ReportBlocks = [] }]);
 
         Assert.Equal(0, requested);
     }
 
-    [Fact]
-    public void Malformed_inbound_datagram_is_dropped_without_throwing()
-    {
-        var requested = 0;
-        var feedback = CreateFeedback(onKeyFrameRequested: () => requested++, out _);
-
-        feedback.OnControlDatagram([0x81, 206]);
-
-        Assert.Equal(0, requested);
-    }
+    // (The malformed-datagram drop moved to RtpSession, which decodes the compound once before dispatch;
+    //  OnRtcpPackets now receives an already-parsed list, so there is nothing to malform at this level.)
 
     // ── Loss → NACK / PLI, gated on advertised feedback ──────────────────────────
 
@@ -139,12 +131,12 @@ public sealed class VideoKeyFrameFeedbackTests
         List<ushort>? requested = null;
         var feedback = CreateFeedback(() => { }, out _, onRetransmitRequested: seqs => requested = seqs.ToList());
 
-        feedback.OnControlDatagram(Codec.Encode([new RtcpGenericNack
+        feedback.OnRtcpPackets([new RtcpGenericNack
         {
             SenderSsrc = 1,
             MediaSsrc = LocalSsrc,
             Entries = [new RtcpNackEntry { PacketId = 500, LostPacketBitmask = 0b0000_0000_0000_0101 }],
-        }]));
+        }]);
 
         Assert.Equal((ushort[])[500, 501, 503], requested?.ToArray());
     }
@@ -155,8 +147,8 @@ public sealed class VideoKeyFrameFeedbackTests
         var retransmits = 0;
         var feedback = CreateFeedback(() => { }, out _, onRetransmitRequested: _ => retransmits++);
 
-        feedback.OnControlDatagram(Codec.Encode(
-            [new RtcpPictureLossIndication { SenderSsrc = 1, MediaSsrc = LocalSsrc }]));
+        feedback.OnRtcpPackets(
+            [new RtcpPictureLossIndication { SenderSsrc = 1, MediaSsrc = LocalSsrc }]);
 
         Assert.Equal(0, retransmits);
     }

@@ -42,6 +42,15 @@ internal sealed class BundledInboundPipeline
     /// <summary>Raised with a decrypted (or plain, pre-keying this never fires) RTCP compound packet.</summary>
     public event Action<byte[]>? ControlPacketReceived;
 
+    /// <summary>
+    /// Raised with every successfully SRTP-decrypted and decoded inbound RTP packet, before track routing.
+    /// The transport-wide-cc receive-side feedback (transport-cc / RFC 8888) subscribes here to read each
+    /// packet's transport-wide sequence number across all MIDs (transport-cc numbers the whole transport, not
+    /// a single stream). Fires on the shared receive-loop thread; a handler must be fast and must not throw
+    /// (an exception is caught and logged so the shared receive loop cannot be torn down).
+    /// </summary>
+    public event Action<Packets.RtpPacket>? RtpPacketReceived;
+
     /// <param name="router">Routes each decoded RTP packet to the owning m-line's track sink.</param>
     /// <param name="rtpCodec">Decodes the plaintext RTP after SRTP-unprotect.</param>
     /// <param name="logger">Logger.</param>
@@ -219,10 +228,10 @@ internal sealed class BundledInboundPipeline
 
         Interlocked.Increment(ref _rtpPacketsReceived);
         Interlocked.Add(ref _rtpBytesReceived, plain.Length);
-        RtpPacketReceived(plain, source);
+        DecodeAndDispatchRtp(plain, source);
     }
 
-    private void RtpPacketReceived(byte[] plainRtp, IPEndPoint? source)
+    private void DecodeAndDispatchRtp(byte[] plainRtp, IPEndPoint? source)
     {
         Packets.RtpPacket packet;
         try
@@ -241,6 +250,18 @@ internal sealed class BundledInboundPipeline
         // tracking, loss, and interarrival jitter, keyed by this packet's SSRC. Done before routing so a
         // throwing track sink cannot skip the accounting; a null tracker leaves reception reporting off.
         _receptionStats?.RecordRtp(packet.Ssrc, packet.SequenceNumber, packet.Timestamp, packet.PayloadType);
+
+        // Surface the decoded packet to receive-side transport-cc feedback (RFC 8888): it reads the packet's
+        // transport-wide sequence number across every MID. Before routing and isolated, so a subscriber fault
+        // cannot skip track dispatch or tear down the shared receive loop.
+        try
+        {
+            RtpPacketReceived?.Invoke(packet);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled exception in bundled inbound RtpPacketReceived handler.");
+        }
 
         // The router resolves the packet's MID (SSRC latch / MID header ext / payload type) and hands
         // it to the owning track's sink, or drops+counts it on its own DroppedPackets counter.

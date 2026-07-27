@@ -233,6 +233,9 @@ public sealed class BundledRtcpReporterTests
             new(Ssrc: 0x0B0B0B0B, PacketCount: 7, OctetCount: 1400, LastRtpTimestamp: 90000),
         };
         var now = new DateTimeOffset(2026, 7, 20, 0, 0, 0, TimeSpan.Zero);
+        // A distinct monotonic instant: the RTT send instant must come from this clock, NOT the wall clock that
+        // stamps the on-wire NTP timestamp (#14 #8 — a system-clock step must not corrupt the derived RTT).
+        var mono = new DateTimeOffset(2001, 1, 1, 0, 0, 0, TimeSpan.Zero);
         var expectedMiddle32 = ToMiddle32(ToNtp(now));
 
         var emitted = new List<(uint Ssrc, uint Middle32, DateTimeOffset SentAt)>();
@@ -247,7 +250,8 @@ public sealed class BundledRtcpReporterTests
             NullLoggerFactory.Instance,
             delay: oneTick.WaitAsync,
             utcNow: () => now,
-            onSenderReportSent: (ssrc, middle32, sentAt) => emitted.Add((ssrc, middle32, sentAt)));
+            onSenderReportSent: (ssrc, middle32, sentAt) => emitted.Add((ssrc, middle32, sentAt)),
+            monotonicNow: () => mono);
 
         reporter.Start();
         await oneTick.WaitForFirstTickConsumed();
@@ -256,7 +260,8 @@ public sealed class BundledRtcpReporterTests
         Assert.All(emitted, e =>
         {
             Assert.Equal(expectedMiddle32, e.Middle32);
-            Assert.Equal(now, e.SentAt);
+            Assert.Equal(mono, e.SentAt);       // the monotonic clock, not `now`
+            Assert.NotEqual(now, e.SentAt);     // regression guard: never the wall clock
         });
         Assert.Contains(emitted, e => e.Ssrc == 0x0A0A0A0A);
         Assert.Contains(emitted, e => e.Ssrc == 0x0B0B0B0B);

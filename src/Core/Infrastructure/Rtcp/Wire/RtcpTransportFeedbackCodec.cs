@@ -14,8 +14,8 @@ namespace CalloraVoipSdk.Core.Infrastructure.Rtcp.Wire;
 /// <remarks>
 /// Encoding emits two-bit status-vector chunks (one chunk per seven packets); run-length chunks
 /// are a valid, more compact representation this encoder does not yet produce (decoding accepts
-/// all chunk forms peers send). This is a pure wire codec: it is not yet wired into the RTCP
-/// receive/dispatch path, so it changes no runtime behaviour on its own.
+/// all chunk forms peers send). It is dispatched by <see cref="RtcpFeedbackCodec"/> for the
+/// RFC 8888/8285 transport-wide feedback message on the RTCP encode/decode path.
 /// </remarks>
 internal static class RtcpTransportFeedbackCodec
 {

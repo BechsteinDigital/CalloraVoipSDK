@@ -67,12 +67,7 @@ public sealed class SrtpContextTests
     }
 
     private static SrtpKeyMaterial CreateRfcMaterial() =>
-        new()
-        {
-            MasterKey = RfcMasterKey,
-            MasterSalt = RfcMasterSalt,
-            Suite = SrtpCryptoSuite.AesCm128HmacSha1_80
-        };
+        new(RfcMasterKey, RfcMasterSalt, SrtpCryptoSuite.AesCm128HmacSha1_80);
 
     private static byte[] CreateRtpPacket(ushort sequenceNumber, uint ssrc, int payloadLength)
     {

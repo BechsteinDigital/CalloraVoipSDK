@@ -62,6 +62,7 @@ public sealed class WebRtcTrickleSignalingTests
         public event EventHandler<RemoteTrack>? TrackReceived { add { } remove { } }
         public event EventHandler<string>? LocalIceCandidateDiscovered;
         public event EventHandler<DtmfTone>? DtmfReceived { add { } remove { } }
+        public event EventHandler? VideoKeyFrameRequested { add { } remove { } }
 
         public string CreateOffer() => "OFFER";
 

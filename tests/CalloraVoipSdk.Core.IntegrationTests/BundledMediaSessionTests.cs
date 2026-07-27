@@ -18,6 +18,7 @@ namespace CalloraVoipSdk.Core.IntegrationTests;
 public sealed class BundledMediaSessionTests
 {
     private const byte MidExtId = 3;
+    private const byte TransportCcExtId = 5;
     private const byte AudioPayloadType = 0;
     private const byte VideoPayloadType = 96;
 
@@ -71,6 +72,49 @@ public sealed class BundledMediaSessionTests
         Assert.True(server.SnapshotStats().KeyFrames > 0, "server should have received the key frame");
     }
 
+    [Fact]
+    public async Task Transport_cc_feedback_loop_updates_the_senders_recommended_bitrate_end_to_end()
+    {
+        // Both peers negotiate the transport-wide-cc extension (RFC 8888), so each BundledMediaSession builds a
+        // BundledCongestionPlane. The client stamps a transport-wide sequence on its video; the server's plane
+        // (receive side) reports those arrivals back over SRTCP; the client's plane (sender side) folds that
+        // feedback and updates its recommended bitrate — the RecommendedBitrateChanged event proves BOTH halves
+        // are wired end to end (exercising the session-level composition, not just the primitives).
+        var certA = DtlsCertificate.GenerateEcdsaP256();
+        var certB = DtlsCertificate.GenerateEcdsaP256();
+
+        var (client, server) = CreatePair(certA, certB, transportCcExtId: TransportCcExtId);
+        await using var clientLease = client;
+        await using var serverLease = server;
+
+        // The extension was negotiated, so the congestion plane exists on both peers.
+        Assert.NotNull(client.Congestion);
+
+        // Fires when the client's controller processes peer feedback that moves the recommendation — i.e. the
+        // whole loop (stamp → arrive → feedback → fold) completed at least once.
+        var recommendationUpdated = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        client.Congestion!.RecommendedBitrateChanged += _ => recommendationUpdated.TrySetResult();
+
+        await server.StartAsync();
+        await client.StartAsync();
+
+        var videoFrame = AnnexB((Nal(0x67, 20), false), (Nal(0x68, 6), false), (Nal(0x65, 3000), false));
+
+        // Media is suppressed until the shared DTLS handshake keys the transport; keep feeding video so the
+        // feedback loop keeps ticking until the client's recommendation moves.
+        using var overall = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        var videoTimestamp = 90000u;
+        while (!recommendationUpdated.Task.IsCompleted)
+        {
+            overall.Token.ThrowIfCancellationRequested();
+            await client.SendVideoFrameAsync(videoFrame, videoTimestamp);
+            videoTimestamp += 3000;
+            await Task.Delay(20, overall.Token);
+        }
+
+        await recommendationUpdated.Task.WaitAsync(TimeSpan.FromSeconds(5));
+    }
+
     // ── harness ──────────────────────────────────────────────────────────────────
 
     private const string ClientPwd = "clienticepassword1234567890";
@@ -80,7 +124,7 @@ public sealed class BundledMediaSessionTests
     // parallel suite two probes can hand out the same free port and one bind then loses the race — retry
     // with fresh ports rather than flake.
     private static (BundledMediaSession Client, BundledMediaSession Server) CreatePair(
-        DtlsCertificate certA, DtlsCertificate certB)
+        DtlsCertificate certA, DtlsCertificate certB, byte? transportCcExtId = null)
     {
         for (var attempt = 1; ; attempt++)
         {
@@ -91,11 +135,13 @@ public sealed class BundledMediaSessionTests
             {
                 client = new BundledMediaSession(
                     Options(portA, portB, isClient: true, certB.Fingerprint, controlling: true,
-                        localUfrag: "cli0", localPwd: ClientPwd, remoteUfrag: "srv0", remotePwd: ServerPwd),
+                        localUfrag: "cli0", localPwd: ClientPwd, remoteUfrag: "srv0", remotePwd: ServerPwd,
+                        transportCcExtId: transportCcExtId),
                     new DtlsSrtpHandshaker(NullLogger<DtlsSrtpHandshaker>.Instance), certA, NullLoggerFactory.Instance);
                 var server = new BundledMediaSession(
                     Options(portB, portA, isClient: false, certA.Fingerprint, controlling: false,
-                        localUfrag: "srv0", localPwd: ServerPwd, remoteUfrag: "cli0", remotePwd: ClientPwd),
+                        localUfrag: "srv0", localPwd: ServerPwd, remoteUfrag: "cli0", remotePwd: ClientPwd,
+                        transportCcExtId: transportCcExtId),
                     new DtlsSrtpHandshaker(NullLogger<DtlsSrtpHandshaker>.Instance), certB, NullLoggerFactory.Instance);
                 return (client, server);
             }
@@ -108,7 +154,7 @@ public sealed class BundledMediaSessionTests
 
     private static BundledMediaSessionOptions Options(
         int localPort, int remotePort, bool isClient, DtlsFingerprint remoteFingerprint, bool controlling,
-        string localUfrag, string localPwd, string remoteUfrag, string remotePwd)
+        string localUfrag, string localPwd, string remoteUfrag, string remotePwd, byte? transportCcExtId = null)
     {
         var remote = new IPEndPoint(IPAddress.Loopback, remotePort);
         return new BundledMediaSessionOptions
@@ -116,6 +162,7 @@ public sealed class BundledMediaSessionTests
             LocalEndPoint = new IPEndPoint(IPAddress.Loopback, localPort),
             RemoteEndPoint = remote,
             MidExtensionId = MidExtId,
+            TransportWideCcExtensionId = transportCcExtId,
             Audio = new BundledTrackConfig
             {
                 Mid = "audio", Ssrc = 0x0A0A0A0A, PayloadType = AudioPayloadType, SamplesPerPacket = 160,

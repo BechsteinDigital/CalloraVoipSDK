@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Net;
 using System.Net.Sockets;
+using CalloraVoipSdk.Core.Application.Media.Rtcp.Packets;
 using CalloraVoipSdk.Core.Domain.Calls;
 using CalloraVoipSdk.Core.Infrastructure.Rtp;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Wire;
@@ -130,8 +131,8 @@ public sealed class SrtcpMediaPathTests
             },
             new RtpPacketCodec(), NullLogger<RtpSession>.Instance);
 
-        var inboundReceived = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
-        session.ControlPacketReceived += d => inboundReceived.TrySetResult(d);
+        var inboundReceived = new TaskCompletionSource<IReadOnlyList<RtcpPacket>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        session.RtcpCompoundReceived += p => inboundReceived.TrySetResult(p);
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         await session.StartAsync(cts.Token);
@@ -147,13 +148,13 @@ public sealed class SrtcpMediaPathTests
         Assert.NotEqual(outboundRtcp[8..], wire[8..outboundRtcp.Length]); // payload encrypted
         Assert.Equal(outboundRtcp, peerDecrypt.UnprotectRtcp(wire));
 
-        // Peer → SDK: an SRTCP packet must surface as decrypted RTCP via ControlPacketReceived.
-        var peerRtcp = Rtcp(ssrc: 0x55667788);
-        var peerSrtcp = peerEncrypt.ProtectRtcp(peerRtcp);
+        // Peer → SDK: an SRTCP packet must surface as decrypted, decoded RTCP via RtcpCompoundReceived.
+        var peerSrtcp = peerEncrypt.ProtectRtcp(Rtcp(ssrc: 0x55667788));
         await peer.SendAsync(peerSrtcp, peerSrtcp.Length, new IPEndPoint(IPAddress.Loopback, localPort));
 
         var delivered = await inboundReceived.Task.WaitAsync(TimeSpan.FromSeconds(3), cts.Token);
-        Assert.Equal(peerRtcp, delivered);
+        var sr = Assert.IsType<RtcpSenderReport>(Assert.Single(delivered));
+        Assert.Equal(0x55667788u, sr.Ssrc);
     }
 
     [Fact]
@@ -176,8 +177,8 @@ public sealed class SrtcpMediaPathTests
             },
             new RtpPacketCodec(), NullLogger<RtpSession>.Instance);
 
-        var delivered = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
-        session.ControlPacketReceived += d => delivered.TrySetResult(d);
+        var delivered = new TaskCompletionSource<IReadOnlyList<RtcpPacket>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        session.RtcpCompoundReceived += p => delivered.TrySetResult(p);
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         await session.StartAsync(cts.Token);
@@ -189,12 +190,12 @@ public sealed class SrtcpMediaPathTests
         await Task.Delay(100, cts.Token);
 
         // A genuine peer SRTCP packet afterwards must still be delivered — the loop lives.
-        var peerRtcp = Rtcp(ssrc: 0x0BADF00D);
-        var peerSrtcp = peerEncrypt.ProtectRtcp(peerRtcp);
+        var peerSrtcp = peerEncrypt.ProtectRtcp(Rtcp(ssrc: 0x0BADF00D));
         await peer.SendAsync(peerSrtcp, peerSrtcp.Length, new IPEndPoint(IPAddress.Loopback, localPort));
 
         var got = await delivered.Task.WaitAsync(TimeSpan.FromSeconds(3), cts.Token);
-        Assert.Equal(peerRtcp, got);
+        var sr = Assert.IsType<RtcpSenderReport>(Assert.Single(got));
+        Assert.Equal(0x0BADF00Du, sr.Ssrc);
     }
 
     [Fact]
@@ -217,8 +218,8 @@ public sealed class SrtcpMediaPathTests
             },
             new RtpPacketCodec(), NullLogger<RtpSession>.Instance);
 
-        var received = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
-        session.ControlPacketReceived += d => received.TrySetResult(d);
+        var received = new TaskCompletionSource<IReadOnlyList<RtcpPacket>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        session.RtcpCompoundReceived += p => received.TrySetResult(p);
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         await session.StartAsync(cts.Token);

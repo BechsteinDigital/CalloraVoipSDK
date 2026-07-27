@@ -32,7 +32,7 @@ internal static class BundledMediaSessionFactory
         ILoggerFactory loggerFactory)
     {
         var withVideo = video is not null && !string.IsNullOrEmpty(videoMid);
-        var audioSsrc = NewSsrc();
+        var audioSsrc = RtpRandom.NextSsrc();
 
         return BundledMediaSessionBuilder.Build(
             audio,
@@ -41,20 +41,11 @@ internal static class BundledMediaSessionFactory
             audioMid,
             audioSsrc,
             withVideo ? videoMid : null,
-            withVideo ? NewSsrc(distinctFrom: audioSsrc) : null,
-            handshaker, certificate, loggerFactory);
-    }
-
-    // A random non-zero SSRC (RFC 3550 §8), optionally distinct from one already assigned so the audio
-    // and video tracks never collide on the shared transport. 31-bit like the single-stream RtpSession.
-    private static uint NewSsrc(uint? distinctFrom = null)
-    {
-        uint ssrc;
-        do
-        {
-            ssrc = (uint)Random.Shared.Next(1, int.MaxValue);
-        }
-        while (ssrc == distinctFrom);
-        return ssrc;
+            withVideo ? RtpRandom.NextSsrc(distinctFrom: audioSsrc) : null,
+            handshaker, certificate, loggerFactory,
+            // RFC 3550 §5.1: the outbound sequence number and timestamp start from unpredictable, crypto-strong
+            // full-range offsets (RtpRandom) rather than the builder's deterministic 1/0 test defaults.
+            initialSequenceNumber: (ushort)RtpRandom.NextUInt32(),
+            initialTimestamp: RtpRandom.NextUInt32());
     }
 }

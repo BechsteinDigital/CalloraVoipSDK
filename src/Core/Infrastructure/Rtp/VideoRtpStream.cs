@@ -99,8 +99,9 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
     private readonly VideoReorderBuffer? _reorderBuffer;
 
     // Arrival-order tracking, for fast NACK/PLI loss signalling (RFC 4585).
-    private ushort _lastSequence;
-    private bool _hasReceived;
+    // Arrival-order loss detection (RFC 4585): classifies forward gaps as loss and reorders/duplicates as
+    // benign, tracking the highest sequence seen so a reorder does not trigger a spurious NACK/PLI cascade.
+    private readonly VideoArrivalLossTracker _arrivalLoss = new();
 
     // Delivery-order tracking, for release-order discontinuity → depacketiser reset.
     private ushort _lastDeliveredSequence;
@@ -173,7 +174,9 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
         if (video.RtxPayloadType is { } rtxPt)
         {
             _rtxPayloadType = (byte)rtxPt;
-            _rtxSsrc = unchecked((uint)Random.Shared.Next());
+            // RFC 3550 §8.1: the repair-stream SSRC is unpredictable and full-range (RtpRandom), not the
+            // predictable 31-bit Random.Shared.Next() an off-path attacker could guess to spoof RTX.
+            _rtxSsrc = RtpRandom.NextSsrc();
             _retransmitBuffer = new RtpRetransmissionBuffer();
             _rtp.ConfigureSecondaryStream(_rtxPayloadType);
             _rtp.PacketSent += _retransmitBuffer.Store;
@@ -207,7 +210,7 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
             () => KeyFrameRequested?.Invoke(),
             OnRetransmitRequested,
             loggerFactory.CreateLogger<VideoKeyFrameFeedback>(), _lifetimeCts.Token);
-        _rtp.ControlPacketReceived += _keyFrameFeedback.OnControlDatagram;
+        _rtp.RtcpCompoundReceived += _keyFrameFeedback.OnRtcpPackets;
 
         // Transport-cc feedback (draft-holmer): when the a=extmap was negotiated for this m-line,
         // report inbound arrivals to the sender for congestion control over the same RTCP-mux channel.
@@ -222,7 +225,7 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
             // Sender side of transport-cc: record each stamped send (PacketSent, primary only) and
             // fold inbound feedback reports (ControlPacketReceived) into the congestion estimators.
             _transportCcCongestion = new TransportCcCongestionController(
-                transportCcExtensionId, new RtcpPacketCodec(),
+                transportCcExtensionId,
                 new TransportCcSendHistory(TransportCcSendHistoryCapacity),
                 new TransportCcDelayTrendEstimator(TransportCcDelaySmoothing, TransportCcOveruseThresholdMicros),
                 new TransportCcLossEstimator(TransportCcLossSmoothing),
@@ -232,7 +235,7 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
                 Stopwatch.GetTimestamp, Stopwatch.Frequency,
                 loggerFactory.CreateLogger<TransportCcCongestionController>());
             _rtp.PacketSent += _transportCcCongestion.OnPacketSent;
-            _rtp.ControlPacketReceived += _transportCcCongestion.OnControlDatagram;
+            _rtp.RtcpCompoundReceived += _transportCcCongestion.OnRtcpPackets;
             _transportCcCongestion.RecommendedBitrateChanged += OnCongestionRecommendationChanged;
         }
 
@@ -360,6 +363,7 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
         _ = _rtp.StartAsync(cancellationToken);
         _iceMedia.Start();
         _dtlsMedia?.Start(cancellationToken);
+        _transportCcSender?.Start(); // periodic transport-cc feedback, decoupled from packet arrival
     }
 
     /// <inheritdoc />
@@ -394,19 +398,16 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
 
         _remoteMediaSsrc = packet.Ssrc;
 
-        // Arrival-order loss signalling (RFC 4585): on a genuine forward gap request retransmit
-        // at once — before the reorder window can slide past it — and request a keyframe. A
-        // reorder or duplicate is not loss (LossReport returns null): the reorder window corrects
-        // it downstream, so it raises neither a NACK nor a PLI. Ordered delivery and the
-        // depacketiser reset are handled downstream, not here.
-        if (_hasReceived && LossReport(_lastSequence, packet.SequenceNumber) is { } missing)
+        // Arrival-order loss signalling (RFC 4585): the tracker holds a forward gap for a small reorder window
+        // and only reports (NACK + PLI) sequences once they age past it — a reordered packet that arrives first
+        // is never NACKed (Track returns null for a reorder/duplicate; the reorder window corrects it
+        // downstream). Ordered delivery and the depacketiser reset are handled downstream, not here.
+        if (_arrivalLoss.Track(packet.SequenceNumber) is { } missing)
             _keyFrameFeedback.OnLoss(packet.Ssrc, missing);
-        _lastSequence = packet.SequenceNumber;
-        _hasReceived = true;
 
         // Report the arrival to transport-cc congestion control (a no-op when the extension was not
         // negotiated). Runs on this receive-loop thread — the sender's single consumer.
-        _transportCcSender?.OnVideoPacketReceived(packet);
+        _transportCcSender?.OnRtpPacketReceived(packet);
 
         Enqueue(packet);
     }
@@ -481,12 +482,15 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
             return;
 
         _lifetimeCts.Cancel();
+        // Stop the transport-cc feedback loop before the transport it sends over is torn down.
+        if (_transportCcSender is not null)
+            await _transportCcSender.DisposeAsync().ConfigureAwait(false);
         _rtp.PacketReceived -= OnPacketReceived;
-        _rtp.ControlPacketReceived -= _keyFrameFeedback.OnControlDatagram;
+        _rtp.RtcpCompoundReceived -= _keyFrameFeedback.OnRtcpPackets;
         if (_transportCcCongestion is not null)
         {
             _rtp.PacketSent -= _transportCcCongestion.OnPacketSent;
-            _rtp.ControlPacketReceived -= _transportCcCongestion.OnControlDatagram;
+            _rtp.RtcpCompoundReceived -= _transportCcCongestion.OnRtcpPackets;
             _transportCcCongestion.RecommendedBitrateChanged -= OnCongestionRecommendationChanged;
         }
         if (_retransmitBuffer is not null)
@@ -519,43 +523,4 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
         _sendSync.Dispose();
         _lifetimeCts.Dispose();
     }
-
-    // Beyond this many missing packets a NACK is pointless — the loss is better recovered
-    // with a keyframe (PLI), so we stop enumerating and let the throttled PLI carry it.
-    private const int MaxEnumeratedLoss = 256;
-
-    // A backward sequence step (a reorder) wraps the forward distance to at least this value;
-    // treated as reordering, not loss. Half the 16-bit space is the reorder/loss boundary.
-    private const int ReorderBoundary = 0x8000;
-
-    /// <summary>
-    /// Classifies a newly arrived sequence number against the last one for loss reporting:
-    /// <list type="bullet">
-    /// <item><see langword="null"/> — in-order, a duplicate, or a reorder (a backward step is
-    /// not loss): nothing to report.</item>
-    /// <item>empty — a forward loss burst larger than <see cref="MaxEnumeratedLoss"/>: report as
-    /// a PLI only (naming every packet in a NACK is pointless; a keyframe recovers faster).</item>
-    /// <item>a list — the missing sequence numbers of a small forward gap: NACK them (plus PLI).</item>
-    /// </list>
-    /// Suppressing the reorder case is what stops a reordered packet from provoking a spurious
-    /// NACK and keyframe request now that the reorder window corrects reordering downstream.
-    /// A forward loss burst of at least half the sequence space (≥ <see cref="ReorderBoundary"/>)
-    /// is indistinguishable from a backward step under 16-bit serial-number arithmetic and is
-    /// therefore treated as a reorder — a pathological case that never arises in a live stream.
-    /// </summary>
-    internal static IReadOnlyList<ushort>? LossReport(ushort last, ushort current)
-    {
-        var gap = (ushort)(current - last); // forward distance; a reorder wraps to a large value
-        if (gap < 2 || gap >= ReorderBoundary)
-            return null; // in-order (1), duplicate (0), or reorder (backward step)
-
-        if (gap > MaxEnumeratedLoss)
-            return Array.Empty<ushort>(); // forward loss too large to enumerate → PLI only
-
-        var missing = new ushort[gap - 1];
-        for (var i = 0; i < missing.Length; i++)
-            missing[i] = (ushort)(last + i + 1);
-        return missing;
-    }
-
 }
