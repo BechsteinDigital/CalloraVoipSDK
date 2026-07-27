@@ -374,9 +374,10 @@ internal sealed class BundledVideoTrack : IDisposable
         // Primary arrival: remember the remote media SSRC so a recovered RTX packet can be stamped with it.
         _remoteMediaSsrc = packet.Ssrc;
 
-        // Arrival-order loss signalling (RFC 4585), on the raw arrival sequence — before the reorder window
-        // can slide past a genuine forward gap. A reorder or duplicate is not loss (Track returns null): the
-        // reorder buffer below corrects it, so it raises neither a NACK nor a PLI. Mirrors VideoRtpStream.
+        // Arrival-order loss signalling (RFC 4585): the tracker holds a forward gap for a small reorder window
+        // and only reports it once it ages past that window — a reordered packet that arrives first is never
+        // NACKed (Track returns null for a reorder/duplicate; the reorder buffer below corrects it). Mirrors
+        // VideoRtpStream.
         if (_arrivalLoss.Track(packet.SequenceNumber) is { } missing)
             _keyFrameFeedback.OnLoss(packet.Ssrc, missing);
 

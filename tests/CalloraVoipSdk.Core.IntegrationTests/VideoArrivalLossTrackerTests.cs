@@ -3,11 +3,11 @@ using CalloraVoipSdk.Core.Infrastructure.Rtp;
 namespace CalloraVoipSdk.Core.IntegrationTests;
 
 /// <summary>
-/// P2 [RTP] #14 #6: the stateful arrival-order loss tracker advances to the highest sequence seen and never
-/// regresses on a reordered or duplicate packet. Before, the reference tracked the last arrival, so a single
-/// forward reorder dragged it backward and made the next in-order packet read as a fresh gap — a spurious
-/// NACK/PLI cascade. These pin the reorder-tolerant behaviour end to end (the pure classifier is covered by
-/// <see cref="VideoLossReportTests"/>).
+/// P2 [RTP] #14 #6: the arrival-order loss tracker holds a newly missing sequence for a small reorder window
+/// before declaring it lost, so a genuinely reordered packet that arrives within that window is never NACKed —
+/// matching libwebrtc's NackModule reorder threshold and Pion's skipLastN (a per-packet-immediate NACK causes a
+/// spurious NACK/RTX storm on ordinary reordering). It advances to the highest sequence seen and never regresses
+/// on a reorder/duplicate. These pin the deferred, reorder-tolerant behaviour end to end.
 /// </summary>
 public sealed class VideoArrivalLossTrackerTests
 {
@@ -29,52 +29,73 @@ public sealed class VideoArrivalLossTrackerTests
         => Assert.All(TrackAll(100, 101, 102, 103), Assert.Null);
 
     [Fact]
-    public void A_genuine_forward_gap_names_the_missing_packet()
+    public void A_duplicate_reports_no_loss()
+        => Assert.All(TrackAll(100, 100), Assert.Null);
+
+    [Fact]
+    public void A_gap_is_held_and_only_reported_after_the_reorder_window()
     {
-        var results = TrackAll(100, 102);
-        Assert.Null(results[0]);
-        Assert.Equal((ushort[])[101], results[1]);
+        // 101 is missing at 102, but it is not NACKed immediately — it is held until the stream advances past it
+        // by more than the reorder tolerance (2). Only on 104 (age 3) is it declared lost.
+        var results = TrackAll(100, 102, 103, 104);
+
+        Assert.Null(results[0]);                    // 100
+        Assert.Null(results[1]);                    // 102 — 101 missing but held
+        Assert.Null(results[2]);                    // 103 — still inside the reorder window
+        Assert.Equal((ushort[])[101], results[3]);  // 104 — 101 has now aged out → NACK
     }
 
     [Fact]
-    public void A_forward_reorder_costs_at_most_one_signal()
+    public void A_packet_reordered_within_the_window_is_never_reported()
     {
-        // 4 arrives before 3: the gap at 4 names [3] (the reorder window fills it downstream). The later
-        // arrival of 3 and the in-order 5 must NOT each produce a fresh signal — before the fix, the
-        // reference regressed to 3 on the reorder and 5 then falsely reported [4].
-        var results = TrackAll(1, 2, 4, 3, 5);
+        // 4 arrives before 3, then 3 arrives (reordered) while still inside the reorder window — the whole
+        // episode must produce no signal at all. A per-packet-immediate tracker would have NACKed 3 on the gap.
+        var results = TrackAll(1, 2, 4, 3, 5, 6, 7);
 
-        Assert.Null(results[0]);                       // 1
-        Assert.Null(results[1]);                       // 2
-        Assert.Equal((ushort[])[3], results[2]);       // 4 → gap names 3
-        Assert.Null(results[3]);                       // 3 (backward reorder) — not loss
-        Assert.Null(results[4]);                       // 5 (in-order after highest 4) — no spurious NACK
-
-        Assert.Single(results, r => r is not null);    // exactly one signal for the whole reorder episode
+        Assert.All(results, Assert.Null); // the reordered 3 is recovered before it ages out → zero NACKs
     }
 
     [Fact]
-    public void A_reorder_does_not_regress_the_reference()
+    public void A_reorder_does_not_regress_the_reference_and_the_reordered_packet_is_not_nacked()
     {
-        // Highest reaches 105 (naming 101-104), then a stale 102 arrives; the next real packet 106 must be
-        // in-order against 105, not a gap against 102.
-        var results = TrackAll(100, 105, 102, 106);
+        // Highest reaches 103 (101,102 pending); then a stale 101 arrives (reordered) and is dropped from the
+        // pending set. 102 is genuinely lost and is reported once it ages out (105); 101 is never NACKed, and
+        // the reference never regressed to 101.
+        var results = TrackAll(100, 103, 101, 104, 105);
 
-        Assert.Null(results[0]);
-        Assert.Equal((ushort[])[101, 102, 103, 104], results[1]); // gap at 105
-        Assert.Null(results[2]);                                  // stale 102 — backward, not loss
-        Assert.Null(results[3]);                                  // 106 is in-order against highest 105
+        Assert.Null(results[0]);                    // 100
+        Assert.Null(results[1]);                    // 103 — 101,102 held
+        Assert.Null(results[2]);                    // 101 reordered — removed from pending, no signal
+        Assert.Null(results[3]);                    // 104 — 102 still inside the window
+        Assert.Equal((ushort[])[102], results[4]);  // 105 — only 102 (truly lost) aged out; 101 was recovered
     }
 
     [Fact]
-    public void A_genuine_loss_after_a_reorder_is_still_reported()
+    public void A_large_forward_jump_reports_a_pli_only_immediately()
     {
-        // 4 before 3 (reorder), then a real gap to 7 must still name 5 and 6 against the highest (4).
-        var results = TrackAll(2, 4, 3, 7);
+        // A jump beyond the enumeration boundary is heavy loss, not reordering: signal a PLI-only (empty) at
+        // once rather than holding hundreds of pointless NACK candidates.
+        var results = TrackAll(100, (ushort)(100 + 258));
 
         Assert.Null(results[0]);
-        Assert.Equal((ushort[])[3], results[1]);            // gap at 4
-        Assert.Null(results[2]);                            // reordered 3
-        Assert.Equal((ushort[])[5, 6], results[3]);         // real gap 4→7 names 5,6 (highest stayed 4)
+        Assert.NotNull(results[1]);
+        Assert.Empty(results[1]!); // empty = PLI only
     }
+
+    [Fact]
+    public void A_gap_across_the_wrap_boundary_is_reported_after_the_window()
+    {
+        // 65535 → 1 is a forward distance of 2 (the missing packet is 0). It ages out three arrivals later.
+        var results = TrackAll(65535, 1, 2, 3);
+
+        Assert.Null(results[0]);
+        Assert.Null(results[1]);                  // 0 missing but held
+        Assert.Null(results[2]);
+        Assert.Equal((ushort[])[0], results[3]);  // 0 aged out
+    }
+
+    [Fact]
+    public void A_far_backward_reorder_reports_no_loss()
+        // last 1, current 65535 → backward step (distance 65534 ≥ boundary) → not loss, reference not regressed.
+        => Assert.All(TrackAll(1, 65535), Assert.Null);
 }
