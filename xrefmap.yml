@@ -4241,6 +4241,159 @@ references:
   commentId: F:CalloraVoipSdk.Core.Domain.Calls.CallState.Transferring
   fullName: CalloraVoipSdk.Core.Domain.Calls.CallState.Transferring
   nameWithType: CallState.Transferring
+- uid: CalloraVoipSdk.Core.Domain.Calls.CallTerminatedBy
+  name: CallTerminatedBy
+  href: _api/CalloraVoipSdk.Core.Domain.Calls.CallTerminatedBy.html
+  commentId: T:CalloraVoipSdk.Core.Domain.Calls.CallTerminatedBy
+  fullName: CalloraVoipSdk.Core.Domain.Calls.CallTerminatedBy
+  nameWithType: CallTerminatedBy
+- uid: CalloraVoipSdk.Core.Domain.Calls.CallTerminatedBy.Local
+  name: Local
+  href: _api/CalloraVoipSdk.Core.Domain.Calls.CallTerminatedBy.html#CalloraVoipSdk_Core_Domain_Calls_CallTerminatedBy_Local
+  commentId: F:CalloraVoipSdk.Core.Domain.Calls.CallTerminatedBy.Local
+  fullName: CalloraVoipSdk.Core.Domain.Calls.CallTerminatedBy.Local
+  nameWithType: CallTerminatedBy.Local
+- uid: CalloraVoipSdk.Core.Domain.Calls.CallTerminatedBy.Remote
+  name: Remote
+  href: _api/CalloraVoipSdk.Core.Domain.Calls.CallTerminatedBy.html#CalloraVoipSdk_Core_Domain_Calls_CallTerminatedBy_Remote
+  commentId: F:CalloraVoipSdk.Core.Domain.Calls.CallTerminatedBy.Remote
+  fullName: CalloraVoipSdk.Core.Domain.Calls.CallTerminatedBy.Remote
+  nameWithType: CallTerminatedBy.Remote
+- uid: CalloraVoipSdk.Core.Domain.Calls.CallTerminatedBy.Unknown
+  name: Unknown
+  href: _api/CalloraVoipSdk.Core.Domain.Calls.CallTerminatedBy.html#CalloraVoipSdk_Core_Domain_Calls_CallTerminatedBy_Unknown
+  commentId: F:CalloraVoipSdk.Core.Domain.Calls.CallTerminatedBy.Unknown
+  fullName: CalloraVoipSdk.Core.Domain.Calls.CallTerminatedBy.Unknown
+  nameWithType: CallTerminatedBy.Unknown
+- uid: CalloraVoipSdk.Core.Domain.Calls.CallTerminationCategory
+  name: CallTerminationCategory
+  href: _api/CalloraVoipSdk.Core.Domain.Calls.CallTerminationCategory.html
+  commentId: T:CalloraVoipSdk.Core.Domain.Calls.CallTerminationCategory
+  fullName: CalloraVoipSdk.Core.Domain.Calls.CallTerminationCategory
+  nameWithType: CallTerminationCategory
+- uid: CalloraVoipSdk.Core.Domain.Calls.CallTerminationCategory.Busy
+  name: Busy
+  href: _api/CalloraVoipSdk.Core.Domain.Calls.CallTerminationCategory.html#CalloraVoipSdk_Core_Domain_Calls_CallTerminationCategory_Busy
+  commentId: F:CalloraVoipSdk.Core.Domain.Calls.CallTerminationCategory.Busy
+  fullName: CalloraVoipSdk.Core.Domain.Calls.CallTerminationCategory.Busy
+  nameWithType: CallTerminationCategory.Busy
+- uid: CalloraVoipSdk.Core.Domain.Calls.CallTerminationCategory.Canceled
+  name: Canceled
+  href: _api/CalloraVoipSdk.Core.Domain.Calls.CallTerminationCategory.html#CalloraVoipSdk_Core_Domain_Calls_CallTerminationCategory_Canceled
+  commentId: F:CalloraVoipSdk.Core.Domain.Calls.CallTerminationCategory.Canceled
+  fullName: CalloraVoipSdk.Core.Domain.Calls.CallTerminationCategory.Canceled
+  nameWithType: CallTerminationCategory.Canceled
+- uid: CalloraVoipSdk.Core.Domain.Calls.CallTerminationCategory.Completed
+  name: Completed
+  href: _api/CalloraVoipSdk.Core.Domain.Calls.CallTerminationCategory.html#CalloraVoipSdk_Core_Domain_Calls_CallTerminationCategory_Completed
+  commentId: F:CalloraVoipSdk.Core.Domain.Calls.CallTerminationCategory.Completed
+  fullName: CalloraVoipSdk.Core.Domain.Calls.CallTerminationCategory.Completed
+  nameWithType: CallTerminationCategory.Completed
+- uid: CalloraVoipSdk.Core.Domain.Calls.CallTerminationCategory.Failed
+  name: Failed
+  href: _api/CalloraVoipSdk.Core.Domain.Calls.CallTerminationCategory.html#CalloraVoipSdk_Core_Domain_Calls_CallTerminationCategory_Failed
+  commentId: F:CalloraVoipSdk.Core.Domain.Calls.CallTerminationCategory.Failed
+  fullName: CalloraVoipSdk.Core.Domain.Calls.CallTerminationCategory.Failed
+  nameWithType: CallTerminationCategory.Failed
+- uid: CalloraVoipSdk.Core.Domain.Calls.CallTerminationCategory.NoAnswer
+  name: NoAnswer
+  href: _api/CalloraVoipSdk.Core.Domain.Calls.CallTerminationCategory.html#CalloraVoipSdk_Core_Domain_Calls_CallTerminationCategory_NoAnswer
+  commentId: F:CalloraVoipSdk.Core.Domain.Calls.CallTerminationCategory.NoAnswer
+  fullName: CalloraVoipSdk.Core.Domain.Calls.CallTerminationCategory.NoAnswer
+  nameWithType: CallTerminationCategory.NoAnswer
+- uid: CalloraVoipSdk.Core.Domain.Calls.CallTerminationCategory.Rejected
+  name: Rejected
+  href: _api/CalloraVoipSdk.Core.Domain.Calls.CallTerminationCategory.html#CalloraVoipSdk_Core_Domain_Calls_CallTerminationCategory_Rejected
+  commentId: F:CalloraVoipSdk.Core.Domain.Calls.CallTerminationCategory.Rejected
+  fullName: CalloraVoipSdk.Core.Domain.Calls.CallTerminationCategory.Rejected
+  nameWithType: CallTerminationCategory.Rejected
+- uid: CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason
+  name: CallTerminationReason
+  href: _api/CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.html
+  commentId: T:CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason
+  fullName: CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason
+  nameWithType: CallTerminationReason
+- uid: CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.Category
+  name: Category
+  href: _api/CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.html#CalloraVoipSdk_Core_Domain_Calls_CallTerminationReason_Category
+  commentId: P:CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.Category
+  fullName: CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.Category
+  nameWithType: CallTerminationReason.Category
+- uid: CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.Category*
+  name: Category
+  href: _api/CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.html#CalloraVoipSdk_Core_Domain_Calls_CallTerminationReason_Category_
+  commentId: Overload:CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.Category
+  isSpec: "True"
+  fullName: CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.Category
+  nameWithType: CallTerminationReason.Category
+- uid: CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.CategoryForSipStatus(System.Nullable{System.Int32},System.Boolean)
+  name: CategoryForSipStatus(int?, bool)
+  href: _api/CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.html#CalloraVoipSdk_Core_Domain_Calls_CallTerminationReason_CategoryForSipStatus_System_Nullable_System_Int32__System_Boolean_
+  commentId: M:CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.CategoryForSipStatus(System.Nullable{System.Int32},System.Boolean)
+  name.vb: CategoryForSipStatus(Integer?, Boolean)
+  fullName: CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.CategoryForSipStatus(int?, bool)
+  fullName.vb: CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.CategoryForSipStatus(Integer?, Boolean)
+  nameWithType: CallTerminationReason.CategoryForSipStatus(int?, bool)
+  nameWithType.vb: CallTerminationReason.CategoryForSipStatus(Integer?, Boolean)
+- uid: CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.CategoryForSipStatus*
+  name: CategoryForSipStatus
+  href: _api/CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.html#CalloraVoipSdk_Core_Domain_Calls_CallTerminationReason_CategoryForSipStatus_
+  commentId: Overload:CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.CategoryForSipStatus
+  isSpec: "True"
+  fullName: CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.CategoryForSipStatus
+  nameWithType: CallTerminationReason.CategoryForSipStatus
+- uid: CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.ReasonPhrase
+  name: ReasonPhrase
+  href: _api/CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.html#CalloraVoipSdk_Core_Domain_Calls_CallTerminationReason_ReasonPhrase
+  commentId: P:CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.ReasonPhrase
+  fullName: CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.ReasonPhrase
+  nameWithType: CallTerminationReason.ReasonPhrase
+- uid: CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.ReasonPhrase*
+  name: ReasonPhrase
+  href: _api/CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.html#CalloraVoipSdk_Core_Domain_Calls_CallTerminationReason_ReasonPhrase_
+  commentId: Overload:CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.ReasonPhrase
+  isSpec: "True"
+  fullName: CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.ReasonPhrase
+  nameWithType: CallTerminationReason.ReasonPhrase
+- uid: CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.RetryAfterSeconds
+  name: RetryAfterSeconds
+  href: _api/CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.html#CalloraVoipSdk_Core_Domain_Calls_CallTerminationReason_RetryAfterSeconds
+  commentId: P:CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.RetryAfterSeconds
+  fullName: CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.RetryAfterSeconds
+  nameWithType: CallTerminationReason.RetryAfterSeconds
+- uid: CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.RetryAfterSeconds*
+  name: RetryAfterSeconds
+  href: _api/CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.html#CalloraVoipSdk_Core_Domain_Calls_CallTerminationReason_RetryAfterSeconds_
+  commentId: Overload:CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.RetryAfterSeconds
+  isSpec: "True"
+  fullName: CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.RetryAfterSeconds
+  nameWithType: CallTerminationReason.RetryAfterSeconds
+- uid: CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.SipStatusCode
+  name: SipStatusCode
+  href: _api/CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.html#CalloraVoipSdk_Core_Domain_Calls_CallTerminationReason_SipStatusCode
+  commentId: P:CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.SipStatusCode
+  fullName: CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.SipStatusCode
+  nameWithType: CallTerminationReason.SipStatusCode
+- uid: CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.SipStatusCode*
+  name: SipStatusCode
+  href: _api/CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.html#CalloraVoipSdk_Core_Domain_Calls_CallTerminationReason_SipStatusCode_
+  commentId: Overload:CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.SipStatusCode
+  isSpec: "True"
+  fullName: CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.SipStatusCode
+  nameWithType: CallTerminationReason.SipStatusCode
+- uid: CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.TerminatedBy
+  name: TerminatedBy
+  href: _api/CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.html#CalloraVoipSdk_Core_Domain_Calls_CallTerminationReason_TerminatedBy
+  commentId: P:CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.TerminatedBy
+  fullName: CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.TerminatedBy
+  nameWithType: CallTerminationReason.TerminatedBy
+- uid: CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.TerminatedBy*
+  name: TerminatedBy
+  href: _api/CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.html#CalloraVoipSdk_Core_Domain_Calls_CallTerminationReason_TerminatedBy_
+  commentId: Overload:CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.TerminatedBy
+  isSpec: "True"
+  fullName: CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.TerminatedBy
+  nameWithType: CallTerminationReason.TerminatedBy
 - uid: CalloraVoipSdk.Core.Domain.Calls.CallVideoParameters
   name: CallVideoParameters
   href: _api/CalloraVoipSdk.Core.Domain.Calls.CallVideoParameters.html
@@ -4926,6 +5079,19 @@ references:
   commentId: E:CalloraVoipSdk.Core.Domain.Calls.ICall.StateChanged
   fullName: CalloraVoipSdk.Core.Domain.Calls.ICall.StateChanged
   nameWithType: ICall.StateChanged
+- uid: CalloraVoipSdk.Core.Domain.Calls.ICall.TerminationReason
+  name: TerminationReason
+  href: _api/CalloraVoipSdk.Core.Domain.Calls.ICall.html#CalloraVoipSdk_Core_Domain_Calls_ICall_TerminationReason
+  commentId: P:CalloraVoipSdk.Core.Domain.Calls.ICall.TerminationReason
+  fullName: CalloraVoipSdk.Core.Domain.Calls.ICall.TerminationReason
+  nameWithType: ICall.TerminationReason
+- uid: CalloraVoipSdk.Core.Domain.Calls.ICall.TerminationReason*
+  name: TerminationReason
+  href: _api/CalloraVoipSdk.Core.Domain.Calls.ICall.html#CalloraVoipSdk_Core_Domain_Calls_ICall_TerminationReason_
+  commentId: Overload:CalloraVoipSdk.Core.Domain.Calls.ICall.TerminationReason
+  isSpec: "True"
+  fullName: CalloraVoipSdk.Core.Domain.Calls.ICall.TerminationReason
+  nameWithType: ICall.TerminationReason
 - uid: CalloraVoipSdk.Core.Domain.Calls.ICall.TransferRequested
   name: TransferRequested
   href: _api/CalloraVoipSdk.Core.Domain.Calls.ICall.html#CalloraVoipSdk_Core_Domain_Calls_ICall_TransferRequested
@@ -5254,6 +5420,19 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.Core.Domain.Events.CallStateChangedEventArgs.OldState
   nameWithType: CallStateChangedEventArgs.OldState
+- uid: CalloraVoipSdk.Core.Domain.Events.CallStateChangedEventArgs.TerminationReason
+  name: TerminationReason
+  href: _api/CalloraVoipSdk.Core.Domain.Events.CallStateChangedEventArgs.html#CalloraVoipSdk_Core_Domain_Events_CallStateChangedEventArgs_TerminationReason
+  commentId: P:CalloraVoipSdk.Core.Domain.Events.CallStateChangedEventArgs.TerminationReason
+  fullName: CalloraVoipSdk.Core.Domain.Events.CallStateChangedEventArgs.TerminationReason
+  nameWithType: CallStateChangedEventArgs.TerminationReason
+- uid: CalloraVoipSdk.Core.Domain.Events.CallStateChangedEventArgs.TerminationReason*
+  name: TerminationReason
+  href: _api/CalloraVoipSdk.Core.Domain.Events.CallStateChangedEventArgs.html#CalloraVoipSdk_Core_Domain_Events_CallStateChangedEventArgs_TerminationReason_
+  commentId: Overload:CalloraVoipSdk.Core.Domain.Events.CallStateChangedEventArgs.TerminationReason
+  isSpec: "True"
+  fullName: CalloraVoipSdk.Core.Domain.Events.CallStateChangedEventArgs.TerminationReason
+  nameWithType: CallStateChangedEventArgs.TerminationReason
 - uid: CalloraVoipSdk.Core.Domain.Events.DtmfReceivedEventArgs
   name: DtmfReceivedEventArgs
   href: _api/CalloraVoipSdk.Core.Domain.Events.DtmfReceivedEventArgs.html

@@ -1429,6 +1429,48 @@
     },
     {
       "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Calls.CallTerminatedBy.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Calls.CallTerminatedBy.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Calls.CallTerminatedBy",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Calls.CallTerminatedBy.yml\" sourcestartlinenumber=\"1\">Which side ended the call.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Calls.CallTerminationCategory.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Calls.CallTerminationCategory.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Calls.CallTerminationCategory",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Calls.CallTerminationCategory.yml\" sourcestartlinenumber=\"1\">Coarse, protocol-neutral classification of why a call ended. Derived from the underlying SIP\nstatus (RFC 3261 §21) when the termination came from signaling, but expressed so an application\ncan branch on the outcome without knowing SIP.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.yml\" sourcestartlinenumber=\"1\">Protocol-neutral description of why a call terminated, surfaced on the public call surface. It is\npopulated for both locally and remotely initiated terminations and is readable at (and before) the\n<xref href=\"CalloraVoipSdk.Core.Domain.Calls.CallState.Terminated\" data-throw-if-not-resolved=\"false\"></xref> state change. <xref href=\"CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.SipStatusCode\" data-throw-if-not-resolved=\"false\"></xref> and\n<xref href=\"CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.ReasonPhrase\" data-throw-if-not-resolved=\"false\"></xref> carry the raw SIP detail when the termination came from SIP signaling;\n<xref href=\"CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.Category\" data-throw-if-not-resolved=\"false\"></xref> and <xref href=\"CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.TerminatedBy\" data-throw-if-not-resolved=\"false\"></xref> classify it without requiring SIP knowledge.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
       "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Calls.CallVideoParameters.yml",
       "output": {
         ".html": {

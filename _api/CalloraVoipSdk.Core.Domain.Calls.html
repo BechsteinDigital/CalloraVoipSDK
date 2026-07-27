@@ -124,6 +124,15 @@ silently dropped the SDES/DTLS key material and video parameters when overriding
 </dd>
     </dl>
     <dl class="jumplist">
+      <dt><a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.html">CallTerminationReason</a></dt>
+      <dd><p>Protocol-neutral description of why a call terminated, surfaced on the public call surface. It is
+populated for both locally and remotely initiated terminations and is readable at (and before) the
+<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallState.html#CalloraVoipSdk_Core_Domain_Calls_CallState_Terminated">Terminated</a> state change. <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.html#CalloraVoipSdk_Core_Domain_Calls_CallTerminationReason_SipStatusCode">SipStatusCode</a> and
+<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.html#CalloraVoipSdk_Core_Domain_Calls_CallTerminationReason_ReasonPhrase">ReasonPhrase</a> carry the raw SIP detail when the termination came from SIP signaling;
+<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.html#CalloraVoipSdk_Core_Domain_Calls_CallTerminationReason_Category">Category</a> and <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason.html#CalloraVoipSdk_Core_Domain_Calls_CallTerminationReason_TerminatedBy">TerminatedBy</a> classify it without requiring SIP knowledge.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
       <dt><a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallVideoParameters.html">CallVideoParameters</a></dt>
       <dd><p>Negotiated video parameters for one call leg (WebRTC phase 2). Present on
 <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.html#CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_Video">Video</a> only when the SDP exchange negotiated an
@@ -207,6 +216,18 @@ ICE snapshot, so this state is only meaningful when ICE was negotiated for the l
     <dl class="jumplist">
       <dt><a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallState.html">CallState</a></dt>
       <dd><p>Lifecycle state of a call.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallTerminatedBy.html">CallTerminatedBy</a></dt>
+      <dd><p>Which side ended the call.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallTerminationCategory.html">CallTerminationCategory</a></dt>
+      <dd><p>Coarse, protocol-neutral classification of why a call ended. Derived from the underlying SIP
+status (RFC 3261 §21) when the termination came from signaling, but expressed so an application
+can branch on the outcome without knowing SIP.</p>
 </dd>
     </dl>
     <dl class="jumplist">
