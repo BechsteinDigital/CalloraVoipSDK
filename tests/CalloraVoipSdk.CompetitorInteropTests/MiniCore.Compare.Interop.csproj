@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <CalloraSdkRoot Condition="'$(CalloraSdkRoot)' == ''">$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)../..'))</CalloraSdkRoot>
+    <OzekiPackageSource Condition="'$(OzekiPackageSource)' == ''">/opt/ozekisdk/nuget/10.5.1</OzekiPackageSource>
+    <RestoreAdditionalProjectSources>$(RestoreAdditionalProjectSources);$(OzekiPackageSource)</RestoreAdditionalProjectSources>
+  </PropertyGroup>
+
+  <Target Name="ValidateCalloraSdkRoot" BeforeTargets="ResolveProjectReferences">
+    <Error
+      Condition="!Exists('$(CalloraSdkRoot)/src/Client/CalloraVoipSdk.Client.csproj')"
+      Text="Callora SDK not found at '$(CalloraSdkRoot)'. Pass -p:CalloraSdkRoot=/absolute/path/to/voip." />
+  </Target>
+
+  <Target Name="ValidateOzekiPackageSource" BeforeTargets="Restore">
+    <Error
+      Condition="!Exists('$(OzekiPackageSource)/Ozeki.SDK.Linux.10.5.1.nupkg')"
+      Text="Ozeki SDK 10.5.1 package source not found at '$(OzekiPackageSource)'." />
+  </Target>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.6.0" />
+    <PackageReference Include="Ozeki.SDK.Linux" Version="10.5.1" />
+    <PackageReference Include="SIPSorcery" Version="10.0.12" />
+    <PackageReference Include="Testcontainers" Version="4.13.0" />
+    <PackageReference Include="xunit" Version="2.4.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.4.5">
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="$(CalloraSdkRoot)/src/Client/CalloraVoipSdk.Client.csproj" />
+    <ProjectReference Include="$(CalloraSdkRoot)/src/Core/CalloraVoipSdk.Core.csproj" />
+  </ItemGroup>
+</Project>
