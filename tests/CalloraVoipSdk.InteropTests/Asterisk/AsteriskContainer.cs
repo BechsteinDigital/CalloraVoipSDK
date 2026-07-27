@@ -12,6 +12,8 @@ namespace CalloraVoipSdk.InteropTests.Asterisk;
 /// </summary>
 public sealed class AsteriskContainer : IAsyncDisposable
 {
+    private const string BrowserSafeModeEnvironmentVariable = "CALLORA_INTEROP_BROWSER_SAFE";
+    private const string BrowserSafeModeLabel = "com.callora.voipsdk.interop.browser-safe";
     private const string SipPortWithProtocol = "5060/udp";
 
     // Minimale PJSIP-Konfiguration. WICHTIG: Kein führendes Leerzeichen — der Asterisk-Parser
@@ -156,6 +158,8 @@ public sealed class AsteriskContainer : IAsyncDisposable
     private readonly FileInfo _extensionsConfFile;
     private readonly FileInfo _tlsCertFile;
     private readonly FileInfo _tlsKeyFile;
+    private readonly bool _usesBrowserSafeNetwork;
+    private BrowserSafeInteropLease? _browserSafeLease;
 
     /// <summary>Erstellt (noch nicht gestartet) den Asterisk-Container.</summary>
     /// <param name="extraBridgePairs">
@@ -165,6 +169,14 @@ public sealed class AsteriskContainer : IAsyncDisposable
     /// </param>
     public AsteriskContainer(int extraBridgePairs = 0)
     {
+        _usesBrowserSafeNetwork = IsBrowserSafeModeRequested(
+            Environment.GetEnvironmentVariable(BrowserSafeModeEnvironmentVariable));
+        if (_usesBrowserSafeNetwork && !OperatingSystem.IsLinux())
+        {
+            throw new PlatformNotSupportedException(
+                $"{BrowserSafeModeEnvironmentVariable}=1 wird nur unter Linux unterstützt.");
+        }
+
         // Generiere bei Bedarf zusätzliche Endpoint-Paare und hänge sie an die Basis-Configs.
         var pjsipContent = extraBridgePairs > 0
             ? PjsipConf + BuildSoakPjsipConf(extraBridgePairs)
@@ -192,13 +204,25 @@ public sealed class AsteriskContainer : IAsyncDisposable
             File.WriteAllText(_tlsKeyFile.FullName, rsa.ExportPkcs8PrivateKeyPem());
         }
 
-        _container = new ContainerBuilder("andrius/asterisk:22")
+        var builder = new ContainerBuilder("andrius/asterisk:22")
             .WithResourceMapping(_pjsipConfFile, new FileInfo("/etc/asterisk/pjsip.conf"))
             .WithResourceMapping(_extensionsConfFile, new FileInfo("/etc/asterisk/extensions.conf"))
             .WithResourceMapping(_tlsCertFile, new FileInfo("/etc/asterisk/keys/asterisk.pem"))
-            .WithResourceMapping(_tlsKeyFile, new FileInfo("/etc/asterisk/keys/asterisk.key"))
-            .WithExposedPort(SipPortWithProtocol)
-            .WithPortBinding(SipPortWithProtocol, assignRandomHostPort: true)
+            .WithResourceMapping(_tlsKeyFile, new FileInfo("/etc/asterisk/keys/asterisk.key"));
+
+        builder = _usesBrowserSafeNetwork
+            ? builder
+                .WithCreateParameterModifier(parameters =>
+                {
+                    parameters.HostConfig ??= new Docker.DotNet.Models.HostConfig();
+                    parameters.HostConfig.NetworkMode = "host";
+                })
+                .WithLabel(BrowserSafeModeLabel, bool.TrueString.ToLowerInvariant())
+            : builder
+                .WithExposedPort(SipPortWithProtocol)
+                .WithPortBinding(SipPortWithProtocol, assignRandomHostPort: true);
+
+        _container = builder
             .WithWaitStrategy(Wait.ForUnixContainer().UntilMessageIsLogged("Asterisk Ready."))
             .Build();
     }
@@ -228,16 +252,18 @@ public sealed class AsteriskContainer : IAsyncDisposable
     public string SdesBridgePassword => "secret";
 
     /// <summary>Docker-Host (meist 127.0.0.1/localhost) für den Port-gemappten UDP-Zugang.</summary>
-    public string Host => _container.Hostname;
+    public string Host => _usesBrowserSafeNetwork ? "127.0.0.1" : _container.Hostname;
 
     /// <summary>Auf den Host gemappter SIP/UDP-Port.</summary>
-    public ushort SipUdpPort => _container.GetMappedPublicPort(SipPortWithProtocol);
+    public ushort SipUdpPort => _usesBrowserSafeNetwork
+        ? (ushort)5060
+        : _container.GetMappedPublicPort(SipPortWithProtocol);
 
     /// <summary>
     /// Interne Docker-Bridge-IP des Containers — für direkten Zugriff ohne NAT/Port-Mapping.
     /// Nur nach <see cref="StartAsync"/> gültig.
     /// </summary>
-    public string ContainerIpAddress => _container.IpAddress;
+    public string ContainerIpAddress => _usesBrowserSafeNetwork ? "127.0.0.1" : _container.IpAddress;
 
     /// <summary>Fester TLS-SIP-Port des Containers (über die Bridge-IP erreichbar).</summary>
     public int SipTlsPort => 5061;
@@ -311,7 +337,30 @@ public sealed class AsteriskContainer : IAsyncDisposable
     }
 
     /// <summary>Startet den Container und wartet, bis Asterisk SIP-ready ist.</summary>
-    public Task StartAsync() => _container.StartAsync();
+    public async Task StartAsync()
+    {
+        if (_usesBrowserSafeNetwork)
+        {
+            _browserSafeLease = await BrowserSafeInteropLease.AcquireAsync().ConfigureAwait(false);
+        }
+
+        try
+        {
+            await _container.StartAsync().ConfigureAwait(false);
+        }
+        catch
+        {
+            _browserSafeLease?.Dispose();
+            _browserSafeLease = null;
+            throw;
+        }
+    }
+
+    internal bool UsesBrowserSafeNetwork => _usesBrowserSafeNetwork;
+
+    internal static bool IsBrowserSafeModeRequested(string? value) =>
+        string.Equals(value, "1", StringComparison.Ordinal) ||
+        string.Equals(value, bool.TrueString, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Führt ein Kommando im Container aus (z. B. die Asterisk-CLI via <c>asterisk -rx …</c>) und
@@ -344,10 +393,18 @@ public sealed class AsteriskContainer : IAsyncDisposable
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
-        await _container.DisposeAsync().ConfigureAwait(false);
-        try { _pjsipConfFile.Delete(); } catch { /* best effort */ }
-        try { _extensionsConfFile.Delete(); } catch { /* best effort */ }
-        try { _tlsCertFile.Delete(); } catch { /* best effort */ }
-        try { _tlsKeyFile.Delete(); } catch { /* best effort */ }
+        try
+        {
+            await _container.DisposeAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+            _browserSafeLease?.Dispose();
+            _browserSafeLease = null;
+            try { _pjsipConfFile.Delete(); } catch { /* best effort */ }
+            try { _extensionsConfFile.Delete(); } catch { /* best effort */ }
+            try { _tlsCertFile.Delete(); } catch { /* best effort */ }
+            try { _tlsKeyFile.Delete(); } catch { /* best effort */ }
+        }
     }
 }

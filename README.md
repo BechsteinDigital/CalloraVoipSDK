@@ -250,9 +250,18 @@ dotnet test CalloraVoipSdk.sln -c Release \
 # (tests self-skip when none is reachable)
 dotnet test tests/CalloraVoipSdk.InteropTests -c Release --filter "Category=Interop"
 
+# Linux workstation mode: runs Asterisk in Docker's host network without creating veth links.
+# This avoids Chromium/Brave treating every test container as a host network change.
+./scripts/test-interop-browser-safe.sh
+
 # Long soak tests — media-quality drift + resource-leak/plateau guards over extended runs
 dotnet test tests/CalloraVoipSdk.SoakTests -c Release --filter "Category=SoakLong"
 ```
+
+The browser-safe interop runner is an explicit local Linux mode. It serializes Asterisk instances
+because host networking uses the fixed SIP ports 5060/5061 and RTP port range, disables the
+Testcontainers resource reaper only for that run, and removes only containers carrying its
+dedicated cleanup label. The normal command and CI continue to use the isolated Docker bridge.
 
 **Interop coverage.** The interop suite runs the full SIP/RTP flow against a real Asterisk
 container in CI (currently **all cases green, none skipped**): registration (happy + failure),
