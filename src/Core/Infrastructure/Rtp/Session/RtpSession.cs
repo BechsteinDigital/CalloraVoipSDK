@@ -42,10 +42,9 @@ internal sealed class RtpSession : IRtpSession
     // single receive-loop thread. See RtpTrackedSsrcTable.
     private readonly RtpTrackedSsrcTable _ssrcTable;
 
-    // Symmetric RTP / comedia (RFC dodging NAT without ICE): once a valid RTP packet
-    // arrives, remember its actual source and send back there instead of the SDP-advertised
-    // address. Lets media flow through NAT without STUN — the peer's SBC latches likewise.
-    private IPEndPoint? _latchedRemoteEndPoint;
+    // Symmetric RTP / comedia (NAT without ICE): outbound media follows the peer's observed source instead of
+    // the SDP-advertised address. The hardened re-latch policy (CVE-2017-14099) lives in SymmetricRtpLatch.
+    private readonly SymmetricRtpLatch _latch;
 
     // Serializes SRTP protection: the context derives the rollover counter from the
     // packet sequence, so out-of-order protection of concurrent sends would corrupt it.
@@ -147,6 +146,7 @@ internal sealed class RtpSession : IRtpSession
             options.TransportWideCcExtensionId, options.MidExtensionId, options.Mid);
         _codec   = codec;
         _logger  = logger;
+        _latch = new SymmetricRtpLatch(logger);
         _ssrcTable = new RtpTrackedSsrcTable(logger);
         // RFC 3550 §8.1 / security considerations: the SSRC is drawn from the full 32-bit space with a
         // cryptographically strong RNG (see RtpRandom — Random.Shared is a non-crypto PRNG and (uint)Next() never
@@ -330,7 +330,7 @@ internal sealed class RtpSession : IRtpSession
             return;
         }
 
-        await _udp.SendAsync(datagram, Volatile.Read(ref _latchedRemoteEndPoint) ?? _options.RemoteEndPoint, cancellationToken).ConfigureAwait(false);
+        await _udp.SendAsync(datagram, _latch.Target(_options.RemoteEndPoint), cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -436,7 +436,7 @@ internal sealed class RtpSession : IRtpSession
             return;
         }
 
-        await _udp.SendAsync(datagram, Volatile.Read(ref _latchedRemoteEndPoint) ?? _options.RemoteEndPoint, cancellationToken)
+        await _udp.SendAsync(datagram, _latch.Target(_options.RemoteEndPoint), cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -635,8 +635,10 @@ internal sealed class RtpSession : IRtpSession
 
         // SRTP (RFC 3711): authenticate and decrypt before any RTP interpretation.
         // A packet failing the auth tag or replay check is dropped here — it never
-        // reaches the codec, the jitter buffer, or the symmetric-RTP latch.
-        if (_options.RequireEncryptedMedia && Volatile.Read(ref _inboundSrtp) is null)
+        // reaches the codec, the jitter buffer, or the symmetric-RTP latch. Snapshot the
+        // context once so the latch's authenticity signal is consistent with this exact packet.
+        var inboundSrtp = Volatile.Read(ref _inboundSrtp);
+        if (_options.RequireEncryptedMedia && inboundSrtp is null)
         {
             // Fail closed (DTLS-SRTP before handshake completion): a keyed call must never
             // accept plaintext RTP — it would also poison the symmetric-RTP latch.
@@ -644,7 +646,7 @@ internal sealed class RtpSession : IRtpSession
             return;
         }
 
-        if (Volatile.Read(ref _inboundSrtp) is { } inboundSrtp)
+        if (inboundSrtp is not null)
         {
             try
             {
@@ -683,14 +685,6 @@ internal sealed class RtpSession : IRtpSession
             return;
         }
 
-        // Symmetric RTP: latch onto the real source of the first valid RTP packet so
-        // outbound media follows the NAT-translated path the peer actually uses.
-        if (source is not null && !source.Equals(Volatile.Read(ref _latchedRemoteEndPoint)))
-        {
-            Volatile.Write(ref _latchedRemoteEndPoint, source);
-            _logger.LogDebug("RTP symmetric latch: sending media to observed source {Source}.", source);
-        }
-
         // SSRC collision detection + resolution (RFC 3550 §8.2): a third party is transmitting with our SSRC.
         if (packet.Ssrc == Volatile.Read(ref _ssrc))
         {
@@ -721,6 +715,12 @@ internal sealed class RtpSession : IRtpSession
                 _logger.LogWarning("RTP sequence jump detected: SSRC={Ssrc:X8} seq={Seq} — source may have restarted", packet.Ssrc, packet.SequenceNumber);
                 return;
         }
+
+        // Symmetric-RTP latch (CVE-2017-14099 hardening): only a validated packet — not an SSRC collision, and
+        // Valid/TooLate rather than a duplicate or sequence jump — may steer the outbound path. A change away
+        // from an established source re-latches only on a keyed (authenticated) call; a plaintext call locks.
+        if (source is not null)
+            _latch.Consider(source, authenticated: inboundSrtp is not null);
 
         try
         {
@@ -978,7 +978,7 @@ internal sealed class RtpSession : IRtpSession
             return;
         }
 
-        await _udp.SendAsync(datagram, Volatile.Read(ref _latchedRemoteEndPoint) ?? _options.RemoteEndPoint, cancellationToken).ConfigureAwait(false);
+        await _udp.SendAsync(datagram, _latch.Target(_options.RemoteEndPoint), cancellationToken).ConfigureAwait(false);
 
         Interlocked.Increment(ref _packetsSent);
         Interlocked.Add(ref _octetsSent, payload.Length);

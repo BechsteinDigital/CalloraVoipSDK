@@ -1,0 +1,95 @@
+using System.Net;
+using CalloraVoipSdk.Core.Infrastructure.Rtp.Session;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using Xunit;
+
+namespace CalloraVoipSdk.Core.IntegrationTests;
+
+/// <summary>
+/// P2 [RTP] #14 #1: the symmetric-RTP latch hardened against the CVE-2017-14099 media-hijack pattern. The first
+/// validated source always latches; a change of source re-latches only on a keyed (authenticated) call — a
+/// plaintext call locks onto the first source so an unauthenticated flood cannot redirect outbound media.
+/// </summary>
+public sealed class SymmetricRtpLatchTests
+{
+    private static readonly IPEndPoint Fallback = new(IPAddress.Parse("10.0.0.1"), 5000);   // SDP-advertised
+    private static readonly IPEndPoint PeerA = new(IPAddress.Parse("203.0.113.7"), 40000);  // real peer source
+    private static readonly IPEndPoint AttackerB = new(IPAddress.Parse("198.51.100.9"), 40000);
+
+    [Fact]
+    public void Before_any_packet_the_target_is_the_fallback()
+        => Assert.Equal(Fallback, new SymmetricRtpLatch(NullLogger.Instance).Target(Fallback));
+
+    [Fact]
+    public void The_first_validated_source_latches()
+    {
+        var latch = new SymmetricRtpLatch(NullLogger.Instance);
+
+        latch.Consider(PeerA, authenticated: false); // first source always latches, even plaintext
+
+        Assert.Equal(PeerA, latch.Target(Fallback));
+    }
+
+    [Fact]
+    public void A_keyed_call_re_latches_to_a_new_source_for_a_nat_rebind()
+    {
+        var latch = new SymmetricRtpLatch(NullLogger.Instance);
+        latch.Consider(PeerA, authenticated: true);
+
+        latch.Consider(AttackerB, authenticated: true); // authenticated → can only be the peer behind a rebind
+
+        Assert.Equal(AttackerB, latch.Target(Fallback));
+    }
+
+    [Fact]
+    public void A_plaintext_call_locks_and_refuses_a_new_source()
+    {
+        var latch = new SymmetricRtpLatch(NullLogger.Instance);
+        latch.Consider(PeerA, authenticated: false);
+
+        latch.Consider(AttackerB, authenticated: false); // unauthenticated flood must not hijack outbound media
+
+        Assert.Equal(PeerA, latch.Target(Fallback)); // media stays with the original peer
+    }
+
+    [Fact]
+    public void The_same_source_never_changes_the_latch()
+    {
+        var latch = new SymmetricRtpLatch(NullLogger.Instance);
+        latch.Consider(PeerA, authenticated: false);
+        latch.Consider(PeerA, authenticated: false);
+
+        Assert.Equal(PeerA, latch.Target(Fallback));
+    }
+
+    [Fact]
+    public void A_refused_re_latch_is_logged_as_a_warning_once_per_source()
+    {
+        var logger = new CapturingLogger();
+        var latch = new SymmetricRtpLatch(logger);
+        latch.Consider(PeerA, authenticated: false);
+
+        latch.Consider(AttackerB, authenticated: false);
+        latch.Consider(AttackerB, authenticated: false); // same attacker again → not logged twice
+
+        Assert.Equal(1, logger.Warnings);
+    }
+
+    private sealed class CapturingLogger : ILogger
+    {
+        public int Warnings { get; private set; }
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            if (logLevel == LogLevel.Warning)
+                Warnings++;
+        }
+    }
+}
