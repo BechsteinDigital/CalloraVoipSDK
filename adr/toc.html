@@ -1,0 +1,317 @@
+
+<div id="sidetoggle">
+  <div>
+    <div class="sidefilter">
+      <form class="toc-filter">
+        <span class="glyphicon glyphicon-filter filter-icon"></span>
+        <span class="glyphicon glyphicon-remove clear-icon" id="toc_filter_clear"></span>
+        <input type="text" id="toc_filter_input" placeholder="Filter by title" onkeypress="if(event.keyCode==13) {return false;}">
+      </form>
+    </div>
+    <div class="sidetoc">
+      <div class="toc" id="toc">
+
+          <ul class="nav level1">
+                <li>
+                    <a href="README.html" name="" title="Overview">Overview</a>
+                </li>
+                <li>
+                    <span class="expand-stub"></span>
+                    <a>Architecture, Layering & Process</a>
+
+                    <ul class="nav level2">
+                          <li>
+                              <a href="ADR-013-role-based-delivery-workflow.html" name="" title="ADR-013: Role-Based Delivery Workflow (CEO / PO / DEV / Reviewer)">ADR-013: Role-Based Delivery Workflow (CEO / PO / DEV / Reviewer)</a>
+                          </li>
+                          <li>
+                              <a href="ADR-014-ddd-layering-gated-baselines.html" name="" title="ADR-014: DDD Layer Direction Enforced by Gated Shrink-Only Baselines">ADR-014: DDD Layer Direction Enforced by Gated Shrink-Only Baselines</a>
+                          </li>
+                          <li>
+                              <a href="ADR-015-icallregistry-domain-port-dip.html" name="" title="ADR-015: PhoneLine↔CallManager Decoupling via Domain Port `ICallRegistry` (DIP)">ADR-015: PhoneLine↔CallManager Decoupling via Domain Port `ICallRegistry` (DIP)</a>
+                          </li>
+                          <li>
+                              <a href="ADR-016-peer-calibrated-refactoring-backlog.html" name="" title="ADR-016: Peer-Calibrated Refactoring Backlog — Harden, Don&#39;t Rebuild">ADR-016: Peer-Calibrated Refactoring Backlog — Harden, Don&#39;t Rebuild</a>
+                          </li>
+                          <li>
+                              <a href="ADR-057-audit-findings-register-marker-discipline.html" name="" title="ADR-057: Audit → Findings-Register → Code-Marker as Durable, Claim-Verified Audit Memory">ADR-057: Audit → Findings-Register → Code-Marker as Durable, Claim-Verified Audit Memory</a>
+                          </li>
+                          <li>
+                              <a href="ADR-058-layered-test-interop-soak-model.html" name="" title="ADR-058: Layered L0–L4 Test Model with Interop/Soak Harness and a Document-Don&#39;t-Fix Register">ADR-058: Layered L0–L4 Test Model with Interop/Soak Harness and a Document-Don&#39;t-Fix Register</a>
+                          </li>
+                    </ul>
+                </li>
+                <li>
+                    <span class="expand-stub"></span>
+                    <a>Product, Platform, Versioning & Extensibility</a>
+
+                    <ul class="nav level2">
+                          <li>
+                              <a href="ADR-006-api-versioning-strategy.html" name="" title="ADR-006: API Versioning and Compatibility Strategy">ADR-006: API Versioning and Compatibility Strategy</a>
+                          </li>
+                          <li>
+                              <a href="ADR-007-host-centric-platform-split.html" name="" title="ADR-007: Host-Centric Platform Split (Engine OSS + Host + Plugins)">ADR-007: Host-Centric Platform Split (Engine OSS + Host + Plugins)</a>
+                          </li>
+                          <li>
+                              <a href="ADR-008-community-module-store.html" name="" title="ADR-008: Community Module Store Architecture">ADR-008: Community Module Store Architecture</a>
+                          </li>
+                          <li>
+                              <a href="ADR-059-public-media-tap-contract.html" name="" title="ADR-059: Public Per-Call Media-Tap Contract (Synchronous, Encoded, Fan-Out)">ADR-059: Public Per-Call Media-Tap Contract (Synchronous, Encoded, Fan-Out)</a>
+                          </li>
+                    </ul>
+                </li>
+                <li>
+                    <span class="expand-stub"></span>
+                    <a>SIP Signaling</a>
+
+                    <ul class="nav level2">
+                          <li>
+                              <a href="ADR-001-uas-user-identity-policy.html" name="" title="ADR-001: UAS User Identity Policy (RFC 3261 &#167;8.2.2.1)">ADR-001: UAS User Identity Policy (RFC 3261 &#167;8.2.2.1)</a>
+                          </li>
+                          <li>
+                              <a href="ADR-002-uas-redirect-redirect-async.html" name="" title="ADR-002: UAS Redirect (RFC 3261 &#167;8.3) — RedirectAsync on ISipCallSession">ADR-002: UAS Redirect (RFC 3261 &#167;8.3) — RedirectAsync on ISipCallSession</a>
+                          </li>
+                          <li>
+                              <a href="ADR-003-rfc3581-rport-uas-response-reflection.html" name="" title="ADR-003: RFC 3581 &#167;4 – rport/received Reflection in UAS Responses">ADR-003: RFC 3581 &#167;4 – rport/received Reflection in UAS Responses</a>
+                          </li>
+                          <li>
+                              <a href="ADR-004-rfc5626-crlf-keepalive-pong.html" name="" title="ADR-004: RFC 5626 &#167;4.4.1 – CRLF Keepalive Pong on Stream Transports">ADR-004: RFC 5626 &#167;4.4.1 – CRLF Keepalive Pong on Stream Transports</a>
+                          </li>
+                          <li>
+                              <a href="ADR-005-rfc3261-cancel-gate-release.html" name="" title="ADR-005: RFC 3261 &#167;9.1 – Release Operation Gate Before INVITE Transaction">ADR-005: RFC 3261 &#167;9.1 – Release Operation Gate Before INVITE Transaction</a>
+                          </li>
+                          <li>
+                              <a href="ADR-017-register-expires-lifecycle.html" name="" title="ADR-017: REGISTER Expires / Refresh Lifecycle">ADR-017: REGISTER Expires / Refresh Lifecycle</a>
+                          </li>
+                          <li>
+                              <a href="ADR-018-challenge-driven-digest-auth.html" name="" title="ADR-018: Challenge-Driven Digest Authentication for REGISTER">ADR-018: Challenge-Driven Digest Authentication for REGISTER</a>
+                          </li>
+                          <li>
+                              <a href="ADR-019-nat-routable-contact-and-media-address.html" name="" title="ADR-019: NAT-Routable Contact and Advertised Media Address">ADR-019: NAT-Routable Contact and Advertised Media Address</a>
+                          </li>
+                          <li>
+                              <a href="ADR-020-dialog-route-set-record-route.html" name="" title="ADR-020: Dialog Route-Set — Record-Route Echo and In-Dialog Routing">ADR-020: Dialog Route-Set — Record-Route Echo and In-Dialog Routing</a>
+                          </li>
+                          <li>
+                              <a href="ADR-021-trunk-inbound-matching.html" name="" title="ADR-021: Trunk-Inbound Line Matching">ADR-021: Trunk-Inbound Line Matching</a>
+                          </li>
+                          <li>
+                              <a href="ADR-022-invite-transaction-robustness.html" name="" title="ADR-022: INVITE Transaction Robustness — Retransmission, Fork, 100rel, Codec">ADR-022: INVITE Transaction Robustness — Retransmission, Fork, 100rel, Codec</a>
+                          </li>
+                          <li>
+                              <a href="ADR-023-session-timer-negotiation.html" name="" title="ADR-023: RFC 4028 Session-Timer Negotiation">ADR-023: RFC 4028 Session-Timer Negotiation</a>
+                          </li>
+                    </ul>
+                </li>
+                <li>
+                    <span class="expand-stub"></span>
+                    <a>SDP Offer/Answer</a>
+
+                    <ul class="nav level2">
+                          <li>
+                              <a href="ADR-024-sdp-offer-answer-origin-and-extmap-negotiation.html" name="" title="ADR-024: SDP Offer/Answer Negotiation — Origin Versioning and extmap Id Assignment">ADR-024: SDP Offer/Answer Negotiation — Origin Versioning and extmap Id Assignment</a>
+                          </li>
+                    </ul>
+                </li>
+                <li>
+                    <span class="expand-stub"></span>
+                    <a>Media Security — SDES / SRTP</a>
+
+                    <ul class="nav level2">
+                          <li>
+                              <a href="ADR-025-sdes-offer-answer-negotiation.html" name="" title="ADR-025: SDES Offer/Answer Negotiation with Own-Key Answers and Fail-Closed Keyless Rejection">ADR-025: SDES Offer/Answer Negotiation with Own-Key Answers and Fail-Closed Keyless Rejection</a>
+                          </li>
+                          <li>
+                              <a href="ADR-026-srtp-media-path-fail-closed-hardening.html" name="" title="ADR-026: SRTP Media-Path Wiring — Fail-Closed Keying, Wire-Derived Keys, and Hardening">ADR-026: SRTP Media-Path Wiring — Fail-Closed Keying, Wire-Derived Keys, and Hardening</a>
+                          </li>
+                          <li>
+                              <a href="ADR-027-srtp-continuity-reinvite-rekey.html" name="" title="ADR-027: SRTP Continuity Across Re-INVITE — Hold/Unhold Key Stability and Peer Rekey">ADR-027: SRTP Continuity Across Re-INVITE — Hold/Unhold Key Stability and Peer Rekey</a>
+                          </li>
+                    </ul>
+                </li>
+                <li>
+                    <span class="expand-stub"></span>
+                    <a>Media Security — DTLS-SRTP</a>
+
+                    <ul class="nav level2">
+                          <li>
+                              <a href="ADR-028-dtls-srtp-foundation.html" name="" title="ADR-028: DTLS-SRTP Keying Foundation (RFC 5763/5764)">ADR-028: DTLS-SRTP Keying Foundation (RFC 5763/5764)</a>
+                          </li>
+                          <li>
+                              <a href="ADR-029-dtls-srtp-signaling-and-keying-precedence.html" name="" title="ADR-029: DTLS-SRTP Signaling, Answer-Role, and Keying-Method Precedence">ADR-029: DTLS-SRTP Signaling, Answer-Role, and Keying-Method Precedence</a>
+                          </li>
+                          <li>
+                              <a href="ADR-030-dtls-srtp-media-wiring.html" name="" title="ADR-030: DTLS-SRTP Media Wiring and Fail-Closed Context Installation">ADR-030: DTLS-SRTP Media Wiring and Fail-Closed Context Installation</a>
+                          </li>
+                    </ul>
+                </li>
+                <li>
+                    <span class="expand-stub"></span>
+                    <a>Media Security — SRTCP</a>
+
+                    <ul class="nav level2">
+                          <li>
+                              <a href="ADR-031-srtcp-crypto-core-and-rtcp-path-wiring.html" name="" title="ADR-031: SRTCP Crypto Core and RTCP-Path Wiring">ADR-031: SRTCP Crypto Core and RTCP-Path Wiring</a>
+                          </li>
+                    </ul>
+                </li>
+                <li>
+                    <span class="expand-stub"></span>
+                    <a>RTP Transport & Hardening</a>
+
+                    <ul class="nav level2">
+                          <li>
+                              <a href="ADR-032-media-hotpath-allocation-avoidance.html" name="" title="ADR-032: Media Hot-Path and SIP-Framer Allocation Avoidance">ADR-032: Media Hot-Path and SIP-Framer Allocation Avoidance</a>
+                          </li>
+                          <li>
+                              <a href="ADR-033-wire-boundary-dos-hardening.html" name="" title="ADR-033: DoS Hardening at the RTP and SIP Wire Boundaries">ADR-033: DoS Hardening at the RTP and SIP Wire Boundaries</a>
+                          </li>
+                          <li>
+                              <a href="ADR-034-secondary-stream-and-onebyte-header-extensions.html" name="" title="ADR-034: Secondary-Stream Transport and RFC 8285 One-Byte Header Extensions">ADR-034: Secondary-Stream Transport and RFC 8285 One-Byte Header Extensions</a>
+                          </li>
+                          <li>
+                              <a href="ADR-035-rtx-retransmission-mechanics.html" name="" title="ADR-035: RTX Retransmission Mechanics — OSN Encapsulation and the Retransmit Buffer">ADR-035: RTX Retransmission Mechanics — OSN Encapsulation and the Retransmit Buffer</a>
+                          </li>
+                    </ul>
+                </li>
+                <li>
+                    <span class="expand-stub"></span>
+                    <a>RTCP, Feedback, Congestion & Timing</a>
+
+                    <ul class="nav level2">
+                          <li>
+                              <a href="ADR-036-rtcp-wire-codec-tolerant-decode.html" name="" title="ADR-036: RTCP Wire Codec — Feedback/XR Framing and Tolerant Compound Decode">ADR-036: RTCP Wire Codec — Feedback/XR Framing and Tolerant Compound Decode</a>
+                          </li>
+                          <li>
+                              <a href="ADR-037-rtt-convergence-seed.html" name="" title="ADR-037: Jitter-Buffer RTT Convergence Seed">ADR-037: Jitter-Buffer RTT Convergence Seed</a>
+                          </li>
+                          <li>
+                              <a href="ADR-038-transport-cc-feedback-plane.html" name="" title="ADR-038: Transport-Wide Congestion Control — Feedback Plane (seq stamping, arrival recording, RTCP feedback)">ADR-038: Transport-Wide Congestion Control — Feedback Plane (seq stamping, arrival recording, RTCP feedback)</a>
+                          </li>
+                          <li>
+                              <a href="ADR-039-transport-cc-estimator-bitrate-api.html" name="" title="ADR-039: Transport-Wide Congestion Control — Estimator, AIMD Rate Policy, and Recommended-Bitrate API">ADR-039: Transport-Wide Congestion Control — Estimator, AIMD Rate Policy, and Recommended-Bitrate API</a>
+                          </li>
+                          <li>
+                              <a href="ADR-061-monotonic-media-clock.html" name="" title="ADR-061: Monotonic Clock for Time-Based Media and RTCP Computations">ADR-061: Monotonic Clock for Time-Based Media and RTCP Computations</a>
+                          </li>
+                    </ul>
+                </li>
+                <li>
+                    <span class="expand-stub"></span>
+                    <a>ICE Connectivity</a>
+
+                    <ul class="nav level2">
+                          <li>
+                              <a href="ADR-040-send-side-ice-state-machine.html" name="" title="ADR-040: Send-Side ICE State Machine on the SIP Path (RFC 8445)">ADR-040: Send-Side ICE State Machine on the SIP Path (RFC 8445)</a>
+                          </li>
+                          <li>
+                              <a href="ADR-041-consent-freshness-and-ice-restart-primitives.html" name="" title="ADR-041: ICE Consent-Freshness and Restart as Built-but-Unwired SIP Primitives">ADR-041: ICE Consent-Freshness and Restart as Built-but-Unwired SIP Primitives</a>
+                          </li>
+                          <li>
+                              <a href="ADR-042-ice-verification-and-shared-socket-gathering.html" name="" title="ADR-042: ICE Verification Discipline and Shared-Socket srflx Gathering">ADR-042: ICE Verification Discipline and Shared-Socket srflx Gathering</a>
+                          </li>
+                    </ul>
+                </li>
+                <li>
+                    <span class="expand-stub"></span>
+                    <a>Video Media Path</a>
+
+                    <ul class="nav level2">
+                          <li>
+                              <a href="ADR-043-video-sdp-negotiation.html" name="" title="ADR-043: Video SDP Offer/Answer Negotiation (m=video, rtcp-fb, RTX/apt)">ADR-043: Video SDP Offer/Answer Negotiation (m=video, rtcp-fb, RTX/apt)</a>
+                          </li>
+                          <li>
+                              <a href="ADR-044-video-packetisation-and-reorder-playout.html" name="" title="ADR-044: Video Packetisation and Contiguous-Release Reorder Playout">ADR-044: Video Packetisation and Contiguous-Release Reorder Playout</a>
+                          </li>
+                          <li>
+                              <a href="ADR-045-video-loss-recovery-nack-pli-rtx.html" name="" title="ADR-045: Video Loss Recovery — Gated NACK/PLI Feedback and RTX">ADR-045: Video Loss Recovery — Gated NACK/PLI Feedback and RTX</a>
+                          </li>
+                          <li>
+                              <a href="ADR-046-video-media-security-sdes-dtls.html" name="" title="ADR-046: Video Media Security — Per-m-line SDES, RTX Keying, DTLS Precedence">ADR-046: Video Media Security — Per-m-line SDES, RTX Keying, DTLS Precedence</a>
+                          </li>
+                          <li>
+                              <a href="ADR-047-video-ice-media-layer-and-candidates.html" name="" title="ADR-047: Video ICE — Per-5-tuple Media Layer, Shared Credentials, Full Candidate Gathering">ADR-047: Video ICE — Per-5-tuple Media Layer, Shared Credentials, Full Candidate Gathering</a>
+                          </li>
+                          <li>
+                              <a href="ADR-048-video-media-stream-and-channel-activation.html" name="" title="ADR-048: Video Media Stream and SIP Channel Activation">ADR-048: Video Media Stream and SIP Channel Activation</a>
+                          </li>
+                    </ul>
+                </li>
+                <li>
+                    <span class="expand-stub"></span>
+                    <a>Audio Codecs</a>
+
+                    <ul class="nav level2">
+                          <li>
+                              <a href="ADR-049-opus-codec-integration-concentus.html" name="" title="ADR-049: Opus Audio Codec Integration via Concentus (Managed Encode/Decode)">ADR-049: Opus Audio Codec Integration via Concentus (Managed Encode/Decode)</a>
+                          </li>
+                          <li>
+                              <a href="ADR-050-bridge-audio-transcoding-opus-mulaw.html" name="" title="ADR-050: Bridge Audio Transcoding — Wire Codec ↔ &#181;-law Tap">ADR-050: Bridge Audio Transcoding — Wire Codec ↔ &#181;-law Tap</a>
+                          </li>
+                    </ul>
+                </li>
+                <li>
+                    <span class="expand-stub"></span>
+                    <a>Concurrency & QoS</a>
+
+                    <ul class="nav level2">
+                          <li>
+                              <a href="ADR-051-event-dispatch-and-object-lifecycle-concurrency.html" name="" title="ADR-051: Event-Dispatch and Object-Lifecycle Concurrency Contract">ADR-051: Event-Dispatch and Object-Lifecycle Concurrency Contract</a>
+                          </li>
+                          <li>
+                              <a href="ADR-052-media-hotpath-lockfree-fanout-and-bounded-buffers.html" name="" title="ADR-052: Media Hot-Path Concurrency — Lock-Free Fan-Out and Bounded Drop-Oldest Buffers">ADR-052: Media Hot-Path Concurrency — Lock-Free Fan-Out and Bounded Drop-Oldest Buffers</a>
+                          </li>
+                          <li>
+                              <a href="ADR-053-qos-observed-not-marked.html" name="" title="ADR-053: QoS as an Observed Metric, Not a Marked Packet">ADR-053: QoS as an Observed Metric, Not a Marked Packet</a>
+                          </li>
+                    </ul>
+                </li>
+                <li>
+                    <span class="expand-stub"></span>
+                    <a>BUNDLE & Multi-Track Transport</a>
+
+                    <ul class="nav level2">
+                          <li>
+                              <a href="ADR-010-bundle-transport-slice-plan.html" name="" title="ADR-010: BUNDLE Media-Transport — Slice-Plan">ADR-010: BUNDLE Media-Transport — Slice-Plan</a>
+                          </li>
+                          <li>
+                              <a href="ADR-011-rtp-multitrack-transport.html" name="" title="ADR-011: Multi-Track RTP Transport for BUNDLE">ADR-011: Multi-Track RTP Transport for BUNDLE</a>
+                          </li>
+                    </ul>
+                </li>
+                <li>
+                    <span class="expand-stub"></span>
+                    <a>WebRTC & Browser Interop</a>
+
+                    <ul class="nav level2">
+                          <li>
+                              <a href="ADR-009-webrtc-browser-peer-roadmap.html" name="" title="ADR-009: WebRTC Browser-Peer Roadmap">ADR-009: WebRTC Browser-Peer Roadmap</a>
+                          </li>
+                          <li>
+                              <a href="ADR-012-webrtc-public-facade.html" name="" title="ADR-012: WebRTC Public Facade (`WebRtcClient`)">ADR-012: WebRTC Public Facade (`WebRtcClient`)</a>
+                          </li>
+                          <li>
+                              <a href="ADR-060-webrtc-facade-completion-and-server-hosting.html" name="" title="ADR-060: WebRTC Facade Completion — Fluent ICE Config, Send-Side Simulcast, and the TURN/STUN Server-Hosting Facade">ADR-060: WebRTC Facade Completion — Fluent ICE Config, Send-Side Simulcast, and the TURN/STUN Server-Hosting Facade</a>
+                          </li>
+                    </ul>
+                </li>
+                <li>
+                    <span class="expand-stub"></span>
+                    <a>TURN Relay</a>
+
+                    <ul class="nav level2">
+                          <li>
+                              <a href="ADR-054-turn-relay-as-ice-candidate.html" name="" title="ADR-054: TURN Relay as a First-Class ICE Candidate">ADR-054: TURN Relay as a First-Class ICE Candidate</a>
+                          </li>
+                          <li>
+                              <a href="ADR-055-turn-control-stack-allocation-permission-keepalive.html" name="" title="ADR-055: TURN Control Stack — Allocation, Permission, and Keepalive over the Shared Socket">ADR-055: TURN Control Stack — Allocation, Permission, and Keepalive over the Shared Socket</a>
+                          </li>
+                          <li>
+                              <a href="ADR-056-post-nomination-whole-socket-relay-transition.html" name="" title="ADR-056: Post-Nomination Whole-Socket Relay Transition (ChannelBind / ChannelData)">ADR-056: Post-Nomination Whole-Socket Relay Transition (ChannelBind / ChannelData)</a>
+                          </li>
+                    </ul>
+                </li>
+          </ul>
+      </div>
+    </div>
+  </div>
+</div>

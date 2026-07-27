@@ -11,6 +11,639 @@
       }
     },
     {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-001-uas-user-identity-policy.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-001-uas-user-identity-policy.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-002-uas-redirect-redirect-async.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-002-uas-redirect-redirect-async.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-003-rfc3581-rport-uas-response-reflection.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-003-rfc3581-rport-uas-response-reflection.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-004-rfc5626-crlf-keepalive-pong.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-004-rfc5626-crlf-keepalive-pong.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-005-rfc3261-cancel-gate-release.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-005-rfc3261-cancel-gate-release.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-006-api-versioning-strategy.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-006-api-versioning-strategy.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-007-host-centric-platform-split.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-007-host-centric-platform-split.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-008-community-module-store.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-008-community-module-store.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-009-webrtc-browser-peer-roadmap.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-009-webrtc-browser-peer-roadmap.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-010-bundle-transport-slice-plan.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-010-bundle-transport-slice-plan.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-011-rtp-multitrack-transport.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-011-rtp-multitrack-transport.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-012-webrtc-public-facade.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-012-webrtc-public-facade.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-013-role-based-delivery-workflow.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-013-role-based-delivery-workflow.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-014-ddd-layering-gated-baselines.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-014-ddd-layering-gated-baselines.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-015-icallregistry-domain-port-dip.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-015-icallregistry-domain-port-dip.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-016-peer-calibrated-refactoring-backlog.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-016-peer-calibrated-refactoring-backlog.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-017-register-expires-lifecycle.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-017-register-expires-lifecycle.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-018-challenge-driven-digest-auth.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-018-challenge-driven-digest-auth.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-019-nat-routable-contact-and-media-address.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-019-nat-routable-contact-and-media-address.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-020-dialog-route-set-record-route.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-020-dialog-route-set-record-route.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-021-trunk-inbound-matching.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-021-trunk-inbound-matching.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-022-invite-transaction-robustness.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-022-invite-transaction-robustness.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-023-session-timer-negotiation.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-023-session-timer-negotiation.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-024-sdp-offer-answer-origin-and-extmap-negotiation.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-024-sdp-offer-answer-origin-and-extmap-negotiation.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-025-sdes-offer-answer-negotiation.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-025-sdes-offer-answer-negotiation.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-026-srtp-media-path-fail-closed-hardening.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-026-srtp-media-path-fail-closed-hardening.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-027-srtp-continuity-reinvite-rekey.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-027-srtp-continuity-reinvite-rekey.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-028-dtls-srtp-foundation.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-028-dtls-srtp-foundation.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-029-dtls-srtp-signaling-and-keying-precedence.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-029-dtls-srtp-signaling-and-keying-precedence.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-030-dtls-srtp-media-wiring.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-030-dtls-srtp-media-wiring.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-031-srtcp-crypto-core-and-rtcp-path-wiring.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-031-srtcp-crypto-core-and-rtcp-path-wiring.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-032-media-hotpath-allocation-avoidance.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-032-media-hotpath-allocation-avoidance.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-033-wire-boundary-dos-hardening.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-033-wire-boundary-dos-hardening.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-034-secondary-stream-and-onebyte-header-extensions.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-034-secondary-stream-and-onebyte-header-extensions.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-035-rtx-retransmission-mechanics.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-035-rtx-retransmission-mechanics.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-036-rtcp-wire-codec-tolerant-decode.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-036-rtcp-wire-codec-tolerant-decode.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-037-rtt-convergence-seed.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-037-rtt-convergence-seed.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-038-transport-cc-feedback-plane.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-038-transport-cc-feedback-plane.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-039-transport-cc-estimator-bitrate-api.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-039-transport-cc-estimator-bitrate-api.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-040-send-side-ice-state-machine.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-040-send-side-ice-state-machine.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-041-consent-freshness-and-ice-restart-primitives.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-041-consent-freshness-and-ice-restart-primitives.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-042-ice-verification-and-shared-socket-gathering.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-042-ice-verification-and-shared-socket-gathering.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-043-video-sdp-negotiation.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-043-video-sdp-negotiation.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-044-video-packetisation-and-reorder-playout.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-044-video-packetisation-and-reorder-playout.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-045-video-loss-recovery-nack-pli-rtx.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-045-video-loss-recovery-nack-pli-rtx.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-046-video-media-security-sdes-dtls.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-046-video-media-security-sdes-dtls.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-047-video-ice-media-layer-and-candidates.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-047-video-ice-media-layer-and-candidates.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-048-video-media-stream-and-channel-activation.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-048-video-media-stream-and-channel-activation.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-049-opus-codec-integration-concentus.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-049-opus-codec-integration-concentus.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-050-bridge-audio-transcoding-opus-mulaw.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-050-bridge-audio-transcoding-opus-mulaw.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-051-event-dispatch-and-object-lifecycle-concurrency.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-051-event-dispatch-and-object-lifecycle-concurrency.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-052-media-hotpath-lockfree-fanout-and-bounded-buffers.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-052-media-hotpath-lockfree-fanout-and-bounded-buffers.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-053-qos-observed-not-marked.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-053-qos-observed-not-marked.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-054-turn-relay-as-ice-candidate.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-054-turn-relay-as-ice-candidate.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-055-turn-control-stack-allocation-permission-keepalive.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-055-turn-control-stack-allocation-permission-keepalive.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-056-post-nomination-whole-socket-relay-transition.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-056-post-nomination-whole-socket-relay-transition.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-057-audit-findings-register-marker-discipline.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-057-audit-findings-register-marker-discipline.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-058-layered-test-interop-soak-model.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-058-layered-test-interop-soak-model.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-059-public-media-tap-contract.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-059-public-media-tap-contract.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-060-webrtc-facade-completion-and-server-hosting.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-060-webrtc-facade-completion-and-server-hosting.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-061-monotonic-media-clock.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-061-monotonic-media-clock.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/README.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/README.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Toc",
+      "source_relative_path": "docs/adr/toc.yml",
+      "output": {
+        ".html": {
+          "relative_path": "adr/toc.html"
+        },
+        ".json": {
+          "relative_path": "adr/toc.json"
+        }
+      },
+      "version": ""
+    },
+    {
       "type": "ManagedReference",
       "source_relative_path": "docs/portal/_api/CalloraVoipSdk.BridgeAudioFormat.yml",
       "output": {

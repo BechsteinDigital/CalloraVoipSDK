@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-013: Role-Based Delivery Workflow (CEO / PO / DEV / Reviewer) | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-013: Role-Based Delivery Workflow (CEO / PO / DEV / Reviewer) | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-013-role-based-delivery-workflow.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-013-role-based-delivery-workflow-ceo--po--dev--reviewer">ADR-013: Role-Based Delivery Workflow (CEO / PO / DEV / Reviewer)</h1>
+
+<p>Status: Accepted
+Date: 2026-04-14</p>
+<h2 id="context">Context</h2>
+<p>CalloraVoipSdk is a single-maintainer commercial SDK developed with AI agents. Without a
+disciplined process, agent runs tend to conflate three failure modes: (1) drifting scope
+(&quot;opportunistic side work&quot;), (2) status inflation (declaring items <code>DONE</code>/<code>compliant</code> without
+evidence), and (3) working from stale planning documents. The 2026-04-14 runs surfaced all three:
+the CEO run for CORE-116 was based on an outdated <code>CLAUDE.md</code> table (it flagged CORE-006 as an open
+Phase-1 gap although it had been <code>DONE</code> since 2026-04-13), and the PO run had to correct that
+against the actual TODO source of truth before scoping DEV work.</p>
+<h3 id="verified-current-state">Verified current state</h3>
+<p>The role separation is a governance decision recorded in the project instructions, not a code
+artifact — so the &quot;state&quot; here is the process contract and its enforcement points:</p>
+<ul>
+<li><strong><code>CLAUDE.md</code> (Agentenprinzip)</strong> fixes the four roles and their hand-off rule: <em>CEO priorisiert und
+entscheidet · PO schneidet Scope und Akzeptanz · DEV implementiert exakt das freigegebene Paket ·
+REVIEWER prueft Scope, Risiken, Tests und Claim-Wahrheit</em>, with &quot;Kein automatisches Skill-Chaining
+als globale Regel&quot; and &quot;Rollenuebergaben nur, wenn explizit ausgeloest.&quot;</li>
+<li>The four 2026-04-14 role logs are the reference execution of the loop for one item (CORE-116):
+<code>2026-04-14-ceo.md</code> (Start-Freigabe, Handover an PO) → <code>2026-04-14-po.md</code> (DEV-Vorgabe mit
+nummerierten Akzeptanzkriterien + Claim-Grenzen) → <code>2026-04-14-dev.md</code> (implementation) →
+<code>2026-04-14-reviewer.md</code> (GRÜN mit Checkliste + <code>PENDING_USER_MERGE_APPROVAL</code>).</li>
+<li>The Reviewer gate is code-anchored: every review runs a fixed checklist (Akzeptanzkriterien, DDD,
+Thread-Safety, ≤1000 Zeilen, DI, XML-Docs, Try/Catch-Logging, Tests grün, kein Scope-Creep) that
+maps 1:1 onto the mechanically enforced <code>EngineeringRulesTests</code> gates
+(<code>tests/CalloraVoipSdk.ArchitectureTests/EngineeringRulesTests.cs</code>).</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<p>Adopt a strictly role-based, single-package-per-run delivery workflow:</p>
+<ol>
+<li><strong>CEO</strong> selects and prioritises exactly one CORE item / approved package, then hands off.</li>
+<li><strong>PO</strong> cuts scope: numbered acceptance criteria, explicit non-goals, and <strong>Claim-Grenzen</strong>
+(what may and may not be claimed after success). One approved package per run.</li>
+<li><strong>DEV</strong> implements exactly the approved package on a feature branch — no opportunistic side work;
+new follow-up work is <em>noted</em>, not silently built.</li>
+<li><strong>REVIEWER</strong> verifies scope adherence, risk, tests, and claim-truth against a fixed checklist,
+and returns <code>GRÜN</code> / <code>APPROVED WITH FOLLOW-UPS</code> — merges to <code>main</code> gate on explicit user approval
+(<code>PENDING_USER_MERGE_APPROVAL</code>).</li>
+</ol>
+<h3 id="crux-design-pieces">Crux design pieces</h3>
+<ul>
+<li><strong>Claim-truth over test-green.</strong> A green suite is evidence of behaviour, never an automatic
+<code>DONE</code>/<code>compliant</code>/<code>abgeschlossen</code> upgrade. Each package carries explicit <code>Claim-Grenzen</code>; docs may
+never assert more than code + tests + scope coverage prove.</li>
+<li><strong>Source-of-truth discipline.</strong> Roles read the specialised sources (POLICY/STATE/TODO), not a
+stale <code>CLAUDE.md</code> table — the PO's first act on 2026-04-14 was correcting the CEO's stale-table
+analysis and re-prioritising against the real TODO.</li>
+<li><strong>No global skill-chaining.</strong> Role transitions fire only when explicitly triggered; there is no
+automatic CEO→PO→DEV→Reviewer cascade.</li>
+<li><strong>Reviewer checklist ≙ mechanical gates.</strong> The human/agent review checklist mirrors the CI
+architecture gates, so the same invariants are checked twice — once by a reasoning reviewer, once
+by the deterministic <code>EngineeringRulesTests</code>.</li>
+</ul>
+<h2 id="consequences">Consequences</h2>
+<p>Positive: scope stays small and auditable; every claim is traceable to code + tests; stale-doc
+drift is caught by the PO layer; merges are user-gated. The 2026-04-14 CORE-116 run demonstrates the
+loop end-to-end including a caught stale-doc error and a <code>PENDING_USER_MERGE_APPROVAL</code> hold.</p>
+<p>Tradeoffs: overhead per change (four hand-offs for one package); the process is only as good as the
+source-of-truth hygiene it depends on. The workflow is a governance contract in <code>CLAUDE.md</code>, not
+itself mechanically enforced — divergence between the documented loop and an individual run is
+possible and must be caught by the Reviewer, not a gate.</p>
+<p><strong>Log↔code divergence:</strong> the four 2026-04-14 logs reference item IDs (CORE-109/112/116) and a test
+baseline count (&quot;775/775&quot;, &quot;821/821&quot;) that reflect the repo state at that date; today's suite and
+item registry differ. The <em>process</em> decision is unchanged and current; the <em>numbers</em> in those logs
+are historical and were not re-verified against today's code.</p>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li>Exactly one approved package per run; no opportunistic side work — follow-ups are noted, not built.</li>
+<li><code>DONE</code>/<code>Erledigt</code>/<code>vollstaendig</code>/<code>compliant</code>/<code>abgeschlossen</code> only with direct code + tests + scope
+evidence; test-green alone never upgrades status.</li>
+<li>Documentation must never claim more than the technical proof supports.</li>
+<li>Role transitions only on explicit trigger; no automatic skill-chaining.</li>
+<li>Reviewer checklist stays aligned with the mechanical <code>EngineeringRulesTests</code> gates.</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Logs: docs/archive/agent-log/2026-04-14-ceo.md, docs/archive/agent-log/2026-04-14-po.md,
+docs/archive/agent-log/2026-04-14-dev.md, docs/archive/agent-log/2026-04-14-reviewer.md</li>
+<li>Code / process anchors: CLAUDE.md (Agentenprinzip, Scope- und Claim-Regeln),
+tests/CalloraVoipSdk.ArchitectureTests/EngineeringRulesTests.cs</li>
+<li>Marker: CORE-109 / CORE-112 / CORE-116</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-013-role-based-delivery-workflow.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

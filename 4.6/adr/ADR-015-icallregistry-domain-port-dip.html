@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-015: PhoneLine↔CallManager Decoupling via Domain Port ICallRegistry (DIP) | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-015: PhoneLine↔CallManager Decoupling via Domain Port ICallRegistry (DIP) | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-015-icallregistry-domain-port-dip.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-015-phonelinecallmanager-decoupling-via-domain-port-icallregistry-dip">ADR-015: PhoneLine↔CallManager Decoupling via Domain Port <code>ICallRegistry</code> (DIP)</h1>
+
+<p>Status: Accepted
+Date: 2026-07-08</p>
+<h2 id="context">Context</h2>
+<p><code>PhoneLine</code> (Domain) directly referenced the concrete <code>CallManager</code> (Application) — the last
+<code>Domain → Application</code> layer violation and the final non-empty entry in <code>LayeringBaseline</code>.
+<code>PhoneLine</code> needs only two operations from the call manager: register a newly created call, and
+enumerate the active calls belonging to that line. Depending on the whole Application service to get
+those two operations inverts the DDD dependency direction and blocks the layering gate from reaching
+an empty baseline.</p>
+<h3 id="verified-current-state">Verified current state</h3>
+<ul>
+<li><strong><code>ICallRegistry</code> is a Domain port</strong>: <code>src/Core/Domain/Calls/ICallRegistry.cs</code> L8, namespace
+<code>CalloraVoipSdk.Core.Domain.Calls</code>, <code>internal interface ICallRegistry</code> with <code>void Register(Call)</code>
+and <code>IReadOnlyCollection&lt;ICall&gt; Active</code>. All referenced types are Domain (<code>Call</code>, <code>ICall</code>). Its
+XML-doc states the intent verbatim: <em>&quot;Implemented by the Application's call manager, so the Domain
+depends only on this abstraction rather than on the service itself.&quot;</em></li>
+<li>graphify confirms the wiring: <code>PhoneLine --references--&gt; ICallRegistry</code> (1 hop) and
+<code>CallManager --implements--&gt; ICallRegistry</code> (1 hop). Additional implementers exist for
+test/degenerate use: <code>SingleCallRegistry</code>, <code>NoopCallRegistry</code>, <code>EmptyCallRegistry</code>.</li>
+<li>The decision is code-anchored in the gate comment
+(<code>tests/CalloraVoipSdk.ArchitectureTests/EngineeringRulesTests.cs</code> L17–19): <em>&quot;K4 vollstaendig
+behoben: … PhoneLine haengt nur noch an der Domain-Abstraktion ICallRegistry (von CallManager
+implementiert) … Kein Domain-&gt;Application/Infrastructure-Leak mehr.&quot;</em> — and <code>LayeringBaseline = []</code>
+(L20).</li>
+<li><code>ENGINEERING_RULES.md</code> R1 elevates this to the normative pattern: <em>&quot;Abhängigkeitsumkehr statt
+Ausnahme: Braucht die Domain etwas aus einer äußeren Schicht, definiert sie selbst einen Port
+(Beispiel: <code>ICallRegistry</code> in der Domain, implementiert vom Application-<code>CallManager</code> — Fix K4).&quot;</em></li>
+</ul>
+<h2 id="decision">Decision</h2>
+<p>Invert the <code>PhoneLine → CallManager</code> dependency with a Domain-owned port:</p>
+<ol>
+<li>Define <code>ICallRegistry</code> (<code>internal</code>) in <code>Core.Domain.Calls</code> exposing exactly what the Domain needs
+— <code>Register(Call)</code> + <code>Active</code> (<code>IReadOnlyCollection&lt;ICall&gt;</code>) — using only Domain types.</li>
+<li><code>CallManager</code> (public, Application) implements <code>ICallRegistry</code>. <code>Active</code> satisfies it implicitly;
+<code>Register</code> is implemented <strong>explicitly</strong> (<code>void ICallRegistry.Register(Call) =&gt; Register(call);</code>)
+so the port stays <code>internal</code> on the public <code>CallManager</code> surface.</li>
+<li><code>PhoneLine</code> depends on <code>ICallRegistry</code>, dropping <code>using Application.Calls</code>. <code>VoipClient</code> still
+passes the concrete <code>CallManager</code> instance (which satisfies the port) at composition time.</li>
+</ol>
+<h3 id="crux-design-pieces">Crux design pieces</h3>
+<ul>
+<li><strong>Narrow, Domain-typed port.</strong> The interface exposes only the two members <code>PhoneLine</code> consumes,
+built from Domain types — the port belongs to the Domain, not to the Application implementer.</li>
+<li><strong>Explicit interface implementation to preserve API.</strong> Implementing <code>Register</code> explicitly keeps it
+off <code>CallManager</code>'s public surface, so the fix is <code>internal</code>-only, non-breaking, no Major bump
+(contrast <code>DialOptions</code>, which required a public namespace move / Major).</li>
+<li><strong>Composition-root injection.</strong> DI (<code>VoipClient</code>) supplies the concrete implementer; the Domain
+never names it.</li>
+</ul>
+<h2 id="consequences">Consequences</h2>
+<p>Positive: <code>LayeringBaseline = []</code> — Domain references neither Application nor Infrastructure, gate-
+enforced. The fix was behaviour- and Public-API-neutral. The pattern is now the codified template
+(R1) for any future Domain→outer-layer need, and gained free testability (<code>Noop</code>/<code>Empty</code>/<code>Single</code>
+registries as seams).</p>
+<p>Tradeoffs: one more abstraction between <code>PhoneLine</code> and the live call manager; the composition root
+must wire the concrete implementer. The port is <code>internal</code>, so it is an SDK-internal contract, not a
+consumer extension point (intentional — consumers do not swap the call registry).</p>
+<p><strong>Log↔code divergence:</strong> none material. The log describes the exact interface members and wiring;
+graphify + the source file confirm namespace, members, <code>PhoneLine</code> reference, and <code>CallManager</code>
+implementation as described. The log's test counts (Core 147/147) are historical.</p>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li>The Domain depends on <code>ICallRegistry</code>, never on the concrete <code>CallManager</code>.</li>
+<li><code>ICallRegistry</code> stays Domain-typed (<code>Call</code>/<code>ICall</code>) and <code>internal</code>; no Application/Infrastructure
+types leak through it.</li>
+<li><code>CallManager.Register</code> stays explicitly implemented so the port does not widen the public surface.</li>
+<li><code>LayeringBaseline</code> stays empty; any Domain→Application <code>using</code> fails the gate.</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Logs: docs/archive/agent-log/2026-07-08-dev-phoneline-callmanager-decouple.md</li>
+<li>Code: src/Core/Domain/Calls/ICallRegistry.cs (L8), CallManager (implements),
+PhoneLine (references), src/Core/Application/Calls/*,
+tests/CalloraVoipSdk.ArchitectureTests/EngineeringRulesTests.cs (K4 comment L17–19,
+LayeringBaseline L20), ENGINEERING_RULES.md (R1 Abhängigkeitsumkehr)</li>
+<li>Marker: Fix K4, R1</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-015-icallregistry-domain-port-dip.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

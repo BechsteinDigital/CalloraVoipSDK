@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-009: WebRTC Browser-Peer Roadmap | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-009: WebRTC Browser-Peer Roadmap | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-009-webrtc-browser-peer-roadmap.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-009-webrtc-browser-peer-roadmap">ADR-009: WebRTC Browser-Peer Roadmap</h1>
+
+<p>Status: Accepted
+Date: 2026-07-15</p>
+<h2 id="context">Context</h2>
+<p>Callora (Host/CPaaS) soll WebRTC als eigenes Modul auf der SDK-Engine anbieten — die Engine
+selbst soll ein WebRTC-<strong>Peer</strong> sein (Browser ⇄ SDK), nicht bloß ein SIP-Stack. Referenzen:
+<strong>SipSorcery</strong> (OSS, .NET) = nativer WebRTC-Peer-Stack; <strong>Ozeki</strong> = WebRTC nur als Gateway
+(Browser ⇄ Server ⇄ SIP), kein nativer C#-Peer. Entschieden ist der Peer-Weg.</p>
+<p>Eine Code-Verifikation (2026-07-15, sechs parallele Explore-Läufe) hat den Ist-Stand gegen
+die WebRTC-Peer-Checkliste kartiert; die daraus abgeleitete Roadmap wurde vom Founder mit
+sieben Architektur-Präzisierungen geschärft (siehe Decision).</p>
+<h2 id="ist-stand-verifiziert-code--tests-vorhanden--nicht-browser-interop-validiert">Ist-Stand (verifiziert: Code + Tests vorhanden — NICHT browser-interop-validiert)</h2>
+<p>Vorhanden &amp; reif: <strong>DTLS-SRTP</strong> (Handshake beide Rollen, RFC-5764-Key-Export, Fingerprint,
+E2e-Tests), <strong>rtcp-mux</strong> (Audio + Video), <strong>WebRTC-SDP-Profil</strong> (<code>UDP/TLS/RTP/SAVPF</code>,
+<code>fingerprint</code>, <code>setup</code>, <code>ice-ufrag/pwd</code>, <code>ice-options:trickle</code>, <code>extmap</code>, <code>rtcp-fb</code>,
+<code>candidate</code>), <strong>ICE</strong> (RFC 8445, checks, nomination, consent freshness RFC 7675,
+<code>IceSnapshot</code>), <strong>RTP/RTCP</strong> (transport-cc, NACK/PLI, RTX), <strong>Opus</strong> nativ (RFC 7587).</p>
+<p>Teilweise / Lücke: <strong>BUNDLE</strong> (SDP-Infra da, aber kein gemeinsamer Transport — siehe unten),
+<strong>Track-Identity</strong> (<code>a=msid</code>/<code>a=ssrc</code> fehlen), <strong>ICE-Connection-State-Event</strong> (nur finaler
+<code>IceSnapshot</code>; Consent-Loss ceaset intern ohne App-Event).</p>
+<p>Fehlt: <strong>SCTP Data Channels</strong>, <strong>TCP/TURN-TCP-Pfade</strong>, <strong>native Video-Codecs</strong> (VP8/H264).</p>
+<h2 id="decision">Decision</h2>
+<p>Der WebRTC-Transport-Kern ist zu ~drei Vierteln vorhanden, aber BUNDLE und die WebRTC-Peer-
+Fassade sind echte Neubauten, kein Feintuning. Reihenfolge und Schnitt:</p>
+<h3 id="1-ice-connection-state-events-mvp-vorbedingung-zuerst">1. ICE-Connection-State-Events (MVP-Vorbedingung, zuerst)</h3>
+<p>Der finale <code>IceSnapshot</code> reicht für Diagnose, nicht für eine laufende Browserverbindung.
+Öffentlich nötig: laufende Transport-Zustandsänderungen, ausgewähltes Candidate-Pair,
+Consent-Verlust, <strong>Wiederherstellung</strong>, dauerhafter Fehler, und die Möglichkeit für <strong>ICE-
+Restart oder kontrollierte Terminierung</strong>. Heute beendet Consent-Loss nur intern die
+Übertragung (<code>RtpCallMediaSession.OnMediaConsentLost</code> → <code>StopTransmission</code>); die App erfährt
+nichts. Muss vor dem öffentlichen WebRTC-Paket behoben sein.</p>
+<h3 id="2-bundle-als-transport-architekturumbau-zentraler-brocken">2. BUNDLE als Transport-Architekturumbau (zentraler Brocken)</h3>
+<p>RFC 8843 verlangt einen <strong>gemeinsamen Transport / ein 5-Tupel</strong> für mehrere <code>m=</code>-Sektionen,
+eine gemeinsame ICE-Kandidatengruppe und eine gemeinsame RTP-Session; eingehende Streams
+werden über MID / PT / ggf. SSRC der Media-Sektion zugeordnet. Heute hat Video einen eigenen
+<code>RtpSession</code>, eigenen Port, eigene DTLS-Assoziation und eigenes ICE/Consent auf dem Video-
+5-Tupel. <code>Bundle = true</code> in der SDP-Generierung wäre technisch falsch. Nötig ist:</p>
+<pre><code>BundledMediaTransport
+├── ein ICE Agent / ausgewähltes Candidate Pair
+├── ein UDP-Socket
+├── eine DTLS-Assoziation
+├── gemeinsame SRTP/SRTCP-Kontexte
+├── RTP/RTCP/STUN/DTLS-Demultiplexing
+└── Track-Routing über MID / PT / SSRC
+    ├── AudioTrack
+    └── VideoTrack
+</code></pre>
+<h3 id="3-track-identity-auf-bundle-aufbauend--msid-und-ssrc-getrennt">3. Track-Identity (auf BUNDLE aufbauend) — msid und ssrc getrennt</h3>
+<p>Zwei Ebenen, nicht ein Baustein:</p>
+<pre><code>Track Identity            RTP Source Identity
+├── MID                   ├── SSRC
+├── Stream ID             ├── RTX SSRC
+├── Track ID              └── optional RID / Simulcast
+└── MSID
+</code></pre>
+<p>Browser-MVP: <strong>ein Audio-Track + ein Video-Track</strong>, stabile MID-Werte, <code>a=msid</code>, <strong>MID-RTP-
+Header-Extension</strong>, korrektes BUNDLE-Routing. Screensharing / mehrere Video-Tracks / Simulcast
+folgen danach (JSEP nutzt dafür <code>a=rid</code> + <code>a=simulcast</code>; eine zweite Video-<code>m=</code>-Sektion allein
+genügt nicht).</p>
+<h3 id="4-signaling-neutrale-webrtc-fassade--paket-calloravoipsdkwebrtc">4. Signaling-neutrale WebRTC-Fassade — Paket <code>CalloraVoipSdk.WebRtc</code></h3>
+<p>Browser sprechen nicht mit der SIP-Fassade; die App macht das Signaling (WebSocket/HTTP/
+Callora) selbst. Eigene öffentliche Peer-API:</p>
+<pre><code class="lang-csharp">var peer = webRtc.CreatePeer(options);
+peer.LocalIceCandidateDiscovered += OnCandidate;
+peer.ConnectionStateChanged      += OnConnectionStateChanged;
+peer.TrackReceived               += OnTrackReceived;
+await peer.SetRemoteDescriptionAsync(remoteOffer);
+var answer = await peer.CreateAnswerAsync();
+await peer.AddRemoteIceCandidateAsync(candidate);
+</code></pre>
+<p>Grenze: <strong>SDK</strong> = SDP, ICE, DTLS, SRTP, BUNDLE, RTP, RTCP, Tracks. <strong>Anwendung</strong> =
+WebSocket/HTTP-Signaling, Teilnehmer, Räume, Authentifizierung. Damit bleibt WebRTC auch
+außerhalb Callora nutzbar.</p>
+<h3 id="5-codec-rollen--ffmpeg-paket">5. Codec-Rollen + FFmpeg-Paket</h3>
+<p>Nicht das monolithische <code>IVideoDevice</code> — für Server/Gateway/Recording/Transcoding zu breit.
+Stattdessen getrennte Rollen; <code>IVideoDevice</code> bleibt Convenience-Komposition:</p>
+<pre><code>IVideoSource · IVideoSink · IVideoEncoder · IVideoDecoder
+IVideoDevice = Convenience-Komposition der vier
+CalloraVoipSdk.Video.FFmpeg → Ffmpeg{Encoder,Decoder,Source,Sink,Device}
+</code></pre>
+<p>Codec-Reihenfolge: <strong>VP8 → H.264</strong> (Constrained Baseline, <code>packetization-mode=1</code>) → VP9 →
+optional AV1 → H.265 als separates optionales Profil. <strong>H.265 nicht im MVP</strong> (nicht im
+WebRTC-Pflichtsatz; darf VP8/H.264-Interop nicht verzögern).</p>
+<h3 id="6-restriktive-netze-turntcp-und-turntls-vor-ice-tcp">6. Restriktive Netze: TURN/TCP und TURN/TLS vor ICE-TCP</h3>
+<p>Direkte ICE-TCP-Candidates (RFC 6544) sind nicht die höchste Priorität — selbst RFC 6544
+bevorzugt UDP für RTP. Reihenfolge: <strong>TURN/UDP → TURN/TCP → TURN/TLS-TCP:443</strong> → dann direkte
+ICE-TCP-Candidates (RFC 6544) → optional TURN-TCP-Allokationen (RFC 6062, eigenes Verfahren
+Relay↔Peer). Vollständig blockiertes UDP ist der Standardgrund für TCP/TLS.</p>
+<h3 id="7-sctp-data-channels-späterer-slice-blockiert-medien-mvp-nicht">7. SCTP Data Channels (späterer Slice, blockiert Medien-MVP nicht)</h3>
+<p>Vollständiges Zusatz-Subsystem: <code>m=application</code> → DTLS → SCTP-Association → mehrere SCTP-
+Streams → Partial Reliability → DCEP (<code>DATA_CHANNEL_OPEN</code>/<code>_ACK</code>) → öffentliche DataChannel-
+API. Am besten auf derselben BUNDLE-/DTLS-Transportbasis, nach dem Audio/Video-MVP.</p>
+<h3 id="browser-mvp-audio--video">Browser-MVP (Audio + Video)</h3>
+<p>= Schritt 1 (ICE-State) + 2 (BUNDLE-Transport) + 3 (Track-Identity) + 4 (WebRtc-Fassade) +
+5 (VP8/H.264) + <strong>Browser-Interop-Validierung</strong> (Chrome/Firefox, eigener Meilenstein).
+TURN/TCP/TLS (6) parallel für restriktive Netze. Data Channels (7) danach.</p>
+<h2 id="consequences">Consequences</h2>
+<p>Positive: Callora baut WebRTC als Modul (Signaling + App-Logik) auf der Engine; der WebRTC-
+Peer bleibt im SDK und außerhalb Callora nutzbar. Audio-Interop ist durch Opus + DTLS-SRTP
+schon nah.</p>
+<p>Tradeoffs: BUNDLE ist ein echter Transport-Umbau (ein 5-Tupel/DTLS/ICE statt pro m-line) —
+berührt RtpSession, DTLS, ICE/Consent, SRTP-Kontexte. „Reif&quot; heißt Code + Tests, nicht
+browser-validiert; die Interop-Validierung bleibt Pflicht vor jedem Produktions-Claim.</p>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li>WebRTC-Transport bleibt im SDK; Callora bringt nur Signaling + Anwendungslogik.</li>
+<li>Kein WebRTC-Code im SIP-Signaling-Kern (getrennte Module / eigenes <code>CalloraVoipSdk.WebRtc</code>).</li>
+<li>Keine „WebRTC-ready/production&quot;-Claims ohne Browser-Interop-Validierung.</li>
+<li>BUNDLE nicht als SDP-Flag „faken&quot; — nur mit echtem gemeinsamem Transport.</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-009-webrtc-browser-peer-roadmap.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

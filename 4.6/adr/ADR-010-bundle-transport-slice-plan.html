@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-010: BUNDLE Media-Transport — Slice-Plan | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-010: BUNDLE Media-Transport — Slice-Plan | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-010-bundle-transport-slice-plan.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-010-bundle-media-transport--slice-plan">ADR-010: BUNDLE Media-Transport — Slice-Plan</h1>
+
+<p>Status: Accepted
+Date: 2026-07-15</p>
+<h2 id="context">Context</h2>
+<p>WebRTC-Browser verlangen BUNDLE (RFC 8843) zwingend: ein gemeinsames 5-Tupel / UDP-Socket /
+DTLS-Assoziation / ICE-Agent für alle <code>m=</code>-Sektionen, mit Track-Routing über MID / Payload
+Type / SSRC. BUNDLE ist damit der eigentliche MVP-Blocker für Browser-Calls (ADR-009 §2).
+Der Founder war explizit: <code>Bundle = true</code> in der SDP-Generierung ohne den Transport-Umbau
+wäre technisch falsch — der Transport muss zuerst.</p>
+<h2 id="verifizierter-ist-zustand-2026-07-15-vier-parallele-explore-läufe">Verifizierter Ist-Zustand (2026-07-15, vier parallele Explore-Läufe)</h2>
+<p>Bereits vorhanden (Fundament):</p>
+<ul>
+<li><strong>Paket-Typ-Demux</strong> STUN/DTLS/RTP/RTCP auf EINEM Socket — <code>RtpSession.ProcessDatagram</code>
+(RFC 7983: STUN byte 0–3 + magic cookie; DTLS 20–63; RTCP v2 PT 192–223; sonst RTP).</li>
+<li><strong>rtcp-mux</strong> (RFC 5761) — ein Socket für RTP+RTCP.</li>
+<li><strong>DTLS-SRTP</strong> reif, <strong>ICE + consent</strong> reif, <strong>SDES</strong> als Alternative.</li>
+<li><strong>SDP-BUNDLE-Modell</strong> — <code>SdpSessionDescription.Group</code> (<code>a=group:BUNDLE</code>),
+<code>SdpMediaDescription.Mid</code> (<code>a=mid</code>) inkl. Parse/Serialize; RFC-8285-Header-Extension-Parsing
+(<code>OneByteRtpHeaderExtensions</code>, 0xBEDE).</li>
+</ul>
+<p>Fehlt / getrennt:</p>
+<ul>
+<li><strong>Audio und Video laufen auf komplett GETRENNTEN Transports</strong>: je eigener UDP-Socket/Port
+(<code>CallVideoParameters.LocalEndPoint</code>), eigene DTLS-Assoziation (RFC 5763 one-per-m-line),
+eigenes ICE-Consent (shared ufrag/pwd, aber separates 5-Tupel), eigene SRTP-Kontexte.
+Video = <code>VideoRtpStream</code> mit eigener <code>RtpSession</code>.</li>
+<li><strong>Kein Multi-Track-Routing</strong>: jeder Socket geht exklusiv an EINEN Stream. Kein MID/PT/SSRC-
+Routing mehrerer Media-Streams auf einem Transport (nur RTX-Secondary-PT existiert).</li>
+<li><strong>MID-RTP-Header-Extension</strong> (<code>urn:ietf:params:rtp-hdrext:sdes:mid</code>, RFC 8843 §5.2) wird
+NICHT dekodiert (Routing-Grundlage fehlt).</li>
+<li><strong>SDP-BUNDLE-Generierung deaktiviert</strong>: <code>SdpMediaNegotiationOptions</code> hat kein <code>Bundle</code>-Feld;
+<code>SdpUtilities.ConvertOptions</code> setzt Bundle nie → <code>Group</code>/<code>Mid</code> bleiben null.</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<p>BUNDLE wird in dieser Reihenfolge gebaut. Der Transport-Umbau kommt VOR der SDP-Aktivierung,
+damit zu keinem Zeitpunkt BUNDLE offeriert wird, das der Transport nicht bedienen kann.</p>
+<ul>
+<li><p><strong>B1 — MID-RTP-Header-Extension</strong> (klein, in sich geschlossen, erster Slice)
+Decode + Encode für <code>urn:ietf:params:rtp-hdrext:sdes:mid</code> (RFC 8843 §5.2 / RFC 8285) auf
+Basis des vorhandenen <code>OneByteRtpHeaderExtensions</code>. Reine Wire-Logik + Unit-Tests, keine
+Transport-Änderung. Die Routing-Grundlage.</p>
+</li>
+<li><p><strong>B2 — Multi-Track-Demux auf einem Transport</strong> (Kern-Umbau, groß)
+Eine Transport-Einheit (<code>BundledMediaTransport</code>) über einem Socket, die inbound RTP/RTCP
+nach MID (→ PT → SSRC als Fallback, RFC 8843 §9.2) dem richtigen Track (Audio/Video) routet.
+Baut auf dem vorhandenen Paket-Typ-Demux auf.</p>
+</li>
+<li><p><strong>B3 — Geteiltes DTLS + ICE-Consent</strong> für den gebündelten Transport
+EINE DTLS-Assoziation und EIN Consent-Monitor für alle Tracks (statt pro m-line). Die SRTP-
+Kontexte werden geteilt.</p>
+</li>
+<li><p><strong>B4 — Video über den geteilten Transport</strong>
+<code>VideoRtpStream</code> nutzt den gebündelten Transport statt eigener <code>RtpSession</code>/Socket/DTLS/ICE;
+die interne Video-Logik (Codec-Packetisierung, Keyframe-Feedback, Reorder-Buffer, transport-cc)
+bleibt. Audio-only-Legs unverändert.</p>
+</li>
+<li><p><strong>B5 — SDP-BUNDLE-Generierung aktivieren</strong> (zuletzt)
+<code>SdpMediaNegotiationOptions.Bundle</code> (public), <code>ConvertOptions</code> → <code>Bundle</code>, <code>CreateOffer</code>:
+<code>a=group:BUNDLE</code>, alle m-lines auf einen Port (bundle-only Port 0 für non-first, RFC 8843 §5),
+session-level ICE, rtcp-mux erzwungen. Answer spiegelt vorhandenes BUNDLE (existiert teils).</p>
+</li>
+<li><p><strong>B6 — Browser-Interop-Validierung</strong> (Chrome/Firefox) — eigener Meilenstein.</p>
+</li>
+</ul>
+<p>Track-Identity (<code>a=msid</code>, Stream/Track-IDs) läuft parallel als eigener Slice (ADR-009 §3), baut
+auf B1/B4 auf. Simulcast (<code>a=rid</code>) folgt später.</p>
+<h2 id="consequences">Consequences</h2>
+<p>Positive: Der Paket-Typ-Demux + rtcp-mux + DTLS/ICE/SRTP sind schon da — der Umbau ist eine
+Multi-Track-Schicht darüber, kein Neubau von Grund auf. Audio-only-Legs bleiben unberührt.</p>
+<p>Tradeoffs: B2–B4 berühren den zentralen Media-Transport (<code>RtpSession</code>, <code>RtpCallMediaSession</code>,
+<code>VideoRtpStream</code>, <code>DtlsMediaAttachment</code>, <code>IceMediaAttachment</code>) — timing- und krypto-sensitiv.
+Jeder Slice braucht E2e-Tests vor dem nächsten. Bis B4 fertig ist, wird BUNDLE nicht offeriert
+(B5), also bleibt der Nicht-BUNDLE-Pfad (getrennte m-lines) bis dahin der einzige Weg.</p>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li>Kein <code>a=group:BUNDLE</code> im Offer, bevor der Transport es bedient (B5 nach B2–B4).</li>
+<li>Audio-only-Pfad zu jedem Zeitpunkt grün und unverändert.</li>
+<li>Kein WebRTC/BUNDLE-Code im SIP-Signaling-Kern (bleibt im Media-Transport / Infrastructure/Rtp).</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-010-bundle-transport-slice-plan.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

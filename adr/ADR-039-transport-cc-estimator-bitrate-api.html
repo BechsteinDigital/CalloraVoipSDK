@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-039: Transport-Wide Congestion Control — Estimator, AIMD Rate Policy, and Recommended-Bitrate API | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-039: Transport-Wide Congestion Control — Estimator, AIMD Rate Policy, and Recommended-Bitrate API | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-039-transport-cc-estimator-bitrate-api.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-039-transport-wide-congestion-control--estimator-aimd-rate-policy-and-recommended-bitrate-api">ADR-039: Transport-Wide Congestion Control — Estimator, AIMD Rate Policy, and Recommended-Bitrate API</h1>
+
+<p>Status: Accepted
+Date: 2026-07-15</p>
+<h2 id="context">Context</h2>
+<p>The transport-cc feedback plane ([C10-01]) gives the media sender an inbound RTCP report of
+per-packet arrivals and gaps. This ADR covers the <strong>sender-side estimator</strong> that turns those
+reports into a congestion signal, the <strong>rate policy</strong> that turns the signal into a target
+bitrate, and the <strong>public API</strong> that hands that recommendation to the application. The founder
+decision (after comparing SipSorcery/baresip/Ozeki, none of which ship full GCC) was <strong>Option 1:
+expose a ready-to-use recommendation rather than raw metrics, with a deliberately simple
+controller</strong>; a smoother standards-based controller (SCReAM, RFC 8298) is a later opt-in upgrade.</p>
+<p>The SDK is <strong>transport-only</strong>: it never encodes. The recommendation tells the application what
+bitrate to set on <em>its</em> encoder.</p>
+<h3 id="verified-current-state">Verified current state</h3>
+<p>Code-grounded via graphify (<code>query &quot;recommended bitrate congestion estimate&quot;</code>,
+<code>query &quot;CongestionBitrateController recommended bitrate wiring&quot;</code>) plus reads:</p>
+<ul>
+<li><strong>Delay signal.</strong> <code>TransportCcSendHistory</code> (bounded direct-mapped ring, seq%capacity) records
+each stamped packet's send time. <code>TransportCcFeedbackInterpreter.Interpret</code> reconstructs each
+received packet's arrival time (<code>referenceTicks*64000 + Σ delta*250</code>, overflow-safe) into
+<code>TransportCcFeedbackResult</code>. <code>TransportCcFeedbackCorrelator.Correlate</code> joins reconstructed
+arrivals with the send history into per-packet delay gradients <code>(Δarrival − Δsend)</code>
+(offset-invariant; gaps/evicted skipped). Time units (64 ms / 250 µs) are centralised in
+<code>TransportCcTime</code>.</li>
+<li><strong>Delay trend + classification.</strong> <code>TransportCcDelayTrendEstimator.Observe</code> folds each gradient
+into an EWMA (<code>trend = trend*(1-α) + grad*α</code>) and classifies against a fixed ± threshold into
+<code>CongestionSignal</code> {Normal, Overusing, Underusing}, read/written under a <code>_sync</code> lock (no torn
+double read). <code>TransportCcLossEstimator</code> smooths the loss ratio (EWMA) from the same results.</li>
+<li><strong>AIMD rate policy — NEW since the C10 logs.</strong> <code>CongestionBitrateController</code> maps
+(signal, loss) → a target video bitrate with a simple AIMD rule: multiplicative back-off when
+<code>Overusing</code> or loss ≥ threshold, additive probe upward otherwise, clamped to [min, max].
+Stateful, thread-safe (<code>_sync</code>). This type does <strong>not</strong> appear in any C10 log — the logs end
+with an internal <code>Congestion</code> property and an explicitly <em>deferred</em> bitrate decision.</li>
+<li><strong>Sender-side orchestrator.</strong> <code>TransportCcCongestionController</code> wires it together:
+<code>OnPacketSent</code> → <code>SendHistory.Record</code>; <code>OnRtcpPackets</code> (the compound already decoded once by
+the session — cf. commit 26816e5) → Interpret → Correlate → <code>DelayTrend.Observe</code> +
+<code>Loss.Observe</code> → <code>bitrate.Update</code>. It exposes <code>RecommendedBitrateBps</code>, <code>Quality</code>
+(<code>NetworkQuality</code> from signal+loss bands: Poor ≥10 % loss or Overusing, Fair ≥2 %, else Good),
+raw <code>Signal</code>/<code>DelayTrendMicros</code>/<code>LossRatio</code>, and a <code>RecommendedBitrateChanged</code> event
+(fires on the RTP control thread; subscriber faults caught+logged).</li>
+<li><strong>Wiring in <code>VideoRtpStream</code>.</strong> Constructed gate-off (extmap-gated) with tuning constants
+(send-history cap 4096, delay EWMA 0.1, overuse threshold 5 ms, loss EWMA 0.1);
+<code>PacketSent += OnPacketSent</code>, <code>RtcpCompoundReceived += OnRtcpPackets</code>,
+<code>RecommendedBitrateChanged += OnCongestionRecommendationChanged</code>; symmetric Dispose-unsubscribe
+(<code>VideoRtpStream.cs:227-239</code>, <code>490-494</code>). Exposes <code>RecommendedBitrateBps</code> / <code>NetworkQuality</code> /
+<code>CongestionUpdated</code>.</li>
+<li><strong>Public API — NEW since the C10 logs.</strong> <code>CallMediaOrchestrator.cs:240-241</code> calls
+<code>sdkCall.SetVideoCongestion(video.RecommendedBitrateBps, video.NetworkQuality)</code>, surfacing the
+recommendation to <code>ICall</code>. The application-facing contract is
+<code>IVideoSender.RecommendedBitrateChanged</code> → <code>VideoBitrateRecommendationEventArgs</code>
+(<code>RecommendedBitrateBps</code> + <code>NetworkQuality</code>, both nullable = &quot;inactive for this leg&quot;). The
+public domain enum is <code>NetworkQuality</code> {Good, Fair, Poor}. The C10 logs deferred this API
+entirely (pending the facade-naming decision).</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<ol>
+<li><strong>Estimator reconstructs delay and loss; policy is a separate object.</strong> The delay chain
+(send-history → interpreter → correlator → EWMA trend + threshold signal) and the loss
+estimator are pure/neutral building blocks. <code>CongestionBitrateController</code> holds the AIMD
+policy alone — &quot;detection quality lives in the estimators; this only maps a signal to a
+bitrate.&quot;</li>
+<li><strong>Ship a recommendation, not raw metrics (Option 1).</strong> The public surface is a ready-to-use
+<code>RecommendedBitrateBps</code> plus a coarse <code>NetworkQuality</code>, delivered by event
+(<code>RecommendedBitrateChanged</code> / <code>VideoBitrateRecommendationEventArgs</code>). Raw signal/trend/loss
+remain readable but are not the primary contract. The application sets its encoder to the
+recommended value; the SDK never encodes.</li>
+<li><strong>Deliberately simple AIMD now, SCReAM later.</strong> A fixed-threshold EWMA detector + AIMD rate
+rule, not GCC's adaptive-threshold regression or SCReAM's rate control. RFC 8298 / adaptive
+threshold + hysteresis is the marked accuracy upgrade, opt-in behind an explicit quality goal.</li>
+<li><strong>Gate-off wiring, opportunistic activation.</strong> The controller is constructed only when the
+transport-cc extmap was negotiated; a non-supporting peer leaves the video stream unchanged.</li>
+</ol>
+<h3 id="crux">Crux</h3>
+<p>The product bet is <strong>abstraction over raw telemetry</strong>: external developers get one number to set
+on their encoder and one enum for a UI hint, not a delay-gradient stream to interpret. The cost
+is a simple controller whose tuning (α, thresholds, AIMD steps) is hand-picked, not adaptive —
+accepted as the Option-1 baseline, with SCReAM as the escape hatch when accuracy matters.</p>
+<h2 id="consequences">Consequences</h2>
+<p>Positive: the full sender loop is live and E2E-proven (<code>TransportCcCongestionWiringE2eTests</code>: a
+real session with 100 ms peer-feedback steps drives the signal to Overusing across both seams).
+The public API is minimal and transport-only-consistent; a plugin sets <code>encoder.SetBitrate(e. RecommendedBitrateBps)</code> and reads <code>NetworkQuality</code> for UI.</p>
+<p>Honest divergences and limitations:</p>
+<ul>
+<li><strong>Two of the four decision pillars post-date the C10 logs.</strong> <code>CongestionBitrateController</code>
+(AIMD policy) and the public <code>RecommendedBitrateChanged</code> / <code>VideoBitrateRecommendationEventArgs</code>
+/ <code>NetworkQuality</code> surface do <strong>not</strong> appear in any of the eleven logs — the logs end with an
+internal <code>Congestion</code> property and a <em>deferred</em> bitrate/API decision. This ADR captures the
+realised design; the logs capture the point before it landed.</li>
+<li><strong>Recommendation is NOT in <code>CallQualitySnapshot</code>.</strong> The recommendation flows via the
+video-sender event / <code>ICall.SetVideoCongestion</code>, separate from <code>CallQualitySnapshot</code> (which
+carries jitter/loss/RTT/MOS). A reader looking there for the bitrate will not find it — this is
+intentional (per-video-leg vs. per-call quality snapshot) but easy to miss.</li>
+<li><strong>No hysteresis.</strong> The fixed-threshold signal can oscillate at the boundary; EWMA smooths but
+does not eliminate it. Hysteresis is bundled with the adaptive-threshold/SCReAM upgrade.</li>
+<li><strong>Tuning is un-calibrated.</strong> The α/threshold/AIMD-step constants are reasonable defaults, not
+network-tuned; calibration is a marked follow-up.</li>
+<li><strong>Sender-side only.</strong> The estimator drives the <em>outbound</em> video bitrate (we send media, peer
+feeds back). It is video-only (audio has no transport-cc stamping) and single-stream.</li>
+</ul>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li>The bitrate result stays clamped to [min, max] and thread-safe (feedback loop writes while the
+application reads); paired reads use the locked accessors, never field-by-field.</li>
+<li>The controller subscribes and unsubscribes symmetrically on Dispose (no leaked handler on the
+RTP control thread); subscriber exceptions are isolated (caught+logged), never propagated onto
+the media thread.</li>
+<li>The public contract exposes a <strong>recommendation</strong> (bitrate + <code>NetworkQuality</code>), not raw
+estimator internals; internal metrics may change without breaking the API.</li>
+<li>Any future GCC/SCReAM controller slots in behind the same <code>CongestionBitrateController</code> seam —
+the estimator and public API stay unchanged.</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Logs (<code>docs/archive/agent-log/</code>): <code>2026-07-15-dev-transport-cc-delay-signal.md</code>,
+<code>…-transport-cc-delay-trend.md</code>, <code>…-transport-cc-feedback-interpreter.md</code>,
+<code>…-transport-cc-congestion-wiring.md</code> (+ feedback-plane logs in [C10-01]).</li>
+<li>Code: <code>Infrastructure/Rtp/CongestionControl/{TransportCcSendHistory,TransportCcFeedbackInterpreter, TransportCcFeedbackCorrelator,TransportCcDelaySample,TransportCcDelayTrendEstimator, TransportCcLossEstimator,CongestionSignal,CongestionBitrateController, TransportCcCongestionController,TransportCcTime}.cs</code>,
+<code>Infrastructure/Rtp/VideoRtpStream.cs:227-239,490-494</code>,
+<code>Application/Media/{CallMediaOrchestrator.cs:240,IVideoSender.cs,VideoBitrateRecommendationEventArgs.cs}</code>,
+<code>Domain/Calls/{NetworkQuality.cs,ICall.cs,CallQualitySnapshot.cs}</code>.</li>
+<li>Tests: <code>TransportCcCongestionControllerTests</code>, <code>TransportCcCongestionWiringE2eTests</code>,
+<code>CongestionBitrateControllerTests</code>, <code>TransportCcExtmapOfferTests</code>.</li>
+<li>RFC/marker: draft-holmer-rmcat-transport-wide-cc-extensions-01 (feedback consumed), RFC 8298
+(SCReAM, marked upgrade), founder &quot;Option 1&quot; decision
+(<code>project_video_interop_codec_decision</code>, <code>project_public_api_dx</code>).</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-039-transport-cc-estimator-bitrate-api.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

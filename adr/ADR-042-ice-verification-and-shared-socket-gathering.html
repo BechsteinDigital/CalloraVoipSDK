@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-042: ICE Verification Discipline and Shared-Socket srflx Gathering | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-042: ICE Verification Discipline and Shared-Socket srflx Gathering | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-042-ice-verification-and-shared-socket-gathering.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-042-ice-verification-discipline-and-shared-socket-srflx-gathering">ADR-042: ICE Verification Discipline and Shared-Socket srflx Gathering</h1>
+
+<p>Status: Accepted
+Date: 2026-07-08</p>
+<h2 id="context">Context</h2>
+<p>Before the RFC-8445 ICE epic (C11-01/C11-02) began, a founder question about the ICE status
+exposed two independent problems that this ADR records together, because they share one root: a
+DONE claim that no live evidence backed.</p>
+<ol>
+<li><p><strong>Evidence gap.</strong> CORE-006 (ICE agent) had been tracked DONE since April, but the original
+Core.Tests suite (~831 tests) did not survive the public-repo cut, and the current tree had
+<strong>zero</strong> ICE tests. The DONE claim was unbacked — exactly the &quot;Testgrün ≠ DONE / claims need
+direct evidence&quot; rule the project enforces. A verification package rebuilt a deterministic
+agent test suite and, separately, made the NAT case runnable end-to-end.</p>
+</li>
+<li><p><strong>srflx gathering could not use the real media port.</strong> The first real STUN gathering against
+<code>stun.l.google.com</code> during a founder NAT test failed with <code>SocketException(98) EADDRINUSE</code>, then with <code>SocketException(97)</code> address-family mismatch. Both were latent because
+gathering had never run against real STUN with an active call — the precise blind spot the
+missing tests had hidden. A server-reflexive candidate must carry the <strong>real</strong> media port, but
+that port is already held by the channel's reservation socket, so the <code>StunClient</code> bound a
+second socket to it (EADDRINUSE); and DNS resolved the STUN host to AAAA first, so an IPv4
+media socket sent to an IPv6 target (family mismatch).</p>
+</li>
+</ol>
+<h3 id="verified-current-state-graphify--logs">Verified current state (graphify + logs)</h3>
+<ul>
+<li><strong>Agent test suite exists and drives the ports.</strong> <code>CallIceAgentTests</code> exercises <code>CallIceAgent</code>
+deterministically through fakes of <code>IIceStunProbe</code> / <code>IIceTurnRelayAllocator</code>: gathering
+(host + srflx via STUN, +relay via TURN-Allocate, host-only fallback on STUN failure, skip when
+disabled), selection (host-host success, relay wins when direct paths fail, retry before pair
+abandonment), and failure reason codes (<code>ice_checks_failed</code> / <code>ice_metadata_missing</code> /
+<code>ice_candidates_missing</code> / <code>ice_no_candidate_pairs</code>) with the correct Failed-vs-Disabled state.</li>
+<li><strong>Shared-socket gathering.</strong> <code>IStunClient.QueryBindingAsync</code> and <code>IIceStunProbe. TryCheckConnectivityAsync</code> carry an optional <code>Socket? sharedUdpSocket</code>, threaded through the
+auth retries / redirect requery down to <code>QueryCoreUdpAsync</code>
+(<code>src/Core/Infrastructure/Stun/Client/StunClient.cs</code> L62–249). When set, the client uses
+<code>SendToAsync</code>/<code>ReceiveFrom</code> on the channel's own socket <strong>without</strong> Connect/Dispose (ownership
+stays with the channel); the in-code comment (L222) states that binding a second socket to that
+port would fail with EADDRINUSE and that connecting the shared socket would filter later
+datagrams. So the srflx candidate carries the real media port.</li>
+<li><strong>Address-family selection.</strong> <code>StunIceProbe.ResolveServerEndPointAsync</code> resolves the STUN host
+and calls <code>PickAddressForFamily(addresses, localEndPoint.AddressFamily)</code>
+(<code>.../Stun/Client/StunIceProbe.cs</code> L141–167), choosing an address in the <strong>local</strong> endpoint's
+family (A for an IPv4 media socket), and errors clearly when the host offers no matching family.</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<p>Treat ICE status as a <strong>claim that requires live, reproducible evidence</strong>, and fix the two latent
+gathering bugs the verification exposed:</p>
+<ol>
+<li><strong>Rebuild a deterministic agent test suite</strong> (<code>CallIceAgentTests</code>) driving <code>CallIceAgent</code>
+through fake connectivity/relay ports across gathering, selection, retry, and failure-reason
+paths — so the ICE agent's behaviour is evidenced rather than asserted by a stale tracking
+entry. Do <strong>not</strong> silently upgrade the CORE-006 DONE claim; the NAT acceptance (&quot;calls work
+over NAT&quot;) is re-established only by a real founder call with STUN configured.</li>
+<li><strong>Thread a shared UDP socket</strong> through the whole STUN query chain so srflx gathering uses the
+channel's real media socket (<code>SendTo</code>/<code>ReceiveFrom</code>, no Connect/Dispose) instead of binding a
+second socket to the same port.</li>
+<li><strong>Pick the STUN server address in the local socket's address family</strong> so an IPv4 media socket
+never sends to an AAAA target.</li>
+</ol>
+<p>Crux: the missing tests and the two socket bugs are the same failure — gathering had never been
+exercised against real STUN with a live call, so a DONE claim survived that live behaviour would
+have refuted. The fix is evidence first, then the bugs the evidence surfaces.</p>
+<h2 id="consequences">Consequences</h2>
+<p>Positive: the ICE agent has a deterministic regression suite again; srflx gathering carries the
+correct media port on a shared socket and degrades cleanly across address families; the NAT path
+became actually runnable (agent gains <code>Agent__StunServer</code> / <code>Agent__TurnServer</code> configuration,
+LAN behaviour unchanged without it). Loopback regression tests against the built <code>StunServer</code>
+prove the shared-socket query returns the correct mapped endpoint and that the old
+second-socket path would throw.</p>
+<p>Honest limits / divergence:</p>
+<ul>
+<li><strong>CORE-006 stays formally DONE in tracking</strong> (deliberately not edited), but this ADR records
+that the NAT acceptance was <strong>not</strong> live-verified at the time — it depends on a real
+external-NAT founder call (mobile data, STUN set), and a Fritz!Box LAN does not exercise real
+ICE. The verification package proved non-regression + gathering, not &quot;NAT works&quot;.</li>
+<li><strong>This predates and motivated the RFC-8445 epic.</strong> At verification time the agent still had no
+trickle, no roles/nomination, no prflx — those are the C11-01 work, explicitly out of scope here.</li>
+<li><strong>TURN gathering has the same second-socket pattern.</strong> The shared-socket fix was applied to the
+STUN path; <code>TurnIceRelayAllocator</code> still uses the bind-a-socket pattern and was flagged to be
+migrated to the shared socket at first real TURN use (noted, not done here).</li>
+</ul>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li>An ICE / CORE-006-style DONE claim MUST be backed by a live-behaviour test or a real-call
+acceptance; a stale tracking entry is not evidence (project claim rule).</li>
+<li>srflx gathering MUST reuse the channel's media socket via <code>SendTo</code>/<code>ReceiveFrom</code> without
+Connect/Dispose — never bind a second socket to the reserved media port.</li>
+<li>STUN server resolution MUST pick an address in the local endpoint's address family and fail with
+a clear message when none matches.</li>
+<li>Ownership of the shared socket stays with the channel; the STUN client MUST NOT dispose it.</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Logs: docs/archive/agent-log/2026-07-08-dev-ice-verification.md (Teil 1 test rebuild;
+Nachtrag 1 EADDRINUSE/shared socket; Nachtrag 2 IPv6/IPv4 family conflict)</li>
+<li>Code: <code>StunClient.QueryBindingAsync</code> / <code>QueryCoreUdpAsync</code> (<code>sharedUdpSocket</code>, EADDRINUSE
+comment, src/Core/Infrastructure/Stun/Client/StunClient.cs);
+<code>StunIceProbe.ResolveServerEndPointAsync</code> / <code>PickAddressForFamily</code>
+(src/Core/Infrastructure/Stun/Client/StunIceProbe.cs);
+<code>IIceStunProbe.TryCheckConnectivityAsync</code> (<code>sharedUdpSocket</code>)</li>
+<li>Tests: CallIceAgentTests (gathering / selection / retry / failure-reason);
+StunClient loopback regression (shared-socket mapped endpoint + old-path throws);
+PickAddressForFamily mixed-AAAA/A regression</li>
+<li>Marker: RFC 8445 (ICE, srflx §5.1.1.2); CORE-006; project claim-evidence rule
+(CLAUDE.md &quot;Scope- und Claim-Regeln&quot;); EADDRINUSE(98) / family(97) founder NAT tests</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-042-ice-verification-and-shared-socket-gathering.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>
