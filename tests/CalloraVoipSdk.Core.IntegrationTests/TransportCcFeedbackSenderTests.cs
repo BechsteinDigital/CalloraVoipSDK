@@ -171,6 +171,76 @@ public sealed class TransportCcFeedbackSenderTests
         Assert.Equal([(ushort)100, 101], Decode(Assert.Single(sent)).Statuses.Select(s => s.SequenceNumber).ToArray());
     }
 
+    // ── Adaptive feedback interval (libwebrtc RemoteEstimatorProxy: ~5 % overhead, clamped [50, 250] ms) ─────
+
+    private static RtpPacket StampedWithPayload(ushort transportSeq, ushort rtpSeq, int payloadLength) => new()
+    {
+        PayloadType = 96,
+        SequenceNumber = rtpSeq,
+        Ssrc = RemoteSsrc,
+        Payload = new byte[payloadLength],
+        HeaderExtension = OneByteRtpHeaderExtensions.Encode(
+            [OneByteRtpHeaderExtensions.TransportSequenceNumber(ExtId, transportSeq)]),
+    };
+
+    [Fact]
+    public void With_no_arrivals_the_interval_is_the_default_100_ms()
+    {
+        var sender = Sender(new List<byte[]>(), () => 0);
+
+        Assert.Equal(TimeSpan.FromMilliseconds(100), sender.NextIntervalForTest());
+    }
+
+    [Fact]
+    public void High_inbound_bitrate_shrinks_the_interval_towards_the_50_ms_floor()
+    {
+        long clock = 0;
+        var sender = Sender(new List<byte[]>(), () => clock);
+
+        // Pump a high inbound rate across the bitrate window: ~1200-byte packets every ~2 ms ≈ 4.8 Mbit/s.
+        for (ushort i = 0; i < 250; i++)
+        {
+            clock = i * 2_000L; // 2 ms apart (Frequency = 1e6 ticks/s → microseconds)
+            sender.OnRtpPacketReceived(StampedWithPayload(i, i, payloadLength: 1200));
+        }
+
+        var interval = sender.NextIntervalForTest();
+        Assert.Equal(TimeSpan.FromMilliseconds(50), interval); // clamped at the floor under heavy traffic
+    }
+
+    [Fact]
+    public void Low_inbound_bitrate_grows_the_interval_towards_the_250_ms_ceiling()
+    {
+        long clock = 0;
+        var sender = Sender(new List<byte[]>(), () => clock);
+
+        // A trickle: tiny packets, sparsely — the target ~5 % feedback share pushes the interval to the ceiling.
+        clock = 0;       sender.OnRtpPacketReceived(StampedWithPayload(0, 0, payloadLength: 10));
+        clock = 200_000; sender.OnRtpPacketReceived(StampedWithPayload(1, 1, payloadLength: 10));
+
+        var interval = sender.NextIntervalForTest();
+        Assert.Equal(TimeSpan.FromMilliseconds(250), interval); // clamped at the ceiling under light traffic
+    }
+
+    [Theory]
+    [InlineData(10, 1)]      // trickle → ceiling
+    [InlineData(1200, 2000)] // flood → floor
+    [InlineData(300, 8000)]  // moderate → somewhere between the bounds
+    public void The_interval_always_stays_within_50_and_250_ms(int payloadLength, long spacingMicros)
+    {
+        long clock = 0;
+        var sender = Sender(new List<byte[]>(), () => clock);
+
+        for (ushort i = 0; i < 200; i++)
+        {
+            clock = i * spacingMicros;
+            sender.OnRtpPacketReceived(StampedWithPayload(i, i, payloadLength));
+        }
+
+        var interval = sender.NextIntervalForTest();
+        Assert.InRange(interval.TotalMilliseconds, 50, 250);
+    }
+
     [Fact]
     public async Task DisposeAsync_stops_the_loop()
     {
