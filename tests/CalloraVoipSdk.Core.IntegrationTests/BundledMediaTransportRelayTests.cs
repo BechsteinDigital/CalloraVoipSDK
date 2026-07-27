@@ -474,10 +474,5 @@ public sealed class BundledMediaTransportRelayTests
             initialSequenceNumber: 1000, initialTimestamp: 5000);
 
     private static SrtpKeyMaterial Material() =>
-        new()
-        {
-            MasterKey = MasterKey,
-            MasterSalt = MasterSalt,
-            Suite = SrtpCryptoSuite.AesCm128HmacSha1_80,
-        };
+        new(MasterKey, MasterSalt, SrtpCryptoSuite.AesCm128HmacSha1_80);
 }

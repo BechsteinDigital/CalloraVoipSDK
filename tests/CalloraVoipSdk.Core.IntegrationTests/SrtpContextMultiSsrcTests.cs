@@ -101,12 +101,7 @@ public sealed class SrtpContextMultiSsrcTests
     }
 
     private static SrtpKeyMaterial Material() =>
-        new()
-        {
-            MasterKey = MasterKey,
-            MasterSalt = MasterSalt,
-            Suite = SrtpCryptoSuite.AesCm128HmacSha1_80,
-        };
+        new(MasterKey, MasterSalt, SrtpCryptoSuite.AesCm128HmacSha1_80);
 
     private static byte[] Packet(uint ssrc, ushort seq, int payloadLength)
     {

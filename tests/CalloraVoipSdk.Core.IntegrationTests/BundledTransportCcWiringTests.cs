@@ -230,12 +230,7 @@ public sealed class BundledTransportCcWiringTests
         new RtpPacketCodec().Decode(receiver.Unprotect(srtpDatagram));
 
     private static SrtpKeyMaterial Material() =>
-        new()
-        {
-            MasterKey = MasterKey,
-            MasterSalt = MasterSalt,
-            Suite = SrtpCryptoSuite.AesCm128HmacSha1_80,
-        };
+        new(MasterKey, MasterSalt, SrtpCryptoSuite.AesCm128HmacSha1_80);
 
     private sealed class CapturingSender : IBundledDatagramSender
     {

@@ -64,8 +64,8 @@ internal static class DtlsSrtpKeyExporter
             return new DtlsSrtpNegotiatedKeys
             {
                 Suite = suite,
-                LocalKeys = new SrtpKeyMaterial { MasterKey = localKey, MasterSalt = localSalt, Suite = suite },
-                RemoteKeys = new SrtpKeyMaterial { MasterKey = remoteKey, MasterSalt = remoteSalt, Suite = suite },
+                LocalKeys = new SrtpKeyMaterial(localKey, localSalt, suite),
+                RemoteKeys = new SrtpKeyMaterial(remoteKey, remoteSalt, suite),
             };
         }
         finally

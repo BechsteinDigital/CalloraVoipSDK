@@ -115,7 +115,7 @@ public sealed class BundledVideoTrackTests
             inbound, NullLogger<BundledMediaTransport>.Instance);
 
     private static SrtpKeyMaterial Material() =>
-        new() { MasterKey = MasterKey, MasterSalt = MasterSalt, Suite = SrtpCryptoSuite.AesCm128HmacSha1_80 };
+        new(MasterKey, MasterSalt, SrtpCryptoSuite.AesCm128HmacSha1_80);
 
     private static byte[] Nal(byte header, int bodyLength)
     {
