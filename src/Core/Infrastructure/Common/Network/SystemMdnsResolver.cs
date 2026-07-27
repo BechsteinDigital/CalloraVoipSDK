@@ -31,11 +31,11 @@ internal sealed class SystemMdnsResolver : IMdnsResolver
     public async Task<IPAddress?> ResolveAsync(string hostname, CancellationToken cancellationToken)
     {
         // RFC 8828 §3.2.2: nur "<label>.local" mit GENAU einem Punkt und nicht-leerem Label
-        // (IndexOf('.')==0 lehnt ".local" ab).
+        // (StartsWith('.') lehnt ".local" ab).
         if (string.IsNullOrEmpty(hostname)
             || !hostname.EndsWith(".local", StringComparison.OrdinalIgnoreCase)
             || hostname.Count(ch => ch == '.') != 1
-            || hostname.IndexOf('.') == 0)
+            || hostname.StartsWith('.'))
             return null;
 
         try
