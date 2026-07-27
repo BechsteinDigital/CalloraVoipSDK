@@ -69,7 +69,9 @@ internal sealed class DtlsSrtpServer : DefaultTlsServer
             throw new TlsFatalAlert(AlertDescription.handshake_failure);
 
         _selectedProfile = DtlsSrtpProfiles.SelectFromOffered(useSrtp.ProtectionProfiles)
-            ?? throw new TlsFatalAlert(AlertDescription.insufficient_security);
+            ?? throw new TlsFatalAlert(
+                AlertDescription.insufficient_security,
+                DtlsSrtpProfiles.FormatNoCommonProfileError(useSrtp.ProtectionProfiles));
 
         base.ProcessClientExtensions(clientExtensions);
     }

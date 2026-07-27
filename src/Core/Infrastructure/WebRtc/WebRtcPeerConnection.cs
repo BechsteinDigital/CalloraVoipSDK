@@ -301,6 +301,15 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         string? pendingLocalDescription;
         lock (_sync)
         {
+            // Re-Offer / ICE restart is not supported (RFC 8829 renegotiation is a documented post-GA follow-up):
+            // a second SetRemoteDescription would silently overwrite the built session — leaking the old transport,
+            // double-wiring media events and re-running DTLS. Fail loudly instead of degrading silently; dispose
+            // this peer and create a new one to renegotiate.
+            if (_session is not null || _started)
+                throw new InvalidOperationException(
+                    "Re-Offer / ICE restart is not supported: this peer already has a media session. " +
+                    "Dispose it and create a new peer to renegotiate.");
+
             // Capture the offerer state as one snapshot: the local description belongs to _localOfferModel
             // and must be read under the same gate, not unsynchronised afterwards (HARD-C6).
             pendingOffer = _localOfferModel!;
@@ -654,8 +663,12 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
 
         if (server.Transport != IceTransport.Udp)
         {
-            _logger.LogDebug(
-                "Skipping TURN server {Host} with transport {Transport}: relay gathering runs over the UDP media socket only.",
+            // Loud enough to diagnose the config trap on the non-builder path (a WebRtcConfiguration set directly
+            // bypasses the builder's reject): a TCP/TLS TURN entry gathers no relay candidate — the TCP/TLS relay
+            // data path is not wired into the media bundle.
+            _logger.LogWarning(
+                "Skipping TURN server {Host} with transport {Transport}: only UDP TURN is supported for relay " +
+                "gathering — no relay candidate is gathered for this server.",
                 server.Host, server.Transport);
             return;
         }
