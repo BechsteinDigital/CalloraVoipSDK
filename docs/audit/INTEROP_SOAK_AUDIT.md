@@ -96,6 +96,16 @@ Kausalkette Ende-zu-Ende gegen den echten Code bestätigt (Verdict **CONFIRMED**
 
 **Scope-Grenze Paket 1:** Connect + bidir. Audio, SDK-Offerer. **Folge-Slices (GA-Reifung):** SDK-mDNS-Auflösung · Video (VP8) Browser-Interop · Browser-Offerer-Richtung · dann die übrigen GA-Blocker (Answerer-Relay-Gap, TCP/TLS-TURN-Config-Diagnostik, Video-Stats). Design/Plan: `docs/audit/2026-07-27-webrtc-browser-interop-{design,plan}.md`.
 
+## Coverage-Notiz WebRTC mDNS-Candidate-Auflösung (GA-Reifung Paket 2, 2026-07-27)
+
+**Der SDK löst empfangene `.local`-mDNS-ICE-Candidates jetzt auf** (`IMdnsResolver`-Seam + `SystemMdnsResolver` via `System.Net.Dns`, RFC-8828-Regeln: `uuid.local` genau-ein-Punkt, >1 IP → ignorieren; fire-and-forget peer-lifecycle-gebunden). Erste echte `src/`-Änderung der GA-Reifung, chirurgisch (2 Resolver-Dateien + `WebRtcPeerConnection.AddIceCandidateAsync`).
+
+**★ measure-first-Fund, der den Scope präzisierte:** Der Spike zeigte, dass **headless Chromium in unserem Setup NIE `.local`-Candidates schickt** — weder bei einem Media-Call noch permission-los. Grund (offizielle Chrome-Quellen): Chrome verschleiert IPs als mDNS **nur ohne getUserMedia-Permission**; ein echter Voice/Video-Call HAT Permission → echte IPs. Der einzige `.local`-Fall ist **DataChannel-only** (keine Media-Permission) — das der SDK aktuell nicht kann (SCTP NOT-STARTED). **Konsequenz:** mDNS-Auflösung greift im heutigen Media-Produkt praktisch nie; **gebaut als Vorbereitung auf die geplanten DataChannels** (User-Entscheidung 2026-07-27), RFC-8828-konform.
+
+**Verifikation (an den Fund angepasst):** Weil headless Chrome kein mDNS triggert, ist der Browser-E2E-Test für mDNS **nicht machbar** — stattdessen: (a) 6 Unit-Tests der RFC-Regeln (gemockter Lookup) + 2 Peer-Tests (`.local` → Resolver gerufen; IP-Pfad unverändert); (b) **echter OS-Nachweis** ohne Browser: `System.Net.Dns` löst einen realen avahi-`.local`-Namen (`nobara-pc.local` → `192.168.178.76`) auf, belegt die OS-mDNS-Integration von Option A. Wo kein OS-mDNS (CI ohne avahi) → Candidate verworfen wie bisher, verhaltensbewahrend, kein Regress. 76/76 WebRtc+Resolver-Tests grün.
+
+**Paket-1-Präzisierung:** der dortige `--disable-features=WebRtcHideLocalIpsWithMdns`-Flag war unnötig (Chrome schickt bei Media-Permission eh echte IPs) — harmlos belassen. Design/Plan: `docs/audit/2026-07-27-webrtc-mdns-resolution-{design,plan}.md`.
+
 ## Coverage-Notiz WebRTC VP8-Video-Browser-Interop (GA-Reifung Paket 3, 2026-07-27)
 
 **Bidirektionaler VP8-Video-Nachweis gegen echten headless Chrome** — erweitert den Audio-Nachweis aus Paket 1. Die `CalloraVoipSdk.WebRtc`-Fassade (SDK-Offerer, `EnableVideo=true, VideoCodecs=["VP8"]`) tauscht VP8-Video mit echtem Chrome (fake-device Testpattern): **Browser→SDK** via `RemoteTrack` (Kind=Video, ≥10 Frames), **SDK→Browser** via keyframe-bewusstes **Echo** (`SendVideoFrameAsync` ab dem ersten `IsKeyFrame`). **★ Dekodier-Nachweis erreicht:** der Browser meldet `inbound-rtp(video).bytesReceived > 0` UND **`framesDecoded > 0`** — er dekodiert das vom SDK gesendete Video tatsächlich. 3× stabil (14–16 s).
