@@ -51,6 +51,20 @@ internal sealed record BundledTrackConfig
     public string? VideoCodecName { get; init; }
 
     /// <summary>
+    /// True when the peer advertised Generic NACK (<c>a=rtcp-fb:* nack</c>, RFC 4585) for this video
+    /// m-line: the track may report detected inbound loss so the peer can retransmit. Ignored for an
+    /// audio m-line; defaults to <see langword="false"/> so feedback the peer did not offer is never sent.
+    /// </summary>
+    public bool RemoteSupportsNack { get; init; }
+
+    /// <summary>
+    /// True when the peer advertised Picture Loss Indication (<c>a=rtcp-fb:* nack pli</c>, RFC 4585 §6.3.1)
+    /// for this video m-line: the track may request a keyframe (a throttled PLI) on detected inbound loss.
+    /// Ignored for an audio m-line; defaults to <see langword="false"/>.
+    /// </summary>
+    public bool RemoteSupportsPli { get; init; }
+
+    /// <summary>
     /// Send-side simulcast encodings for a video m-line (RFC 8853): each names an <c>a=rid</c> layer
     /// carried on its own SSRC under the shared MID. Empty for a non-simulcast track — the single stream
     /// then uses <see cref="Ssrc"/> / <see cref="PayloadType"/> directly. All layers share the codec and

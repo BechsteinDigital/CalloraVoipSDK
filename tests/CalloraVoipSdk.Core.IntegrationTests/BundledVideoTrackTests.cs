@@ -85,7 +85,8 @@ public sealed class BundledVideoTrackTests
     // ── harness ──────────────────────────────────────────────────────────────────
 
     private static BundledVideoTrack VideoTrack(BundledOutboundPipeline outbound) =>
-        new("video", "H264", VideoPayloadType, outbound, ReorderDepth, NullLogger<BundledVideoTrack>.Instance);
+        new("video", "H264", VideoPayloadType, VideoSsrc, remoteSupportsNack: false, remoteSupportsPli: false,
+            outbound, ReorderDepth, NullLoggerFactory.Instance);
 
     // Outbound pipeline over the given send seam, with the video BundledOutboundTrack registered.
     private static BundledOutboundPipeline OutboundOver(IBundledDatagramSender sender)
