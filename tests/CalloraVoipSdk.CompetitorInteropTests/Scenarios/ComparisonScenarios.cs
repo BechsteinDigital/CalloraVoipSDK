@@ -15,6 +15,19 @@ public sealed class ComparisonScenarios
         StackKind.Ozeki,
     };
 
+    public static TheoryData<StackKind, string> RemoteRejections => new()
+    {
+        { StackKind.Callora, "busy" },
+        { StackKind.Callora, "decline" },
+        { StackKind.Callora, "nonexistent" },
+        { StackKind.SipSorcery, "busy" },
+        { StackKind.SipSorcery, "decline" },
+        { StackKind.SipSorcery, "nonexistent" },
+        { StackKind.Ozeki, "busy" },
+        { StackKind.Ozeki, "decline" },
+        { StackKind.Ozeki, "nonexistent" },
+    };
+
     [Theory]
     [MemberData(nameof(Stacks))]
     public async Task Registration(StackKind kind)
@@ -85,6 +98,45 @@ public sealed class ComparisonScenarios
         Assert.Null(attempt.Call);
         Assert.InRange(stopwatch.Elapsed, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(9));
         Assert.Equal(0, stack.ActiveCallCount);
+    }
+
+    [Theory]
+    [MemberData(nameof(RemoteRejections))]
+    public async Task Remote_rejection_cleans_up_and_stack_remains_reusable(
+        StackKind kind,
+        string extension)
+    {
+        await using var asterisk = await StartAsteriskAsync().ConfigureAwait(false);
+        await using var stack = await CreateRegisteredStackAsync(kind, asterisk).ConfigureAwait(false);
+        var stopwatch = Stopwatch.StartNew();
+
+        var rejected = await stack
+            .DialAsync(asterisk.Target(extension), TimeSpan.FromSeconds(10))
+            .ConfigureAwait(false);
+
+        stopwatch.Stop();
+        Assert.Equal(DialAttemptStatus.Failed, rejected.Status);
+        Assert.Null(rejected.Call);
+        Assert.InRange(stopwatch.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(8));
+        Assert.Equal(0, stack.ActiveCallCount);
+        Assert.True(stack.IsRegistered, $"{stack.Name} lost registration after {extension} rejection.");
+        await WaitUntilAsync(
+                async () => (await asterisk.ShowChannelsAsync().ConfigureAwait(false))
+                    .Contains("0 active channels", StringComparison.OrdinalIgnoreCase),
+                TimeSpan.FromSeconds(8),
+                $"{stack.Name} left an Asterisk channel after {extension} rejection.")
+            .ConfigureAwait(false);
+
+        var recovery = await stack
+            .DialAsync(asterisk.Target("answer"), TimeSpan.FromSeconds(10))
+            .ConfigureAwait(false);
+        AssertConnected(stack, recovery);
+        await using var recoveredCall = recovery.Call!;
+        await WaitUntilAsync(
+                () => recoveredCall.ReceivedPacketCount >= 10,
+                TimeSpan.FromSeconds(10),
+                $"{stack.Name} did not receive media after recovering from {extension} rejection.")
+            .ConfigureAwait(false);
     }
 
     [Theory]

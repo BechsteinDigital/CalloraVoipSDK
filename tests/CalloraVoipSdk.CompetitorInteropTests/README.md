@@ -76,7 +76,9 @@ Jedes Szenario wird einmal mit Callora, Ozeki und SIPSorcery ausgeführt:
 8. Medien-Bridge von einem Milliwatt-Quell-Leg zu einem Echo-Leg
 9. Hold/Unhold per re-INVITE mit öffentlichem Zustandswechsel,
    Asterisk-sichtbarem `sendonly`/`inactive` → `sendrecv` und fortgesetztem RTP
-10. Hangup, Channel-Cleanup und Deregistrierung
+10. Remote-Ablehnung mit 486, 403 und 404: prompter Fehler,
+    Channel-Cleanup und erfolgreicher Folgeanruf über dieselbe Registrierung
+11. Hangup, Channel-Cleanup und Deregistrierung
 
 Für jede Testzeile wird ein frischer Asterisk-Container gestartet. Die Tests
 laufen absichtlich seriell. Dadurch teilen sich die Implementierungen weder
@@ -142,6 +144,9 @@ Lizenz- oder Kostenbenchmark. Nicht abgedeckt sind insbesondere:
 - Transcoding-Qualität und akustische Qualitätsmetriken
 - Parallelität mit vielen Calls, Turbo-Dialing und Race Conditions
 - Transfer, Remote-Hold/Glare, Fax, Konferenzmischung und In-Band-DTMF
+- externe Cancellation, Transportabbruch und wiederholte Fehlerstürme
+- Granularität der öffentlich sichtbaren SIP-Fehlerursache; der gemeinsame
+  Vertrag normalisiert 486, 403 und 404 bewusst zu `Failed`
 - Authentifizierung, Mandantentrennung und die REST-Oberfläche des Dialers
 - fachliche Gleichwertigkeit aller 77 WebMethods des alten ASMX-Dialers
 - Supportqualität, Lizenzkosten oder Produktionsfreigabe
