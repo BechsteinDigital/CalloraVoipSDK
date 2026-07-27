@@ -84,14 +84,23 @@ public sealed class BundledVideoKeyFrameRequestTests
         var sender = new CapturingSender();
         using var track = VideoTrack(sender, remoteSupportsNack: true);
 
-        // 100 establishes the reference; jumping to 104 is a forward gap of 101, 102, 103.
+        // 100 establishes the reference; jumping to 104 is a forward gap of 101, 102, 103. The NACK is
+        // deferred and reorder-tolerant (libwebrtc/Pion): each missing sequence is only NACKed once the stream
+        // has advanced past it beyond the reorder window, so keep advancing until the whole gap has aged out.
         track.OnRtpPacket(VideoPacket(sequence: 100));
-        track.OnRtpPacket(VideoPacket(sequence: 104));
+        foreach (var seq in new ushort[] { 104, 105, 106, 107 })
+            track.OnRtpPacket(VideoPacket(seq));
 
-        var nack = Assert.Single(sender.Captured.SelectMany(Decode).OfType<RtcpGenericNack>());
-        Assert.Equal(LocalSsrc, nack.SenderSsrc);   // our outbound SSRC is the feedback sender
-        Assert.Equal(RemoteSsrc, nack.MediaSsrc);   // the media source we lost packets from
-        Assert.Equal(new ushort[] { 101, 102, 103 }, nack.LostSequenceNumbers().ToArray());
+        var nacks = sender.Captured.SelectMany(Decode).OfType<RtcpGenericNack>().ToArray();
+        Assert.NotEmpty(nacks);
+        Assert.All(nacks, n =>
+        {
+            Assert.Equal(LocalSsrc, n.SenderSsrc);   // our outbound SSRC is the feedback sender
+            Assert.Equal(RemoteSsrc, n.MediaSsrc);   // the media source we lost packets from
+        });
+        // Across the aged-out reports, exactly the three missing sequences are NACKed — no more, no fewer.
+        var nacked = nacks.SelectMany(n => n.LostSequenceNumbers()).Distinct().OrderBy(s => s).ToArray();
+        Assert.Equal(new ushort[] { 101, 102, 103 }, nacked);
     }
 
     [Fact]

@@ -54,11 +54,13 @@ public sealed class VideoFeedbackE2eTests
         const uint peerSsrc = 0x0BADF00D;
         var target = new IPEndPoint(IPAddress.Loopback, setup.LocalVideoPort);
 
-        // First a delivered packet establishes the receive baseline, then a gap (seq +2)
-        // must make the stream ask the peer for a keyframe.
+        // First a delivered packet establishes the receive baseline, then a gap (101 missing) must make the
+        // stream ask the peer for a keyframe. The loss signal is deferred and reorder-tolerant (libwebrtc/Pion):
+        // keep the stream advancing past the gap so 101 ages out of the reorder window and the PLI fires.
         await peer.SendAsync(VideoRtpPacket(seq: 100, peerSsrc), target);
         await Task.Delay(50);
-        await peer.SendAsync(VideoRtpPacket(seq: 102, peerSsrc), target);
+        foreach (var seq in new ushort[] { 102, 103, 104 })
+            await peer.SendAsync(VideoRtpPacket(seq, peerSsrc), target);
 
         using var receiveTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         RtcpPictureLossIndication? pli = null;
@@ -81,10 +83,12 @@ public sealed class VideoFeedbackE2eTests
         const uint peerSsrc = 0x0BADF00D;
         var target = new IPEndPoint(IPAddress.Loopback, setup.LocalVideoPort);
 
-        // seq 100 delivered, then 102 → 101 is missing.
+        // seq 100 delivered, then 101 goes missing. The NACK is deferred and reorder-tolerant (libwebrtc/Pion):
+        // keep advancing past the gap so 101 ages out of the reorder window and is NACKed.
         await peer.SendAsync(VideoRtpPacket(seq: 100, peerSsrc), target);
         await Task.Delay(50);
-        await peer.SendAsync(VideoRtpPacket(seq: 102, peerSsrc), target);
+        foreach (var seq in new ushort[] { 102, 103, 104 })
+            await peer.SendAsync(VideoRtpPacket(seq, peerSsrc), target);
 
         using var receiveTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         RtcpGenericNack? nack = null;

@@ -398,10 +398,10 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
 
         _remoteMediaSsrc = packet.Ssrc;
 
-        // Arrival-order loss signalling (RFC 4585): on a genuine forward gap request retransmit at once —
-        // before the reorder window can slide past it — and request a keyframe. A reorder or duplicate is not
-        // loss (Track returns null): the reorder window corrects it downstream, so it raises neither a NACK nor
-        // a PLI. Ordered delivery and the depacketiser reset are handled downstream, not here.
+        // Arrival-order loss signalling (RFC 4585): the tracker holds a forward gap for a small reorder window
+        // and only reports (NACK + PLI) sequences once they age past it — a reordered packet that arrives first
+        // is never NACKed (Track returns null for a reorder/duplicate; the reorder window corrects it
+        // downstream). Ordered delivery and the depacketiser reset are handled downstream, not here.
         if (_arrivalLoss.Track(packet.SequenceNumber) is { } missing)
             _keyFrameFeedback.OnLoss(packet.Ssrc, missing);
 
