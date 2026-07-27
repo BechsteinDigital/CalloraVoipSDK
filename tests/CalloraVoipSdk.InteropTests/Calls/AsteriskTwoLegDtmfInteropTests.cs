@@ -57,3 +57,10 @@ public sealed class AsteriskTwoLegDtmfMatrix : TwoLegDtmfMatrix
 {
     protected override IPbxFixture CreatePbx(int bridgePairs = 1) => new AsteriskPbxFixture(bridgePairs);
 }
+
+/// <summary>Fährt die DTMF-Matrix gegen echtes FreeSWITCH.</summary>
+[Trait("Category", "Interop"), Trait("Category", "InteropFreeSwitch")]
+public sealed class FreeSwitchTwoLegDtmfMatrix : TwoLegDtmfMatrix
+{
+    protected override IPbxFixture CreatePbx(int bridgePairs = 1) => new FreeSwitchPbxFixture(bridgePairs);
+}

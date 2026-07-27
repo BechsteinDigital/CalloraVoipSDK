@@ -60,3 +60,10 @@ public sealed class AsteriskTwoLegHoldMatrix : TwoLegHoldMatrix
 {
     protected override IPbxFixture CreatePbx(int bridgePairs = 1) => new AsteriskPbxFixture(bridgePairs);
 }
+
+/// <summary>Fährt die Hold/Unhold-Matrix gegen echtes FreeSWITCH.</summary>
+[Trait("Category", "Interop"), Trait("Category", "InteropFreeSwitch")]
+public sealed class FreeSwitchTwoLegHoldMatrix : TwoLegHoldMatrix
+{
+    protected override IPbxFixture CreatePbx(int bridgePairs = 1) => new FreeSwitchPbxFixture(bridgePairs);
+}
