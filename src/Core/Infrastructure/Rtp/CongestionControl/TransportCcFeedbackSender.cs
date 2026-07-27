@@ -100,11 +100,12 @@ internal sealed class TransportCcFeedbackSender : IAsyncDisposable
     }
 
     /// <summary>
-    /// Records one incoming video packet's transport-wide sequence number and arrival time. A packet without
-    /// the transport-cc header extension is ignored. Must be called on the single RTP receive-loop thread.
-    /// The feedback itself is sent by the periodic flush loop, not here.
+    /// Records one incoming RTP packet's transport-wide sequence number and arrival time. transport-cc numbers
+    /// the transport, not a stream, so this observes every arriving packet (on a bundle, audio and video across
+    /// all MIDs); a packet without the transport-cc header extension is ignored. Must be called on the single
+    /// RTP receive-loop thread. The feedback itself is sent by the periodic flush loop, not here.
     /// </summary>
-    public void OnVideoPacketReceived(RtpPacket packet)
+    public void OnRtpPacketReceived(RtpPacket packet)
     {
         ArgumentNullException.ThrowIfNull(packet);
         if (!OneByteRtpHeaderExtensions.TryReadTransportSequenceNumber(
