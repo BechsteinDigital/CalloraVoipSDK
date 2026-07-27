@@ -138,7 +138,9 @@ public sealed class AsteriskContainer : IAsyncDisposable
         "exten => answer,1,Answer()\n" +          // → 200 OK, Dialog etabliert
         "same => n,Milliwatt()\n" +               // endloser 1004-Hz-Testton → RTP fließt SDK-wärts
         "exten => dtmf,1,Answer()\n" +            // → 200 OK, dann RFC-4733-Ziffern senden
-        "same => n,Wait(2)\n" +                   // Media etablieren, DTMF-Listener anhängen
+        "same => n,Wait(4)\n" +                   // Media etablieren, BEVOR gesendet wird: Wait startet bei Answer,
+                                                  // aber das SDK registriert DtmfReceived erst nach connected —
+                                                  // auf langsamem CI fiel Ziffer 1 sonst weg (Wait(2) war zu knapp).
         "same => n,SendDTMF(1234)\n" +            // sendet 1-2-3-4 als telephone-event
         "same => n,Wait(30)\n" +                  // Call offen halten für den Empfang
         "exten => earlymedia,1,Progress()\n" +    // → 183 Session Progress mit SDP (Early Media)
