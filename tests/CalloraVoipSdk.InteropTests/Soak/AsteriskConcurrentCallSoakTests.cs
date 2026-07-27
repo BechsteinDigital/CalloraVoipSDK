@@ -13,6 +13,13 @@ public abstract class ConcurrentCallSoakMatrix
 {
     protected abstract IPbxFixture CreatePbx(int bridgePairs = 1);
 
+    /// <summary>
+    /// Staggerung zwischen dem Start aufeinanderfolgender Bridged-Calls (dämpft den Thundering-Herd
+    /// beim simultanen Registrierungssturm). Peer-spezifisch überschreibbar: FreeSWITCHs B2BUA ist beim
+    /// gleichzeitigen Setup vieler Endpunkte empfindlicher als Asterisk und braucht mehr Puffer.
+    /// </summary>
+    protected virtual TimeSpan StaggerPerCall => TimeSpan.FromMilliseconds(50);
+
     // ── Öffentliche Test-Einstiegspunkte ─────────────────────────────────────────────────────────
 
     /// <summary>
@@ -40,10 +47,10 @@ public abstract class ConcurrentCallSoakMatrix
         await using var pbx = CreatePbx(callCount);
         await pbx.StartAsync();
 
-        // Alle callCount Calls parallel starten; kleine Staggerung (50 ms/Paar) dämpft den
+        // Alle callCount Calls parallel starten; kleine Staggerung (StaggerPerCall/Paar) dämpft den
         // Thundering-Herd-Effekt beim simultanen Registrierungssturm gegen den PBX.
         var tasks = Enumerable.Range(0, callCount)
-            .Select(i => RunOneAsync(pbx, i, staggerDelay: TimeSpan.FromMilliseconds(i * 50)));
+            .Select(i => RunOneAsync(pbx, i, staggerDelay: StaggerPerCall * i));
         var results = await Task.WhenAll(tasks);
 
         var failures = results.Where(r => r.Error is not null).ToArray();
@@ -95,4 +102,20 @@ public abstract class ConcurrentCallSoakMatrix
 public sealed class AsteriskConcurrentCallSoakMatrix : ConcurrentCallSoakMatrix
 {
     protected override IPbxFixture CreatePbx(int bridgePairs = 1) => new AsteriskPbxFixture(bridgePairs);
+}
+
+/// <summary>
+/// Fährt die Concurrent-Call-Soak-Matrix gegen echtes FreeSWITCH. Klassen-Trait InteropFreeSwitch,
+/// damit der geerbte Short-Soak (Category=Interop) im PR-CI-Gate via Category!=InteropFreeSwitch
+/// ausgeschlossen wird; die Short/Long-Methoden-Traits kommen aus der Basis.
+/// </summary>
+[Trait("Category", "InteropFreeSwitch")]
+public sealed class FreeSwitchConcurrentCallSoakMatrix : ConcurrentCallSoakMatrix
+{
+    protected override IPbxFixture CreatePbx(int bridgePairs = 1) => new FreeSwitchPbxFixture(bridgePairs);
+
+    // FreeSWITCHs B2BUA verhungerte bei N=20 mit dem 50-ms-Default sporadisch einen Call im
+    // simultanen 40-Endpunkt-Registrierungssturm (measure-first: 1/20 grenzwertiger Setup-Timeout).
+    // Größerer Stagger dämpft den Herd → alle Legs bekommen im Setup genug Ressourcen.
+    protected override TimeSpan StaggerPerCall => TimeSpan.FromMilliseconds(150);
 }
