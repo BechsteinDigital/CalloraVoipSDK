@@ -34,6 +34,13 @@ public sealed class WebRtcVideoBrowserInteropTests
         // Browser->SDK: Video-Frames zählen UND keyframe-bewusst zurück-echoen (SDK->Browser).
         // Das Echo startet erst ab dem ersten Keyframe, damit der Browser einen dekodierbaren Stream
         // (Keyframe zuerst) erhält — sonst kein framesDecoded.
+        // ★ Warum framesDecoded>0 den SDK->Browser-Pfad beweist (nicht zirkulär): das Echo verlässt den
+        //   SDK auf DESSEN Outbound-SSRC — ein anderer Stream als der Browser-Uplink. Der inbound-rtp-
+        //   framesDecoded-Zähler des Browsers zählt also Frames, die er aus dem SDK-Medienpfad (ICE/DTLS/
+        //   SRTP/VP8-Packetiser) dekodiert hat. Die Bits sind valides VP8 (aus Chromes eigenem Encoder),
+        //   sodass der Browser-Decoder sie ohne Stall dekodieren kann.
+        // FrameReceived feuert seriell auf dem einzigen RTP-Receive-Loop des Peers → das
+        // _videoEchoStarted-Gate ist nicht nebenläufig (volatile nur für die Sichtbarkeit im Poll-Loop).
         var inboundFrames = 0;
         peer.TrackReceived += (_, track) =>
         {
@@ -43,7 +50,9 @@ public sealed class WebRtcVideoBrowserInteropTests
                 Interlocked.Increment(ref inboundFrames);
                 if (!_videoEchoStarted && !frame.IsKeyFrame) return;   // warte auf ein Keyframe
                 _videoEchoStarted = true;
-                _ = peer.SendVideoFrameAsync(frame.Payload.ToArray(), frame.RtpTimestamp ?? 0);
+                // RtpTimestamp ist für Video-Frames garantiert non-null (s. EncodedFrame.RtpTimestamp-Doc);
+                // .Value macht die Invariante explizit statt eines stillen 0-Fallbacks.
+                _ = peer.SendVideoFrameAsync(frame.Payload.ToArray(), frame.RtpTimestamp!.Value);
             };
         };
 
