@@ -82,4 +82,6 @@ jobs:
       - name: Interop tests (Docker/Asterisk)
         # InteropLocalMedia ausgeschlossen: Zwei-Bein-SRTP-Bridge-Media ist auf GitHub-Runnern nicht
         # zuverlässig messbar (byte-exakter Content flakte stark, lokal 100% stabil) — lokaler/FreeSWITCH-Check.
-        run: dotnet test tests/CalloraVoipSdk.InteropTests/CalloraVoipSdk.InteropTests.csproj --configuration Release --no-build -f net10.0 --filter "Category=Interop&Category!=InteropLocalMedia" --nologo --verbosity minimal
+        # InteropFreeSwitch ausgeschlossen: FreeSWITCH-Matrix lokal-first (noch nicht im PR-CI-Gate,
+        # bis über mehrere Läufe stabil) — läuft lokal grün gegen echtes FreeSWITCH.
+        run: dotnet test tests/CalloraVoipSdk.InteropTests/CalloraVoipSdk.InteropTests.csproj --configuration Release --no-build -f net10.0 --filter "Category=Interop&Category!=InteropLocalMedia&Category!=InteropFreeSwitch" --nologo --verbosity minimal
