@@ -54,6 +54,19 @@ internal sealed class BundledVideoTrack : IDisposable
     // The simulcast layers keyed by a=rid, or empty for a non-simulcast track.
     private readonly IReadOnlyDictionary<string, BundledVideoSendEncoding> _layers;
 
+    // Inbound RTX recovery (RFC 4588 §4), non-simulcast only: when RTX was negotiated the router sink also
+    // receives the peer's repair stream on the shared video MID (its rtx SSRC carries the same a=mid, RFC 9143),
+    // so OnRtpPacket must split it out by payload type — decapsulate the OSN-prefixed repair packet and feed the
+    // recovered original into the same reorder window a primary packet takes, letting a retransmit fill the gap
+    // that prompted the NACK. Gated off (false) when RTX was not negotiated or on a simulcast track.
+    private readonly bool _rtxConfigured;
+    // The primary video payload type of this stream, used to reconstruct the original PT on decapsulation.
+    private readonly byte _videoPayloadType;
+    // The remote media SSRC, captured from the first primary inbound packet, stamped on recovered RTX packets.
+    // Cosmetic only — the reorder buffer keys on sequence number and the depacketiser ignores SSRC (mirrors
+    // VideoRtpStream): an RTX arriving before any primary stamps the recovered packet with 0.
+    private uint _remoteMediaSsrc;
+
     // RTX retransmission (RFC 4588), non-simulcast only: retains this stream's sent packets so an inbound
     // Generic NACK can be answered by resending them on a separate repair stream (own SSRC + rtx payload type,
     // OSN-prefixed). All null when RTX was not negotiated (the retransmit callback stays a no-op) or on a
@@ -135,6 +148,7 @@ internal sealed class BundledVideoTrack : IDisposable
         _reorderBuffer = new VideoReorderBuffer(reorderWindowDepth);
         _single = new BundledVideoSendEncoding(rid: null, payloadType, packetiser);
         _layers = new Dictionary<string, BundledVideoSendEncoding>(StringComparer.Ordinal);
+        _videoPayloadType = payloadType;
 
         // RTX repair stream (RFC 4588): retain sent packets so an inbound NACK can be answered by resending
         // them, and pick an unpredictable full-range repair SSRC (RFC 3550 §8.1) distinct from this stream's.
@@ -142,6 +156,7 @@ internal sealed class BundledVideoTrack : IDisposable
         if (rtxPayloadType is { } rtxPt)
         {
             _rtxPayloadType = rtxPt;
+            _rtxConfigured = true;
             _rtxSsrc = RtpRandom.NextSsrc(distinctFrom: localSsrc);
             _retransmitBuffer = new RtpRetransmissionBuffer();
             // Retain only THIS stream's sent packets, keyed by sequence number. The pipeline's PacketSent fires
@@ -324,11 +339,33 @@ internal sealed class BundledVideoTrack : IDisposable
 
     /// <summary>
     /// The router sink for the video MID: reorders an arriving RTP packet and depacketises released
-    /// packets into frames. Runs on the bundle receive loop (single consumer).
+    /// packets into frames. When RTX was negotiated the peer's repair stream shares this MID (its rtx SSRC
+    /// carries the same <c>a=mid</c>, RFC 9143), so a packet on the rtx payload type is decapsulated (RFC 4588 §4)
+    /// and the recovered original is fed into the same reorder window — filling the gap that prompted the NACK.
+    /// Runs on the bundle receive loop (single consumer).
     /// </summary>
     public void OnRtpPacket(RtpPacket packet)
     {
         ArgumentNullException.ThrowIfNull(packet);
+
+        // Inbound RTX recovery (RFC 4588 §4): a repair packet is not a new primary arrival — it must not drive
+        // arrival-order loss detection (that would NACK the very gaps a retransmit is closing, a NACK storm) nor
+        // be inserted raw. Strip the OSN prefix to recover the original, then feed it through the shared reorder
+        // path exactly like a primary packet. Mirrors VideoRtpStream's separate secondary receive path.
+        if (_rtxConfigured && packet.PayloadType == _rtxPayloadType)
+        {
+            if (!RtxPacketFactory.TryDecapsulate(packet, _videoPayloadType, _remoteMediaSsrc, out var original))
+            {
+                _logger.LogDebug("Dropping bundled RTX packet too short to carry an original sequence number.");
+                return;
+            }
+
+            Enqueue(original!);
+            return;
+        }
+
+        // Primary arrival: remember the remote media SSRC so a recovered RTX packet can be stamped with it.
+        _remoteMediaSsrc = packet.Ssrc;
 
         // Arrival-order loss signalling (RFC 4585), on the raw arrival sequence — before the reorder window
         // can slide past a genuine forward gap. A reorder or duplicate is not loss (Track returns null): the
@@ -336,6 +373,15 @@ internal sealed class BundledVideoTrack : IDisposable
         if (_arrivalLoss.Track(packet.SequenceNumber) is { } missing)
             _keyFrameFeedback.OnLoss(packet.Ssrc, missing);
 
+        Enqueue(packet);
+    }
+
+    // Feeds one video packet (freshly received or RTX-recovered) through the reorder window toward the
+    // depacketiser. The window releases in ascending sequence order (letting a late retransmit slot into its
+    // gap) and drops duplicates and too-late sequences — so an RTX for a sequence that was never missing, or
+    // already released, is harmlessly absorbed. Mirrors VideoRtpStream.Enqueue.
+    private void Enqueue(RtpPacket packet)
+    {
         foreach (var released in _reorderBuffer.Insert(packet))
             DeliverOrdered(released);
     }
