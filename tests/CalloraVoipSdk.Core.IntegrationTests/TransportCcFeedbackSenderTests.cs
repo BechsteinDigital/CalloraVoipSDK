@@ -47,9 +47,9 @@ public sealed class TransportCcFeedbackSenderTests
         long clock = 0;
         var sender = Sender(sent, () => clock);
 
-        clock = 0;      sender.OnVideoPacketReceived(Stamped(ExtId, 100, 1));
-        clock = 50_000; sender.OnVideoPacketReceived(Stamped(ExtId, 101, 2));
-        clock = 100_000; sender.OnVideoPacketReceived(Stamped(ExtId, 102, 3));
+        clock = 0;      sender.OnRtpPacketReceived(Stamped(ExtId, 100, 1));
+        clock = 50_000; sender.OnRtpPacketReceived(Stamped(ExtId, 101, 2));
+        clock = 100_000; sender.OnRtpPacketReceived(Stamped(ExtId, 102, 3));
         Assert.Empty(sent); // nothing until a flush
 
         sender.FlushForTest();
@@ -78,8 +78,8 @@ public sealed class TransportCcFeedbackSenderTests
         var sent = new List<byte[]>();
         var sender = Sender(sent, () => 0);
 
-        sender.OnVideoPacketReceived(new RtpPacket { PayloadType = 96, SequenceNumber = 1 });
-        sender.OnVideoPacketReceived(new RtpPacket { PayloadType = 96, SequenceNumber = 2 });
+        sender.OnRtpPacketReceived(new RtpPacket { PayloadType = 96, SequenceNumber = 1 });
+        sender.OnRtpPacketReceived(new RtpPacket { PayloadType = 96, SequenceNumber = 2 });
         sender.FlushForTest();
 
         Assert.Empty(sent);
@@ -91,8 +91,8 @@ public sealed class TransportCcFeedbackSenderTests
         var sent = new List<byte[]>();
         var sender = Sender(sent, () => 0);
 
-        sender.OnVideoPacketReceived(Stamped(7, 100, 1)); // sender expects id 5
-        sender.OnVideoPacketReceived(Stamped(7, 101, 2));
+        sender.OnRtpPacketReceived(Stamped(7, 100, 1)); // sender expects id 5
+        sender.OnRtpPacketReceived(Stamped(7, 101, 2));
         sender.FlushForTest();
 
         Assert.Empty(sent);
@@ -107,8 +107,8 @@ public sealed class TransportCcFeedbackSenderTests
 
         // Two received packets ~10 s apart → a receive delta beyond the signed-int16 range the wire
         // format allows: the report cannot be encoded and must be skipped, not crash the send path.
-        clock = 0;          sender.OnVideoPacketReceived(Stamped(ExtId, 100, 1));
-        clock = 10_000_000; sender.OnVideoPacketReceived(Stamped(ExtId, 101, 2));
+        clock = 0;          sender.OnRtpPacketReceived(Stamped(ExtId, 100, 1));
+        clock = 10_000_000; sender.OnRtpPacketReceived(Stamped(ExtId, 101, 2));
         sender.FlushForTest();
 
         Assert.Empty(sent);
@@ -121,9 +121,9 @@ public sealed class TransportCcFeedbackSenderTests
         long clock = 0;
         var sender = Sender(sent, () => clock);
 
-        clock = 0;       sender.OnVideoPacketReceived(Stamped(ExtId, 100, 1));
+        clock = 0;       sender.OnRtpPacketReceived(Stamped(ExtId, 100, 1));
         sender.FlushForTest();                                       // report #0
-        clock = 150_000; sender.OnVideoPacketReceived(Stamped(ExtId, 101, 2));
+        clock = 150_000; sender.OnRtpPacketReceived(Stamped(ExtId, 101, 2));
         sender.FlushForTest();                                       // report #1
 
         Assert.Equal(2, sent.Count);
@@ -141,7 +141,7 @@ public sealed class TransportCcFeedbackSenderTests
         // More arrivals than the ring buffer holds (1024) before a flush: the oldest are overwritten.
         // The report still goes out (no crash) and the overflow is logged once.
         for (ushort i = 0; i < 1100; i++)
-            sender.OnVideoPacketReceived(Stamped(ExtId, i, i));
+            sender.OnRtpPacketReceived(Stamped(ExtId, i, i));
         sender.FlushForTest();
 
         Assert.NotEmpty(sent);
@@ -163,8 +163,8 @@ public sealed class TransportCcFeedbackSenderTests
             () => 0, Frequency, NullLogger.Instance, CancellationToken.None,
             delay: (_, ct) => Interlocked.Increment(ref ticks) == 1 ? Task.CompletedTask : Task.Delay(Timeout.Infinite, ct));
 
-        sender.OnVideoPacketReceived(Stamped(ExtId, 100, 1));
-        sender.OnVideoPacketReceived(Stamped(ExtId, 101, 2));
+        sender.OnRtpPacketReceived(Stamped(ExtId, 100, 1));
+        sender.OnRtpPacketReceived(Stamped(ExtId, 101, 2));
         sender.Start(); // no further packet — the loop must flush on the tick
 
         await sendGate.Task.WaitAsync(TimeSpan.FromSeconds(5));

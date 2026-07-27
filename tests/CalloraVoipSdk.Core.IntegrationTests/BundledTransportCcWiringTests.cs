@@ -100,7 +100,7 @@ public sealed class BundledTransportCcWiringTests
             (data, _) => { sent.Add(data.ToArray()); return ValueTask.CompletedTask; },
             () => clock, 1_000_000, NullLogger.Instance, CancellationToken.None);
 
-        var inbound = InboundWith(feedback.OnVideoPacketReceived, out var receiverKey);
+        var inbound = InboundWith(feedback.OnRtpPacketReceived, out var receiverKey);
 
         // Feed three stamped video packets in (protected with the paired sender key), advancing the clock.
         var senderSrtp = new SrtpContext(Material());
@@ -181,7 +181,7 @@ public sealed class BundledTransportCcWiringTests
                 stampsTransportCc ? TransportCcExtId : null, MidExtId, mid),
             InitialSeq, InitialTimestamp);
 
-    // An inbound pipeline that forwards decoded RTP to the given hook (the feedback sender's OnVideoPacketReceived).
+    // An inbound pipeline that forwards decoded RTP to the given hook (the feedback sender's OnRtpPacketReceived).
     private static BundledInboundPipeline InboundWith(Action<RtpPacket> onRtp, out SrtpContext receiverKey)
     {
         var demux = BundledRtpDemultiplexerFactory.Create(

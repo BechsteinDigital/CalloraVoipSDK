@@ -407,7 +407,7 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
 
         // Report the arrival to transport-cc congestion control (a no-op when the extension was not
         // negotiated). Runs on this receive-loop thread — the sender's single consumer.
-        _transportCcSender?.OnVideoPacketReceived(packet);
+        _transportCcSender?.OnRtpPacketReceived(packet);
 
         Enqueue(packet);
     }

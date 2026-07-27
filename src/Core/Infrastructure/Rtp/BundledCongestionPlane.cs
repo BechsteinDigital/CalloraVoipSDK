@@ -81,7 +81,7 @@ internal sealed class BundledCongestionPlane : IAsyncDisposable
             rtcpCodec, transportCcExtensionId, feedbackSenderSsrc, outbound.SendRtcpAsync,
             Stopwatch.GetTimestamp, Stopwatch.Frequency,
             loggerFactory.CreateLogger<TransportCcFeedbackSender>(), _lifetimeCts.Token);
-        inbound.RtpPacketReceived += _feedback.OnVideoPacketReceived;
+        inbound.RtpPacketReceived += _feedback.OnRtpPacketReceived;
     }
 
     /// <summary>
