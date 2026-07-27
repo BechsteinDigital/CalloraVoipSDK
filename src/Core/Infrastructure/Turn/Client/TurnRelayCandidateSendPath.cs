@@ -143,11 +143,17 @@ internal sealed class TurnRelayCandidateSendPath
         }
     }
 
-    // The permission task is shared across concurrent checks to the same peer, so it runs under
-    // CancellationToken.None (self-bounded by the transactor's RTO schedule) — a single caller's cancellation
-    // must not cancel a permission others depend on. Each caller instead observes its own token via WaitAsync,
-    // bailing out of the wait without disturbing the shared install.
-    private Task EnsurePermissionAsync(IPAddress peerAddress, CancellationToken ct)
+    /// <summary>
+    /// Ensures a TURN permission (RFC 8656 §9) is installed for <paramref name="peerAddress"/>, deduplicated per
+    /// IP so concurrent callers share a single CreatePermission. Exposed so a controlled (answerer) agent can
+    /// proactively open the inbound path for offerer remote-candidate IPs before their inbound relay checks
+    /// arrive — the send path installs the permission itself when it relays a check, so this is the same install
+    /// reached from the receive side. The install runs under <see cref="CancellationToken.None"/> (self-bounded
+    /// by the transactor's RTO schedule); each caller observes its own <paramref name="ct"/> only for the wait,
+    /// so bailing out of the wait never cancels a permission others depend on. Throws when the install fails, so
+    /// the caller can retry — a failed permission is dropped from the cache rather than poisoning the peer.
+    /// </summary>
+    internal Task EnsurePermissionAsync(IPAddress peerAddress, CancellationToken ct)
         => _permissions.GetOrAdd(peerAddress, ip => new Lazy<Task>(() => CreatePermissionAsync(ip))).Value.WaitAsync(ct);
 
     private async Task CreatePermissionAsync(IPAddress peerAddress)

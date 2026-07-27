@@ -112,4 +112,111 @@ public sealed class IceMediaAttachmentRelayCandidateTests
             Assert.Equal(answererAddr, await offererNominated.Task.WaitAsync(TimeSpan.FromSeconds(5)));
         }
     }
+
+    // ── K4: proactive TURN permission on the controlled (answerer) agent ────────────────────────────────────
+
+    [Fact]
+    public async Task Controlled_agent_proactively_permissions_a_remote_candidate_seen_after_relay_adoption()
+    {
+        // The answerer (controlled, no nomination driver) adopts its relay candidate, then a remote candidate
+        // trickles in. Its IP must be proactively permissioned (RFC 8656 §9) so the offerer's inbound relay
+        // check reaches the answerer instead of being dropped by the TURN server.
+        var offererIp = IPAddress.Parse("203.0.113.7");
+        var permissioned = new TaskCompletionSource<IPAddress>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        Task EnsurePermission(IPAddress ip, CancellationToken ct)
+        {
+            permissioned.TrySetResult(ip);
+            return Task.CompletedTask;
+        }
+
+        await using var answerer = ControlledAnswerer();
+        answerer.AddRelayLocalCandidate(NoopRelaySend, EnsurePermission);
+
+        answerer.AddRemoteCandidate(new IceRemoteCandidate(new IPEndPoint(offererIp, 50000), Priority: 100));
+
+        Assert.Equal(offererIp, await permissioned.Task.WaitAsync(TimeSpan.FromSeconds(5)));
+    }
+
+    [Fact]
+    public async Task Controlled_agent_backfills_permission_for_remote_candidates_seen_before_relay_adoption()
+    {
+        // The offer's SDP remote candidates (and early trickle) arrive BEFORE the answerer's allocation finishes
+        // gathering, so they are seen before the relay is adopted. AddRelayLocalCandidate must back-fill the
+        // permission for every already-seen IP — otherwise those offerer paths' inbound relay checks are dropped.
+        var offererIpA = IPAddress.Parse("203.0.113.7");
+        var offererIpB = IPAddress.Parse("203.0.113.9");
+        var permissioned = new HashSet<IPAddress>();
+        var gate = new object();
+        var both = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        Task EnsurePermission(IPAddress ip, CancellationToken ct)
+        {
+            lock (gate)
+            {
+                permissioned.Add(ip);
+                if (permissioned.Count == 2)
+                    both.TrySetResult();
+            }
+            return Task.CompletedTask;
+        }
+
+        await using var answerer = ControlledAnswerer();
+
+        // Seen before the relay is adopted (the offer's candidates + early trickle).
+        answerer.AddRemoteCandidate(new IceRemoteCandidate(new IPEndPoint(offererIpA, 50000), Priority: 100));
+        answerer.AddRemoteCandidate(new IceRemoteCandidate(new IPEndPoint(offererIpB, 50000), Priority: 90));
+
+        answerer.AddRelayLocalCandidate(NoopRelaySend, EnsurePermission);
+
+        await both.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        lock (gate)
+        {
+            Assert.Contains(offererIpA, permissioned);
+            Assert.Contains(offererIpB, permissioned);
+        }
+    }
+
+    [Fact]
+    public async Task Controlling_agent_does_not_use_the_proactive_permission_installer()
+    {
+        // A controlling agent installs a permission when its send path relays a check — the proactive installer
+        // must NOT be driven from AddRemoteCandidate on the controlling path, or the permission would be issued
+        // twice. This guards the driver/no-driver branch split in AddRemoteCandidate.
+        var remote = new IPEndPoint(IPAddress.Parse("203.0.113.20"), 50000);
+        var proactiveInstalls = 0;
+
+        Task EnsurePermission(IPAddress ip, CancellationToken ct)
+        {
+            Interlocked.Increment(ref proactiveInstalls);
+            return Task.CompletedTask;
+        }
+
+        var offererParams = new IceMediaParameters(
+            remote, IceEnabled: true, IceControlling: true,
+            LocalIceUfrag: "offr", LocalIcePwd: "offrPassword", RemoteIceUfrag: "answ", RemoteIcePwd: "answPassword");
+
+        await using var offerer = new IceMediaAttachment(
+            offererParams, NoopRelaySend, NullLoggerFactory.Instance);
+
+        // A controlling agent HAS a nomination driver, so AddRelayLocalCandidate adds a driver candidate; the
+        // installer is stored but the proactive path is gated on there being no driver.
+        offerer.AddRelayLocalCandidate(NoopRelaySend, EnsurePermission);
+        offerer.AddRemoteCandidate(new IceRemoteCandidate(remote, Priority: 100));
+
+        await Task.Delay(150); // give any erroneous proactive install a chance to fire
+        Assert.Equal(0, Volatile.Read(ref proactiveInstalls));
+    }
+
+    // A controlled (answerer) agent: ICE enabled, IceControlling false → no nomination driver. No remote
+    // candidates seeded in the parameters (they arrive via SDP/trickle through AddRemoteCandidate).
+    private static IceMediaAttachment ControlledAnswerer() =>
+        new(
+            new IceMediaParameters(
+                new IPEndPoint(IPAddress.Loopback, 51000), IceEnabled: true, IceControlling: false,
+                LocalIceUfrag: "answ", LocalIcePwd: "answPassword", RemoteIceUfrag: "offr", RemoteIcePwd: "offrPassword"),
+            NoopRelaySend, NullLoggerFactory.Instance);
+
+    private static ValueTask NoopRelaySend(ReadOnlyMemory<byte> datagram, IPEndPoint target, CancellationToken ct)
+        => ValueTask.CompletedTask;
 }

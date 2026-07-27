@@ -97,7 +97,7 @@ public sealed class BundledInboundPipelineTests
         var harness = new Harness();
         byte[]? received = null;
         IPEndPoint? from = null;
-        harness.Pipeline.StunPacketReceived += (d, s) => { received = d; from = s; };
+        harness.Pipeline.StunPacketReceived += (d, s, _) => { received = d; from = s; };
 
         var stun = new byte[20];
         stun[0] = 0x00;

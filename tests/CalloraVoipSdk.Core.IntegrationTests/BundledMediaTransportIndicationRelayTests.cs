@@ -32,7 +32,7 @@ public sealed class BundledMediaTransportIndicationRelayTests
 
         var stun = StunTcs();
         var pipeline = Pipeline();
-        pipeline.StunPacketReceived += (data, src) => stun.TrySetResult((data, src));
+        pipeline.StunPacketReceived += (data, src, _) => stun.TrySetResult((data, src));
 
         await using var transport = new BundledMediaTransport(
             new BundledMediaTransportOptions { LocalEndPoint = Loopback() },
@@ -50,6 +50,45 @@ public sealed class BundledMediaTransportIndicationRelayTests
     }
 
     [Fact]
+    public async Task A_relayed_check_carries_a_reply_path_that_frames_the_response_back_through_the_relay()
+    {
+        using var relayServer = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        var relayEndPoint = (IPEndPoint)relayServer.Client.LocalEndPoint!;
+        var peer = new IPEndPoint(IPAddress.Loopback, 40406); // the remote candidate the check was relayed from
+
+        Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>? replyVia = null;
+        var arrived = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var pipeline = Pipeline();
+        pipeline.StunPacketReceived += (_, _, rv) => { replyVia = rv; arrived.TrySetResult(); };
+
+        await using var transport = new BundledMediaTransport(
+            new BundledMediaTransportOptions { LocalEndPoint = Loopback() },
+            pipeline, NullLogger<BundledMediaTransport>.Instance);
+        transport.SetIndicationRelay(new TurnRelayIndicationChannel(new StunMessageCodec(), relayEndPoint));
+        await transport.StartAsync();
+
+        // An inbound relayed connectivity check → the pipeline is handed a non-null reply path (K1).
+        var indication = DataIndication(peer, StunBindingRequest());
+        await relayServer.SendAsync(indication, indication.Length, transport.LocalEndPoint);
+        await arrived.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.NotNull(replyVia);
+
+        // Sending a response over the reply path frames it as a TURN Send indication back through the relay
+        // server, carrying the response for `peer` — never a direct datagram to peer (role-agnostic routing, K2).
+        var response = StunBindingRequest();
+        await replyVia!(response, peer, CancellationToken.None);
+
+        using var receiveCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var relayed = await relayServer.ReceiveAsync(receiveCts.Token);
+        var msg = new StunMessageCodec().Decode(relayed.Buffer);
+        Assert.NotNull(msg);
+        Assert.Equal(StunMessageClass.Indication, msg!.MessageClass);
+        Assert.Equal((StunMessageMethod)(ushort)TurnMessageMethod.Send, msg.MessageMethod); // TURN Send indication
+        Assert.True(relayed.Buffer.AsSpan().IndexOf(response) >= 0,
+            "the response should be embedded as the Send-indication DATA, relayed back to the peer");
+    }
+
+    [Fact]
     public async Task A_control_response_from_the_relay_server_goes_to_the_control_callback()
     {
         using var relayServer = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
@@ -58,7 +97,7 @@ public sealed class BundledMediaTransportIndicationRelayTests
         var control = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
         var stun = StunTcs();
         var pipeline = Pipeline();
-        pipeline.StunPacketReceived += (data, src) => stun.TrySetResult((data, src));
+        pipeline.StunPacketReceived += (data, src, _) => stun.TrySetResult((data, src));
 
         await using var transport = new BundledMediaTransport(
             new BundledMediaTransportOptions { LocalEndPoint = Loopback() },
@@ -88,7 +127,7 @@ public sealed class BundledMediaTransportIndicationRelayTests
 
         var stun = StunTcs();
         var pipeline = Pipeline();
-        pipeline.StunPacketReceived += (data, src) => stun.TrySetResult((data, src));
+        pipeline.StunPacketReceived += (data, src, _) => stun.TrySetResult((data, src));
 
         await using var transport = new BundledMediaTransport(
             new BundledMediaTransportOptions { LocalEndPoint = Loopback() },
@@ -115,7 +154,7 @@ public sealed class BundledMediaTransportIndicationRelayTests
         var control = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
         var stun = StunTcs();
         var pipeline = Pipeline();
-        pipeline.StunPacketReceived += (data, src) => stun.TrySetResult((data, src));
+        pipeline.StunPacketReceived += (data, src, _) => stun.TrySetResult((data, src));
 
         await using var transport = new BundledMediaTransport(
             new BundledMediaTransportOptions { LocalEndPoint = Loopback() },

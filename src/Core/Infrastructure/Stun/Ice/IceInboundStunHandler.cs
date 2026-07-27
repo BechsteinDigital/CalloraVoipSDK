@@ -69,18 +69,20 @@ internal sealed class IceInboundStunHandler
     public IceRole Role => (IceRole)Volatile.Read(ref _role);
 
     /// <summary>
-    /// Raised with the sender's address when an inbound check with USE-CANDIDATE nominates the pair and
-    /// this agent is the controlled one (RFC 8445 §7.3.1.5) — the controlled agent adopts that source as
-    /// the nominated remote. Fires on the transport receive-loop thread.
+    /// Raised with the sender's address (and the reply path the check arrived on) when an inbound check with
+    /// USE-CANDIDATE nominates the pair and this agent is the controlled one (RFC 8445 §7.3.1.5) — the controlled
+    /// agent adopts that source as the nominated remote and routes consent over the same path. The reply path is
+    /// non-null when the check came relayed, so consent for a relay-nominated pair goes back through the relay.
+    /// Fires on the transport receive-loop thread.
     /// </summary>
-    public event Action<IPEndPoint>? PairNominated;
+    public event Action<IPEndPoint, Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>?>? PairNominated;
 
     /// <summary>
-    /// Raised with the sender's address when an inbound check is authenticated and accepted, so the
-    /// transport can trigger a connectivity check back to confirm the pair bidirectionally
-    /// (RFC 8445 §7.3.1.4). Fires on the transport receive-loop thread.
+    /// Raised with the sender's address (and the reply path the check arrived on) when an inbound check is
+    /// authenticated and accepted, so the transport can trigger a connectivity check back to confirm the pair
+    /// bidirectionally (RFC 8445 §7.3.1.4) over the same path. Fires on the transport receive-loop thread.
     /// </summary>
-    public event Action<IPEndPoint>? CheckAccepted;
+    public event Action<IPEndPoint, Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>?>? CheckAccepted;
 
     /// <summary>
     /// Handles one STUN datagram demuxed off the media transport. Matches the transport's
@@ -89,7 +91,16 @@ internal sealed class IceInboundStunHandler
     /// </summary>
     /// <param name="datagram">The received STUN datagram.</param>
     /// <param name="source">The transport address it arrived from.</param>
-    public void OnStunPacketReceived(byte[] datagram, IPEndPoint source)
+    /// <param name="replyVia">
+    /// The path the response must take back to <paramref name="source"/> — supplied by the transport when the
+    /// check arrived relayed (a TURN Data indication), so the response is framed as a Send indication back
+    /// through the same relay (RFC 8445 role-agnostic response routing; the response takes the path the request
+    /// came on). <see langword="null"/> for a direct (host/srflx) check — the response uses the raw socket send.
+    /// </param>
+    public void OnStunPacketReceived(
+        byte[] datagram,
+        IPEndPoint source,
+        Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>? replyVia = null)
     {
         ArgumentNullException.ThrowIfNull(datagram);
         ArgumentNullException.ThrowIfNull(source);
@@ -105,28 +116,33 @@ internal sealed class IceInboundStunHandler
 
         if (result.NominatePair)
         {
-            try { PairNominated?.Invoke(source); }
+            try { PairNominated?.Invoke(source, replyVia); }
             catch (Exception ex) { _logger.LogError(ex, "Unhandled exception in ICE PairNominated handler."); }
         }
 
         if (result.Accepted)
         {
-            try { CheckAccepted?.Invoke(source); }
+            try { CheckAccepted?.Invoke(source, replyVia); }
             catch (Exception ex) { _logger.LogError(ex, "Unhandled exception in ICE CheckAccepted handler."); }
         }
 
         if (result.ResponseBytes is { } response)
         {
-            // Do not await on the receive-loop thread; send the response without blocking it.
-            _ = SendResponseAsync(response, source);
+            // Role-agnostic response routing (RFC 8445, mirroring libwebrtc/pjnath/SIPSorcery): the response
+            // takes the path the request arrived on — relay-framed via replyVia when the check came through a
+            // TURN relay, else the direct socket send. Do not await on the receive loop; send fire-and-forget.
+            _ = SendResponseAsync(response, source, replyVia ?? _sendRaw);
         }
     }
 
-    private async Task SendResponseAsync(byte[] response, IPEndPoint destination)
+    private async Task SendResponseAsync(
+        byte[] response,
+        IPEndPoint destination,
+        Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask> send)
     {
         try
         {
-            await _sendRaw(response, destination, CancellationToken.None).ConfigureAwait(false);
+            await send(response, destination, CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception ex)
         {

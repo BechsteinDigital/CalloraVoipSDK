@@ -107,8 +107,12 @@ internal static class WebRtcRelayBinding
             // control datagram arriving after the session is disposed is a harmless no-match. The RelaySend path
             // and the keepalive, by contrast, call the transport's targeted send, so their post-disposal safety
             // relies on the session draining the ICE agent and the keepalive before disposing the transport — a
-            // dispose-ordering concern owned by the session, not this producer.
-            return new RelayIceBinding(indication, transactor.OnControlDatagram, sendPath.SendAsync, keepAlive, BindChannel);
+            // dispose-ordering concern owned by the session, not this producer. EnsurePermission reaches the same
+            // per-IP install the send path uses, so a controlled agent can proactively permission offerer IPs
+            // (RFC 8656 §9) — it rides the same targeted send, so it shares that dispose-ordering guarantee.
+            return new RelayIceBinding(
+                indication, transactor.OnControlDatagram, sendPath.SendAsync, keepAlive, BindChannel,
+                EnsurePermission: sendPath.EnsurePermissionAsync);
         };
     }
 }
