@@ -135,12 +135,12 @@ public sealed class PhoneLineDialCancellationTests
     // observable proxy for a SIP CANCEL on the pending outbound INVITE.
     private sealed class HangupObservingCallChannel : ICallChannel
     {
-        private Action<CallState>? _onStateChange;
+        private Action<CallState, CallTerminationReason?>? _onStateChange;
 
         public Action? OnReachedRinging { get; set; }
         public int HangupCount { get; private set; }
 
-        public void Drive(CallState state) => _onStateChange?.Invoke(state);
+        public void Drive(CallState state) => _onStateChange?.Invoke(state, null);
 
         public void BindCallbacks(CallChannelCallbacks callbacks) => _onStateChange = callbacks.OnStateChange;
 
