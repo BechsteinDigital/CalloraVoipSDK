@@ -363,6 +363,7 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
         _ = _rtp.StartAsync(cancellationToken);
         _iceMedia.Start();
         _dtlsMedia?.Start(cancellationToken);
+        _transportCcSender?.Start(); // periodic transport-cc feedback, decoupled from packet arrival
     }
 
     /// <inheritdoc />
@@ -481,6 +482,9 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
             return;
 
         _lifetimeCts.Cancel();
+        // Stop the transport-cc feedback loop before the transport it sends over is torn down.
+        if (_transportCcSender is not null)
+            await _transportCcSender.DisposeAsync().ConfigureAwait(false);
         _rtp.PacketReceived -= OnPacketReceived;
         _rtp.RtcpCompoundReceived -= _keyFrameFeedback.OnRtcpPackets;
         if (_transportCcCongestion is not null)
