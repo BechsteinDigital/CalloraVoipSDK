@@ -64,9 +64,16 @@ RTP/RTCP-Transport mit Jitter-Buffer, SRTP/SDES und DTLS-SRTP sowie der
 sind im `src/`-Baum gebaut und durch Unit-/Integrationstests belegt.
 **WebRTC-Fassade und TURN-Relay-Datenpfad sind teils Prototyp** (Bausteine
 gebaut, aber nicht vollständig in den Produktionspfad verdrahtet bzw. nicht
-End-to-End gegen einen realen Stack abgesichert). **Browser-Interop ist
-unbewiesen** — WebRTC ist nur SDK↔SDK (Loopback) validiert, nie gegen einen
-echten Browser; native Video-Codecs sind **transport-only** (kein Encode/Decode).
+End-to-End gegen einen realen Stack abgesichert). **Der WebRTC-Kern ist erstmals
+gegen einen echten Chrome (Audio) bewiesen** — ein Playwright-basierter E2E-Test
+zeigt SDK-Offerer ↔ Browser-Answerer über die volle Kette Signaling→ICE→DTLS→SRTP
+mit **bidirektionalem Opus-Audio** (lokal-first, host-only Loopback ohne STUN/TURN;
+dabei fand + behob der Lauf einen echten GA-Blocker: der SDK löst jetzt Chromes
+`.local`-mDNS-Candidates auf statt sie zu droppen, RFC 8828). **Die GA-Reifung läuft
+noch** — bewiesen sind nur Connect + bidir. Audio in der SDK-Offerer-Richtung; offen
+bleiben Video-Browser-Interop (VP8), die Browser-Offerer-Richtung, die CI-Aufnahme
+des Browser-Tests sowie die übrigen GA-Blocker → **WebRTC ist nicht production-ready**.
+Native Video-Codecs sind **transport-only** (kein Encode/Decode).
 Die **Differenzierungsmodule** (Privacy / Risk / Intelligence / Policy) sind
 **Vision, nicht gebaut** — es existiert dafür kein `src/`-Projekt.
 
@@ -80,8 +87,15 @@ besteht auf beiden Stacks. Dass identischer Testcode auf zwei Herstellern grün 
 starkes **Standard-Konformitätssignal** — nicht auf einen Hersteller getunt.
 **Noch aus stehen:** **weitere Referenz-Stacks** (3CX/Fritzbox), die **Aufnahme von
 FreeSWITCH ins PR-CI-Gate** (heute Trait `Category=InteropFreeSwitch`, lokal-first, analog
-`SoakLong`; Asterisk läuft bereits im Gate), ein durchgängiges **Soak-/Chaos-CI-Gate**,
-sowie jeglicher **WebRTC-/TURN-Nachweis gegen einen realen Stack oder Browser**. Die vollständige,
+`SoakLong`; Asterisk läuft bereits im Gate), ein durchgängiges **Soak-/Chaos-CI-Gate**.
+Für WebRTC ist der **Kern-Browser-Interop-Gate erstmals durch** — Connect + bidir. Audio
+gegen echten Chrome (lokal-first, aus allen CI-Jobs ausgeschlossen, Kategorie `BrowserInterop`);
+und der **TURN-Relay-Datenpfad ist gegen einen echten (in-Process-)`TurnServer` über Loopback
+E2E-belegt** (Allocation/Relay, Public-Relay-Address, Indication-Auth, Keepalive/Refresh +
+ChannelData-Zustellung). Weiterhin **offen**: WebRTC-Browser-Interop für **Video** und in der
+**Browser-Offerer-Richtung**, die **CI-Aufnahme** des Browser-Tests, sowie ein TURN-Nachweis
+gegen einen **externen Produktions-TURN-Server** (coturn) und TURN-über-einen-Browser-Call.
+Die vollständige,
 fähigkeit-für-fähigkeit belegte Einschätzung mit Reifegrad-Stufen steht in der
 → [Fähigkeiten- und Reifegrad-Matrix](technical/capabilities-matrix.md);
 die zusammengefassten Kernlücken und offenen Punkte in der

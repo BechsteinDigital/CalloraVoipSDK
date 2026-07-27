@@ -24,7 +24,11 @@ Interop-Test gegen einen Referenz-Stack verifiziert*. Für den **SIP-/Audio-Kern
 reale Interop-/Soak-Suite gegen **zwei echte SIP-Stacks** — **Asterisk** (im PR-CI-Gate) **und
 FreeSWITCH** (lokal-first, gleiche `IPbxFixture`-Szenario-Matrix) — siehe
 [ADR-058](../../adr/ADR-058-layered-test-interop-soak-model.md). Für den **WebRTC-/TURN-/Browser-Pfad**
-steht ein Interop-Nachweis gegen reale Gegenstellen weiterhin **ganz aus**.
+gibt es seit 2026-07-27 einen **ersten realen Interop-Nachweis** — der TURN-Relay-Datenpfad gegen einen
+echten in-Process-`TurnServer` (Loopback) und der WebRTC-Kern gegen einen echten Chrome (Connect +
+bidir. Audio, lokal-first; siehe [`../../audit/INTEROP_SOAK_AUDIT.md`](../../audit/INTEROP_SOAK_AUDIT.md)).
+Ein **umfassender** Interop-Nachweis (Video-Browser-Interop, Browser-Offerer-Richtung, externer coturn)
+steht weiterhin **aus**.
 
 **Primärquellen dieser Verdichtung:**
 - ADR-Verzeichnis (getrackter, code-verifizierter Beleg): [`../../adr/README.md`](../../adr/README.md)
@@ -92,7 +96,13 @@ steht ein Interop-Nachweis gegen reale Gegenstellen weiterhin **ganz aus**.
 
 ## 6. WebRTC-Interop (Browser-Pfad)
 
-*Der WebRTC-Pfad ist im Aufbau; kein production-ready-Claim gegen Browser bis Interop-Verifikation
+*Der WebRTC-Pfad ist im Aufbau. **Der Kern ist erstmals gegen einen echten Chrome bewiesen** —
+SDK-Offerer ↔ Browser-Answerer, volle Kette Signaling→ICE→DTLS→SRTP, **bidir. Opus-Audio** (lokal-first;
+[`../../audit/INTEROP_SOAK_AUDIT.md`](../../audit/INTEROP_SOAK_AUDIT.md), Coverage-Notiz Paket 1). Dabei
+wurde der mDNS-`.local`-Blocker SDK-seitig behoben (RFC 8828). **Grenzen:** nur Audio, nur SDK-Offerer,
+host-only. Video-Browser-Interop, die Browser-Offerer-Richtung und die unten gelisteten Wire-Gaps
+(Opus-PT-Verhandlung, JSEP-State-Machine, RTCP/DTMF auf BUNDLE) bleiben offen → **kein
+production-ready-Claim gegen Browser** bis zur vollständigen Interop-Verifikation
 ([ADR-009](../../adr/ADR-009-webrtc-browser-peer-roadmap.md)).*
 
 | RFC | Bereich | Abdeckung | Beleg (ADR/Code) | Anmerkung |
@@ -128,5 +138,8 @@ TLS-/Zertifikats-Sicherheit (RFC 5922 + BCP 195).
 **SIP-/Audio-Kern** sind sie zusätzlich gegen **zwei echte SIP-Stacks** abgesichert — **Asterisk**
 (im PR-CI-Gate) **und FreeSWITCH** (lokal-first, gleiche `IPbxFixture`-Szenario-Matrix; identischer
 Testcode auf zwei Herstellern = Konformitätssignal) über die L0–L4-Interop-/Soak-Suite
-([ADR-058](../../adr/ADR-058-layered-test-interop-soak-model.md)). Offen bleiben: weitere Stacks
-(3CX/Fritzbox), FreeSWITCH-CI-Gating und der gesamte **WebRTC-/TURN-/Browser-Interop-Nachweis**.
+([ADR-058](../../adr/ADR-058-layered-test-interop-soak-model.md)). Für den **WebRTC-/TURN-Pfad** gibt
+es einen **ersten** realen Interop-Nachweis (TURN-Relay gegen echten in-Process-`TurnServer`; WebRTC-Kern
+gegen echten Chrome, Connect + bidir. Audio, lokal-first). Offen bleiben: weitere Stacks (3CX/Fritzbox),
+FreeSWITCH-CI-Gating sowie der **umfassende WebRTC-/TURN-/Browser-Interop-Nachweis** (Video-Browser-Interop,
+Browser-Offerer-Richtung, externer coturn, CI-Gating des Browser-Tests).
