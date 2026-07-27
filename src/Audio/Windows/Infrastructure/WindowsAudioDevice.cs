@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using NAudio.Codecs;
 using NAudio.Wave;
 using CalloraVoipSdk.Audio.Abstractions.Domain.Devices;
@@ -16,16 +17,23 @@ namespace CalloraVoipSdk.Audio.Windows;
 /// Supports G.711 (PCMU/PCMA), G.722 (wideband, 16 kHz) and Opus (RFC 7587, 48 kHz).
 /// Provides runtime controls for device switching, mute, volume, and format updates.
 /// </summary>
+[SupportedOSPlatform("windows")]
 public sealed class WindowsAudioDevice : IAudioDeviceProvider, IAudioDeviceRuntimeControl, IDisposable
 {
     private static readonly IReadOnlyDictionary<int, string> EmptyPayloadTypeCodecMap =
         new ReadOnlyDictionary<int, string>(new Dictionary<int, string>());
 
+    // Bounds the decoded-PCM playback buffer at 1 second (50 × 20 ms frames), matching the Linux
+    // device. On overflow the stalest frame is dropped (drop-oldest) so playback stays fresh and
+    // mouth-to-ear latency stays bounded — the opposite of NAudio's drop-newest overflow
+    // (issue #18, A3 / HARD-F4).
+    private const int PlaybackQueueCapacity = 50;
+
     private readonly object _sync = new();
+    private readonly BoundedPlaybackBuffer _playbackQueue = new(PlaybackQueueCapacity);
 
     private WaveInEvent? _waveIn;
     private WaveOutEvent? _waveOut;
-    private BufferedWaveProvider? _playbackBuffer;
     private IMediaReceiver? _receiver;
     private IMediaSender? _sender;
 
@@ -37,6 +45,9 @@ public sealed class WindowsAudioDevice : IAudioDeviceProvider, IAudioDeviceRunti
     private int _outputDeviceNumber;
 
     private int _payloadType;
+    private int _outboundPayloadType;
+    private int _negotiatedPayloadType;
+    private ActiveCodec _outboundCodec = ActiveCodec.Pcmu;
     private IReadOnlyDictionary<int, string> _payloadTypeCodecMap = EmptyPayloadTypeCodecMap;
     private ActiveCodec _activeCodec = ActiveCodec.Pcmu;
     private int _activeSampleRate;
@@ -65,6 +76,14 @@ public sealed class WindowsAudioDevice : IAudioDeviceProvider, IAudioDeviceRunti
     public WindowsAudioDevice(AudioDeviceOptions? options = null)
     {
         options ??= new AudioDeviceOptions();
+
+        // The G.711/G.722 codecs and the whole capture/playback path assume 16-bit mono PCM, and
+        // UpdateFormat enforces the same. Reject unsupported option values up front rather than
+        // silently opening a mismatched hardware stream that the codecs then misread (issue #18, A9).
+        if (options.BitsPerSample is not (0 or 16))
+            throw new ArgumentException("Only 16-bit PCM is supported (BitsPerSample must be 16).", nameof(options));
+        if (options.Channels is not (0 or 1))
+            throw new ArgumentException("Only mono audio is supported (Channels must be 1).", nameof(options));
 
         _inputDeviceNumber = options.InputDeviceNumber;
         _outputDeviceNumber = options.OutputDeviceNumber;
@@ -102,12 +121,15 @@ public sealed class WindowsAudioDevice : IAudioDeviceProvider, IAudioDeviceRunti
             _receiver = receiver;
             _sender = sender;
             _payloadType = parameters.PayloadType;
+            _negotiatedPayloadType = parameters.PayloadType;
+            _outboundPayloadType = parameters.PayloadType;
             _payloadTypeCodecMap = parameters.PayloadTypeCodecMap ?? EmptyPayloadTypeCodecMap;
             _activeCodec = ResolveActiveCodec(
                 parameters.PayloadType,
                 parameters.SampleRate,
                 parameters.CodecName,
                 _payloadTypeCodecMap);
+            _outboundCodec = _activeCodec;
 
             if (parameters.SampleRate > 0)
                 _activeSampleRate = parameters.SampleRate;
@@ -203,7 +225,9 @@ public sealed class WindowsAudioDevice : IAudioDeviceProvider, IAudioDeviceRunti
                     SampleRate = _activeSampleRate,
                     BitsPerSample = _bitsPerSample,
                     Channels = _channels
-                });
+                },
+                playbackQueueDepth: _playbackQueue.Depth,
+                droppedPlaybackFrames: _playbackQueue.DroppedFrames);
         }
     }
 
@@ -267,10 +291,16 @@ public sealed class WindowsAudioDevice : IAudioDeviceProvider, IAudioDeviceRunti
 
         lock (_sync)
         {
+            // Always store the requested volume as the unmute restore level, but while muted keep the
+            // hardware silent — a mid-mute volume change must not leak through the mute and unmute
+            // must restore this value, not a stale one (issue #18, A4).
             _outputVolume = volume;
 
             if (_waveOut is not null)
-                _waveOut.Volume = ClampWaveOutVolume(volume);
+            {
+                _waveOut.Volume = ClampWaveOutVolume(
+                    OutputVolumeGate.EffectiveHardwareVolume(volume, _outputMuted));
+            }
         }
     }
 
@@ -294,7 +324,10 @@ public sealed class WindowsAudioDevice : IAudioDeviceProvider, IAudioDeviceRunti
         {
             _outputMuted = isMuted;
             if (_waveOut is not null)
-                _waveOut.Volume = isMuted ? 0f : ClampWaveOutVolume(_outputVolume);
+            {
+                _waveOut.Volume = ClampWaveOutVolume(
+                    OutputVolumeGate.EffectiveHardwareVolume(_outputVolume, isMuted));
+            }
         }
     }
 
@@ -380,18 +413,20 @@ public sealed class WindowsAudioDevice : IAudioDeviceProvider, IAudioDeviceRunti
     {
         var payload = e.Frame.Payload.ToArray();
         var inboundCodec = ResolveInboundCodec(e.Frame.PayloadType);
+
+        if (TryResolveInboundCodec(e.Frame.PayloadType, out var knownInboundCodec))
+            TryAdaptOutboundCodec(knownInboundCodec, e.Frame.PayloadType);
+
         var decoded = Decode(payload, inboundCodec);
 
         int playbackSampleRate;
         bool outputMuted;
         float outputVolume;
-        BufferedWaveProvider? playbackBuffer;
         lock (_sync)
         {
             playbackSampleRate = _activeSampleRate;
             outputMuted = _outputMuted;
             outputVolume = _outputVolume;
-            playbackBuffer = _playbackBuffer;
         }
 
         var playbackPcm = ConvertPcmSampleRate(
@@ -399,7 +434,10 @@ public sealed class WindowsAudioDevice : IAudioDeviceProvider, IAudioDeviceRunti
             GetCodecSampleRate(inboundCodec),
             playbackSampleRate);
         var adjustedPcm = PcmGain.ApplyInPlace(playbackPcm, outputMuted, outputVolume);
-        playbackBuffer?.AddSamples(adjustedPcm, 0, adjustedPcm.Length);
+
+        // Enqueue into the shared drop-oldest buffer (issue #18, A3); the wave provider drains it.
+        if (adjustedPcm.Length > 0)
+            _playbackQueue.Enqueue(adjustedPcm);
     }
 
     private void OnDataAvailable(object? sender, WaveInEventArgs e)
@@ -417,8 +455,8 @@ public sealed class WindowsAudioDevice : IAudioDeviceProvider, IAudioDeviceRunti
         lock (_sync)
         {
             localSender = _sender;
-            outboundCodec = _activeCodec;
-            outboundPayloadType = _payloadType;
+            outboundCodec = _outboundCodec;
+            outboundPayloadType = _outboundPayloadType;
             deviceSampleRate = _activeSampleRate;
             inputMuted = _inputMuted;
             inputVolume = _inputVolume;
@@ -446,7 +484,10 @@ public sealed class WindowsAudioDevice : IAudioDeviceProvider, IAudioDeviceRunti
                     opusPayload,
                     PayloadType: outboundPayloadType,
                     DurationRtpUnits: (uint)OpusDeviceCodec.FrameSamples);
-                _ = localSender.SendAsync(opusFrame, CancellationToken.None);
+                // Fire-and-forget with fault observation (issue #18, A5 / K3).
+                AudioTaskFaultObserver.Observe(
+                    localSender.SendAsync(opusFrame, CancellationToken.None),
+                    "windows-capture-opus");
             }
 
             return;
@@ -461,7 +502,10 @@ public sealed class WindowsAudioDevice : IAudioDeviceProvider, IAudioDeviceRunti
             (int)Math.Round(sampleCount * rtpClockRate / outboundSampleRate));
 
         var frame = new MediaFrame(encoded, PayloadType: outboundPayloadType, durationRtpUnits);
-        _ = localSender.SendAsync(frame, CancellationToken.None);
+        // Fire-and-forget with fault observation (issue #18, A5 / K3).
+        AudioTaskFaultObserver.Observe(
+            localSender.SendAsync(frame, CancellationToken.None),
+            "windows-capture");
     }
 
     private void StartInputStreamLocked()
@@ -483,18 +527,18 @@ public sealed class WindowsAudioDevice : IAudioDeviceProvider, IAudioDeviceRunti
     {
         var waveFormat = new WaveFormat(_activeSampleRate, _bitsPerSample, _channels);
 
-        _playbackBuffer = new BufferedWaveProvider(waveFormat)
-        {
-            DiscardOnBufferOverflow = true
-        };
+        // Drive playback from the shared drop-oldest buffer (issue #18, A3) instead of NAudio's
+        // drop-newest BufferedWaveProvider.
+        var provider = new BoundedPlaybackWaveProvider(waveFormat, _playbackQueue);
 
         _waveOut = new WaveOutEvent
         {
             DeviceNumber = _outputDeviceNumber,
-            Volume = _outputMuted ? 0f : ClampWaveOutVolume(_outputVolume)
+            Volume = ClampWaveOutVolume(
+                OutputVolumeGate.EffectiveHardwareVolume(_outputVolume, _outputMuted))
         };
 
-        _waveOut.Init(_playbackBuffer);
+        _waveOut.Init(provider);
         _waveOut.Play();
     }
 
@@ -530,7 +574,8 @@ public sealed class WindowsAudioDevice : IAudioDeviceProvider, IAudioDeviceRunti
             _waveOut = null;
         }
 
-        _playbackBuffer = null;
+        // Drain the buffer and reset its drop metric so a reconnect starts with an empty queue.
+        _playbackQueue.Clear();
     }
 
     private void DisconnectInternalLocked()
@@ -549,8 +594,11 @@ public sealed class WindowsAudioDevice : IAudioDeviceProvider, IAudioDeviceRunti
         _g722EncodeState = null;
         _opusCodec = null;
         _payloadType = 0;
+        _outboundPayloadType = 0;
+        _negotiatedPayloadType = 0;
         _payloadTypeCodecMap = EmptyPayloadTypeCodecMap;
         _activeCodec = ActiveCodec.Pcmu;
+        _outboundCodec = ActiveCodec.Pcmu;
         _connected = false;
     }
 
@@ -614,19 +662,53 @@ public sealed class WindowsAudioDevice : IAudioDeviceProvider, IAudioDeviceRunti
 
     private ActiveCodec ResolveInboundCodec(int payloadType)
     {
-        if (payloadType == 0)
-            return ActiveCodec.Pcmu;
-
-        if (payloadType == 8)
-            return ActiveCodec.Pcma;
-
-        if (payloadType == 9)
-            return ActiveCodec.G722;
-
-        if (TryResolveCodecFromMap(payloadType, out var mappedCodec))
-            return mappedCodec;
+        if (TryResolveInboundCodec(payloadType, out var resolved))
+            return resolved;
 
         return _activeCodec;
+    }
+
+    private bool TryResolveInboundCodec(int payloadType, out ActiveCodec codec)
+    {
+        if (payloadType == 0)
+        {
+            codec = ActiveCodec.Pcmu;
+            return true;
+        }
+
+        if (payloadType == 8)
+        {
+            codec = ActiveCodec.Pcma;
+            return true;
+        }
+
+        if (payloadType == 9)
+        {
+            codec = ActiveCodec.G722;
+            return true;
+        }
+
+        return TryResolveCodecFromMap(payloadType, out codec);
+    }
+
+    private void TryAdaptOutboundCodec(ActiveCodec inboundCodec, int inboundPayloadType)
+    {
+        lock (_sync)
+        {
+            // Match Linux: only adapt to a codec the far end negotiated for this leg — never echo
+            // an unnegotiated inbound payload type (issue #18, A2; RFC 3264 §5.1).
+            var decision = OutboundCodecAdaptationPolicy.Evaluate(
+                inboundPayloadType,
+                _outboundPayloadType,
+                _negotiatedPayloadType,
+                _payloadTypeCodecMap.Keys);
+
+            if (!decision.ShouldAdapt)
+                return;
+
+            _outboundCodec = inboundCodec;
+            _outboundPayloadType = decision.TargetPayloadType;
+        }
     }
 
     private static ActiveCodec ResolveActiveCodec(

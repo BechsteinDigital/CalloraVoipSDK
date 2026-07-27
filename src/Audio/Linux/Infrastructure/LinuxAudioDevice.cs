@@ -32,6 +32,20 @@ public sealed class LinuxAudioDevice : IAudioDeviceProvider, IAudioDeviceRuntime
     private readonly object _sync = new();
     private readonly BoundedPlaybackBuffer _playbackQueue = new(PlaybackQueueCapacity);
 
+    // Holds one PortAudio acquisition for the whole device lifetime so Initialize/Terminate stay
+    // balanced with the process-wide refcount (issue #18, A7); released once in Dispose.
+    private readonly PortAudioLease _portAudioLease = PortAudioLifetime.Acquire();
+
+    // Reused silence buffer for the playback callback so a starved output stream does not allocate a
+    // fresh zero-filled array on every hardware tick on the audio hotpath (issue #18, A6 / HARD-F1).
+    // Sized lazily to the largest observed callback and only ever read from (never written after
+    // creation), so a single instance is safe to hand to the single-reader playback callback.
+    private byte[] _silenceBuffer = Array.Empty<byte>();
+
+    // Explicit optional override for the PortAudio callback buffer size (issue #18, A1). Zero means
+    // "derive from the sample rate" via ComputeFramesPerBuffer; a positive value is used verbatim.
+    private readonly uint _framesPerBufferOverride;
+
     private PortAudioSharp.Stream? _inputStream;
     private PortAudioSharp.Stream? _outputStream;
     private IMediaReceiver? _receiver;
@@ -45,6 +59,7 @@ public sealed class LinuxAudioDevice : IAudioDeviceProvider, IAudioDeviceRuntime
     private int _outputDeviceIndex;
 
     private int _outboundPayloadType;
+    private int _negotiatedPayloadType;
     private IReadOnlyDictionary<int, string> _payloadTypeCodecMap = EmptyPayloadTypeCodecMap;
     private ActiveCodec _activeCodec = ActiveCodec.Pcmu;
     private ActiveCodec _outboundCodec = ActiveCodec.Pcmu;
@@ -75,8 +90,9 @@ public sealed class LinuxAudioDevice : IAudioDeviceProvider, IAudioDeviceRuntime
     {
         options ??= new AudioDeviceOptions();
 
-        PortAudio.Initialize();
-
+        // PortAudio is now initialized via the process-wide refcount lease acquired in the field
+        // initializer above (issue #18, A7) — no bare Initialize() here.
+        _framesPerBufferOverride = options.FramesPerBuffer;
         _inputDeviceIndex = options.InputDeviceIndex;
         _outputDeviceIndex = options.OutputDeviceIndex;
         _activeSampleRate = options.SampleRate > 0 ? options.SampleRate : 8000;
@@ -111,6 +127,7 @@ public sealed class LinuxAudioDevice : IAudioDeviceProvider, IAudioDeviceRuntime
             _receiver = receiver;
             _sender = sender;
             _outboundPayloadType = parameters.PayloadType;
+            _negotiatedPayloadType = parameters.PayloadType;
             _payloadTypeCodecMap = parameters.PayloadTypeCodecMap ?? EmptyPayloadTypeCodecMap;
             _activeCodec = ResolveActiveCodec(
                 parameters.PayloadType,
@@ -157,7 +174,9 @@ public sealed class LinuxAudioDevice : IAudioDeviceProvider, IAudioDeviceRuntime
     /// <inheritdoc />
     public IReadOnlyList<AudioDeviceDescriptor> GetAvailableInputDevices()
     {
-        PortAudio.Initialize();
+        // Acquire/release around the enumeration so this Initialize is paired with a Terminate
+        // (issue #18, A7). The lease is a no-op init when a device already holds one.
+        using var lease = PortAudioLifetime.Acquire();
 
         var result = new List<AudioDeviceDescriptor>
         {
@@ -182,7 +201,8 @@ public sealed class LinuxAudioDevice : IAudioDeviceProvider, IAudioDeviceRuntime
     /// <inheritdoc />
     public IReadOnlyList<AudioDeviceDescriptor> GetAvailableOutputDevices()
     {
-        PortAudio.Initialize();
+        // Paired acquire/release around the enumeration (issue #18, A7).
+        using var lease = PortAudioLifetime.Acquire();
 
         var result = new List<AudioDeviceDescriptor>
         {
@@ -353,7 +373,8 @@ public sealed class LinuxAudioDevice : IAudioDeviceProvider, IAudioDeviceRuntime
     /// </summary>
     public static IReadOnlyList<string> GetInputDevices()
     {
-        PortAudio.Initialize();
+        // Paired acquire/release around the enumeration (issue #18, A7).
+        using var lease = PortAudioLifetime.Acquire();
 
         var result = new List<string>();
         for (var i = 0; i < PortAudio.DeviceCount; i++)
@@ -371,7 +392,8 @@ public sealed class LinuxAudioDevice : IAudioDeviceProvider, IAudioDeviceRuntime
     /// </summary>
     public static IReadOnlyList<string> GetOutputDevices()
     {
-        PortAudio.Initialize();
+        // Paired acquire/release around the enumeration (issue #18, A7).
+        using var lease = PortAudioLifetime.Acquire();
 
         var result = new List<string>();
         for (var i = 0; i < PortAudio.DeviceCount; i++)
@@ -397,7 +419,10 @@ public sealed class LinuxAudioDevice : IAudioDeviceProvider, IAudioDeviceRuntime
 
             _disposed = true;
             DisconnectInternalLocked();
-            PortAudio.Terminate();
+
+            // Release this device's lifetime acquisition; PortAudio terminates once the last
+            // outstanding acquisition across the process is released (issue #18, A7).
+            _portAudioLease.Dispose();
         }
     }
 
@@ -440,16 +465,41 @@ public sealed class LinuxAudioDevice : IAudioDeviceProvider, IAudioDeviceRuntime
         _playbackQueue.TryDequeue(out var pcm);
 
         var bytes = (int)(frameCount * 2);
-        if (pcm is not null && pcm.Length >= bytes)
+        var silence = EnsureSilenceBuffer(bytes);
+
+        if (pcm is null || pcm.Length == 0)
+        {
+            // Underrun: write pre-allocated silence instead of allocating a fresh array per tick
+            // on the audio hotpath (issue #18, A6 / HARD-F1).
+            Marshal.Copy(silence, 0, output, bytes);
+        }
+        else if (pcm.Length >= bytes)
         {
             Marshal.Copy(pcm, 0, output, bytes);
         }
         else
         {
-            Marshal.Copy(new byte[bytes], 0, output, bytes);
+            // Short frame: copy what we have, then pad the tail with silence rather than discarding
+            // the frame wholesale (issue #18, A6). The pointer arithmetic keeps a single P/Invoke
+            // copy per region without a temporary managed buffer.
+            Marshal.Copy(pcm, 0, output, pcm.Length);
+            Marshal.Copy(silence, 0, output + pcm.Length, bytes - pcm.Length);
         }
 
         return StreamCallbackResult.Continue;
+    }
+
+    private byte[] EnsureSilenceBuffer(int bytes)
+    {
+        // The playback callback is the single reader/writer of this field; grow-only, so a larger
+        // request replaces the array and never shrinks a buffer another read might still touch.
+        var buffer = _silenceBuffer;
+        if (buffer.Length >= bytes)
+            return buffer;
+
+        buffer = new byte[bytes];
+        _silenceBuffer = buffer;
+        return buffer;
     }
 
     private StreamCallbackResult CaptureCallback(
@@ -501,7 +551,11 @@ public sealed class LinuxAudioDevice : IAudioDeviceProvider, IAudioDeviceRuntime
                     opusPayload,
                     PayloadType: outboundPayloadType,
                     DurationRtpUnits: (uint)OpusDeviceCodec.FrameSamples);
-                _ = localSender.SendAsync(opusFrame, CancellationToken.None);
+                // Fire-and-forget, but observe the fault so send failures are not silently lost
+                // to the finalizer (issue #18, A5 / K3).
+                AudioTaskFaultObserver.Observe(
+                    localSender.SendAsync(opusFrame, CancellationToken.None),
+                    "linux-capture-opus");
             }
 
             return StreamCallbackResult.Continue;
@@ -516,7 +570,10 @@ public sealed class LinuxAudioDevice : IAudioDeviceProvider, IAudioDeviceRuntime
             (int)Math.Round(outboundSamples * rtpClockRate / outboundSampleRate));
 
         var frame = new MediaFrame(encoded, PayloadType: outboundPayloadType, durationRtpUnits);
-        _ = localSender.SendAsync(frame, CancellationToken.None);
+        // Fire-and-forget with fault observation (issue #18, A5 / K3).
+        AudioTaskFaultObserver.Observe(
+            localSender.SendAsync(frame, CancellationToken.None),
+            "linux-capture");
 
         return StreamCallbackResult.Continue;
     }
@@ -538,7 +595,7 @@ public sealed class LinuxAudioDevice : IAudioDeviceProvider, IAudioDeviceRuntime
             inParams: inParams,
             outParams: null,
             sampleRate: _activeSampleRate,
-            framesPerBuffer: ComputeFramesPerBuffer(_activeSampleRate),
+            framesPerBuffer: ResolveFramesPerBuffer(),
             streamFlags: StreamFlags.ClipOff,
             callback: CaptureCallback,
             userData: IntPtr.Zero);
@@ -563,7 +620,7 @@ public sealed class LinuxAudioDevice : IAudioDeviceProvider, IAudioDeviceRuntime
             inParams: null,
             outParams: outParams,
             sampleRate: _activeSampleRate,
-            framesPerBuffer: ComputeFramesPerBuffer(_activeSampleRate),
+            framesPerBuffer: ResolveFramesPerBuffer(),
             streamFlags: StreamFlags.ClipOff,
             callback: PlaybackCallback,
             userData: IntPtr.Zero);
@@ -623,10 +680,20 @@ public sealed class LinuxAudioDevice : IAudioDeviceProvider, IAudioDeviceRuntime
         _g722EncodeState = null;
         _opusCodec = null;
         _outboundPayloadType = 0;
+        _negotiatedPayloadType = 0;
         _payloadTypeCodecMap = EmptyPayloadTypeCodecMap;
         _activeCodec = ActiveCodec.Pcmu;
         _outboundCodec = ActiveCodec.Pcmu;
         _connected = false;
+    }
+
+    private uint ResolveFramesPerBuffer()
+    {
+        // An explicit FramesPerBuffer option overrides the sample-rate-derived default (issue #18,
+        // A1); zero (the default) means "derive a 20 ms buffer from the active sample rate".
+        return _framesPerBufferOverride > 0
+            ? _framesPerBufferOverride
+            : ComputeFramesPerBuffer(_activeSampleRate);
     }
 
     private static uint ComputeFramesPerBuffer(int sampleRate = 8000)
@@ -753,16 +820,22 @@ public sealed class LinuxAudioDevice : IAudioDeviceProvider, IAudioDeviceRuntime
 
     private void TryAdaptOutboundCodec(ActiveCodec inboundCodec, int inboundPayloadType)
     {
-        if (inboundPayloadType is < 0 or > 127)
-            return;
-
         lock (_sync)
         {
-            if (_outboundCodec == inboundCodec && _outboundPayloadType == inboundPayloadType)
+            // Only adapt to a codec the far end negotiated for this leg — never echo an
+            // unnegotiated inbound payload type back at it (issue #18, A2; RFC 3264 §5.1). The
+            // negotiated set is the SDP payload-type→codec map keys plus the primary negotiated PT.
+            var decision = OutboundCodecAdaptationPolicy.Evaluate(
+                inboundPayloadType,
+                _outboundPayloadType,
+                _negotiatedPayloadType,
+                _payloadTypeCodecMap.Keys);
+
+            if (!decision.ShouldAdapt)
                 return;
 
             _outboundCodec = inboundCodec;
-            _outboundPayloadType = inboundPayloadType;
+            _outboundPayloadType = decision.TargetPayloadType;
         }
     }
 
