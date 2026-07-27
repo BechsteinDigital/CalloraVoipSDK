@@ -1583,20 +1583,6 @@
     },
     {
       "type": "ManagedReference",
-      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Events.CallErrorEventArgs.yml",
-      "output": {
-        ".html": {
-          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Events.CallErrorEventArgs.html"
-        }
-      },
-      "version": "",
-      "Uid": null,
-      "IsMRef": true,
-      "Title": "CalloraVoipSdk.Core.Domain.Events.CallErrorEventArgs",
-      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Events.CallErrorEventArgs.yml\" sourcestartlinenumber=\"1\">Payload for a call-related error notification.</p>\n"
-    },
-    {
-      "type": "ManagedReference",
       "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Events.CallIceConnectionStateChangedEventArgs.yml",
       "output": {
         ".html": {

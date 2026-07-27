@@ -5253,51 +5253,6 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.Core.Domain.Events.CallActivityEventArgs.Call
   nameWithType: CallActivityEventArgs.Call
-- uid: CalloraVoipSdk.Core.Domain.Events.CallErrorEventArgs
-  name: CallErrorEventArgs
-  href: _api/CalloraVoipSdk.Core.Domain.Events.CallErrorEventArgs.html
-  commentId: T:CalloraVoipSdk.Core.Domain.Events.CallErrorEventArgs
-  fullName: CalloraVoipSdk.Core.Domain.Events.CallErrorEventArgs
-  nameWithType: CallErrorEventArgs
-- uid: CalloraVoipSdk.Core.Domain.Events.CallErrorEventArgs.Call
-  name: Call
-  href: _api/CalloraVoipSdk.Core.Domain.Events.CallErrorEventArgs.html#CalloraVoipSdk_Core_Domain_Events_CallErrorEventArgs_Call
-  commentId: P:CalloraVoipSdk.Core.Domain.Events.CallErrorEventArgs.Call
-  fullName: CalloraVoipSdk.Core.Domain.Events.CallErrorEventArgs.Call
-  nameWithType: CallErrorEventArgs.Call
-- uid: CalloraVoipSdk.Core.Domain.Events.CallErrorEventArgs.Call*
-  name: Call
-  href: _api/CalloraVoipSdk.Core.Domain.Events.CallErrorEventArgs.html#CalloraVoipSdk_Core_Domain_Events_CallErrorEventArgs_Call_
-  commentId: Overload:CalloraVoipSdk.Core.Domain.Events.CallErrorEventArgs.Call
-  isSpec: "True"
-  fullName: CalloraVoipSdk.Core.Domain.Events.CallErrorEventArgs.Call
-  nameWithType: CallErrorEventArgs.Call
-- uid: CalloraVoipSdk.Core.Domain.Events.CallErrorEventArgs.Exception
-  name: Exception
-  href: _api/CalloraVoipSdk.Core.Domain.Events.CallErrorEventArgs.html#CalloraVoipSdk_Core_Domain_Events_CallErrorEventArgs_Exception
-  commentId: P:CalloraVoipSdk.Core.Domain.Events.CallErrorEventArgs.Exception
-  fullName: CalloraVoipSdk.Core.Domain.Events.CallErrorEventArgs.Exception
-  nameWithType: CallErrorEventArgs.Exception
-- uid: CalloraVoipSdk.Core.Domain.Events.CallErrorEventArgs.Exception*
-  name: Exception
-  href: _api/CalloraVoipSdk.Core.Domain.Events.CallErrorEventArgs.html#CalloraVoipSdk_Core_Domain_Events_CallErrorEventArgs_Exception_
-  commentId: Overload:CalloraVoipSdk.Core.Domain.Events.CallErrorEventArgs.Exception
-  isSpec: "True"
-  fullName: CalloraVoipSdk.Core.Domain.Events.CallErrorEventArgs.Exception
-  nameWithType: CallErrorEventArgs.Exception
-- uid: CalloraVoipSdk.Core.Domain.Events.CallErrorEventArgs.Message
-  name: Message
-  href: _api/CalloraVoipSdk.Core.Domain.Events.CallErrorEventArgs.html#CalloraVoipSdk_Core_Domain_Events_CallErrorEventArgs_Message
-  commentId: P:CalloraVoipSdk.Core.Domain.Events.CallErrorEventArgs.Message
-  fullName: CalloraVoipSdk.Core.Domain.Events.CallErrorEventArgs.Message
-  nameWithType: CallErrorEventArgs.Message
-- uid: CalloraVoipSdk.Core.Domain.Events.CallErrorEventArgs.Message*
-  name: Message
-  href: _api/CalloraVoipSdk.Core.Domain.Events.CallErrorEventArgs.html#CalloraVoipSdk_Core_Domain_Events_CallErrorEventArgs_Message_
-  commentId: Overload:CalloraVoipSdk.Core.Domain.Events.CallErrorEventArgs.Message
-  isSpec: "True"
-  fullName: CalloraVoipSdk.Core.Domain.Events.CallErrorEventArgs.Message
-  nameWithType: CallErrorEventArgs.Message
 - uid: CalloraVoipSdk.Core.Domain.Events.CallIceConnectionStateChangedEventArgs
   name: CallIceConnectionStateChangedEventArgs
   href: _api/CalloraVoipSdk.Core.Domain.Events.CallIceConnectionStateChangedEventArgs.html
