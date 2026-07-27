@@ -73,6 +73,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CalloraVoipSdk.SoakTests", 
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CalloraVoipSdk.InteropTests", "tests\CalloraVoipSdk.InteropTests\CalloraVoipSdk.InteropTests.csproj", "{A0FB04B9-8FE1-4DC3-9A9C-81C4422F3D1F}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CalloraVoipSdk.BrowserInteropTests", "tests\CalloraVoipSdk.BrowserInteropTests\CalloraVoipSdk.BrowserInteropTests.csproj", "{439B57A4-1621-4B4D-9383-F04126FB01C3}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -395,6 +397,18 @@ Global
 		{A0FB04B9-8FE1-4DC3-9A9C-81C4422F3D1F}.Release|x64.Build.0 = Release|Any CPU
 		{A0FB04B9-8FE1-4DC3-9A9C-81C4422F3D1F}.Release|x86.ActiveCfg = Release|Any CPU
 		{A0FB04B9-8FE1-4DC3-9A9C-81C4422F3D1F}.Release|x86.Build.0 = Release|Any CPU
+		{439B57A4-1621-4B4D-9383-F04126FB01C3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{439B57A4-1621-4B4D-9383-F04126FB01C3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{439B57A4-1621-4B4D-9383-F04126FB01C3}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{439B57A4-1621-4B4D-9383-F04126FB01C3}.Debug|x64.Build.0 = Debug|Any CPU
+		{439B57A4-1621-4B4D-9383-F04126FB01C3}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{439B57A4-1621-4B4D-9383-F04126FB01C3}.Debug|x86.Build.0 = Debug|Any CPU
+		{439B57A4-1621-4B4D-9383-F04126FB01C3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{439B57A4-1621-4B4D-9383-F04126FB01C3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{439B57A4-1621-4B4D-9383-F04126FB01C3}.Release|x64.ActiveCfg = Release|Any CPU
+		{439B57A4-1621-4B4D-9383-F04126FB01C3}.Release|x64.Build.0 = Release|Any CPU
+		{439B57A4-1621-4B4D-9383-F04126FB01C3}.Release|x86.ActiveCfg = Release|Any CPU
+		{439B57A4-1621-4B4D-9383-F04126FB01C3}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -431,5 +445,6 @@ Global
 		{D73522F0-8791-4F4F-B81D-C018D1405F73} = {5BDBFD67-6DBF-4248-8DFC-4F6B27F39DB2}
 		{DA3FBAC6-1585-4B16-91C2-49E5B286A7C5} = {5BDBFD67-6DBF-4248-8DFC-4F6B27F39DB2}
 		{A0FB04B9-8FE1-4DC3-9A9C-81C4422F3D1F} = {5BDBFD67-6DBF-4248-8DFC-4F6B27F39DB2}
+		{439B57A4-1621-4B4D-9383-F04126FB01C3} = {5BDBFD67-6DBF-4248-8DFC-4F6B27F39DB2}
 	EndGlobalSection
 EndGlobal

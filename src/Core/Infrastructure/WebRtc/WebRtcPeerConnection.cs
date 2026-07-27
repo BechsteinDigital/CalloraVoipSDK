@@ -51,6 +51,8 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     private readonly DtlsCertificate _certificate;
     private readonly IIceStunProbe? _stunProbe;
     private readonly TurnAllocationProbe? _turnProbe;
+    private readonly IMdnsResolver _mdnsResolver;
+    private readonly CancellationTokenSource _mdnsLifetime = new();
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<WebRtcPeerConnection> _logger;
     private readonly object _sync = new();
@@ -124,7 +126,8 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         DtlsCertificate certificate,
         ILoggerFactory loggerFactory,
         IIceStunProbe? stunProbe = null,
-        TurnAllocationProbe? turnProbe = null)
+        TurnAllocationProbe? turnProbe = null,
+        IMdnsResolver? mdnsResolver = null)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
         ArgumentNullException.ThrowIfNull(options.LocalEndPoint);
@@ -138,6 +141,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         _certificate = certificate ?? throw new ArgumentNullException(nameof(certificate));
         _stunProbe = stunProbe;
         _turnProbe = turnProbe;
+        _mdnsResolver = mdnsResolver ?? new SystemMdnsResolver();
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
         _logger = loggerFactory.CreateLogger<WebRtcPeerConnection>();
     }
@@ -503,19 +507,61 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         ArgumentException.ThrowIfNullOrWhiteSpace(candidate);
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (ParseTrickleCandidate(candidate) is not { } parsed)
+        if (ParseCandidateFields(candidate) is not { } parsed)
         {
-            // Distinguish an mDNS (.local) candidate — which we cannot resolve yet — from a genuinely
-            // malformed one, so the gap is visible in diagnostics rather than looking like a parse error.
-            // Full ICE still nominates a reachable pair from the peer's other (host/srflx) candidates.
-            // Two constant templates (not a ternary), so the logging analyzer (CA2254) stays satisfied.
-            if (candidate.Contains(".local", StringComparison.OrdinalIgnoreCase))
-                _logger.LogDebug("Ignoring an mDNS (.local) trickled ICE candidate — mDNS resolution is not yet supported; relying on the peer's other candidates.");
-            else
-                _logger.LogDebug("Ignoring an unusable trickled ICE candidate.");
+            _logger.LogDebug("Ignoring an unusable trickled ICE candidate.");
             return Task.CompletedTask;
         }
 
+        if (IPAddress.TryParse(parsed.Address, out var ip))
+        {
+            EnqueueRemoteCandidate(new IPEndPoint(ip, parsed.Port), parsed.Priority);
+            return Task.CompletedTask;
+        }
+
+        if (parsed.Address.EndsWith(".local", StringComparison.OrdinalIgnoreCase))
+        {
+            // mDNS (.local) candidate: resolve in the background (RFC 8838 — candidates arrive asynchronously,
+            // so the signalling path must not block on the resolver), bound to the peer lifetime.
+            // No throttle: well-behaved peers send <20 candidates; each task lives at most the resolver
+            // timeout (3 s) and is cancelled on dispose. Flood protection is the caller's concern (connection
+            // rate-limiting above this layer).
+            var host = parsed.Address;
+            var port = parsed.Port;
+            var priority = parsed.Priority;
+            _ = ResolveAndEnqueueAsync(host, port, priority);
+            return Task.CompletedTask;
+        }
+
+        _logger.LogDebug("Ignoring an unusable trickled ICE candidate.");
+        return Task.CompletedTask;
+    }
+
+    private async Task ResolveAndEnqueueAsync(string host, int port, long priority)
+    {
+        try
+        {
+            var ip = await _mdnsResolver.ResolveAsync(host, _mdnsLifetime.Token).ConfigureAwait(false);
+            if (ip is null)
+            {
+                _logger.LogDebug("An mDNS (.local) trickled ICE candidate could not be resolved; relying on the peer's other candidates.");
+                return;
+            }
+            EnqueueRemoteCandidate(new IPEndPoint(ip, port), priority);
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
+        {
+            // Peer disposed mid-resolution (token cancelled, or CTS read during the teardown race) — expected.
+            _logger.LogTrace("mDNS (.local) ICE candidate resolution abandoned during peer teardown.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Resolving an mDNS (.local) trickled ICE candidate failed.");
+        }
+    }
+
+    private void EnqueueRemoteCandidate(IPEndPoint endpoint, long priority)
+    {
         BundledMediaSession? session;
         lock (_sync)
         {
@@ -524,13 +570,12 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             {
                 // Buffer until the session (and its check list) exist, under the same lock that publishes
                 // _session so a concurrent SetRemoteDescription cannot lose it (RFC 8838).
-                _pendingRemoteCandidates.Add((parsed.Endpoint, parsed.Priority));
-                return Task.CompletedTask;
+                _pendingRemoteCandidates.Add((endpoint, priority));
+                return;
             }
         }
 
-        session.AddRemoteCandidate(parsed.Endpoint, parsed.Priority);
-        return Task.CompletedTask;
+        session.AddRemoteCandidate(endpoint, priority);
     }
 
     /// <summary>
@@ -655,10 +700,11 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         adoptInto?.AdoptRelay(WebRtcRelayBinding.CreateFactory(serverEndPoint, allocation, _loggerFactory));
     }
 
-    // Parses an RFC 8829 candidate string ("candidate:…", tolerating a leading "a=") into a component-1
-    // UDP endpoint and its priority, or null when malformed/unusable (wrong component/transport, no port,
-    // unparseable address).
-    private static (IPEndPoint Endpoint, long Priority)? ParseTrickleCandidate(string candidate)
+    // Validates a trickled RFC 8829 candidate string ("candidate:…", tolerating a leading "a=") and returns
+    // the parsed fields (address NOT yet parsed to an IP, so an mDNS ".local" name is still distinguishable
+    // by the caller). Returns null when malformed/unusable (wrong component/transport, non-positive port,
+    // negative priority).
+    private static SdpIceCandidate? ParseCandidateFields(string candidate)
     {
         var value = candidate.Trim();
         if (value.StartsWith("a=", StringComparison.Ordinal))
@@ -670,11 +716,10 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             || parsed.Component != 1
             || !parsed.Transport.Equals("udp", StringComparison.OrdinalIgnoreCase)
             || parsed.Port <= 0
-            || parsed.Priority < 0 // RFC 8445 priority is a 31-bit unsigned; a negative value is malformed
-            || !IPAddress.TryParse(parsed.Address, out var ip))
+            || parsed.Priority < 0) // RFC 8445 priority is a 31-bit unsigned; a negative value is malformed
             return null;
 
-        return (new IPEndPoint(ip, parsed.Port), parsed.Priority);
+        return parsed;
     }
 
     // Emits the local host candidate for the bound endpoint as an RFC 8829 candidate string (trickle).
@@ -886,6 +931,11 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
+        // Cancel any in-flight background mDNS (.local) resolutions so they cannot outlive the peer.
+        // Idempotent: a second dispose sees an already-disposed CTS (Cancel would throw) — swallow it.
+        try { _mdnsLifetime.Cancel(); }
+        catch (ObjectDisposedException) { _logger.LogTrace("mDNS lifetime CTS already disposed (double dispose)."); }
+
         BundledMediaSession? session;
         UdpClient? orphanSocket;
         lock (_sync)
@@ -910,5 +960,6 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         if (session is not null)
             await session.DisposeAsync().ConfigureAwait(false);
         orphanSocket?.Dispose();
+        _mdnsLifetime.Dispose();
     }
 }

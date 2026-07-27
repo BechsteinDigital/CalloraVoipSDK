@@ -55,7 +55,7 @@ internal sealed class SipDnsRouteResolver : ISipRouteResolver
     {
         ValidateRequest(request);
         var host = request.Host.Trim();
-        var preferredTransport = NormalizeTransport(request.PreferredTransport);
+        var preferredTransport = request.PreferredTransport;
         var effectivePort = request.Port.GetValueOrDefault();
 
         if (IPAddress.TryParse(host, out var ipAddress))
@@ -392,12 +392,6 @@ internal sealed class SipDnsRouteResolver : ISipRouteResolver
             SipTransportProtocol.Udp => resolved is SipTransportProtocol.Udp or SipTransportProtocol.Tcp,
             _ => resolved == SipTransportProtocol.Udp
         };
-
-    /// <summary>
-    /// Normalizes requested transport.
-    /// Keeps WS/WSS explicit for RFC7118 routing.
-    /// </summary>
-    private static SipTransportProtocol NormalizeTransport(SipTransportProtocol transport) => transport;
 
     /// <summary>
     /// Returns default SIP port for a transport protocol.

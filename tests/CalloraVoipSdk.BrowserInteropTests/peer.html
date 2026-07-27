@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Callora Browser Interop Peer</title></head>
+<body>
+<h1 id="status">init</h1>
+<script>
+(async () => {
+  const set = (s) => { document.getElementById('status').textContent = s; };
+  const ws = new WebSocket(`ws://${location.host}/ws`);
+  const send = (o) => { try { ws.send(JSON.stringify(o)); } catch (e) {} };
+  const log = (m) => { console.log('[peer] ' + m); send({ type: 'log', candidate: String(m) }); };
+  window.onerror = (m) => log('window.onerror: ' + m);
+
+  const pc = new RTCPeerConnection({ iceServers: [] });   // host-only ICE, kein STUN
+  pc.onicecandidate = (e) => { if (e.candidate) send({ type: 'candidate', candidate: e.candidate.candidate }); };
+  pc.oniceconnectionstatechange = () => log('ice:' + pc.iceConnectionState);
+  pc.onconnectionstatechange = () => { set('pc:' + pc.connectionState); log('pc:' + pc.connectionState); };
+
+  // WS-Handler + getUserMedia VOR dem "ready"-Signal, damit kein Offer verpasst wird.
+  ws.onmessage = async (ev) => {
+    const msg = JSON.parse(ev.data);
+    if (msg.type === 'offer') {
+      log('offer received');
+      await pc.setRemoteDescription({ type: 'offer', sdp: msg.sdp });
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      send({ type: 'answer', sdp: answer.sdp });
+      log('answer sent');
+    } else if (msg.type === 'candidate') {
+      try { await pc.addIceCandidate({ candidate: msg.candidate, sdpMLineIndex: 0 }); }
+      catch (e) { log('addIceCandidate failed: ' + e); }
+    }
+  };
+
+  let stream;
+  try {
+    // fake-device Audio (Chrome-Flag --use-fake-device-for-media-stream liefert einen Sinuston).
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    for (const track of stream.getTracks()) pc.addTrack(track, stream);
+    log('getUserMedia ok, tracks=' + stream.getTracks().length);
+  } catch (e) {
+    log('getUserMedia FAILED: ' + e);
+  }
+
+  const announceReady = () => {
+    set('ws:open');
+    send({ type: 'ready' });
+    log('ready sent');
+    setInterval(async () => {
+      const stats = await pc.getStats();
+      stats.forEach((r) => {
+        if (r.type === 'inbound-rtp' && r.kind === 'audio') {
+          send({ type: 'stats', bytesReceived: r.bytesReceived || 0, packetsReceived: r.packetsReceived || 0 });
+        }
+      });
+    }, 500);
+  };
+  if (ws.readyState === WebSocket.OPEN) announceReady();
+  else ws.onopen = announceReady;
+})();
+</script>
+</body>
+</html>

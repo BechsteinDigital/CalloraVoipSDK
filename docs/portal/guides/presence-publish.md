@@ -41,29 +41,42 @@ to publish from a specific line.
 The `eventType` is the SIP event package (the `Event` header). `presence` is the common
 case; the body's `contentType` must match the package (for presence, `application/pidf+xml`).
 
-## Refresh, modify and remove — current limitation
+## Refresh, modify and remove
 
-Per RFC 3903 a publication is soft state: it is kept alive by **refreshing** it before
-`ExpiresSeconds` elapses, **modified** by publishing a new body, and **removed** early with
+Per RFC 3903 a publication is **soft state**: it is kept alive by *refreshing* it before
+`ExpiresSeconds` elapses, *modified* by publishing a new body, and *removed* early with
 `Expires: 0` — each carrying the `SIP-If-Match` entity tag from the previous response.
 
-The SIP layer implements this full lifecycle, but a **public API to supply the entity tag is
-not yet exposed**: today every `PublishAsync` call sends an *initial* publication (its own new
-ETag). An app therefore cannot yet refresh, modify or remove a specific publication from the
-facade — each publication simply expires after its granted lifetime.
+Keep the `ETag` from the previous call and pass it to the matching method. Each one returns a
+**new** ETag — always use the most recent one for the next operation.
 
-> Tracked in [#76](https://github.com/BechsteinDigital/callora-voip-sdk/issues/76). Keep the
-> returned `ETag` if you want to drive that lifecycle once the public entry point lands.
+```csharp
+// Keep the publication alive without changing its state:
+PublishResult refreshed = await client.RefreshPublicationAsync("presence", result.ETag!);
 
-Until then, if you need presence to persist, re-publish before the granted lifetime expires
-(accepting that each re-publish is a fresh publication rather than a true refresh).
+// Replace the published body (e.g. open -> busy):
+PublishResult modified = await client.ModifyPublicationAsync(
+    "presence", refreshed.ETag!, busyPidf, "application/pidf+xml");
+
+// Withdraw the publication (sends Expires: 0):
+await client.RemovePublicationAsync("presence", modified.ETag!);
+```
+
+All three exist on `IPhoneLine` too (`line.RefreshPublicationAsync(...)` etc.) when you need a
+specific line rather than the first registered one. `RemovePublicationAsync` returns `Task` —
+after a removal there is no publication left to tag.
+
+Refresh before the granted `ExpiresSeconds` elapses; a lapsed publication cannot be refreshed
+and must be re-established with `PublishAsync`.
 
 ## Notes
 
 - **Own address-of-record only.** A UA publishes state for its own presentity; the
   Request-URI is the line's own AoR.
-- **Threading.** `PublishAsync` is a normal awaitable call; it does not run on a media or
+- **Threading.** These are normal awaitable calls; they do not run on a media or
   signaling callback thread.
+- **Automatic refresh.** The SDK does not run a refresh loop for publications — schedule the
+  refresh yourself from the granted `ExpiresSeconds`.
 
 ## See also
 

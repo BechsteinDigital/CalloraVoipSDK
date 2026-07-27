@@ -136,24 +136,6 @@ internal static class SipIngressRequestPolicy
     }
 
     /// <summary>
-    /// Decrements Max-Forwards when header is present.
-    /// </summary>
-    public static SipRequest DecrementMaxForwardsIfPresent(SipRequest request)
-    {
-        var maxForwardsHeader = request.Header("Max-Forwards");
-        if (string.IsNullOrWhiteSpace(maxForwardsHeader))
-            return request;
-        if (!int.TryParse(maxForwardsHeader.Trim(), out var maxForwards))
-            return request;
-
-        var updatedHeaders = new Dictionary<string, string>(request.Headers, StringComparer.OrdinalIgnoreCase)
-        {
-            ["Max-Forwards"] = Math.Max(0, maxForwards - 1).ToString()
-        };
-        return new SipRequest(request.Method, request.RequestUri, updatedHeaders, request.Body);
-    }
-
-    /// <summary>
     /// Returns true when request URI carries a non-SIP scheme.
     /// </summary>
     private static bool IsUnsupportedUriScheme(string requestUri)
