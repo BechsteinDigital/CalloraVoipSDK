@@ -2020,7 +2020,7 @@ Alle Samples multi-targeten net8/9/10, sind in der Solution und referenzieren da
 - **docs.yml**: PR-/main-Gate für den DocFX-Build (Site nur als Artefakt, 7 Tage).
 - **release-docs.yml**: bei Push auf main; extrahiert Version aus Tag oder `VersionPrefix`, injiziert sie per `jq` in `docfx.json`, deployt nach GitHub Pages (root + versioniertes Unterverzeichnis, `.nojekyll`).
 
-**DocFX**: lokales Tool `docfx 2.78.5` (`.config/dotnet-tools.json`); Metadata nur aus **Core + Client** (net8.0/Release); `filterConfig.yml` blendet `[Obsolete]`, `Core.Infrastructure.*` und `Core.Application.Ports.*` aus der API-Doku aus — konsistent zur „Public API boundary" im README. Portal-Inhalte unter `docs/portal/` (Guides, Concepts, Interop, Commercial).
+**DocFX**: lokales Tool `docfx 2.78.5` (`.config/dotnet-tools.json`); Metadata nur aus **Core + Client** (net8.0/Release); `filterConfig.yml` blendet `[Obsolete]`, `Core.Infrastructure.*` und `Core.Application.Ports.*` grundsätzlich aus der API-Doku aus. Sichtbar bleiben nur die ausdrücklich unterstützten Extension-Seams für Audio-Devices (`Core.Application.Ports.Audio`) und SIP-Telemetrie (`Core.Infrastructure.Sip.Observability`) — konsistent zur progressiven „Public API boundary" im README. Portal-Inhalte unter `docs/portal/` (Guides, Concepts, Interop, Commercial).
 
 **Lizenz**: Apache-2.0 (Copyright Bechstein.Digital Ecommerce UG). `THIRD-PARTY-NOTICES.md` ist vorbildlich: Tabelle mit Version/Lizenz/Copyright (BouncyCastle, Concentus, DnsClient.NET, NAudio, PortAudioSharp2, Microsoft.Extensions.*), explizit „kein Copyleft", Test-only-Pakete ausgenommen.
 

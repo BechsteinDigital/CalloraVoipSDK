@@ -2,15 +2,23 @@ apiRules:
 - exclude:
     hasAttribute:
       uid: System.ObsoleteAttribute
-- exclude:
-    uidRegex: ^CalloraVoipSdk\.Core\.Infrastructure
+# Supported extension contracts that intentionally live below the facade.
+# Keep these exact seams visible before the broad layer exclusions apply.
+- include:
+    uidRegex: ^CalloraVoipSdk\.Core\.Application\.Ports\.Audio$
     type: Namespace
+- include:
+    uidRegex: ^CalloraVoipSdk\.Core\.Application\.Ports\.Audio\.
+    type: Type
+- include:
+    uidRegex: ^CalloraVoipSdk\.Core\.Infrastructure\.Sip\.Observability$
+    type: Namespace
+- include:
+    uidRegex: ^CalloraVoipSdk\.Core\.Infrastructure\.Sip\.Observability\.
+    type: Type
 - exclude:
     uidRegex: ^CalloraVoipSdk\.Core\.Infrastructure
     type: Type
-- exclude:
-    uidRegex: ^CalloraVoipSdk\.Core\.Application\.Ports
-    type: Namespace
 - exclude:
     uidRegex: ^CalloraVoipSdk\.Core\.Application\.Ports
     type: Type
