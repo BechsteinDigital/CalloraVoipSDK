@@ -71,12 +71,17 @@ Die **Differenzierungsmodule** (Privacy / Risk / Intelligence / Policy) sind
 **Vision, nicht gebaut** — es existiert dafür kein `src/`-Projekt.
 
 Wichtig für die DD: **„getestet" heißt hier durch Repo-Tests belegt.** Für den
-**SIP-/Audio-Kern** kommt ein echter Interop-Nachweis hinzu: Er ist gegen einen
-**echten Asterisk** (`andrius/asterisk:22`, eigener CI-Interop-Job) interop-verifiziert
-(Register/INVITE/Hold/Transfer/DTMF/Session-Timer/Early-Media, inkl. bidirektionaler
-Zwei-Bein-Media). **Noch aus stehen:** die **Breite** gegen weitere Referenz-Stacks
-(FreeSWITCH/3CX/Fritzbox), ein durchgängiges **Soak-/Chaos-CI-Gate**, sowie jeglicher
-**WebRTC-/TURN-Nachweis gegen einen realen Stack oder Browser**. Die vollständige,
+**SIP-/Audio-Kern** kommt ein echter Interop-Nachweis hinzu — und zwar gegen **zwei
+unabhängige, echte SIP-Stacks**: **Asterisk** (`andrius/asterisk:22`, im PR-CI-Interop-Gate)
+**und FreeSWITCH** (`safarov/freeswitch:latest`, lokal-first). Beide laufen über
+**dieselbe `IPbxFixture`-Abstraktion** — derselbe Zwei-Bein-Szenario-Testcode
+(Register/INVITE/Media-Matrix/DTMF/Hold/Transfer, inkl. bidirektionaler Zwei-Bein-Media)
+besteht auf beiden Stacks. Dass identischer Testcode auf zwei Herstellern grün ist, ist ein
+starkes **Standard-Konformitätssignal** — nicht auf einen Hersteller getunt.
+**Noch aus stehen:** **weitere Referenz-Stacks** (3CX/Fritzbox), die **Aufnahme von
+FreeSWITCH ins PR-CI-Gate** (heute Trait `Category=InteropFreeSwitch`, lokal-first, analog
+`SoakLong`; Asterisk läuft bereits im Gate), ein durchgängiges **Soak-/Chaos-CI-Gate**,
+sowie jeglicher **WebRTC-/TURN-Nachweis gegen einen realen Stack oder Browser**. Die vollständige,
 fähigkeit-für-fähigkeit belegte Einschätzung mit Reifegrad-Stufen steht in der
 → [Fähigkeiten- und Reifegrad-Matrix](technical/capabilities-matrix.md);
 die zusammengefassten Kernlücken und offenen Punkte in der

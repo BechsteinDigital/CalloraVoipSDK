@@ -54,11 +54,19 @@ CI-verdrahtet sind drei Kategorien (belegt über Attribut-Vorkommen im `tests/`-
 |---|---|---|---|
 | `SoakShort` | kurzer Leak-/Drift-Lauf im PR-CI | PR/Push-CI (Hauptsuite) | 4 |
 | `SoakLong` | langer Soak (Stunden/Zyklen) | nightly (`soak.yml`) | 6 |
-| `Interop` | Docker-Fremd-Stack (Asterisk) | eigener CI-Job | 16 |
+| `Interop` | Docker-Fremd-Stack (**Asterisk**) | eigener CI-Job (im PR-CI-Interop-Gate) | 16 |
+| `InteropFreeSwitch` | Docker-Fremd-Stack (**FreeSWITCH**, `safarov/freeswitch:latest`) | lokal-first, **noch nicht** im PR-CI-Gate (analog `SoakLong`) | — |
 
 Die Trait-Zählungen sind die im Quellcode gesetzten `Trait`-Attribute; Theorien expandieren zur
 Laufzeit auf mehr Einzelfälle. Die `Interop`-Suite enthält zusätzlich `[DockerRequiredFact]`-Fakten
 (17 Vorkommen), die ohne verfügbaren Docker-Host übersprungen werden statt zu scheitern.
+
+**Zweiter Fremd-Stack über dieselbe Fixture.** Die FreeSWITCH-Tests tragen `Category=InteropFreeSwitch`
+und laufen über **dieselbe `IPbxFixture`-Abstraktion** wie die Asterisk-Suite — es ist *derselbe*
+Zwei-Bein-Szenario-Testcode, nur eine zweite Fixture-Implementierung (`FreeSwitchContainer` +
+`FreeSwitchPbxFixture`). Der PR-CI-Interop-Filter schließt sie heute aus
+(`Category=Interop&Category!=InteropLocalMedia&Category!=InteropFreeSwitch`), analog `SoakLong`;
+die Aufnahme ins Gate ist ein separater Folge-Schritt, sobald über mehrere CI-Läufe stabil.
 
 ---
 
@@ -75,7 +83,7 @@ erzeugen — nicht als absolute Gesamt-Testzahl zu lesen.
 | `CalloraVoipSdk.Client.Tests` | Client-/Facade-Schicht, Config-/Mapping-Drift-Guards | 22 | ~89 | net8/9/10 |
 | `CalloraVoipSdk.Audio.Tests` | Audio-Adapter | 5 | ~10 | net8/9/10 |
 | `CalloraVoipSdk.SoakTests` | Dauer-/Last-Läufe (`SoakShort`/`SoakLong`), Trend-Asserts | 20 | ~44 | net8/9/10 |
-| `CalloraVoipSdk.InteropTests` | L4-Interop gegen echten Asterisk (Docker/Testcontainers) | 21 | ~38 | net8/9/10 |
+| `CalloraVoipSdk.InteropTests` | L4-Interop gegen echtes Asterisk **und FreeSWITCH** (Docker/Testcontainers, geteilte `IPbxFixture`) | 21 | ~38 | net8/9/10 |
 | `CalloraVoipSdk.ArchitectureTests` | mechanische Engineering-Gates (siehe §4) | 2 | 7 | net8/9/10 |
 | `CalloraVoipSdk.InteropHarness` | gemeinsames Fundament (Fixtures, Metrik-Sampler, Audit-Sink) — **kein Testträger** | 20 | 0 | net8/9/10 |
 
@@ -232,7 +240,19 @@ Dokumentationsschicht, kein Gate** — seine Findings brechen den Build nicht.
   (`andrius/asterisk:22` via Testcontainers) läuft laut ADR-058 mit "29 grün, 0 Skip"
   (Register/Call/Codec/SRTP-SDES/DTMF/Hold/Transfer/Session-Timer/Early-Media) plus eine
   bidirektionale Zwei-Bein-Media-Suite ("8 harte `[DockerRequiredFact]`, 0 Skip") mit byte-exakter
-  Inhaltsverifikation in beide Richtungen.
+  Inhaltsverifikation in beide Richtungen. Diese Suite läuft im **PR-CI-Interop-Gate**.
+- **Zweiter echter Stack — FreeSWITCH (lokal-first):** derselbe Zwei-Bein-Szenario-Testcode läuft
+  über die geteilte `IPbxFixture` zusätzlich gegen echtes **FreeSWITCH** (`safarov/freeswitch:latest`).
+  Grün (lokal): Register-Smoke · Media-Matrix 7/7 (ConnectsBothLegs, bidir. RTP, lokale + remote
+  RTCP-Qualität/RTT, byte-exakter Plain-PCMU-Content, Codec-Mismatch/Transcoding, SDES) · DTMF-Relay ·
+  Hold/Unhold · Attended-Transfer · Concurrent-Soak (N=4 Short, N=20 Long). Diese Tests tragen
+  `Category=InteropFreeSwitch` und sind **lokal-first, noch nicht im PR-CI-Gate** (analog `SoakLong`;
+  Aufnahme ins Gate als Folge-Schritt, sobald über mehrere CI-Läufe stabil).
+- **Cross-Stack-Konformität als Signal:** dass *identischer* Testcode auf **zwei unabhängigen
+  SIP-Stacks** (Asterisk **und** FreeSWITCH) dasselbe Verhalten nachweist, ist ein starkes Indiz für
+  **Standard-Konformität** statt Anpassung an einen Hersteller. FreeSWITCH-Verhaltensunterschiede
+  (RTCP-Intervall, Codec/SRTP am Callee-Bein, Concurrent-Stagger) wurden measure-first als
+  **Fixture-Config** gelöst, nicht als SDK-Defekt.
 - **Soak assertet auf Trends:** Ressourcen-Sockel bleiben flach über N Calls; Jitter/Loss driften
   nicht; Nebenläufigkeit zeigt keinen Deadlock/Race — gemessen vom Harness-Sampler.
 
@@ -257,8 +277,12 @@ Die Register führen ihre eigenen Grenzen. Explizit ausgewiesen:
   (`CallRtcpQualityMonitor`); im nackten L2-Media-Loopback bleibt sie ein statischer Anlauf-Hint.
   Über den vollen `VoipClient`/L4-Pfad wird sie real gemessen (belegt im Zwei-Bein-Media-Test:
   echte Peer-RTT befüllt).
-- **Externe Peers 3CX/Fritzbox** sind opt-in/lokal, nicht CI — env-gated, Credentials via
-  User-Secrets.
+- **FreeSWITCH läuft lokal-first, aber noch nicht im PR-CI-Gate:** die FreeSWITCH-Suite ist grün
+  (lokal, gleiche `IPbxFixture`-Szenario-Matrix wie Asterisk), trägt aber `Category=InteropFreeSwitch`
+  und ist bewusst aus dem PR-CI-Interop-Filter ausgeschlossen (analog `SoakLong`) — CI-Gating ist ein
+  Folge-Schritt, sobald über mehrere CI-Läufe stabil. Asterisk läuft dagegen bereits im Gate.
+- **Externe Peers 3CX/Fritzbox** sind gar nicht getestet — opt-in/lokal, nicht CI — env-gated,
+  Credentials via User-Secrets.
 - **F011-DTMF-*Send* im early dialog** ist nur SDK-seitig nachgewiesen (`SendDtmfAsync` wirft im
   Ringing nicht + telephone-event verhandelt); der Peer-*Empfang* im early dialog ist NICHT
   end-to-end bestätigt.
@@ -269,6 +293,6 @@ Die Register führen ihre eigenen Grenzen. Explizit ausgewiesen:
   (`PacketsUnrecoverableLoss`) überzählt Late-Drops auf reinem Loopback; der RTCP-Wire-Report-Pfad
   ist davon getrennt und korrekt. Als offen/adversarial-verifiziert registriert, nicht gefixt.
 
-Der Kern-Signaling-/Medien-/Krypto-Pfad ist über L0–L4 tief und gegen einen echten Fremd-Stack
-belegt. Die obigen Punkte sind die bewusst ausgewiesenen Grenzen — sie stehen im Register, nicht
-unter einem grünen Lauf versteckt.
+Der Kern-Signaling-/Medien-/Krypto-Pfad ist über L0–L4 tief und gegen **zwei echte Fremd-Stacks**
+(Asterisk im CI-Gate, FreeSWITCH lokal-first) belegt. Die obigen Punkte sind die bewusst
+ausgewiesenen Grenzen — sie stehen im Register, nicht unter einem grünen Lauf versteckt.

@@ -16,13 +16,17 @@ eine ADR und/oder Testklasse belegt.
 
 **Wichtiger Vorbehalt zur Bedeutung von „getestet":** „Gebaut & getestet" heißt *durch Unit-/
 Integrationstests im Repo belegt*. Für den **SIP-/Audio-Kern** kommt ein echter Interop-Nachweis
-hinzu: Er ist gegen einen **echten Asterisk** (`andrius/asterisk:22`, eigener CI-Interop-Job,
-29 grün inkl. bidirektionaler Zwei-Bein-Media) interop-belegt. **Noch aus stehen** die **Breite**
-gegen weitere Referenz-Stacks (FreeSWITCH / 3CX / Fritzbox), ein durchgängiges **Soak-/Chaos-CI-Gate**
-sowie **jeglicher WebRTC-/TURN-Nachweis gegen einen realen Stack oder Browser** (siehe
-[ADR-058](../../adr/ADR-058-layered-test-interop-soak-model.md)). Wo ein produktionskritischer
-Interop-Nachweis fehlt oder nur gegen Asterisk erbracht ist, ist das in der Caveat-Spalte
-ausdrücklich vermerkt.
+gegen **zwei unabhängige, echte SIP-Stacks** hinzu: **Asterisk** (`andrius/asterisk:22`,
+im PR-CI-Interop-Gate, 29 grün inkl. bidirektionaler Zwei-Bein-Media) **und FreeSWITCH**
+(`safarov/freeswitch:latest`, lokal-first, Trait `Category=InteropFreeSwitch`). Beide laufen über
+**dieselbe `IPbxFixture`-Abstraktion** — derselbe Zwei-Bein-Szenario-Testcode (Register-Smoke,
+Media-Matrix 7/7, DTMF, Hold/Unhold, Attended-Transfer, Concurrent-Soak) besteht auf beiden Stacks;
+identischer Testcode auf zwei Herstellern ist ein starkes **Standard-Konformitätssignal**.
+**Noch aus stehen** die **Breite** gegen weitere Referenz-Stacks (3CX / Fritzbox), die **Aufnahme von
+FreeSWITCH ins PR-CI-Gate** (heute lokal-first, analog `SoakLong`; Asterisk ist im Gate), ein
+durchgängiges **Soak-/Chaos-CI-Gate** sowie **jeglicher WebRTC-/TURN-Nachweis gegen einen realen
+Stack oder Browser** (siehe [ADR-058](../../adr/ADR-058-layered-test-interop-soak-model.md)). Wo ein
+produktionskritischer Interop-Nachweis fehlt, ist das in der Caveat-Spalte ausdrücklich vermerkt.
 
 ### Reifegrad-Stufen
 
@@ -39,12 +43,12 @@ ausdrücklich vermerkt.
 
 | Fähigkeit | Reifegrad | Beleg (ADR / Code) | Einschränkung / Caveat |
 |-----------|-----------|--------------------|------------------------|
-| REGISTER + Digest-Auth (Challenge/Response, Refresh-Lifecycle) | Gebaut & getestet | [ADR-017](../../adr/ADR-017-register-expires-lifecycle.md), [ADR-018](../../adr/ADR-018-challenge-driven-digest-auth.md); `SipRegistrationService`, `ISipDigestAuthenticator` | Interop nur gegen Asterisk belegt (UDP/TCP/TLS-Register grün); Breite gegen andere Registrar fehlt. |
+| REGISTER + Digest-Auth (Challenge/Response, Refresh-Lifecycle) | Gebaut & getestet | [ADR-017](../../adr/ADR-017-register-expires-lifecycle.md), [ADR-018](../../adr/ADR-018-challenge-driven-digest-auth.md); `SipRegistrationService`, `ISipDigestAuthenticator` | Interop gegen Asterisk (CI-Gate, UDP/TCP/TLS-Register grün) **und FreeSWITCH** (lokal, Register-Smoke grün) belegt; Breite gegen weitere Registrar (3CX/Fritzbox) fehlt. |
 | INVITE-Dialog / Transaktion (UAC + UAS), Retransmission, Fork, 100rel | Gebaut & getestet | [ADR-022](../../adr/ADR-022-invite-transaction-robustness.md); `SipCallSession`, `SipCallSessionTransactionService` | — |
 | CANCEL / BYE / ACK / Re-INVITE | Gebaut & getestet | [ADR-005](../../adr/ADR-005-rfc3261-cancel-gate-release.md); `SipCallSessionInboundService`, `SipCallSessionTransactionService` | — |
-| Transport UDP / TCP / TLS (SIPS) | Gebaut & getestet | `SipTransportRuntime`, `SipTransportProtocol` | UDP/TCP/TLS-Register + Call gegen Asterisk grün (inkl. NAT-Bridge); TLS-Zert-Ketten-Interop gegen breitere reale Peers nicht separat verifiziert. |
+| Transport UDP / TCP / TLS (SIPS) | Gebaut & getestet | `SipTransportRuntime`, `SipTransportProtocol` | UDP/TCP/TLS-Register + Call gegen Asterisk (CI-Gate) **und FreeSWITCH** (lokal) grün (inkl. NAT-Bridge); TLS-Zert-Ketten-Interop gegen breitere reale Peers nicht separat verifiziert. |
 | Session-Timer-Aushandlung (RFC 4028: Interval, 422/Min-SE, Refresher-Rolle) | Teilweise | [ADR-023](../../adr/ADR-023-session-timer-negotiation.md); Parse/Validate/Emit im Code | Aushandlung + Offer-Emission belegt (Known-Answer-Tests, Aushandlung gegen Asterisk grün); der **Refresher-Enforcement-Loop** (aktive Session-Refresh-Timer, der einen Dialog beendet) ist nicht end-to-end belegt. |
-| Hold / Unhold, blinder + attended Transfer (REFER) | Gebaut & getestet | [ADR-020](../../adr/ADR-020-dialog-route-set-record-route.md); `SipReferSubscription`, `SipCoreCallChannel.HoldAsync/UnholdAsync/AttendedTransferAsync` | Konferenz/Bridge s. Media. Hold/Unhold + blind/attended Transfer gegen Asterisk grün; Breite der Transfer-Kette gegen andere PBX fehlt. |
+| Hold / Unhold, blinder + attended Transfer (REFER) | Gebaut & getestet | [ADR-020](../../adr/ADR-020-dialog-route-set-record-route.md); `SipReferSubscription`, `SipCoreCallChannel.HoldAsync/UnholdAsync/AttendedTransferAsync` | Konferenz/Bridge s. Media. Hold/Unhold + attended Transfer gegen Asterisk (CI-Gate) **und FreeSWITCH** (lokal) grün; Breite der Transfer-Kette gegen weitere PBX (3CX/Fritzbox) fehlt. |
 | Redirect 3xx (UAS) | Gebaut & getestet | [ADR-002](../../adr/ADR-002-uas-redirect-redirect-async.md); `RedirectAsync` | — |
 | Dialog-Route-Set / Record-Route-Echo, In-Dialog-Routing | Gebaut & getestet | [ADR-020](../../adr/ADR-020-dialog-route-set-record-route.md) | — |
 | Trunk-Inbound-Matching | Gebaut & getestet | [ADR-021](../../adr/ADR-021-trunk-inbound-matching.md); `TrunkInboundMatcher` | — |
@@ -193,6 +197,6 @@ Diese Punkte sind für die Due Diligence besonders relevant und in der Matrix ob
 7. **Differenzierungsmodule (Privacy/Risk/Intelligence/Policy) sind Vision, nicht gebaut** — kein `src/`-Projekt, nur Portal-/Marketing-Doku.
 8. **Opus ist managed und nicht produktionsbewiesen**; Tuning nicht konfigurierbar, PLC/FEC bei Loss ungenutzt.
 9. **Session-Timer-Refresher-Enforcement-Loop** nur teilweise (Aushandlung belegt, aktiver Refresh-Timer nicht end-to-end).
-10. **Interop-/Soak-Nachweis teilweise:** Der **SIP-/Audio-Kern ist gegen echten Asterisk** (`andrius/asterisk:22`, eigener CI-Interop-Job, 29 grün inkl. bidirektionaler Zwei-Bein-Media) interop-belegt. **Fehlend:** die **Breite** gegen weitere Stacks (FreeSWITCH/3CX/Fritzbox), ein durchgängiges **Soak-/Chaos-CI-Gate**, sowie **WebRTC/TURN gegen jeden realen Stack/Browser** (ungetestet) ([ADR-058](../../adr/ADR-058-layered-test-interop-soak-model.md)).
+10. **Interop-/Soak-Nachweis auf zwei Stacks, mit klaren Rest-Kanten:** Der **SIP-/Audio-Kern ist gegen zwei unabhängige, echte SIP-Stacks** interop-belegt — **Asterisk** (`andrius/asterisk:22`, im PR-CI-Gate, 29 grün inkl. bidirektionaler Zwei-Bein-Media) **und FreeSWITCH** (`safarov/freeswitch:latest`, lokal-first, Trait `Category=InteropFreeSwitch`) über dieselbe `IPbxFixture`-Abstraktion (Register-Smoke, Media-Matrix 7/7, DTMF, Hold/Unhold, Attended-Transfer, Concurrent-Soak). Identischer Testcode auf zwei Herstellern = starkes Standard-Konformitätssignal. **Fehlend:** die **Breite** gegen weitere Stacks (3CX/Fritzbox), die **Aufnahme von FreeSWITCH ins PR-CI-Gate** (heute lokal-first; Asterisk ist im Gate), ein durchgängiges **Soak-/Chaos-CI-Gate**, sowie **WebRTC/TURN gegen jeden realen Stack/Browser** (weiterhin ungetestet) ([ADR-058](../../adr/ADR-058-layered-test-interop-soak-model.md)).
 
 *Bezugsdokumente: [ADR-Index](../../adr/README.md); interne Status-Roh-Register (SDK_COMPLETION_TODO, SESSION_HANDOFF) und CEO_VISION sind intern und nicht Teil des Pakets (auf Anfrage/NDA). Verifikationsmethode: Code-Graph-Abfrage (graphify) je Fähigkeit + ADR-Consequences/Guardrails.*
