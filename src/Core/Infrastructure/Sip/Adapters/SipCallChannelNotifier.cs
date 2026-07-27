@@ -12,9 +12,9 @@ namespace CalloraVoipSdk.Core.Infrastructure.Sip.Adapters;
 internal sealed class SipCallChannelNotifier
 {
     private readonly object _sync = new();
-    private readonly Queue<CallState> _stateBuffer = new();
+    private readonly Queue<(CallState State, CallTerminationReason? Reason)> _stateBuffer = new();
     private readonly Queue<bool> _remoteHoldBuffer = new();
-    private Action<CallState>? _onStateChange;
+    private Action<CallState, CallTerminationReason?>? _onStateChange;
     private Action<byte, int>? _onDtmf;
     private Action<bool>? _onRemoteHold;
     private Func<string, string, IReferSubscription, bool>? _onTransfer;
@@ -24,7 +24,7 @@ internal sealed class SipCallChannelNotifier
     {
         ArgumentNullException.ThrowIfNull(callbacks);
 
-        List<CallState> pendingStates;
+        List<(CallState State, CallTerminationReason? Reason)> pendingStates;
         List<bool> pendingRemoteHold;
         lock (_sync)
         {
@@ -40,24 +40,28 @@ internal sealed class SipCallChannelNotifier
         }
 
         // Flush outside the lock so a re-entrant consumer callback cannot deadlock on it.
-        foreach (var state in pendingStates)
-            callbacks.OnStateChange(state);
+        foreach (var (state, reason) in pendingStates)
+            callbacks.OnStateChange(state, reason);
 
         if (callbacks.OnRemoteHold is null) return;
         foreach (var isOnHold in pendingRemoteHold)
             callbacks.OnRemoteHold(isOnHold);
     }
 
-    /// <summary>Dispatches a state change, or buffers it until a handler is bound.</summary>
-    public void NotifyState(CallState state)
+    /// <summary>
+    /// Dispatches a state change, or buffers it until a handler is bound. The optional
+    /// <paramref name="reason"/> is carried on the <see cref="CallState.Terminated"/> transition so the
+    /// consumer can classify why the call ended; it is preserved across buffering.
+    /// </summary>
+    public void NotifyState(CallState state, CallTerminationReason? reason = null)
     {
-        Action<CallState>? handler;
+        Action<CallState, CallTerminationReason?>? handler;
         lock (_sync)
         {
-            if (_onStateChange is null) { _stateBuffer.Enqueue(state); return; }
+            if (_onStateChange is null) { _stateBuffer.Enqueue((state, reason)); return; }
             handler = _onStateChange;
         }
-        handler(state);
+        handler(state, reason);
     }
 
     /// <summary>Dispatches a remote-hold change, or buffers it until a handler is bound.</summary>

@@ -54,13 +54,20 @@ internal static class SipCallSessionTransactionUtilities
         string reasonPhrase,
         int? retryAfterSeconds = null)
     {
+        // The RFC 3326 Reason header (for example Q.850;cause=17) may override Protocol/Cause/Text with
+        // protocol-neutral detail, but the SIP response status is the authoritative classification signal
+        // and MUST always be carried through — independently of whichever Reason protocol is present — so
+        // the public surface can classify on it rather than on a non-SIP cause. See #103.
         var reason = SipReasonHeader.TryParseFirst(reasonHeader, out var parsedReason) && parsedReason is not null
             ? parsedReason
             : SipReasonHeader.CreateSipStatusReason(statusCode, reasonPhrase);
 
-        if (retryAfterSeconds.HasValue)
-            return new SipDialogTerminationReason(reason.Protocol, reason.Cause, reason.Text, retryAfterSeconds);
-
-        return reason;
+        return new SipDialogTerminationReason(
+            reason.Protocol,
+            reason.Cause,
+            reason.Text,
+            retryAfterSeconds,
+            sipStatusCode: statusCode,
+            remoteInitiated: true);
     }
 }

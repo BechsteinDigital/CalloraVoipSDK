@@ -115,6 +115,17 @@ internal sealed class PhoneLine : IPhoneLine, IDisposable
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Outbound dial to {Uri} failed on [{User}]", targetUri, Account.Username);
+
+            // A SIP final-response rejection (486/408/480/603/…) drives the registered call to Terminated
+            // WITH a CallTerminationReason via the session→channel StateChanged path (SipCoreCallChannel
+            // .BuildTerminationReason) before the dial method's exception unwinds here. In that case the
+            // terminated call carries the outcome, so return it instead of rethrowing — this is what lets
+            // DialAndWaitUntilConnectedAsync surface result.Call.TerminationReason (issue #103). A dial that
+            // did NOT terminate the call (a genuine transport/network fault, or a caller cancellation/timeout
+            // that must remain distinguishable at the convenience layer) still terminates locally and rethrows.
+            if (call.State == CallState.Terminated)
+                return call;
+
             call.TransitionTo(CallState.Terminated);
             throw;
         }

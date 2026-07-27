@@ -176,7 +176,9 @@ internal sealed class SipCallSessionInboundService
 
         if (string.Equals(request.Method, "BYE", StringComparison.Ordinal))
         {
-            var terminationReason = TryParseReasonHeader(request.Header("Reason"));
+            // A remote BYE is a proven remote-initiated teardown; mark it so even when it carries no
+            // RFC 3326 Reason header (the common case) the public surface reports TerminatedBy=Remote.
+            var terminationReason = ParseRemoteInitiatedReason(request.Header("Reason"));
             var localTag = _context.LocalTag ?? SipProtocol.NewTag();
             _context.LocalTag = localTag;
             var headers = _headers.CreateResponseHeadersFromRequest(request, localTag, includeContentType: false);
@@ -350,6 +352,7 @@ internal sealed class SipCallSessionInboundService
             && _context.IsInbound
             && _context.State == SipDialogState.Ringing)
         {
+            // Keep the raw parsed value for the outbound 487 Reason header (byte-identical wire output).
             var cancellationReason = TryParseReasonHeader(request.Header("Reason"));
             var localTag = _context.LocalTag ?? SipProtocol.NewTag();
             _context.LocalTag = localTag;
@@ -382,7 +385,18 @@ internal sealed class SipCallSessionInboundService
                     .ConfigureAwait(false);
             }
 
-            _context.TransitionTo(SipDialogState.Terminated, cancellationReason);
+            // A remote CANCEL of a ringing dialog resolves to 487 Request Terminated (RFC 3261 §21.4.26)
+            // and is a proven remote-initiated teardown — classify on 487 (→ Canceled), attribute Remote,
+            // and preserve any Q.850/other Reason-header detail from the CANCEL.
+            _context.TransitionTo(
+                SipDialogState.Terminated,
+                new SipDialogTerminationReason(
+                    cancellationReason?.Protocol ?? "SIP",
+                    cancellationReason?.Cause,
+                    cancellationReason?.Text,
+                    cancellationReason?.RetryAfterSeconds,
+                    sipStatusCode: 487,
+                    remoteInitiated: true));
             return;
         }
 
@@ -906,6 +920,26 @@ internal sealed class SipCallSessionInboundService
         return SipReasonHeader.TryParseFirst(reasonHeader, out var parsedReason)
             ? parsedReason
             : null;
+    }
+
+    /// <summary>
+    /// Builds a proven remote-initiated termination reason for an inbound BYE. Preserves any RFC 3326
+    /// <c>Reason</c> header detail (Q.850 cause, text) when present, but always yields a non-null,
+    /// <see cref="SipDialogTerminationReason.RemoteInitiated"/> value — a graceful BYE usually carries no
+    /// Reason header, yet is still a provable remote teardown. A BYE carries no SIP status, so
+    /// <see cref="SipDialogTerminationReason.SipStatusCode"/> stays <see langword="null"/> (the call was
+    /// established and completed normally).
+    /// </summary>
+    private static SipDialogTerminationReason ParseRemoteInitiatedReason(string? reasonHeader)
+    {
+        var parsed = TryParseReasonHeader(reasonHeader);
+        return new SipDialogTerminationReason(
+            parsed?.Protocol ?? "SIP",
+            parsed?.Cause,
+            parsed?.Text,
+            parsed?.RetryAfterSeconds,
+            sipStatusCode: null,
+            remoteInitiated: true);
     }
 
     /// <summary>

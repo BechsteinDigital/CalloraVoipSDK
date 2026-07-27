@@ -96,6 +96,21 @@ internal sealed class SipCoreCallChannel : ICallChannel
 
     private int _disposed;
 
+    // Set (once, before the terminating session action runs) whenever THIS side ends the call —
+    // hangup, reject, redirect, or a local SRTP-policy termination. Read when the Terminated state
+    // change is dispatched so the public termination reason reports Local vs Remote correctly.
+    // Volatile int (0/1) for the same lock-free, thread-safe access pattern as _disposed. Monotonic
+    // (only ever flips to 1): the first Terminated transition binds via the Call's TransitionTo guard,
+    // so a later flip cannot re-classify an already-reported termination.
+    private int _locallyTerminated;
+
+    // Set (once, monotonic) the first time the dialog reaches Established, i.e. the media session was
+    // actually up. Read when building the termination reason: a teardown with no SIP failure status is a
+    // normal completion only if the call was connected (a graceful remote BYE); a never-connected abort
+    // with no SIP status is a technical failure, not a false Completed. Volatile int (0/1), same lock-free
+    // pattern as _disposed/_locallyTerminated.
+    private int _wasEstablished;
+
     /// <inheritdoc />
     public event EventHandler<CallMediaParameters>? MediaParametersNegotiated;
 
@@ -252,6 +267,7 @@ internal sealed class SipCoreCallChannel : ICallChannel
         // before the Connected state change reaches the application layer.
         if (session.State == SipDialogState.Established)
         {
+            Volatile.Write(ref _wasEstablished, 1);
             var result = _mediaPublisher.TryPublish(session, out var reasonCode);
             if (result == MediaPublicationResult.PolicyViolation)
             {
@@ -334,6 +350,8 @@ internal sealed class SipCoreCallChannel : ICallChannel
     public async Task HangupAsync()
     {
         var session = EnsureSession();
+        // Mark before the BYE so the resulting Terminated dispatch reports TerminatedBy=Local.
+        Volatile.Write(ref _locallyTerminated, 1);
         await session.HangupAsync().ConfigureAwait(false);
     }
 
@@ -448,6 +466,8 @@ internal sealed class SipCoreCallChannel : ICallChannel
     public Task RejectAsync(int statusCode, string? reasonPhrase, CancellationToken ct)
     {
         var session = EnsureSession();
+        // Local decline: mark before the response so Terminated reports TerminatedBy=Local.
+        Volatile.Write(ref _locallyTerminated, 1);
         return session.RejectAsync(statusCode, reasonPhrase, ct);
     }
 
@@ -455,6 +475,8 @@ internal sealed class SipCoreCallChannel : ICallChannel
     public Task RedirectAsync(IReadOnlyList<string> contactUris, int statusCode, CancellationToken ct)
     {
         var session = EnsureSession();
+        // Local redirect: mark before the response so Terminated reports TerminatedBy=Local.
+        Volatile.Write(ref _locallyTerminated, 1);
         return session.RedirectAsync(contactUris, statusCode, ct);
     }
 
@@ -637,6 +659,7 @@ internal sealed class SipCoreCallChannel : ICallChannel
         // before Connected so call.MediaParameters is populated for app callbacks.
         if (e.NewState == SipDialogState.Established && sender is ISipCallSession s)
         {
+            Volatile.Write(ref _wasEstablished, 1);
             if (!_mediaPublisher.HasFired)
             {
                 var result = _mediaPublisher.TryPublish(s, out var reasonCode);
@@ -656,7 +679,67 @@ internal sealed class SipCoreCallChannel : ICallChannel
 
         var state = SipCallChannelConversions.MapState(e.NewState);
         if (state is null) return;
-        _notifier.NotifyState(state.Value);
+
+        // Attach the protocol-neutral termination reason on the Terminated transition, derived from the
+        // session's last SIP Reason (RFC 3326) so REMOTE terminations (486 Busy, 480/408 NoAnswer, 603
+        // Reject, or a normal BYE = Completed) surface on the public call surface too.
+        var reason = state.Value == CallState.Terminated
+            ? BuildTerminationReason(sender as ISipCallSession)
+            : null;
+        _notifier.NotifyState(state.Value, reason);
+    }
+
+    /// <summary>
+    /// Builds the protocol-neutral <see cref="CallTerminationReason"/> from the session's last SIP
+    /// termination reason.
+    /// <para>
+    /// The SIP response status (RFC 3261 §21) is the authoritative classification signal and is read
+    /// from <see cref="SipDialogTerminationReason.SipStatusCode"/> — which the signaling layer always
+    /// sets from the response status even when an RFC 3326 <c>Reason</c> header (for example
+    /// <c>Q.850;cause=17</c>) also populated the protocol/cause detail. This is the #103 fix: previously
+    /// the status was only recovered when the Reason protocol happened to be <c>SIP</c>, so a Q.850
+    /// Reason header on a 486 silently dropped the status and mis-classified the call as Completed.
+    /// </para>
+    /// <para>
+    /// A teardown with no SIP status (a BYE-based completion) is classified via the connected-gate:
+    /// Completed only when the call was actually established (see <c>_wasEstablished</c>), otherwise a
+    /// technical Failed. Local-vs-remote origin: Local when this side terminated (<c>_locallyTerminated</c>);
+    /// Remote only when provably remote (a SIP final-response status, or an inbound BYE/CANCEL flagged
+    /// <see cref="SipDialogTerminationReason.RemoteInitiated"/>); Unknown otherwise (transport loss,
+    /// internal fault, ambiguous timeout).
+    /// </para>
+    /// </summary>
+    private CallTerminationReason BuildTerminationReason(ISipCallSession? session)
+    {
+        var sip = session?.LastTerminationReason;
+        var sipStatus = sip?.SipStatusCode;
+        var wasConnected = Volatile.Read(ref _wasEstablished) != 0;
+        return new CallTerminationReason
+        {
+            SipStatusCode     = sipStatus,
+            ReasonPhrase      = sip?.Text,
+            Category          = CallTerminationReason.CategoryForSipStatus(sipStatus, wasConnected),
+            RetryAfterSeconds = sip?.RetryAfterSeconds,
+            TerminatedBy      = ResolveTerminatedBy(sipStatus, sip),
+        };
+    }
+
+    /// <summary>
+    /// Resolves the three-way <see cref="CallTerminatedBy"/> origin. Local wins when this side initiated
+    /// the teardown. Otherwise Remote is asserted only on proof — a SIP final-response status, or an
+    /// inbound BYE/CANCEL flagged <see cref="SipDialogTerminationReason.RemoteInitiated"/> — and every
+    /// other case (transport loss, socket error, internal fault, ambiguous timeout) stays Unknown rather
+    /// than defaulting to Remote.
+    /// </summary>
+    private CallTerminatedBy ResolveTerminatedBy(int? sipStatus, SipDialogTerminationReason? sip)
+    {
+        if (Volatile.Read(ref _locallyTerminated) != 0)
+            return CallTerminatedBy.Local;
+
+        if (sipStatus is not null || sip is { RemoteInitiated: true })
+            return CallTerminatedBy.Remote;
+
+        return CallTerminatedBy.Unknown;
     }
 
     private void HandleSessionRemoteHoldChanged(object? sender, bool isOnHold)
@@ -690,6 +773,9 @@ internal sealed class SipCoreCallChannel : ICallChannel
             _appliedSrtpPolicy,
             reasonCode);
 
+        // Local, policy-driven termination: mark before the BYE so the reason reports TerminatedBy=Local.
+        Volatile.Write(ref _locallyTerminated, 1);
+
         try
         {
             await session.HangupAsync().ConfigureAwait(false);
@@ -702,7 +788,16 @@ internal sealed class SipCoreCallChannel : ICallChannel
                 session.CallId);
         }
 
-        _notifier.NotifyState(CallState.Terminated);
+        // A local fail-closed teardown (K1): no SIP status maps to it, so report it as a Failed
+        // category with the reason code as the human-readable phrase.
+        var reason = new CallTerminationReason
+        {
+            SipStatusCode = null,
+            ReasonPhrase  = reasonCode,
+            Category      = CallTerminationCategory.Failed,
+            TerminatedBy  = CallTerminatedBy.Local,
+        };
+        _notifier.NotifyState(CallState.Terminated, reason);
     }
 
     // ── SDP negotiation options (offer/answer/hold/re-offer, video) ────────────

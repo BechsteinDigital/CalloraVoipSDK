@@ -79,7 +79,13 @@ public interface IPhoneLine
     /// <param name="targetUri">Destination SIP URI or number to dial.</param>
     /// <param name="options">Per-call options; <see langword="null"/> uses <see cref="DialOptions.Default"/>.</param>
     /// <param name="ct">Cancels the dial attempt.</param>
-    /// <returns>The newly created outbound call.</returns>
+    /// <returns>
+    /// The newly created outbound call. When the remote end rejects the INVITE with a SIP final response
+    /// (486 Busy, 408/480 no-answer, 603 decline, …), the returned call is already in
+    /// <see cref="CallState.Terminated"/> and its <see cref="ICall.TerminationReason"/> classifies the
+    /// outcome — no exception is thrown for a signaled rejection. A transport/network fault that never
+    /// produced a call outcome still propagates as an exception.
+    /// </returns>
     Task<ICall> DialAsync(string targetUri, DialOptions? options = null, CancellationToken ct = default);
 
     /// <summary>

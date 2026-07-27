@@ -21,6 +21,7 @@ internal sealed class Call : ICall, IDisposable
     private CallIceState           _iceConnectionState = CallIceState.Disabled;
     private long?                  _recommendedVideoBitrateBps;
     private NetworkQuality?        _videoNetworkQuality;
+    private CallTerminationReason? _terminationReason;
     private bool                   _disposed;
 
     /// <inheritdoc />
@@ -43,6 +44,9 @@ internal sealed class Call : ICall, IDisposable
 
     /// <inheritdoc />
     public CallMediaParameters? MediaParameters { get; private set; }
+
+    /// <inheritdoc />
+    public CallTerminationReason? TerminationReason { get { lock (_sync) return _terminationReason; } }
 
     /// <inheritdoc />
     public CallQualitySnapshot QualitySnapshot { get { lock (_sync) return _qualitySnapshot; } }
@@ -367,7 +371,7 @@ internal sealed class Call : ICall, IDisposable
     /// The <see cref="StateChanged"/> handler is snapshotted inside the lock so that a
     /// concurrent subscribe/unsubscribe cannot cause a null-dereference or lost-wake-up.
     /// </summary>
-    internal void TransitionTo(CallState next)
+    internal void TransitionTo(CallState next, CallTerminationReason? reason = null)
     {
         CallStateChangedEventArgs? args;
         CallState current;
@@ -384,7 +388,12 @@ internal sealed class Call : ICall, IDisposable
                 return;
             }
 
-            args               = new CallStateChangedEventArgs(current, next, this);
+            // Publish the termination reason under the same lock and before StateChanged fires, so a
+            // handler reading TerminationReason on the Terminated transition always sees it set (K3).
+            var terminationReason = next == CallState.Terminated ? reason : null;
+            if (next == CallState.Terminated) _terminationReason = terminationReason;
+
+            args               = new CallStateChangedEventArgs(current, next, this, terminationReason);
             _stateInt          = (int)next;
             stateChangedSnapshot = StateChanged; // snapshot before releasing lock
         }
