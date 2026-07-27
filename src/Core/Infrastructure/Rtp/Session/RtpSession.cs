@@ -1,7 +1,6 @@
 using System.Buffers;
 using System.Net;
 using System.Net.Sockets;
-using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
 using CalloraVoipSdk.Core.Application.Media.Rtcp.Packets;
 using CalloraVoipSdk.Core.Application.Media.Rtcp.Wire;
@@ -50,24 +49,23 @@ internal sealed class RtpSession : IRtpSession
     // packet sequence, so out-of-order protection of concurrent sends would corrupt it.
     private readonly object _srtpProtectSync = new();
 
-    // Security contexts. Fixed from options for SDES/plain calls; the DTLS-SRTP path
-    // installs them once after the handshake via InstallSecurityContexts. Written once
-    // by the handshake thread, read per packet by the receive loop and senders —
-    // reference reads/writes are atomic, Volatile ensures visibility.
+    // Outbound security contexts. Fixed from options for SDES/plain calls; the DTLS-SRTP path installs them
+    // once after the handshake via InstallSecurityContexts. Written once by the handshake thread, read per
+    // packet by the senders — reference reads/writes are atomic, Volatile ensures visibility. The matching
+    // inbound contexts live on _inbound (RtpInboundProcessor), which owns the receive pipeline.
     private ISrtpContext? _outboundSrtp;
-    private ISrtpContext? _inboundSrtp;
     private ISrtcpContext? _outboundSrtcp;
-    private ISrtcpContext? _inboundSrtcp;
 
-    // Secondary multiplexed stream (RFC 4588 RTX): one additional payload type carried on the
-    // same socket with its own SRTP contexts, so its independent sequence space never shares
-    // the primary stream's replay window / ROC. -1 until ConfigureSecondaryStream is called;
-    // contexts installed later (post-DTLS or from SDES keys) like the primary ones. Written
-    // once before the receive loop starts, read on the loop thread — volatile for visibility.
-    private volatile int _secondaryPayloadType = -1;
+    // Secondary multiplexed stream (RFC 4588 RTX): one additional payload type carried on the same socket with
+    // its own SRTP contexts, so its independent sequence space never shares the primary stream's replay window
+    // / ROC. The outbound context and its send serialization live here; the inbound context and the payload-type
+    // routing live on _inbound.
     private ISrtpContext? _secondaryOutboundSrtp;
-    private ISrtpContext? _secondaryInboundSrtp;
     private readonly object _secondarySrtpProtectSync = new();
+
+    // Inbound half: demux, decrypt, sequence-validate and dispatch (see RtpInboundProcessor). Constructed in the
+    // ctor once the collaborators (latch, ssrc table, codecs) exist; driven from the single receive loop.
+    private readonly RtpInboundProcessor _inbound;
 
     private ushort _sequenceNumber;
     private ushort _transportCcSequence;
@@ -154,9 +152,21 @@ internal sealed class RtpSession : IRtpSession
         _ssrc    = options.Ssrc ?? RtpRandom.NextUInt32();
 
         _outboundSrtp  = options.OutboundSrtp;
-        _inboundSrtp   = options.InboundSrtp;
         _outboundSrtcp = options.OutboundSrtcp;
-        _inboundSrtcp  = options.InboundSrtcp;
+
+        // The receive pipeline: owns the inbound contexts (seeded from options) and dispatches back through the
+        // session's events, so subscriber changes and teardown clearing are reflected at call time and the public
+        // PacketReceived keeps the session as its sender. A detected SSRC collision (§8.2) routes to the session,
+        // which owns the send-side sequence/timestamp/SSRC reseed.
+        _inbound = new RtpInboundProcessor(
+            options, codec, _rtcpCodec, _latch, _ssrcTable, logger,
+            localSsrc: () => LocalSsrc,
+            onSsrcCollision: ResolveSsrcCollision,
+            onPacketReceived: packet => PacketReceived?.Invoke(this, packet),
+            onRtcpCompound: packets => RtcpCompoundReceived?.Invoke(packets),
+            onStun: (datagram, source) => StunPacketReceived?.Invoke(datagram, source),
+            onDtls: (datagram, source) => DtlsPacketReceived?.Invoke(datagram, source),
+            onSecondary: packet => SecondaryPacketReceived?.Invoke(packet));
 
         // Random initial sequence number and timestamp offset (RFC 3550 §5.1): cryptographically strong and full
         // range (the old Random.Shared.Next(ushort.MaxValue) also never reached 65535, and Next() was 31-bit).
@@ -290,7 +300,7 @@ internal sealed class RtpSession : IRtpSession
     /// never called on the runtime receive path.
     /// </summary>
     internal void InjectInboundDatagramForTest(ReadOnlySpan<byte> datagram)
-        => ProcessDatagram(datagram, source: null);
+        => _inbound.Process(datagram, source: null);
 
     /// <summary>
     /// Sends one RTCP datagram via the RTP socket (RTCP-MUX mode).
@@ -374,9 +384,8 @@ internal sealed class RtpSession : IRtpSession
         ArgumentNullException.ThrowIfNull(inboundSrtcp);
 
         Volatile.Write(ref _outboundSrtp, outboundSrtp);
-        Volatile.Write(ref _inboundSrtp, inboundSrtp);
         Volatile.Write(ref _outboundSrtcp, outboundSrtcp);
-        Volatile.Write(ref _inboundSrtcp, inboundSrtcp);
+        _inbound.InstallInbound(inboundSrtp, inboundSrtcp);
     }
 
     /// <summary>
@@ -385,10 +394,10 @@ internal sealed class RtpSession : IRtpSession
     /// Call once before the receive loop dispatches secondary traffic. The caller retains
     /// ownership of the contexts installed via <see cref="InstallSecondarySecurityContexts"/>.
     /// </summary>
-    internal void ConfigureSecondaryStream(byte payloadType) => _secondaryPayloadType = payloadType;
+    internal void ConfigureSecondaryStream(byte payloadType) => _inbound.ConfigureSecondaryStream(payloadType);
 
     /// <summary>The configured secondary-stream payload type, or <c>null</c> when none.</summary>
-    internal byte? SecondaryPayloadType => _secondaryPayloadType >= 0 ? (byte)_secondaryPayloadType : null;
+    internal byte? SecondaryPayloadType => _inbound.SecondaryPayloadType;
 
     /// <summary>
     /// Installs the SRTP contexts for the secondary (RTX) stream — separate from the primary
@@ -401,7 +410,7 @@ internal sealed class RtpSession : IRtpSession
         ArgumentNullException.ThrowIfNull(outbound);
         ArgumentNullException.ThrowIfNull(inbound);
         Volatile.Write(ref _secondaryOutboundSrtp, outbound);
-        Volatile.Write(ref _secondaryInboundSrtp, inbound);
+        _inbound.InstallSecondaryInbound(inbound);
     }
 
     /// <summary>
@@ -463,8 +472,8 @@ internal sealed class RtpSession : IRtpSession
     {
         _logger.LogDebug("RTP receive loop started on {LocalEndPoint}", _options.LocalEndPoint);
 
-        // One pooled receive buffer for the whole loop. The loop is single-threaded and
-        // ProcessDatagram copies every byte it retains (the codec copies the payload, SRTP
+        // One pooled receive buffer for the whole loop. The loop is single-threaded and the inbound
+        // processor copies every byte it retains (the codec copies the payload, SRTP
         // returns a fresh array, the RTCP path clones before dispatch) before the next
         // receive overwrites the buffer — so a single reused buffer is safe and removes the
         // per-datagram byte[] that UdpClient.ReceiveAsync allocated on every packet.
@@ -479,7 +488,7 @@ internal sealed class RtpSession : IRtpSession
                     var result = await _udp.Client
                         .ReceiveFromAsync(buffer, SocketFlags.None, remoteTemplate, cancellationToken)
                         .ConfigureAwait(false);
-                    ProcessDatagram(buffer.AsSpan(0, result.ReceivedBytes), (IPEndPoint)result.RemoteEndPoint);
+                    _inbound.Process(buffer.AsSpan(0, result.ReceivedBytes), (IPEndPoint)result.RemoteEndPoint);
                 }
                 catch (OperationCanceledException)
                 {
@@ -509,227 +518,6 @@ internal sealed class RtpSession : IRtpSession
         }
 
         _logger.LogDebug("RTP receive loop stopped on {LocalEndPoint}", _options.LocalEndPoint);
-    }
-
-    private void ProcessDatagram(ReadOnlySpan<byte> datagram, IPEndPoint? source)
-    {
-        // RFC 7983 demux (STUN/DTLS/RTP/RTCP share the media 5-tuple): classify once, then route.
-        var kind = MediaPacketClassifier.Classify(datagram);
-
-        // STUN connectivity checks — routed out before any RTP/RTCP interpretation; the ICE layer
-        // owns the response.
-        if (source is not null && kind is MediaPacketKind.Stun)
-        {
-            // The receive buffer is reused for the next datagram; the ICE handler may
-            // authenticate or respond asynchronously, so hand it an independent copy.
-            var stunDatagram = datagram.ToArray();
-            try
-            {
-                StunPacketReceived?.Invoke(stunDatagram, source);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Unhandled exception in STUN datagram handler.");
-            }
-            return;
-        }
-
-        // DTLS records (RFC 5764 §5.1.2 / RFC 7983) — routed to the DTLS-SRTP handshake layer.
-        if (source is not null && kind is MediaPacketKind.Dtls)
-        {
-            // Independent copy — the receive buffer is reused and the handshake engine
-            // consumes the record on its own thread.
-            var dtlsDatagram = datagram.ToArray();
-            try
-            {
-                DtlsPacketReceived?.Invoke(dtlsDatagram, source);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Unhandled exception in DTLS datagram handler.");
-            }
-            return;
-        }
-
-        if (kind is MediaPacketKind.Rtcp)
-        {
-            // SRTCP (RFC 3711 §3.4): authenticate + decrypt before dispatch when a context is
-            // negotiated. UnprotectRtcp returns a fresh array; on plain RTCP we copy, since the
-            // receive buffer is reused and RTCP handlers may parse/queue asynchronously.
-            byte[] rtcpDatagram;
-            if (_options.RequireEncryptedMedia && Volatile.Read(ref _inboundSrtcp) is null)
-            {
-                // Fail closed (DTLS-SRTP before handshake completion): a keyed call must
-                // never interpret unauthenticated RTCP.
-                _logger.LogDebug("Dropping inbound RTCP from {Source}: encrypted media required but no SRTCP context installed yet.", source);
-                return;
-            }
-
-            if (Volatile.Read(ref _inboundSrtcp) is { } inboundSrtcp)
-            {
-                try
-                {
-                    rtcpDatagram = inboundSrtcp.UnprotectRtcp(datagram);
-                }
-                catch (SrtpAuthenticationException)
-                {
-                    _logger.LogDebug("Dropping SRTCP packet failing authentication from {Source}.", source);
-                    return;
-                }
-                catch (SrtpReplayException)
-                {
-                    _logger.LogDebug("Dropping replayed SRTCP packet from {Source}.", source);
-                    return;
-                }
-                catch (Exception ex) when (ex is ArgumentException or CryptographicException or ObjectDisposedException)
-                {
-                    // A too-short or otherwise malformed RTCP-looking datagram (it passed the
-                    // version/PT demux but not the SRTCP length/parse) must be a clean drop —
-                    // an uncaught throw here would terminate the whole receive loop (DoS).
-                    // ObjectDisposedException covers a receive racing session teardown while
-                    // the context owner (DTLS attachment) already zeroed the keys.
-                    _logger.LogDebug("Dropping malformed SRTCP packet from {Source}: {Message}", source, ex.Message);
-                    return;
-                }
-            }
-            else
-            {
-                rtcpDatagram = datagram.ToArray();
-            }
-
-            IReadOnlyList<RtcpPacket> packets;
-            try
-            {
-                // Decode the compound once; every subscriber shares this read-only list (no per-consumer
-                // re-parse). A malformed compound is dropped — RTCP must never break the receive loop.
-                packets = _rtcpCodec.Decode(rtcpDatagram);
-            }
-            catch (Exception ex) when (ex is ArgumentException or NotSupportedException)
-            {
-                _logger.LogDebug("Dropping malformed inbound RTCP compound from {Source}: {Message}", source, ex.Message);
-                return;
-            }
-
-            try
-            {
-                RtcpCompoundReceived?.Invoke(packets);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Unhandled exception in RTP control datagram handler.");
-            }
-            return;
-        }
-
-        // Secondary stream (RFC 4588 RTX): a configured payload type is decrypted with its
-        // own SRTP context and dispatched apart, so its independent sequence space does not
-        // disturb the primary stream's replay window. The RTP header (incl. PT, byte 1 low
-        // 7 bits) is plaintext under SRTP, so the routing decision is safe pre-decrypt.
-        if (_secondaryPayloadType >= 0
-            && datagram.Length >= 2
-            && (datagram[1] & 0x7F) == _secondaryPayloadType)
-        {
-            ProcessSecondaryDatagram(datagram, source);
-            return;
-        }
-
-        // SRTP (RFC 3711): authenticate and decrypt before any RTP interpretation.
-        // A packet failing the auth tag or replay check is dropped here — it never
-        // reaches the codec, the jitter buffer, or the symmetric-RTP latch. Snapshot the
-        // context once so the latch's authenticity signal is consistent with this exact packet.
-        var inboundSrtp = Volatile.Read(ref _inboundSrtp);
-        if (_options.RequireEncryptedMedia && inboundSrtp is null)
-        {
-            // Fail closed (DTLS-SRTP before handshake completion): a keyed call must never
-            // accept plaintext RTP — it would also poison the symmetric-RTP latch.
-            _logger.LogDebug("Dropping inbound RTP from {Source}: encrypted media required but no SRTP context installed yet.", source);
-            return;
-        }
-
-        if (inboundSrtp is not null)
-        {
-            try
-            {
-                datagram = inboundSrtp.Unprotect(datagram);
-            }
-            catch (SrtpAuthenticationException)
-            {
-                _logger.LogDebug("Dropping SRTP packet failing authentication from {Source}.", source);
-                return;
-            }
-            catch (SrtpReplayException)
-            {
-                _logger.LogDebug("Dropping replayed SRTP packet from {Source}.", source);
-                return;
-            }
-            catch (Exception ex) when (ex is ArgumentException or CryptographicException or ObjectDisposedException)
-            {
-                // A too-short or malformed RTP-looking datagram (it passed the STUN/RTCP demux
-                // but is shorter than 12 + auth-tag, or has a malformed header) must be a clean
-                // drop — an uncaught throw here would terminate the whole receive loop (DoS).
-                // ObjectDisposedException covers a receive racing session teardown while the
-                // context owner (DTLS attachment) already zeroed the keys.
-                _logger.LogDebug("Dropping undecryptable SRTP packet from {Source}: {Message}", source, ex.Message);
-                return;
-            }
-        }
-
-        RtpPacket packet;
-        try
-        {
-            packet = _codec.Decode(datagram);
-        }
-        catch (FormatException ex)
-        {
-            _logger.LogDebug("Dropping malformed RTP datagram: {Message}", ex.Message);
-            return;
-        }
-
-        // SSRC collision detection + resolution (RFC 3550 §8.2): a third party is transmitting with our SSRC.
-        if (packet.Ssrc == Volatile.Read(ref _ssrc))
-        {
-            ResolveSsrcCollision(packet.Ssrc);
-            return;
-        }
-
-        // Sequence number validation (RFC 3550 §A.1)
-        var tracked = _ssrcTable.GetOrAdd(packet.Ssrc);
-        var result = tracked.Validator.Validate(packet.SequenceNumber);
-        switch (result)
-        {
-            case RtpSequenceResult.Valid:
-                break;
-            case RtpSequenceResult.Probation:
-                _logger.LogDebug("RTP SSRC={Ssrc:X8} on probation, seq={Seq}", packet.Ssrc, packet.SequenceNumber);
-                return;
-            case RtpSequenceResult.Duplicate:
-                _logger.LogDebug("RTP duplicate dropped: SSRC={Ssrc:X8} seq={Seq}", packet.Ssrc, packet.SequenceNumber);
-                return;
-            case RtpSequenceResult.TooLate:
-                _logger.LogDebug(
-                    "RTP out-of-order packet forwarded to jitter buffer: SSRC={Ssrc:X8} seq={Seq}",
-                    packet.Ssrc,
-                    packet.SequenceNumber);
-                break;
-            case RtpSequenceResult.SequenceJump:
-                _logger.LogWarning("RTP sequence jump detected: SSRC={Ssrc:X8} seq={Seq} — source may have restarted", packet.Ssrc, packet.SequenceNumber);
-                return;
-        }
-
-        // Symmetric-RTP latch (CVE-2017-14099 hardening): only a validated packet — not an SSRC collision, and
-        // Valid/TooLate rather than a duplicate or sequence jump — may steer the outbound path. A change away
-        // from an established source re-latches only on a keyed (authenticated) call; a plaintext call locks.
-        if (source is not null)
-            _latch.Consider(source, authenticated: inboundSrtp is not null);
-
-        try
-        {
-            PacketReceived?.Invoke(this, packet);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unhandled exception in RTP PacketReceived handler");
-        }
     }
 
     // RFC 3550 §8.2: a third party is transmitting with our SSRC. Send a best-effort RTCP BYE for the
@@ -787,63 +575,6 @@ internal sealed class RtpSession : IRtpSession
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to send RTCP BYE for departing SSRC={Ssrc:X8} after a collision.", departingSsrc);
-        }
-    }
-
-    // Decrypts a secondary-stream datagram with its own SRTP context and dispatches it,
-    // mirroring the primary path's fail-closed drops (auth/replay/malformed never kill the
-    // receive loop). Deliberately skips the symmetric-RTP latch and SSRC validation: the
-    // secondary stream (RTX) rides the already-latched media 5-tuple and its own sequence
-    // space is validated by the consumer via the recovered original packet.
-    private void ProcessSecondaryDatagram(ReadOnlySpan<byte> datagram, IPEndPoint? source)
-    {
-        if (_options.RequireEncryptedMedia && Volatile.Read(ref _secondaryInboundSrtp) is null)
-        {
-            _logger.LogDebug("Dropping secondary RTP from {Source}: encrypted media required but no context installed yet.", source);
-            return;
-        }
-
-        if (Volatile.Read(ref _secondaryInboundSrtp) is { } inbound)
-        {
-            try
-            {
-                datagram = inbound.Unprotect(datagram);
-            }
-            catch (SrtpAuthenticationException)
-            {
-                _logger.LogDebug("Dropping secondary SRTP packet failing authentication from {Source}.", source);
-                return;
-            }
-            catch (SrtpReplayException)
-            {
-                _logger.LogDebug("Dropping replayed secondary SRTP packet from {Source}.", source);
-                return;
-            }
-            catch (Exception ex) when (ex is ArgumentException or CryptographicException or ObjectDisposedException)
-            {
-                _logger.LogDebug("Dropping undecryptable secondary SRTP packet from {Source}: {Message}", source, ex.Message);
-                return;
-            }
-        }
-
-        RtpPacket packet;
-        try
-        {
-            packet = _codec.Decode(datagram);
-        }
-        catch (FormatException ex)
-        {
-            _logger.LogDebug("Dropping malformed secondary RTP datagram: {Message}", ex.Message);
-            return;
-        }
-
-        try
-        {
-            SecondaryPacketReceived?.Invoke(packet);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unhandled exception in secondary RTP handler.");
         }
     }
 
