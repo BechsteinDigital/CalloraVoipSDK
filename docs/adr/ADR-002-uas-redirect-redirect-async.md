@@ -1,8 +1,8 @@
 # ADR-002: UAS Redirect (RFC 3261 §8.3) — RedirectAsync on ISipCallSession
 
-**Status:** Accepted  
-**Date:** 2026-04-09  
-**RFC reference:** RFC 3261 §8.3
+Status: Accepted
+Date: 2026-04-09
+RFC reference: RFC 3261 §8.3
 
 ---
 

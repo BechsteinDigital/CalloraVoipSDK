@@ -1,8 +1,8 @@
 # ADR-001: UAS User Identity Policy (RFC 3261 §8.2.2.1)
 
-**Status:** Accepted  
-**Date:** 2026-04-09  
-**RFC reference:** RFC 3261 §8.2.2.1
+Status: Accepted
+Date: 2026-04-09
+RFC reference: RFC 3261 §8.2.2.1
 
 ---
 

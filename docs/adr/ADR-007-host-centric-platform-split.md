@@ -1,6 +1,6 @@
 # ADR-007: Host-Centric Platform Split (Engine OSS + Host + Plugins)
 
-Status: Accepted  
+Status: Accepted
 Date: 2026-04-16
 
 ## Context

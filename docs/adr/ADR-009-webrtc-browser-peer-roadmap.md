@@ -1,6 +1,6 @@
 # ADR-009: WebRTC Browser-Peer Roadmap
 
-Status: Accepted  
+Status: Accepted
 Date: 2026-07-15
 
 ## Context
