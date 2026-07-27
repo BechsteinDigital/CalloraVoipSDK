@@ -83,7 +83,9 @@ Jedes Szenario wird einmal mit Callora, Ozeki und SIPSorcery ausgeführt:
     Folgeanruf über dieselbe Registrierung
 12. Remote-BYE nach aufgebautem Gespräch: öffentlicher Zustandswechsel,
     Channel-Cleanup und erfolgreicher Folgeanruf über dieselbe Registrierung
-13. Hangup, Channel-Cleanup und Deregistrierung
+13. PBX-Neustart: Registrierungsverlust, automatische Wiederanmeldung,
+    wiederhergestellter Asterisk-Contact und erfolgreicher RTP-Folgeanruf
+14. Hangup, Channel-Cleanup und Deregistrierung
 
 Für jede Testzeile wird ein frischer Asterisk-Container gestartet. Die Tests
 laufen absichtlich seriell. Dadurch teilen sich die Implementierungen weder
@@ -99,6 +101,9 @@ im Test auf.
 
 - Alle Stacks verhandeln ausschließlich Plain RTP mit PCMU/8 kHz.
 - Asterisk, Credentials, Dialplan, Timeouts und Assertions sind identisch.
+- Der PBX-Restart nutzt für alle Stacks eine öffentlich konfigurierte
+  Registrierungslebensdauer von zehn Sekunden. Asterisk akzeptiert fünf bis
+  120 Sekunden; der Ausfall bleibt höchstens 20 Sekunden unbeobachtet.
 - Callora nutzt seine öffentlichen High-Level-APIs für Playback, Recording und
   `MediaConnector.CrossConnect`; Hold/Unhold läuft direkt über `ICall`.
 - Ozeki nutzt seine öffentlichen Softphone-, Call- und Medienbausteine wie
@@ -138,7 +143,10 @@ Muster jetzt auch für tiefergehende Call-Steuerung: Managed Dial, typisiertes
 `ICall.HoldAsync`/`UnholdAsync`, beobachtbarer Zustand und derselbe
 Asterisk-Medienpfad greifen ohne internen API-Zugriff ineinander. Der
 Remote-BYE-Slice nutzt denselben öffentlichen Call-Zustand, um ein vom Peer
-beendetes Gespräch ohne stack-spezifischen internen Zugriff zu erkennen.
+beendetes Gespräch ohne stack-spezifischen internen Zugriff zu erkennen. Beim
+PBX-Neustart werden außerdem `IPhoneLine.State`, `SipAccount.RegistrationExpiry`
+und `ReregisterOptions` direkt genutzt; die Komfortregistrierung bleibt damit
+bis zur steuerbaren Recovery-Oberfläche durchlässig.
 
 Nicht vergleichend geprüft wurden die übrigen öffentlichen Escape Hatches wie
 Transfer, In-Dialog-`INFO`/`OPTIONS`/`SUBSCRIBE`/`NOTIFY`, Custom-Header,
@@ -157,7 +165,7 @@ Lizenz- oder Kostenbenchmark. Nicht abgedeckt sind insbesondere:
 - Transcoding-Qualität und akustische Qualitätsmetriken
 - Parallelität mit vielen Calls, Turbo-Dialing und Race Conditions
 - Transfer, Remote-Hold/Glare, Fax, Konferenzmischung und In-Band-DTMF
-- Transportabbruch und wiederholte Fehlerstürme
+- Transportabbruch während aktiver Calls und wiederholte Fehlerstürme
 - Granularität der öffentlich sichtbaren SIP-Fehlerursache; der gemeinsame
   Vertrag normalisiert 486, 403 und 404 bewusst zu `Failed`
 - Authentifizierung, Mandantentrennung und die REST-Oberfläche des Dialers

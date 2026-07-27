@@ -30,7 +30,10 @@ public sealed class AsteriskTestServer : IAsyncDisposable
         "[6001]\n" +
         "type=aor\n" +
         "max_contacts=1\n" +
-        "remove_existing=yes\n";
+        "remove_existing=yes\n" +
+        "minimum_expiration=5\n" +
+        "default_expiration=10\n" +
+        "maximum_expiration=120\n";
 
     private const string ExtensionsConf =
         "[default]\n" +
@@ -72,7 +75,43 @@ public sealed class AsteriskTestServer : IAsyncDisposable
 
     public SipTestAccount Account => new(ServerAddress, 5060, "6001", "secret");
 
-    public Task StartAsync(CancellationToken ct = default) => _container.StartAsync(ct);
+    public async Task StartAsync(CancellationToken ct = default)
+    {
+        await _container.StartAsync(ct).ConfigureAwait(false);
+
+        var deadline = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(15);
+        string? lastError = null;
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            var result = await _container
+                .ExecAsync(["asterisk", "-rx", "core waitfullybooted"], ct)
+                .ConfigureAwait(false);
+            if (result.ExitCode == 0)
+            {
+                return;
+            }
+
+            lastError = result.Stderr;
+            await Task.Delay(100, ct).ConfigureAwait(false);
+        }
+
+        throw new InvalidOperationException($"Asterisk did not become ready after start: {lastError}");
+    }
+
+    public Task StopAsync(CancellationToken ct = default) => _container.StopAsync(ct);
+
+    public async Task ClearPersistedContactsAsync()
+    {
+        var result = await _container
+            .ExecAsync(["asterisk", "-rx", "database deltree registrar/contact"])
+            .ConfigureAwait(false);
+
+        if (result.ExitCode != 0)
+        {
+            throw new InvalidOperationException(
+                $"Asterisk contact persistence cleanup failed ({result.ExitCode}): {result.Stderr}");
+        }
+    }
 
     public string Target(string extension) => $"sip:{extension}@{ServerAddress}:5060";
 

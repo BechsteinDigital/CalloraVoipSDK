@@ -37,7 +37,12 @@ public sealed class OzekiStack : IComparisonStack
             domainServerHost: account.Server,
             domainServerPort: account.Port,
             proxy: $"{account.Server}:{account.Port}");
-        var line = _softPhone.CreatePhoneLine(sipAccount);
+        var lineConfiguration = new PhoneLineConfiguration(sipAccount)
+        {
+            ExpirationTime = account.RegistrationExpirySeconds,
+            RegisterBeforeExpires = Math.Max(1, account.RegistrationExpirySeconds / 2),
+        };
+        var line = _softPhone.CreatePhoneLine(lineConfiguration);
         var completion = new TaskCompletionSource(
             TaskCreationOptions.RunContinuationsAsynchronously);
 

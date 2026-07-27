@@ -25,7 +25,8 @@ public sealed class CalloraStack : IComparisonStack
 
     public string Name => "Callora";
 
-    public bool IsRegistered => !_disposed && _line is not null;
+    public bool IsRegistered =>
+        !_disposed && _line?.State == LineState.Registered;
 
     public int ActiveCallCount => _calls.Values.Count(call => call.IsConnected);
 
@@ -41,6 +42,14 @@ public sealed class CalloraStack : IComparisonStack
                     Username = account.Username,
                     Password = account.Password,
                     Transport = DomainSipTransport.Udp,
+                    RegistrationExpiry = account.RegistrationExpirySeconds,
+                    Reregister = new ReregisterOptions
+                    {
+                        InitialRetryDelay = TimeSpan.FromSeconds(1),
+                        MaxRetryDelay = TimeSpan.FromSeconds(2),
+                        RefreshRatio = 0.5,
+                        MinRefreshInterval = TimeSpan.FromSeconds(1),
+                    },
                 },
                 new ConnectOptions { Timeout = TimeSpan.FromSeconds(20) },
                 ct)

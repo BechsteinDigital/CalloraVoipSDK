@@ -41,9 +41,9 @@ public sealed class SipSorceryStack : IComparisonStack
             account.Username,
             account.Password,
             $"{account.Server}:{account.Port}",
-            expiry: 120,
+            expiry: account.RegistrationExpirySeconds,
             maxRegistrationAttemptTimeout: 10,
-            registerFailureRetryInterval: 5);
+            registerFailureRetryInterval: 2);
 
         registration.RegistrationSuccessful += (_, _) => completion.TrySetResult();
         registration.RegistrationFailed += (_, _, error) =>

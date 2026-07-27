@@ -17,7 +17,7 @@ Umgebung:
   `a8a3f67cf52925a24e1fdc9e3f439b653e46f5c68bedae2040030bbe3a908ace`
 - Asterisk-Container `andrius/asterisk:22`
 - Callora-Checkout auf Commit
-  `401906986164b07d4f88e7ecb3dfebc4a496d5d6`
+  `80f5e20067d40c2d459d2c68372fdf6dfb282d96`
 
 Der Callora-Checkout lief in einem eigenen Worktree auf Basis des nach der
 Handover-Historienbereinigung neu geschriebenen `origin/main`. Unter `src/`
@@ -33,8 +33,8 @@ Ausgeführt wurde:
 Ergebnis des vollständigen Laufs:
 
 ```text
-Passed! - Failed: 0, Passed: 45, Skipped: 0, Total: 45
-Duration: 2 m 37 s
+Passed! - Failed: 0, Passed: 48, Skipped: 0, Total: 48
+Duration: 3 m 38 s
 ```
 
 | Szenario | Callora | Ozeki 10.5.1 | SIPSorcery |
@@ -52,12 +52,14 @@ Duration: 2 m 37 s
 | Caller-Cancellation: `Canceled` + erfolgreicher Folgeanruf | PASS | PASS | PASS |
 | Caller-Cancellation: SIP-`CANCEL` + externer Channel-Cleanup | **FAIL** | PASS | PASS |
 | Remote-BYE + Cleanup + erfolgreicher Folgeanruf | PASS | PASS | PASS |
+| PBX-Ausfall innerhalb 20 s öffentlich als Registrierungsverlust sichtbar | PASS | **FAIL** | PASS |
+| Automatische Wiederanmeldung + RTP-Folgeanruf nach PBX-Neustart | PASS | PASS | PASS |
 | Call- und Registration-Cleanup | PASS | PASS | PASS |
 
-Die 45/45 beziehen sich auf ausführbare Charakterisierungstests. Der
-unterschiedliche Cleanup-Vertrag ist darin absichtlich stack-spezifisch
-hinterlegt; das **FAIL** in der Ergebnismatrix wird dadurch nicht zu einem
-Parity-PASS umgedeutet.
+Die 48/48 beziehen sich auf ausführbare Charakterisierungstests. Unterschiede
+bei Cancellation-Cleanup und öffentlicher Outage-Erkennung sind darin
+absichtlich stack-spezifisch hinterlegt; die **FAIL**-Felder in der
+Ergebnismatrix werden dadurch nicht zu Parity-PASS umgedeutet.
 
 Auf dem dokumentierten, bereinigten Main-Commit bestand der neue
 Hold/Unhold-Slice im gezielten Staging-Lauf, im vollständigen Lauf und nach
@@ -88,6 +90,18 @@ meldeten null aktive Calls, behielten ihre Registrierung und empfingen im
 Folgeanruf erneut RTP. Asterisk meldete zwischen beiden Gesprächen null aktive
 Channels.
 
+Der PBX-Restart bestand als Charakterisierung im gezielten Lauf mit 3/3 und
+danach im vollständigen Lauf. Vor dem Stopp wurde Asterisks persistierter
+Contact-Speicher geleert; ein Contact nach dem Neustart beweist daher eine
+neue Registrierung und nicht bloß wieder geladenen Zustand. Bei zehn Sekunden
+Registrierungslebensdauer machte Callora den Verlust nach rund 5,1 Sekunden
+und SIPSorcery nach rund 15,0 Sekunden öffentlich sichtbar. Ozekis
+`IPhoneLine.RegState` blieb während des 20-Sekunden-Fensters auf
+`RegistrationSucceeded`. Trotzdem meldeten sich alle drei automatisch wieder
+an: nach Asterisk-Bereitschaft benötigten Callora rund 1,4 Sekunden, Ozeki
+rund 3,4 Sekunden und SIPSorcery rund 1,6 Sekunden bis zum neuen Contact.
+Anschließend bestand jeder Stack wieder einen RTP-führenden Folgeanruf.
+
 ## Stack-spezifische Codefläche
 
 Gezählt wurden nichtleere physische Zeilen der funktionalen C#-Adapter, ohne
@@ -96,12 +110,12 @@ Tondatei-Erzeugung.
 
 | Stack | Zugeordnete Dateien | Nichtleere Zeilen |
 |---|---|---:|
-| Callora | `Adapters/CalloraStack.cs` | 298 |
-| Ozeki 10.5.1 | `Adapters/OzekiStack.cs` | 507 |
+| Callora | `Adapters/CalloraStack.cs` | 307 |
+| Ozeki 10.5.1 | `Adapters/OzekiStack.cs` | 512 |
 | SIPSorcery | `Adapters/SipSorceryStack.cs` + `Adapters/SipSorceryPcmuWaveCodec.cs` | 679 |
 
-Für genau diesen Slice benötigt Ozeki damit rund **1,70-mal** und SIPSorcery
-rund **2,28-mal** so viel funktionalen Adaptercode wie Callora. Das sind keine
+Für genau diesen Slice benötigt Ozeki damit rund **1,67-mal** und SIPSorcery
+rund **2,21-mal** so viel funktionalen Adaptercode wie Callora. Das sind keine
 allgemeinen Bibliotheksmetriken, sondern Messwerte dieses Vertrags.
 
 Nur für den neuen Hold/Unhold-Vertrag kamen stack-spezifisch drei nichtleere
@@ -129,6 +143,14 @@ Definition ohne Größenänderung an die beiden anderen Adapter angeglichen:
 Gezählt werden verbundene statt lediglich noch vom Testadapter gehaltene
 Wrapper.
 
+Der PBX-Recovery-Vertrag fügte neun nichtleere Zeilen bei Callora, fünf bei
+Ozeki und keine bei SIPSorcery hinzu. Callora konfiguriert kurze
+`RegistrationExpiry`- und `ReregisterOptions` und wertet den bestehenden
+`IPhoneLine.State` aus. Ozeki benötigt eine
+`PhoneLineConfiguration` mit `ExpirationTime` und
+`RegisterBeforeExpires`. SIPSorcery hatte die entsprechenden
+Konstruktorparameter bereits im Adapter.
+
 Der Vertrag wurde ursprünglich anhand des alten Dialer-/Callora-Slice
 formuliert. Die Asterisk-Beobachtungen sind externe
 Verhaltensbeobachtungen; der Codeflächenvorteil kann dagegen auch ausdrücken,
@@ -144,7 +166,7 @@ Ozekis reproduzierbarer Linux-Weg umfasst zusätzlich:
 | Enger `/usr/share/Ozeki.{…}`-Pfadshim in C | 183 |
 | Summe | 252 |
 
-Dieser Aufwand ist nicht in den 507 funktionalen Ozeki-Zeilen versteckt. Bei
+Dieser Aufwand ist nicht in den 512 funktionalen Ozeki-Zeilen versteckt. Bei
 einer systemweiten Paketinstallation entfällt die Extraktion, nicht aber
 automatisch das Berechtigungsproblem des Runtime-Verzeichnisses.
 
@@ -200,6 +222,11 @@ Callora:
   Callora-spezifischen Adapterpfad sichtbar. Der Call endete lokal, Asterisk
   hatte keinen aktiven Channel mehr und dieselbe Registrierung trug den
   RTP-führenden Folgeanruf.
+- Beim PBX-Ausfall wechselte `IPhoneLine.State` nach rund 5,1 Sekunden aus
+  `Registered`. Nach dem Neustart stellte der eingebaute Re-Register-Loop den
+  Asterisk-Contact automatisch in rund 1,4 Sekunden wieder her; der Folgeanruf
+  führte RTP. Lebensdauer, Refresh und Backoff sind öffentlich typisiert
+  konfigurierbar.
 - Nachteil im geprüften Managed Workflow: Erfolgt die Cancellation während
   `PhoneLine.DialAsync`, sendet der Client kein SIP-`CANCEL`. Der Asterisk-
   Channel blieb länger als fünf beziehungsweise im Wiederholungslauf acht
@@ -237,6 +264,10 @@ Ozeki SDK Linux 10.5.1:
 - Der öffentliche `IPhoneCall.CallState` folgte dem Remote-BYE bis zum
   terminalen Zustand; Channel-Cleanup, Registrierung und Folgeanruf blieben
   intakt.
+- Nach dem PBX-Neustart wurde der Asterisk-Contact automatisch in rund
+  3,4 Sekunden neu aufgebaut und der Folgeanruf funktionierte. Der öffentliche
+  `RegState` machte den vorherigen 20-sekündigen Ausfall jedoch nicht sichtbar,
+  sondern blieb auf `RegistrationSucceeded`.
 - Der native .NET-10-Medienpfad funktioniert ohne `System.Drawing.Common` und
   ohne den früheren DMO/G.711-Workaround.
 - Trotz eigenem Linux-Paket setzt der Runtime-Start Schreibzugriff auf einen
@@ -266,6 +297,9 @@ SIPSorcery:
   der Folgeanruf erfolgreich.
 - `SIPUserAgent.IsCallActive` wechselte nach dem Remote-BYE auf `false`;
   Asterisk-Cleanup, Registrierung und Folgeanruf waren erfolgreich.
+- `SIPRegistrationUserAgent.IsRegistered` machte den PBX-Ausfall nach rund
+  15,0 Sekunden sichtbar. Der Contact wurde nach dem Neustart automatisch in
+  rund 1,6 Sekunden wiederhergestellt; der Folgeanruf führte RTP.
 - Die zusätzliche Arbeit liefert viel Low-Level-Kontrolle, vergrößert aber
   Codefläche und Lifecycle-Verantwortung.
 
@@ -300,6 +334,14 @@ benötigt dafür keine zusätzliche Lifecycle-Orchestrierung im Adapter. Die
 genaue Beendigungsursache ist auf dem gemessenen Main-Stand weiterhin nicht
 Teil dieses Vergleichsvertrags; der offene PR #105 bleibt davon getrennt.
 
+Beim PBX-Neustart hat Callora den stärksten beobachtbaren Recovery-Vertrag:
+Der typisierte Line-State zeigte den Ausfall am schnellsten, der öffentliche
+Re-Register-Loop stellte den Contact ohne Anwendungsaktion wieder her und der
+Folgeanruf funktionierte. SIPSorcery verhielt sich ebenfalls transparent,
+erkannte den Ausfall mit den gemeinsamen Lease-Werten aber später. Ozeki
+registrierte sich technisch wieder, ließ den Consumer während des
+20-Sekunden-Ausfalls jedoch im erfolgreichen öffentlichen Zustand.
+
 Ozeki 10.5.1 ist gegenüber dem historischen Bestand deutlich aufgewertet:
 native .NET-10-Pakete, direkter Medienpfad und weniger Adaptercode. Funktional
 liegt es in diesem Slice eng bei Callora. Seine größten Nachteile sind hier
@@ -323,3 +365,30 @@ beim SIP-Cleanup eines aktiv abgebrochenen Wahlversuchs. Noch nicht bewiesen
 ist eine generelle Überlegenheit der übrigen Escape Hatches: Transfer,
 In-Dialog-SIP, Custom-Header, Telemetrie, eigene Devices, Module, ICE und
 WebRTC wurden in diesem Dreiervergleich nicht systematisch gegenübergestellt.
+
+## Konkreter Callora-Handlungsbedarf
+
+Aus der vollständigen Fünferreihe folgen zwei Produktkorrekturen und zwei
+Absicherungs-/Dokumentationsaufgaben:
+
+1. Caller-Cancellation während `PhoneLine.DialAsync` muss den bereits intern
+   erzeugten beziehungsweise klingelnden Call erreichen und ein SIP-`CANCEL`
+   senden. `HangupOnCancellation=true` darf nicht lokal `Canceled` melden,
+   während der Remote-Channel weiterklingelt.
+2. Der mit PR #105 vorgeschlagene `CallTerminationReason` muss interop-grün
+   fertiggestellt werden. Insbesondere darf der Busy-Pfad keinen leeren Reason
+   liefern; 486, 403 und 404 müssen auf der öffentlichen Komfortebene
+   unterscheidbar werden.
+3. Calloras reguläre Interop-CI sollte die beiden Findings dauerhaft sichern:
+   Cancellation muss Wire-`CANCEL` plus null Asterisk-Channels prüfen; ein
+   PBX-Neustart muss State-Verlust, neuen Contact und RTP-Folgeanruf prüfen.
+4. README und Portal-Dokumentation sollten den bewiesenen Progressive-API-Pfad
+   zeigen: Managed Dial plus `ICall` für Hold/Remote-BYE sowie
+   `IPhoneLine.State`, `LineReconnecting`, `RegistrationExpiry` und
+   `ReregisterOptions` für kontrollierbare Recovery. Der
+   Cancellation-Cleanup darf erst nach Punkt 1 als Garantie beschrieben
+   werden.
+
+Für Hold/Unhold, Remote-Ablehnung mit Wiederverwendung, Remote-BYE und
+automatische PBX-Recovery wurde in diesem Slice kein weiterer
+Callora-Produktfix sichtbar.

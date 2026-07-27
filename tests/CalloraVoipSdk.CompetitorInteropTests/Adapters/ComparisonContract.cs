@@ -19,7 +19,8 @@ public sealed record SipTestAccount(
     string Server,
     int Port,
     string Username,
-    string Password);
+    string Password,
+    int RegistrationExpirySeconds = 10);
 
 public sealed record DialAttempt(
     DialAttemptStatus Status,

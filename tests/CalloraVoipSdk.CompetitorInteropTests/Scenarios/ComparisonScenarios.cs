@@ -3,11 +3,19 @@ using MiniCore.Compare.Interop.Adapters;
 using MiniCore.Compare.Interop.Asterisk;
 using MiniCore.Compare.Interop.Audio;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace MiniCore.Compare.Interop.Scenarios;
 
 public sealed class ComparisonScenarios
 {
+    private readonly ITestOutputHelper _output;
+
+    public ComparisonScenarios(ITestOutputHelper output)
+    {
+        _output = output;
+    }
+
     public static TheoryData<StackKind> Stacks => new()
     {
         StackKind.Callora,
@@ -33,6 +41,13 @@ public sealed class ComparisonScenarios
         { StackKind.Callora, false },
         { StackKind.SipSorcery, true },
         { StackKind.Ozeki, true },
+    };
+
+    public static TheoryData<StackKind, bool> PbxOutageDetectionExpectations => new()
+    {
+        { StackKind.Callora, true },
+        { StackKind.SipSorcery, true },
+        { StackKind.Ozeki, false },
     };
 
     [Theory]
@@ -236,6 +251,52 @@ public sealed class ComparisonScenarios
                 () => recoveredCall.ReceivedPacketCount >= 10,
                 TimeSpan.FromSeconds(10),
                 $"{stack.Name} did not receive media after the remote BYE.")
+            .ConfigureAwait(false);
+    }
+
+    [Theory]
+    [MemberData(nameof(PbxOutageDetectionExpectations))]
+    public async Task Pbx_restart_is_detected_and_registration_recovers(
+        StackKind kind,
+        bool expectsObservableRegistrationLoss)
+    {
+        await using var asterisk = await StartAsteriskAsync().ConfigureAwait(false);
+        await using var stack = await CreateRegisteredStackAsync(kind, asterisk).ConfigureAwait(false);
+        var outageDetection = Stopwatch.StartNew();
+
+        await asterisk.ClearPersistedContactsAsync().ConfigureAwait(false);
+        await asterisk.StopAsync().ConfigureAwait(false);
+        var registrationLossWasObserved = await WaitUntilOrTimeoutAsync(
+                () => Task.FromResult(!stack.IsRegistered),
+                TimeSpan.FromSeconds(20))
+            .ConfigureAwait(false);
+        outageDetection.Stop();
+        Assert.Equal(expectsObservableRegistrationLoss, registrationLossWasObserved);
+
+        var recovery = Stopwatch.StartNew();
+        await asterisk.StartAsync().ConfigureAwait(false);
+        await WaitUntilAsync(
+                async () => !HasNoContacts(await asterisk.ShowContactsAsync().ConfigureAwait(false)),
+                TimeSpan.FromSeconds(35),
+                $"{stack.Name} did not restore its Asterisk contact after the PBX restart.")
+            .ConfigureAwait(false);
+        Assert.True(stack.IsRegistered, $"{stack.Name} restored its contact but not its public registration state.");
+        recovery.Stop();
+
+        _output.WriteLine(
+            $"{stack.Name}: registration loss observed={registrationLossWasObserved} "
+            + $"after {outageDetection.Elapsed}; "
+            + $"registration restored in {recovery.Elapsed}.");
+
+        var recoveredDial = await stack
+            .DialAsync(asterisk.Target("answer"), TimeSpan.FromSeconds(10))
+            .ConfigureAwait(false);
+        AssertConnected(stack, recoveredDial);
+        await using var recoveredCall = recoveredDial.Call!;
+        await WaitUntilAsync(
+                () => recoveredCall.ReceivedPacketCount >= 10,
+                TimeSpan.FromSeconds(10),
+                $"{stack.Name} received no media after PBX restart recovery.")
             .ConfigureAwait(false);
     }
 
