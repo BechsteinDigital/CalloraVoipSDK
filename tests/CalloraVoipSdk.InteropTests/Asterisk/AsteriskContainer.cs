@@ -158,14 +158,27 @@ public sealed class AsteriskContainer : IAsyncDisposable
     private readonly FileInfo _tlsKeyFile;
 
     /// <summary>Erstellt (noch nicht gestartet) den Asterisk-Container.</summary>
-    public AsteriskContainer()
+    /// <param name="extraBridgePairs">
+    /// Anzahl zusätzlicher Plain-RTP-Endpoint-Paare für den Concurrent-Call-Soak.
+    /// Paar <c>i</c> besteht aus Caller <c>sc{i}</c> und Callee <c>se{i}</c>, beide PCMU-only.
+    /// 0 (Standard) → Konfiguration byte-identisch mit dem Basis-Setup.
+    /// </param>
+    public AsteriskContainer(int extraBridgePairs = 0)
     {
+        // Generiere bei Bedarf zusätzliche Endpoint-Paare und hänge sie an die Basis-Configs.
+        var pjsipContent = extraBridgePairs > 0
+            ? PjsipConf + BuildSoakPjsipConf(extraBridgePairs)
+            : PjsipConf;
+        var extensionsContent = extraBridgePairs > 0
+            ? ExtensionsConf + BuildSoakExtensionsConf(extraBridgePairs)
+            : ExtensionsConf;
+
         // Schreibe die Configs in temporäre Dateien, damit Testcontainers sie als reguläre
         // Dateien (nicht als Byte-Array-Artefakt) ins Container-Dateisystem kopiert.
         _pjsipConfFile = new FileInfo(Path.GetTempFileName());
-        File.WriteAllText(_pjsipConfFile.FullName, PjsipConf);
+        File.WriteAllText(_pjsipConfFile.FullName, pjsipContent);
         _extensionsConfFile = new FileInfo(Path.GetTempFileName());
-        File.WriteAllText(_extensionsConfFile.FullName, ExtensionsConf);
+        File.WriteAllText(_extensionsConfFile.FullName, extensionsContent);
 
         // Self-signed TLS-Zertifikat für [transport-tls]; der SDK vertraut ihm im Test über
         // TlsConfiguration.AcceptUntrustedCertificates.
@@ -228,6 +241,74 @@ public sealed class AsteriskContainer : IAsyncDisposable
 
     /// <summary>Fester TLS-SIP-Port des Containers (über die Bridge-IP erreichbar).</summary>
     public int SipTlsPort => 5061;
+
+    // ── Soak-Accessoren ──────────────────────────────────────────────────────────────────────────
+    // Verfügbar nur, wenn der Container mit extraBridgePairs > 0 erstellt wurde.
+
+    /// <summary>Soak-Passwort (identisch für alle generierten Endpoint-Paare).</summary>
+    public string SoakPassword => "secret";
+
+    /// <summary>Benutzername des Soak-Caller-Endpoints für Paar <paramref name="i"/>.</summary>
+    public string SoakCallerUser(int i) => $"sc{i}";
+
+    /// <summary>Benutzername des Soak-Callee-Endpoints für Paar <paramref name="i"/>.</summary>
+    public string SoakCalleeUser(int i) => $"se{i}";
+
+    /// <summary>Dialplan-Extension des Soak-Callee-Endpoints für Paar <paramref name="i"/>.</summary>
+    public string SoakBridgeExtension(int i) => $"se{i}";
+
+    // ── Hilfsmethoden für die Konfigurationsgenerierung ──────────────────────────────────────────
+
+    /// <summary>
+    /// Generiert PJSIP-Konfiguration für <paramref name="n"/> zusätzliche Plain-RTP-Endpoint-Paare
+    /// (sc{i}/se{i}, i=0..n−1). Wird an <see cref="PjsipConf"/> angehängt.
+    /// </summary>
+    private static string BuildSoakPjsipConf(int n)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine();
+        for (var i = 0; i < n; i++)
+        {
+            var caller = $"sc{i}";
+            var callee = $"se{i}";
+            foreach (var user in new[] { caller, callee })
+            {
+                sb.AppendLine($"[{user}]");
+                sb.AppendLine("type=endpoint");
+                sb.AppendLine("context=default");
+                sb.AppendLine("disallow=all");
+                sb.AppendLine("allow=ulaw");
+                sb.AppendLine($"auth={user}");
+                sb.AppendLine($"aors={user}");
+                sb.AppendLine("direct_media=no");
+                sb.AppendLine();
+                sb.AppendLine($"[{user}]");
+                sb.AppendLine("type=auth");
+                sb.AppendLine("auth_type=userpass");
+                sb.AppendLine($"username={user}");
+                sb.AppendLine("password=secret");
+                sb.AppendLine();
+                sb.AppendLine($"[{user}]");
+                sb.AppendLine("type=aor");
+                sb.AppendLine("max_contacts=1");
+                sb.AppendLine();
+            }
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Generiert Dialplan-Extensions, die jeden Soak-Callee <c>se{i}</c> über
+    /// <c>Dial(PJSIP/se{i})</c> brücken. Wird an <see cref="ExtensionsConf"/> angehängt.
+    /// </summary>
+    private static string BuildSoakExtensionsConf(int n)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine();
+        for (var i = 0; i < n; i++)
+            sb.AppendLine($"exten => se{i},1,Dial(PJSIP/se{i},30)");
+        return sb.ToString();
+    }
 
     /// <summary>Startet den Container und wartet, bis Asterisk SIP-ready ist.</summary>
     public Task StartAsync() => _container.StartAsync();

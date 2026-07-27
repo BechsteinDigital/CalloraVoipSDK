@@ -50,9 +50,9 @@ internal sealed class SipLineChannel : ILineChannel
     private string? _registrationCallId;
     private int _registrationNextCSeq = 1;
 
-    // Resolved once (background registration loop), read on the inbound-INVITE thread —
-    // published via a volatile reference for safe cross-thread visibility.
-    private volatile IReadOnlyCollection<System.Net.IPAddress>? _trustedRegistrarAddresses;
+    // Resolves the trusted registrar/proxy addresses off the inbound-INVITE thread (background one-shot with a
+    // bounded retry back-off); reads are non-blocking. See TrustedRegistrarResolver.
+    private readonly TrustedRegistrarResolver _trustedRegistrars;
 
     // NAT: public address learned from the registrar's Via received=/rport= (N2). Written on
     // the registration loop, read on the inbound-INVITE thread; held as a single immutable
@@ -97,6 +97,12 @@ internal sealed class SipLineChannel : ILineChannel
         ArgumentNullException.ThrowIfNull(loggerFactory);
         _logger = loggerFactory.CreateLogger<SipLineChannel>();
         _callChannelLogger = loggerFactory.CreateLogger<SipCoreCallChannel>();
+
+        var registrarHosts = new[] { _account.SipServer, _account.OutboundProxy }
+            .Where(host => !string.IsNullOrWhiteSpace(host))
+            .Select(host => SipProtocol.TryParseSipUri(host!, out _, out var parsedHost, out _) ? parsedHost! : host!)
+            .ToList();
+        _trustedRegistrars = new TrustedRegistrarResolver(registrarHosts, _logger);
 
         _callSignalingService.IncomingInvite += HandleIncomingInvite;
         _callSignalingService.IncomingMessage += HandleIncomingMessage;
@@ -411,7 +417,7 @@ internal sealed class SipLineChannel : ILineChannel
             _account.Username,
             _account.SipServer,
             args.RemoteEndPoint?.Address,
-            ResolveTrustedRegistrarAddresses(),
+            _trustedRegistrars.Addresses(),
             _account.InboundNumbers,
             _account.AcceptTrunkInbound);
 
@@ -548,9 +554,9 @@ internal sealed class SipLineChannel : ILineChannel
                     correctiveReregistrations = 0;
                     failureCount = 0;
                     hadSuccessfulRegistration = true;
-                    // Resolve trusted registrar peers here (background loop), so the inbound
-                    // INVITE path never blocks on DNS; the result is cached and volatile.
-                    _ = ResolveTrustedRegistrarAddresses();
+                    // Warm the trusted registrar peer cache in the background, so the inbound INVITE path never
+                    // blocks on DNS.
+                    _trustedRegistrars.Warm();
                     _onState?.Invoke(LineState.Registered);
 
                     var refreshDelay = ComputeRefreshDelay(result.EffectiveExpiresSeconds, options);
@@ -679,41 +685,9 @@ internal sealed class SipLineChannel : ILineChannel
             _account.Username,
             _account.SipServer,
             session.RemoteSignalingEndPoint?.Address,
-            ResolveTrustedRegistrarAddresses(),
+            _trustedRegistrars.Addresses(),
             _account.InboundNumbers,
             _account.AcceptTrunkInbound);
-
-    /// <summary>
-    /// Resolves and caches the registrar/outbound-proxy addresses this line trusts for
-    /// inbound peer matching. Best-effort DNS; an unresolvable host contributes nothing.
-    /// </summary>
-    private IReadOnlyCollection<System.Net.IPAddress> ResolveTrustedRegistrarAddresses()
-    {
-        if (_trustedRegistrarAddresses is not null)
-            return _trustedRegistrarAddresses;
-
-        var addresses = new HashSet<System.Net.IPAddress>();
-        foreach (var host in new[] { _account.SipServer, _account.OutboundProxy })
-        {
-            if (string.IsNullOrWhiteSpace(host))
-                continue;
-            var bareHost = SipProtocol.TryParseSipUri(host, out _, out var parsedHost, out _)
-                ? parsedHost
-                : host;
-            try
-            {
-                foreach (var address in System.Net.Dns.GetHostAddresses(bareHost))
-                    addresses.Add(address);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogDebug(ex, "Could not resolve trusted registrar host '{Host}' for inbound matching.", bareHost);
-            }
-        }
-
-        _trustedRegistrarAddresses = addresses;
-        return _trustedRegistrarAddresses;
-    }
 
     /// <summary>
     /// Builds one registration request from line account configuration.
