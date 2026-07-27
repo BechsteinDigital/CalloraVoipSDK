@@ -192,4 +192,4 @@ Diese Punkte sind für die Due Diligence besonders relevant und in der Matrix ob
 9. **Session-Timer-Refresher-Enforcement-Loop** nur teilweise (Aushandlung belegt, aktiver Refresh-Timer nicht end-to-end).
 10. **Kein Interop-/Soak-Nachweis** gegen reale Stacks für den gesamten Non-WebRTC-Kern ([ADR-058](../../adr/ADR-058-layered-test-interop-soak-model.md)).
 
-*Bezugsdokumente: [ADR-Index](../../adr/README.md), `docs/SDK_COMPLETION_TODO.md`, `docs/SESSION_HANDOFF.md`, CEO_VISION (intern, nicht Teil des Pakets). Verifikationsmethode: Code-Graph-Abfrage (graphify) je Fähigkeit + ADR-Consequences/Guardrails.*
+*Bezugsdokumente: [ADR-Index](../../adr/README.md), `docs/archive/status-raw/SDK_COMPLETION_TODO.md`, `docs/archive/status-raw/SESSION_HANDOFF.md`, CEO_VISION (intern, nicht Teil des Pakets). Verifikationsmethode: Code-Graph-Abfrage (graphify) je Fähigkeit + ADR-Consequences/Guardrails.*
