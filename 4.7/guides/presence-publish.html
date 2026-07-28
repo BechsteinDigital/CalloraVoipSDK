@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Presence &amp; event state (SIP PUBLISH) | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Presence &amp; event state (SIP PUBLISH) | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/portal/guides/presence-publish.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="presence--event-state-sip-publish">Presence &amp; event state (SIP PUBLISH)</h1>
+
+<p>Publish event state — most commonly presence — with SIP <code>PUBLISH</code> (RFC 3903). A PUBLISH
+sends an event-state document (for example a PIDF presence body) for your own
+address-of-record to the event state compositor, so watchers can be notified of your
+availability.</p>
+<h2 id="publish-state">Publish state</h2>
+<pre><code class="lang-csharp">string pidf = &quot;&quot;&quot;
+    &lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+    &lt;presence xmlns=&quot;urn:ietf:params:xml:ns:pidf&quot; entity=&quot;sip:alice@example.com&quot;&gt;
+      &lt;tuple id=&quot;a&quot;&gt;
+        &lt;status&gt;&lt;basic&gt;open&lt;/basic&gt;&lt;/status&gt;
+      &lt;/tuple&gt;
+    &lt;/presence&gt;
+    &quot;&quot;&quot;;
+
+PublishResult result = await client.PublishAsync(
+    eventType: &quot;presence&quot;,
+    body: pidf,
+    contentType: &quot;application/pidf+xml&quot;,
+    expiresSeconds: 3600);
+
+Console.WriteLine($&quot;ETag {result.ETag}, granted {result.ExpiresSeconds}s&quot;);
+</code></pre>
+<p><code>PublishAsync</code> sends the publication and completes when the compositor answers a <code>2xx</code>,
+returning a <code>PublishResult</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Property</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ETag</code></td>
+<td>The SIP-ETag the compositor assigned (or <code>null</code> if it sent none)</td>
+</tr>
+<tr>
+<td><code>ExpiresSeconds</code></td>
+<td>The <strong>granted</strong> lifetime in seconds (may be lower than you requested)</td>
+</tr>
+</tbody>
+</table>
+<p>It <strong>faults</strong> on a non-2xx final response or if no response arrives. Register a line first —
+the state is published for that line's address-of-record — or use <code>line.PublishAsync(...)</code>
+to publish from a specific line.</p>
+<p>The <code>eventType</code> is the SIP event package (the <code>Event</code> header). <code>presence</code> is the common
+case; the body's <code>contentType</code> must match the package (for presence, <code>application/pidf+xml</code>).</p>
+<h2 id="refresh-modify-and-remove">Refresh, modify and remove</h2>
+<p>Per RFC 3903 a publication is <strong>soft state</strong>: it is kept alive by <em>refreshing</em> it before
+<code>ExpiresSeconds</code> elapses, <em>modified</em> by publishing a new body, and <em>removed</em> early with
+<code>Expires: 0</code> — each carrying the <code>SIP-If-Match</code> entity tag from the previous response.</p>
+<p>Keep the <code>ETag</code> from the previous call and pass it to the matching method. Each one returns a
+<strong>new</strong> ETag — always use the most recent one for the next operation.</p>
+<pre><code class="lang-csharp">// Keep the publication alive without changing its state:
+PublishResult refreshed = await client.RefreshPublicationAsync(&quot;presence&quot;, result.ETag!);
+
+// Replace the published body (e.g. open -&gt; busy):
+PublishResult modified = await client.ModifyPublicationAsync(
+    &quot;presence&quot;, refreshed.ETag!, busyPidf, &quot;application/pidf+xml&quot;);
+
+// Withdraw the publication (sends Expires: 0):
+await client.RemovePublicationAsync(&quot;presence&quot;, modified.ETag!);
+</code></pre>
+<p>All three exist on <code>IPhoneLine</code> too (<code>line.RefreshPublicationAsync(...)</code> etc.) when you need a
+specific line rather than the first registered one. <code>RemovePublicationAsync</code> returns <code>Task</code> —
+after a removal there is no publication left to tag.</p>
+<p>Refresh before the granted <code>ExpiresSeconds</code> elapses; a lapsed publication cannot be refreshed
+and must be re-established with <code>PublishAsync</code>.</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li><strong>Own address-of-record only.</strong> A UA publishes state for its own presentity; the
+Request-URI is the line's own AoR.</li>
+<li><strong>Threading.</strong> These are normal awaitable calls; they do not run on a media or
+signaling callback thread.</li>
+<li><strong>Automatic refresh.</strong> The SDK does not run a refresh loop for publications — schedule the
+refresh yourself from the granted <code>ExpiresSeconds</code>.</li>
+</ul>
+<h2 id="see-also">See also</h2>
+<ul>
+<li><a href="messaging.html">Instant messages (SIP MESSAGE)</a> — stateless pager-mode IM.</li>
+<li><a href="inbound-calls.html">Handling inbound calls</a> — <code>SUBSCRIBE</code>/<code>NOTIFY</code> and other event flows.</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/portal/guides/presence-publish.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

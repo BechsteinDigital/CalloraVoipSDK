@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Namespace CalloraVoipSdk.Hosting | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Namespace CalloraVoipSdk.Hosting | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="CalloraVoipSdk.Hosting">
+
+  <h1 id="CalloraVoipSdk_Hosting" data-uid="CalloraVoipSdk.Hosting" class="text-break">Namespace CalloraVoipSdk.Hosting</h1>
+  <div class="markdown level0 summary"></div>
+  <div class="markdown level0 conceptual"></div>
+  <div class="markdown level0 remarks"></div>
+
+    <h3 id="classes">
+Classes
+</h3>
+    <dl class="jumplist">
+      <dt><a class="xref" href="CalloraVoipSdk.Hosting.StunServerHost.html">StunServerHost</a></dt>
+      <dd><p>The public STUN server host (Level 2 facade). Assembles the internal <span class="xref">CalloraVoipSdk.Core.Infrastructure.Stun.Server.StunServer</span> from a
+<a class="xref" href="CalloraVoipSdk.Hosting.StunServerHostConfiguration.html">StunServerHostConfiguration</a> — binding the socket on construction — and answers Binding requests
+with a <span class="xref">CalloraVoipSdk.Core.Infrastructure.Stun.Server.StunBindingRequestHandler</span> once started. Kept in the Client layer so the server
+infrastructure stays an internal implementation detail reached only through this facade.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="CalloraVoipSdk.Hosting.StunServerHostConfiguration.html">StunServerHostConfiguration</a></dt>
+      <dd><p>Immutable configuration a <a class="xref" href="CalloraVoipSdk.Hosting.StunServerHost.html">StunServerHost</a> is built from (Level 2). A STUN Binding server needs
+no credentials; it just returns the client's server-reflexive (mapped) address.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="CalloraVoipSdk.Hosting.StunServerHostOptions.html">StunServerHostOptions</a></dt>
+      <dd><p>Mutable options bound from the DI container (Level 3), mapped onto the immutable
+<a class="xref" href="CalloraVoipSdk.Hosting.StunServerHostConfiguration.html">StunServerHostConfiguration</a> when the host is resolved.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="CalloraVoipSdk.Hosting.TurnServerCredential.html">TurnServerCredential</a></dt>
+      <dd><p>One long-term credential the hosted TURN server accepts (RFC 8656 / RFC 5389 §10.2). The realm is set once
+on the host configuration (<a class="xref" href="CalloraVoipSdk.Hosting.TurnServerHostConfiguration.html#CalloraVoipSdk_Hosting_TurnServerHostConfiguration_Realm">Realm</a>); each credential carries only the
+username and password.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="CalloraVoipSdk.Hosting.TurnServerHost.html">TurnServerHost</a></dt>
+      <dd><p>The public TURN/STUN server host (Level 2 facade). Assembles the internal <span class="xref">CalloraVoipSdk.Core.Infrastructure.Turn.Server.TurnServer</span> from a
+<a class="xref" href="CalloraVoipSdk.Hosting.TurnServerHostConfiguration.html">TurnServerHostConfiguration</a> — binding the socket on construction — and exposes only the small
+hostable surface (<a class="xref" href="CalloraVoipSdk.Hosting.ITurnServerHost.html">ITurnServerHost</a>). Kept in the Client layer so the server infrastructure stays
+an internal implementation detail, reached only through this facade.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="CalloraVoipSdk.Hosting.TurnServerHostConfiguration.html">TurnServerHostConfiguration</a></dt>
+      <dd><p>Immutable configuration a <a class="xref" href="CalloraVoipSdk.Hosting.TurnServerHost.html">TurnServerHost</a> is built from (Level 2). Mirrors the client facades'
+configuration objects (<code>VoipConfiguration</code>, <code>WebRtcConfiguration</code>): the mutable
+<a class="xref" href="CalloraVoipSdk.Hosting.TurnServerHostOptions.html">TurnServerHostOptions</a> maps onto this for the DI happy path.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="CalloraVoipSdk.Hosting.TurnServerHostOptions.html">TurnServerHostOptions</a></dt>
+      <dd><p>Mutable options bound from the DI container (Level 3), mapped onto the immutable
+<a class="xref" href="CalloraVoipSdk.Hosting.TurnServerHostConfiguration.html">TurnServerHostConfiguration</a> when the host is resolved. Mirrors <code>WebRtcOptions</code>.</p>
+</dd>
+    </dl>
+    <h3 id="interfaces">
+Interfaces
+</h3>
+    <dl class="jumplist">
+      <dt><a class="xref" href="CalloraVoipSdk.Hosting.IStunServerHost.html">IStunServerHost</a></dt>
+      <dd><p>A hostable STUN server (RFC 5389) for server-reflexive address discovery — the pure-STUN counterpart to
+<a class="xref" href="CalloraVoipSdk.Hosting.ITurnServerHost.html">ITurnServerHost</a>. It binds its socket on construction (so <a class="xref" href="CalloraVoipSdk.Hosting.IStunServerHost.html#CalloraVoipSdk_Hosting_IStunServerHost_LocalEndPoint">LocalEndPoint</a> is known
+immediately, including after an ephemeral bind), answers Binding requests from <a class="xref" href="CalloraVoipSdk.Hosting.IStunServerHost.html#CalloraVoipSdk_Hosting_IStunServerHost_Start">Start()</a>, and
+releases everything on disposal.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="CalloraVoipSdk.Hosting.ITurnServerHost.html">ITurnServerHost</a></dt>
+      <dd><p>A hostable TURN relay server (RFC 8656) — the server-side counterpart to the client facades
+(<code>VoipClient</code>, <code>WebRtcClient</code>). It binds its socket on construction (so <a class="xref" href="CalloraVoipSdk.Hosting.ITurnServerHost.html#CalloraVoipSdk_Hosting_ITurnServerHost_LocalEndPoint">LocalEndPoint</a>
+is known immediately, including after an ephemeral bind), starts serving on <a class="xref" href="CalloraVoipSdk.Hosting.ITurnServerHost.html#CalloraVoipSdk_Hosting_ITurnServerHost_Start">Start()</a>, and stops
+and releases everything on disposal. It serves the TURN methods (Allocate / Refresh / CreatePermission /
+ChannelBind / Send / Data, plus the TCP extension); it does <em>not</em> answer bare STUN Binding requests —
+for server-reflexive discovery run an <a class="xref" href="CalloraVoipSdk.Hosting.IStunServerHost.html">IStunServerHost</a> alongside it.</p>
+</dd>
+    </dl>
+
+
+</article>
+
+        <div class="contribution d-print-none">
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

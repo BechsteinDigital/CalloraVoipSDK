@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-038: Transport-Wide Congestion Control — Feedback Plane (seq stamping, arrival recording, RTCP feedback) | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-038: Transport-Wide Congestion Control — Feedback Plane (seq stamping, arrival recording, RTCP feedback) | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-038-transport-cc-feedback-plane.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-038-transport-wide-congestion-control--feedback-plane-seq-stamping-arrival-recording-rtcp-feedback">ADR-038: Transport-Wide Congestion Control — Feedback Plane (seq stamping, arrival recording, RTCP feedback)</h1>
+
+<p>Status: Accepted
+Date: 2026-07-15</p>
+<h2 id="context">Context</h2>
+<p>Video bandwidth estimation needs a signal the sender can act on. Transport-wide congestion
+control (transport-cc) is the WebRTC-de-facto mechanism: the <strong>media sender</strong> stamps every
+outbound RTP packet with a monotonic transport-wide 16-bit sequence number as an RFC 8285
+one-byte header extension; the <strong>receiver</strong> records each packet's arrival time keyed by that
+number and periodically returns an RTCP feedback report (RTPFB PT=205, FMT=15,
+draft-holmer-rmcat-transport-wide-cc-extensions-01; the modern equivalent is RFC 8888 ccfb).
+That report lets the original sender reconstruct per-packet one-way delay and loss.</p>
+<p>This ADR covers the <strong>feedback plane</strong> — everything on the wire and both packet paths that
+produce and carry the signal, up to (but not including) the sender-side estimator/rate policy,
+which is [C10-02]. The chain was built as ~8 isolated, individually reviewed slices (&quot;BWE
+foundation N/N&quot;), each merged inert, so that no partial capability was advertised before the
+whole path stood.</p>
+<h3 id="verified-current-state">Verified current state</h3>
+<p>Code-grounded via graphify (<code>explain &quot;congestion control&quot;</code>, <code>query &quot;transport-wide feedback&quot;</code>)
+plus reads of the named files:</p>
+<ul>
+<li><strong>Seq stamping (send).</strong> <code>RtpSession</code> allocates <code>_transportCcSequence</code> under the send lock
+alongside the RTP sequence and stamps it <strong>before</strong> SRTP-protect (RFC 3711: the header
+extension is authenticated, not encrypted, so the receiver reads it in clear-text). The
+negotiated <code>a=extmap</code> id flows from SDP through <code>CallVideoParameters.TransportWideCcExtensionId</code>
+and the ICE/SRTP enrichers into <code>RtpSessionOptions.TransportWideCcExtensionId</code>
+(<code>CallMediaParametersIceEnricher.cs:99</code>, <code>CallMediaParametersSrtpEnricher.cs:119</code>,
+<code>VideoRtpStream.cs:165/218</code>). The stamp/read helpers live in
+<code>OneByteRtpHeaderExtensions</code> (<code>TransportSequenceNumber</code> write; <code>TryReadTransportSequenceNumber</code>
+allocation-free inline scan, 2-byte big-endian).</li>
+<li><strong>Arrival recording (receive).</strong> <code>TransportCcArrivalRecorder</code>
+(<code>Infrastructure/Rtp/CongestionControl/</code>) is a fixed-capacity ring buffer under one <code>_sync</code>
+lock; <code>Record</code> is allocation-free (<code>TransportCcArrival</code> is a <code>readonly record struct</code>),
+overwrite-oldest on overflow with an observable <code>DroppedCount</code> (no silent loss). Timestamp is
+passed in (injectable clock, unit-testable).</li>
+<li><strong>Wire codec.</strong> <code>RtcpTransportFeedbackCodec</code> (<code>Infrastructure/Rtcp/Wire</code>) encodes/decodes the
+FMT=15 message per draft §3.1: base seq | status count | 24-bit signed reference time (64 ms
+units) | fb pkt count, then two-bit status-vector chunks, then receive deltas (250 µs units),
+32-bit padded. Decode accepts all chunk forms (run-length, one-bit, two-bit vectors),
+sign-extends the reference time, rejects reserved symbol 3, and guards truncation (no OOB read).
+Model types: <code>RtcpTransportFeedback</code> + top-level <code>RtcpTransportFeedbackStatus</code>
+(<code>Application/Media/Rtcp/Packets</code>).</li>
+<li><strong>Feedback builder.</strong> <code>TransportCcFeedbackBuilder.Build(...)</code> turns a recorder <code>Drain()</code> batch
+into the <code>RtcpTransportFeedback</code> model: 16-bit unwrap relative to the first seq (contiguous
+across the 65535→0 boundary, 32767-span guard), gap-fill (missing seq = not-received),
+reference time via <code>FloorDiv</code> from a shared epoch, receive deltas computed against the
+reconstructed clock (no cumulative rounding drift), duplicate-collapse to earliest arrival,
+overflow-safe <code>ToMicros</code>.</li>
+<li><strong>Receive-side sender loop.</strong> <code>TransportCcFeedbackSender</code> records each stamped inbound video
+packet and sends a report ~every 100 ms over the RTCP-mux channel
+(<code>Drain</code>→<code>Build</code>→<code>Encode</code>→<code>sendControl</code>). Packet-triggered on the receive-loop thread (single
+consumer, no timer thread), injected time source, build/encode failures logged-and-skipped (no
+crash, no silent catch), <code>DroppedCount</code> growth debug-logged. Wired in <code>VideoRtpStream</code> and
+constructed only when the extmap was negotiated.</li>
+<li><strong>RTCP dispatch.</strong> <code>RtcpFeedbackCodec</code> routes <code>(TransportFeedback, FMT=15)</code> to
+<code>RtcpTransportFeedbackCodec</code> on both encode and decode, so transport-cc rides the normal
+compound RTCP path. <code>CallRtcpQualityMonitor</code>'s typed switch has no <code>default</code>, so the new type
+is ignored there (like NACK/PLI) — no regression.</li>
+<li><strong>Live offer — DIVERGES from every C10 log.</strong> <code>SipCoreCallChannel.cs:774</code> now sets
+<code>HeaderExtensionUris = [RtpHeaderExtensionUris.TransportWideCc]</code> on the video offer;
+<code>SdpUtilities.cs:598/609</code> resolves the id from the answer (Ordinal match on the draft URI).
+All eleven C10 logs describe the chain as <strong>gate-off / extmap not offered / inert</strong>; the offer
+is now wired, and <code>TransportCcExtmapOfferTests</code> covers it.</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<p>Build transport-cc as a <strong>per-slice, inert-until-complete feedback plane</strong> with a strict
+separation between wire/transport plumbing (this ADR) and estimation/policy ([C10-02]):</p>
+<ol>
+<li><strong>Stamp before SRTP, read from clear-text.</strong> The transport-wide seq is an authenticated,
+unencrypted RFC 8285 extension; the sender stamps it under the send lock (monotonic,
+thread-safe, <code>unchecked</code> wrap), the receiver reads it allocation-free on the hot path.</li>
+<li><strong>Receiver captures, never estimates.</strong> Arrival recording is a bounded, allocation-free,
+drop-observable ring; the feedback builder and wire codec are pure transformations. The
+receiver's only job is to report facts (arrivals + gaps) back to the sender.</li>
+<li><strong>One wire codec on the central dispatch.</strong> transport-cc encode/decode lives in one codec
+reached through the existing compound-RTCP path, not a side channel.</li>
+<li><strong>Opportunistic, gate-off offer.</strong> Offer the extmap; a peer that echoes it enables
+transport-cc, a peer that omits it leaves the stream byte-identical to before. No premature
+capability advertising — the offer was wired only once the full chain (including [C10-02]'s
+estimator) stood.</li>
+</ol>
+<h3 id="crux">Crux</h3>
+<p>The feedback plane is deliberately <strong>policy-free</strong>: it reconstructs per-packet delay and loss
+but makes no bandwidth decision. That boundary is what let each slice merge inert and be reviewed
+in isolation, and it is what keeps the SDK transport-only — the receiver reports, the sender's
+estimator ([C10-02]) decides, the application encodes.</p>
+<h2 id="consequences">Consequences</h2>
+<p>Positive: eight independently reviewed, individually inert slices composed into a working
+feedback path; the wire format is verified bit-for-bit against the draft; the hot paths are
+allocation-free and the overflow behaviour is observable, not silent.</p>
+<p>Honest divergences and limitations:</p>
+<ul>
+<li><strong>The C10 logs are stale on liveness.</strong> Every log says &quot;gate-off / not offered / inert.&quot;
+Current code offers the extmap (<code>SipCoreCallChannel.cs:774</code>) — the chain is <strong>live</strong>, gated
+only by peer support. This ADR documents the live state; the logs document the build-up.</li>
+<li><strong>Draft URI, not the RFC 8888 URN.</strong> The resolver matches the libwebrtc draft URI Ordinal-only
+(<code>RtpHeaderExtensionUris.TransportWideCc</code>); a registered/RFC-8888 URN is a marked follow-up.
+Interop today is with Chrome/libwebrtc-style peers.</li>
+<li><strong>Encoder is not compact.</strong> <code>RtcpTransportFeedbackCodec.Encode</code> emits only two-bit vector
+chunks (no run-length optimisation) and a receive-gap &gt; ~8.19 s between packets makes <code>Encode</code>
+throw (int16 delta) — the ~100 ms feedback window keeps this out of range; window-splitting is
+open.</li>
+<li><strong>RTX packets do not participate</strong> in the transport-wide seq; buffer pooling for the stamp
+path is a noted perf follow-up (a few heap allocs/packet).</li>
+<li><strong>Malformed inbound feedback discards the whole compound</strong> (ArgumentException), the pre-existing
+behaviour of all feedback decoders; fault-tolerant per-type decoding is a noted follow-up.</li>
+</ul>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li>The transport-wide seq is stamped <strong>before</strong> SRTP-protect and read from the authenticated,
+unencrypted extension region — never from ciphertext.</li>
+<li>Arrival recording stays bounded and allocation-free with observable drops; no unbounded queue
+on the receive hot path.</li>
+<li>The extmap stays <strong>opportunistic</strong>: a non-supporting SIP peer leaves the stream byte-identical
+(gate-off), asserted by <code>TransportCcExtmapOfferTests</code> / negotiation tests.</li>
+<li>The wire codec stays the single transport-cc coder on the compound-RTCP dispatch; new RTCP
+feedback types must not silently break the <code>CallRtcpQualityMonitor</code> switch.</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Logs (<code>docs/archive/agent-log/</code>): <code>2026-07-15-dev-transport-wide-cc-seq.md</code>,
+<code>…-transport-cc-arrival-recorder.md</code>, <code>…-transport-cc-feedback.md</code>,
+<code>…-transport-cc-feedback-builder.md</code>, <code>…-transport-cc-feedback-sender.md</code>,
+<code>…-transport-cc-rtcp-dispatch.md</code>, <code>…-transport-cc-sender-findings.md</code>.</li>
+<li>Code: <code>OneByteRtpHeaderExtensions.cs</code>, <code>RtpHeaderExtensionUris.cs</code>,
+<code>Infrastructure/Rtp/CongestionControl/{TransportCcArrival,TransportCcArrivalRecorder, TransportCcFeedbackBuilder,TransportCcFeedbackSender}.cs</code>,
+<code>Infrastructure/Rtcp/Wire/{RtcpTransportFeedbackCodec,RtcpFeedbackCodec}.cs</code>,
+<code>Application/Media/Rtcp/Packets/RtcpTransportFeedback*.cs</code>,
+<code>Infrastructure/Sip/Adapters/SipCoreCallChannel.cs:774</code>, <code>Infrastructure/Sdp/SdpUtilities.cs:598</code>.</li>
+<li>RFC/marker: RFC 8285 (one-byte header extension), RFC 3711 §3 (auth-not-encrypted extension),
+draft-holmer-rmcat-transport-wide-cc-extensions-01 §3.1 (FMT=15 wire format), RFC 8888 (ccfb,
+follow-up URN). Findings register: <code>docs/audit/CODE_FINDINGS_REGISTER.md</code>.</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-038-transport-cc-feedback-plane.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

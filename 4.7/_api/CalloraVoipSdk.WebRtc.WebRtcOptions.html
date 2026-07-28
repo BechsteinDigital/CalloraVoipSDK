@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class WebRtcOptions | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class WebRtcOptions | CalloraVoipSdk ">
+      
+      <meta name="description" content="Host-facing, mutable options for the WebRTC facade, consumed by AddCalloraWebRtc(...) — the dependency-injection counterpart to the immutable  (mirrors how VoipOptions backs VoipConfiguration for the SIP facade).">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/new/main/apiSpec/new?filename=CalloraVoipSdk_WebRtc_WebRtcOptions.md&amp;value=---%0Auid%3A%20CalloraVoipSdk.WebRtc.WebRtcOptions%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="CalloraVoipSdk.WebRtc.WebRtcOptions">
+
+
+
+  <h1 id="CalloraVoipSdk_WebRtc_WebRtcOptions" data-uid="CalloraVoipSdk.WebRtc.WebRtcOptions" class="text-break">
+Class WebRtcOptions  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcOptions.cs/#L18"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="CalloraVoipSdk.html">CalloraVoipSdk</a>.<a class="xref" href="CalloraVoipSdk.WebRtc.html">WebRtc</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>CalloraVoipSdk.Client.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Host-facing, mutable options for the WebRTC facade, consumed by <code>AddCalloraWebRtc(...)</code> — the
+dependency-injection counterpart to the immutable <a class="xref" href="CalloraVoipSdk.WebRtc.WebRtcConfiguration.html">WebRtcConfiguration</a> (mirrors how
+<code>VoipOptions</code> backs <code>VoipConfiguration</code> for the SIP facade).</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sealed class WebRtcOptions</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">WebRtcOptions</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="CalloraVoipSdk_WebRtc_WebRtcOptions_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>This is the WebRTC facade's <em>own</em> option surface: a sibling of the SIP <code>VoipOptions</code>, not a
+section nested inside it. A pure-WebRTC host therefore never carries SIP settings, and the two facades
+meet only at the composition layer (<code>AddCalloraVoip(...).AddWebRtc(...)</code>). See ADR-012.</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="CalloraVoipSdk_WebRtc_WebRtcOptions_AudioCodecs_" data-uid="CalloraVoipSdk.WebRtc.WebRtcOptions.AudioCodecs*"></a>
+
+  <h3 id="CalloraVoipSdk_WebRtc_WebRtcOptions_AudioCodecs" data-uid="CalloraVoipSdk.WebRtc.WebRtcOptions.AudioCodecs">
+  AudioCodecs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcOptions.cs/#L24"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Audio codecs to offer, by name. See <a class="xref" href="CalloraVoipSdk.WebRtc.WebRtcConfiguration.html#CalloraVoipSdk_WebRtc_WebRtcConfiguration_AudioCodecs">AudioCodecs</a>. Default: Opus.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IReadOnlyList&lt;string&gt; AudioCodecs { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_WebRtc_WebRtcOptions_DtlsCertificate_" data-uid="CalloraVoipSdk.WebRtc.WebRtcOptions.DtlsCertificate*"></a>
+
+  <h3 id="CalloraVoipSdk_WebRtc_WebRtcOptions_DtlsCertificate" data-uid="CalloraVoipSdk.WebRtc.WebRtcOptions.DtlsCertificate">
+  DtlsCertificate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcOptions.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>DTLS-SRTP identity certificate for the peer (ECDSA P-256 with an exportable private key);
+<a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> generates a fresh per-peer identity. See <a class="xref" href="CalloraVoipSdk.WebRtc.WebRtcConfiguration.html#CalloraVoipSdk_WebRtc_WebRtcConfiguration_DtlsCertificate">DtlsCertificate</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public X509Certificate2? DtlsCertificate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.security.cryptography.x509certificates.x509certificate2">X509Certificate2</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_WebRtc_WebRtcOptions_EnableVideo_" data-uid="CalloraVoipSdk.WebRtc.WebRtcOptions.EnableVideo*"></a>
+
+  <h3 id="CalloraVoipSdk_WebRtc_WebRtcOptions_EnableVideo" data-uid="CalloraVoipSdk.WebRtc.WebRtcOptions.EnableVideo">
+  EnableVideo
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcOptions.cs/#L27"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Whether to offer a video m-line. See <a class="xref" href="CalloraVoipSdk.WebRtc.WebRtcConfiguration.html#CalloraVoipSdk_WebRtc_WebRtcConfiguration_EnableVideo">EnableVideo</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableVideo { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_WebRtc_WebRtcOptions_IceServers_" data-uid="CalloraVoipSdk.WebRtc.WebRtcOptions.IceServers*"></a>
+
+  <h3 id="CalloraVoipSdk_WebRtc_WebRtcOptions_IceServers" data-uid="CalloraVoipSdk.WebRtc.WebRtcOptions.IceServers">
+  IceServers
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcOptions.cs/#L36"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>STUN/TURN servers for server-reflexive candidate gathering. See <a class="xref" href="CalloraVoipSdk.WebRtc.WebRtcConfiguration.html#CalloraVoipSdk_WebRtc_WebRtcConfiguration_IceServers">IceServers</a>. Default: none.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IReadOnlyList&lt;IceServerConfiguration&gt; IceServers { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="CalloraVoipSdk.IceServerConfiguration.html">IceServerConfiguration</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_WebRtc_WebRtcOptions_LocalEndPoint_" data-uid="CalloraVoipSdk.WebRtc.WebRtcOptions.LocalEndPoint*"></a>
+
+  <h3 id="CalloraVoipSdk_WebRtc_WebRtcOptions_LocalEndPoint" data-uid="CalloraVoipSdk.WebRtc.WebRtcOptions.LocalEndPoint">
+  LocalEndPoint
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcOptions.cs/#L21"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Local media endpoint the peer binds. See <a class="xref" href="CalloraVoipSdk.WebRtc.WebRtcConfiguration.html#CalloraVoipSdk_WebRtc_WebRtcConfiguration_LocalEndPoint">LocalEndPoint</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IPEndPoint LocalEndPoint { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.net.ipendpoint">IPEndPoint</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_WebRtc_WebRtcOptions_LoggerFactory_" data-uid="CalloraVoipSdk.WebRtc.WebRtcOptions.LoggerFactory*"></a>
+
+  <h3 id="CalloraVoipSdk_WebRtc_WebRtcOptions_LoggerFactory" data-uid="CalloraVoipSdk.WebRtc.WebRtcOptions.LoggerFactory">
+  LoggerFactory
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcOptions.cs/#L48"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Logger factory override; <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> falls back to the container's registered factory.
+See <a class="xref" href="CalloraVoipSdk.WebRtc.WebRtcConfiguration.html#CalloraVoipSdk_WebRtc_WebRtcConfiguration_LoggerFactory">LoggerFactory</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ILoggerFactory? LoggerFactory { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/microsoft.extensions.logging.iloggerfactory">ILoggerFactory</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_WebRtc_WebRtcOptions_SimulcastLayers_" data-uid="CalloraVoipSdk.WebRtc.WebRtcOptions.SimulcastLayers*"></a>
+
+  <h3 id="CalloraVoipSdk_WebRtc_WebRtcOptions_SimulcastLayers" data-uid="CalloraVoipSdk.WebRtc.WebRtcOptions.SimulcastLayers">
+  SimulcastLayers
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcOptions.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Send-side simulcast layers to offer, by <code>a=rid</code> id. See <a class="xref" href="CalloraVoipSdk.WebRtc.WebRtcConfiguration.html#CalloraVoipSdk_WebRtc_WebRtcConfiguration_SimulcastLayers">SimulcastLayers</a>. Default: none.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IReadOnlyList&lt;string&gt; SimulcastLayers { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_WebRtc_WebRtcOptions_VideoCodecs_" data-uid="CalloraVoipSdk.WebRtc.WebRtcOptions.VideoCodecs*"></a>
+
+  <h3 id="CalloraVoipSdk_WebRtc_WebRtcOptions_VideoCodecs" data-uid="CalloraVoipSdk.WebRtc.WebRtcOptions.VideoCodecs">
+  VideoCodecs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcOptions.cs/#L30"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Video codecs to offer when <a class="xref" href="CalloraVoipSdk.WebRtc.WebRtcOptions.html#CalloraVoipSdk_WebRtc_WebRtcOptions_EnableVideo">EnableVideo</a> is set. See <a class="xref" href="CalloraVoipSdk.WebRtc.WebRtcConfiguration.html#CalloraVoipSdk_WebRtc_WebRtcConfiguration_VideoCodecs">VideoCodecs</a>. Default: H264.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IReadOnlyList&lt;string&gt; VideoCodecs { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcOptions.cs/#L18" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

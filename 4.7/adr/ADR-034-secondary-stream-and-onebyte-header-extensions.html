@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-034: Secondary-Stream Transport and RFC 8285 One-Byte Header Extensions | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-034: Secondary-Stream Transport and RFC 8285 One-Byte Header Extensions | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-034-secondary-stream-and-onebyte-header-extensions.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-034-secondary-stream-transport-and-rfc-8285-one-byte-header-extensions">ADR-034: Secondary-Stream Transport and RFC 8285 One-Byte Header Extensions</h1>
+
+<p>Status: Accepted
+Date: 2026-07-14</p>
+<h2 id="context">Context</h2>
+<p>Two transport-layer foundations had to exist before higher-level media features (RTX
+retransmission per RFC 4588, and congestion control / BWE per transport-cc / RFC 8888) could be
+built. Both are additive to the proven single-stream <code>RtpSession</code>, and both were deliberately
+shipped as isolated slices — the risky infrastructure decoupled from the semantics that ride on
+it — so the central receive/send path stays byte-identical for every existing audio call.</p>
+<ol>
+<li><strong>A secondary stream on the same socket.</strong> RTX retransmits lost packets on a <em>separate</em>
+SSRC and sequence space (RFC 4588 §9). Feeding those retransmissions through the primary
+SRTP context would corrupt the primary replay window / ROC. The transport therefore needs a
+second payload type carried on the same 5-tuple with its <em>own</em> SRTP context — before any RTX
+semantics exist.</li>
+<li><strong>Element-level header extensions.</strong> The RTP layer only carried the generic RFC 3550
+extension (<code>RtpExtension</code> = profile <code>0xBEDE</code> + one opaque padded blob) — no element layer. The
+RFC 8285 one-byte form packs multiple <code>{id, value}</code> elements into that <code>0xBEDE</code> block; it is
+the carrier for the transport-wide sequence number that congestion control reports arrival
+times against.</li>
+</ol>
+<p>The governing rules are ENGINEERING_RULES <strong>K3</strong> (hot-path allocation hygiene, thread-safety
+by design), <strong>K1</strong> (fail-closed media security), and <strong>K7</strong> (RFC references in code).</p>
+<h3 id="verified-current-state-graphify--code">Verified current state (graphify + code)</h3>
+<ul>
+<li><strong><code>RtpSession</code> hosts a secondary stream with its own SRTP context.</strong>
+(<code>src/Core/Infrastructure/Rtp/Session/RtpSession.cs</code>.) Fields: <code>_secondaryPayloadType</code>
+(<code>volatile int</code>, <code>-1</code> = off, L67), <code>_secondaryOutboundSrtp</code> / <code>_secondaryInboundSrtp</code>
+(<code>ISrtpContext?</code>, Volatile-accessed, L68-69). API: <code>event SecondaryPacketReceived</code> (L129),
+<code>ConfigureSecondaryStream(byte)</code> (L388), <code>InstallSecondarySecurityContexts(out, in)</code> (L399),
+<code>SecondaryPayloadType</code> getter (L391), <code>SendSecondaryAsync(RtpPacket, ct)</code> (L413).</li>
+<li><strong>Inbound intercepts the secondary PT <em>before</em> the primary SRTP block.</strong> In <code>ProcessDatagram</code>
+(L628-634) the demux order is STUN → DTLS → RTCP → secondary → primary: when
+<code>_secondaryPayloadType &gt;= 0</code> and the plaintext RTP header PT (<code>datagram[1] &amp; 0x7F</code>) matches,
+the datagram routes to <code>ProcessSecondaryDatagram</code> (L798). The PT read is safe pre-decrypt
+because the RTP header is plaintext under SRTP. The RTCP mask is disjoint from any RTP PT, so
+there is no collision with the RTCP arm above it.</li>
+<li><strong>The secondary path is fail-closed and does not disturb the primary.</strong>
+<code>ProcessSecondaryDatagram</code> decrypts with <code>_secondaryInboundSrtp</code> under the same three-way drop
+as the primary (auth / replay / <code>ArgumentException|CryptographicException|ObjectDisposedException</code>,
+L806-827; see ADR C07-02), then fires <code>SecondaryPacketReceived</code>. It deliberately <strong>skips</strong> the
+symmetric-RTP latch and SSRC validation (comment L793-797): the secondary rides the
+already-latched 5-tuple and its sequence space is validated by the consumer via the recovered
+original packet. <code>SendSecondaryAsync</code> (L413) protects with <code>_secondaryOutboundSrtp</code> under a
+dedicated <code>_secondarySrtpProtectSync</code> lock, suppresses the send fail-closed when
+<code>RequireEncryptedMedia</code> and no context is installed (L433-437, ENGINEERING_RULES K1), and omits
+the SR counters (its own SSRC). <code>SecondaryPacketReceived</code> is nulled on dispose (L883).</li>
+<li><strong>The RFC 8285 one-byte codec exists and is fully wired, past what the founding log described.</strong>
+<code>OneByteRtpHeaderExtensions</code> (<code>src/Core/Infrastructure/Rtp/Packets/OneByteRtpHeaderExtensions.cs</code>,
+graphify community 87) provides <code>Encode</code> (fail-fast <code>ArgumentException</code> on id∉1..14 or
+value-length∉1..16, L34), <code>Parse</code> (lenient on receive: skip padding, stop at id 15, drop a
+truncated trailing element; <strong>each value copied</strong> because the source may alias the pooled
+receive buffer, L104). Beyond the original wire-only slice it now also carries
+<code>TransportSequenceNumber</code> (L116), <code>EncodeTransportSequenceNumber</code> (L130, allocation-lean
+direct-bytes stamp for the per-packet path) and <code>TryReadTransportSequenceNumber</code> (L151,
+inline scan, no list/per-element copy, allocation-free on receive).</li>
+<li><strong>The codec drives real congestion control.</strong> <code>RtpOutboundHeaderExtensionStamper</code>
+(<code>src/Core/Infrastructure/Rtp/Session/RtpOutboundHeaderExtensionStamper.cs</code>) builds the
+per-packet extension from transport-cc + (on BUNDLE) MID (RFC 9143) + (on simulcast) RID
+(RFC 8852), reusing <code>EncodeTransportSequenceNumber</code> on the non-BUNDLE path so it is
+byte-identical to stamping transport-cc alone (L77-80). Consumers include
+<code>TransportCcCongestionController</code>, <code>TransportCcFeedbackSender</code>, <code>RtpSession</code>, and
+<code>VideoRtpStream</code> (grep-confirmed).</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<p>Ship the two foundations as additive, self-contained transport slices:</p>
+<ol>
+<li><strong>Secondary-stream transport in <code>RtpSession</code>.</strong> A second payload type on the same socket with
+its own outbound/inbound SRTP context (independent ROC + replay window, RFC 4588 §9),
+intercepted before the primary SRTP block, fail-closed identically to the primary, latch- and
+SSRC-validation-skipped by design. <strong>No RTX semantics</strong> in this slice — pure transport.</li>
+<li><strong>RFC 8285 one-byte header-extension codec.</strong> Fail-fast on construction, lenient on receive,
+value-copying to survive the pooled receive buffer; plus an allocation-lean transport-cc
+stamp/read pair for the per-packet path.</li>
+</ol>
+<p><strong>Crux:</strong> the secondary stream keeps a <em>separate</em> SRTP context so its independent sequence space
+never advances the primary stream's replay window — that isolation is the entire point, and it is
+what lets RTX be built later without touching the audio-critical primary path. The header-extension
+codec is fail-fast when <em>we</em> build (a bad element is a construction bug) but lenient when a peer
+sends (unknown/padding/truncation tolerated) — the asymmetry is deliberate.</p>
+<h2 id="consequences">Consequences</h2>
+<p>Positive:</p>
+<ul>
+<li>The central receive path is byte-identical when <code>_secondaryPayloadType == -1</code> (every existing
+call), verified by the demux-order review and the regression suite. Six secondary-stream tests
+cover dispatch separation, an SRTP round-trip with the secondary's own context, <strong>replay-window
+separation</strong> (a secondary replay does not advance the primary window — the core purpose), an
+auth-fail drop that does not kill the loop, a send reaching the peer with the secondary SSRC,
+and a fail-closed send-suppress under <code>RequireEncryptedMedia</code> without a context.</li>
+<li>The one-byte codec has 15 round-trip/edge tests (ordering, 32-bit padding, inter-element
+padding skip, id-15 stop, non-<code>0xBEDE</code> → empty, truncation tolerance, 16-byte value,
+id-1/id-14 boundaries, rejection of id 0/15/16 and value length 0/17). A reviewer H1 finding —
+<code>Parse</code> aliasing <code>extension.Data</code> over a pooled buffer — was fixed with a per-value <code>.ToArray()</code>
+copy, closing the exact hot-path/pooling hazard C07-01 introduced.</li>
+</ul>
+<p>Tradeoffs / honest divergence:</p>
+<ul>
+<li><strong>The founding logs understate the current state — recorded honestly.</strong> The one-byte-extension
+log (2026-07-14) scoped itself as &quot;reine Wire-Ebene, keine RtpSession-Verdrahtung … Fundament&quot;;
+the code has since grown the transport-cc stamp/read helpers and is wired through
+<code>RtpOutboundHeaderExtensionStamper</code> into live congestion control and <code>VideoRtpStream</code>. The
+secondary-stream log (2026-07-14) explicitly shipped &quot;keine RTX-Semantik, keine Video-
+Verdrahtung&quot;; whether RTX now rides it is a separate cluster's concern (WebRTC/RTX roadmap) and
+is <strong>not</strong> claimed here — this ADR captures the transport foundation only.</li>
+<li><strong>The secondary path skips the symmetric-RTP latch and SSRC/sequence validation by design.</strong>
+That is correct only under the stated assumption (it rides the already-latched 5-tuple and the
+consumer validates the recovered original). If a secondary stream were ever used outside that
+assumption, the missing validation would be a gap — the assumption is load-bearing.</li>
+<li><strong>SDP <code>a=extmap</code> negotiation is not part of this codec slice.</strong> The id↔URI mapping (RFC 8285 §5)
+that tells the peer which id carries transport-cc/MID/RID is negotiated elsewhere; the codec
+assumes an already-agreed id.</li>
+<li>No external-stack interop claim; evidence is in-process unit tests over real sockets.</li>
+</ul>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li>The secondary inbound/outbound contexts are separate <code>ISrtpContext</code> instances with their own
+ROC + replay window; a secondary replay MUST NOT advance the primary window (pinned test).</li>
+<li>Secondary inbound applies the same fail-closed three-way drop as the primary; a fail never
+terminates the receive loop (ADR C07-02 parity).</li>
+<li><code>SendSecondaryAsync</code> suppresses under <code>RequireEncryptedMedia</code> with no context — no plaintext
+leak (ENGINEERING_RULES K1); protect runs under <code>_secondarySrtpProtectSync</code>.</li>
+<li>Demux order STUN → DTLS → RTCP → secondary → primary; the secondary PT test reads only the
+plaintext RTP header byte and is skipped byte-identically when <code>_secondaryPayloadType == -1</code>.</li>
+<li><code>OneByteRtpHeaderExtensions.Encode</code> fail-fast on id∉1..14 / length∉1..16; <code>Parse</code> /
+<code>TryReadTransportSequenceNumber</code> copy each value so a returned element never aliases the pooled
+receive buffer (ADR C07-01 hazard closed).</li>
+<li><code>EncodeTransportSequenceNumber</code> / <code>TryReadTransportSequenceNumber</code> stay allocation-free on the
+per-packet path (ENGINEERING_RULES K3).</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Logs: <code>docs/archive/agent-log/2026-07-14-dev-rtpsession-secondary-stream.md</code> (secondary
+transport, separate SRTP context, replay-window separation, 6 tests),
+<code>2026-07-14-dev-rtp-onebyte-header-extensions.md</code> (RFC 8285 one-byte codec, fail-fast/lenient,
+H1 aliasing fix, 15 tests).</li>
+<li>Code (graphify-verified): <code>RtpSession.cs</code> (secondary fields L67-69, API L129/L388/L399/L413,
+inbound intercept L628-634, <code>ProcessSecondaryDatagram</code> L798-848, dispose L883),
+<code>OneByteRtpHeaderExtensions.cs</code> (community 87: <code>Encode</code> L34, <code>Parse</code> value-copy L104,
+<code>EncodeTransportSequenceNumber</code> L130, <code>TryReadTransportSequenceNumber</code> L151),
+<code>RtpOutboundHeaderExtensionStamper.cs</code> (transport-cc + MID/RID build, non-BUNDLE byte-identical
+L77-80); wiring grep-confirmed in <code>TransportCcCongestionController.cs</code>,
+<code>TransportCcFeedbackSender.cs</code>, <code>VideoRtpStream.cs</code>.</li>
+<li>Markers / RFC: RFC 4588 §9 (RTX separate SSRC/sequence), RFC 8285 §5 (one-byte header
+extensions / extmap), RFC 8888 (transport-cc feedback), RFC 9143 (MID), RFC 8852 (RID);
+ENGINEERING_RULES K1 (fail-closed), K3 (hot-path alloc/thread-safety), K7 (RFC refs).</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-034-secondary-stream-and-onebyte-header-extensions.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

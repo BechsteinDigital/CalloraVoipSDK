@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-029: DTLS-SRTP Signaling, Answer-Role, and Keying-Method Precedence | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-029: DTLS-SRTP Signaling, Answer-Role, and Keying-Method Precedence | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-029-dtls-srtp-signaling-and-keying-precedence.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-029-dtls-srtp-signaling-answer-role-and-keying-method-precedence">ADR-029: DTLS-SRTP Signaling, Answer-Role, and Keying-Method Precedence</h1>
+
+<p>Status: Accepted
+Date: 2026-07-14</p>
+<h2 id="context">Context</h2>
+<p>With the DTLS-SRTP keying core in place (foundation ADR), SIP calls still could not <em>reach</em> it:
+no production path set <code>IsDtlsNegotiated</code>, and there was no offer/answer machinery for
+<code>a=fingerprint</code> / <code>a=setup</code>. This ADR covers the signaling wiring and — the sharp part — the
+<strong>precedence rules that decide which keying method wins</strong> when an SDP can be read more than one
+way (SDES <code>a=crypto</code> vs. DTLS fingerprint), plus how the answerer picks its DTLS role, all while
+staying <strong>fail-closed</strong> (K1: no cleartext downgrade).</p>
+<h3 id="verified-current-state">Verified current state</h3>
+<ul>
+<li><strong>Offer-side precedence</strong> (<code>SdpOfferAnswerNegotiator.CreateOffer</code>): profile is chosen
+<code>dtls is not null → UDP/TLS/RTP/SAVPF</code>, else <code>crypto.Count &gt; 0 → RTP/SAVP</code>, else <code>RTP/AVP</code>.
+<strong>DTLS wins over SDES over plain.</strong> SDES a=crypto is suppressed on a DTLS offer.</li>
+<li><strong>Answer-side precedence</strong> (<code>TryNegotiateVideoAnswerMedia</code>, and the audio path): a=crypto is
+only honored on a <strong>non-DTLS profile</strong> — <code>if (offered.Crypto.Count &gt; 0 &amp;&amp; !SdpSecurityInspector.IsDtlsProfile(offered.Profile))</code>. On a DTLS profile the a=crypto is
+ignored and the answer is fingerprint-keyed. The two methods are <strong>mutually exclusive per
+m-line</strong> (RFC 5763).</li>
+<li><strong>Answer role</strong> (<code>ResolveAnswerSetup</code>, RFC 5763 §5 / RFC 4145 §4): <code>actpass → active</code>,
+<code>active → passive</code>, <code>passive → active</code>, and <strong>no/holdconn remote setup → passive</strong> (the
+offer defaults to <code>active</code> per RFC 4145 §4, so the answerer takes the server/passive side).
+An answer is <strong>never</strong> <code>actpass</code>.</li>
+<li><strong>RFC 5763 §6.6 interop</strong>: a <code>SAVP(F)</code> profile that also carries <code>a=fingerprint</code> resolves to a
+<strong>DTLS answer</strong> — the fingerprint decides, not the profile string; DTLS resolution runs
+<em>before</em> the keyless-secure reject.</li>
+<li><strong>Fail-closed rejects</strong>: a secure m-line that can be keyed neither via SDES (no answerable
+a=crypto) nor via DTLS (no remote fingerprint / no local identity) is <strong>declined</strong>, not
+answered in the clear (<code>return null</code> on the keyless secure profile).</li>
+<li><strong>Enricher + latch</strong> (<code>CallMediaParametersDtlsEnricher</code>, <code>SipCoreCallChannel</code>): stamps
+<code>IsDtlsNegotiated</code>/<code>DtlsIsClient</code>/remote-fingerprint onto <code>CallMediaParameters</code>; a
+<code>_dtlsActiveOnCall</code> latch conserves established keying across a re-offer; the enricher runs at
+both publish sites. <code>SdkConfiguration.OfferDtlsSrtp</code> defaults <strong>false</strong> (SDES stays the
+default egress).</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<p>Signal DTLS-SRTP through the standard SDP surface and make <strong>precedence explicit and
+fail-closed</strong>:</p>
+<ol>
+<li><strong>Keying precedence: DTLS &gt; SDES &gt; plain.</strong> On offer, a DTLS leg selects <code>UDP/TLS/RTP/SAVPF</code>
+and does not emit a=crypto. On answer, a=crypto is honored only on a non-DTLS profile; on a
+DTLS profile the leg is fingerprint-keyed and any a=crypto is ignored. One keying method per
+m-line, never both.</li>
+<li><strong>Fingerprint-decides over profile string</strong> for §6.6 interop: <code>SAVP(F)+fingerprint</code> is
+answered as DTLS.</li>
+<li><strong>Answer role per RFC 5763 §5 / RFC 4145 §4</strong>, defaulting to <code>passive</code> on a missing remote
+<code>a=setup</code>; answers are never <code>actpass</code>.</li>
+<li><strong>Fail-closed</strong>: any secure offer the SDK cannot key is rejected, never downgraded to
+cleartext. Under a <em>required</em> media policy, a keyless-secure negotiation (e.g. a
+fingerprint-less UDP/TLS answer) is a policy violation and the media backstop
+(<code>RequireEncryptedMedia = IsSrtpNegotiated || IsDtlsNegotiated</code>) keeps such legs <strong>silent</strong>
+rather than plain.</li>
+<li><code>OfferDtlsSrtp</code> is opt-in (default false); the answerer always carries its DTLS identity so
+it can accept a DTLS offer even when it would not itself originate one.</li>
+</ol>
+<h3 id="crux">Crux</h3>
+<p>Precedence lives at exactly two points and must agree: the <strong>offer profile ladder</strong> and the
+<strong>answer's <code>IsDtlsProfile</code> gate on a=crypto</strong>. The invariant is <em>one keying method per m-line,
+DTLS winning any ambiguity, and no answer that keys nothing on a secure profile</em>. Fingerprint
+presence — not the profile token — is the DTLS discriminator, so a peer offering <code>SAVPF</code> with a
+fingerprint still gets DTLS.</p>
+<h2 id="consequences">Consequences</h2>
+<p>Positive: SIP calls negotiate DTLS-SRTP end-to-end (full-chain evidence: real negotiator → real
+DTLS handshake → encrypted audio). SDES remains the default, so nothing regresses for existing
+callers. The keyless-secure backstop closes the fail-open path that would otherwise emit
+plaintext under a required policy.</p>
+<p>Tradeoffs / honest divergence:</p>
+<ul>
+<li><strong>Browser / foreign-stack interop is not tested</strong> (BC↔BC loopback only).</li>
+<li><strong>Re-handshake scenarios are open</strong>: a re-INVITE with a <em>changed</em> fingerprint triggers a
+session rebuild → DTLS re-handshake in a live call is untested end-to-end (RFC 5763 §6.6);
+hold/unhold of a DTLS call is only logically argued (M2 latch fix), not E2E-tested.</li>
+<li>Precedence correctness rests on <code>SdpSecurityInspector.IsDtlsProfile</code> being the single source
+of truth for &quot;is this a DTLS profile&quot; across offer and answer — divergence there would break
+the exclusivity invariant.</li>
+</ul>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li>One keying method per m-line: DTLS profile ⇒ ignore a=crypto; SDES only on a non-DTLS profile.</li>
+<li>Offer profile ladder is DTLS &gt; SDES &gt; plain; DTLS offers emit no a=crypto.</li>
+<li>Answer <code>a=setup</code> is always <code>active</code>/<code>passive</code> (RFC 5763 §5), defaulting <code>passive</code>; never
+<code>actpass</code>.</li>
+<li>A secure m-line that can be keyed by neither method is rejected, never answered in cleartext
+(K1 fail-closed); <code>RequireEncryptedMedia</code> keeps keyless-secure legs silent.</li>
+<li>The DTLS enricher runs at every publish site; the re-offer latch conserves — never
+force-upgrades — established keying (no DTLS forced onto a SDES/plain call).</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Logs: <code>docs/archive/agent-log/2026-07-14-dev-dtls-signaling.md</code></li>
+<li>Code (graphify-verified): <code>Sdp/OfferAnswer/SdpOfferAnswerNegotiator.cs</code>
+(<code>.CreateOffer()</code> profile ladder, <code>ResolveAnswerSetup</code>, <code>TryNegotiateVideoAnswerMedia</code>
+IsDtlsProfile gate), <code>Sdp/SdpUtilities.cs</code> (<code>.TryExtractAudioDtls()</code>, <code>ConvertOptions</code>),
+<code>Sdp/SdpSecurityInspector</code> (<code>IsDtlsProfile</code>), <code>Application/.../CallMediaParametersDtlsEnricher</code>,
+<code>SipCoreCallChannel</code> + <code>SipCallChannelSrtpPolicyGuard</code>; tests <code>DtlsSignalingToMediaE2eTests</code></li>
+<li>Markers: RFC 5763 §5/§6.6/§6.7.1, RFC 4145 §4, RFC 4568, RFC 3264; K1 (fail-closed media),
+K2 (enricher order ICE→SRTP→DTLS); Review BLOCKER B1 (keyless-secure fail-open) fixed</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-029-dtls-srtp-signaling-and-keying-precedence.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

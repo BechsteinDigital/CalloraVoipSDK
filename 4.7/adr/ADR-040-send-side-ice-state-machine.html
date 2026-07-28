@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-040: Send-Side ICE State Machine on the SIP Path (RFC 8445) | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-040: Send-Side ICE State Machine on the SIP Path (RFC 8445) | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-040-send-side-ice-state-machine.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-040-send-side-ice-state-machine-on-the-sip-path-rfc-8445">ADR-040: Send-Side ICE State Machine on the SIP Path (RFC 8445)</h1>
+
+<p>Status: Accepted
+Date: 2026-07-09</p>
+<h2 id="context">Context</h2>
+<p>The SIP media path needed real ICE (RFC 8445), not the placeholder it had. The pre-existing
+<code>CallIceAgent</code> ran a sequential, first-wins probe over candidate pairs with <strong>no</strong> check list,
+no candidate-pair priority, no role, no wire attributes, and no nomination — enough to pick a
+reachable pair on a LAN, but not RFC-conformant ICE. The founder directive was &quot;volles ICE,
+komplett umsetzen&quot;.</p>
+<p>The work was sliced deliberately so the live media path never regressed: build the pure,
+deterministic pieces first (check-list construction, pair priority, the check FSM) with no wiring,
+then thread them into <code>CallIceAgent</code>, then put the check attributes on the wire, then add regular
+nomination. Each slice explicitly refused to claim &quot;ICE works&quot; until it was wired and evidenced.</p>
+<p>This ADR covers the <strong>outbound / controlling-and-controlled send model</strong> on the SIP path: the
+agent forms a check list, drives it as a state machine, sends STUN Binding checks carrying the ICE
+attributes, and nominates the selected pair. Inbound check processing (§7.3), consent freshness,
+and ICE restart are separate concerns (C11-02); the bundle-level WebRTC ICE subsystem is separate
+again (ADR-010 orbit).</p>
+<h3 id="verified-current-state-graphify--logs">Verified current state (graphify + logs)</h3>
+<ul>
+<li><strong>Check list.</strong> <code>IceCheckList.Create(locals, remotes, role)</code>
+(<code>src/Core/Application/Media/Ice/IceCheckList.cs</code>) pairs candidates by component/transport/
+address-family (RFC 8445 §6.1.2.2), prunes a server-reflexive local that is redundant with its
+base (§6.1.2.4), orders by pair priority, caps at 100 pairs (§6.1.2.5, <code>MaxCandidatePairs</code>),
+and assigns initial states by foundation freezing (§6.1.2.6: one <code>Waiting</code> per foundation, the
+rest <code>Frozen</code>). Pair priority is <code>IceCandidatePair.ComputePriority(role, localPrio, remotePrio)</code>
+= RFC 8445 §6.1.2.3 (<code>2^32·min(G,D) + 2·max(G,D) + (G&gt;D?1:0)</code>).</li>
+<li><strong>FSM scheduler.</strong> <code>IceConnectivityScheduler.RunAsync(checkList, checkDelegate, ct)</code>
+(<code>.../Ice/IceConnectivityScheduler.cs</code>) runs the list as a state machine (§6.1.4.2 ordinary
+scheduling, §7.2.5.3.3 state advancement): each iteration takes the highest-priority <code>Waiting</code>
+pair → <code>InProgress</code> → the check delegate → <code>Succeeded</code>/<code>Failed</code>; a completed check unfreezes
+same-foundation <code>Frozen</code> pairs; it returns the first pair that passes (highest-priority valid).</li>
+<li><strong>Role.</strong> <code>CallIceAgent.SelectCandidatePairAsync</code> (<code>src/Core/Application/Media/CallIceAgent.cs</code>
+L247) derives the role from <code>parameters.IceControlling</code> — the SDP offerer is controlling, the
+answerer controlled (RFC 8445 §5.1.1); the infrastructure adapter carries the direction in. The
+role feeds both the pair-priority formula and the role attribute on each check. (This supersedes
+the &quot;fixed Controlling&quot; simplification the I3/I4 logs described as still-open.)</li>
+<li><strong>Wire attributes.</strong> <code>StunIceCheckAttributes.Build(priority, isControlling, tieBreaker, useCandidate)</code> produces PRIORITY + ICE-CONTROLLING/ICE-CONTROLLED (+ USE-CANDIDATE when
+nominating). <code>StunIceProbe.TryCheckConnectivityAsync</code> passes them through
+<code>IStunClient.QueryBindingAsync</code>'s <code>additionalAttributes</code>, placed before USERNAME/
+MESSAGE-INTEGRITY so MI covers them (ICE always has credentials). A one-off <code>_tieBreaker = IceTieBreaker.Generate()</code> (§5.2) is generated per agent.</li>
+<li><strong>Regular nomination.</strong> After the scheduler returns a valid pair, a controlling agent re-checks
+the <em>same</em> pair with <code>useCandidate: true</code> and sets <code>IceCandidatePair.Nominated</code> (RFC 8445
+§8.1.1). If the nomination check is not confirmed, the pair stays selected but <code>Nominated = false</code> (<code>CallIceAgent.cs</code> L294–314).</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<p>Implement send-side ICE on the SIP path as a <strong>deterministic check-list state machine driven by
+<code>CallIceAgent</code></strong>, built in unwired pure slices first and wired last:</p>
+<ol>
+<li><strong><code>IceCheckList</code> + <code>IceCandidatePair</code></strong> own pairing, srflx pruning, §6.1.2.3 pair priority,
+the §6.1.2.5 cap, and §6.1.2.6 foundation freezing — pure, known-answer-testable, no live-path
+effect until consumed.</li>
+<li><strong><code>IceConnectivityScheduler</code></strong> drives that list as the §6.1.4.2 / §7.2.5.3.3 FSM via an injected
+check delegate, returning the highest-priority valid pair.</li>
+<li><strong><code>CallIceAgent</code> derives the role from the offer/answer direction</strong> (§5.1.1) and feeds it into
+both priority and the check attributes.</li>
+<li><strong>The check attributes go on the wire</strong> through the STUN client's <code>additionalAttributes</code>, under
+MESSAGE-INTEGRITY.</li>
+<li><strong>Regular nomination</strong> (§8.1.1) is a controlling-only USE-CANDIDATE re-check of the selected
+pair; a failed nomination does not discard an otherwise-valid pair.</li>
+</ol>
+<p>Crux: keep the RFC's own primitives (check list, foundation freezing, pair priority, role,
+USE-CANDIDATE) as separately-testable units, and never let a slice claim conformance before it is
+both wired into <code>CallIceAgent</code> and evidenced on the wire against the built <code>StunServer</code>.</p>
+<h2 id="consequences">Consequences</h2>
+<p>Positive: the SIP path selects a candidate pair by RFC-8445 pair priority through a real check
+FSM, advertises PRIORITY + role + tie-breaker under MESSAGE-INTEGRITY, and nominates with
+USE-CANDIDATE — up from a first-wins probe. Every piece is known-answer or loopback-tested against
+the built <code>StunServer</code>, so the wire attributes are proven to survive encode + MI + server parse.</p>
+<p>Honest limits / divergence:</p>
+<ul>
+<li><strong>Send-only model.</strong> This agent <em>sends</em> checks and reads responses; it does <strong>not</strong> process
+inbound Binding requests on the media port. Role-conflict resolution (§7.3.1.1) and a peer's
+inbound USE-CANDIDATE (a controlled agent nominating from the peer's request, §7.3.1.5) are
+handled by separate primitives (<code>IceInboundCheckEvaluator</code> / <code>IceRoleConflict</code>) that today are
+consumed only by the Infrastructure bundle-level path (<code>IceInboundCheckProcessor</code> /
+<code>IceInboundBindingResponder</code>), <strong>not</strong> by <code>CallIceAgent</code>. Full bidirectional ICE on the SIP path
+is therefore not claimed.</li>
+<li><strong>No peer-reflexive candidates.</strong> PRIORITY carries the local candidate priority, not the
+prflx-derived priority (§7.2.2); <code>IceConnectivityScheduler</code>'s own doc marks prflx discovery as a
+later package. Unbuilt on the SIP path.</li>
+<li><strong>Foundation freezing is latent for RTP-only calls.</strong> With one component and distinct
+foundations, every pair starts <code>Waiting</code>; the unfreeze path is implemented and unit-tested but
+only becomes active with a second component (RTCP), which is not built here.</li>
+<li><strong>No trickle ICE.</strong> Selection runs over the candidates present at negotiation time.</li>
+</ul>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li>Pair priority MUST use RFC 8445 §6.1.2.3 with the role-assigned G/D; the controlling role must
+flip G/D relative to controlled (known-answer test pins the literal).</li>
+<li>The role MUST derive from the offer/answer direction (§5.1.1), never be hard-coded.</li>
+<li>Check attributes MUST be placed before MESSAGE-INTEGRITY so MI covers them; the 300 Try-Alternate
+requery MUST NOT forward them.</li>
+<li>USE-CANDIDATE MUST be sent only by a controlling agent, and only as a re-check of an
+already-valid pair; a failed nomination MUST keep the valid pair usable (unnominated).</li>
+<li>No slice may claim ICE conformance before it is wired into <code>CallIceAgent</code> and evidenced on the
+wire.</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Logs: docs/archive/agent-log/2026-07-09-dev-ice-i1-checklist-foundation.md;
+docs/archive/agent-log/2026-07-09-dev-ice-i2b-wire-attributes.md;
+docs/archive/agent-log/2026-07-09-dev-ice-i3-fsm-connectivity.md;
+docs/archive/agent-log/2026-07-09-dev-ice-i4-nomination.md</li>
+<li>Code: <code>IceCheckList</code> / <code>IceCandidatePair</code> / <code>IceCandidatePairState</code>
+(src/Core/Application/Media/Ice/); <code>IceConnectivityScheduler.cs</code>; <code>IceRole.cs</code>;
+<code>IceTieBreaker.cs</code>; <code>CallIceAgent.SelectCandidatePairAsync</code> / <code>CheckPairAsync</code>
+(src/Core/Application/Media/CallIceAgent.cs); <code>StunIceCheckAttributes.Build</code>,
+<code>StunIceProbe.TryCheckConnectivityAsync</code>, <code>IStunClient.QueryBindingAsync</code>
+(<code>additionalAttributes</code>)</li>
+<li>Tests: IceCheckListTests; IceConnectivitySchedulerTests; StunIceCheckWiringTests;
+CallIceAgentTests (Connectivity_check_carries_local_priority_and_controlling_role,
+Controlling_agent_nominates_selected_pair_with_use_candidate,
+Pair_stays_selected_but_unnominated_when_nomination_check_fails,
+Address_family_mismatch_yields_no_candidate_pairs)</li>
+<li>Marker: RFC 8445 §5.1.1, §5.2, §6.1.2.2–§6.1.2.6, §6.1.4.2, §7.2.5.3.3, §8.1.1; I1/I2b/I3/I4</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-040-send-side-ice-state-machine.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

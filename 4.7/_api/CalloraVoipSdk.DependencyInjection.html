@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Namespace CalloraVoipSdk.DependencyInjection | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Namespace CalloraVoipSdk.DependencyInjection | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="CalloraVoipSdk.DependencyInjection">
+
+  <h1 id="CalloraVoipSdk_DependencyInjection" data-uid="CalloraVoipSdk.DependencyInjection" class="text-break">Namespace CalloraVoipSdk.DependencyInjection</h1>
+  <div class="markdown level0 summary"></div>
+  <div class="markdown level0 conceptual"></div>
+  <div class="markdown level0 remarks"></div>
+
+    <h3 id="classes">
+Classes
+</h3>
+    <dl class="jumplist">
+      <dt><a class="xref" href="CalloraVoipSdk.DependencyInjection.CalloraBuilder.html">CalloraBuilder</a></dt>
+      <dd><p>Builder for optional CalloraVoipSdk dependency overrides.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="CalloraVoipSdk.DependencyInjection.CalloraHostedService.html">CalloraHostedService</a></dt>
+      <dd><p>Coordinates CalloraVoipSdk lifecycle through host start/stop hooks.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="CalloraVoipSdk.DependencyInjection.CalloraStunServerBuilder.html">CalloraStunServerBuilder</a></dt>
+      <dd><p>Builder for optional STUN server-host overrides (Level 3). Returned by
+<a class="xref" href="CalloraVoipSdk.DependencyInjection.StunServerServiceCollectionExtensions.html#CalloraVoipSdk_DependencyInjection_StunServerServiceCollectionExtensions_AddCalloraStunServer_Microsoft_Extensions_DependencyInjection_IServiceCollection_System_Action_CalloraVoipSdk_Hosting_StunServerHostOptions__">AddCalloraStunServer(IServiceCollection, Action&lt;StunServerHostOptions&gt;?)</a>.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="CalloraVoipSdk.DependencyInjection.CalloraTurnServerBuilder.html">CalloraTurnServerBuilder</a></dt>
+      <dd><p>Builder for optional TURN/STUN server-host overrides (Level 3). Returned by
+<a class="xref" href="CalloraVoipSdk.DependencyInjection.TurnServerServiceCollectionExtensions.html#CalloraVoipSdk_DependencyInjection_TurnServerServiceCollectionExtensions_AddCalloraTurnServer_Microsoft_Extensions_DependencyInjection_IServiceCollection_System_Action_CalloraVoipSdk_Hosting_TurnServerHostOptions__">AddCalloraTurnServer(IServiceCollection, Action&lt;TurnServerHostOptions&gt;?)</a>; mirrors <code>CalloraWebRtcBuilder</code>.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="CalloraVoipSdk.DependencyInjection.CalloraWebRtcBuilder.html">CalloraWebRtcBuilder</a></dt>
+      <dd><p>Builder for optional WebRTC-facade dependency overrides (Level 3). Mirrors <a class="xref" href="CalloraVoipSdk.DependencyInjection.CalloraBuilder.html">CalloraBuilder</a>
+for the SIP facade and is returned by <a class="xref" href="CalloraVoipSdk.DependencyInjection.WebRtcServiceCollectionExtensions.html#CalloraVoipSdk_DependencyInjection_WebRtcServiceCollectionExtensions_AddCalloraWebRtc_Microsoft_Extensions_DependencyInjection_IServiceCollection_System_Action_CalloraVoipSdk_WebRtc_WebRtcOptions__">AddCalloraWebRtc(IServiceCollection, Action&lt;WebRtcOptions&gt;?)</a>
+and by <a class="xref" href="CalloraVoipSdk.DependencyInjection.CalloraBuilder.html#CalloraVoipSdk_DependencyInjection_CalloraBuilder_AddWebRtc_System_Action_CalloraVoipSdk_WebRtc_WebRtcOptions__">AddWebRtc(Action&lt;WebRtcOptions&gt;?)</a>.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="CalloraVoipSdk.DependencyInjection.ServiceCollectionExtensions.html">ServiceCollectionExtensions</a></dt>
+      <dd><p>Dependency-injection entrypoint for CalloraVoipSdk.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="CalloraVoipSdk.DependencyInjection.StunServerServiceCollectionExtensions.html">StunServerServiceCollectionExtensions</a></dt>
+      <dd><p>Dependency-injection entrypoint for the STUN server host. Standalone counterpart to
+<a class="xref" href="CalloraVoipSdk.DependencyInjection.TurnServerServiceCollectionExtensions.html#CalloraVoipSdk_DependencyInjection_TurnServerServiceCollectionExtensions_AddCalloraTurnServer_Microsoft_Extensions_DependencyInjection_IServiceCollection_System_Action_CalloraVoipSdk_Hosting_TurnServerHostOptions__">AddCalloraTurnServer(IServiceCollection, Action&lt;TurnServerHostOptions&gt;?)</a> for a pure-STUN (Binding) deployment.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="CalloraVoipSdk.DependencyInjection.TurnServerServiceCollectionExtensions.html">TurnServerServiceCollectionExtensions</a></dt>
+      <dd><p>Dependency-injection entrypoint for the TURN/STUN server host. Standalone counterpart to
+<code>AddCalloraVoip</code> / <code>AddCalloraWebRtc</code>: a host that runs a TURN server calls
+<a class="xref" href="CalloraVoipSdk.DependencyInjection.TurnServerServiceCollectionExtensions.html#CalloraVoipSdk_DependencyInjection_TurnServerServiceCollectionExtensions_AddCalloraTurnServer_Microsoft_Extensions_DependencyInjection_IServiceCollection_System_Action_CalloraVoipSdk_Hosting_TurnServerHostOptions__">AddCalloraTurnServer(IServiceCollection, Action&lt;TurnServerHostOptions&gt;?)</a> and receives a builder for optional overrides.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="CalloraVoipSdk.DependencyInjection.VoipOptionsValidator.html">VoipOptionsValidator</a></dt>
+      <dd><p>Startup validation for host-bound <a class="xref" href="CalloraVoipSdk.VoipOptions.html">VoipOptions</a>.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="CalloraVoipSdk.DependencyInjection.WebRtcOptionsValidator.html">WebRtcOptionsValidator</a></dt>
+      <dd><p>Startup validation for host-bound <a class="xref" href="CalloraVoipSdk.WebRtc.WebRtcOptions.html">WebRtcOptions</a>. The WebRTC counterpart to
+<a class="xref" href="CalloraVoipSdk.DependencyInjection.VoipOptionsValidator.html">VoipOptionsValidator</a>: registered with <code>ValidateOnStart()</code> so an invalid ICE-server
+entry surfaces at host start rather than only when the first peer is created.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="CalloraVoipSdk.DependencyInjection.WebRtcServiceCollectionExtensions.html">WebRtcServiceCollectionExtensions</a></dt>
+      <dd><p>Dependency-injection entrypoint for the WebRTC facade. Standalone counterpart to
+<a class="xref" href="CalloraVoipSdk.DependencyInjection.ServiceCollectionExtensions.html#CalloraVoipSdk_DependencyInjection_ServiceCollectionExtensions_AddCalloraVoip_Microsoft_Extensions_DependencyInjection_IServiceCollection_System_Action_CalloraVoipSdk_VoipOptions__">AddCalloraVoip(IServiceCollection, Action&lt;VoipOptions&gt;?)</a>: a pure-WebRTC host calls only
+<a class="xref" href="CalloraVoipSdk.DependencyInjection.WebRtcServiceCollectionExtensions.html#CalloraVoipSdk_DependencyInjection_WebRtcServiceCollectionExtensions_AddCalloraWebRtc_Microsoft_Extensions_DependencyInjection_IServiceCollection_System_Action_CalloraVoipSdk_WebRtc_WebRtcOptions__">AddCalloraWebRtc(IServiceCollection, Action&lt;WebRtcOptions&gt;?)</a>; a host that wants both facades chains
+<code>AddCalloraVoip(...).AddWebRtc(...)</code> (ADR-012, two-facade composition).</p>
+</dd>
+    </dl>
+
+
+</article>
+
+        <div class="contribution d-print-none">
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-014: DDD Layer Direction Enforced by Gated Shrink-Only Baselines | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-014: DDD Layer Direction Enforced by Gated Shrink-Only Baselines | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-014-ddd-layering-gated-baselines.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-014-ddd-layer-direction-enforced-by-gated-shrink-only-baselines">ADR-014: DDD Layer Direction Enforced by Gated Shrink-Only Baselines</h1>
+
+<p>Status: Accepted
+Date: 2026-07-08</p>
+<h2 id="context">Context</h2>
+<p>The project mandates DDD with a hard &quot;keine Schichtverletzungen&quot; rule (<code>Domain → Application → Infrastructure</code>, <code>Infrastructure/*</code> an internal implementation detail). A hand-maintained rule is
+worthless without a mechanism that (a) fails new violations and (b) forces legacy debt to shrink
+rather than persist. Two 2026-07 runs converged on the enforcement design: the A1 slice
+(2026-07-07) removed unimplemented module surfaces from the SDK facade, and B.3 (2026-07-08) shrank
+three baselines (layer-segment / nested-type / silent-catch) behaviour- and API-neutrally.</p>
+<h3 id="verified-current-state">Verified current state</h3>
+<ul>
+<li>The gate is <code>tests/CalloraVoipSdk.ArchitectureTests/EngineeringRulesTests.cs</code>
+(<code>.Domain_und_Application_halten_die_Schichtrichtung_ein()</code>, L22): it scans <code>src/Core/Domain</code> for
+any <code>using CalloraVoipSdk.Core.(Application|Infrastructure)</code> / <code>…Client</code>, and <code>src/Core/Application</code>
+for any <code>using …Infrastructure</code> / <code>…Client</code>, then calls <code>SourceScan.AssertMatchesBaseline(...)</code>.</li>
+<li><strong><code>LayeringBaseline = []</code></strong> and <strong><code>LayerSegmentBaseline = []</code></strong> are both empty (L20, L63) — Domain
+and Application currently hold the layer direction with zero exceptions.</li>
+<li>The baseline mechanic (&quot;Baselines dürfen nur schrumpfen; veraltete Einträge schlagen ebenfalls
+fehl&quot;) is normatively documented in <code>ENGINEERING_RULES.md</code> (Baseline-Mechanik, R1–R6) and the
+gates run in CI as a dedicated step <strong>before</strong> the rest of the suite
+(<code>.github/workflows/ci.yml</code>).</li>
+<li>Sibling gates in the same file enforce the wider rule family: namespace-segment = folder-layer
+(R2, <code>.Schicht_Segment_des_Namespace_passt_zur_Ordner_Schicht()</code> L65, HARD-G1 drift closed),
+≤1000 lines (R3, L114), no private nested types (R4, L131), no silent catch (R5, L179), no
+sync-over-async (R6, L211).</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<p>Encode every mechanical <code>ENGINEERING_RULES</code> rule as a source-tree scan in <code>EngineeringRulesTests</code>
+compared against a <strong>shrink-only baseline of known debt</strong>:</p>
+<ol>
+<li>New violations fail the build. Fixed baseline entries must be removed from the baseline, or the
+test fails on the stale entry — debt can only shrink, never linger silently.</li>
+<li>The DDD layer-direction rule (R1) is the primary instance: its baseline is empty, so <em>any</em> new
+<code>Domain→Application/Infrastructure</code> or <code>Application→Infrastructure/Client</code> <code>using</code> fails CI.</li>
+<li>Refactoring that reduces debt is scoped as behaviour- and API-neutral baseline shrink (B.3:
+<code>git mv</code> RTCP codec keeping namespace → zero consumer changes; extract nested <code>MediaActivity</code> /
+<code>LearnedPublicContact</code> to top-level <code>internal</code>; add logging to silent catches).</li>
+<li>The SDK facade is kept honest by removing surfaces the Core does not implement (A1: dropped
+<code>IConferencingModule</code>/<code>IRealtimeModule</code>/<code>IWebSocketAudioTransportModule</code> from <code>IVoipClient</code>),
+rather than shipping dead abstraction layers.</li>
+</ol>
+<h3 id="crux-design-pieces">Crux design pieces</h3>
+<ul>
+<li><strong>Shrink-only baseline.</strong> Both directions of drift fail: a new violation <em>and</em> a stale baseline
+entry. This is what turns a documented rule into a ratchet.</li>
+<li><strong>Gate before suite.</strong> Architecture gates run first in CI, so a layering regression fails fast and
+independently of behavioural tests.</li>
+<li><strong>Empty is the target.</strong> <code>LayeringBaseline</code>/<code>LayerSegmentBaseline</code> reaching <code>[]</code> is the recorded
+end-state; the follow-up ADR (ICallRegistry / K4) is what got the layering baseline to empty.</li>
+</ul>
+<h2 id="consequences">Consequences</h2>
+<p>Positive: the DDD layer direction is machine-checked on every push, not review-dependent; legacy
+debt is inventoried and monotonically decreasing; the facade advertises only implemented capability.
+The refactoring assessment (2026-07-17) independently measured &quot;0 verifizierte Schichtverletzungen&quot;
+against the VoIP peer set, corroborating the gate.</p>
+<p>Tradeoffs: the gate is a <code>using</code>-regex scan, not full semantic analysis — it catches namespace-level
+layer leaks, not e.g. reflection-based coupling. Baseline maintenance is manual: a developer fixing
+debt must also delete the baseline entry. R3's 1000-line scan targets <code>samples/</code> while the directory
+is named <code>examples/</code>, so examples are effectively unscanned (known minor gap, documented in
+<code>ENGINEERING_RULES.md</code>).</p>
+<p><strong>Log↔code divergence:</strong> the B.3 log cites &quot;Core 142/142&quot; and A1 cites a 10-test suite; both are
+historical counts. The <em>baselines-empty</em> end-state and the gate structure are verified current.</p>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li><code>LayeringBaseline</code> and <code>LayerSegmentBaseline</code> stay empty — no new layer or namespace-segment leak.</li>
+<li>Baselines may only shrink; a fixed entry must be removed or the test fails.</li>
+<li>Architecture gates run in CI before the behavioural suite.</li>
+<li>Baseline-shrinking refactors stay behaviour- and API-neutral (or are split off as a Breaking/Major
+package with founder approval, per B.3b <code>DialOptions</code>).</li>
+<li>The SDK facade exposes only Core-implemented surfaces.</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Logs: docs/archive/agent-log/2026-07-08-dev-b3-layer-hygiene.md,
+docs/archive/agent-log/2026-07-07-dev.md</li>
+<li>Code: tests/CalloraVoipSdk.ArchitectureTests/EngineeringRulesTests.cs (LayeringBaseline L20,
+LayerSegmentBaseline L63, layer gate L22, namespace gate L65), tests/…/SourceScan.cs
+(AssertMatchesBaseline L97), ENGINEERING_RULES.md (R1–R6, Baseline-Mechanik),
+.github/workflows/ci.yml</li>
+<li>Marker: K3, HARD-G1, R1/R2/R3/R4/R5/R6</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-014-ddd-layering-gated-baselines.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-044: Video Packetisation and Contiguous-Release Reorder Playout | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-044: Video Packetisation and Contiguous-Release Reorder Playout | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-044-video-packetisation-and-reorder-playout.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-044-video-packetisation-and-contiguous-release-reorder-playout">ADR-044: Video Packetisation and Contiguous-Release Reorder Playout</h1>
+
+<p>Status: Accepted
+Date: 2026-07-14</p>
+<h2 id="context">Context</h2>
+<p>To carry encoded video over RTP the SDK needs the codec payload formats (H.264 RFC 6184,
+VP8 RFC 7741) and a receive-side reorder/playout window so out-of-order or RTX-recovered
+packets reach the depacketiser in ascending sequence order. Both are pure protocol mechanics,
+independent of security, feedback, or ICE. Codec is <strong>transport-only</strong> — the packetiser splits
+an already-encoded frame and the depacketiser reassembles it; no native encode/decode.</p>
+<h3 id="verified-current-state-graphify-grounded">Verified current state (graphify-grounded)</h3>
+<ul>
+<li><code>src/Core/Infrastructure/Rtp/Packetisation/</code> holds the format layer: <code>IVideoPacketiser</code>
+(stateless, one instance serves any stream — its doc, L8) / <code>IVideoDepacketiser</code>
+(stateful per stream), <code>VideoRtpPayload</code> (readonly record struct, hot path), <code>AnnexBParser</code>,
+<code>H264Packetiser</code>/<code>H264Depacketiser</code>, <code>Vp8Packetiser</code>/<code>Vp8Depacketiser</code>, <code>VideoPayloadFormat</code>.</li>
+<li>Frame boundaries are detected by <strong>both</strong> the marker bit and an RTP-timestamp change:
+<code>H264Depacketiser.TryProcess</code> (L30-41) resets the frame under assembly when
+<code>rtpTimestamp != _timestamp</code> even without a closing marker — markerless senders exist.
+Fail-closed on malformed / unsupported modes (STAP-B, MTAP, FU-B) → discard the frame, never a
+corrupted access unit (class doc L5-11). H.264 IDR (NAL type 5) marks the key frame (L17-18).</li>
+<li><code>VideoReorderBuffer</code> (<code>src/Core/Infrastructure/Rtp/VideoReorderBuffer.cs</code>) is
+<strong>contiguous-release with gap-hold</strong>: an in-order packet is emitted immediately (zero added
+latency), a missing next-expected sequence holds subsequent packets, and the hold is bounded to
+<code>depth</code> packets — beyond that <code>DrainReleasable</code> (L139-166) skips to the lowest buffered key and
+resumes. Extended sequence numbers (<code>ExtendSequenceNumber</code>, L182-201, RFC 3550 §A.1 signed
+16-bit delta) make it wrap-aware; duplicates and too-late packets are dropped. Thread-safe
+under <code>_sync</code>. Constructor bounds <code>depth ∈ [1, 16384]</code> (below 32768 so wrap cannot alias).</li>
+<li>Wiring: <code>VideoRtpStream</code> creates the buffer at <code>ReorderWindowDepth = 32</code> <strong>only on
+RTX-negotiated legs</strong> (L43, L186); without RTX the receive path is byte-for-byte the pre-RTX
+arrival-order passthrough (<code>Enqueue</code>, L440-450). <code>DeliverOrdered</code> (L455-473) resets the
+depacketiser on a release-order discontinuity — the gap the window could not fill.</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<ol>
+<li><strong>Own the RTP payload formats</strong> as a self-contained module: packetiser stateless, depacketiser
+stateful-per-stream (single-consumer, documented not thread-safe), frame boundary on marker
+<strong>or</strong> timestamp change, fail-closed discard on anything malformed or unsupported.</li>
+<li><strong>Reorder = contiguous release with bounded gap-hold</strong>, not a fixed-depth delay line. In-order
+traffic incurs no buffering latency; latency is only paid while a gap is open, capped by
+<code>depth</code>. A jump in the emitted sequence numbers is the consumer's concealment/keyframe cue.</li>
+<li><strong>Reorder is a pure mechanic</strong> — it never inspects payloads and makes no timing decisions; the
+hold is bounded by packet count, not a wall clock.</li>
+<li><strong>Reorder is active only on RTX legs.</strong> Without RTX the receive path stays the exact pre-RTX
+arrival-order passthrough — the buffer's cost (constant recovery-window latency) is only borne
+by legs that opted into the RTX trade-off.</li>
+</ol>
+<h3 id="crux">Crux</h3>
+<p>The reorder window doubles as the RTX-recovery window: <code>depth</code> bounds <em>both</em> how much reordering
+is absorbed <em>and</em> how long a retransmitted packet has to arrive and slot into its gap before
+playout. <code>depth = 32</code> balances a ~1-RTT retransmit window against added latency. Delivering
+in-order immediately (rather than always holding <code>depth</code> packets) is what removes steady-state
+latency — the original design held a constant window; contiguous-release replaced it.</p>
+<h2 id="consequences">Consequences</h2>
+<p>Positive: in-order video has no reorder latency; RTX recovery and reordering share one bounded
+mechanism; the format layer is isolated and unit-testable against hand-built libwebrtc-shaped
+payloads.</p>
+<p>Divergence / honesty:</p>
+<ul>
+<li><strong>No timeout-based playout, no RTCP-jitter coupling.</strong> The hold is bounded by packet count
+(<code>depth</code>), not by a wall clock (<code>VideoReorderBuffer</code> doc L15; <code>VideoRtpStream</code> DECISION L38-43).
+Time-based playout is noted follow-up.</li>
+<li>A forward loss burst of ≥ half the sequence space is indistinguishable from a reorder under
+16-bit serial arithmetic (pathological, documented — see the loss-signalling ADR).</li>
+<li>VP8 is sent with a minimal descriptor (no PictureID); H.264 does not send STAP-A. These are
+noted follow-ups, not gaps that break interop with standard receivers.</li>
+<li>Roundtrip-tested against the SDK's own implementation and hand-built shapes; <strong>no interop test
+against real encoders/browsers</strong>.</li>
+</ul>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li>Depacketiser resets the frame on marker <strong>or</strong> timestamp change; never merges half a frame into
+the next access unit.</li>
+<li><code>VideoReorderBuffer</code> depth kept well below 32768 (wrap-alias safety, constructor-validated).</li>
+<li>Non-RTX receive path stays byte-identical to the pre-reorder passthrough (regression net).</li>
+<li>Reorder buffer stays payload-agnostic and timing-free (a mechanic, not a policy).</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Logs: <code>docs/archive/agent-log/2026-07-14-dev-video-packetisation.md</code>,
+<code>…-video-reorder-buffer.md</code>, <code>…-video-contiguous-playout.md</code>.</li>
+<li>Code (graphify-verified): <code>src/Core/Infrastructure/Rtp/Packetisation/</code> (<code>IVideoPacketiser</code>,
+<code>IVideoDepacketiser</code>, <code>H264Depacketiser.TryProcess</code> L30, <code>H264Packetiser</code>, <code>Vp8Packetiser</code>,
+<code>Vp8Depacketiser</code>, <code>AnnexBParser</code>, <code>VideoRtpPayload</code>, <code>VideoPayloadFormat</code>);
+<code>src/Core/Infrastructure/Rtp/VideoReorderBuffer.cs</code> (<code>Insert</code> L81, <code>DrainReleasable</code> L139,
+<code>ExtendSequenceNumber</code> L182); <code>src/Core/Infrastructure/Rtp/VideoRtpStream.cs</code>
+(<code>ReorderWindowDepth</code> L43, <code>Enqueue</code> L440, <code>DeliverOrdered</code> L455).</li>
+<li>Markers: <code>DECISION</code> in <code>VideoRtpStream</code> (<code>ReorderWindowDepth</code>).</li>
+<li>RFC: 6184 (H.264 RTP), 7741 (VP8 RTP), 3550 §A.1 (extended sequence numbers), 4588 (RTX window).</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-044-video-packetisation-and-reorder-playout.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>
