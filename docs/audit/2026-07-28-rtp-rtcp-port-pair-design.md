@@ -16,6 +16,10 @@ Konsekutives Portpaar **atomar reservieren, halten und übergeben** — kein Rel
 2. **Pre-bound-Socket-Seam** in `RtpSession` + `CallRtcpQualityMonitor` (+ `VideoRtpStream`): optionaler `UdpClient`; gesetzt → Ownership übernehmen statt neu binden; `null` → heutiges Verhalten (verhaltensbewahrend, ICE-Pfad unberührt — dort besitzt der ICE-Agent den Socket).
 3. **Handoff über einen Infra-Sidecar**, NICHT das Domain-`record` `CallMediaParameters` (kein Live-Socket im Value Object). Die Reservierung reist von `SipCoreCallChannel` zu `RtpCallMediaSessionFactory` + `CallMediaOrchestrator`.
 
+### ★ Measure-first-Befund (2026-07-28): Reservierung muss auf die route-lokale IP binden
+
+Die `RtpSession` bindet `parameters.LocalEndPoint` = `IPEndPoint(ResolveAdvertisedMediaAddress(session), N)` — die **konkrete route-lokale IP**, nicht `Any` (Kommentar `SipCoreCallChannel` ~617: "RTP/RTCP must bind where the peer sends to, a wildcard bind is not routable for a LAN peer"). Die heutige Reservierung bindet `Any:0` nur zum Port-Grabben; das Media-Socket bindet danach die konkrete IP. Ein übergebener `Any`-Socket würde die Quell-IP ausgehender Media auf die OS-Default-Route setzen → auf multi-homed Hosts **Symmetric-RTP-Bruch**. **Deshalb muss `MediaPortReservation.Reserve` mit der route-lokalen IP aufgerufen werden** — die erst zur Answer/Offer-Zeit bekannt ist (`ResolveAdvertisedMediaAddress(session)`), nicht im Ctor. Folge: die Paar-Reservierung wandert vom Ctor ins Per-Session-Setup (der Port N wird dann dort fixiert, bevor das SDP ihn schreibt). `MediaPortReservation` trägt das bereits (bindAddress-Parameter); es ändert sich nur der Aufruf-Zeitpunkt/-Ort in der Verdrahtung.
+
 ## Slices
 
 1. `MediaPortReservation` + Unit-Test (inkl. Kollisions-Retry).
