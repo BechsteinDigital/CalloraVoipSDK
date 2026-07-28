@@ -9,8 +9,6 @@ using CalloraVoipSdk.Core.Infrastructure.Rtp;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Models;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.OfferAnswer;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Parsing;
-using CalloraVoipSdk.Core.Infrastructure.Stun.Auth;
-using CalloraVoipSdk.Core.Infrastructure.Stun.Client;
 using CalloraVoipSdk.Core.Infrastructure.Turn.Client;
 using Microsoft.Extensions.Logging;
 
@@ -70,6 +68,9 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     private readonly List<(WebRtcAddedVideoTrack Track, string TrackId)> _addedVideoTracks = [];
 
     private WebRtcConnectionState _state = WebRtcConnectionState.New;
+    // The RFC 8829 §4.1.3 signalling state (offer/answer half of the lifecycle), separate from the ICE/DTLS
+    // transport _state. Guarded by _sync; transitioned via TransitionSignalingTo (event fired outside the lock).
+    private WebRtcSignalingState _signalingState = WebRtcSignalingState.Stable;
     private string? _remoteDescription;
     private SdpMsid? _remoteAudioMsid;
     private SdpMsid? _remoteVideoMsid;
@@ -97,6 +98,13 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
 
     /// <summary>Raised when the connection state changes (RFC 8829 <c>connectionstatechange</c>).</summary>
     public event Action<WebRtcConnectionState>? ConnectionStateChanged;
+
+    /// <summary>
+    /// Raised when the RFC 8829 §4.1.3 signalling state changes (the W3C <c>signalingstatechange</c>).
+    /// The answerer fires twice within one <see cref="SetRemoteDescriptionAsync"/> — HaveRemoteOffer then
+    /// back to Stable — as it applies the offer and produces the answer.
+    /// </summary>
+    public event Action<WebRtcSignalingState>? SignalingStateChanged;
 
     /// <summary>Raised with each inbound audio RTP payload (the app owns the codec — transport-only).</summary>
     public event Action<byte[]>? AudioReceived;
@@ -166,6 +174,12 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     public WebRtcConnectionState State
     {
         get { lock (_sync) { return _state; } }
+    }
+
+    /// <summary>The current RFC 8829 §4.1.3 signalling state (offer/answer half of the lifecycle).</summary>
+    public WebRtcSignalingState SignalingState
+    {
+        get { lock (_sync) { return _signalingState; } }
     }
 
     /// <summary>The applied remote SDP offer, or null before <see cref="SetRemoteDescriptionAsync"/>.</summary>
@@ -312,18 +326,38 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     /// rtcp-mux, and the sdes:mid extension. It becomes <see cref="LocalDescription"/>; apply the peer's
     /// answer with <see cref="SetRemoteDescriptionAsync"/> to establish media.
     /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// The signalling state is not <see cref="WebRtcSignalingState.Stable"/> or
+    /// <see cref="WebRtcSignalingState.HaveLocalOffer"/> — an offer cannot be produced while a remote offer
+    /// is pending or after the peer is closed (RFC 8829 §4.1.3).
+    /// </exception>
     public string CreateOffer()
     {
         var local = EnsureLocalMediaEndPoint();
         var offerModel = _negotiator.CreateOffer(
             local, _options.AudioCodecs, SdpMediaDirection.SendRecv, MediaOptions(local));
         var offerSdp = _serializer.Serialize(offerModel);
+        bool enteredHaveLocalOffer;
         lock (_sync)
         {
+            // RFC 8829 §4.1.3: createOffer + setLocalDescription is valid from stable (first offer) and is
+            // idempotent from have-local-offer (re-offer before any answer replaces the pending offer, state
+            // unchanged). Any other state (a remote offer is pending, or the peer is closed) is an invalid
+            // transition and fails loudly rather than silently overwriting negotiation state.
+            if (_signalingState is not (WebRtcSignalingState.Stable or WebRtcSignalingState.HaveLocalOffer))
+                throw new InvalidOperationException(
+                    $"Cannot create an offer in signalling state '{_signalingState}': an offer is valid only " +
+                    "from Stable or HaveLocalOffer (RFC 8829 §4.1.3).");
+
             _localOfferModel = offerModel;
             _localDescription = offerSdp;
+            enteredHaveLocalOffer = _signalingState == WebRtcSignalingState.Stable;
+            _signalingState = WebRtcSignalingState.HaveLocalOffer;
         }
 
+        // Only the Stable → HaveLocalOffer edge is a transition; a re-offer within HaveLocalOffer fires no event.
+        if (enteredHaveLocalOffer)
+            RaiseSignalingState(WebRtcSignalingState.HaveLocalOffer);
         RaiseLocalCandidate(local);
         return offerSdp;
     }
@@ -366,11 +400,32 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
                     "Re-Offer / ICE restart is not supported: this peer already has a media session. " +
                     "Dispose it and create a new peer to renegotiate.");
 
+            // RFC 8829 §4.1.3: setRemoteDescription is valid as the offerer applying the peer's answer (from
+            // HaveLocalOffer) or as the answerer applying the peer's offer (from Stable). HaveRemoteOffer means
+            // an answer is already being produced, and Closed means the peer is torn down — both are invalid
+            // transitions and fail loudly rather than corrupt the signalling state.
+            if (_signalingState is not (WebRtcSignalingState.Stable or WebRtcSignalingState.HaveLocalOffer))
+                throw new InvalidOperationException(
+                    $"Cannot apply a remote description in signalling state '{_signalingState}' (RFC 8829 §4.1.3).");
+
             // Capture the offerer state as one snapshot: the local description belongs to _localOfferModel
-            // and must be read under the same gate, not unsynchronised afterwards (HARD-C6).
+            // and must be read under the same gate, not unsynchronised afterwards (HARD-C6). The offerer/answerer
+            // role is the same discriminator the session build uses (a local offer was created), so the
+            // signalling state stays consistent with the transport path actually taken.
             pendingOffer = _localOfferModel!;
             pendingLocalDescription = _localDescription;
+
+            // Answerer (no local offer): the remote description is an offer. Enter HaveRemoteOffer now so the
+            // W3C two-transition answerer path (Stable → HaveRemoteOffer → Stable) is observable; the event is
+            // fired below, outside the lock. The offerer stays in HaveLocalOffer until the answer is applied.
+            if (pendingOffer is null)
+                _signalingState = WebRtcSignalingState.HaveRemoteOffer;
         }
+
+        // Answerer's first transition: fire outside the lock (K3). A negotiation failure below still leaves the
+        // peer in HaveRemoteOffer, mirroring W3C where a failed createAnswer does not roll signalling back.
+        if (pendingOffer is null)
+            RaiseSignalingState(WebRtcSignalingState.HaveRemoteOffer);
 
         SdpSessionDescription localModel;
         string localSdp;
@@ -449,6 +504,10 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
                 .Where(m => string.Equals(m.MediaType, "video", StringComparison.OrdinalIgnoreCase) && RemoteSends(m))
                 .Select(m => new RemoteVideoTrackInfo(m.Mid, m.Msid))
                 .ToArray();
+            // Both roles settle to Stable now the exchange is complete: the offerer from HaveLocalOffer (answer
+            // applied) and the answerer from HaveRemoteOffer (answer produced) — RFC 8829 §4.1.3. The event is
+            // fired below, outside the lock (K3).
+            _signalingState = WebRtcSignalingState.Stable;
         }
 
         // Publish _session before wiring its event handlers, so a state-transition callback can never
@@ -461,6 +520,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         }
 
         TransitionTo(WebRtcConnectionState.Connecting);
+        RaiseSignalingState(WebRtcSignalingState.Stable);
         if (answererLocal is not null)
             RaiseLocalCandidate(answererLocal);
         return Task.FromResult(localSdp);
@@ -597,7 +657,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         ArgumentException.ThrowIfNullOrWhiteSpace(candidate);
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (ParseCandidateFields(candidate) is not { } parsed)
+        if (WebRtcIceCandidateFactory.ParseTrickleCandidate(candidate) is not { } parsed)
         {
             _logger.LogDebug("Ignoring an unusable trickled ICE candidate.");
             return Task.CompletedTask;
@@ -693,88 +753,23 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             socket = _mediaSocket!.Client;
         }
 
-        // Sequential per server: each gathering step temporarily runs its own receive loop on the shared
-        // media socket, so they must not overlap (nor overlap the transport's post-Start loop).
-        foreach (var server in _options.IceServers)
-        {
-            switch (server.Type)
-            {
-                case IceServerType.Stun:
-                    await GatherServerReflexiveAsync(server, local, socket, cancellationToken).ConfigureAwait(false);
-                    break;
-                case IceServerType.Turn:
-                    await GatherRelayAsync(server, local, socket, cancellationToken).ConfigureAwait(false);
-                    break;
-                default:
-                    _logger.LogDebug("Skipping ICE server {Host} of unsupported type {Type}.", server.Host, server.Type);
-                    break;
-            }
-        }
+        // The peer keeps ownership of the retained relay allocation and its session; the gatherer only sequences
+        // the wire steps (each temporarily runs its own receive loop on the shared media socket, so they must
+        // not overlap the transport's post-Start loop).
+        var gatherer = new WebRtcCandidateGatherer(_stunProbe, _turnProbe, _logger);
+        await gatherer.GatherAsync(
+            _options.IceServers, local, socket, RaiseCandidate, OnRelayGathered, cancellationToken).ConfigureAwait(false);
     }
 
-    // Queries one STUN server for the server-reflexive endpoint and emits an srflx candidate on success.
-    // No-op without a STUN probe (a peer configured with STUN servers but no probe gathers host-only).
-    private async Task GatherServerReflexiveAsync(
-        IceServerConfiguration server, IPEndPoint local, Socket socket, CancellationToken ct)
+    // Retains the first successful TURN allocation for the relay coordinator to adopt post-Start; further
+    // successes do not replace the retained one. When THIS allocation is the one retained AND a media session
+    // already exists — the answerer, which built its session (direct-only, no gathered allocation yet) before
+    // gathering — adopt the relay candidate into it now. The offerer gathers before applying the answer, so its
+    // session does not exist yet here (adoptInto stays null) and wires the relay at construction from the
+    // options factory instead. Returns the raddr/rport base for the relay candidate: the mapped
+    // (server-reflexive) base the server reported, else the host base.
+    private IPEndPoint OnRelayGathered(IPEndPoint serverEndPoint, TurnAllocateResult allocation, IPEndPoint local)
     {
-        if (_stunProbe is null)
-            return;
-
-        var reflexive = await _stunProbe
-            .TryGetServerReflexiveEndPointAsync(local, server, socket, ct)
-            .ConfigureAwait(false);
-        if (reflexive is not null)
-            RaiseCandidate(WebRtcIceCandidateFactory.ServerReflexiveCandidate(reflexive, local));
-    }
-
-    // Allocates a TURN relay on the media socket and emits a relay candidate on success, retaining the first
-    // allocation for later coordinator adoption. No-op without a TURN probe. Only UDP TURN is gathered over
-    // the media socket — TCP/TLS TURN needs its own connection (a later slice) — and a failed allocation is
-    // simply no relay candidate (as with a failed srflx query), never a throw.
-    private async Task GatherRelayAsync(
-        IceServerConfiguration server, IPEndPoint local, Socket socket, CancellationToken ct)
-    {
-        if (_turnProbe is null)
-        {
-            _logger.LogDebug(
-                "Skipping TURN server {Host}: no TURN allocation probe is configured, so no relay candidate is gathered.",
-                server.Host);
-            return;
-        }
-
-        if (server.Transport != IceTransport.Udp)
-        {
-            // Loud enough to diagnose the config trap on the non-builder path (a WebRtcConfiguration set directly
-            // bypasses the builder's reject): a TCP/TLS TURN entry gathers no relay candidate — the TCP/TLS relay
-            // data path is not wired into the media bundle.
-            _logger.LogWarning(
-                "Skipping TURN server {Host} with transport {Transport}: only UDP TURN is supported for relay " +
-                "gathering — no relay candidate is gathered for this server.",
-                server.Host, server.Transport);
-            return;
-        }
-
-        var serverEndPoint = await ResolveTurnServerEndPointAsync(server, socket.AddressFamily, ct).ConfigureAwait(false);
-        if (serverEndPoint is null)
-        {
-            _logger.LogDebug(
-                "Skipping TURN server {Host}: no address resolved in the media socket's family {Family}.",
-                server.Host, socket.AddressFamily);
-            return;
-        }
-
-        var allocation = await _turnProbe
-            .TryAllocateAsync(socket, serverEndPoint, BuildTurnCredentials(server), lifetimeSeconds: null, ct)
-            .ConfigureAwait(false);
-        if (allocation is null)
-            return;
-
-        // Retain the first successful allocation for the relay coordinator to adopt post-Start; further
-        // successes still emit a candidate but do not replace the retained one. When THIS allocation is the
-        // one retained AND a media session already exists — the answerer, which built its session (direct-only,
-        // no gathered allocation yet) before gathering — adopt the relay candidate into it now. The offerer
-        // gathers before applying the answer, so its session does not exist yet here (adoptInto stays null) and
-        // wires the relay at construction from the options factory instead.
         BundledMediaSession? adoptInto = null;
         lock (_sync)
         {
@@ -785,35 +780,12 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             }
         }
 
-        // raddr/rport carry the mapped (server-reflexive) base the server reported, else the host base.
-        RaiseCandidate(WebRtcIceCandidateFactory.RelayCandidate(allocation.RelayedEndPoint, allocation.MappedEndPoint ?? local));
-
         // Adopt outside the lock: AdoptRelay builds the TURN control stack and takes the ICE driver's own gate,
         // and needs no _sync-guarded state of ours. AdoptRelay is idempotent, so a session that already wired
         // a relay (it should not on the answerer, but defensively) is unaffected.
         adoptInto?.AdoptRelay(WebRtcRelayBinding.CreateFactory(serverEndPoint, allocation, _loggerFactory));
-    }
 
-    // Validates a trickled RFC 8829 candidate string ("candidate:…", tolerating a leading "a=") and returns
-    // the parsed fields (address NOT yet parsed to an IP, so an mDNS ".local" name is still distinguishable
-    // by the caller). Returns null when malformed/unusable (wrong component/transport, non-positive port,
-    // negative priority).
-    private static SdpIceCandidate? ParseCandidateFields(string candidate)
-    {
-        var value = candidate.Trim();
-        if (value.StartsWith("a=", StringComparison.Ordinal))
-            value = value[2..];
-        if (value.StartsWith("candidate:", StringComparison.Ordinal))
-            value = value["candidate:".Length..];
-
-        if (SdpIceCandidate.TryParse(value) is not { } parsed
-            || parsed.Component != 1
-            || !parsed.Transport.Equals("udp", StringComparison.OrdinalIgnoreCase)
-            || parsed.Port <= 0
-            || parsed.Priority < 0) // RFC 8445 priority is a 31-bit unsigned; a negative value is malformed
-            return null;
-
-        return parsed;
+        return allocation.MappedEndPoint ?? local;
     }
 
     // Emits the local host candidate for the bound endpoint as an RFC 8829 candidate string (trickle).
@@ -913,31 +885,6 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     private static bool RemoteSends(SdpMediaDescription? media)
         => media is { Disabled: false, Direction: SdpMediaDirection.SendRecv or SdpMediaDirection.SendOnly };
 
-    // Long-term TURN credentials from the configured username/password, or null for an open server. A
-    // bootstrap realm (the server host, replaced by the server's real realm on the 401 challenge, and never
-    // put on the wire — the first Allocate is unauthenticated) marks the credentials long-term so the
-    // allocation runs the RFC 5389 §10.2 challenge flow. That flow yields the effective realm/nonce the relay
-    // coordinator needs to adopt the allocation without re-challenging; short-term credentials skip it.
-    private static StunCredentials? BuildTurnCredentials(IceServerConfiguration server)
-        => string.IsNullOrWhiteSpace(server.Username) || string.IsNullOrWhiteSpace(server.Password)
-            ? null
-            : new StunCredentials { Username = server.Username, Password = server.Password, Realm = server.Host };
-
-    // Resolves the TURN server's transport address in the media socket's address family (RFC 8656 default
-    // port 3478), or null when no address in that family resolves — a mismatched family would fail the send.
-    private static async Task<IPEndPoint?> ResolveTurnServerEndPointAsync(
-        IceServerConfiguration server, AddressFamily addressFamily, CancellationToken ct)
-    {
-        const int defaultTurnPort = 3478;
-        var port = server.Port ?? defaultTurnPort;
-        if (IPAddress.TryParse(server.Host, out var ip))
-            return new IPEndPoint(ip, port);
-
-        var addresses = await Dns.GetHostAddressesAsync(server.Host, ct).ConfigureAwait(false);
-        var address = StunIceProbe.PickAddressForFamily(addresses, addressFamily);
-        return address is null ? null : new IPEndPoint(address, port);
-    }
-
     private void TransitionTo(WebRtcConnectionState next)
     {
         lock (_sync)
@@ -957,6 +904,27 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         }
     }
 
+    // Fires the signalling-state change event for a transition already committed to _signalingState under
+    // _sync at the call site. The delegate is snapshotted inside the lock and invoked outside it (K3), so a
+    // handler can re-subscribe without deadlocking; a throwing handler is logged, not propagated (K3: handlers
+    // must not break the signalling path).
+    private void RaiseSignalingState(WebRtcSignalingState next)
+    {
+        Action<WebRtcSignalingState>? handler;
+        lock (_sync) { handler = SignalingStateChanged; }
+        if (handler is null)
+            return;
+
+        try
+        {
+            handler(next);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled exception in WebRTC SignalingStateChanged handler.");
+        }
+    }
+
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
@@ -967,6 +935,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
 
         BundledMediaSession? session;
         UdpClient? orphanSocket;
+        bool signalingClosed;
         lock (_sync)
         {
             session = _session;
@@ -976,9 +945,15 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             // never double-disposes.
             orphanSocket = _socketHandedOver ? null : _mediaSocket;
             _mediaSocket = null;
+            // Signalling terminates at Closed (RFC 8829 §4.1.3), idempotent across a double dispose. The event
+            // is fired below, outside the lock (K3).
+            signalingClosed = _signalingState != WebRtcSignalingState.Closed;
+            _signalingState = WebRtcSignalingState.Closed;
         }
 
         TransitionTo(WebRtcConnectionState.Closed);
+        if (signalingClosed)
+            RaiseSignalingState(WebRtcSignalingState.Closed);
 
         // Refuse new sends and wait for in-flight ones to finish before tearing down the session, so a
         // concurrent send never operates on a disposed media session (HARD-C6). Idempotent: a second

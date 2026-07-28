@@ -29,6 +29,15 @@ accumulate the consumer-visible changes for 4.7.0.
   of the existing automatic loss-driven feedback. A tolerant no-op when no BUNDLE session is negotiated, the
   bundle has no video track, the peer did not advertise `nack pli`, or the built-in 500 ms throttle still
   holds. Additive — the existing 1 audio + 1 video API is unchanged.
+- **RFC 8829 signalling state observation** — `IPeerConnection.SignalingState` and the
+  `SignalingStateChanged` event surface the peer's offer/answer signalling state (W3C `RTCSignalingState`),
+  distinct from the ICE/DTLS transport `State`. New public enum `SignalingState` (`Stable`, `HaveLocalOffer`,
+  `HaveRemoteOffer`, `Closed` — no `pranswer` path in this SDK). The offerer runs
+  `Stable → HaveLocalOffer → Stable` and the answerer `Stable → HaveRemoteOffer → Stable`, with an invalid
+  transition (e.g. creating an offer after close) throwing `InvalidOperationException` instead of silently
+  overwriting negotiation state. **Observation + guards only, additive:** the SDP/wire/session behaviour of the
+  existing single offer/answer exchange is byte-identical; re-offer / renegotiation apply remains a later
+  package (a second `SetRemoteDescriptionAsync` still fails loudly).
 
 ### Changed
 

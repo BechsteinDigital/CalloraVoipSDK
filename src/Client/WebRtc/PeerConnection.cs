@@ -32,6 +32,7 @@ internal sealed class PeerConnection : IPeerConnection
     // this lock (invoking outside it, so a handler cannot deadlock by re-subscribing).
     private readonly object _eventSync = new();
     private EventHandler<PeerConnectionState>? _connectionStateChanged;
+    private EventHandler<SignalingState>? _signalingStateChanged;
     private EventHandler<RemoteTrack>? _trackReceived;
     private EventHandler<string>? _localIceCandidateDiscovered;
     private EventHandler<DtmfTone>? _dtmfReceived;
@@ -51,6 +52,7 @@ internal sealed class PeerConnection : IPeerConnection
         _tracks = new RemoteTrackSet(RaiseTrackReceived);
         _taps = new MediaTapSet(logger);
         _peer.ConnectionStateChanged += OnInternalStateChanged;
+        _peer.SignalingStateChanged += OnInternalSignalingStateChanged;
         _peer.AudioReceived += OnAudioReceived;
         // Inbound video is projected via the MID-tagged event only (P2c): the peer fires it for EVERY video
         // track — including the primary, for which the legacy untagged VideoFrameReceived also fires — so
@@ -63,6 +65,7 @@ internal sealed class PeerConnection : IPeerConnection
     }
 
     public PeerConnectionState State => Map(_peer.State);
+    public SignalingState SignalingState => MapSignaling(_peer.SignalingState);
     public string? LocalDescription => _peer.LocalDescription;
     public IPEndPoint? LocalMediaEndPoint => _peer.LocalMediaEndPoint;
 
@@ -70,6 +73,12 @@ internal sealed class PeerConnection : IPeerConnection
     {
         add { lock (_eventSync) _connectionStateChanged += value; }
         remove { lock (_eventSync) _connectionStateChanged -= value; }
+    }
+
+    public event EventHandler<SignalingState>? SignalingStateChanged
+    {
+        add { lock (_eventSync) _signalingStateChanged += value; }
+        remove { lock (_eventSync) _signalingStateChanged -= value; }
     }
 
     public event EventHandler<RemoteTrack>? TrackReceived
@@ -305,6 +314,7 @@ internal sealed class PeerConnection : IPeerConnection
     public async ValueTask DisposeAsync()
     {
         _peer.ConnectionStateChanged -= OnInternalStateChanged;
+        _peer.SignalingStateChanged -= OnInternalSignalingStateChanged;
         _peer.AudioReceived -= OnAudioReceived;
         _peer.VideoTrackFrameReceived -= OnVideoTrackReceived;
         _peer.LocalIceCandidateDiscovered -= OnLocalIceCandidate;
@@ -343,6 +353,13 @@ internal sealed class PeerConnection : IPeerConnection
         EventHandler<PeerConnectionState>? handler;
         lock (_eventSync) handler = _connectionStateChanged;
         handler?.Invoke(this, Map(state));
+    }
+
+    private void OnInternalSignalingStateChanged(WebRtcSignalingState state)
+    {
+        EventHandler<SignalingState>? handler;
+        lock (_eventSync) handler = _signalingStateChanged;
+        handler?.Invoke(this, MapSignaling(state));
     }
 
     private void OnLocalIceCandidate(string candidate)
@@ -420,5 +437,15 @@ internal sealed class PeerConnection : IPeerConnection
         WebRtcConnectionState.Failed       => PeerConnectionState.Failed,
         WebRtcConnectionState.Closed       => PeerConnectionState.Closed,
         _ => PeerConnectionState.Closed,
+    };
+
+    // Projects the internal RFC 8829 signalling state onto the public enum (1:1; no pranswer path exists).
+    private static SignalingState MapSignaling(WebRtcSignalingState state) => state switch
+    {
+        WebRtcSignalingState.Stable          => SignalingState.Stable,
+        WebRtcSignalingState.HaveLocalOffer  => SignalingState.HaveLocalOffer,
+        WebRtcSignalingState.HaveRemoteOffer => SignalingState.HaveRemoteOffer,
+        WebRtcSignalingState.Closed          => SignalingState.Closed,
+        _ => SignalingState.Closed,
     };
 }

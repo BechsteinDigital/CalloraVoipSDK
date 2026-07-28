@@ -14,6 +14,14 @@ public interface IPeerConnection : IAsyncDisposable
     /// <summary>Current lifecycle state (RFC 8829).</summary>
     PeerConnectionState State { get; }
 
+    /// <summary>
+    /// The current RFC 8829 §4.1.3 signalling state — the offer/answer half of the peer's lifecycle,
+    /// distinct from the ICE/DTLS transport <see cref="State"/>. Starts at <see cref="SignalingState.Stable"/>
+    /// and settles back there once each offer/answer exchange completes; see <see cref="SignalingState"/> for
+    /// the transitions this SDK models. Mirrors the W3C <c>RTCPeerConnection.signalingState</c>.
+    /// </summary>
+    SignalingState SignalingState { get; }
+
     /// <summary>The local SDP (offer or answer) once one has been produced; <see langword="null"/> before.</summary>
     string? LocalDescription { get; }
 
@@ -22,6 +30,14 @@ public interface IPeerConnection : IAsyncDisposable
 
     /// <summary>Raised on every lifecycle transition (RFC 8829 <c>connectionstatechange</c>).</summary>
     event EventHandler<PeerConnectionState>? ConnectionStateChanged;
+
+    /// <summary>
+    /// Raised on every RFC 8829 §4.1.3 signalling-state transition (the W3C <c>signalingstatechange</c>),
+    /// carrying the new <see cref="SignalingState"/>. The answerer path fires twice in one
+    /// <see cref="SetRemoteDescriptionAsync"/> call — once for <see cref="SignalingState.HaveRemoteOffer"/>
+    /// and once for the return to <see cref="SignalingState.Stable"/>.
+    /// </summary>
+    event EventHandler<SignalingState>? SignalingStateChanged;
 
     /// <summary>
     /// Raised once per remote track, when that track's first frame arrives (the W3C <c>track</c> event).

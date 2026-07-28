@@ -55,10 +55,12 @@ public sealed class WebRtcTrickleSignalingTests
 
         private PeerConnectionState _state = PeerConnectionState.New;
         public PeerConnectionState State => _state;
+        public SignalingState SignalingState => SignalingState.Stable;
         public string? LocalDescription => "OFFER";
         public IPEndPoint? LocalMediaEndPoint => null;
 
         public event EventHandler<PeerConnectionState>? ConnectionStateChanged;
+        public event EventHandler<SignalingState>? SignalingStateChanged { add { } remove { } }
         public event EventHandler<RemoteTrack>? TrackReceived { add { } remove { } }
         public event EventHandler<string>? LocalIceCandidateDiscovered;
         public event EventHandler<DtmfTone>? DtmfReceived { add { } remove { } }

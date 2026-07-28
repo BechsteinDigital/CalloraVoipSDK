@@ -102,10 +102,12 @@ public sealed class WebRtcSignalingTests
         public bool Started { get; private set; }
 
         public PeerConnectionState State { get; private set; } = PeerConnectionState.New;
+        public SignalingState SignalingState { get; private set; } = SignalingState.Stable;
         public string? LocalDescription => "OFFER";
         public IPEndPoint? LocalMediaEndPoint => null;
 
         public event EventHandler<PeerConnectionState>? ConnectionStateChanged;
+        public event EventHandler<SignalingState>? SignalingStateChanged { add { } remove { } }
         public event EventHandler<RemoteTrack>? TrackReceived { add { } remove { } }
         public event EventHandler<string>? LocalIceCandidateDiscovered { add { } remove { } }
         public event EventHandler<DtmfTone>? DtmfReceived { add { } remove { } }

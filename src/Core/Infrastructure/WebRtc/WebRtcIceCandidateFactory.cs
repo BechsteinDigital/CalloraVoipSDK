@@ -53,4 +53,28 @@ internal static class WebRtcIceCandidateFactory
         RelatedAddress = relatedBase.Address.ToString(),
         RelatedPort = relatedBase.Port,
     };
+
+    /// <summary>
+    /// Validates a trickled RFC 8829 candidate string (<c>candidate:…</c>, tolerating a leading <c>a=</c>) and
+    /// returns the parsed fields — the inverse of the builders above. The address is NOT parsed to an IP, so an
+    /// mDNS <c>.local</c> name stays distinguishable by the caller. Returns null when malformed/unusable (wrong
+    /// component/transport, non-positive port, negative priority).
+    /// </summary>
+    public static SdpIceCandidate? ParseTrickleCandidate(string candidate)
+    {
+        var value = candidate.Trim();
+        if (value.StartsWith("a=", StringComparison.Ordinal))
+            value = value[2..];
+        if (value.StartsWith("candidate:", StringComparison.Ordinal))
+            value = value["candidate:".Length..];
+
+        if (SdpIceCandidate.TryParse(value) is not { } parsed
+            || parsed.Component != 1
+            || !parsed.Transport.Equals("udp", StringComparison.OrdinalIgnoreCase)
+            || parsed.Port <= 0
+            || parsed.Priority < 0) // RFC 8445 priority is a 31-bit unsigned; a negative value is malformed
+            return null;
+
+        return parsed;
+    }
 }
