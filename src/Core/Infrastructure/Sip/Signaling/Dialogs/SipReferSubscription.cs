@@ -193,7 +193,7 @@ internal sealed class SipReferSubscription : IReferSubscription
         {
             if (_phase is Phase.Terminated or Phase.Cancelled) return;
             _phase = Phase.Terminated;
-            Dispatch(TimeoutState, "SIP/2.0 408 Request Timeout");
+            Dispatch(TimeoutState, "SIP/2.0 408 Request Timeout", ct);
             tail = _sendTail;
         }
         await tail.ConfigureAwait(false);

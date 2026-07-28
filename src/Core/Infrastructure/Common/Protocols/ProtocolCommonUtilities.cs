@@ -60,7 +60,12 @@ internal static class ProtocolCommonUtilities
     public static string Md5HexLower(string value)
     {
         var bytes = Encoding.UTF8.GetBytes(value);
+        // CA5351 (weak crypto): MD5 is the default SIP Digest algorithm (RFC 3261/RFC 2617) and is required
+        // for interop with servers that request it. This SDK also implements the stronger RFC 8760 algorithms
+        // (SHA-256, SHA-512-256) via TryHashHexLower and prefers them when the server offers a choice.
+#pragma warning disable CA5351
         var hash = MD5.HashData(bytes);
+#pragma warning restore CA5351
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
@@ -75,6 +80,10 @@ internal static class ProtocolCommonUtilities
         hashHexLower = string.Empty;
         var bytes = Encoding.UTF8.GetBytes(value);
         var normalized = algorithm.Trim().ToUpperInvariant();
+        // CA5351 (weak crypto): the "MD5" arm implements the legacy SIP Digest algorithm (RFC 3261/RFC 2617),
+        // kept for interop; the SHA-256 / SHA-512-256 arms are the stronger RFC 8760 algorithms this SDK
+        // prefers. MD5 here is protocol-mandated, not an unreviewed algorithm choice.
+#pragma warning disable CA5351
         byte[] hash = normalized switch
         {
             "MD5" => MD5.HashData(bytes),
@@ -82,6 +91,7 @@ internal static class ProtocolCommonUtilities
             "SHA-512-256" or "SHA-512/256" => Sha512_256(bytes),
             _ => Array.Empty<byte>()
         };
+#pragma warning restore CA5351
         if (hash.Length == 0)
             return false;
 
