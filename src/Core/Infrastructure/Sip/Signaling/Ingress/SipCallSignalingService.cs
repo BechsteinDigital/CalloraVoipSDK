@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net;
 using Microsoft.Extensions.Logging;
+using CalloraVoipSdk.Core.Application.Observability;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Authentication;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Observability;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Transport;

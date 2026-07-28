@@ -1,4 +1,4 @@
-using CalloraVoipSdk.Core.Infrastructure.Sip.Observability;
+using CalloraVoipSdk.Core.Application.Observability;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Signaling;
 using CalloraVoipSdk.Core.Domain.Security;
 

@@ -1,4 +1,4 @@
-namespace CalloraVoipSdk.Core.Infrastructure.Sip.Observability;
+namespace CalloraVoipSdk.Core.Application.Observability;
 
 /// <summary>
 /// Simple metric data point for SIP counters/timers.

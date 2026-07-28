@@ -34,7 +34,7 @@ namespace CalloraVoipSdk.Core.Infrastructure.Security;
 /// thread-safety concerns.
 /// </para>
 /// </summary>
-public static class SipDomainCertificateValidator
+internal static class SipDomainCertificateValidator
 {
     /// <summary>
     /// OID for the Subject Alternative Name X.509 extension (RFC 5280 §4.2.1.6).

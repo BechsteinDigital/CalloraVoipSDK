@@ -1,8 +1,8 @@
 using CalloraVoipSdk;
 using CalloraVoipSdk.Core.Domain.Calls;
 using CalloraVoipSdk.Core.Domain.Lines;
+using CalloraVoipSdk.Core.Application.Ports.Security;
 using CalloraVoipSdk.Core.Domain.Security;
-using CalloraVoipSdk.Core.Infrastructure.Security;
 using CalloraVoipSdk.InteropTests.Asterisk;
 using Xunit;
 

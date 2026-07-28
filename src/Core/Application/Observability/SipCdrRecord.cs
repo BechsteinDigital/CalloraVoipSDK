@@ -1,4 +1,4 @@
-namespace CalloraVoipSdk.Core.Infrastructure.Sip.Observability;
+namespace CalloraVoipSdk.Core.Application.Observability;
 
 /// <summary>
 /// Call detail record emitted for SIP dialog lifecycles.

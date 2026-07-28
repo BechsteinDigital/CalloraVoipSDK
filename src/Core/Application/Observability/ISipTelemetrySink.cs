@@ -1,4 +1,4 @@
-namespace CalloraVoipSdk.Core.Infrastructure.Sip.Observability;
+namespace CalloraVoipSdk.Core.Application.Observability;
 
 /// <summary>
 /// Sink for SIP observability artifacts (events, metrics, CDR).

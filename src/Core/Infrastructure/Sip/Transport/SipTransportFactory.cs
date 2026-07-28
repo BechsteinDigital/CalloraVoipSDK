@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
-using CalloraVoipSdk.Core.Infrastructure.Sip.Wire;
+using CalloraVoipSdk.Core.Application.Ports.Security;
 using CalloraVoipSdk.Core.Infrastructure.Security;
+using CalloraVoipSdk.Core.Infrastructure.Sip.Wire;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Sip.Transport;
 
@@ -17,7 +18,7 @@ internal sealed class SipTransportFactory : ISipTransportFactory
     {
         ArgumentNullException.ThrowIfNull(loggerFactory);
         var logger = loggerFactory.CreateLogger<SipTransportFactory>();
-        if (tls?.GetCertificate() is null && tls is not null)
+        if (tls is not null && new SipTlsCertificateProvider(tls).GetCertificate() is null)
         {
             logger.LogWarning(
                 "TLS configuration is present but no certificate could be loaded; SIP TLS listener will remain disabled.");

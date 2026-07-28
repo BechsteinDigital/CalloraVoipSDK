@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using CalloraVoipSdk.Core.Application.Ports.Security;
 using CalloraVoipSdk.Core.Infrastructure.Media;
 using CalloraVoipSdk.Core.Infrastructure.Security;
 
@@ -72,6 +73,7 @@ public sealed class Issue16SecurityHardeningTests
                 File.WriteAllBytes(pfxPath, cert.Export(X509ContentType.Pkcs12, password));
 
             var config = new TlsConfiguration { CertificatePath = pfxPath, CertificatePassword = password };
+            var provider = new SipTlsCertificateProvider(config);
 
             // Fire all callers at once to expose a check-then-load race.
             var results = new X509Certificate2?[64];
@@ -79,7 +81,7 @@ public sealed class Issue16SecurityHardeningTests
             Parallel.For(0, results.Length, i =>
             {
                 gate.SignalAndWait();
-                results[i] = config.GetCertificate();
+                results[i] = provider.GetCertificate();
             });
 
             var first = results[0];

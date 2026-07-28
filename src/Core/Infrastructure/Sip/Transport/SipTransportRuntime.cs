@@ -6,6 +6,7 @@ using System.Net.WebSockets;
 using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Logging;
+using CalloraVoipSdk.Core.Application.Ports.Security;
 using CalloraVoipSdk.Core.Infrastructure.Common.Disposal;
 using CalloraVoipSdk.Core.Infrastructure.Common.Network;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Routing;
@@ -28,6 +29,7 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
     private const int WebSocketListenerBindAttempts = 5;
     private readonly IPEndPoint _wssLocalEndPoint;
     private readonly TlsConfiguration? _tlsConfiguration;
+    private readonly SipTlsCertificateProvider? _tlsCertificateProvider;
     private readonly X509Certificate2? _tlsCertificate;
     private readonly ILogger<SipTransportRuntime> _logger;
     private readonly ISipWireCodec _wireCodec;
@@ -88,7 +90,8 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
         _wireCodec = wireCodec ?? throw new ArgumentNullException(nameof(wireCodec));
         _routeResolver = routeResolver ?? new SipDnsRouteResolver(loggerFactory);
         _tlsConfiguration = tlsConfiguration;
-        _tlsCertificate = tlsConfiguration?.GetCertificate();
+        _tlsCertificateProvider = tlsConfiguration is null ? null : new SipTlsCertificateProvider(tlsConfiguration);
+        _tlsCertificate = _tlsCertificateProvider?.GetCertificate();
         _defaultTransport = defaultTransport;
         _outboundPool = new SipOutboundConnectionPool(
             _logger, _endpointTlsHosts, ValidateTlsServerCertificate, HandleInboundPayloadAsync);
@@ -775,9 +778,10 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
 
         // RFC 5922 §7.1: additional SIP domain SAN check when configured.
         if (_tlsConfiguration?.ExpectedSipDomain is not null
+            && _tlsCertificateProvider is not null
             && certificate is X509Certificate2 cert2)
         {
-            if (!_tlsConfiguration.ValidatePeerCertificateSipDomain(cert2))
+            if (!_tlsCertificateProvider.ValidatePeerCertificateSipDomain(cert2))
             {
                 _logger.LogWarning(
                     "RFC 5922 SIP domain SAN validation failed for domain '{SipDomain}'.",

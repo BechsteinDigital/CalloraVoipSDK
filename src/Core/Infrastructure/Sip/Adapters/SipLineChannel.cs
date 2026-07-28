@@ -5,6 +5,7 @@ using CalloraVoipSdk.Core.Application.Media;
 using CalloraVoipSdk.Core.Domain.Calls;
 using CalloraVoipSdk.Core.Domain.Lines;
 using CalloraVoipSdk.Core.Domain.Messages;
+using CalloraVoipSdk.Core.Application.Observability;
 using CalloraVoipSdk.Core.Application.Ports.Sdp;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Observability;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Signaling;

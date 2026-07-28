@@ -3,6 +3,7 @@ using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using CalloraVoipSdk.Core.Infrastructure.Common.Network;
 using CalloraVoipSdk.Core.Infrastructure.Common.Protocols;
+using CalloraVoipSdk.Core.Application.Observability;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Authentication;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Observability;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Transport;

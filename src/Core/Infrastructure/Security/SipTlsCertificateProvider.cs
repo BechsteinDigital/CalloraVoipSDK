@@ -1,53 +1,34 @@
 using System.Security.Cryptography.X509Certificates;
+using CalloraVoipSdk.Core.Application.Ports.Security;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Security;
 
 /// <summary>
-/// TLS configuration for SIP transport connections.
-/// <para>
-/// Supports both outbound (client) and inbound (server) TLS use-cases.
-/// Certificate loading is lazy and cached after the first call to
-/// <see cref="GetCertificate"/>.
-/// </para>
-/// <para>
-/// RFC 5922 compliance: set <see cref="ExpectedSipDomain"/> to enable
-/// domain certificate validation per RFC 5922 §7.1 in addition to the
-/// standard chain and hostname checks performed by the TLS stack.
-/// </para>
+/// Infrastructure helper that realizes the certificate behavior for a
+/// <see cref="TlsConfiguration"/> data contract: lazy, cached loading of the
+/// configured X.509 identity certificate from disk and RFC 5922 §7.1 SIP-domain
+/// SAN validation of a peer certificate.
 /// </summary>
-public class TlsConfiguration
+/// <remarks>
+/// The certificate is loaded at most once per provider instance: concurrent first
+/// callers of <see cref="GetCertificate"/> synchronize on an internal lock (double-checked
+/// locking) so two callers cannot both construct an <see cref="X509Certificate2"/>,
+/// which would leak the loser instance.
+/// </remarks>
+internal sealed class SipTlsCertificateProvider
 {
-    /// <summary>
-    /// Path to the X.509 certificate file (PFX/P12 or PEM).
-    /// </summary>
-    public string? CertificatePath { get; init; }
-
-    /// <summary>
-    /// Password for the certificate file, if required.
-    /// </summary>
-    public string? CertificatePassword { get; init; }
-
-    /// <summary>
-    /// When <see langword="true"/>, the TLS stack accepts server certificates
-    /// that fail standard chain or hostname validation. Use only in
-    /// development or testing environments.
-    /// </summary>
-    public bool AcceptUntrustedCertificates { get; init; } = false;
-
-    /// <summary>
-    /// Optional SIP domain expected in the server certificate's Subject
-    /// Alternative Name (SAN) extension per RFC 5922 §7.1.
-    /// <para>
-    /// When set, <see cref="ValidatePeerCertificateSipDomain"/> checks that
-    /// the peer's certificate contains a <c>dNSName</c> or
-    /// <c>uniformResourceIdentifier</c> (sip:/sips:) SAN that matches this
-    /// domain. Leave <see langword="null"/> to skip RFC 5922 SAN validation.
-    /// </para>
-    /// </summary>
-    public string? ExpectedSipDomain { get; init; }
-
+    private readonly TlsConfiguration _configuration;
     private readonly object _certificateSync = new();
     private X509Certificate2? _certificate;
+
+    /// <summary>
+    /// Creates a provider bound to the supplied TLS configuration DTO.
+    /// </summary>
+    /// <param name="configuration">The TLS configuration data contract. Must not be <see langword="null"/>.</param>
+    internal SipTlsCertificateProvider(TlsConfiguration configuration)
+    {
+        _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+    }
 
     /// <summary>
     /// Returns the configured X.509 certificate, loading it from disk on first
@@ -56,7 +37,7 @@ public class TlsConfiguration
     /// </summary>
     public X509Certificate2? GetCertificate()
     {
-        if (CertificatePath == null)
+        if (_configuration.CertificatePath == null)
             return null;
 
         // Double-checked load under a lock so two concurrent callers cannot both construct an
@@ -66,7 +47,7 @@ public class TlsConfiguration
 
         lock (_certificateSync)
         {
-            _certificate ??= LoadCertificate(CertificatePath, CertificatePassword);
+            _certificate ??= LoadCertificate(_configuration.CertificatePath, _configuration.CertificatePassword);
         }
 
         return _certificate;
@@ -85,11 +66,11 @@ public class TlsConfiguration
 
     /// <summary>
     /// Validates that <paramref name="certificate"/> satisfies the RFC 5922
-    /// SIP domain check configured via <see cref="ExpectedSipDomain"/>.
+    /// SIP domain check configured via <see cref="TlsConfiguration.ExpectedSipDomain"/>.
     /// </summary>
     /// <param name="certificate">The peer X.509 certificate to validate.</param>
     /// <returns>
-    /// <see langword="true"/> when <see cref="ExpectedSipDomain"/> is not set
+    /// <see langword="true"/> when <see cref="TlsConfiguration.ExpectedSipDomain"/> is not set
     /// (validation skipped) or when the certificate's SAN matches the expected
     /// domain; <see langword="false"/> when the SAN check fails.
     /// </returns>
@@ -101,9 +82,9 @@ public class TlsConfiguration
     /// </remarks>
     public bool ValidatePeerCertificateSipDomain(X509Certificate2 certificate)
     {
-        if (string.IsNullOrWhiteSpace(ExpectedSipDomain))
+        if (string.IsNullOrWhiteSpace(_configuration.ExpectedSipDomain))
             return true; // RFC 5922 SAN check not configured — skip
 
-        return SipDomainCertificateValidator.ValidateSipDomain(certificate, ExpectedSipDomain);
+        return SipDomainCertificateValidator.ValidateSipDomain(certificate, _configuration.ExpectedSipDomain);
     }
 }

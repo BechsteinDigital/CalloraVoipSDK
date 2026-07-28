@@ -1,4 +1,4 @@
-namespace CalloraVoipSdk.Core.Infrastructure.Sip.Observability;
+namespace CalloraVoipSdk.Core.Application.Observability;
 
 /// <summary>
 /// Structured SIP event record for diagnostics and event-stream consumers.
