@@ -2,7 +2,9 @@
 
 **Ziel:** Den ICE-Answerer (controlled agent) seinen eigenen TURN-Relay-Kandidaten voll nutzen lassen — Connectivity-Check-**Responses** und **Consent** über den Relay senden, nicht nur direkt. Schließt den letzten großen WebRTC-GA-Code-Rest (NAT-Traversal, wenn der Answerer hinter symmetrischem NAT sitzt).
 
-**Status:** Design (nach Referenz-Recherche + Code-Verifikation). Sicherheitskritischer ICE-Kern — pro Slice fresh-context + Review.
+**Status:** ✅ UMGESETZT (Branch `feat/webrtc-answerer-relay`, Slices K1–K5, 2 Reviews APPROVED-WITH-FOLLOWUPS, in main). Der Answerer-Relay-Gap (GA-Blocker #2) ist geschlossen — der controlled Agent nutzt seinen eigenen Relay-Kandidaten über empfangspfad-getaggtes `replyVia`-Routing + proaktive TURN-Permission. Dieses Dokument ist das ursprüngliche Design.
+
+<sub>(historisch) Design (nach Referenz-Recherche + Code-Verifikation). Sicherheitskritischer ICE-Kern — pro Slice fresh-context + Review.</sub>
 
 ---
 
