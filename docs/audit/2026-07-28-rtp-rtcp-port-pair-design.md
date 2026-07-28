@@ -1,0 +1,36 @@
+# RTP/RTCP-Portpaar-Reservierung — Design (2026-07-28)
+
+**Branch:** `fix/rtp-rtcp-port-pair-reservation` · **Ziel:** das `Failed to bind RTCP socket … Address already in use`-Race unter Last beseitigen.
+
+## Problem (measure-first, verifiziert)
+
+Ein SIP-Call reserviert nur den RTP-Port (`SipCoreCallChannel` bindet `_localMediaSocket` auf Port 0 → N). Der RTCP-Port wird als **N+1** ins SDP geschrieben (`SdpUtilities.ResolveRtcpPort`), aber **nie gebunden/gehalten**. Der `CallRtcpQualityMonitor` bindet N+1 erst **spät** in `StartAsync` (`new UdpClient(_localRtcpEndPoint)`); ist er inzwischen belegt → `SocketException` → `catch` → Qualitätsmessung für diesen Call aus (RTP-Audio läuft weiter). Je mehr parallele Calls, desto wahrscheinlicher belegt ein späterer RTP-Zufallsport das ungeschützte N+1 eines früheren Calls.
+
+Der RTP-Port hat dieselbe Klasse Fehler in klein: Reserve → **Release** (`ReleasePortReservationSockets`) → **Rebind** durch `RtpSession` = Mikrosekunden-TOCTOU. Beobachtet bricht aber RTCP, weil es das ganze Setup über ungeschützt ist.
+
+## Fix
+
+Konsekutives Portpaar **atomar reservieren, halten und übergeben** — kein Release+Rebind. Ein Portwechsel nach SDP-Veröffentlichung wäre zu spät (das SDP hat N+1 bereits angekündigt).
+
+1. **`MediaPortReservation`** (Infra, `IDisposable`): bindet RTP auf zufälliges N, dann N+1; N+1 belegt → dispose + Retry mit neuem N (bounded). Hält beide `UdpClient` bis zur Übergabe; `Take…Socket()` überträgt Ownership (Reservation schließt nur nicht-übernommene Sockets). Audio + Video je eine Instanz.
+2. **Pre-bound-Socket-Seam** in `RtpSession` + `CallRtcpQualityMonitor` (+ `VideoRtpStream`): optionaler `UdpClient`; gesetzt → Ownership übernehmen statt neu binden; `null` → heutiges Verhalten (verhaltensbewahrend, ICE-Pfad unberührt — dort besitzt der ICE-Agent den Socket).
+3. **Handoff über einen Infra-Sidecar**, NICHT das Domain-`record` `CallMediaParameters` (kein Live-Socket im Value Object). Die Reservierung reist von `SipCoreCallChannel` zu `RtpCallMediaSessionFactory` + `CallMediaOrchestrator`.
+
+### ★ Measure-first-Befund (2026-07-28): Reservierung muss auf die route-lokale IP binden
+
+Die `RtpSession` bindet `parameters.LocalEndPoint` = `IPEndPoint(ResolveAdvertisedMediaAddress(session), N)` — die **konkrete route-lokale IP**, nicht `Any` (Kommentar `SipCoreCallChannel` ~617: "RTP/RTCP must bind where the peer sends to, a wildcard bind is not routable for a LAN peer"). Die heutige Reservierung bindet `Any:0` nur zum Port-Grabben; das Media-Socket bindet danach die konkrete IP. Ein übergebener `Any`-Socket würde die Quell-IP ausgehender Media auf die OS-Default-Route setzen → auf multi-homed Hosts **Symmetric-RTP-Bruch**. **Deshalb muss `MediaPortReservation.Reserve` mit der route-lokalen IP aufgerufen werden** — die erst zur Answer/Offer-Zeit bekannt ist (`ResolveAdvertisedMediaAddress(session)`), nicht im Ctor. Folge: die Paar-Reservierung wandert vom Ctor ins Per-Session-Setup (der Port N wird dann dort fixiert, bevor das SDP ihn schreibt). `MediaPortReservation` trägt das bereits (bindAddress-Parameter); es ändert sich nur der Aufruf-Zeitpunkt/-Ort in der Verdrahtung.
+
+## Slices
+
+1. `MediaPortReservation` + Unit-Test (inkl. Kollisions-Retry).
+2. Socket-Seams in `RtpSession`/`CallRtcpQualityMonitor`/`VideoRtpStream` (verhaltensbewahrend bei `null`).
+3. Verdrahtung: `SipCoreCallChannel` → Sidecar → Factory/Orchestrator → Übergabe; Release+Rebind entfällt (Nicht-ICE).
+4. Deterministischer Kollisionstest (Fremd-Socket auf N+1 → RTCP bleibt mit Fix aktiv), Review, PR.
+
+## ★ Umgesetzter Scope (2026-07-28): minimal-invasiv, nur RTCP-Handoff
+
+Beim Verdrahten (Slice 3) zeigten sich zwei Integrationssubtilitäten: (1) der ICE-Pfad übergibt `_localMediaSocket.Client` an den ICE-Agent (Gathering); (2) `ReleasePortReservationSockets` läuft unbedingt. Um den **RTP-/ICE-Pfad NICHT anzufassen** (Reliability), ist der finale Fix bewusst minimal: das RTP/RTCP-**Paar** wird reserviert (schützt N+1), der **RTP-Socket behält seinen Lebenszyklus unverändert** (release+rebind — bewiesen stabil, ICE-Gathering unberührt), und **nur der RTCP-Socket** wird gehalten und via `IRtcpSocketHandoff` an den `CallRtcpQualityMonitor` übergeben (non-mux). Das trifft exakt den beobachteten Bug (RTCP N+1) ohne Risiko am RTP/ICE-Pfad. Wildcard-Bind + voller RTP-Handoff (Referenz-Parität) bleiben als optionale Folge-Verfeinerung. Video hat keinen RTCP-Monitor → unberührt.
+
+## Nicht in Scope (Follow-up)
+
+Media-Hotpath-Profiling (`MediaReceiver` erzeugt pro Frame EventArgs + Invocation-List-Kopie); Server-GC-Rampentest.

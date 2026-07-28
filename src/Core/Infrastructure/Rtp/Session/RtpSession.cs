@@ -133,7 +133,15 @@ internal sealed class RtpSession : IRtpSession
     /// </summary>
     internal event Action<RtpPacket>? PacketSent;
 
-    public RtpSession(RtpSessionOptions options, IRtpPacketCodec codec, ILogger<RtpSession> logger)
+    /// <param name="preBoundSocket">
+    /// A socket already bound to the media port (handed over from <c>MediaPortReservation</c>). When
+    /// supplied the session takes ownership and uses it as-is — no rebind, which is how the port-ownership
+    /// race is avoided (reference-parity: the reserved socket <em>is</em> the media socket). When
+    /// <see langword="null"/> the session binds <see cref="RtpSessionOptions.LocalEndPoint"/> itself,
+    /// preserving the legacy path (e.g. the DTLS/ICE flows that own their socket elsewhere).
+    /// </param>
+    public RtpSession(
+        RtpSessionOptions options, IRtpPacketCodec codec, ILogger<RtpSession> logger, UdpClient? preBoundSocket = null)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(codec);
@@ -173,11 +181,21 @@ internal sealed class RtpSession : IRtpSession
         _sequenceNumber = (ushort)RtpRandom.NextUInt32();
         _timestamp      = RtpRandom.NextUInt32();
 
-        _udp = new UdpClient(AddressFamily.InterNetwork);
         // Kernel SO_RCVBUF (queues many pending datagrams) — distinct from the per-datagram user-space
         // buffer used by the receive loop below (MediaSocketDefaults.DatagramBufferBytes).
-        _udp.Client.ReceiveBufferSize = options.SocketReceiveBufferBytes;
-        _udp.Client.Bind(options.LocalEndPoint);
+        if (preBoundSocket is not null)
+        {
+            // Ownership transferred: already bound to the media port and held continuously since
+            // reservation, so there is no rebind window for another call to steal the port.
+            _udp = preBoundSocket;
+            _udp.Client.ReceiveBufferSize = options.SocketReceiveBufferBytes;
+        }
+        else
+        {
+            _udp = new UdpClient(AddressFamily.InterNetwork);
+            _udp.Client.ReceiveBufferSize = options.SocketReceiveBufferBytes;
+            _udp.Client.Bind(options.LocalEndPoint);
+        }
     }
 
     /// <summary>
