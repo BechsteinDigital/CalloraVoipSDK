@@ -257,144 +257,53 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             };
         }
 
-        var negotiated = NegotiateCodecs(offeredAudio.Codecs, localCapabilities);
-
-        // At least one real audio codec must be negotiated — an answer carrying only
-        // telephone-event would be an audio-less call. Reachable when the caller pins
-        // an opt-in codec (e.g. Opus) that the peer does not offer: negotiation fails
-        // (488) instead of producing a broken answer.
-        if (!negotiated.Any(c => !c.Name.Equals("telephone-event", StringComparison.OrdinalIgnoreCase)))
+        // Primary audio answer (RFC 3264 §6): the first audio m-line drives the session result (negotiated
+        // codecs and resolved keying) and MUST be answerable — an answer without a keyed audio m-line is
+        // rejected (488). Extracted so every further audio m-line under BUNDLE negotiates and keys identically.
+        var primaryAudio = TryNegotiateAudioAnswer(
+            offeredAudio, remoteOffer, localOptions, localCapabilities, localDirection, localEndPoint);
+        if (primaryAudio is null)
             return new SdpOfferAnswerResult { Success = false };
 
         var host = LocalEndPointHostResolver.ResolveHost(localEndPoint);
-        var answerDirection = ResolveAnswerDirection(offeredAudio.Direction, localDirection);
+        var answerDirection = primaryAudio.Media.Direction;
 
-        // Carry fmtp from remote offer for accepted payload types (RFC 3264 §6.1).
-        var acceptedPts = new HashSet<int>(negotiated.Select(c => c.PayloadType));
-        var carriedFmtp = offeredAudio.Fmtp
-            .Where(f => acceptedPts.Contains(f.PayloadType))
-            .ToArray();
-
-        // Reflect ptime when the remote offer specifies one (RFC 3264 §6.1).
-        var ptime = offeredAudio.Ptime;
-
-        // --- rtcp-mux (RFC 5761 §5.1.1): confirm ONLY when the offer advertised it ---
-        // The answer may not enable mux on its own — an answerer that muxes while the peer
-        // (which never offered a=rtcp-mux) still listens on the separate RTCP port loses all
-        // RTCP. A local "I can mux" preference cannot force mux; it only matters when we offer.
-        // Mirrors the video path (RtcpMux = offered.RtcpMux).
-        var rtcpMux = offeredAudio.RtcpMux;
-
-        // --- BUNDLE/MID (RFC 5888): mirror mid from remote ---
-        var mid = offeredAudio.Mid;
+        // --- BUNDLE/MID (RFC 5888): the answer group is carried only for a BUNDLE offer whose audio has a mid ---
         string? group = null;
-        if (mid is not null && remoteOffer.Group is not null
+        if (offeredAudio.Mid is not null && remoteOffer.Group is not null
             && remoteOffer.Group.StartsWith("BUNDLE", StringComparison.OrdinalIgnoreCase))
         {
             group = remoteOffer.Group;
         }
 
-        // --- SDES crypto (RFC 4568): answer the first supported suite with our OWN key ---
-        // (§5.1.3 — echoing the offerer's key would put the same keystream on both
-        // directions; the peer would also fail to decrypt our stream.)
-        IReadOnlyList<SdpCryptoAttribute> crypto = [];
-        SdpCryptoAttribute? localCrypto = null;
-        SdpCryptoAttribute? remoteCrypto = null;
-        // Ignore a=crypto on a DTLS-keyed profile (UDP/TLS/*): it is fingerprint-keyed and any
-        // a=crypto on it must be ignored (RFC 5763), exactly as the video m-line does. Without this
-        // guard a spurious a=crypto on a DTLS offer would be selected as SDES, which then trips the
-        // DTLS-profile fail-closed check below and wrongly rejects the audio m-line (HARD-S1).
-        if (offeredAudio.Crypto.Count > 0 && !SdpSecurityInspector.IsDtlsProfile(offeredAudio.Profile))
-        {
-            var sdes = SdesCryptoSelector.SelectAnswer(offeredAudio.Crypto);
-            if (sdes is not null)
-            {
-                localCrypto = sdes.LocalAnswer;
-                remoteCrypto = sdes.RemoteOffer;
-                crypto = [localCrypto];
-            }
-        }
-
-        // RFC 3264 §5.1: the answer keeps the offered profile. An SDES-secured profile
-        // without a negotiated key cannot be answered (keyless SAVP) and silently
-        // downgrading to plain RTP is not allowed — reject instead. DTLS-keyed profiles
-        // (UDP/TLS/…) are unaffected; a plain AVP offer carrying an unsupported a=crypto
-        // falls back to an unencrypted answer, which stays legal for AVP.
-        // --- DTLS (RFC 5763): resolve fingerprint and setup role ---
-        SdpFingerprint? fingerprint = null;
-        string? dtlsSetup = null;
-        var remoteFp = offeredAudio.Fingerprint ?? remoteOffer.Fingerprint;
-        var remoteSetup = offeredAudio.DtlsSetup ?? remoteOffer.DtlsSetup;
-
-        // Answer with DTLS only when the peer actually offered it (remote fingerprint
-        // present) and SDES did not already win — the keying methods are mutually
-        // exclusive per m-line (RFC 5763). Note RFC 5763 §6.6 signals DTLS on RTP/SAVP(F)
-        // profiles too, not only UDP/TLS/* — the fingerprint decides, not the profile.
-        if (localOptions?.Dtls is not null && remoteFp is not null && localCrypto is null)
-        {
-            fingerprint = new SdpFingerprint
-            {
-                Algorithm = localOptions.Dtls.Algorithm,
-                Value = localOptions.Dtls.Fingerprint
-            };
-            dtlsSetup = ResolveAnswerSetup(remoteSetup);
-        }
-
-        // Fail closed: a secure-profile offer we can key neither via SDES nor via DTLS
-        // cannot be answered — silently downgrading to plain RTP is not allowed.
-        if (localCrypto is null && fingerprint is null && IsSdesSecuredProfile(offeredAudio.Profile))
-            return new SdpOfferAnswerResult { Success = false };
-
-        // A DTLS-keyed profile additionally requires a DTLS answer — an SDES answer on
-        // UDP/TLS/* would contradict the profile's keying method.
-        if (fingerprint is null && SdpSecurityInspector.IsDtlsProfile(offeredAudio.Profile))
-            return new SdpOfferAnswerResult { Success = false };
-
-        // --- ICE credentials (RFC 8839) ---
-        var ice = localOptions?.Ice;
-
-        // --- Profile: mirror remote profile for DTLS/SAVP ---
-        var profile = ResolveAnswerProfile(offeredAudio.Profile);
-
-        var answerMedia = new SdpMediaDescription
-        {
-            MediaType = "audio",
-            Port = localEndPoint.Port,
-            Profile = profile,
-            Codecs = negotiated,
-            Direction = answerDirection,
-            Fmtp = carriedFmtp,
-            Ptime = ptime,
-            Mid = mid,
-            Msid = localOptions?.AudioMsid,
-            RtcpMux = rtcpMux,
-            Crypto = crypto,
-            Fingerprint = fingerprint,
-            DtlsSetup = dtlsSetup,
-            IceUfrag = ice?.Ufrag,
-            IcePwd = ice?.Pwd,
-            IceOptions = ice?.Options,
-            Candidates = ice?.Candidates ?? [],
-            // Echo the MID SDES extension (RFC 9143) when the BUNDLE offer advertised it (no-op otherwise).
-            Extensions = BuildAnswerExtmaps(offeredAudio.Extensions, WithMidExtension([]))
-        };
-
-        // RFC 3264 §6: the answer must carry one m-line per offered m-line, in offer
-        // order. Video is negotiated when enabled; anything else (or unanswerable
-        // video) is declined with a zero-port mirror.
+        // RFC 3264 §6: one answer m-line per offered m-line, in offer order (mid preserved 1:1, RFC 8829
+        // §5.3.1). Multi-track (RFC 8843): under BUNDLE every audio and video m-line is answered — they all
+        // share the one local port. Without BUNDLE only the first of each media type is answered; a second
+        // same-type m-line would need its own local port, so it is declined with a zero-port mirror.
+        var isBundle = group is not null;
         var answerLines = new List<SdpMediaDescription>(remoteOffer.Media.Count);
         var videoAnswered = false;
         foreach (var offered in remoteOffer.Media)
         {
             if (ReferenceEquals(offered, offeredAudio))
             {
-                answerLines.Add(answerMedia);
+                answerLines.Add(primaryAudio.Media);
                 continue;
             }
 
-            // Only the first video m-line is negotiated — a second one (screenshare
-            // pattern) would share the single local video port and break demux.
-            var videoAnswer = videoAnswered
+            if (offered.MediaType.Equals("audio", StringComparison.OrdinalIgnoreCase))
+            {
+                // A further audio m-line beyond the primary: negotiated only under BUNDLE (shared port).
+                var extraAudio = isBundle
+                    ? TryNegotiateAudioAnswer(offered, remoteOffer, localOptions, localCapabilities, localDirection, localEndPoint)
+                    : null;
+                answerLines.Add(extraAudio?.Media ?? BuildDisabledMirror(offered));
+                continue;
+            }
+
+            // Video: the first, or any under BUNDLE. A second video without BUNDLE would share the single
+            // local video port and break demux.
+            var videoAnswer = videoAnswered && !isBundle
                 ? null
                 : TryNegotiateVideoAnswerMedia(offered, remoteOffer, localOptions, answerDirection);
             videoAnswered |= videoAnswer is not null;
@@ -427,13 +336,114 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
         {
             Success = true,
             Answer = answer,
-            NegotiatedCodecs = negotiated,
-            RtcpMuxNegotiated = rtcpMux,
-            RemoteFingerprint = remoteFp,
-            RemoteDtlsSetup = remoteSetup,
-            NegotiatedCrypto = remoteCrypto,
-            LocalCrypto = localCrypto
+            NegotiatedCodecs = primaryAudio.NegotiatedCodecs,
+            RtcpMuxNegotiated = primaryAudio.RtcpMuxNegotiated,
+            RemoteFingerprint = primaryAudio.RemoteFingerprint,
+            RemoteDtlsSetup = primaryAudio.RemoteDtlsSetup,
+            NegotiatedCrypto = primaryAudio.NegotiatedCrypto,
+            LocalCrypto = primaryAudio.LocalCrypto
         };
+    }
+
+    // Negotiates the answer m-line for one offered audio m-line (RFC 3264 §6): codec intersection, rtcp-mux
+    // confirm (RFC 5761), per-m-line SDES/DTLS keying with fail-closed (RFC 4568/5763), ptime/fmtp carry, and
+    // the MID extension echo (RFC 9143). Returns null — a decline — when the m-line is not answerable audio:
+    // disabled/zero-port, no real (non-telephone-event) codec, or a secure profile keyable neither via SDES
+    // (no answerable a=crypto) nor via DTLS (no fingerprint / local identity). Shared by the primary audio and,
+    // under BUNDLE, every further audio m-line, so multi-track audio answers key identically to the 1+1 path.
+    private static AudioAnswerNegotiation? TryNegotiateAudioAnswer(
+        SdpMediaDescription offered,
+        SdpSessionDescription remoteOffer,
+        SdpMediaOptions? localOptions,
+        IReadOnlyList<SdpCodecDefinition> localCapabilities,
+        SdpMediaDirection localDirection,
+        IPEndPoint localEndPoint)
+    {
+        if (!offered.MediaType.Equals("audio", StringComparison.OrdinalIgnoreCase)
+            || offered.Disabled || offered.Port <= 0)
+        {
+            return null;
+        }
+
+        var negotiated = NegotiateCodecs(offered.Codecs, localCapabilities);
+
+        // At least one real audio codec — an answer of only telephone-event would be an audio-less call.
+        if (!negotiated.Any(c => !c.Name.Equals("telephone-event", StringComparison.OrdinalIgnoreCase)))
+            return null;
+
+        var answerDirection = ResolveAnswerDirection(offered.Direction, localDirection);
+
+        // Carry fmtp from the offer for accepted payload types, reflect ptime, confirm rtcp-mux only when
+        // offered (RFC 3264 §6.1 / RFC 5761 §5.1.1 — the answer cannot enable mux the offer did not advertise).
+        var acceptedPts = new HashSet<int>(negotiated.Select(c => c.PayloadType));
+        var carriedFmtp = offered.Fmtp.Where(f => acceptedPts.Contains(f.PayloadType)).ToArray();
+        var ptime = offered.Ptime;
+        var rtcpMux = offered.RtcpMux;
+
+        // SDES crypto (RFC 4568 §5.1.3): answer the first supported suite with our OWN key. Ignored on a
+        // DTLS-keyed profile (fingerprint-keyed; any a=crypto on UDP/TLS/* must be ignored, RFC 5763 / HARD-S1).
+        IReadOnlyList<SdpCryptoAttribute> crypto = [];
+        SdpCryptoAttribute? localCrypto = null;
+        SdpCryptoAttribute? remoteCrypto = null;
+        if (offered.Crypto.Count > 0 && !SdpSecurityInspector.IsDtlsProfile(offered.Profile))
+        {
+            var sdes = SdesCryptoSelector.SelectAnswer(offered.Crypto);
+            if (sdes is not null)
+            {
+                localCrypto = sdes.LocalAnswer;
+                remoteCrypto = sdes.RemoteOffer;
+                crypto = [localCrypto];
+            }
+        }
+
+        // DTLS (RFC 5763): fingerprint answer only when the peer offered one and SDES did not win — the keying
+        // methods are mutually exclusive per m-line. The fingerprint decides, not the profile (§6.6).
+        SdpFingerprint? fingerprint = null;
+        string? dtlsSetup = null;
+        var remoteFp = offered.Fingerprint ?? remoteOffer.Fingerprint;
+        var remoteSetup = offered.DtlsSetup ?? remoteOffer.DtlsSetup;
+        if (localOptions?.Dtls is not null && remoteFp is not null && localCrypto is null)
+        {
+            fingerprint = new SdpFingerprint
+            {
+                Algorithm = localOptions.Dtls.Algorithm,
+                Value = localOptions.Dtls.Fingerprint
+            };
+            dtlsSetup = ResolveAnswerSetup(remoteSetup);
+        }
+
+        // Fail closed: a secure-profile offer keyable neither via SDES nor DTLS is declined, never answered in
+        // the clear (RFC 3264 §5.1). A DTLS-keyed profile additionally requires a DTLS answer.
+        if (localCrypto is null && fingerprint is null && IsSdesSecuredProfile(offered.Profile))
+            return null;
+        if (fingerprint is null && SdpSecurityInspector.IsDtlsProfile(offered.Profile))
+            return null;
+
+        var ice = localOptions?.Ice;
+        var media = new SdpMediaDescription
+        {
+            MediaType = "audio",
+            Port = localEndPoint.Port,
+            Profile = ResolveAnswerProfile(offered.Profile),
+            Codecs = negotiated,
+            Direction = answerDirection,
+            Fmtp = carriedFmtp,
+            Ptime = ptime,
+            Mid = offered.Mid,
+            Msid = localOptions?.AudioMsid,
+            RtcpMux = rtcpMux,
+            Crypto = crypto,
+            Fingerprint = fingerprint,
+            DtlsSetup = dtlsSetup,
+            IceUfrag = ice?.Ufrag,
+            IcePwd = ice?.Pwd,
+            IceOptions = ice?.Options,
+            Candidates = ice?.Candidates ?? [],
+            // Echo the MID SDES extension (RFC 9143) when the BUNDLE offer advertised it (no-op otherwise).
+            Extensions = BuildAnswerExtmaps(offered.Extensions, WithMidExtension([]))
+        };
+
+        return new AudioAnswerNegotiation(media, negotiated, rtcpMux, remoteFp, remoteSetup, remoteCrypto, localCrypto);
     }
 
     // -------------------------------------------------------------------------
