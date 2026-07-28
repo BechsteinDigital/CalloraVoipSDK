@@ -1,4 +1,4 @@
-using CalloraVoipSdk.Core.Infrastructure.Sip.Observability;
+using CalloraVoipSdk.Core.Application.Observability;
 
 namespace CalloraVoipSdk;
 

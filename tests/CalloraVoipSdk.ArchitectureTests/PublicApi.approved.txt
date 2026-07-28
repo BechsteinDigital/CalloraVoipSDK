@@ -187,6 +187,31 @@
   CalloraVoipSdk.Core.Application.Media.VideoSender.RecommendedBitrateBps : System.Nullable<System.Int64> { get }
   CalloraVoipSdk.Core.Application.Media.VideoSender.RecommendedBitrateChanged : event System.EventHandler<CalloraVoipSdk.Core.Application.Media.VideoBitrateRecommendationEventArgs>
   CalloraVoipSdk.Core.Application.Media.VideoSender.SendAsync(CalloraVoipSdk.Core.Application.Media.VideoFrame frame, System.Threading.CancellationToken ct = default) : System.Threading.Tasks.Task
+  CalloraVoipSdk.Core.Application.Observability.ISipTelemetrySink.PublishCdr(CalloraVoipSdk.Core.Application.Observability.SipCdrRecord record) : System.Void
+  CalloraVoipSdk.Core.Application.Observability.ISipTelemetrySink.PublishEvent(CalloraVoipSdk.Core.Application.Observability.SipEventRecord record) : System.Void
+  CalloraVoipSdk.Core.Application.Observability.ISipTelemetrySink.PublishMetric(CalloraVoipSdk.Core.Application.Observability.SipMetricRecord record) : System.Void
+  CalloraVoipSdk.Core.Application.Observability.SipCdrRecord..ctor()
+  CalloraVoipSdk.Core.Application.Observability.SipCdrRecord.CallId : System.String { get, init }
+  CalloraVoipSdk.Core.Application.Observability.SipCdrRecord.Duration : System.TimeSpan { get }
+  CalloraVoipSdk.Core.Application.Observability.SipCdrRecord.EndedAt : System.DateTimeOffset { get, init }
+  CalloraVoipSdk.Core.Application.Observability.SipCdrRecord.LocalUri : System.String { get, init }
+  CalloraVoipSdk.Core.Application.Observability.SipCdrRecord.Outcome : System.String { get, init }
+  CalloraVoipSdk.Core.Application.Observability.SipCdrRecord.RemoteUri : System.String { get, init }
+  CalloraVoipSdk.Core.Application.Observability.SipCdrRecord.StartedAt : System.DateTimeOffset { get, init }
+  CalloraVoipSdk.Core.Application.Observability.SipCdrRecord.TraceId : System.String { get, init }
+  CalloraVoipSdk.Core.Application.Observability.SipEventRecord..ctor()
+  CalloraVoipSdk.Core.Application.Observability.SipEventRecord.Attributes : System.Collections.Generic.IReadOnlyDictionary<System.String, System.String> { get, init }
+  CalloraVoipSdk.Core.Application.Observability.SipEventRecord.CallId : System.String { get, init }
+  CalloraVoipSdk.Core.Application.Observability.SipEventRecord.CorrelationId : System.String { get, init }
+  CalloraVoipSdk.Core.Application.Observability.SipEventRecord.EventType : System.String { get, init }
+  CalloraVoipSdk.Core.Application.Observability.SipEventRecord.Timestamp : System.DateTimeOffset { get, init }
+  CalloraVoipSdk.Core.Application.Observability.SipEventRecord.TraceId : System.String { get, init }
+  CalloraVoipSdk.Core.Application.Observability.SipMetricRecord..ctor()
+  CalloraVoipSdk.Core.Application.Observability.SipMetricRecord.Labels : System.Collections.Generic.IReadOnlyDictionary<System.String, System.String> { get, init }
+  CalloraVoipSdk.Core.Application.Observability.SipMetricRecord.Name : System.String { get, init }
+  CalloraVoipSdk.Core.Application.Observability.SipMetricRecord.Timestamp : System.DateTimeOffset { get, init }
+  CalloraVoipSdk.Core.Application.Observability.SipMetricRecord.TraceId : System.String { get, init }
+  CalloraVoipSdk.Core.Application.Observability.SipMetricRecord.Value : System.Double { get, init }
   CalloraVoipSdk.Core.Application.Ports.Audio.AudioConnectionParameters..ctor()
   CalloraVoipSdk.Core.Application.Ports.Audio.AudioConnectionParameters.ClockRate : System.Int32 { get, init }
   CalloraVoipSdk.Core.Application.Ports.Audio.AudioConnectionParameters.CodecName : System.String { get, init }
@@ -257,6 +282,11 @@
   CalloraVoipSdk.Core.Application.Ports.Sdp.SdpVideoNegotiationOptions.OfferSrtpKeyParams : System.String { get, init }
   CalloraVoipSdk.Core.Application.Ports.Sdp.SdpVideoNegotiationOptions.Port : System.Int32 { get, init }
   CalloraVoipSdk.Core.Application.Ports.Sdp.SdpVideoNegotiationOptions.PreferredCodecNames : System.Collections.Generic.IReadOnlyList<System.String> { get, init }
+  CalloraVoipSdk.Core.Application.Ports.Security.TlsConfiguration..ctor()
+  CalloraVoipSdk.Core.Application.Ports.Security.TlsConfiguration.AcceptUntrustedCertificates : System.Boolean { get, init }
+  CalloraVoipSdk.Core.Application.Ports.Security.TlsConfiguration.CertificatePassword : System.String { get, init }
+  CalloraVoipSdk.Core.Application.Ports.Security.TlsConfiguration.CertificatePath : System.String { get, init }
+  CalloraVoipSdk.Core.Application.Ports.Security.TlsConfiguration.ExpectedSipDomain : System.String { get, init }
   CalloraVoipSdk.Core.Application.Ports.Video.IVideoDevice.Connect(CalloraVoipSdk.Core.Application.Media.IVideoReceiver receiver, CalloraVoipSdk.Core.Application.Media.IVideoSender sender, CalloraVoipSdk.Core.Application.Ports.Video.VideoConnectionParameters parameters) : System.Void
   CalloraVoipSdk.Core.Application.Ports.Video.IVideoDevice.Disconnect() : System.Void
   CalloraVoipSdk.Core.Application.Ports.Video.IVideoDevice.Name : System.String { get }
@@ -631,46 +661,6 @@
   CalloraVoipSdk.Core.Domain.Security.SrtpPolicy.Disabled = enum-value
   CalloraVoipSdk.Core.Domain.Security.SrtpPolicy.Optional = enum-value
   CalloraVoipSdk.Core.Domain.Security.SrtpPolicy.Required = enum-value
-  CalloraVoipSdk.Core.Infrastructure.Media.AesGcmRecordingEncryptionProvider..ctor(System.ReadOnlySpan<System.Byte> key)
-  CalloraVoipSdk.Core.Infrastructure.Media.AesGcmRecordingEncryptionProvider.DecryptFileAsync(System.String encryptedFilePath, System.String decryptedOutputPath, System.Threading.CancellationToken ct = default) : System.Threading.Tasks.ValueTask
-  CalloraVoipSdk.Core.Infrastructure.Media.AesGcmRecordingEncryptionProvider.Dispose() : System.Void
-  CalloraVoipSdk.Core.Infrastructure.Media.AesGcmRecordingEncryptionProvider.EncryptFileAsync(System.String inputFilePath, System.String encryptedOutputPath, System.Threading.CancellationToken ct = default) : System.Threading.Tasks.ValueTask
-  CalloraVoipSdk.Core.Infrastructure.Media.AesGcmRecordingEncryptionProvider.FromPassphrase(System.String passphrase, System.ReadOnlySpan<System.Byte> salt, System.Int32 iterations = default) : CalloraVoipSdk.Core.Infrastructure.Media.AesGcmRecordingEncryptionProvider
-  CalloraVoipSdk.Core.Infrastructure.Media.AesGcmRecordingEncryptionProvider.OutputFileExtension : System.String { get }
-  CalloraVoipSdk.Core.Infrastructure.Security.SipDomainCertificateValidator.GetSubjectAlternativeNames(System.Security.Cryptography.X509Certificates.X509Certificate2 certificate) : System.Collections.Generic.IReadOnlyList<System.String>
-  CalloraVoipSdk.Core.Infrastructure.Security.SipDomainCertificateValidator.ValidateSipDomain(System.Security.Cryptography.X509Certificates.X509Certificate2 certificate, System.String sipDomain) : System.Boolean
-  CalloraVoipSdk.Core.Infrastructure.Security.TlsConfiguration..ctor()
-  CalloraVoipSdk.Core.Infrastructure.Security.TlsConfiguration.AcceptUntrustedCertificates : System.Boolean { get, init }
-  CalloraVoipSdk.Core.Infrastructure.Security.TlsConfiguration.CertificatePassword : System.String { get, init }
-  CalloraVoipSdk.Core.Infrastructure.Security.TlsConfiguration.CertificatePath : System.String { get, init }
-  CalloraVoipSdk.Core.Infrastructure.Security.TlsConfiguration.ExpectedSipDomain : System.String { get, init }
-  CalloraVoipSdk.Core.Infrastructure.Security.TlsConfiguration.GetCertificate() : System.Security.Cryptography.X509Certificates.X509Certificate2
-  CalloraVoipSdk.Core.Infrastructure.Security.TlsConfiguration.ValidatePeerCertificateSipDomain(System.Security.Cryptography.X509Certificates.X509Certificate2 certificate) : System.Boolean
-  CalloraVoipSdk.Core.Infrastructure.Sip.Observability.ISipTelemetrySink.PublishCdr(CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipCdrRecord record) : System.Void
-  CalloraVoipSdk.Core.Infrastructure.Sip.Observability.ISipTelemetrySink.PublishEvent(CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipEventRecord record) : System.Void
-  CalloraVoipSdk.Core.Infrastructure.Sip.Observability.ISipTelemetrySink.PublishMetric(CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipMetricRecord record) : System.Void
-  CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipCdrRecord..ctor()
-  CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipCdrRecord.CallId : System.String { get, init }
-  CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipCdrRecord.Duration : System.TimeSpan { get }
-  CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipCdrRecord.EndedAt : System.DateTimeOffset { get, init }
-  CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipCdrRecord.LocalUri : System.String { get, init }
-  CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipCdrRecord.Outcome : System.String { get, init }
-  CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipCdrRecord.RemoteUri : System.String { get, init }
-  CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipCdrRecord.StartedAt : System.DateTimeOffset { get, init }
-  CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipCdrRecord.TraceId : System.String { get, init }
-  CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipEventRecord..ctor()
-  CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipEventRecord.Attributes : System.Collections.Generic.IReadOnlyDictionary<System.String, System.String> { get, init }
-  CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipEventRecord.CallId : System.String { get, init }
-  CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipEventRecord.CorrelationId : System.String { get, init }
-  CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipEventRecord.EventType : System.String { get, init }
-  CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipEventRecord.Timestamp : System.DateTimeOffset { get, init }
-  CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipEventRecord.TraceId : System.String { get, init }
-  CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipMetricRecord..ctor()
-  CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipMetricRecord.Labels : System.Collections.Generic.IReadOnlyDictionary<System.String, System.String> { get, init }
-  CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipMetricRecord.Name : System.String { get, init }
-  CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipMetricRecord.Timestamp : System.DateTimeOffset { get, init }
-  CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipMetricRecord.TraceId : System.String { get, init }
-  CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipMetricRecord.Value : System.Double { get, init }
   CalloraVoipSdk.DependencyInjection.CalloraBuilder.AddWebRtc(System.Action<CalloraVoipSdk.WebRtc.WebRtcOptions> configure = default) : CalloraVoipSdk.DependencyInjection.CalloraWebRtcBuilder
   CalloraVoipSdk.DependencyInjection.CalloraBuilder.WithAudioDevice() : CalloraVoipSdk.DependencyInjection.CalloraBuilder
   CalloraVoipSdk.DependencyInjection.CalloraBuilder.WithIce(System.Action<CalloraVoipSdk.IceOptions> configure) : CalloraVoipSdk.DependencyInjection.CalloraBuilder
@@ -831,9 +821,9 @@
   CalloraVoipSdk.ISessionManager.ActiveCalls : System.Collections.Generic.IReadOnlyCollection<CalloraVoipSdk.Core.Domain.Calls.ICall> { get }
   CalloraVoipSdk.ISessionManager.ActivePlaybacks : System.Collections.Generic.IReadOnlyCollection<CalloraVoipSdk.Core.Application.Media.IPlaybackSession> { get }
   CalloraVoipSdk.ISessionManager.ActiveRecordings : System.Collections.Generic.IReadOnlyCollection<CalloraVoipSdk.Core.Application.Media.IRecordingSession> { get }
-  CalloraVoipSdk.ITelemetryManager.CdrPublished : event System.EventHandler<CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipCdrRecord>
-  CalloraVoipSdk.ITelemetryManager.EventPublished : event System.EventHandler<CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipEventRecord>
-  CalloraVoipSdk.ITelemetryManager.MetricPublished : event System.EventHandler<CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipMetricRecord>
+  CalloraVoipSdk.ITelemetryManager.CdrPublished : event System.EventHandler<CalloraVoipSdk.Core.Application.Observability.SipCdrRecord>
+  CalloraVoipSdk.ITelemetryManager.EventPublished : event System.EventHandler<CalloraVoipSdk.Core.Application.Observability.SipEventRecord>
+  CalloraVoipSdk.ITelemetryManager.MetricPublished : event System.EventHandler<CalloraVoipSdk.Core.Application.Observability.SipMetricRecord>
   CalloraVoipSdk.IVoipClient.AttachDefaultAudioAsync(CalloraVoipSdk.Core.Domain.Calls.ICall call, System.Threading.CancellationToken ct = default) : System.Threading.Tasks.Task
   CalloraVoipSdk.IVoipClient.AttachDefaultVideoAsync(CalloraVoipSdk.Core.Domain.Calls.ICall call, System.Threading.CancellationToken ct = default) : System.Threading.Tasks.Task
   CalloraVoipSdk.IVoipClient.Calls : CalloraVoipSdk.Core.Application.Calls.ICallManager { get }
@@ -902,9 +892,9 @@
   CalloraVoipSdk.SipTransport.Udp = enum-value
   CalloraVoipSdk.SipTransport.Ws = enum-value
   CalloraVoipSdk.SipTransport.Wss = enum-value
-  CalloraVoipSdk.TelemetryManager.CdrPublished : event System.EventHandler<CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipCdrRecord>
-  CalloraVoipSdk.TelemetryManager.EventPublished : event System.EventHandler<CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipEventRecord>
-  CalloraVoipSdk.TelemetryManager.MetricPublished : event System.EventHandler<CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipMetricRecord>
+  CalloraVoipSdk.TelemetryManager.CdrPublished : event System.EventHandler<CalloraVoipSdk.Core.Application.Observability.SipCdrRecord>
+  CalloraVoipSdk.TelemetryManager.EventPublished : event System.EventHandler<CalloraVoipSdk.Core.Application.Observability.SipEventRecord>
+  CalloraVoipSdk.TelemetryManager.MetricPublished : event System.EventHandler<CalloraVoipSdk.Core.Application.Observability.SipMetricRecord>
   CalloraVoipSdk.VoipClient..ctor(CalloraVoipSdk.VoipConfiguration config = default)
   CalloraVoipSdk.VoipClient.AttachDefaultAudioAsync(CalloraVoipSdk.Core.Domain.Calls.ICall call, System.Threading.CancellationToken ct = default) : System.Threading.Tasks.Task
   CalloraVoipSdk.VoipClient.AttachDefaultVideoAsync(CalloraVoipSdk.Core.Domain.Calls.ICall call, System.Threading.CancellationToken ct = default) : System.Threading.Tasks.Task
@@ -964,7 +954,7 @@
   CalloraVoipSdk.VoipConfiguration.RequireSecureSignalingForSdes : System.Boolean { get, init }
   CalloraVoipSdk.VoipConfiguration.Services : System.IServiceProvider { get, init }
   CalloraVoipSdk.VoipConfiguration.SrtpPolicy : CalloraVoipSdk.Core.Domain.Security.SrtpPolicy { get, init }
-  CalloraVoipSdk.VoipConfiguration.Tls : CalloraVoipSdk.Core.Infrastructure.Security.TlsConfiguration { get, init }
+  CalloraVoipSdk.VoipConfiguration.Tls : CalloraVoipSdk.Core.Application.Ports.Security.TlsConfiguration { get, init }
   CalloraVoipSdk.VoipConfiguration.UserAgent : System.String { get, init }
   CalloraVoipSdk.VoipOptions..ctor()
   CalloraVoipSdk.VoipOptions.AudioDevice : CalloraVoipSdk.Core.Application.Ports.Audio.IAudioDevice { get, set }
@@ -983,7 +973,7 @@
   CalloraVoipSdk.VoipOptions.PreferredVideoCodecs : System.Collections.Generic.IReadOnlyList<System.String> { get, set }
   CalloraVoipSdk.VoipOptions.RequireSecureSignalingForSdes : System.Boolean { get, set }
   CalloraVoipSdk.VoipOptions.SrtpPolicy : CalloraVoipSdk.Core.Domain.Security.SrtpPolicy { get, set }
-  CalloraVoipSdk.VoipOptions.Tls : CalloraVoipSdk.Core.Infrastructure.Security.TlsConfiguration { get, set }
+  CalloraVoipSdk.VoipOptions.Tls : CalloraVoipSdk.Core.Application.Ports.Security.TlsConfiguration { get, set }
   CalloraVoipSdk.VoipOptions.UserAgent : System.String { get, set }
   CalloraVoipSdk.WebRtc.DtmfTone..ctor(System.Byte ToneCode, System.Int32 DurationMs)
   CalloraVoipSdk.WebRtc.DtmfTone.Deconstruct(out System.Byte ToneCode, out System.Int32 DurationMs) : System.Void
@@ -1141,6 +1131,9 @@ TYPE class CalloraVoipSdk.Core.Application.Media.VideoBitrateRecommendationEvent
 TYPE class CalloraVoipSdk.Core.Application.Media.VideoFrameReceivedEventArgs
 TYPE class CalloraVoipSdk.Core.Application.Media.VideoReceiver
 TYPE class CalloraVoipSdk.Core.Application.Media.VideoSender
+TYPE class CalloraVoipSdk.Core.Application.Observability.SipCdrRecord
+TYPE class CalloraVoipSdk.Core.Application.Observability.SipEventRecord
+TYPE class CalloraVoipSdk.Core.Application.Observability.SipMetricRecord
 TYPE class CalloraVoipSdk.Core.Application.Ports.Audio.AudioConnectionParameters
 TYPE class CalloraVoipSdk.Core.Application.Ports.Audio.AudioDeviceDescriptor
 TYPE class CalloraVoipSdk.Core.Application.Ports.Audio.AudioDeviceFormat
@@ -1149,6 +1142,7 @@ TYPE class CalloraVoipSdk.Core.Application.Ports.Sdp.SdpDtlsNegotiationOptions
 TYPE class CalloraVoipSdk.Core.Application.Ports.Sdp.SdpIceNegotiationOptions
 TYPE class CalloraVoipSdk.Core.Application.Ports.Sdp.SdpMediaNegotiationOptions
 TYPE class CalloraVoipSdk.Core.Application.Ports.Sdp.SdpVideoNegotiationOptions
+TYPE class CalloraVoipSdk.Core.Application.Ports.Security.TlsConfiguration
 TYPE class CalloraVoipSdk.Core.Application.Ports.Video.VideoConnectionParameters
 TYPE class CalloraVoipSdk.Core.Domain.Calls.CallActionResult
 TYPE class CalloraVoipSdk.Core.Domain.Calls.CallIceCandidate
@@ -1171,12 +1165,6 @@ TYPE class CalloraVoipSdk.Core.Domain.Lines.ReregisterOptions
 TYPE class CalloraVoipSdk.Core.Domain.Lines.SipAccount
 TYPE class CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage
 TYPE class CalloraVoipSdk.Core.Domain.Security.SrtpDecisionReasonCodes
-TYPE class CalloraVoipSdk.Core.Infrastructure.Media.AesGcmRecordingEncryptionProvider
-TYPE class CalloraVoipSdk.Core.Infrastructure.Security.SipDomainCertificateValidator
-TYPE class CalloraVoipSdk.Core.Infrastructure.Security.TlsConfiguration
-TYPE class CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipCdrRecord
-TYPE class CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipEventRecord
-TYPE class CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipMetricRecord
 TYPE class CalloraVoipSdk.DependencyInjection.CalloraBuilder
 TYPE class CalloraVoipSdk.DependencyInjection.CalloraHostedService
 TYPE class CalloraVoipSdk.DependencyInjection.CalloraStunServerBuilder
@@ -1255,6 +1243,7 @@ TYPE interface CalloraVoipSdk.Core.Application.Media.IRecordingEncryptionProvide
 TYPE interface CalloraVoipSdk.Core.Application.Media.IRecordingSession
 TYPE interface CalloraVoipSdk.Core.Application.Media.IVideoReceiver
 TYPE interface CalloraVoipSdk.Core.Application.Media.IVideoSender
+TYPE interface CalloraVoipSdk.Core.Application.Observability.ISipTelemetrySink
 TYPE interface CalloraVoipSdk.Core.Application.Ports.Audio.IAudioDevice
 TYPE interface CalloraVoipSdk.Core.Application.Ports.Audio.IAudioDeviceRuntimeControl
 TYPE interface CalloraVoipSdk.Core.Application.Ports.Sdp.ISdpNegotiator
@@ -1262,7 +1251,6 @@ TYPE interface CalloraVoipSdk.Core.Application.Ports.Video.IVideoDevice
 TYPE interface CalloraVoipSdk.Core.Domain.Calls.ICall
 TYPE interface CalloraVoipSdk.Core.Domain.Calls.IReferSubscription
 TYPE interface CalloraVoipSdk.Core.Domain.Lines.IPhoneLine
-TYPE interface CalloraVoipSdk.Core.Infrastructure.Sip.Observability.ISipTelemetrySink
 TYPE interface CalloraVoipSdk.Hosting.IStunServerHost
 TYPE interface CalloraVoipSdk.Hosting.ITurnServerHost
 TYPE interface CalloraVoipSdk.IDeviceManager

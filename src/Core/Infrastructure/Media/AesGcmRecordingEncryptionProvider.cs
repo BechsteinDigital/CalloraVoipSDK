@@ -17,7 +17,7 @@ namespace CalloraVoipSdk.Core.Infrastructure.Media;
 /// truncation or reordering fail the GCM authentication. The long-term key is held in memory for the
 /// provider's lifetime; call <see cref="Dispose"/> to zero it.
 /// </remarks>
-public sealed class AesGcmRecordingEncryptionProvider : IRecordingEncryptionProvider, IDisposable
+internal sealed class AesGcmRecordingEncryptionProvider : IRecordingEncryptionProvider, IDisposable
 {
     private const string MagicV2 = "VREC2"; // chunked/streaming (this implementation)
     private const string MagicV1 = "VREC1"; // legacy whole-file blob, still decryptable

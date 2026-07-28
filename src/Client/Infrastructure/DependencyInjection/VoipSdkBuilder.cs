@@ -1,6 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
+using CalloraVoipSdk.Core.Application.Observability;
 using CalloraVoipSdk.Core.Application.Ports.Audio;
-using CalloraVoipSdk.Core.Infrastructure.Sip.Observability;
 using CalloraVoipSdk.WebRtc;
 
 namespace CalloraVoipSdk.DependencyInjection;

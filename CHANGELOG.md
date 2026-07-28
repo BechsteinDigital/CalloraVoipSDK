@@ -19,6 +19,32 @@ accumulate the consumer-visible changes for 4.7.0.
   bundle has no video track, the peer did not advertise `nack pli`, or the built-in 500 ms throttle still
   holds. Additive — the existing 1 audio + 1 video API is unchanged.
 
+### Changed
+
+#### Public API surface cleanup (preview-only namespace moves)
+Public types that were exported from the `Core.Infrastructure.*` layer — a violation of the "infrastructure
+stays an internal implementation detail" rule — were relocated to the `Core.Application.*` layer where the
+public seam belongs. These are **consumer-visible namespace changes** (permitted while in preview); consumers
+referencing these types must update their `using` directives:
+
+- **SIP telemetry contract** moved from `CalloraVoipSdk.Core.Infrastructure.Sip.Observability` to
+  **`CalloraVoipSdk.Core.Application.Observability`**: `ISipTelemetrySink`, `SipEventRecord`, `SipMetricRecord`,
+  `SipCdrRecord`. The type shapes are unchanged; the built-in sink implementations remain internal
+  infrastructure detail. `ITelemetryManager`/`TelemetryManager` event args now surface the new namespace.
+- **`TlsConfiguration`** moved from `CalloraVoipSdk.Core.Infrastructure.Security` to
+  **`CalloraVoipSdk.Core.Application.Ports.Security`** and is now a pure configuration DTO. The certificate
+  behavior (`GetCertificate()`, `ValidatePeerCertificateSipDomain()`) that previously lived on the type is now
+  handled internally by the SIP transport and is **no longer part of the public surface**. The DTO's data
+  properties (`CertificatePath`, `CertificatePassword`, `AcceptUntrustedCertificates`, `ExpectedSipDomain`)
+  and the `VoipConfiguration.Tls` / `VoipOptions.Tls` configuration flow are unchanged.
+
+Additionally, two types that were public only by accident are now `internal`, matching their intended
+implementation-detail status (the public seam is the corresponding interface):
+
+- `AesGcmRecordingEncryptionProvider` (the public contract remains
+  `CalloraVoipSdk.Core.Application.Media.IRecordingEncryptionProvider`).
+- `SipDomainCertificateValidator` (an internal RFC 5922 helper of the TLS transport).
+
 ### Internal / in progress (not yet consumer-visible)
 - **Multi-track SDP groundwork.** The shared SDP negotiator can now generate and answer *N* BUNDLE m-lines
   with numeric mids (offer + answer). This is **internal only** — there is **no public multi-track API yet**,

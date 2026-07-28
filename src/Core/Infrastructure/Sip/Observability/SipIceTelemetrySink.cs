@@ -1,3 +1,4 @@
+using CalloraVoipSdk.Core.Application.Observability;
 using CalloraVoipSdk.Core.Application.Ports.Connectivity;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Sip.Observability;

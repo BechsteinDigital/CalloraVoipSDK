@@ -8,7 +8,7 @@ using CalloraVoipSdk.Core.Application.Ports.Sdp;
 using CalloraVoipSdk.Core.Infrastructure.Rtp;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
 using CalloraVoipSdk.Core.Infrastructure.Sdp;
-using CalloraVoipSdk.Core.Infrastructure.Sip.Observability;
+using CalloraVoipSdk.Core.Application.Observability;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Signaling;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Wire;
 using CalloraVoipSdk.Core.Domain.Security;

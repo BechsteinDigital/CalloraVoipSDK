@@ -21,6 +21,7 @@ using CalloraVoipSdk.Core.Infrastructure.Media;
 using CalloraVoipSdk.Core.Infrastructure.Rtp;
 using CalloraVoipSdk.Core.Infrastructure.Rtcp.Wire;
 using CalloraVoipSdk.Core.Infrastructure.Sdp;
+using CalloraVoipSdk.Core.Application.Observability;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Adapters;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Authentication;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Observability;

@@ -1,5 +1,5 @@
 using Microsoft.Extensions.Logging;
-using CalloraVoipSdk.Core.Infrastructure.Security;
+using CalloraVoipSdk.Core.Application.Ports.Security;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Sip.Transport;
 

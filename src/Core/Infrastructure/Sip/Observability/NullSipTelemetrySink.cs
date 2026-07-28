@@ -1,3 +1,5 @@
+using CalloraVoipSdk.Core.Application.Observability;
+
 namespace CalloraVoipSdk.Core.Infrastructure.Sip.Observability;
 
 /// <summary>
