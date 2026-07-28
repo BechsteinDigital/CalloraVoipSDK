@@ -101,6 +101,15 @@ Encoded frames arrive on <a class="xref" href="CalloraVoipSdk.WebRtc.RemoteTrack
 </dd>
     </dl>
     <dl class="jumplist">
+      <dt><a class="xref" href="CalloraVoipSdk.WebRtc.VideoTrackOptions.html">VideoTrackOptions</a></dt>
+      <dd><p>Deeper control for <a class="xref" href="CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_AddVideoTrack_CalloraVoipSdk_WebRtc_VideoTrackOptions_">AddVideoTrack(VideoTrackOptions)</a>: the track's
+direction, its codec preferences, send-side simulcast layers, and the MediaStream it belongs to. Every
+field is optional — <code>new VideoTrackOptions()</code> yields a send-recv track using the client's configured
+<a class="xref" href="CalloraVoipSdk.WebRtc.WebRtcConfiguration.html#CalloraVoipSdk_WebRtc_WebRtcConfiguration_VideoCodecs">VideoCodecs</a>, matching the parameterless
+<a class="xref" href="CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_AddVideoTrack">AddVideoTrack()</a> happy path.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
       <dt><a class="xref" href="CalloraVoipSdk.WebRtc.WebRtcClient.html">WebRtcClient</a></dt>
       <dd><p>The WebRTC peer facade (Level 1). Builds signalling-neutral <a class="xref" href="CalloraVoipSdk.WebRtc.IPeerConnection.html">IPeerConnection</a>s that run
 ICE, DTLS-SRTP, BUNDLE and RTP/RTCP internally; the app owns signalling and the codec (transport
@@ -225,6 +234,14 @@ a multi-peer app (e.g. a conference) can enumerate its live connections without 
 </dd>
     </dl>
     <dl class="jumplist">
+      <dt><a class="xref" href="CalloraVoipSdk.WebRtc.IVideoTrack.html">IVideoTrack</a></dt>
+      <dd><p>A handle to an outbound video track added before the first offer with
+<a class="xref" href="CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_AddVideoTrack">AddVideoTrack()</a> (its own <code>m=video</code> line on the shared BUNDLE
+transport). Send encoded frames on this track with <a class="xref" href="CalloraVoipSdk.WebRtc.IVideoTrack.html#CalloraVoipSdk_WebRtc_IVideoTrack_SendFrameAsync_System_ReadOnlyMemory_System_Byte__System_UInt32_System_Threading_CancellationToken_">SendFrameAsync(ReadOnlyMemory&lt;byte&gt;, uint, CancellationToken)</a>;
+each track carries its own SSRC, so frames sent on distinct handles never collide (RFC 3550 §8.1).</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
       <dt><a class="xref" href="CalloraVoipSdk.WebRtc.IWebRtcClient.html">IWebRtcClient</a></dt>
       <dd><p>The WebRTC peer facade — the happy-path entry point for building signalling-neutral peer
 connections. Mirrors the SIP <code>IVoipClient</code>; the advanced peer-registry manager tier is added in a
@@ -292,6 +309,13 @@ Enums
       <dd><p>Lifecycle state of a WebRTC <a class="xref" href="CalloraVoipSdk.WebRtc.IPeerConnection.html">IPeerConnection</a>, modelled on the W3C
 <code>RTCPeerConnectionState</code> (RFC 8829): a signalling-neutral view of where the peer is between
 creation and teardown. ICE consent and the DTLS handshake drive the transitions.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="CalloraVoipSdk.WebRtc.TrackDirection.html">TrackDirection</a></dt>
+      <dd><p>The negotiated direction of a media track's m-line (RFC 3264 §5.1): whether this peer sends and/or
+receives media on it. Distinct from <a class="xref" href="CalloraVoipSdk.WebRtc.MediaDirection.html">MediaDirection</a>, which labels the in/out direction an
+<a class="xref" href="CalloraVoipSdk.WebRtc.IMediaTap.html">IMediaTap</a> observes; this is the SDP directionality a track is offered with.</p>
 </dd>
     </dl>
     <dl class="jumplist">

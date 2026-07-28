@@ -2927,6 +2927,20 @@
     },
     {
       "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.WebRtc.IVideoTrack.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.WebRtc.IVideoTrack.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.WebRtc.IVideoTrack",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.WebRtc.IVideoTrack.yml\" sourcestartlinenumber=\"1\">A handle to an outbound video track added before the first offer with\n<xref href=\"CalloraVoipSdk.WebRtc.IPeerConnection.AddVideoTrack\" data-throw-if-not-resolved=\"false\"></xref> (its own <code>m=video</code> line on the shared BUNDLE\ntransport). Send encoded frames on this track with <xref href=\"CalloraVoipSdk.WebRtc.IVideoTrack.SendFrameAsync(System.ReadOnlyMemory%7bSystem.Byte%7d%2cSystem.UInt32%2cSystem.Threading.CancellationToken)\" data-throw-if-not-resolved=\"false\"></xref>;\neach track carries its own SSRC, so frames sent on distinct handles never collide (RFC 3550 §8.1).</p>\n"
+    },
+    {
+      "type": "ManagedReference",
       "source_relative_path": "docs/portal/_api/CalloraVoipSdk.WebRtc.IWebRtcClient.yml",
       "output": {
         ".html": {
@@ -3081,6 +3095,20 @@
     },
     {
       "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.WebRtc.TrackDirection.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.WebRtc.TrackDirection.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.WebRtc.TrackDirection",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.WebRtc.TrackDirection.yml\" sourcestartlinenumber=\"1\">The negotiated direction of a media track's m-line (RFC 3264 §5.1): whether this peer sends and/or\nreceives media on it. Distinct from <xref href=\"CalloraVoipSdk.WebRtc.MediaDirection\" data-throw-if-not-resolved=\"false\"></xref>, which labels the in/out direction an\n<xref href=\"CalloraVoipSdk.WebRtc.IMediaTap\" data-throw-if-not-resolved=\"false\"></xref> observes; this is the SDP directionality a track is offered with.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
       "source_relative_path": "docs/portal/_api/CalloraVoipSdk.WebRtc.TrackKind.yml",
       "output": {
         ".html": {
@@ -3092,6 +3120,20 @@
       "IsMRef": true,
       "Title": "CalloraVoipSdk.WebRtc.TrackKind",
       "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.WebRtc.TrackKind.yml\" sourcestartlinenumber=\"1\">The media kind of a remote WebRTC track surfaced by <xref href=\"CalloraVoipSdk.WebRtc.IPeerConnection.TrackReceived\" data-throw-if-not-resolved=\"false\"></xref>.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.WebRtc.VideoTrackOptions.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.WebRtc.VideoTrackOptions.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.WebRtc.VideoTrackOptions",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.WebRtc.VideoTrackOptions.yml\" sourcestartlinenumber=\"1\">Deeper control for <xref href=\"CalloraVoipSdk.WebRtc.IPeerConnection.AddVideoTrack(CalloraVoipSdk.WebRtc.VideoTrackOptions)\" data-throw-if-not-resolved=\"false\"></xref>: the track's\ndirection, its codec preferences, send-side simulcast layers, and the MediaStream it belongs to. Every\nfield is optional — <code>new VideoTrackOptions()</code> yields a send-recv track using the client's configured\n<xref href=\"CalloraVoipSdk.WebRtc.WebRtcConfiguration.VideoCodecs\" data-throw-if-not-resolved=\"false\"></xref>, matching the parameterless\n<xref href=\"CalloraVoipSdk.WebRtc.IPeerConnection.AddVideoTrack\" data-throw-if-not-resolved=\"false\"></xref> happy path.</p>\n"
     },
     {
       "type": "ManagedReference",

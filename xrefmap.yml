@@ -11649,6 +11649,25 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.WebRtc.IPeerConnection.AddIceCandidateAsync
   nameWithType: IPeerConnection.AddIceCandidateAsync
+- uid: CalloraVoipSdk.WebRtc.IPeerConnection.AddVideoTrack
+  name: AddVideoTrack()
+  href: _api/CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_AddVideoTrack
+  commentId: M:CalloraVoipSdk.WebRtc.IPeerConnection.AddVideoTrack
+  fullName: CalloraVoipSdk.WebRtc.IPeerConnection.AddVideoTrack()
+  nameWithType: IPeerConnection.AddVideoTrack()
+- uid: CalloraVoipSdk.WebRtc.IPeerConnection.AddVideoTrack(CalloraVoipSdk.WebRtc.VideoTrackOptions)
+  name: AddVideoTrack(VideoTrackOptions)
+  href: _api/CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_AddVideoTrack_CalloraVoipSdk_WebRtc_VideoTrackOptions_
+  commentId: M:CalloraVoipSdk.WebRtc.IPeerConnection.AddVideoTrack(CalloraVoipSdk.WebRtc.VideoTrackOptions)
+  fullName: CalloraVoipSdk.WebRtc.IPeerConnection.AddVideoTrack(CalloraVoipSdk.WebRtc.VideoTrackOptions)
+  nameWithType: IPeerConnection.AddVideoTrack(VideoTrackOptions)
+- uid: CalloraVoipSdk.WebRtc.IPeerConnection.AddVideoTrack*
+  name: AddVideoTrack
+  href: _api/CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_AddVideoTrack_
+  commentId: Overload:CalloraVoipSdk.WebRtc.IPeerConnection.AddVideoTrack
+  isSpec: "True"
+  fullName: CalloraVoipSdk.WebRtc.IPeerConnection.AddVideoTrack
+  nameWithType: IPeerConnection.AddVideoTrack
 - uid: CalloraVoipSdk.WebRtc.IPeerConnection.AttachMediaTap(CalloraVoipSdk.WebRtc.IMediaTap)
   name: AttachMediaTap(IMediaTap)
   href: _api/CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_AttachMediaTap_CalloraVoipSdk_WebRtc_IMediaTap_
@@ -11901,6 +11920,63 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.WebRtc.IPeerConnectionManager.Count
   nameWithType: IPeerConnectionManager.Count
+- uid: CalloraVoipSdk.WebRtc.IVideoTrack
+  name: IVideoTrack
+  href: _api/CalloraVoipSdk.WebRtc.IVideoTrack.html
+  commentId: T:CalloraVoipSdk.WebRtc.IVideoTrack
+  fullName: CalloraVoipSdk.WebRtc.IVideoTrack
+  nameWithType: IVideoTrack
+- uid: CalloraVoipSdk.WebRtc.IVideoTrack.Direction
+  name: Direction
+  href: _api/CalloraVoipSdk.WebRtc.IVideoTrack.html#CalloraVoipSdk_WebRtc_IVideoTrack_Direction
+  commentId: P:CalloraVoipSdk.WebRtc.IVideoTrack.Direction
+  fullName: CalloraVoipSdk.WebRtc.IVideoTrack.Direction
+  nameWithType: IVideoTrack.Direction
+- uid: CalloraVoipSdk.WebRtc.IVideoTrack.Direction*
+  name: Direction
+  href: _api/CalloraVoipSdk.WebRtc.IVideoTrack.html#CalloraVoipSdk_WebRtc_IVideoTrack_Direction_
+  commentId: Overload:CalloraVoipSdk.WebRtc.IVideoTrack.Direction
+  isSpec: "True"
+  fullName: CalloraVoipSdk.WebRtc.IVideoTrack.Direction
+  nameWithType: IVideoTrack.Direction
+- uid: CalloraVoipSdk.WebRtc.IVideoTrack.Mid
+  name: Mid
+  href: _api/CalloraVoipSdk.WebRtc.IVideoTrack.html#CalloraVoipSdk_WebRtc_IVideoTrack_Mid
+  commentId: P:CalloraVoipSdk.WebRtc.IVideoTrack.Mid
+  fullName: CalloraVoipSdk.WebRtc.IVideoTrack.Mid
+  nameWithType: IVideoTrack.Mid
+- uid: CalloraVoipSdk.WebRtc.IVideoTrack.Mid*
+  name: Mid
+  href: _api/CalloraVoipSdk.WebRtc.IVideoTrack.html#CalloraVoipSdk_WebRtc_IVideoTrack_Mid_
+  commentId: Overload:CalloraVoipSdk.WebRtc.IVideoTrack.Mid
+  isSpec: "True"
+  fullName: CalloraVoipSdk.WebRtc.IVideoTrack.Mid
+  nameWithType: IVideoTrack.Mid
+- uid: CalloraVoipSdk.WebRtc.IVideoTrack.SendFrameAsync(System.ReadOnlyMemory{System.Byte},System.UInt32,System.Threading.CancellationToken)
+  name: SendFrameAsync(ReadOnlyMemory<byte>, uint, CancellationToken)
+  href: _api/CalloraVoipSdk.WebRtc.IVideoTrack.html#CalloraVoipSdk_WebRtc_IVideoTrack_SendFrameAsync_System_ReadOnlyMemory_System_Byte__System_UInt32_System_Threading_CancellationToken_
+  commentId: M:CalloraVoipSdk.WebRtc.IVideoTrack.SendFrameAsync(System.ReadOnlyMemory{System.Byte},System.UInt32,System.Threading.CancellationToken)
+  name.vb: SendFrameAsync(ReadOnlyMemory(Of Byte), UInteger, CancellationToken)
+  fullName: CalloraVoipSdk.WebRtc.IVideoTrack.SendFrameAsync(System.ReadOnlyMemory<byte>, uint, System.Threading.CancellationToken)
+  fullName.vb: CalloraVoipSdk.WebRtc.IVideoTrack.SendFrameAsync(System.ReadOnlyMemory(Of Byte), UInteger, System.Threading.CancellationToken)
+  nameWithType: IVideoTrack.SendFrameAsync(ReadOnlyMemory<byte>, uint, CancellationToken)
+  nameWithType.vb: IVideoTrack.SendFrameAsync(ReadOnlyMemory(Of Byte), UInteger, CancellationToken)
+- uid: CalloraVoipSdk.WebRtc.IVideoTrack.SendFrameAsync(System.String,System.ReadOnlyMemory{System.Byte},System.UInt32,System.Threading.CancellationToken)
+  name: SendFrameAsync(string, ReadOnlyMemory<byte>, uint, CancellationToken)
+  href: _api/CalloraVoipSdk.WebRtc.IVideoTrack.html#CalloraVoipSdk_WebRtc_IVideoTrack_SendFrameAsync_System_String_System_ReadOnlyMemory_System_Byte__System_UInt32_System_Threading_CancellationToken_
+  commentId: M:CalloraVoipSdk.WebRtc.IVideoTrack.SendFrameAsync(System.String,System.ReadOnlyMemory{System.Byte},System.UInt32,System.Threading.CancellationToken)
+  name.vb: SendFrameAsync(String, ReadOnlyMemory(Of Byte), UInteger, CancellationToken)
+  fullName: CalloraVoipSdk.WebRtc.IVideoTrack.SendFrameAsync(string, System.ReadOnlyMemory<byte>, uint, System.Threading.CancellationToken)
+  fullName.vb: CalloraVoipSdk.WebRtc.IVideoTrack.SendFrameAsync(String, System.ReadOnlyMemory(Of Byte), UInteger, System.Threading.CancellationToken)
+  nameWithType: IVideoTrack.SendFrameAsync(string, ReadOnlyMemory<byte>, uint, CancellationToken)
+  nameWithType.vb: IVideoTrack.SendFrameAsync(String, ReadOnlyMemory(Of Byte), UInteger, CancellationToken)
+- uid: CalloraVoipSdk.WebRtc.IVideoTrack.SendFrameAsync*
+  name: SendFrameAsync
+  href: _api/CalloraVoipSdk.WebRtc.IVideoTrack.html#CalloraVoipSdk_WebRtc_IVideoTrack_SendFrameAsync_
+  commentId: Overload:CalloraVoipSdk.WebRtc.IVideoTrack.SendFrameAsync
+  isSpec: "True"
+  fullName: CalloraVoipSdk.WebRtc.IVideoTrack.SendFrameAsync
+  nameWithType: IVideoTrack.SendFrameAsync
 - uid: CalloraVoipSdk.WebRtc.IWebRtcClient
   name: IWebRtcClient
   href: _api/CalloraVoipSdk.WebRtc.IWebRtcClient.html
@@ -12351,6 +12427,19 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.WebRtc.RemoteTrack.Kind
   nameWithType: RemoteTrack.Kind
+- uid: CalloraVoipSdk.WebRtc.RemoteTrack.Mid
+  name: Mid
+  href: _api/CalloraVoipSdk.WebRtc.RemoteTrack.html#CalloraVoipSdk_WebRtc_RemoteTrack_Mid
+  commentId: P:CalloraVoipSdk.WebRtc.RemoteTrack.Mid
+  fullName: CalloraVoipSdk.WebRtc.RemoteTrack.Mid
+  nameWithType: RemoteTrack.Mid
+- uid: CalloraVoipSdk.WebRtc.RemoteTrack.Mid*
+  name: Mid
+  href: _api/CalloraVoipSdk.WebRtc.RemoteTrack.html#CalloraVoipSdk_WebRtc_RemoteTrack_Mid_
+  commentId: Overload:CalloraVoipSdk.WebRtc.RemoteTrack.Mid
+  isSpec: "True"
+  fullName: CalloraVoipSdk.WebRtc.RemoteTrack.Mid
+  nameWithType: RemoteTrack.Mid
 - uid: CalloraVoipSdk.WebRtc.RemoteTrack.StreamId
   name: StreamId
   href: _api/CalloraVoipSdk.WebRtc.RemoteTrack.html#CalloraVoipSdk_WebRtc_RemoteTrack_StreamId
@@ -12377,6 +12466,36 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.WebRtc.RemoteTrack.TrackId
   nameWithType: RemoteTrack.TrackId
+- uid: CalloraVoipSdk.WebRtc.TrackDirection
+  name: TrackDirection
+  href: _api/CalloraVoipSdk.WebRtc.TrackDirection.html
+  commentId: T:CalloraVoipSdk.WebRtc.TrackDirection
+  fullName: CalloraVoipSdk.WebRtc.TrackDirection
+  nameWithType: TrackDirection
+- uid: CalloraVoipSdk.WebRtc.TrackDirection.Inactive
+  name: Inactive
+  href: _api/CalloraVoipSdk.WebRtc.TrackDirection.html#CalloraVoipSdk_WebRtc_TrackDirection_Inactive
+  commentId: F:CalloraVoipSdk.WebRtc.TrackDirection.Inactive
+  fullName: CalloraVoipSdk.WebRtc.TrackDirection.Inactive
+  nameWithType: TrackDirection.Inactive
+- uid: CalloraVoipSdk.WebRtc.TrackDirection.RecvOnly
+  name: RecvOnly
+  href: _api/CalloraVoipSdk.WebRtc.TrackDirection.html#CalloraVoipSdk_WebRtc_TrackDirection_RecvOnly
+  commentId: F:CalloraVoipSdk.WebRtc.TrackDirection.RecvOnly
+  fullName: CalloraVoipSdk.WebRtc.TrackDirection.RecvOnly
+  nameWithType: TrackDirection.RecvOnly
+- uid: CalloraVoipSdk.WebRtc.TrackDirection.SendOnly
+  name: SendOnly
+  href: _api/CalloraVoipSdk.WebRtc.TrackDirection.html#CalloraVoipSdk_WebRtc_TrackDirection_SendOnly
+  commentId: F:CalloraVoipSdk.WebRtc.TrackDirection.SendOnly
+  fullName: CalloraVoipSdk.WebRtc.TrackDirection.SendOnly
+  nameWithType: TrackDirection.SendOnly
+- uid: CalloraVoipSdk.WebRtc.TrackDirection.SendRecv
+  name: SendRecv
+  href: _api/CalloraVoipSdk.WebRtc.TrackDirection.html#CalloraVoipSdk_WebRtc_TrackDirection_SendRecv
+  commentId: F:CalloraVoipSdk.WebRtc.TrackDirection.SendRecv
+  fullName: CalloraVoipSdk.WebRtc.TrackDirection.SendRecv
+  nameWithType: TrackDirection.SendRecv
 - uid: CalloraVoipSdk.WebRtc.TrackKind
   name: TrackKind
   href: _api/CalloraVoipSdk.WebRtc.TrackKind.html
@@ -12395,6 +12514,64 @@ references:
   commentId: F:CalloraVoipSdk.WebRtc.TrackKind.Video
   fullName: CalloraVoipSdk.WebRtc.TrackKind.Video
   nameWithType: TrackKind.Video
+- uid: CalloraVoipSdk.WebRtc.VideoTrackOptions
+  name: VideoTrackOptions
+  href: _api/CalloraVoipSdk.WebRtc.VideoTrackOptions.html
+  commentId: T:CalloraVoipSdk.WebRtc.VideoTrackOptions
+  fullName: CalloraVoipSdk.WebRtc.VideoTrackOptions
+  nameWithType: VideoTrackOptions
+- uid: CalloraVoipSdk.WebRtc.VideoTrackOptions.Codecs
+  name: Codecs
+  href: _api/CalloraVoipSdk.WebRtc.VideoTrackOptions.html#CalloraVoipSdk_WebRtc_VideoTrackOptions_Codecs
+  commentId: P:CalloraVoipSdk.WebRtc.VideoTrackOptions.Codecs
+  fullName: CalloraVoipSdk.WebRtc.VideoTrackOptions.Codecs
+  nameWithType: VideoTrackOptions.Codecs
+- uid: CalloraVoipSdk.WebRtc.VideoTrackOptions.Codecs*
+  name: Codecs
+  href: _api/CalloraVoipSdk.WebRtc.VideoTrackOptions.html#CalloraVoipSdk_WebRtc_VideoTrackOptions_Codecs_
+  commentId: Overload:CalloraVoipSdk.WebRtc.VideoTrackOptions.Codecs
+  isSpec: "True"
+  fullName: CalloraVoipSdk.WebRtc.VideoTrackOptions.Codecs
+  nameWithType: VideoTrackOptions.Codecs
+- uid: CalloraVoipSdk.WebRtc.VideoTrackOptions.Direction
+  name: Direction
+  href: _api/CalloraVoipSdk.WebRtc.VideoTrackOptions.html#CalloraVoipSdk_WebRtc_VideoTrackOptions_Direction
+  commentId: P:CalloraVoipSdk.WebRtc.VideoTrackOptions.Direction
+  fullName: CalloraVoipSdk.WebRtc.VideoTrackOptions.Direction
+  nameWithType: VideoTrackOptions.Direction
+- uid: CalloraVoipSdk.WebRtc.VideoTrackOptions.Direction*
+  name: Direction
+  href: _api/CalloraVoipSdk.WebRtc.VideoTrackOptions.html#CalloraVoipSdk_WebRtc_VideoTrackOptions_Direction_
+  commentId: Overload:CalloraVoipSdk.WebRtc.VideoTrackOptions.Direction
+  isSpec: "True"
+  fullName: CalloraVoipSdk.WebRtc.VideoTrackOptions.Direction
+  nameWithType: VideoTrackOptions.Direction
+- uid: CalloraVoipSdk.WebRtc.VideoTrackOptions.SimulcastSendRids
+  name: SimulcastSendRids
+  href: _api/CalloraVoipSdk.WebRtc.VideoTrackOptions.html#CalloraVoipSdk_WebRtc_VideoTrackOptions_SimulcastSendRids
+  commentId: P:CalloraVoipSdk.WebRtc.VideoTrackOptions.SimulcastSendRids
+  fullName: CalloraVoipSdk.WebRtc.VideoTrackOptions.SimulcastSendRids
+  nameWithType: VideoTrackOptions.SimulcastSendRids
+- uid: CalloraVoipSdk.WebRtc.VideoTrackOptions.SimulcastSendRids*
+  name: SimulcastSendRids
+  href: _api/CalloraVoipSdk.WebRtc.VideoTrackOptions.html#CalloraVoipSdk_WebRtc_VideoTrackOptions_SimulcastSendRids_
+  commentId: Overload:CalloraVoipSdk.WebRtc.VideoTrackOptions.SimulcastSendRids
+  isSpec: "True"
+  fullName: CalloraVoipSdk.WebRtc.VideoTrackOptions.SimulcastSendRids
+  nameWithType: VideoTrackOptions.SimulcastSendRids
+- uid: CalloraVoipSdk.WebRtc.VideoTrackOptions.StreamId
+  name: StreamId
+  href: _api/CalloraVoipSdk.WebRtc.VideoTrackOptions.html#CalloraVoipSdk_WebRtc_VideoTrackOptions_StreamId
+  commentId: P:CalloraVoipSdk.WebRtc.VideoTrackOptions.StreamId
+  fullName: CalloraVoipSdk.WebRtc.VideoTrackOptions.StreamId
+  nameWithType: VideoTrackOptions.StreamId
+- uid: CalloraVoipSdk.WebRtc.VideoTrackOptions.StreamId*
+  name: StreamId
+  href: _api/CalloraVoipSdk.WebRtc.VideoTrackOptions.html#CalloraVoipSdk_WebRtc_VideoTrackOptions_StreamId_
+  commentId: Overload:CalloraVoipSdk.WebRtc.VideoTrackOptions.StreamId
+  isSpec: "True"
+  fullName: CalloraVoipSdk.WebRtc.VideoTrackOptions.StreamId
+  nameWithType: VideoTrackOptions.StreamId
 - uid: CalloraVoipSdk.WebRtc.WebRtcClient
   name: WebRtcClient
   href: _api/CalloraVoipSdk.WebRtc.WebRtcClient.html
