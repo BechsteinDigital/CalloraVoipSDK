@@ -118,13 +118,15 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             var trackMid = index.ToString(CultureInfo.InvariantCulture);
             mids.Add(trackMid);
 
+            // Per-track direction (RFC 3264): a track that set its own direction emits it; the default is
+            // SendRecv, so a list that leaves it unset stays byte-identical to the pre-direction multi-track path.
             mediaLines.Add(track.Kind.Equals("video", StringComparison.OrdinalIgnoreCase)
                 ? BuildVideoOfferMedia(
-                    track.Codecs, track.SimulcastSendRids, localEndPoint.Port, profile, direction,
+                    track.Codecs, track.SimulcastSendRids, localEndPoint.Port, profile, track.Direction,
                     trackMid, track.Msid, track.Crypto, track.HeaderExtensionUris,
                     bundle, rtcpMux, dtls, ice, sharedCandidates)
                 : BuildAudioOfferMedia(
-                    track.Codecs, localEndPoint.Port, profile, direction,
+                    track.Codecs, localEndPoint.Port, profile, track.Direction,
                     trackMid, track.Msid, track.Crypto, track.HeaderExtensionUris,
                     bundle, rtcpMux, dtls, ice, sharedCandidates));
         }

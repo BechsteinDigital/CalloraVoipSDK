@@ -79,7 +79,7 @@ public sealed class WebRtcOutboundVideoNegotiationTests
             {
                 LocalEndPoint = new IPEndPoint(IPAddress.Loopback, 0),
                 AudioCodecs = Pcmu,
-                Video = new SdpVideoMediaOptions { Port = 6002, Codecs = H264 },
+                VideoTracks = [new SdpVideoMediaOptions { Port = 6002, Codecs = H264 }],
                 Dtls = new SdpDtlsParameters { Algorithm = "sha-256", Fingerprint = "11:22:33" },
                 Ice = new SdpIceParameters { Ufrag = "localU", Pwd = "localpassword1234567890" },
             },

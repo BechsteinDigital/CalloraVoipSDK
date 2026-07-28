@@ -19,8 +19,14 @@ internal sealed record WebRtcPeerOptions
     /// <summary>Local audio codec capabilities offered/accepted on the audio m-line.</summary>
     public required IReadOnlyList<SdpCodecDefinition> AudioCodecs { get; init; }
 
-    /// <summary>Local video media capabilities, or null for an audio-only peer.</summary>
-    public SdpVideoMediaOptions? Video { get; init; }
+    /// <summary>
+    /// The config-time video tracks the peer offers, in order (P2c). An empty list is an audio-only peer;
+    /// a single entry is the historic <c>EnableVideo</c> primary video track (byte-identical to the pre-P2c
+    /// single-video offer). Further tracks the app adds at runtime via
+    /// <see cref="WebRtcPeerConnection.AddVideoTrack(WebRtcAddedVideoTrack)"/> are appended after these on the
+    /// numeric-MID multi-track path.
+    /// </summary>
+    public IReadOnlyList<SdpVideoMediaOptions> VideoTracks { get; init; } = [];
 
     /// <summary>Local DTLS-SRTP identity (fingerprint + setup role) signalled in the answer (RFC 5763).</summary>
     public required SdpDtlsParameters Dtls { get; init; }

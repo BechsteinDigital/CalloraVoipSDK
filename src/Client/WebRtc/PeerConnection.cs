@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Net;
 using CalloraVoipSdk.Core.Infrastructure.Rtp;
+using CalloraVoipSdk.Core.Infrastructure.Sdp;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Models;
 using CalloraVoipSdk.Core.Infrastructure.WebRtc;
 using Microsoft.Extensions.Logging;
@@ -19,6 +20,8 @@ internal sealed class PeerConnection : IPeerConnection
     private readonly RemoteTrackSet _tracks;
     private readonly MediaTapSet _taps;
     private readonly Action<IPeerConnection>? _onDisposed;
+    // The client's default video codecs (config VideoCodecs) for a track added without explicit codecs.
+    private readonly IReadOnlyList<string> _defaultVideoCodecs;
     private readonly BitrateMeter _outgoingBitrate = new();
     private readonly BitrateMeter _incomingBitrate = new();
     private readonly RateMeter _frameRate = new();
@@ -34,17 +37,26 @@ internal sealed class PeerConnection : IPeerConnection
     private EventHandler<DtmfTone>? _dtmfReceived;
     private EventHandler? _videoKeyFrameRequested;
 
-    public PeerConnection(WebRtcPeerConnection peer, ILogger<PeerConnection> logger, Action<IPeerConnection>? onDisposed = null)
+    public PeerConnection(
+        WebRtcPeerConnection peer,
+        ILogger<PeerConnection> logger,
+        Action<IPeerConnection>? onDisposed = null,
+        IReadOnlyList<string>? defaultVideoCodecs = null)
     {
         ArgumentNullException.ThrowIfNull(peer);
         ArgumentNullException.ThrowIfNull(logger);
         _peer = peer;
         _onDisposed = onDisposed;
+        _defaultVideoCodecs = defaultVideoCodecs ?? [];
         _tracks = new RemoteTrackSet(RaiseTrackReceived);
         _taps = new MediaTapSet(logger);
         _peer.ConnectionStateChanged += OnInternalStateChanged;
         _peer.AudioReceived += OnAudioReceived;
-        _peer.VideoFrameReceived += OnVideoReceived;
+        // Inbound video is projected via the MID-tagged event only (P2c): the peer fires it for EVERY video
+        // track — including the primary, for which the legacy untagged VideoFrameReceived also fires — so
+        // subscribing to both would double-deliver the primary track's frames. The MID-tagged path covers the
+        // 1+1 case (one MID) and the N case (one per m-line) with a single subscription.
+        _peer.VideoTrackFrameReceived += OnVideoTrackReceived;
         _peer.LocalIceCandidateDiscovered += OnLocalIceCandidate;
         _peer.DtmfReceived += OnDtmfReceived;
         _peer.VideoKeyFrameRequested += OnVideoKeyFrameRequested;
@@ -85,6 +97,55 @@ internal sealed class PeerConnection : IPeerConnection
     }
 
     public string CreateOffer() => _peer.CreateOffer();
+
+    public IVideoTrack AddVideoTrack() => AddVideoTrack(new VideoTrackOptions());
+
+    public IVideoTrack AddVideoTrack(VideoTrackOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        // Resolve the track's codecs: explicit names, else the client's configured default video codecs.
+        // VideoCodecCatalog rejects unknown names (consistent with the EnableVideo path) before the track is added.
+        var codecNames = options.Codecs ?? _defaultVideoCodecs;
+        foreach (var name in codecNames)
+        {
+            if (!VideoCodecCatalog.IsSupported(name))
+                throw new ArgumentException($"Unknown WebRTC video codec '{name}'.", nameof(options));
+        }
+
+        var mid = _peer.AddVideoTrack(new WebRtcAddedVideoTrack
+        {
+            Codecs = VideoCodecCatalog.Resolve(codecNames),
+            Direction = MapDirection(options.Direction),
+            SimulcastSendRids = options.SimulcastSendRids,
+            StreamId = options.StreamId,
+        });
+
+        // The handle routes each send through this facade's tap fan-out (so a recorder/analytics sees the
+        // outbound frame) and the peer's mid-targeted send-lease path (drained against dispose).
+        return new VideoTrack(
+            mid,
+            options.Direction,
+            (frame, ts, ct) =>
+            {
+                _taps.Video(MediaDirection.Outbound, frame, ts, isKeyFrame: false, rid: null);
+                return _peer.SendVideoTrackFrameAsync(mid, frame, ts, ct);
+            },
+            (rid, frame, ts, ct) =>
+            {
+                _taps.Video(MediaDirection.Outbound, frame, ts, isKeyFrame: false, rid: rid);
+                return _peer.SendVideoTrackFrameAsync(mid, rid, frame, ts, ct);
+            });
+    }
+
+    private static SdpMediaDirection MapDirection(TrackDirection direction) => direction switch
+    {
+        TrackDirection.SendRecv => SdpMediaDirection.SendRecv,
+        TrackDirection.SendOnly => SdpMediaDirection.SendOnly,
+        TrackDirection.RecvOnly => SdpMediaDirection.RecvOnly,
+        TrackDirection.Inactive => SdpMediaDirection.Inactive,
+        _ => SdpMediaDirection.SendRecv,
+    };
 
     public Task AddIceCandidateAsync(string candidate, CancellationToken cancellationToken = default)
         => _peer.AddIceCandidateAsync(candidate, cancellationToken);
@@ -245,7 +306,7 @@ internal sealed class PeerConnection : IPeerConnection
     {
         _peer.ConnectionStateChanged -= OnInternalStateChanged;
         _peer.AudioReceived -= OnAudioReceived;
-        _peer.VideoFrameReceived -= OnVideoReceived;
+        _peer.VideoTrackFrameReceived -= OnVideoTrackReceived;
         _peer.LocalIceCandidateDiscovered -= OnLocalIceCandidate;
         _peer.DtmfReceived -= OnDtmfReceived;
         _peer.VideoKeyFrameRequested -= OnVideoKeyFrameRequested;
@@ -271,11 +332,10 @@ internal sealed class PeerConnection : IPeerConnection
             var msid = _peer.RemoteAudioMsid;
             _tracks.EnsureAudioTrack(StreamId(msid), msid?.TrackId);
         }
-        if (_peer.HasRemoteVideo)
-        {
-            var msid = _peer.RemoteVideoMsid;
-            _tracks.EnsureVideoTrack(StreamId(msid), msid?.TrackId);
-        }
+        // One RemoteTrack per remote video m-line (P2c: N tracks), keyed by MID, so several remote cameras /
+        // screen-shares each surface a distinct track with the right MID/msid.
+        foreach (var video in _peer.RemoteVideoTracks)
+            _tracks.EnsureVideoTrack(video.Mid, StreamId(video.Msid), video.Msid?.TrackId);
     }
 
     private void OnInternalStateChanged(WebRtcConnectionState state)
@@ -325,12 +385,17 @@ internal sealed class PeerConnection : IPeerConnection
         _tracks.DeliverAudioFrame(StreamId(msid), msid?.TrackId, new EncodedFrame(payload, rtpTimestamp: null, isKeyFrame: false, presentationTimeUsec: null));
     }
 
-    private void OnVideoReceived(byte[] frame, uint rtpTimestamp, bool isKeyFrame)
+    // Mid-tagged inbound video (P2c): route each frame to its own RemoteTrack (by MID). The peer fires this
+    // for every video track (primary and added), so a single subscription covers 1+1 and N without the
+    // double-delivery the untagged event would cause on the primary.
+    private void OnVideoTrackReceived(string mid, byte[] frame, uint rtpTimestamp, bool isKeyFrame)
     {
         // Inbound RID demux is a later slice; the layer is not yet distinguished on the receive path.
         _taps.Video(MediaDirection.Inbound, frame, rtpTimestamp, isKeyFrame, rid: null);
-        var msid = _peer.RemoteVideoMsid;
-        _tracks.DeliverVideoFrame(StreamId(msid), msid?.TrackId, new EncodedFrame(frame, rtpTimestamp, isKeyFrame, presentationTimeUsec: null));
+        // The remote m-line's msid for this MID (for stream grouping); null when the remote advertised none.
+        var msid = _peer.RemoteVideoTracks.FirstOrDefault(t => string.Equals(t.Mid, mid, StringComparison.Ordinal))?.Msid
+            ?? _peer.RemoteVideoMsid;
+        _tracks.DeliverVideoFrame(mid, StreamId(msid), msid?.TrackId, new EncodedFrame(frame, rtpTimestamp, isKeyFrame, presentationTimeUsec: null));
     }
 
     // RFC 8830: a stream id of "-" means the track belongs to no MediaStream.

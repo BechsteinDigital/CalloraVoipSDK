@@ -352,11 +352,14 @@ public sealed class WebRtcPeerConnectionTests
             {
                 LocalEndPoint = new IPEndPoint(IPAddress.Loopback, 0),
                 AudioCodecs = audioCodecs,
-                Video = new SdpVideoMediaOptions
-                {
-                    Port = 6002,
-                    Codecs = [new SdpCodecDefinition { PayloadType = 96, Name = "H264", ClockRate = 90000 }],
-                },
+                VideoTracks =
+                [
+                    new SdpVideoMediaOptions
+                    {
+                        Port = 6002,
+                        Codecs = [new SdpCodecDefinition { PayloadType = 96, Name = "H264", ClockRate = 90000 }],
+                    },
+                ],
                 Dtls = new SdpDtlsParameters { Algorithm = "sha-256", Fingerprint = "11:22:33" },
                 Ice = new SdpIceParameters { Ufrag = "localU", Pwd = "localpassword1234567890" },
             },
