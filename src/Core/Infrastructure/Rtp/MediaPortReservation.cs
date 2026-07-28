@@ -42,8 +42,7 @@ internal sealed class MediaPortReservation : IDisposable
     public static MediaPortReservation Reserve(IPAddress bindAddress, int maxAttempts = 64)
     {
         ArgumentNullException.ThrowIfNull(bindAddress);
-        if (maxAttempts < 1)
-            throw new ArgumentOutOfRangeException(nameof(maxAttempts));
+        ArgumentOutOfRangeException.ThrowIfLessThan(maxAttempts, 1);
 
         for (var attempt = 0; attempt < maxAttempts; attempt++)
         {

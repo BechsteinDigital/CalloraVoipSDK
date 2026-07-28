@@ -4,7 +4,9 @@ using Microsoft.Extensions.Logging;
 using CalloraVoipSdk.Core.Application.Calls;
 using CalloraVoipSdk.Core.Application.Media;
 using CalloraVoipSdk.Core.Domain.Calls;
+using CalloraVoipSdk.Core.Application.Media;
 using CalloraVoipSdk.Core.Application.Ports.Sdp;
+using CalloraVoipSdk.Core.Infrastructure.Rtp;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
 using CalloraVoipSdk.Core.Infrastructure.Sdp;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Observability;
@@ -20,7 +22,7 @@ namespace CalloraVoipSdk.Core.Infrastructure.Sip.Adapters;
 /// Fires <see cref="ICallChannel.MediaParametersNegotiated"/> once the SDP exchange
 /// is complete so the application media orchestrator can set up RTP I/O.
 /// </summary>
-internal sealed class SipCoreCallChannel : ICallChannel
+internal sealed class SipCoreCallChannel : ICallChannel, IRtcpSocketHandoff
 {
     private readonly ILogger<SipCoreCallChannel> _logger;
     private readonly ISdpNegotiator _sdpNegotiator;
@@ -47,6 +49,11 @@ internal sealed class SipCoreCallChannel : ICallChannel
     // Pre-allocated local UDP socket so the port is known before the SDP offer is built.
     private readonly UdpClient _localMediaSocket;
     private readonly int _localMediaPort;
+
+    // The RTCP socket (media port + 1) reserved as a pair with the media socket and HELD until handed to
+    // the quality monitor (non-mux path); set to null once taken over or disposed. Holding it is what
+    // keeps N+1 from being stolen by a concurrent call between SDP publication and the monitor's bind.
+    private UdpClient? _localRtcpSocket;
 
     // Video (WebRTC phase 2): a second reserved UDP socket/port for the m=video line,
     // present only when video is enabled. Released before the video RtpSession binds it,
@@ -154,8 +161,13 @@ internal sealed class SipCoreCallChannel : ICallChannel
         _preferredCodecNames = preferredCodecNames;
         _configuredPublicMediaAddress = advertisedPublicMediaAddress;
 
-        // Bind on any address, port 0 → OS assigns a free port.
-        _localMediaSocket = new UdpClient(new IPEndPoint(IPAddress.Any, 0));
+        // Reserve the RTP/RTCP port pair as a unit (even N for RTP, odd N+1 for RTCP — RFC 3550 §11) and
+        // hold both. The media socket keeps its existing lifecycle (handed to the ICE agent for gathering /
+        // released so the RtpSession rebinds), while the RTCP socket is HELD and later handed to the quality
+        // monitor — closing the race where a concurrent call's random port grabbed this call's unbound N+1.
+        var audioReservation = MediaPortReservation.Reserve(IPAddress.Any);
+        _localMediaSocket = audioReservation.TakeRtpSocket();
+        _localRtcpSocket = audioReservation.TakeRtcpSocket();
         _localMediaPort = ((IPEndPoint)_localMediaSocket.Client.LocalEndPoint!).Port;
 
         if (_videoEnabled)
@@ -623,9 +635,19 @@ internal sealed class SipCoreCallChannel : ICallChannel
         _iceControlling,
         _localAnswerSdp ?? _localOfferSdp);
 
+    /// <inheritdoc />
+    public UdpClient? TakeRtcpSocket()
+    {
+        // Ownership moves to the caller (the RTCP quality monitor); the channel no longer disposes it.
+        var socket = _localRtcpSocket;
+        _localRtcpSocket = null;
+        return socket;
+    }
+
     /// <summary>
     /// Releases the port-reservation sockets so the audio and video RtpSessions can bind the same
-    /// ports. UdpClient.Dispose is idempotent; <see cref="Dispose"/> calls it again.
+    /// ports. UdpClient.Dispose is idempotent; <see cref="Dispose"/> calls it again. The held RTCP socket
+    /// is intentionally not released here — it is handed to the quality monitor (or disposed on teardown).
     /// </summary>
     private void ReleasePortReservationSockets()
     {
@@ -927,6 +949,7 @@ internal sealed class SipCoreCallChannel : ICallChannel
 
         _localMediaSocket.Dispose();
         _localVideoSocket?.Dispose();
+        _localRtcpSocket?.Dispose(); // no-op once handed off (set to null by TakeRtcpSocket)
 
         _audioTap.Dispose();
         _videoTap.Dispose();

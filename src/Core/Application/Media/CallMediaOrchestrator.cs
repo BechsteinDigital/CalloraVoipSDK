@@ -178,7 +178,15 @@ internal sealed class CallMediaOrchestrator : IDisposable
             sdkCall.SetMediaParameters(effectiveParameters);
 
         var session = _sessionFactory.Create(effectiveParameters);
-        var qualityMonitor = new CallRtcpQualityMonitor(session, effectiveParameters, _loggerFactory, _rtcpPacketCodec);
+
+        // Take the RTCP socket the channel reserved as a pair with the media socket (non-mux path) so the
+        // monitor binds a port it already owns, instead of a late bind that can race concurrent call setup.
+        System.Net.Sockets.UdpClient? rtcpSocket = null;
+        if (!effectiveParameters.RtcpMux && channel is IRtcpSocketHandoff rtcpHandoff)
+            rtcpSocket = rtcpHandoff.TakeRtcpSocket();
+
+        var qualityMonitor = new CallRtcpQualityMonitor(
+            session, effectiveParameters, _loggerFactory, _rtcpPacketCodec, preBoundRtcpSocket: rtcpSocket);
         Action<CallAudioFrame> inboundHandler = frame => channel.DeliverInboundAudioFrame(frame);
         Action<byte, int> inboundDtmfHandler = (toneCode, durationMs) =>
             channel.DeliverInboundDtmf(toneCode, durationMs);
