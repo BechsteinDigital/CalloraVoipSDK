@@ -43,6 +43,19 @@
 3. **`ICall.RestartIceAsync(ct)`** + `Call.RestartIceAsync` (Guard `Connected`, Delegation). Test: Guard + Delegation.
 4. **E2E** (falls Harness vorhanden): Restart auf laufendem ICE-Call → neue Nominierung, Media-Kontinuität über den Swap.
 
+## ★ Umgesetzt (2026-07-28)
+
+Slices 1–3 umgesetzt in `471a4afc`; Review-Fix in `3766ee66`. Ergebnis:
+
+- **Slice 1** `ISipCallSession.ReinviteAsync` + `SipCallSession` — Hold/Unhold/Reinvite teilen jetzt einen gemeinsamen `SendReInviteAsync`-Helfer (DRY, verhaltensbewahrend; hielt `SipCallSession.cs` unter der 1000-Zeilen-Regel).
+- **Slice 2** `SipCoreCallChannel.RestartIceAsync` — Cache-Invalidierung → Re-Gather gleicher Socket → Re-Offer neue Creds → `ReinviteAsync`; `_iceControlling` erhalten.
+- **Slice 3** `ICall`/`Call.RestartIceAsync` — Guard `Connected`, Delegation.
+- **Review-Fix:** Guard prüft zusätzlich `RemoteOfferHasIce(session.RemoteSdp)` (RFC 8445 §5.4) — ein ausgehender Call mit ICE-fähigem SDK aber Plain-RTP-Peer wirft jetzt, statt ICE-Credentials an einen Nicht-ICE-Peer zu senden.
+
+**Test-Deckung:** `SipCoreCallChannelIceRestartTests` (neue Creds ≠ alte, gleicher Media-Port = Socket-Reuse, sendrecv, Nicht-ICE-Agent wirft, Peer-declined-ICE wirft), `CallIceRestartTests` (Guard + Delegation). Der Media-Kontinuitäts-**Round-Trip** (Re-Offer-Answer → Republish → neue ICE-Selektion auf altem Socket) läuft über den bestehenden #10-Generations-Swap und ist bereits durch `SrtpReofferContinuityTests` + `SipCoreCallChannelRekeyTests` gedeckt.
+
+**Slice 4 (Live-Media-Flow-E2E) bewusst nicht gebaut:** ein bespoke End-to-End-Restart mit echtem Media-Fluss (zwei Live-ICE-Agenten, STUN über Loopback) wäre redundant zur obigen Mechanik-Deckung und gehört inhaltlich zu **#62 Punkt 3** (Live-Interop/NAT-Matrix-Validierung) — dort gegen echte Peers (Asterisk/Browser) verifizieren.
+
 ## Nicht in Scope (Follow-up)
 
 - **Inbound-Restart** (Peer initiiert): `IceRestartDetector` in Produktion verdrahten + Doku-Fix „both" statt „and/or". Eigenes Paket — #62 Punkt 2 ist explizit *Initiation*.
