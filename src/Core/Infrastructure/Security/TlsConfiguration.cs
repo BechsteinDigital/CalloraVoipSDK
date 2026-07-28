@@ -46,29 +46,41 @@ public class TlsConfiguration
     /// </summary>
     public string? ExpectedSipDomain { get; init; }
 
+    private readonly object _certificateSync = new();
     private X509Certificate2? _certificate;
 
     /// <summary>
     /// Returns the configured X.509 certificate, loading it from disk on first
     /// call. Returns <see langword="null"/> when no certificate path is configured.
+    /// Thread-safe: concurrent first calls load the certificate exactly once.
     /// </summary>
     public X509Certificate2? GetCertificate()
     {
-        if (_certificate != null)
-            return _certificate;
-
         if (CertificatePath == null)
             return null;
 
-        _certificate = LoadCertificate(CertificatePath, CertificatePassword);
+        // Double-checked load under a lock so two concurrent callers cannot both construct an
+        // X509Certificate2 (the loser would be leaked, never disposed).
+        if (_certificate != null)
+            return _certificate;
+
+        lock (_certificateSync)
+        {
+            _certificate ??= LoadCertificate(CertificatePath, CertificatePassword);
+        }
+
         return _certificate;
     }
 
     private static X509Certificate2 LoadCertificate(string path, string? password)
     {
-#pragma warning disable SYSLIB0057
+#if NET9_0_OR_GREATER
+        // X509CertificateLoader replaces the obsolete X509Certificate2(path, password) constructor
+        // (SYSLIB0057). TLS identity certificates carry a private key, i.e. they are PKCS#12/PFX.
+        return X509CertificateLoader.LoadPkcs12FromFile(path, password);
+#else
         return new X509Certificate2(path, password);
-#pragma warning restore SYSLIB0057
+#endif
     }
 
     /// <summary>

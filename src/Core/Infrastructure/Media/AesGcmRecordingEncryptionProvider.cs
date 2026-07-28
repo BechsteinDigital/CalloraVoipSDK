@@ -6,13 +6,20 @@ namespace CalloraVoipSdk.Core.Infrastructure.Media;
 /// <summary>
 /// AES-256-GCM reference implementation for recording file encryption.
 /// </summary>
-public sealed class AesGcmRecordingEncryptionProvider : IRecordingEncryptionProvider
+/// <remarks>
+/// Holds the AES key in managed memory for its lifetime; call <see cref="Dispose"/> to zero it when the
+/// provider is no longer needed. The one-shot AES-GCM API requires the plaintext to be resident in memory,
+/// so encryption is O(file size) in RAM (encrypted in place to avoid a second full-size buffer); very large
+/// recordings that must stay within a tight RAM budget need a chunked-AEAD format instead (follow-up).
+/// </remarks>
+public sealed class AesGcmRecordingEncryptionProvider : IRecordingEncryptionProvider, IDisposable
 {
     private const string Magic = "VREC1";
     private const int NonceSize = 12;
     private const int TagSize = 16;
 
     private readonly byte[] _key;
+    private bool _disposed;
 
     /// <summary>
     /// Creates an encryption provider from a raw 32-byte AES key.
@@ -57,23 +64,26 @@ public sealed class AesGcmRecordingEncryptionProvider : IRecordingEncryptionProv
         string encryptedOutputPath,
         CancellationToken ct = default)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentException.ThrowIfNullOrWhiteSpace(inputFilePath);
         ArgumentException.ThrowIfNullOrWhiteSpace(encryptedOutputPath);
 
         var inputBytes = await File.ReadAllBytesAsync(inputFilePath, ct).ConfigureAwait(false);
-        var ciphertext = new byte[inputBytes.Length];
         var nonce = RandomNumberGenerator.GetBytes(NonceSize);
         var tag = new byte[TagSize];
 
         using (var aes = new AesGcm(_key, TagSize))
         {
+            // Encrypt in place: AES-GCM is a stream cipher, so the ciphertext may reuse the plaintext buffer.
+            // This avoids a second full-size array (the RAM footprint is now ~1x the file, not 2x).
             aes.Encrypt(
                 nonce,
                 inputBytes,
-                ciphertext,
+                inputBytes,
                 tag,
                 associatedData: null);
         }
+        var ciphertext = inputBytes;
 
         var directory = Path.GetDirectoryName(encryptedOutputPath);
         if (!string.IsNullOrWhiteSpace(directory))
@@ -93,5 +103,16 @@ public sealed class AesGcmRecordingEncryptionProvider : IRecordingEncryptionProv
         await stream.WriteAsync(tag, ct).ConfigureAwait(false);
         await stream.WriteAsync(ciphertext, ct).ConfigureAwait(false);
         await stream.FlushAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Zeroes the AES key held in memory. After disposal the provider can no longer encrypt.
+    /// </summary>
+    public void Dispose()
+    {
+        if (_disposed)
+            return;
+        _disposed = true;
+        CryptographicOperations.ZeroMemory(_key);
     }
 }
