@@ -45,11 +45,23 @@ The client also carries the high-level verbs most apps need directly:
 |----------|---------|---------|
 | `UserAgent` | `"CalloraVoipSdk/1.0"` | SIP `User-Agent` header |
 | `LoggerFactory` | `null` | `ILoggerFactory` for diagnostics |
+| `DefaultTransport` | `Udp` | Default outbound SIP transport: UDP / TCP / TLS / WS / WSS |
+| `Tls` | `null` | TLS settings for the TLS/WSS transports |
 | `SrtpPolicy` | `Optional` | `Disabled` / `Optional` / `Required` — see [SRTP/SRTCP](../guides/srtp-srtcp.md) |
+| `OfferDtlsSrtp` | `false` | Offer DTLS-SRTP keying (RFC 5763) instead of SDES |
+| `RequireSecureSignalingForSdes` | `false` | Refuse SDES keying over insecure signalling (UDP/TCP/WS) |
+| `DtlsCertificate` | `null` | Certificate for the DTLS-SRTP handshake; self-signed when unset |
 | `PreferredAudioCodecs` | `null` | Ordered codec preference for offers/answers |
+| `BridgeAudioFormat` | `Passthrough` | Wire format when bridging two calls (`Passthrough` or `Pcmu`) |
+| `EnableVideo` | `false` | Negotiate a video m-line ([transport-only](../guides/video-calls.md)) |
+| `PreferredVideoCodecs` | `null` | Ordered video codec preference |
+| `AudioDevice` | `SilenceAudioDevice` | Default audio device when none is attached |
+| `EnableAutomaticAudioDeviceSelection` | `true` | Load the platform audio package by reflection |
 | `MaxConcurrentCallsPerLine` | `10` | Guard against runaway call fan-out |
 | `InboundMediaTimeout` | `15 s` | Drop inbound calls with no media |
-| `Ice` | `IceConfiguration` | Opt-in ICE (unproven in production) |
+| `HangupHeldCallOnMediaSilence` | `false` | Also apply the media timeout to held calls |
+| `Ice` | `IceConfiguration` | Full ICE (RFC 8445/7675) — opt-in, off by default, unproven in production trunks |
+| `Services` | `null` | `IServiceProvider` used to resolve ports (DI composition) |
 
 ## Lifecycle
 

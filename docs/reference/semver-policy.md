@@ -5,8 +5,7 @@ Gültig für alle `CalloraVoipSdk.*` Pakete.
 ## Version-Schema
 
 - `MAJOR.MINOR.PATCH`
-- Vor erstem stabilem Release: `0.x.y` (aktuell `4.6.0-preview.2`)
-- Erstes stabiles Public Release: `1.0.0`
+- Aktuelle Release-Linie: `4.x` (aktuell `4.6.0`)
 
 ## Erhöhungsregeln
 
@@ -16,8 +15,8 @@ Gültig für alle `CalloraVoipSdk.*` Pakete.
 
 ## Release-Kanäle
 
-- Stable: `x.y.z`
-- Preview: `x.y.z-preview.n`
+- Stable: `x.y.z` (aktueller Kanal)
+- Preview: `x.y.z-preview.n` (nur für Vorabstände zwischen Releases)
 - RC: `x.y.z-rc.n`
 
 ## Paketversionen

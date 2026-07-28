@@ -33,7 +33,7 @@ src/
 │   └── Sdk/             Öffentliche ICE-Konfigurations-DTOs (Namespace CalloraVoipSdk)
 ├── Client/        Öffentliche Fassaden + DI
 │   ├── Application/     VoipClient/IVoipClient (Kompositionswurzel), Manager, Workflows, Module
-│   ├── WebRtc/          WebRtcClient/IPeerConnection (4.6-Preview, transport-only)
+│   ├── WebRtc/          WebRtcClient/IPeerConnection (transport-only)
 │   ├── Hosting/         StunServerHost/TurnServerHost (eigenes Server-Hosting)
 │   └── Infrastructure/  AddCalloraVoip(...), Options→Configuration-Mapping, HostedService
 ├── Audio/         Abstractions | Headless | Linux (PortAudio) | Windows (NAudio)
@@ -56,16 +56,17 @@ Typen sind entsprechend teuer.
 | Socket | einer pro m-line | ein 5-Tupel für alles (RFC 8843), MID/RID-Demux |
 | Keying | SDES (RFC 4568) **oder** DTLS-SRTP | nur DTLS-SRTP |
 | Jitter/PLC | adaptiver `JitterBuffer` + Playout-Loop + Concealment | kein Jitter-Buffer (dokumentiert); Video: `VideoReorderBuffer` |
-| Reparatur/Feedback | NACK/RTX, PLI, TWCC vollständig | **noch nicht** (Follow-ups in `BundledCallMediaSession`) |
+| Reparatur/Feedback | NACK/RTX, PLI/FIR, transport-cc vollständig (`VideoRtpStream`) | seit 4.6.0 ebenfalls vollständig: NACK/PLI/FIR (`VideoKeyFrameFeedback`, `VideoArrivalLossTracker`), RTX (`Retransmission/`), transport-cc über **eine** transportweite Ebene je Bundle (`BundledCongestionPlane`) |
+| RTCP | `CallRtcpQualityMonitor` (L3) | `BundledRtcpReporter` (SR/RR, per-SSRC-Reception, RTT) im Bundle selbst |
 
 ### 1.3 Die zwei Fassaden (ADR-012, „Two-Facade Composition")
 
 `VoipClient` (SIP) und `WebRtcClient` (WebRTC) spiegeln dasselbe Muster:
 mutable `*Options` → pure Mapping-Funktion → immutable `*Configuration` → Client →
 Fluent-Builder-Overrides (`PostConfigure`) → Modul-Registry als Plugin-Seam
-(`IVoipClientModule` / `IWebRtcClientModule`). Die WebRTC-Fassade ist erklärter
-**Preview-Stand**: nicht browser-validiert, kein SCTP/Datachannel, kein TCP/TLS-TURN,
-Empfangs-Simulcast (RID-Demux) offen.
+(`IVoipClientModule` / `IWebRtcClientModule`). Die WebRTC-Fassade ist seit 4.6.0
+browser-validiert (Chromium + Firefox, beide Rollen, in CI). Erklärte Scope-Grenzen:
+kein SCTP/Datachannel, kein TCP/TLS-TURN, Empfangs-Simulcast (RID-Demux) offen.
 
 ### 1.4 Konnektivität
 
@@ -109,7 +110,7 @@ Kurzfassung — Details und Fundstellen in [`ENGINEERING_RULES.md`](ENGINEERING_
 - .NET SDK **10.0.100** (`global.json`, rollForward latestFeature); Ziel-TFMs
   `net8.0;net9.0;net10.0` überall (ArchitectureTests nur net10.0).
 - Version kommt aus `src/Directory.Build.props` (`VersionPrefix` + `VersionSuffix`, aktuell
-  `4.6.0-preview.3`); Releases überschreiben per `/p:Version` aus dem Git-Tag.
+  `4.6.0`); Releases überschreiben per `/p:Version` aus dem Git-Tag.
 
 ```bash
 dotnet build CalloraVoipSdk.sln --configuration Release
@@ -124,17 +125,32 @@ sonst scheitert der PR an Analyzer-Warnungen.
 # 1. Architektur-Gates (laufen in CI zuerst)
 dotnet test tests/CalloraVoipSdk.ArchitectureTests --configuration Release
 
-# 2. Standard-Testlauf (wie CI: ohne Long-Soaks, ohne Interop)
+# 2. Standard-Testlauf (exakt der CI-Filter des build-and-test-Jobs)
 dotnet test CalloraVoipSdk.sln --configuration Release \
-  --filter "FullyQualifiedName!~CalloraVoipSdk.Core.Tests&Category!=SoakLong&Category!=Interop"
+  --filter "Category!=SoakLong&Category!=Interop&Category!=InteropFreeSwitch&Category!=BrowserInterop&Category!=Chaos&Category!=Perf&FullyQualifiedName!~ArchitectureTests"
 
-# 3. Interop (braucht laufenden Docker-Daemon; ohne Docker: stiller Skip!)
-dotnet test tests/CalloraVoipSdk.InteropTests -f net10.0 --filter "Category=Interop"
+# 3. Interop Asterisk (braucht laufenden Docker-Daemon; ohne Docker: stiller Skip!)
+dotnet test tests/CalloraVoipSdk.InteropTests -f net10.0 \
+  --filter "Category=Interop&Category!=InteropLocalMedia&Category!=InteropFreeSwitch"
 
-# 4. Long-Soaks (nightly; lokal mit reduzierten Parametern)
+# 4. Interop FreeSWITCH (nicht im PR-Gate — lokal ausführen)
+dotnet test tests/CalloraVoipSdk.InteropTests -f net10.0 --filter "Category=InteropFreeSwitch"
+
+# 5. Browser-Interop (Chromium + Firefox über Playwright)
+dotnet test tests/CalloraVoipSdk.BrowserInteropTests -f net10.0 --filter "Category=BrowserInterop"
+
+# 6. Chaos- und Perf-Gate (beide eigene PR-Jobs)
+dotnet test tests/CalloraVoipSdk.SoakTests -f net10.0 --filter "Category=Chaos"
+dotnet test tests/CalloraVoipSdk.SoakTests -f net10.0 --filter "Category=Perf"
+
+# 7. Long-Soaks (nightly via soak.yml; lokal mit reduzierten Parametern)
 SOAK_ITERATIONS=50 SOAK_DURATION_SECONDS=10 SOAK_ARTIFACT_DIR=/tmp/soak \
   dotnet test tests/CalloraVoipSdk.SoakTests -f net10.0 --filter "Category=SoakLong"
 ```
+
+CI-Jobs in `ci.yml`: `build-and-test` (Architektur-Gates + Standardlauf + Coverage), `interop`
+(Asterisk), `chaos`, `perf`, `browser-interop` (Chromium + Firefox). `soak.yml` fährt `SoakLong`
+nächtlich, `packages.yml` ist der Release-Pfad.
 
 Wissenswertes:
 - Core.IntegrationTests und SoakTests haben **Parallelisierung deaktiviert** (echte
@@ -143,8 +159,11 @@ Wissenswertes:
   `SOAK_DURATION_SECONDS`; `SOAK_ARTIFACT_DIR` aktiviert den JSON-Artefakt-Sink
   (Artefakte werden **vor** den Assertions geschrieben — auch Fehlläufe hinterlassen Daten).
 - Interop-Tests skippen ohne Docker **grün** (`DockerRequiredFactAttribute`) — ein grüner
-  Interop-Job beweist nichts, wenn Docker fehlte.
-- Der CI-Filter schließt das nicht existente `CalloraVoipSdk.Core.Tests` aus (Altlast).
+  Interop-Job beweist nichts, wenn Docker fehlte. Analog skippen Browser-Tests ohne installierte
+  Engine (`BrowserFactAttribute`); WebKit/Safari ist genau deshalb unverifiziert.
+- Browser-Interop läuft über `BrowserEngine` (Chromium/Firefox/WebKit) gegen die statischen
+  Peer-Seiten `peer.html` / `peer-offerer.html` / `peer-video.html` und die
+  `BrowserInteropSignalingBridge`.
 
 ### 3.3 Performance-Gate
 
@@ -158,17 +177,29 @@ dotnet run --project perf/CalloraVoipSdk.Core.Performance -c Release -- \
   --write-baseline perf/baselines/core-performance-baseline.json
 ```
 
-Achtung (Stand 2026-07-22): Das Gate wird **von keinem CI-Workflow aufgerufen**; die
-Baseline stammt von net8/2026-04. `Conferencing.Performance` referenziert ein nicht
-existentes Projekt und baut nicht; `Media.Performance` ist ein Skelett. Wer Perf-relevante
-Änderungen macht, führt das Gate manuell aus.
+**Zwei verschiedene Dinge nicht verwechseln (Stand 2026-07-28):**
+
+- Der **PR-Perf-Job** in `ci.yml` (`perf`) läuft `Category=Perf` aus den SoakTests
+  (`tests/CalloraVoipSdk.SoakTests/Perf/SrtpPerfGateTests.cs`) und hält den SRTP-Paket-Hotpath
+  über einem großzügigen Durchsatz-Boden — er fängt katastrophale Regressionen (Sync-over-async,
+  O(n²), Allokationsstürme), ohne an CI-CPU-Varianz zu flaken.
+- Der **Benchmark-Gate oben** (`perf/CalloraVoipSdk.Core.Performance` gegen
+  `perf/baselines/core-performance-baseline.json`) ist davon unabhängig und wird **weiterhin von
+  keinem Workflow aufgerufen**; die Baseline stammt von net8/2026-04. Wer perf-relevante Änderungen
+  macht, führt ihn manuell aus.
+
+`Conferencing.Performance` referenziert `src/Modules/Conferencing/…`, das es nicht (mehr) gibt —
+das Projekt baut nicht und ist bewusst nicht in der Solution. `Media.Performance` ist ein Skelett.
 
 ### 3.4 Release
 
 1. Tag `v*` pushen (oder `packages.yml` per Dispatch mit Versions-Input starten).
-2. Workflow baut, testet (derzeit **ungefiltert**, inkl. Long-Soaks — bekannte Schwäche),
-   packt 6 Pakete (Core, CalloraVoipSdk, Client, Audio.Abstractions, Audio.Windows,
-   Audio.Linux) und pusht nach nuget.org (`NUGET_API_KEY`, `--skip-duplicate`).
+2. `packages.yml` baut, fährt das Release-Gate
+   (`Category!=SoakLong&Category!=Interop&Category!=InteropFreeSwitch&Category!=BrowserInterop`
+   — Chaos- und Perf-Tests laufen hier also mit), packt 6 Pakete (Core, CalloraVoipSdk, Client,
+   Audio.Abstractions, Audio.Windows, Audio.Linux) und pusht nach nuget.org (`NUGET_API_KEY`,
+   `--skip-duplicate`). Die Version kommt aus dem Tag (`v*` → `/p:Version`) bzw. dem
+   Dispatch-Input.
 3. Doku: `release-docs.yml` deployt DocFX nach GitHub Pages (root + versioniert) bei Push
    auf main; `docs.yml` ist das PR-Gate für den Doku-Build.
 4. `CHANGELOG.md` pflegen; Breaking Changes im README-Abschnitt „What's new" nachziehen.
@@ -201,10 +232,10 @@ ein Subsystem betritt:
 | **STUN/TURN/ICE** | `StunMessageCodec` (einziger Wire-Ort) · `StunClient`/`StunServer` · `TurnClient`/`TurnServer` (+ `TurnRelayControlClient` für Shared-Socket) · `IceMediaAttachment` (bündelt Inbound-Handler, Consent, `IceNominationDriver`) |
 | **Core-Orchestrierung** | `CallMediaOrchestrator` (Session-Lebenszyklus je Call) · `CallIceAgent` · `CallRtcpQualityMonitor` · `MediaManager` (Recording/Playback) |
 | **Domain** | `Call` + `CallStateRules` (Übergangstabelle) · `PhoneLine` · Ports `ICallChannel`/`ILineChannel`/`ICallRegistry` |
-| **Client-Fassade** | `VoipClient`-Konstruktor = Kompositionswurzel (resolve-or-default aller Ports) · `SdkConvenienceOrchestrator` (Connect/Dial-Workflows) · `ServiceCollectionExtensions`/`CalloraBuilder` |
+| **Client-Fassade** | `VoipClient`-Konstruktor = Kompositionswurzel (resolve-or-default aller Ports) · `SdkConvenienceOrchestrator` (Connect/Dial-Workflows) · `ServiceCollectionExtensions`/`CalloraBuilder` (in `VoipSdkBuilder.cs`) |
 | **WebRTC-Fassade** | `WebRtcClient` → `PeerConnection` (Adapter) → Core-`WebRtcPeerConnection` → `WebRtcSessionFactory` (→ `BundledMediaSession`) · Happy-Path: `WebRtcPeerConnectionExtensions.ConnectAsync` |
 | **Audio** | Port `IAudioDevice`/`IAudioDeviceRuntimeControl` · `PlatformAudioDeviceFactory` (Reflection-Load) · `LinuxAudioDevice`/`WindowsAudioDevice` · geteilt: `BoundedPlaybackBuffer`, `PcmGain` |
-| **Test-Harness** | `SourceScan` (Architektur-Gates) · `RtpMediaLoopback`/`SipRegisterLoopHarness` (InteropHarness) · `CapturingSipTransportRuntime` (SIP-Fakes) · `AsteriskContainer` (Interop) |
+| **Test-Harness** | `SourceScan` (Architektur-Gates) · `RtpMediaLoopback`/`SipRegisterLoopHarness` (InteropHarness) · `CapturingSipTransportRuntime` (SIP-Fakes) · `AsteriskContainer`/`FreeSwitchContainer` hinter `IPbxFixture` (Interop) · `BrowserEngine`/`BrowserPeer`/`BrowserInteropSignalingBridge` (Browser-Interop) |
 
 Typische Erweiterungspunkte:
 - **Neuer Audio-Codec (Datei/Bridge):** `PayloadCodecKind` + `AudioPayloadTranscoder`
@@ -222,34 +253,39 @@ Typische Erweiterungspunkte:
 
 ---
 
-## 5. Bekannte Baustellen (Stand 2026-07-22)
+## 5. Bekannte Baustellen (Stand 2026-07-28, Release 4.6.0)
 
-Quellen: `docs/audit/INTEROP_SOAK_AUDIT.md` (F-Register) und Tiefenanalyse 2026-07-22
-(dortiges Kapitel „Konsolidierte Top-Befunde" mit Datei:Zeile). Die wichtigsten, nach
-Priorität:
+Quellen: `docs/audit/INTEROP_SOAK_AUDIT.md` (F-Register) und die Tiefenanalyse 2026-07-22
+(`docs/audit/2026-07-22-quelltext-tiefenanalyse.md`). **Sämtliche P1-Befunde der Tiefenanalyse
+(SIP-Re-ACK, Digest-Retry auf UPDATE/SUBSCRIBE, `+sip.instance`, SRTCP-Auth-Tag, TURN-Send-Indication
+und Relay-Adresse, Transfer-Hänger und ICE-Terminierungs-Race, G.722-Zustand, Socket-Empfangspuffer)
+sind in 4.6.0 gefixt** — Details im [`CHANGELOG.md`](CHANGELOG.md). Was offen bleibt:
 
-**P1 — Interop/Stabilität (sollten Issues werden):**
-1. SIP: kein Re-ACK auf retransmittierte 2xx (Call-Abbau bei ACK-Verlust möglich).
-2. SIP: kein Digest-Retry auf Session-Timer-UPDATE und SUBSCRIBE-Refresh.
-3. SIP: `+sip.instance`-Contact-Parameter malformiert (Name gequotet).
-4. SRTP: SRTCP-Auth-Tag bei `*_HMAC_SHA1_32`-Suiten 4 statt 10 Bytes (libsrtp-Interop-Bruch).
-5. TURN-Server: verlangt MESSAGE-INTEGRITY auf Send-Indications (RFC-widrig) und kann
-   Loopback als Relay-Adresse annoncieren (fehlende konfigurierbare öffentliche Adresse).
-6. Core: Transfer kann in `Transferring` hängenbleiben (fehlendes try/finally);
-   ICE-Terminierungs-Race leakt Media-Sessions.
-7. Audio: G.722-Transkodierung zustandslos (Artefakte); 8-KiB-Kernel-Empfangspuffer auf
-   allen Media-Sockets.
+**Offene Register-Befunde:**
+- **F003** — keine Zeitabstraktion im Signaling (`SipLineChannel`-Refresh-Loop,
+  `SipSessionTimerManager` nutzen hart `Task.Delay`), daher kein zeitgeraffter Signaling-Soak.
+  Dokumentiert, kein Fix geplant; ein optionaler `ITimeProvider`-Seam wäre ein eigenes Paket.
+- **F004** — `RoundTripTimeMs` ist auf dem baren L2-`RtpCallMediaSession` nur ein statischer
+  Anlauf-Hint; die echte RTT-Messung (RFC 3550 §6.4.1) hängt am L3-`CallRtcpQualityMonitor`.
+  Schichtgrenze, kein Bug; ein Wächter-Test schlägt an, wenn sich das ändert.
+- **F002 ist geschlossen** — der Late-Drop-Pfad rückt den Delivered-Sequence-Cursor mit, der
+  Loopback-Soak `LongCall_UnrecoverableLoss_IsZeroOnLoopback` läuft ungeskippt.
 
-**P2 — Bekannte Register-Befunde:** F002 (Late-Drops als `PacketsUnrecoverableLoss`
-fehlklassifiziert; Repro-Soak geskippt, wird nach Fix automatisch zur Verifikation),
-F003 (keine Zeitabstraktion im Signaling → kein Zeitraffer-Soak), F004 (RTT auf L2 ist
-statischer Hint — Wächter-Test schlägt an, wenn sich das ändert).
+**Offene Infrastruktur-Punkte:**
+- `InternalsVisibleTo` in `src/Core/Properties/AssemblyInfo.cs` nennt drei Assemblies, die es nicht
+  (mehr) gibt: `CalloraVoipSdk.Tests`, `CalloraVoipSdk.Core.Tests`, `CalloraVoipSdk.Conferencing.Tests`.
+- Coverage wird erhoben (`--collect:"XPlat Code Coverage"`), aber ohne Schwellwert gegated.
+- `Conferencing.Performance` ist verwaist.
+- Die FreeSWITCH-Interop-Suite (`Category=InteropFreeSwitch`) läuft lokal, ist aber **nicht** im
+  PR-Gate — Regressionen fallen nur beim expliziten Lauf auf.
 
-**P3 — Infrastruktur:** Perf-Gate nicht in CI verdrahtet; `Conferencing.Performance`
-verwaist; Release-Gate ungefiltert (Long-Soaks im Release-Pfad); Interop-Abdeckung nur
-REGISTER; `EngineeringRulesTests` scannt `samples/` statt `examples/`; Coverage ohne
-Schwellwert; `InternalsVisibleTo` auf nicht existente Assemblies.
+*Erledigt seit der Tiefenanalyse:* Perf- und Chaos-Gate hängen als eigene Jobs in `ci.yml`;
+`packages.yml` filtert Long-Soaks und Interop aus dem Release-Pfad; die Interop-Abdeckung ist von
+„nur REGISTER" auf die volle Asterisk-Matrix plus Zwei-Bein-Bridge gewachsen; `EngineeringRulesTests`
+scannt `examples/`.
 
-**Erklärte Preview-/Scope-Grenzen (keine Bugs):** WebRTC-Fassade nicht browser-validiert;
-kein SCTP; kein TCP/TLS-TURN-Gathering; Bundle-Pfad ohne NACK/RTX/PLI/TWCC; kein volles ICE
-im SIP-Remote-Endpoint-Pfad; mDNS-Kandidaten ignoriert; Simulcast empfangsseitig offen.
+**Erklärte Scope-Grenzen (keine Bugs):** kein SCTP/Datachannel; kein TCP/TLS-TURN-Relay;
+Empfangs-Simulcast (RID-Demux) offen; kein volles ICE im SIP-Remote-Endpoint-Pfad; ICE-TCP
+(RFC 6544) bewusst ausgelassen; Safari/WebKit nicht verifiziert. ICE selbst ist implementiert und
+opt-in, aber in Produktions-Trunks unerprobt — Restarbeiten in
+[#62](https://github.com/BechsteinDigital/callora-voip-sdk/issues/62).

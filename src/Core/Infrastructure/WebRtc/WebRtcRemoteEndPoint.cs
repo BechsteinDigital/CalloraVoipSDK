@@ -11,9 +11,11 @@ namespace CalloraVoipSdk.Core.Infrastructure.WebRtc;
 /// loopback / SIP style, where the port is real).
 /// </summary>
 /// <remarks>
-/// This is single-candidate selection, not full ICE: it picks the best advertised address rather than
-/// running connectivity checks across every candidate pair. That suffices for host-reachable peers
-/// (loopback, same LAN); NAT traversal via srflx/relay pairing is later work.
+/// This is the <b>bootstrap</b> send target only — it picks the best advertised address so the transport
+/// has somewhere to send before a pair is nominated. The actual pair selection is full ICE: the session
+/// factory hands every usable <c>a=candidate</c> to <c>BundledIceControl</c>/<c>IceMediaAttachment</c>,
+/// which runs connectivity checks and nomination (RFC 8445 §7.2.2/§8, relay candidates included) and
+/// re-points the transport at the nominated pair.
 /// </remarks>
 internal static class WebRtcRemoteEndPoint
 {

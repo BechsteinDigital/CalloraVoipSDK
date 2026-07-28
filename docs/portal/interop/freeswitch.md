@@ -1,17 +1,48 @@
 # FreeSWITCH
 
 **Status: 🧪 automated interop suite, run locally.** FreeSWITCH is the second PBX behind the shared
-`IPbxFixture` abstraction: the same interop matrix that runs against Asterisk also runs against a
-real FreeSWITCH container (`tests/CalloraVoipSdk.InteropTests`, trait `InteropFreeSwitch`).
+`IPbxFixture` abstraction: the **two-leg scenario matrix** that runs against Asterisk also runs
+against a real FreeSWITCH container (`tests/CalloraVoipSdk.InteropTests`, trait
+`InteropFreeSwitch`).
 
-The suite is **not yet part of the PR CI gate** — it is a local-first check, so regressions are
-caught only when it is run explicitly:
+The suite is **not part of the PR CI gate** — it is a local-first check, so regressions are caught
+only when it is run explicitly:
 
 ```bash
 dotnet test tests/CalloraVoipSdk.InteropTests -c Release --filter "Category=InteropFreeSwitch"
 ```
 
-Run your own acceptance test for anything you depend on before production.
+## What is verified against FreeSWITCH
+
+Each of these runs against a real FreeSWITCH container, with two SDK legs bridged through the PBX:
+
+| Scenario | Assertion |
+|----------|-----------|
+| Registration | A directory user registers over UDP through the fixture adapter |
+| Bridged call | Both legs reach `Connected` |
+| Media | RTP flows in **both** directions, with RTP counters on each leg |
+| Media content | A marked PCMU payload arrives **byte-exact** A→B through the PBX |
+| RTCP | Local quality metrics *and* the remote SR/RR report are populated |
+| SRTP-SDES | An encrypted bridged call flows in both directions |
+| Codec mismatch | Legs with different codecs still flow, via transcoding |
+| Hold / unhold | Unhold resumes bidirectional media |
+| Attended transfer | The callee is bridged to a new target, with media flowing after the transfer |
+| DTMF (RFC 4733) | A digit traverses the bridge, caller → callee |
+| Concurrent calls | A short concurrent-call soak: all calls connect and flow media |
+
+## What is *not* covered against FreeSWITCH
+
+These are exercised against **Asterisk only** — do your own acceptance test before relying on them
+with FreeSWITCH:
+
+- Registration failure paths (wrong credentials, `423 Interval Too Brief`)
+- Single-leg in/outbound calls and the codec-negotiation matrix (PCMU / PCMA / G722)
+- Blind transfer (REFER) as a separate scenario
+- Session timers (RFC 4028)
+- Early media (RFC 3960)
+- TCP and TLS transport
+
+See the [interop matrix](matrix.md) for the full picture.
 
 ## Directory user
 

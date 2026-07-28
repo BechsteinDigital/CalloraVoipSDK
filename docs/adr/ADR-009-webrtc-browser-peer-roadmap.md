@@ -3,6 +3,14 @@
 Status: Accepted
 Date: 2026-07-15
 
+> **Nachtrag 2026-07-28 (Release 4.6.0).** Der unten festgehaltene „Ist-Stand" ist der Stand vom
+> 2026-07-15 und damit historisch. Inzwischen erledigt: BUNDLE mit gemeinsamem Transport,
+> Track-Identity (`a=msid`/`a=ssrc`), `IceConnectionStateChanged` inkl. Consent-Loss, mDNS-Kandidaten
+> (RFC 8828) — und die Fassade ist in CI **gegen echte Browser validiert** (Chromium + Firefox, beide
+> Rollen). Weiterhin offen bzw. bewusst außerhalb des Scopes: SCTP-Datachannels, TCP/TLS-TURN-Relay,
+> native Video-Codecs (transport-only bleibt die Entscheidung). Der aktuelle Stand steht in
+> [`CHANGELOG.md`](../../CHANGELOG.md) und im [WebRTC-Guide](../portal/guides/webrtc.md).
+
 ## Context
 
 Callora (Host/CPaaS) soll WebRTC als eigenes Modul auf der SDK-Engine anbieten — die Engine

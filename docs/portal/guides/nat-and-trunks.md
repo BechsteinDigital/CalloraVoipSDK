@@ -42,12 +42,14 @@ new SipAccount
 symmetric-RTP-friendly address. Only set it when the RTP port is preserved end-to-end; a public
 address with a remapped port breaks media. Non-IP values are ignored.
 
-## ICE (opt-in, experimental)
+## ICE (opt-in)
 
-Full ICE (RFC 8445 / RFC 7675) is implemented **opt-in** and is still marked unproven in
-production. Enable it via `VoipConfiguration.Ice`. Treat it as experimental and validate
-against your own network before relying on it. Without ICE, plan for a
-media-relaying/SBC path on hostile NAT.
+Full ICE (RFC 8445 / RFC 7675) is implemented and **opt-in** — role + tie-breaker, check-list FSM,
+`USE-CANDIDATE` nomination, inbound/triggered checks, consent freshness, restart detection and local
+restart initiation (`ICall.RestartIceAsync()`, RFC 8445 §9). Enable it via `VoipConfiguration.Ice`.
+It is off by default and **not yet proven in production trunks**, so validate it against your own
+network before relying on it; without ICE, plan for a media-relaying/SBC path on hostile NAT. On the
+WebRTC side the same ICE stack *is* exercised in CI against real browsers and a real coturn relay.
 
 ## Registering against a trunk
 
@@ -100,11 +102,16 @@ Interop specifics per provider/PBX live under **Interop**:
 
 - [FRITZ!Box](../interop/fritzbox.md) — verified **manually** against a live device (not an
   automated test); source of several hardening fixes
-- [Asterisk](../interop/asterisk.md) — REGISTER covered by an **automated** CI interop test
-  (full call/media not yet)
-- [sipgate](../interop/sipgate.md), [FreeSWITCH](../interop/freeswitch.md),
-  [3CX](../interop/3cx.md) — configuration guidance only; see the
-  [matrix](../interop/matrix.md) for the full verification status
+- [Asterisk](../interop/asterisk.md) — the **full** SIP/RTP flow is automated in CI: register,
+  in/outbound calls with live RTP, codec negotiation, SRTP-SDES, DTMF, hold, blind & attended
+  transfer, session timers, early media and TCP/TLS, plus a two-leg bridged call with byte-exact
+  bidirectional media
+- [FreeSWITCH](../interop/freeswitch.md) — the two-leg scenario matrix (bridged media, hold,
+  transfer, DTMF, SDES) runs against a real FreeSWITCH container, but local-first and narrower than
+  the Asterisk matrix
+- [sipgate](../interop/sipgate.md), [3CX](../interop/3cx.md) — configuration guidance only; see the
+  [matrix](../interop/matrix.md) for the full verification status, including the browser (Chromium,
+  Firefox) and coturn coverage
 
 ## Diagnostics
 

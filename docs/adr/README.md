@@ -18,6 +18,11 @@ Guardrails** (see `ADR-011` for the format model).
   where the original prose diverged from the shipped code; the errata state the verified reality.
 - Two decisions were verified as *already covered* by existing ADRs and deliberately not
   duplicated: BUNDLE/multi-track (ADR-010/011) and the WebRTC peer facade (ADR-009/012).
+- **Type names are time-bound.** ADRs written before 4.6.0 name the old SIP-facade types. In 4.6.0
+  they were renamed: `SdkConfiguration` → `VoipConfiguration`, `SdkOptions` → `VoipOptions`,
+  `AddCallora(...)` → `AddCalloraVoip(...)` (no compatibility aliases). The ADR texts stay unchanged
+  as a dated record — translate as you read. The current state is in
+  [`CHANGELOG.md`](../../CHANGELOG.md).
 
 ### Architecture, Layering & Delivery Process
 
