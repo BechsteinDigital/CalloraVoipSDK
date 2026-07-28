@@ -4,12 +4,13 @@ using System.Net.Sockets;
 namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
 
 /// <summary>
-/// Reserves a consecutive RTP/RTCP UDP port pair (N, N+1) atomically and holds both bound sockets, so no
-/// other call can claim N+1 between SDP publication and the RTCP monitor start. The sockets are handed to
-/// the <c>RtpSession</c> and the RTCP monitor via <see cref="TakeRtpSocket"/>/<see cref="TakeRtcpSocket"/>
-/// — there is no release-and-rebind, which is what removes the port-ownership race: a port change after
-/// the SDP is published would be too late, since the SDP already advertised N+1 as the RTCP port
-/// (RFC 3550 §11, <c>a=rtcp</c>).
+/// Reserves a consecutive RTP/RTCP UDP port pair (even N for RTP, odd N+1 for RTCP — RFC 3550 §11)
+/// atomically and holds both bound sockets, so no other call can claim N+1 between SDP publication and
+/// the RTCP monitor start. The bound sockets are handed straight to the <c>RtpSession</c> and the RTCP
+/// monitor via <see cref="TakeRtpSocket"/>/<see cref="TakeRtcpSocket"/> — the reserved socket <em>is</em>
+/// the media socket, there is no release-and-rebind. That is what removes the port-ownership race: N+1 is
+/// never released, so nothing can grab it, and a port change after the SDP advertised N+1 would be too
+/// late anyway. This mirrors pjsip/SIPSorcery/baresip: wildcard bind, even RTP port, both-or-none retry.
 /// </summary>
 internal sealed class MediaPortReservation : IDisposable
 {
@@ -31,12 +32,14 @@ internal sealed class MediaPortReservation : IDisposable
     public int RtcpPort => RtpPort + 1;
 
     /// <summary>
-    /// Reserves a consecutive (N, N+1) pair on <paramref name="bindAddress"/>: binds RTP on an OS-assigned
-    /// port N, then N+1; if N+1 is already owned it discards N and retries with a fresh N, up to
-    /// <paramref name="maxAttempts"/>. Both sockets are bound and held on return.
+    /// Reserves a consecutive (even N, odd N+1) pair on <paramref name="bindAddress"/>: binds RTP on an
+    /// OS-assigned port and, when that port is even and N+1 is free, holds both; otherwise it discards and
+    /// retries, up to <paramref name="maxAttempts"/>. Both sockets are bound and held on return. Bind on
+    /// <see cref="IPAddress.Any"/> for the reference-parity wildcard behaviour (the SDP advertises the
+    /// route-local address separately).
     /// </summary>
-    /// <exception cref="IOException">No consecutive pair could be reserved within the attempt budget.</exception>
-    public static MediaPortReservation Reserve(IPAddress bindAddress, int maxAttempts = 32)
+    /// <exception cref="IOException">No consecutive even/odd pair could be reserved within the attempt budget.</exception>
+    public static MediaPortReservation Reserve(IPAddress bindAddress, int maxAttempts = 64)
     {
         ArgumentNullException.ThrowIfNull(bindAddress);
         if (maxAttempts < 1)
@@ -47,8 +50,9 @@ internal sealed class MediaPortReservation : IDisposable
             var rtp = new UdpClient(new IPEndPoint(bindAddress, 0));
             var rtpPort = ((IPEndPoint)rtp.Client.LocalEndPoint!).Port;
 
-            // N+1 must be a representable UDP port; ushort.MaxValue leaves no room for the RTCP port.
-            if (rtpPort >= ushort.MaxValue)
+            // RFC 3550 §11: RTP on an even port, RTCP on the following odd port. An odd OS-assigned port
+            // cannot host the pair (and the last port leaves no room for N+1) — discard and retry.
+            if ((rtpPort & 1) != 0 || rtpPort >= ushort.MaxValue)
             {
                 rtp.Dispose();
                 continue;
@@ -68,7 +72,7 @@ internal sealed class MediaPortReservation : IDisposable
         }
 
         throw new IOException(
-            $"Could not reserve a consecutive RTP/RTCP UDP port pair on {bindAddress} within {maxAttempts} attempts.");
+            $"Could not reserve a consecutive even/odd RTP/RTCP UDP port pair on {bindAddress} within {maxAttempts} attempts.");
     }
 
     /// <summary>

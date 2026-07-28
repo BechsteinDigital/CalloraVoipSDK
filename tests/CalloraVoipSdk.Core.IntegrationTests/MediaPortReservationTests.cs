@@ -15,6 +15,7 @@ public sealed class MediaPortReservationTests
     {
         using var reservation = MediaPortReservation.Reserve(IPAddress.Loopback);
 
+        Assert.Equal(0, reservation.RtpPort % 2); // even RTP port (RFC 3550 §11)
         Assert.Equal(reservation.RtpPort + 1, reservation.RtcpPort);
         // Both ports are held — a second bind on either fails (this is exactly the EADDRINUSE the fix prevents).
         Assert.Throws<SocketException>(() => new UdpClient(new IPEndPoint(IPAddress.Loopback, reservation.RtpPort)));
