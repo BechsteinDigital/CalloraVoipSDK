@@ -68,12 +68,16 @@ internal sealed class AesGcmSrtcpCipher : ISrtcpPacketCipher
     public (byte[] Rtcp, uint Index) Unprotect(uint ssrc, ReadOnlySpan<byte> srtcpPacket)
     {
         // Layout: [header (8)][ciphertext][tag (16)][E|index (4)].
+        var ciphertextLen = srtcpPacket.Length - RtcpHeaderLength - TagBytes - SrtcpIndexLength;
+        if (ciphertextLen < 0) // defends the cipher boundary; SrtcpContext already length-checks callers
+            throw new ArgumentException("SRTCP packet too short for AEAD-GCM.", nameof(srtcpPacket));
+
         var indexWord = BinaryPrimitives.ReadUInt32BigEndian(srtcpPacket[^SrtcpIndexLength..]);
         var index = indexWord & SrtcpIndexMask;
-        if ((indexWord & EncryptionFlag) == 0)
-            throw new NotSupportedException("Unencrypted SRTCP (E-flag = 0) under AEAD-GCM is not supported.");
-
-        var ciphertextLen = srtcpPacket.Length - RtcpHeaderLength - TagBytes - SrtcpIndexLength;
+        // The E-flag is part of the AAD (via indexWord). A cleared flag — unencrypted SRTCP (RFC 7714 §9.3,
+        // which this SDK and browsers never send) or a tampered bit — changes the AAD and fails the tag
+        // check below, so it is discarded as an authentication failure rather than handled specially. This
+        // avoids an unauthenticated-input branch that could throw before the tag is even verified.
         var header = srtcpPacket[..RtcpHeaderLength];
         var ciphertext = srtcpPacket.Slice(RtcpHeaderLength, ciphertextLen);
         var tag = srtcpPacket.Slice(RtcpHeaderLength + ciphertextLen, TagBytes);

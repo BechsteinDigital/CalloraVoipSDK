@@ -84,6 +84,19 @@ public sealed class SrtcpContextTests
         Assert.Throws<SrtpAuthenticationException>(() => receiver.UnprotectRtcp(protectedPacket));
     }
 
+    [Fact]
+    public void UnprotectRtcp_RejectsClearedEncryptionFlagAsAuthFailure()
+    {
+        // The E-flag is part of the AAD. A cleared/tampered flag (unauthenticated input) changes the AAD
+        // and must fail authentication — never throw an unhandled type that could fault the receive loop.
+        using var sender = new SrtcpContext(Material(22, SrtpCryptoSuite.AeadAes128Gcm));
+        using var receiver = new SrtcpContext(Material(22, SrtpCryptoSuite.AeadAes128Gcm));
+        var protectedPacket = sender.ProtectRtcp(Rtcp(0x55667788, 16));
+        protectedPacket[^4] &= 0x7F; // clear the E-flag (top bit of the trailing E|index word)
+
+        Assert.Throws<SrtpAuthenticationException>(() => receiver.UnprotectRtcp(protectedPacket));
+    }
+
     // ── KDF: independent known-answer for SRTCP labels 3/4/5 ──────────────────────
 
     [Fact]
