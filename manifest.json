@@ -3095,6 +3095,20 @@
     },
     {
       "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.WebRtc.SignalingState.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.WebRtc.SignalingState.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.WebRtc.SignalingState",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.WebRtc.SignalingState.yml\" sourcestartlinenumber=\"1\">The RFC 8829 §4.1.3 signalling state of a WebRTC <xref href=\"CalloraVoipSdk.WebRtc.IPeerConnection\" data-throw-if-not-resolved=\"false\"></xref> — the offer/answer\nhalf of the peer's lifecycle, distinct from the ICE/DTLS transport lifecycle exposed by\n<xref href=\"CalloraVoipSdk.WebRtc.PeerConnectionState\" data-throw-if-not-resolved=\"false\"></xref>. It mirrors the W3C <code>RTCSignalingState</code>, tracking where the\npeer sits in the SDP negotiation: whether an offer is pending locally, pending from the remote, or\nthe exchange has settled.</p>\n<p>\nThis SDK negotiates a single offer/answer exchange per peer (re-offer / renegotiation is a later\npackage), so the state moves <code>Stable → HaveLocalOffer → Stable</code> (offerer) or\n<code>Stable → HaveRemoteOffer → Stable</code> (answerer) and then to <xref href=\"CalloraVoipSdk.WebRtc.SignalingState.Closed\" data-throw-if-not-resolved=\"false\"></xref>. The\nprovisional-answer state (<code>have-local-pranswer</code> / <code>have-remote-pranswer</code>) is not used by\nthis SDK — no <code>a=pranswer</code> path exists — and is therefore not modelled.\n</p>\n"
+    },
+    {
+      "type": "ManagedReference",
       "source_relative_path": "docs/portal/_api/CalloraVoipSdk.WebRtc.TrackDirection.yml",
       "output": {
         ".html": {

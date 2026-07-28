@@ -11850,6 +11850,25 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.WebRtc.IPeerConnection.SetRemoteDescriptionAsync
   nameWithType: IPeerConnection.SetRemoteDescriptionAsync
+- uid: CalloraVoipSdk.WebRtc.IPeerConnection.SignalingState
+  name: SignalingState
+  href: _api/CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_SignalingState
+  commentId: P:CalloraVoipSdk.WebRtc.IPeerConnection.SignalingState
+  fullName: CalloraVoipSdk.WebRtc.IPeerConnection.SignalingState
+  nameWithType: IPeerConnection.SignalingState
+- uid: CalloraVoipSdk.WebRtc.IPeerConnection.SignalingState*
+  name: SignalingState
+  href: _api/CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_SignalingState_
+  commentId: Overload:CalloraVoipSdk.WebRtc.IPeerConnection.SignalingState
+  isSpec: "True"
+  fullName: CalloraVoipSdk.WebRtc.IPeerConnection.SignalingState
+  nameWithType: IPeerConnection.SignalingState
+- uid: CalloraVoipSdk.WebRtc.IPeerConnection.SignalingStateChanged
+  name: SignalingStateChanged
+  href: _api/CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_SignalingStateChanged
+  commentId: E:CalloraVoipSdk.WebRtc.IPeerConnection.SignalingStateChanged
+  fullName: CalloraVoipSdk.WebRtc.IPeerConnection.SignalingStateChanged
+  nameWithType: IPeerConnection.SignalingStateChanged
 - uid: CalloraVoipSdk.WebRtc.IPeerConnection.StartAsync(System.Threading.CancellationToken)
   name: StartAsync(CancellationToken)
   href: _api/CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_StartAsync_System_Threading_CancellationToken_
@@ -12466,6 +12485,36 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.WebRtc.RemoteTrack.TrackId
   nameWithType: RemoteTrack.TrackId
+- uid: CalloraVoipSdk.WebRtc.SignalingState
+  name: SignalingState
+  href: _api/CalloraVoipSdk.WebRtc.SignalingState.html
+  commentId: T:CalloraVoipSdk.WebRtc.SignalingState
+  fullName: CalloraVoipSdk.WebRtc.SignalingState
+  nameWithType: SignalingState
+- uid: CalloraVoipSdk.WebRtc.SignalingState.Closed
+  name: Closed
+  href: _api/CalloraVoipSdk.WebRtc.SignalingState.html#CalloraVoipSdk_WebRtc_SignalingState_Closed
+  commentId: F:CalloraVoipSdk.WebRtc.SignalingState.Closed
+  fullName: CalloraVoipSdk.WebRtc.SignalingState.Closed
+  nameWithType: SignalingState.Closed
+- uid: CalloraVoipSdk.WebRtc.SignalingState.HaveLocalOffer
+  name: HaveLocalOffer
+  href: _api/CalloraVoipSdk.WebRtc.SignalingState.html#CalloraVoipSdk_WebRtc_SignalingState_HaveLocalOffer
+  commentId: F:CalloraVoipSdk.WebRtc.SignalingState.HaveLocalOffer
+  fullName: CalloraVoipSdk.WebRtc.SignalingState.HaveLocalOffer
+  nameWithType: SignalingState.HaveLocalOffer
+- uid: CalloraVoipSdk.WebRtc.SignalingState.HaveRemoteOffer
+  name: HaveRemoteOffer
+  href: _api/CalloraVoipSdk.WebRtc.SignalingState.html#CalloraVoipSdk_WebRtc_SignalingState_HaveRemoteOffer
+  commentId: F:CalloraVoipSdk.WebRtc.SignalingState.HaveRemoteOffer
+  fullName: CalloraVoipSdk.WebRtc.SignalingState.HaveRemoteOffer
+  nameWithType: SignalingState.HaveRemoteOffer
+- uid: CalloraVoipSdk.WebRtc.SignalingState.Stable
+  name: Stable
+  href: _api/CalloraVoipSdk.WebRtc.SignalingState.html#CalloraVoipSdk_WebRtc_SignalingState_Stable
+  commentId: F:CalloraVoipSdk.WebRtc.SignalingState.Stable
+  fullName: CalloraVoipSdk.WebRtc.SignalingState.Stable
+  nameWithType: SignalingState.Stable
 - uid: CalloraVoipSdk.WebRtc.TrackDirection
   name: TrackDirection
   href: _api/CalloraVoipSdk.WebRtc.TrackDirection.html
