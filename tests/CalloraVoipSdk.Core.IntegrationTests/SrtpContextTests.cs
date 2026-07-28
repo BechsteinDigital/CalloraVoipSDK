@@ -66,6 +66,40 @@ public sealed class SrtpContextTests
         Assert.Equal(seq0Packet, context.Unprotect(protectedSeq0AfterWrap));
     }
 
+    [Fact]
+    public void Protect_Unprotect_RoundTripsWithAeadGcm()
+    {
+        var packet = CreateRtpPacket(sequenceNumber: 0x1234, ssrc: 0xCAFEBABE, payloadLength: 40);
+        var sender = new SrtpContext(CreateGcmMaterial());
+        var receiver = new SrtpContext(CreateGcmMaterial());
+
+        var protectedPacket = sender.Protect(packet);
+
+        // AEAD-GCM appends a full 16-byte tag (RFC 7714 §14), not the 10-byte HMAC tag.
+        Assert.Equal(packet.Length + 16, protectedPacket.Length);
+        // The 12-byte header stays clear-text (authenticated as AAD); the payload is encrypted.
+        Assert.Equal(packet[..12], protectedPacket[..12]);
+        Assert.NotEqual(packet[12..], protectedPacket[12..packet.Length]);
+
+        Assert.Equal(packet, receiver.Unprotect(protectedPacket));
+    }
+
+    [Fact]
+    public void Unprotect_RejectsTamperedAeadGcmTag()
+    {
+        var packet = CreateRtpPacket(sequenceNumber: 7, ssrc: 0x11223344, payloadLength: 24);
+        var protectedPacket = new SrtpContext(CreateGcmMaterial()).Protect(packet);
+        protectedPacket[^1] ^= 0xFF; // flip a tag byte
+
+        Assert.Throws<SrtpAuthenticationException>(
+            () => new SrtpContext(CreateGcmMaterial()).Unprotect(protectedPacket));
+    }
+
+    private static SrtpKeyMaterial CreateGcmMaterial() =>
+        new(Convert.FromHexString("000102030405060708090a0b0c0d0e0f"),
+            Convert.FromHexString("517569642070726f2071756f"),
+            SrtpCryptoSuite.AeadAes128Gcm);
+
     private static SrtpKeyMaterial CreateRfcMaterial() =>
         new(RfcMasterKey, RfcMasterSalt, SrtpCryptoSuite.AesCm128HmacSha1_80);
 
