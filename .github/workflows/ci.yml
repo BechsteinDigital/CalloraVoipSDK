@@ -88,6 +88,8 @@ jobs:
 
   chaos:
     runs-on: ubuntu-latest
+    # Bounded so a hung chaos scenario (e.g. a socket that never closes) fails loudly instead of stalling.
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v7

@@ -33,7 +33,7 @@ public sealed class ChurnUnderFaultChaosTests
         for (var i = 0; i < iterations; i++)
         {
             await ChurnOnceAsync();
-            if (i % 8 == 0)
+            if (i % 5 == 0)
                 samples.Add(Capture(sampler));
         }
         samples.Add(Capture(sampler));

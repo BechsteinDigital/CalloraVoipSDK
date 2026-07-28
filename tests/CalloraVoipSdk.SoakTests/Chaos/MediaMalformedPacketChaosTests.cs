@@ -62,11 +62,14 @@ public sealed class MediaMalformedPacketChaosTests
         loop.Relay.SetCorruptRate(1.0);
         await loop.SendForAsync(Payload, TimeSpan.FromSeconds(2));
 
+        // Precondition (guards a slow CI runner): the corruption path was actually exercised on many packets,
+        // so the fail-closed assertion below is meaningful and not a vacuous "nothing was sent" pass.
+        Assert.True(loop.Relay.Corrupted >= 10, "the corruption fault should have corrupted many packets");
+
         // Fail-closed: with every packet failing authentication, no forged frame is delivered to B.
         Assert.False(
             await loop.TryRoundTripAsync(Payload, TimeSpan.FromSeconds(1.5)),
             "corrupted SRTP packets must be rejected, not delivered (fail-closed)");
-        Assert.True(loop.Relay.Corrupted > 0, "packets should actually have been corrupted on the wire");
 
         // Recovery: with corruption off, authenticated media flows again — the path itself was never broken.
         loop.Relay.SetCorruptRate(0);

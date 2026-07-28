@@ -8,7 +8,7 @@
 
 Der `InteropHarness` hat **Soak-Ausdauer + Metric-Sampling** (`ResourceSampler`, `TrendAssertions.NoUpwardSlope`-Leak-Erkennung via Regressionssteigung, `RtpMediaLoopback` = zwei echte `RtpCallMediaSession` über UDP-Loopback, `SoakArtifactSink`), aber **keine Fault-Injection-Primitive** (der ADR-058-Claim war aspirational).
 
-Der Media-Socket ist SDK-intern (`RtpCallMediaSession` bindet `CallMediaParameters.LocalEndPoint`, kein exponierter Transport-Seam). **Der saubere, src/-freie Fault-Injection-Punkt ist ein MITM-UDP-Relay im Harness** zwischen den beiden Legs: beide Legs senden an das Relay (`RemoteEndPoint=Relay-Port`), das Relay lernt beide Quell-Adressen aus den ersten Datagrammen und leitet A↔B weiter — und entscheidet **pro Paket** über *forward / drop / delay / corrupt / inject*. Kein src/-Eingriff.
+Der Media-Socket ist SDK-intern (`RtpCallMediaSession` bindet `CallMediaParameters.LocalEndPoint`, kein exponierter Transport-Seam). **Der saubere, src/-freie Fault-Injection-Punkt ist ein MITM-UDP-Relay im Harness** zwischen den beiden Legs: beide Legs senden an das Relay (`RemoteEndPoint=Relay-Port`), das Relay ist mit beiden Leg-Adressen konfiguriert und leitet A↔B quell-basiert weiter (kein Lernen — ein einseitiger Media-Flow enthüllt die Empfangsseite nicht) — und entscheidet **pro Paket** über *forward / drop / delay / corrupt / inject*. Kein src/-Eingriff.
 
 ## Architektur
 
