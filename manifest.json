@@ -2199,6 +2199,20 @@
     },
     {
       "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.DependencyInjection.WebRtcOptionsValidator.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.DependencyInjection.WebRtcOptionsValidator.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.DependencyInjection.WebRtcOptionsValidator",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.DependencyInjection.WebRtcOptionsValidator.yml\" sourcestartlinenumber=\"1\">Startup validation for host-bound <xref href=\"CalloraVoipSdk.WebRtc.WebRtcOptions\" data-throw-if-not-resolved=\"false\"></xref>. The WebRTC counterpart to\n<xref href=\"CalloraVoipSdk.DependencyInjection.VoipOptionsValidator\" data-throw-if-not-resolved=\"false\"></xref>: registered with <code>ValidateOnStart()</code> so an invalid ICE-server\nentry surfaces at host start rather than only when the first peer is created.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
       "source_relative_path": "docs/portal/_api/CalloraVoipSdk.DependencyInjection.WebRtcServiceCollectionExtensions.yml",
       "output": {
         ".html": {
@@ -2923,7 +2937,7 @@
       "Uid": null,
       "IsMRef": true,
       "Title": "CalloraVoipSdk.WebRtc.IWebRtcClient",
-      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.WebRtc.IWebRtcClient.yml\" sourcestartlinenumber=\"1\">The WebRTC peer facade — the happy-path entry point for building signalling-neutral peer\nconnections. Mirrors the SIP <code>IVoipClient</code>; the advanced peer-registry manager tier is added in a\nlater slice (ADR-012).</p>\n"
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.WebRtc.IWebRtcClient.yml\" sourcestartlinenumber=\"1\">The WebRTC peer facade — the happy-path entry point for building signalling-neutral peer\nconnections. Mirrors the SIP <code>IVoipClient</code>; the advanced peer-registry manager tier is added in a\nlater slice (ADR-012). Disposing the client asynchronously closes every peer it still tracks. Peer\nteardown is inherently asynchronous (<xref href=\"CalloraVoipSdk.WebRtc.IPeerConnection\" data-throw-if-not-resolved=\"false\"></xref> is <xref href=\"System.IAsyncDisposable\" data-throw-if-not-resolved=\"false\"></xref>),\nso the client is async-disposable only; a DI host disposes it on the async path (an <code>IHost</code>, or an\nexplicit <code>await using</code> / <code>DisposeAsync</code> on a manually built provider).</p>\n"
     },
     {
       "type": "ManagedReference",
@@ -3203,7 +3217,7 @@
       "Uid": null,
       "IsMRef": true,
       "Title": "CalloraVoipSdk.WebRtc.WebRtcStats",
-      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.WebRtc.WebRtcStats.yml\" sourcestartlinenumber=\"1\">A point-in-time statistics snapshot for a peer connection (the SDK's <code>getStats</code>). Transport\ncounters, derived bitrates and the ICE state/selected pair are populated today; quality, video and\ncongestion-control metrics are added in later slices and read <a href=\"https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null\">null</a> until then — a null\nvalue means &quot;not yet measured&quot;, never a fabricated zero.</p>\n"
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.WebRtc.WebRtcStats.yml\" sourcestartlinenumber=\"1\">A point-in-time statistics snapshot for a peer connection (the SDK's <code>getStats</code>). Transport\ncounters, derived bitrates, RTCP-derived quality, video, congestion-control and the ICE state/selected\npair are all populated. A nullable metric reads <a href=\"https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null\">null</a> when it has not yet been measured\n(for example no media session is active, the peer has not yet reported, or no inbound video has been\nreceived) — a null value means &quot;not yet measured&quot;, never a fabricated zero.</p>\n"
     },
     {
       "type": "ManagedReference",

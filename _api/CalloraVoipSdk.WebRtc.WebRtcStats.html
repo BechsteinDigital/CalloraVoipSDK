@@ -6,7 +6,7 @@
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <meta name="title" content="Class WebRtcStats | CalloraVoipSdk ">
       
-      <meta name="description" content="A point-in-time statistics snapshot for a peer connection (the SDK&#39;s getStats). Transport counters, derived bitrates and the ICE state/selected pair are populated today; quality, video and congestion-control metrics are added in later slices and read null until then — a null value means &amp;quot;not yet measured&amp;quot;, never a fabricated zero.">
+      <meta name="description" content="A point-in-time statistics snapshot for a peer connection (the SDK&#39;s getStats). Transport counters, derived bitrates, RTCP-derived quality, video, congestion-control and the ICE state/selected pair are all populated. A nullable metric reads null when it has not yet been measured (for example no media session is active, the peer has not yet reported, or no inbound video has been received) — a null value means &amp;quot;not yet measured&amp;quot;, never a fabricated zero.">
       <link rel="icon" href="../favicon.ico">
       <link rel="stylesheet" href="../public/docfx.min.css">
       <link rel="stylesheet" href="../public/main.css">
@@ -89,7 +89,7 @@
 
 
   <h1 id="CalloraVoipSdk_WebRtc_WebRtcStats" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats" class="text-break">
-Class WebRtcStats  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L9"><i class="bi bi-code-slash"></i></a>
+Class WebRtcStats  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L10"><i class="bi bi-code-slash"></i></a>
   </h1>
 
   <div class="facts text-secondary">
@@ -98,9 +98,10 @@ Class WebRtcStats  <a class="header-action link-secondary" title="View source" h
   </div>
 
   <div class="markdown summary"><p>A point-in-time statistics snapshot for a peer connection (the SDK's <code>getStats</code>). Transport
-counters, derived bitrates and the ICE state/selected pair are populated today; quality, video and
-congestion-control metrics are added in later slices and read <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> until then — a null
-value means &quot;not yet measured&quot;, never a fabricated zero.</p>
+counters, derived bitrates, RTCP-derived quality, video, congestion-control and the ICE state/selected
+pair are all populated. A nullable metric reads <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> when it has not yet been measured
+(for example no media session is active, the peer has not yet reported, or no inbound video has been
+received) — a null value means &quot;not yet measured&quot;, never a fabricated zero.</p>
 </div>
   <div class="markdown conceptual"></div>
 
@@ -157,11 +158,12 @@ value means &quot;not yet measured&quot;, never a fabricated zero.</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_AvailableOutgoingBitrateBps" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.AvailableOutgoingBitrateBps">
   AvailableOutgoingBitrateBps
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L120"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L125"><i class="bi bi-code-slash"></i></a>
   </h3>
 
-  <div class="markdown level1 summary"><p>Estimated available outgoing bitrate in bits/second from congestion control, or
-<a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> until transport-cc is wired through the bundle.</p>
+  <div class="markdown level1 summary"><p>Estimated available outgoing bitrate in bits/second from transport-cc congestion control, or
+<a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> until an estimate is available (no media session, or congestion control
+inactive for this leg).</p>
 </div>
   <div class="markdown level1 conceptual"></div>
 
@@ -190,7 +192,7 @@ value means &quot;not yet measured&quot;, never a fabricated zero.</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_BytesReceived" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.BytesReceived">
   BytesReceived
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L26"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L27"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Total bytes of decrypted inbound RTP packets.</p>
@@ -222,7 +224,7 @@ value means &quot;not yet measured&quot;, never a fabricated zero.</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_BytesSent" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.BytesSent">
   BytesSent
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L20"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L21"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Total bytes of protected RTP datagrams sent.</p>
@@ -254,7 +256,7 @@ value means &quot;not yet measured&quot;, never a fabricated zero.</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_ConnectionState" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.ConnectionState">
   ConnectionState
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L12"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L13"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>The peer connection's current lifecycle state.</p>
@@ -286,7 +288,7 @@ value means &quot;not yet measured&quot;, never a fabricated zero.</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_DroppedDatagrams" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.DroppedDatagrams">
   DroppedDatagrams
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L32"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L33"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Inbound datagrams dropped (pre-key, auth failure, replay, or unroutable).</p>
@@ -318,10 +320,11 @@ value means &quot;not yet measured&quot;, never a fabricated zero.</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_FirCount" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.FirCount">
   FirCount
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L97"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L101"><i class="bi bi-code-slash"></i></a>
   </h3>
 
-  <div class="markdown level1 summary"><p>Full Intra Request (FIR) messages, or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> until video feedback metrics are wired.</p>
+  <div class="markdown level1 summary"><p>Full Intra Request (FIR) messages sent. Always <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>: the bundle honours an inbound
+FIR as a keyframe request but never sends one itself, so this counter is never produced.</p>
 </div>
   <div class="markdown level1 conceptual"></div>
 
@@ -350,10 +353,10 @@ value means &quot;not yet measured&quot;, never a fabricated zero.</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_FramesDropped" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.FramesDropped">
   FramesDropped
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L85"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L86"><i class="bi bi-code-slash"></i></a>
   </h3>
 
-  <div class="markdown level1 summary"><p>Frames dropped (e.g. by the reorder buffer), or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> until video metrics are wired.</p>
+  <div class="markdown level1 summary"><p>Frames dropped (e.g. by the reorder buffer), or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> until a media session is active.</p>
 </div>
   <div class="markdown level1 conceptual"></div>
 
@@ -382,10 +385,10 @@ value means &quot;not yet measured&quot;, never a fabricated zero.</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_FramesPerSecond" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.FramesPerSecond">
   FramesPerSecond
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L82"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L83"><i class="bi bi-code-slash"></i></a>
   </h3>
 
-  <div class="markdown level1 summary"><p>Inbound frames per second, or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> until video metrics are wired.</p>
+  <div class="markdown level1 summary"><p>Inbound frames per second, or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> until a media session is active.</p>
 </div>
   <div class="markdown level1 conceptual"></div>
 
@@ -414,7 +417,7 @@ value means &quot;not yet measured&quot;, never a fabricated zero.</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_IceState" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.IceState">
   IceState
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L106"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L110"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>A W3C <code>RTCIceConnectionState</code>-style label (new/checking/connected/disconnected/failed/closed)
@@ -448,7 +451,7 @@ ICE-checklist FSM.</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_IncomingBitrateBps" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.IncomingBitrateBps">
   IncomingBitrateBps
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L40"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L41"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Incoming bitrate in bits/second since the previous snapshot; <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> on the first snapshot.</p>
@@ -480,7 +483,7 @@ ICE-checklist FSM.</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_JitterMs" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.JitterMs">
   JitterMs
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L59"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L60"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Our local receive-side interarrival jitter in milliseconds (RFC 3550 §A.8) — the WebRTC
@@ -516,10 +519,10 @@ session aggregate — the worst (maximum) across inbound sources; the per-stream
 
   <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_KeyFrames" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.KeyFrames">
   KeyFrames
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L88"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L89"><i class="bi bi-code-slash"></i></a>
   </h3>
 
-  <div class="markdown level1 summary"><p>Key frames received, or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> until video metrics are wired.</p>
+  <div class="markdown level1 summary"><p>Key frames received on inbound video, or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> until a media session is active.</p>
 </div>
   <div class="markdown level1 conceptual"></div>
 
@@ -548,7 +551,7 @@ session aggregate — the worst (maximum) across inbound sources; the per-stream
 
   <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_MediaStreams" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.MediaStreams">
   MediaStreams
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L77"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L78"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Per-media-stream quality (CF-004f): one entry per audio/video track (folded by MID) carrying the RTT and
@@ -585,10 +588,10 @@ across these streams.</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_NackCount" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.NackCount">
   NackCount
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L91"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L92"><i class="bi bi-code-slash"></i></a>
   </h3>
 
-  <div class="markdown level1 summary"><p>Generic NACK feedback messages, or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> until video feedback metrics are wired.</p>
+  <div class="markdown level1 summary"><p>Generic NACK feedback messages sent, or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> until a media session is active.</p>
 </div>
   <div class="markdown level1 conceptual"></div>
 
@@ -617,7 +620,7 @@ across these streams.</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_OutgoingBitrateBps" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.OutgoingBitrateBps">
   OutgoingBitrateBps
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L38"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Outgoing bitrate in bits/second since the previous snapshot; <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> on the first snapshot.</p>
@@ -649,7 +652,7 @@ across these streams.</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_PacketLoss" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.PacketLoss">
   PacketLoss
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L50"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L51"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Fraction of our outbound packets the peer reports lost (0..1) via its RTCP reception report
@@ -684,7 +687,7 @@ session aggregate — the worst (maximum) loss across our sending streams; the p
 
   <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_PacketsReceived" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.PacketsReceived">
   PacketsReceived
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L23"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L24"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Total RTP packets received and successfully decrypted.</p>
@@ -716,7 +719,7 @@ session aggregate — the worst (maximum) loss across our sending streams; the p
 
   <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_PacketsSent" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.PacketsSent">
   PacketsSent
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L17"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L18"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Total RTP packets sent across all tracks.</p>
@@ -748,10 +751,10 @@ session aggregate — the worst (maximum) loss across our sending streams; the p
 
   <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_PliCount" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.PliCount">
   PliCount
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L94"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L95"><i class="bi bi-code-slash"></i></a>
   </h3>
 
-  <div class="markdown level1 summary"><p>Picture Loss Indication (PLI) messages, or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> until video feedback metrics are wired.</p>
+  <div class="markdown level1 summary"><p>Picture Loss Indication (PLI) messages sent, or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> until a media session is active.</p>
 </div>
   <div class="markdown level1 conceptual"></div>
 
@@ -780,7 +783,7 @@ session aggregate — the worst (maximum) loss across our sending streams; the p
 
   <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_RoundTripTimeMs" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.RoundTripTimeMs">
   RoundTripTimeMs
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L67"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L68"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Round-trip time in milliseconds derived from the peer's echoed LSR/DLSR (RFC 3550 §6.4.1), or
@@ -815,7 +818,7 @@ session aggregate — the worst (maximum) RTT across our sending streams; the pe
 
   <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_SelectedLocalCandidate" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.SelectedLocalCandidate">
   SelectedLocalCandidate
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L109"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L113"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>The selected local candidate (the bound local media endpoint), or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> before the transport binds.</p>
@@ -847,7 +850,7 @@ session aggregate — the worst (maximum) RTT across our sending streams; the pe
 
   <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_SelectedRemoteCandidate" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.SelectedRemoteCandidate">
   SelectedRemoteCandidate
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L112"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L116"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>The selected remote candidate (the resolved remote media endpoint), or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> before one is set.</p>
@@ -879,7 +882,7 @@ session aggregate — the worst (maximum) RTT across our sending streams; the pe
 
   <h3 id="CalloraVoipSdk_WebRtc_WebRtcStats_SuppressedSends" data-uid="CalloraVoipSdk.WebRtc.WebRtcStats.SuppressedSends">
   SuppressedSends
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L29"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L30"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Outbound sends suppressed before the SRTP keys were installed (fail-closed).</p>
@@ -911,7 +914,7 @@ session aggregate — the worst (maximum) RTT across our sending streams; the pe
 </article>
 
         <div class="contribution d-print-none">
-          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L9" class="edit-link">Edit this page</a>
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcStats.cs/#L10" class="edit-link">Edit this page</a>
         </div>
 
 

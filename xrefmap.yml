@@ -7634,6 +7634,28 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.DependencyInjection.VoipOptionsValidator.Validate
   nameWithType: VoipOptionsValidator.Validate
+- uid: CalloraVoipSdk.DependencyInjection.WebRtcOptionsValidator
+  name: WebRtcOptionsValidator
+  href: _api/CalloraVoipSdk.DependencyInjection.WebRtcOptionsValidator.html
+  commentId: T:CalloraVoipSdk.DependencyInjection.WebRtcOptionsValidator
+  fullName: CalloraVoipSdk.DependencyInjection.WebRtcOptionsValidator
+  nameWithType: WebRtcOptionsValidator
+- uid: CalloraVoipSdk.DependencyInjection.WebRtcOptionsValidator.Validate(System.String,CalloraVoipSdk.WebRtc.WebRtcOptions)
+  name: Validate(string?, WebRtcOptions)
+  href: _api/CalloraVoipSdk.DependencyInjection.WebRtcOptionsValidator.html#CalloraVoipSdk_DependencyInjection_WebRtcOptionsValidator_Validate_System_String_CalloraVoipSdk_WebRtc_WebRtcOptions_
+  commentId: M:CalloraVoipSdk.DependencyInjection.WebRtcOptionsValidator.Validate(System.String,CalloraVoipSdk.WebRtc.WebRtcOptions)
+  name.vb: Validate(String, WebRtcOptions)
+  fullName: CalloraVoipSdk.DependencyInjection.WebRtcOptionsValidator.Validate(string?, CalloraVoipSdk.WebRtc.WebRtcOptions)
+  fullName.vb: CalloraVoipSdk.DependencyInjection.WebRtcOptionsValidator.Validate(String, CalloraVoipSdk.WebRtc.WebRtcOptions)
+  nameWithType: WebRtcOptionsValidator.Validate(string?, WebRtcOptions)
+  nameWithType.vb: WebRtcOptionsValidator.Validate(String, WebRtcOptions)
+- uid: CalloraVoipSdk.DependencyInjection.WebRtcOptionsValidator.Validate*
+  name: Validate
+  href: _api/CalloraVoipSdk.DependencyInjection.WebRtcOptionsValidator.html#CalloraVoipSdk_DependencyInjection_WebRtcOptionsValidator_Validate_
+  commentId: Overload:CalloraVoipSdk.DependencyInjection.WebRtcOptionsValidator.Validate
+  isSpec: "True"
+  fullName: CalloraVoipSdk.DependencyInjection.WebRtcOptionsValidator.Validate
+  nameWithType: WebRtcOptionsValidator.Validate
 - uid: CalloraVoipSdk.DependencyInjection.WebRtcServiceCollectionExtensions
   name: WebRtcServiceCollectionExtensions
   href: _api/CalloraVoipSdk.DependencyInjection.WebRtcServiceCollectionExtensions.html
@@ -12385,6 +12407,19 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.WebRtc.WebRtcClient.CreatePeer
   nameWithType: WebRtcClient.CreatePeer
+- uid: CalloraVoipSdk.WebRtc.WebRtcClient.DisposeAsync
+  name: DisposeAsync()
+  href: _api/CalloraVoipSdk.WebRtc.WebRtcClient.html#CalloraVoipSdk_WebRtc_WebRtcClient_DisposeAsync
+  commentId: M:CalloraVoipSdk.WebRtc.WebRtcClient.DisposeAsync
+  fullName: CalloraVoipSdk.WebRtc.WebRtcClient.DisposeAsync()
+  nameWithType: WebRtcClient.DisposeAsync()
+- uid: CalloraVoipSdk.WebRtc.WebRtcClient.DisposeAsync*
+  name: DisposeAsync
+  href: _api/CalloraVoipSdk.WebRtc.WebRtcClient.html#CalloraVoipSdk_WebRtc_WebRtcClient_DisposeAsync_
+  commentId: Overload:CalloraVoipSdk.WebRtc.WebRtcClient.DisposeAsync
+  isSpec: "True"
+  fullName: CalloraVoipSdk.WebRtc.WebRtcClient.DisposeAsync
+  nameWithType: WebRtcClient.DisposeAsync
 - uid: CalloraVoipSdk.WebRtc.WebRtcClient.Modules
   name: Modules
   href: _api/CalloraVoipSdk.WebRtc.WebRtcClient.html#CalloraVoipSdk_WebRtc_WebRtcClient_Modules

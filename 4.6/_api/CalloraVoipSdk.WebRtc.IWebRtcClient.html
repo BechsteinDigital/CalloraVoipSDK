@@ -6,7 +6,7 @@
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <meta name="title" content="Interface IWebRtcClient | CalloraVoipSdk ">
       
-      <meta name="description" content="The WebRTC peer facade — the happy-path entry point for building signalling-neutral peer connections. Mirrors the SIP IVoipClient; the advanced peer-registry manager tier is added in a later slice (ADR-012).">
+      <meta name="description" content="The WebRTC peer facade — the happy-path entry point for building signalling-neutral peer connections. Mirrors the SIP IVoipClient; the advanced peer-registry manager tier is added in a later slice (ADR-012). Disposing the client asynchronously closes every peer it still tracks. Peer teardown is inherently asynchronous ( is ), so the client is async-disposable only; a DI host disposes it on the async path (an IHost, or an explicit await using / DisposeAsync on a manually built provider).">
       <link rel="icon" href="../favicon.ico">
       <link rel="stylesheet" href="../public/docfx.min.css">
       <link rel="stylesheet" href="../public/main.css">
@@ -89,7 +89,7 @@
 
 
   <h1 id="CalloraVoipSdk_WebRtc_IWebRtcClient" data-uid="CalloraVoipSdk.WebRtc.IWebRtcClient" class="text-break">
-Interface IWebRtcClient  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IWebRtcClient.cs/#L8"><i class="bi bi-code-slash"></i></a>
+Interface IWebRtcClient  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IWebRtcClient.cs/#L11"><i class="bi bi-code-slash"></i></a>
   </h1>
 
   <div class="facts text-secondary">
@@ -99,12 +99,15 @@ Interface IWebRtcClient  <a class="header-action link-secondary" title="View sou
 
   <div class="markdown summary"><p>The WebRTC peer facade — the happy-path entry point for building signalling-neutral peer
 connections. Mirrors the SIP <code>IVoipClient</code>; the advanced peer-registry manager tier is added in a
-later slice (ADR-012).</p>
+later slice (ADR-012). Disposing the client asynchronously closes every peer it still tracks. Peer
+teardown is inherently asynchronous (<a class="xref" href="CalloraVoipSdk.WebRtc.IPeerConnection.html">IPeerConnection</a> is <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.iasyncdisposable">IAsyncDisposable</a>),
+so the client is async-disposable only; a DI host disposes it on the async path (an <code>IHost</code>, or an
+explicit <code>await using</code> / <code>DisposeAsync</code> on a manually built provider).</p>
 </div>
   <div class="markdown conceptual"></div>
 
   <div class="codewrapper">
-    <pre><code class="lang-csharp hljs">public interface IWebRtcClient</code></pre>
+    <pre><code class="lang-csharp hljs">public interface IWebRtcClient : IAsyncDisposable</code></pre>
   </div>
 
 
@@ -113,6 +116,13 @@ later slice (ADR-012).</p>
 
 
 
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.iasyncdisposable.disposeasync">IAsyncDisposable.DisposeAsync()</a>
+    </div>
+  </dd></dl>
 
 
 
@@ -127,7 +137,7 @@ later slice (ADR-012).</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_IWebRtcClient_Modules" data-uid="CalloraVoipSdk.WebRtc.IWebRtcClient.Modules">
   Modules
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IWebRtcClient.cs/#L24"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IWebRtcClient.cs/#L27"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>The registry of optional facade extensions contributed by separate packages (L3 plugin seam);
@@ -161,7 +171,7 @@ register modules programmatically via <a class="xref" href="CalloraVoipSdk.WebRt
 
   <h3 id="CalloraVoipSdk_WebRtc_IWebRtcClient_Peers" data-uid="CalloraVoipSdk.WebRtc.IWebRtcClient.Peers">
   Peers
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IWebRtcClient.cs/#L17"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IWebRtcClient.cs/#L20"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>The registry of peer connections currently open on this client (L2 multi-peer manager).</p>
@@ -197,7 +207,7 @@ register modules programmatically via <a class="xref" href="CalloraVoipSdk.WebRt
 
   <h3 id="CalloraVoipSdk_WebRtc_IWebRtcClient_CreatePeer" data-uid="CalloraVoipSdk.WebRtc.IWebRtcClient.CreatePeer">
   CreatePeer()
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IWebRtcClient.cs/#L14"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IWebRtcClient.cs/#L17"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Creates a new peer connection with the client's configured codecs, DTLS identity and local
@@ -230,7 +240,7 @@ endpoint. The caller drives signalling and disposes the returned peer.</p>
 </article>
 
         <div class="contribution d-print-none">
-          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IWebRtcClient.cs/#L8" class="edit-link">Edit this page</a>
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IWebRtcClient.cs/#L11" class="edit-link">Edit this page</a>
         </div>
 
 

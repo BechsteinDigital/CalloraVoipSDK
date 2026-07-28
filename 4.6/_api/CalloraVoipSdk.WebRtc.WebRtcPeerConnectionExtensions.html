@@ -162,7 +162,7 @@ for callers that drive signalling themselves.</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_WebRtcPeerConnectionExtensions_ConnectAsync_CalloraVoipSdk_WebRtc_IPeerConnection_CalloraVoipSdk_WebRtc_IWebRtcSignaling_CalloraVoipSdk_WebRtc_WebRtcRole_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.WebRtc.WebRtcPeerConnectionExtensions.ConnectAsync(CalloraVoipSdk.WebRtc.IPeerConnection,CalloraVoipSdk.WebRtc.IWebRtcSignaling,CalloraVoipSdk.WebRtc.WebRtcRole,System.Threading.CancellationToken)">
   ConnectAsync(IPeerConnection, IWebRtcSignaling, WebRtcRole, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcPeerConnectionExtensions.cs/#L29"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcPeerConnectionExtensions.cs/#L36"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Drives the SDP handshake over <code class="paramref">signalling</code> for the given <code class="paramref">role</code> and
@@ -204,6 +204,13 @@ tracks are not missed. Early-bind gives even an ephemeral (port 0) client a live
 fixed, reachable media port is still recommended for NAT reachability without TURN. When
 <code class="paramref">signalling</code> also implements <a class="xref" href="CalloraVoipSdk.WebRtc.IWebRtcTrickleSignaling.html">IWebRtcTrickleSignaling</a>, local candidates
 (host + server-reflexive) trickle out and remote candidates are applied during negotiation (ADR-012).</p>
+<p>
+Trickle contract: the remote-candidate pump is cancelled and awaited to completion before this method
+returns. Your <a class="xref" href="CalloraVoipSdk.WebRtc.IWebRtcTrickleSignaling.html#CalloraVoipSdk_WebRtc_IWebRtcTrickleSignaling_ReceiveCandidateAsync_System_Threading_CancellationToken_">ReceiveCandidateAsync(CancellationToken)</a> implementation MUST honour the
+supplied <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a> (return or throw <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.operationcanceledexception">OperationCanceledException</a> when
+it fires); a pump that blocks indefinitely on a token it ignores will hang <code>ConnectAsync</code> at
+teardown. The SDK cancels correctly — it cannot force a non-cooperative channel to unblock.
+</p>
 </div>
 
   <h4 class="section">Exceptions</h4>

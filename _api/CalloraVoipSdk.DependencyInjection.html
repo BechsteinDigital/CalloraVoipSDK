@@ -147,6 +147,13 @@ and by <a class="xref" href="CalloraVoipSdk.DependencyInjection.CalloraBuilder.h
 </dd>
     </dl>
     <dl class="jumplist">
+      <dt><a class="xref" href="CalloraVoipSdk.DependencyInjection.WebRtcOptionsValidator.html">WebRtcOptionsValidator</a></dt>
+      <dd><p>Startup validation for host-bound <a class="xref" href="CalloraVoipSdk.WebRtc.WebRtcOptions.html">WebRtcOptions</a>. The WebRTC counterpart to
+<a class="xref" href="CalloraVoipSdk.DependencyInjection.VoipOptionsValidator.html">VoipOptionsValidator</a>: registered with <code>ValidateOnStart()</code> so an invalid ICE-server
+entry surfaces at host start rather than only when the first peer is created.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
       <dt><a class="xref" href="CalloraVoipSdk.DependencyInjection.WebRtcServiceCollectionExtensions.html">WebRtcServiceCollectionExtensions</a></dt>
       <dd><p>Dependency-injection entrypoint for the WebRTC facade. Standalone counterpart to
 <a class="xref" href="CalloraVoipSdk.DependencyInjection.ServiceCollectionExtensions.html#CalloraVoipSdk_DependencyInjection_ServiceCollectionExtensions_AddCalloraVoip_Microsoft_Extensions_DependencyInjection_IServiceCollection_System_Action_CalloraVoipSdk_VoipOptions__">AddCalloraVoip(IServiceCollection, Action&lt;VoipOptions&gt;?)</a>: a pure-WebRTC host calls only

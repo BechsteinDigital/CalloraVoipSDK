@@ -163,9 +163,10 @@ codec bitstream — turning it into a playable file is the sink's job.</p>
     <dl class="jumplist">
       <dt><a class="xref" href="CalloraVoipSdk.WebRtc.WebRtcStats.html">WebRtcStats</a></dt>
       <dd><p>A point-in-time statistics snapshot for a peer connection (the SDK's <code>getStats</code>). Transport
-counters, derived bitrates and the ICE state/selected pair are populated today; quality, video and
-congestion-control metrics are added in later slices and read <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> until then — a null
-value means &quot;not yet measured&quot;, never a fabricated zero.</p>
+counters, derived bitrates, RTCP-derived quality, video, congestion-control and the ICE state/selected
+pair are all populated. A nullable metric reads <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> when it has not yet been measured
+(for example no media session is active, the peer has not yet reported, or no inbound video has been
+received) — a null value means &quot;not yet measured&quot;, never a fabricated zero.</p>
 </dd>
     </dl>
     <h3 id="structs">
@@ -227,7 +228,10 @@ a multi-peer app (e.g. a conference) can enumerate its live connections without 
       <dt><a class="xref" href="CalloraVoipSdk.WebRtc.IWebRtcClient.html">IWebRtcClient</a></dt>
       <dd><p>The WebRTC peer facade — the happy-path entry point for building signalling-neutral peer
 connections. Mirrors the SIP <code>IVoipClient</code>; the advanced peer-registry manager tier is added in a
-later slice (ADR-012).</p>
+later slice (ADR-012). Disposing the client asynchronously closes every peer it still tracks. Peer
+teardown is inherently asynchronous (<a class="xref" href="CalloraVoipSdk.WebRtc.IPeerConnection.html">IPeerConnection</a> is <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.iasyncdisposable">IAsyncDisposable</a>),
+so the client is async-disposable only; a DI host disposes it on the async path (an <code>IHost</code>, or an
+explicit <code>await using</code> / <code>DisposeAsync</code> on a manually built provider).</p>
 </dd>
     </dl>
     <dl class="jumplist">
