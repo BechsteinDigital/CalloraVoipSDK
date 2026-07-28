@@ -272,7 +272,9 @@ public sealed class VoipClient : IVoipClient
             // manager's constructor requires the concrete peer type.
             var callManager = new CallManager();
             Calls = callManager;
-            callManager.CallStateChanged += (s, e) => CallStateChanged?.Invoke(s, e);
+            // Re-raise with the facade as sender, not the internal manager, so subscribers to
+            // VoipClient.CallStateChanged see the VoipClient they subscribed on (#18.9).
+            callManager.CallStateChanged += (_, e) => CallStateChanged?.Invoke(this, e);
 
             var audioFileCodecs = ResolveService<IAudioFileCodecRegistry>(services)
                 ?? new AudioFileCodecRegistry();
@@ -348,8 +350,9 @@ public sealed class VoipClient : IVoipClient
             });
             Lines = lineManager;
 
-            Lines.IncomingCall += (s, e) => IncomingCall?.Invoke(s, e);
-            Lines.IncomingMessage += (s, e) => IncomingMessage?.Invoke(s, e);
+            // Facade as sender (see CallStateChanged above), not the inner line manager (#18.9).
+            Lines.IncomingCall += (_, e) => IncomingCall?.Invoke(this, e);
+            Lines.IncomingMessage += (_, e) => IncomingMessage?.Invoke(this, e);
 
             // Video is transport-only: the SDK ships no codec, so the video device is optional and resolved
             // purely from DI (no platform-factory fallback like audio). When absent, AttachDefaultVideoAsync
@@ -443,7 +446,7 @@ public sealed class VoipClient : IVoipClient
     /// Convenience registration flow: registers one line and waits for a terminal connect outcome.
     /// Existing <see cref="PhoneLineManager.Register"/> remains unchanged.
     /// </summary>
-    [Obsolete("Use ConnectAsync(...) instead. RegisterAndWaitAsync(...) will be removed after v1.0.", false)]
+    [Obsolete("Use ConnectAsync(...) instead. RegisterAndWaitAsync(...) has been deprecated since v1.0 and is kept for backward compatibility; it may be removed in a future major release.", false)]
     public Task<ConnectResult> RegisterAndWaitAsync(
         SipAccount account,
         ConnectOptions? options = null,
@@ -759,6 +762,13 @@ public sealed class VoipClient : IVoipClient
     /// <summary>
     /// Disposes lines, transport, and owned audio resources.
     /// </summary>
+    /// <remarks>
+    /// Double-dispose is safe (the first caller wins via an interlocked guard), but disposal is <b>not</b>
+    /// synchronized against in-flight operations: calling <see cref="Dispose"/> while a <c>ConnectAsync</c>,
+    /// <c>DialAndWaitUntilConnectedAsync</c> or a call/media operation is still running tears the underlying
+    /// orchestrators and transport out from under it and may fault that operation. Let outstanding
+    /// operations complete (or cancel them via their token) before disposing the client.
+    /// </remarks>
     public void Dispose()
     {
         // Claim disposal atomically so two concurrent Dispose() callers cannot both run the teardown
