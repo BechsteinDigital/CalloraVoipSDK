@@ -556,45 +556,45 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
         }
     }
     /// <inheritdoc />
-    public async Task HoldAsync(
-        string? sessionDescription = null,
-        CancellationToken ct = default)
-    {
-        ThrowIfDisposed();
-        await _operationGate.WaitAsync(ct).ConfigureAwait(false);
-        string? body;
-        try
-        {
-            if (State != SipDialogState.Established)
-                throw new InvalidOperationException($"Dialog must be Established, current state is {State}.");
-            body = sessionDescription
-                ?? _sdpProvider.BuildOffer(new System.Net.IPEndPoint(LocalSignalingEndPoint.Address, 0), true);
-        }
-        finally
-        {
-            ReleaseOperationGateSafe();
-        }
-        await _transactionService.SendInviteTransactionAsync(
-                body,
-                allowRingingTransition: false,
-                successState: SipDialogState.OnHold,
-                ct)
-            .ConfigureAwait(false);
-    }
+    public Task HoldAsync(string? sessionDescription = null, CancellationToken ct = default) =>
+        SendReInviteAsync(SipDialogState.Established, sessionDescription, holdOffer: true, SipDialogState.OnHold, ct);
+
     /// <inheritdoc />
-    public async Task UnholdAsync(
-        string? sessionDescription = null,
-        CancellationToken ct = default)
+    public Task UnholdAsync(string? sessionDescription = null, CancellationToken ct = default) =>
+        SendReInviteAsync(SipDialogState.OnHold, sessionDescription, holdOffer: false, SipDialogState.Established, ct);
+
+    /// <inheritdoc />
+    public Task ReinviteAsync(string sessionDescription, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sessionDescription);
+        // Direction-preserving re-INVITE (Established → Established): the caller owns the SDP (new ICE
+        // credentials), so no hold/unhold offer is built. This is the transport for an ICE restart (RFC 8445 §9).
+        return SendReInviteAsync(
+            SipDialogState.Established, sessionDescription, holdOffer: false, SipDialogState.Established, ct);
+    }
+
+    /// <summary>
+    /// Shared in-dialog re-INVITE driver for hold/unhold/ICE-restart. Under the operation gate it asserts
+    /// the <paramref name="requiredState"/> precondition and resolves the offer body — building a hold/unhold
+    /// offer (<paramref name="holdOffer"/>) when the caller supplied none — then runs the INVITE transaction
+    /// to <paramref name="successState"/>.
+    /// </summary>
+    private async Task SendReInviteAsync(
+        SipDialogState requiredState,
+        string? sessionDescription,
+        bool holdOffer,
+        SipDialogState successState,
+        CancellationToken ct)
     {
         ThrowIfDisposed();
         await _operationGate.WaitAsync(ct).ConfigureAwait(false);
         string? body;
         try
         {
-            if (State != SipDialogState.OnHold)
-                throw new InvalidOperationException($"Dialog must be OnHold, current state is {State}.");
+            if (State != requiredState)
+                throw new InvalidOperationException($"Dialog must be {requiredState}, current state is {State}.");
             body = sessionDescription
-                ?? _sdpProvider.BuildOffer(new System.Net.IPEndPoint(LocalSignalingEndPoint.Address, 0), false);
+                ?? _sdpProvider.BuildOffer(new System.Net.IPEndPoint(LocalSignalingEndPoint.Address, 0), holdOffer);
         }
         finally
         {
@@ -603,7 +603,7 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
         await _transactionService.SendInviteTransactionAsync(
                 body,
                 allowRingingTransition: false,
-                successState: SipDialogState.Established,
+                successState: successState,
                 ct)
             .ConfigureAwait(false);
     }

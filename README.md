@@ -566,18 +566,21 @@ The SDK core stays open and free; plugins are licensed separately. Contact
 ## Roadmap
 
 - Full ICE (RFC 8445 / RFC 7675) is **implemented and opt-in** — role + tie-breaker, check-list
-  FSM, `USE-CANDIDATE` nomination, inbound/triggered checks, restart detection, and consent
-  freshness with media cease. Final state and selected pair are observable via `ICall.IceSnapshot`;
-  post-establishment changes (incl. consent loss → `Disconnected`) via `ICall.IceConnectionStateChanged`.
-  Remaining gaps toward production ([#62](../../issues/62)): ICE-TCP candidates (RFC 6544), local
-  ICE-restart *initiation* (only detection today), and live interop/production validation. Real trunk
-  calls run over symmetric RTP (comedia), which needs no ICE or STUN.
+  FSM, `USE-CANDIDATE` nomination, inbound/triggered checks, restart detection **and local restart
+  initiation** (`ICall.RestartIceAsync`, RFC 8445 §9 — new credentials on the existing socket, role
+  preserved), and consent freshness with media cease. Final state and selected pair are observable via
+  `ICall.IceSnapshot`; post-establishment changes (incl. consent loss → `Disconnected`) via
+  `ICall.IceConnectionStateChanged`. Remaining gaps toward production ([#62](../../issues/62)): live
+  interop/production validation of the ICE path, and ICE-TCP candidates (RFC 6544) — a **deliberate
+  post-GA limitation**, since real trunk calls run over symmetric RTP (comedia), which needs no ICE or STUN.
 - Commercial plugin line-up (private feed, licensed): Callora.Realtime, WebSocket
   streaming, Privacy/Risk/Intelligence — in development
-- CI/CD hardening: soak and Asterisk interop gates are in place (media-quality matrix,
-  resource-leak guards, full SIP/RTP flow against a real container with zero skipped cases, plus a
-  two-leg byte-exact bidirectional media test); remaining: a chaos/fault-injection gate and a
-  wired-up performance gate
+- CI/CD hardening: soak, Asterisk interop, chaos/fault-injection, and performance gates are all in place
+  (media-quality matrix, resource-leak guards, full SIP/RTP flow against a real container with zero skipped
+  cases, a two-leg byte-exact bidirectional media test, a per-PR chaos gate that injects transport loss,
+  malformed/adversarial packets, signaling outage, and resource churn under fault and asserts graceful
+  degradation + recovery + no leak, and a per-PR performance gate that holds the SRTP per-packet crypto hot
+  path above a catastrophic-regression throughput floor); the machine-specific capacity envelope runs nightly
 - Broader interop validation against more PBXs/trunks/browsers (Asterisk is automated;
   FRITZ!Box is manually verified — the rest is configuration guidance so far)
 

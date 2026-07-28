@@ -156,6 +156,18 @@ internal sealed class Call : ICall, IDisposable
     }
 
     /// <summary>
+    /// Initiates a local ICE restart (RFC 8445 §9). The call stays <see cref="CallState.Connected"/> —
+    /// the restart re-negotiates only the ICE transport; the channel rejects it when ICE was not
+    /// negotiated on this call.
+    /// </summary>
+    public async Task RestartIceAsync(CancellationToken ct = default)
+    {
+        GuardState(CallState.Connected);
+
+        await _channel.RestartIceAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// Sends one DTMF tone. Allowed once the (early or confirmed) dialog can carry media:
     /// <see cref="CallState.Ringing"/> (early dialog, e.g. IVR navigation or AI-outbound bots that
     /// send DTMF before the 200 OK), <see cref="CallState.Connected"/>, and <see cref="CallState.OnHold"/>.

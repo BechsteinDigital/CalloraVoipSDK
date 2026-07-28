@@ -11,6 +11,16 @@ internal interface ICallChannel : IDisposable
     Task HangupAsync();
     Task HoldAsync();
     Task UnholdAsync();
+
+    /// <summary>
+    /// Initiates a local ICE restart (RFC 8445 §9): re-gathers on the existing media socket with fresh
+    /// ICE credentials (new ufrag AND pwd) and re-offers via a direction-preserving re-INVITE, preserving
+    /// the ICE role. Media continues on the previously validated pair until the new nomination completes.
+    /// The default implementation throws <see cref="NotSupportedException"/>; only ICE-capable channels
+    /// override it.
+    /// </summary>
+    Task RestartIceAsync() => throw new NotSupportedException();
+
     Task SendDtmfAsync(byte dtmfCode);
     Task RejectAsync(int statusCode, string? reasonPhrase, CancellationToken ct);
     Task RedirectAsync(IReadOnlyList<string> contactUris, int statusCode, CancellationToken ct);
