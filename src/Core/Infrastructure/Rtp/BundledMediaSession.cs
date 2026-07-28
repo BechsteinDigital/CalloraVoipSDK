@@ -19,10 +19,19 @@ namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
 /// Assembles a full BUNDLE media session (ADR-011 B5, RFC 8843) from negotiated parameters: one shared
 /// <see cref="BundledMediaTransport"/> (socket, B3-1) keyed by one <see cref="BundledDtlsKeying"/>
 /// (DTLS-SRTP, B3-2) and kept alive by one <see cref="BundledIceControl"/> (ICE/consent, B3-3), carrying
-/// an audio track and an optional video track (<see cref="BundledVideoTrack"/>, B4) over the inbound and
-/// outbound pipelines (B2c-in). This is the object that ties the transport slices into one startable unit
-/// — the internal composition a signalling-neutral WebRTC facade drives, or that the SDP negotiator
-/// builds from a BUNDLE-negotiated offer/answer.
+/// one audio track and zero or more video tracks (<see cref="BundledVideoTrack"/>, B4 — P2b: N video
+/// m-lines such as a camera plus a screen-share) over the inbound and outbound pipelines (B2c-in). This is
+/// the object that ties the transport slices into one startable unit — the internal composition a
+/// signalling-neutral WebRTC facade drives, or that the SDP negotiator builds from a BUNDLE-negotiated
+/// offer/answer.
+/// <para>
+/// Each video track rides its own MID on its own bundle-wide-distinct SSRC(s); inbound packets are routed to
+/// the owning track by MID (the router demultiplexes by the MID header extension, RFC 9143, when tracks share
+/// a payload type), and per-SSRC SRTP (ADR-011) keeps two simultaneous video streams encrypting/decrypting
+/// independently — so two same-codec video tracks never cross-talk. The mid-less send/receive members address
+/// the primary (first) video track for backward compatibility with the pre-P2b 1-audio-1-video path; the
+/// mid-carrying members (P2b) address a specific track. The public add-a-track surface is P2c.
+/// </para>
 /// </summary>
 internal sealed class BundledMediaSession : IAsyncDisposable
 {
@@ -35,7 +44,9 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     private readonly BundledInboundReceptionStats _receptionStats;
     private readonly BundledOutboundQualityTracker _outboundQuality;
     private readonly IRtcpPacketCodec _rtcpCodec;
-    private readonly BundledVideoTrack? _video;
+    // The bundle's video tracks (P2b: N video m-lines, RFC 8843 §9), keyed by MID. Empty for an audio-only
+    // bundle; the first is the primary, addressed by the mid-less send/receive facade for backward compatibility.
+    private readonly BundledVideoTrackSet _video;
 
     // Transport-wide congestion control (transport-cc / RFC 8888), one plane for the WHOLE bundle because
     // transport-cc numbers the transport, not a stream. Null unless the a=extmap was negotiated. See
@@ -105,8 +116,20 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     /// </summary>
     public event Action<byte, int>? DtmfReceived;
 
-    /// <summary>Raised with each reassembled inbound video frame (frame, RTP timestamp, is-key-frame).</summary>
+    /// <summary>
+    /// Raised with each reassembled inbound video frame on the <em>primary</em> video track (frame, RTP
+    /// timestamp, is-key-frame). Backward-compatible with the pre-P2b single-video path: with exactly one
+    /// video track this fires for that track's frames; with several it fires only for the primary (first)
+    /// track. Use <see cref="VideoTrackFrameReceived"/> to receive every track's frames tagged with its MID.
+    /// </summary>
     public event Action<byte[], uint, bool>? VideoFrameReceived;
+
+    /// <summary>
+    /// Raised with each reassembled inbound video frame on any video track (P2b), tagged with the MID of the
+    /// track it arrived on (MID, frame, RTP timestamp, is-key-frame). Fires for every video track — the way to
+    /// tell N video tracks apart on the inbound path. Runs on the shared receive loop.
+    /// </summary>
+    public event Action<string, byte[], uint, bool>? VideoTrackFrameReceived;
 
     /// <summary>
     /// Raised when the peer requests a key frame via an inbound PLI/FIR (RFC 4585/5104) on the video track;
@@ -153,8 +176,15 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         {
             [options.Audio.Mid] = new[] { (int)options.Audio.PayloadType },
         };
-        if (options.Video is { } videoConfig)
-            payloadTypesByMid[videoConfig.Mid] = new[] { (int)videoConfig.PayloadType };
+        // One entry per video m-line (P2b). A payload type shared across video tracks (two same-codec streams
+        // both use, e.g., PT 96) is dropped from the PT→MID demux map by the factory below, so those packets are
+        // demultiplexed by MID header extension (RFC 9143) instead — never guessed by an ambiguous PT.
+        foreach (var videoConfig in options.VideoTracks)
+        {
+            if (!payloadTypesByMid.TryAdd(videoConfig.Mid, new[] { (int)videoConfig.PayloadType }))
+                throw new ArgumentException(
+                    $"Duplicate video MID '{videoConfig.Mid}' in the bundle options.", nameof(options));
+        }
 
         var router = new BundledTrackRouter(
             BundledRtpDemultiplexerFactory.Create(options.MidExtensionId, payloadTypesByMid));
@@ -165,7 +195,7 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         // The negotiated clock/kind is applied per inbound source by matching the first packet's payload type
         // (the inbound SSRC is the remote's choice), so audio gets its exact §A.8 clock and video gets 90 kHz
         // regardless of arrival order, and each source is attributed to its track (CF-004f).
-        _receptionStats = new BundledInboundReceptionStats(clockByPayloadType: BuildInboundClockMap(options));
+        _receptionStats = new BundledInboundReceptionStats(clockByPayloadType: BundledMediaSessionComposition.BuildInboundClockMap(options));
         // Consumes the reception blocks the peer returns about our outbound streams to derive RTT and the loss
         // the peer sees (RFC 3550 §6.4.1): fed by the reporter's SR send instants and by inbound RR/SR blocks.
         _outboundQuality = new BundledOutboundQualityTracker();
@@ -198,47 +228,30 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         _outbound = new BundledOutboundPipeline(
             new RtpPacketCodec(), _transport, loggerFactory.CreateLogger<BundledOutboundPipeline>(),
             stampsTransportCc: options.TransportWideCcExtensionId is not null);
-        _outbound.RegisterTrack(options.Audio.Mid, BuildOutboundTrack(options, options.Audio));
+        _outbound.RegisterTrack(options.Audio.Mid, BundledMediaSessionComposition.BuildOutboundTrack(options, options.Audio));
 
-        if (options.Video is { } video)
+        // One BundledVideoTrack per negotiated video m-line (P2b: N video tracks). Each registers its own
+        // outbound sender(s) and its own inbound router sink on its MID; per-SSRC SRTP keeps them independent.
+        var builtVideo = new List<(string Mid, BundledVideoTrack Track)>(options.VideoTracks.Count);
+        foreach (var video in options.VideoTracks)
         {
-            var codecName = video.VideoCodecName
-                ?? throw new ArgumentException("A video track must name its codec.", nameof(options));
-
-            if (video.Encodings.Count > 0)
+            var track = BundledMediaSessionComposition.BuildVideoTrack(options, video, _outbound, loggerFactory);
+            // The mid-less legacy event tracks only the primary (first) video track; the mid-tagged event
+            // fires for every track so N tracks are distinguishable on the inbound path.
+            var mid = video.Mid;
+            var isPrimary = builtVideo.Count == 0;
+            track.FrameReceived += (frame, timestamp, isKeyFrame) =>
             {
-                // Send-side simulcast (RFC 8853): one outbound RTP stream per a=rid layer under the shared
-                // MID, each on its own SSRC with the negotiated RID header extension (RFC 8852) stamped.
-                var ridExtensionId = options.RidExtensionId ?? throw new ArgumentException(
-                    "A simulcast video track needs a negotiated RID header-extension id.", nameof(options));
-                foreach (var encoding in video.Encodings)
-                    _outbound.RegisterTrack(video.Mid, encoding.Rid,
-                        BuildEncodingTrack(options, video.Mid, encoding.Ssrc, video.PayloadType, encoding.Rid, ridExtensionId));
-
-                _video = new BundledVideoTrack(
-                    video.Mid, codecName, video.PayloadType, video.Ssrc,
-                    video.RemoteSupportsNack, video.RemoteSupportsPli,
-                    video.Encodings.Select(e => e.Rid).ToArray(),
-                    _outbound, options.VideoReorderDepth, loggerFactory);
-            }
-            else
-            {
-                _outbound.RegisterTrack(video.Mid, BuildOutboundTrack(options, video));
-                _video = new BundledVideoTrack(
-                    video.Mid, codecName, video.PayloadType, video.Ssrc,
-                    video.RemoteSupportsNack, video.RemoteSupportsPli,
-                    _outbound, options.VideoReorderDepth, loggerFactory,
-                    // RTX repair stream (RFC 4588): retain sent packets and resend on an inbound NACK. Wired for
-                    // the non-simulcast track only — per-encoding simulcast RTX is follow-up work. Its repair
-                    // SSRC is allocated bundle-wide-distinct by the factory (RFC 3550 §8.1).
-                    rtxPayloadType: video.RtxPayloadType,
-                    rtxSsrc: video.RtxSsrc);
-            }
-
-            _video.FrameReceived += (frame, timestamp, isKeyFrame) => VideoFrameReceived?.Invoke(frame, timestamp, isKeyFrame);
-            _video.KeyFrameRequested += () => VideoKeyFrameRequested?.Invoke();
-            router.RegisterTrack(video.Mid, _video.OnRtpPacket);
+                if (isPrimary)
+                    VideoFrameReceived?.Invoke(frame, timestamp, isKeyFrame);
+                VideoTrackFrameReceived?.Invoke(mid, frame, timestamp, isKeyFrame);
+            };
+            track.KeyFrameRequested += () => VideoKeyFrameRequested?.Invoke();
+            router.RegisterTrack(mid, track.OnRtpPacket);
+            builtVideo.Add((mid, track));
         }
+
+        _video = builtVideo.Count > 0 ? new BundledVideoTrackSet(builtVideo) : new BundledVideoTrackSet();
 
         // Transport-wide congestion control (transport-cc / RFC 8888), one plane per bundle. Only when the
         // a=extmap was negotiated (so the transport actually stamps a transport-wide sequence) — otherwise the
@@ -286,7 +299,7 @@ internal sealed class BundledMediaSession : IAsyncDisposable
             onSenderReportSent: _outboundQuality.RecordLocalSenderReport);
 
         _audioSsrc = options.Audio.Ssrc;
-        _outboundStreamIdentity = BuildOutboundStreamIdentity(options);
+        _outboundStreamIdentity = BundledMediaSessionComposition.BuildOutboundStreamIdentity(options);
         // A relay candidate wired at construction (offerer path) closes the door on a later AdoptRelay.
         _relayWired = relayBinding is not null ? 1 : 0;
         // Its keepalive (if any) is started in StartAsync, once the transport's receive loop is up.
@@ -423,9 +436,10 @@ internal sealed class BundledMediaSession : IAsyncDisposable
             }
         }
 
-        // Fan the already-decoded compound out to the video track for RTCP feedback (PLI/FIR → keyframe
-        // request). Runs on this same receive-loop thread, so the track's confinement is preserved.
-        _video?.OnRtcpPackets(packets);
+        // Fan the already-decoded compound out to every video track for RTCP feedback (PLI/FIR → keyframe
+        // request; Generic NACK → RTX). Each track filters to its own SSRC, so a NACK for one track never
+        // resends another's. Runs on this same receive-loop thread, so each track's confinement is preserved.
+        _video.OnRtcpPackets(packets);
 
         // And to the transport-wide congestion controller: any transport-cc feedback report in the compound
         // (RFC 8888) updates its delay-trend + loss estimators and the recommended bitrate. Same thread — no
@@ -441,87 +455,20 @@ internal sealed class BundledMediaSession : IAsyncDisposable
                 block.Ssrc, block.FractionLost, block.LastSr, block.DelaySinceLastSr, arrival);
     }
 
-    // The RTP clock rate used for the SR RTP-timestamp extrapolation (CF-004e). Audio uses its negotiated codec
-    // clock (from the track config); video uses the fixed 90 kHz RTP clock (RFC 3551 §5) — the bundle video
-    // track config does not carry a per-codec rate, and all supported video codecs (H.264/VP8) run at 90 kHz.
-    private const uint VideoRtpClockRate = 90000;
-
-    // Maps each negotiated inbound payload type to its clock/kind/MID so the reception stats can seed an inbound
-    // source's exact §A.8 clock (and attribute it to a track) by matching the first packet's payload type — the
-    // inbound SSRC is the remote's choice, unknown ahead of time. Audio uses its negotiated codec clock; video
-    // uses 90 kHz (RFC 3551 §5). The RFC 4733 telephone-event PT shares the audio clock but is DTMF, not media —
-    // it is left out (no inbound reception stream is attributed to it).
-    private static IReadOnlyDictionary<byte, BundledInboundClockDescriptor> BuildInboundClockMap(
-        BundledMediaSessionOptions options)
-    {
-        var map = new Dictionary<byte, BundledInboundClockDescriptor>
-        {
-            [options.Audio.PayloadType] = new BundledInboundClockDescriptor(
-                options.Audio.ClockRate > 0 ? (uint)options.Audio.ClockRate : 0u,
-                BundledStreamKind.Audio,
-                options.Audio.Mid),
-        };
-        if (options.Video is { } video)
-        {
-            // A shared video PT can already be present (e.g. audio and video negotiated the same number is not
-            // possible in practice, but guard anyway); the video entry wins for the video MID.
-            map[video.PayloadType] = new BundledInboundClockDescriptor(VideoRtpClockRate, BundledStreamKind.Video, video.Mid);
-        }
-
-        return map;
-    }
-
-    // Maps each of our local sending SSRCs to the track (MID + kind) it belongs to, so a per-SSRC outbound
-    // quality snapshot (RTT/loss keyed per our sending SSRC) can be attributed to a stream. Audio SSRC → audio
-    // MID; a single video SSRC or each simulcast encoding's SSRC → video MID.
-    private static IReadOnlyDictionary<uint, BundledOutboundStreamIdentity> BuildOutboundStreamIdentity(
-        BundledMediaSessionOptions options)
-    {
-        var map = new Dictionary<uint, BundledOutboundStreamIdentity>
-        {
-            [options.Audio.Ssrc] = new BundledOutboundStreamIdentity(options.Audio.Mid, BundledStreamKind.Audio),
-        };
-        if (options.Video is { } video)
-        {
-            if (video.Encodings.Count > 0)
-            {
-                foreach (var encoding in video.Encodings)
-                    map[encoding.Ssrc] = new BundledOutboundStreamIdentity(video.Mid, BundledStreamKind.Video);
-            }
-            else
-            {
-                map[video.Ssrc] = new BundledOutboundStreamIdentity(video.Mid, BundledStreamKind.Video);
-            }
-        }
-
-        return map;
-    }
-
-    private static BundledOutboundTrack BuildOutboundTrack(BundledMediaSessionOptions options, BundledTrackConfig track) =>
-        new(track.Ssrc, track.PayloadType, track.SamplesPerPacket,
-            new RtpOutboundHeaderExtensionStamper(options.TransportWideCcExtensionId, options.MidExtensionId, track.Mid),
-            options.InitialSequenceNumber, options.InitialTimestamp,
-            clockRate: track.VideoCodecName is null ? (uint)Math.Max(0, track.ClockRate) : VideoRtpClockRate);
-
-    // One simulcast encoding's outbound stream: its own SSRC, the shared video payload type, and a stamper
-    // that marks every packet with the MID and this encoding's RID (RFC 8852). Video packets carry an
-    // explicit frame timestamp, so the timestamp cursor never advances (samplesPerPacket: 0).
-    private static BundledOutboundTrack BuildEncodingTrack(
-        BundledMediaSessionOptions options, string mid, uint ssrc, byte payloadType, string rid, byte ridExtensionId) =>
-        new(ssrc, payloadType, samplesPerPacket: 0,
-            new RtpOutboundHeaderExtensionStamper(
-                options.TransportWideCcExtensionId, options.MidExtensionId, mid, ridExtensionId, rid),
-            options.InitialSequenceNumber, options.InitialTimestamp,
-            clockRate: VideoRtpClockRate);
-
     /// <summary>The endpoint the shared socket is bound to (the actual port after an ephemeral bind).</summary>
     public IPEndPoint LocalEndPoint => _transport.LocalEndPoint;
 
     /// <summary>The local audio track's synchronisation source.</summary>
     public uint AudioSsrc => _audioSsrc;
 
-    /// <summary>Whether this bundle carries a video track.</summary>
-    public bool HasVideo => _video is not null;
+    /// <summary>Whether this bundle carries at least one video track.</summary>
+    public bool HasVideo => _video.Any;
+
+    /// <summary>The number of video tracks on this bundle (P2b: N video m-lines).</summary>
+    public int VideoTrackCount => _video.Count;
+
+    /// <summary>The MID tokens of the video tracks on this bundle, in build order (primary first).</summary>
+    public IReadOnlyList<string> VideoMids => _video.Mids;
 
     /// <summary>
     /// Whether outbound audio is sent. False when the negotiated directions do not carry audio from this peer
@@ -530,11 +477,11 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     /// </summary>
     public bool AudioSendEnabled => _audioSendEnabled;
 
-    /// <summary>Whether the video track sends multiple simulcast encodings (RFC 8853).</summary>
-    public bool VideoIsSimulcast => _video?.IsSimulcast ?? false;
+    /// <summary>Whether the primary video track sends multiple simulcast encodings (RFC 8853).</summary>
+    public bool VideoIsSimulcast => _video.Primary?.IsSimulcast ?? false;
 
-    /// <summary>The configured simulcast <c>a=rid</c> layer ids, or empty when not simulcasting.</summary>
-    public IReadOnlyCollection<string> VideoSendRids => _video?.SendRids ?? [];
+    /// <summary>The primary video track's simulcast <c>a=rid</c> layer ids, or empty when not simulcasting.</summary>
+    public IReadOnlyCollection<string> VideoSendRids => _video.Primary?.SendRids ?? [];
 
     /// <summary>The remote media endpoint the shared transport sends to, or null before one is set.</summary>
     public IPEndPoint? RemoteEndPoint => _transport.RemoteEndPoint;
@@ -678,12 +625,19 @@ internal sealed class BundledMediaSession : IAsyncDisposable
 
     /// <summary>Point-in-time transport counters aggregated from the outbound and inbound pipelines, the video
     /// track's frame/feedback counters, and the sender-side congestion controller's recommended bitrate.</summary>
-    public BundledMediaStats SnapshotStats() => new(
-        _outbound.PacketsSent, _outbound.BytesSent, _outbound.SuppressedSends,
-        _inbound.RtpPacketsReceived, _inbound.RtpBytesReceived, _inbound.DroppedDatagrams,
-        _video?.FramesReceived, _video?.KeyFrames,
-        _video?.FramesDropped, _video?.NacksSent, _video?.PlisSent,
-        Congestion?.RecommendedBitrateBps);
+    public BundledMediaStats SnapshotStats()
+    {
+        // Video counters are summed across all tracks (P2b), and surfaced as null on an audio-only bundle so the
+        // "no video track" case stays distinguishable from a video track that has simply received nothing yet.
+        var hasVideo = _video.Any;
+        var video = _video.SnapshotStats();
+        return new(
+            _outbound.PacketsSent, _outbound.BytesSent, _outbound.SuppressedSends,
+            _inbound.RtpPacketsReceived, _inbound.RtpBytesReceived, _inbound.DroppedDatagrams,
+            hasVideo ? video.FramesReceived : null, hasVideo ? video.KeyFrames : null,
+            hasVideo ? video.FramesDropped : null, hasVideo ? video.NacksSent : null, hasVideo ? video.PlisSent : null,
+            Congestion?.RecommendedBitrateBps);
+    }
 
     /// <summary>
     /// Point-in-time derived quality: the RTCP outbound metrics (RFC 3550 §6.4.1 — round-trip time and the loss
@@ -848,34 +802,74 @@ internal sealed class BundledMediaSession : IAsyncDisposable
             cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
-    /// <summary>Packetises and sends one encoded video frame on the (non-simulcast) video track.</summary>
-    /// <exception cref="InvalidOperationException">This bundle has no video track, or it is simulcast.</exception>
+    /// <summary>
+    /// Packetises and sends one encoded video frame on the primary (non-simulcast) video track. Backward
+    /// compatible with the pre-P2b path: with several video tracks this addresses the primary (first) track —
+    /// use <see cref="SendVideoTrackFrameAsync(string, System.ReadOnlyMemory{byte}, uint, System.Threading.CancellationToken)"/>
+    /// to target a specific MID.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">This bundle has no video track, or the primary is simulcast.</exception>
     public Task SendVideoFrameAsync(ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default)
-        => _video is { } video
+        => _video.Primary is { } video
             ? video.SendFrameAsync(encodedFrame, rtpTimestamp, cancellationToken)
             : throw new InvalidOperationException("This bundle has no video track.");
 
-    /// <summary>Packetises and sends one encoded video frame on a simulcast <paramref name="rid"/> layer (RFC 8853).</summary>
+    /// <summary>Packetises and sends one encoded video frame on the primary track's simulcast <paramref name="rid"/> layer (RFC 8853).</summary>
     /// <exception cref="InvalidOperationException">This bundle has no video track.</exception>
     /// <exception cref="ArgumentException">No encoding is configured for <paramref name="rid"/>.</exception>
     public Task SendVideoFrameAsync(string rid, ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default)
-        => _video is { } video
+        => _video.Primary is { } video
             ? video.SendFrameAsync(rid, encodedFrame, rtpTimestamp, cancellationToken)
             : throw new InvalidOperationException("This bundle has no video track.");
 
     /// <summary>
-    /// Asks the peer for a fresh video key frame on the app's demand (RFC 4585 §6.3.1). A no-op returning
-    /// <see langword="false"/> when this bundle has no video track, when the peer did not advertise PLI, or
-    /// when the 500 ms throttle still holds; otherwise sends the PLI and returns <see langword="true"/>.
+    /// Packetises and sends one encoded video frame on the video track identified by <paramref name="mid"/>
+    /// (P2b: N video tracks — e.g. a camera and a screen-share on distinct MIDs). Internal seam; the public
+    /// add-a-track surface is P2c.
+    /// </summary>
+    /// <param name="mid">The MID of the target video track.</param>
+    /// <exception cref="InvalidOperationException">This bundle has no video track with that MID.</exception>
+    /// <exception cref="InvalidOperationException">The target track is simulcast (send with a rid instead).</exception>
+    public Task SendVideoTrackFrameAsync(string mid, ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default)
+        => (_video.Find(mid) ?? throw NoVideoTrack(mid)).SendFrameAsync(encodedFrame, rtpTimestamp, cancellationToken);
+
+    /// <summary>
+    /// Packetises and sends one encoded video frame on the <paramref name="mid"/> video track's simulcast
+    /// <paramref name="rid"/> layer (RFC 8853). Internal seam; the public add-a-track surface is P2c.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">This bundle has no video track with that MID.</exception>
+    /// <exception cref="ArgumentException">No encoding is configured for <paramref name="rid"/>.</exception>
+    public Task SendVideoTrackFrameAsync(string mid, string rid, ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default)
+        => (_video.Find(mid) ?? throw NoVideoTrack(mid)).SendFrameAsync(rid, encodedFrame, rtpTimestamp, cancellationToken);
+
+    private static InvalidOperationException NoVideoTrack(string mid)
+        => new($"This bundle has no video track with MID '{mid}'.");
+
+    /// <summary>
+    /// Asks the peer for a fresh video key frame on the primary track, on the app's demand (RFC 4585 §6.3.1).
+    /// A no-op returning <see langword="false"/> when this bundle has no video track, when the peer did not
+    /// advertise PLI, or when the 500 ms throttle still holds; otherwise sends the PLI and returns
+    /// <see langword="true"/>. Addresses the primary (first) track — use <see cref="RequestVideoTrackKeyFrameAsync"/>
+    /// to target a specific MID.
     /// </summary>
     public ValueTask<bool> RequestVideoKeyFrameAsync(CancellationToken cancellationToken = default)
-        => _video is { } video
+        => _video.Primary is { } video
+            ? video.RequestKeyFrameAsync(cancellationToken)
+            : ValueTask.FromResult(false);
+
+    /// <summary>
+    /// Asks the peer for a fresh video key frame on the <paramref name="mid"/> video track (P2b). A no-op
+    /// returning <see langword="false"/> when this bundle has no such track, when the peer did not advertise
+    /// PLI, or when the throttle still holds. Internal seam; the public add-a-track surface is P2c.
+    /// </summary>
+    public ValueTask<bool> RequestVideoTrackKeyFrameAsync(string mid, CancellationToken cancellationToken = default)
+        => _video.Find(mid) is { } video
             ? video.RequestKeyFrameAsync(cancellationToken)
             : ValueTask.FromResult(false);
 
     /// <summary>
     /// Tears the session down: stops ICE and DTLS (closing the association, zeroing keys) before
-    /// disposing the video track and finally the transport (which stops the receive loop and the socket).
+    /// disposing the video tracks and finally the transport (which stops the receive loop and the socket).
     /// </summary>
     public async ValueTask DisposeAsync()
     {
@@ -903,7 +897,7 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         // through the transport), and before DTLS zeroes the outbound SRTCP key.
         await _rtcpReporter.DisposeAsync().ConfigureAwait(false);
         await _dtls.DisposeAsync().ConfigureAwait(false);
-        _video?.Dispose();
+        _video.Dispose();
         await _transport.DisposeAsync().ConfigureAwait(false);
     }
 }

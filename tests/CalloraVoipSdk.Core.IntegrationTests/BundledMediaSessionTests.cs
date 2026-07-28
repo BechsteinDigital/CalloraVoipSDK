@@ -79,6 +79,129 @@ public sealed class BundledMediaSessionTests
     }
 
     [Fact]
+    public async Task Two_video_tracks_and_audio_flow_over_one_bundle_without_cross_talk()
+    {
+        // P2b: two video m-lines (a camera and a screen-share pattern) plus audio ride the ONE bundle. Both
+        // video tracks share the video payload type (PT 96), so inbound demux cannot rely on the PT — it must
+        // route by the MID header extension (RFC 9143). Each track sends on its own bundle-wide-distinct SSRC,
+        // and per-SSRC SRTP (ADR-011) keys ROC/replay per SSRC, so two simultaneous video streams decrypt
+        // independently. This proves each track's frame lands on its own MID and never on the other's.
+        var certA = DtlsCertificate.GenerateEcdsaP256();
+        var certB = DtlsCertificate.GenerateEcdsaP256();
+
+        // Distinct MIDs, distinct SSRCs (bundle-wide-distinct across audio + both video), shared PT 96.
+        IReadOnlyList<BundledTrackConfig> twoVideos =
+        [
+            new BundledTrackConfig { Mid = "cam", Ssrc = 0x0B0B0B0B, PayloadType = VideoPayloadType, VideoCodecName = "H264" },
+            new BundledTrackConfig { Mid = "scr", Ssrc = 0x0C0C0C0C, PayloadType = VideoPayloadType, VideoCodecName = "H264" },
+        ];
+
+        var (client, server) = CreatePair(certA, certB, videoTracks: twoVideos);
+        await using var clientLease = client;
+        await using var serverLease = server;
+
+        Assert.Equal(2, server.VideoTrackCount);
+        Assert.Equal(new[] { "cam", "scr" }, server.VideoMids);
+
+        // Collect the first received frame per MID on the receiver. A cross-talk bug would land the camera's
+        // frame under "scr" (or vice versa) — the per-MID content assertion below catches it.
+        var cam = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var scr = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
+        server.VideoTrackFrameReceived += (mid, frame, _, _) =>
+        {
+            if (mid == "cam") cam.TrySetResult(frame);
+            else if (mid == "scr") scr.TrySetResult(frame);
+        };
+
+        await server.StartAsync();
+        await client.StartAsync();
+
+        // Two visibly different frames so a mixed-up MID mapping is detectable by content, not just by count.
+        var camFrame = AnnexB((Nal(0x67, 20), false), (Nal(0x68, 6), false), (Nal(0x65, 3000), false));
+        var scrFrame = AnnexB((Nal(0x67, 24), false), (Nal(0x68, 8), false), (Nal(0x65, 4000), false));
+
+        using var overall = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        var videoTimestamp = 90000u;
+        while (!(cam.Task.IsCompleted && scr.Task.IsCompleted))
+        {
+            overall.Token.ThrowIfCancellationRequested();
+            await client.SendVideoTrackFrameAsync("cam", camFrame, videoTimestamp);
+            await client.SendVideoTrackFrameAsync("scr", scrFrame, videoTimestamp);
+            videoTimestamp += 3000;
+            await Task.Delay(20, overall.Token);
+        }
+
+        // Each MID received exactly its own track's frame content — no cross-talk between the two SSRCs.
+        Assert.Equal(
+            AnnexBParser.ParseNalUnits(camFrame).Select(n => n.ToArray()),
+            AnnexBParser.ParseNalUnits(await cam.Task.WaitAsync(TimeSpan.FromSeconds(5))).Select(n => n.ToArray()));
+        Assert.Equal(
+            AnnexBParser.ParseNalUnits(scrFrame).Select(n => n.ToArray()),
+            AnnexBParser.ParseNalUnits(await scr.Task.WaitAsync(TimeSpan.FromSeconds(5))).Select(n => n.ToArray()));
+
+        // The two distinct frames differ, so a swapped mapping would have failed one of the equalities above;
+        // assert they are genuinely different to rule out both tracks accidentally carrying identical content.
+        Assert.NotEqual(camFrame, scrFrame);
+
+        // Aggregate video stats (S4) sum across both tracks: at least the two key frames landed.
+        Assert.True(server.SnapshotStats().FramesReceived >= 2, "both video tracks should have delivered frames");
+        Assert.True(server.SnapshotStats().KeyFrames >= 2, "both video tracks' key frames should have landed");
+    }
+
+    [Fact]
+    public async Task Two_simultaneous_video_ssrcs_decrypt_independently_with_per_ssrc_replay_windows()
+    {
+        // per-SSRC SRTP (ADR-011): each SSRC on the bundle has its own ROC + replay window. Two video tracks
+        // send a long burst concurrently on distinct SSRCs; every frame decrypts on the receiver and none is
+        // rejected as a replay/out-of-window — which could only hold if the SRTP context is keyed per SSRC (a
+        // single shared replay window across both SSRCs would false-positive once their sequence spaces overlap).
+        var certA = DtlsCertificate.GenerateEcdsaP256();
+        var certB = DtlsCertificate.GenerateEcdsaP256();
+
+        IReadOnlyList<BundledTrackConfig> twoVideos =
+        [
+            new BundledTrackConfig { Mid = "cam", Ssrc = 0x0B0B0B0B, PayloadType = VideoPayloadType, VideoCodecName = "H264" },
+            new BundledTrackConfig { Mid = "scr", Ssrc = 0x0C0C0C0C, PayloadType = VideoPayloadType, VideoCodecName = "H264" },
+        ];
+
+        var (client, server) = CreatePair(certA, certB, videoTracks: twoVideos);
+        await using var clientLease = client;
+        await using var serverLease = server;
+
+        var camCount = 0;
+        var scrCount = 0;
+        server.VideoTrackFrameReceived += (mid, _, _, _) =>
+        {
+            if (mid == "cam") Interlocked.Increment(ref camCount);
+            else if (mid == "scr") Interlocked.Increment(ref scrCount);
+        };
+
+        await server.StartAsync();
+        await client.StartAsync();
+
+        var frame = AnnexB((Nal(0x67, 20), false), (Nal(0x68, 6), false), (Nal(0x65, 1500), false));
+
+        // Keep pushing a long interleaved burst on both SSRCs until each track has decrypted many frames — far
+        // past the point where a shared replay window would begin discarding one SSRC's packets.
+        const int target = 25;
+        using var overall = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        var videoTimestamp = 90000u;
+        while (Volatile.Read(ref camCount) < target || Volatile.Read(ref scrCount) < target)
+        {
+            overall.Token.ThrowIfCancellationRequested();
+            await client.SendVideoTrackFrameAsync("cam", frame, videoTimestamp);
+            await client.SendVideoTrackFrameAsync("scr", frame, videoTimestamp);
+            videoTimestamp += 3000;
+            await Task.Delay(10, overall.Token);
+        }
+
+        Assert.True(Volatile.Read(ref camCount) >= target, $"cam decrypted {camCount} frames (expected ≥ {target})");
+        Assert.True(Volatile.Read(ref scrCount) >= target, $"scr decrypted {scrCount} frames (expected ≥ {target})");
+        // The receiver dropped no datagram as undecryptable/replay across the whole burst on either SSRC.
+        Assert.Equal(0L, server.SnapshotStats().DroppedDatagrams);
+    }
+
+    [Fact]
     public async Task Transport_cc_feedback_loop_updates_the_senders_recommended_bitrate_end_to_end()
     {
         // Both peers negotiate the transport-wide-cc extension (RFC 8888), so each BundledMediaSession builds a
@@ -132,12 +255,20 @@ public sealed class BundledMediaSessionTests
     private const string ClientPwd = "clienticepassword1234567890";
     private const string ServerPwd = "servericepassword1234567890";
 
+    // The default single video track (matches the pre-P2b 1-audio-1-video path used by the byte-identity tests).
+    private static IReadOnlyList<BundledTrackConfig> DefaultVideo() =>
+    [
+        new BundledTrackConfig { Mid = "video", Ssrc = 0x0B0B0B0B, PayloadType = VideoPayloadType, VideoCodecName = "H264" },
+    ];
+
     // Two peers each need the other's port before construction, so ports are pre-allocated. Under the
     // parallel suite two probes can hand out the same free port and one bind then loses the race — retry
     // with fresh ports rather than flake.
     private static (BundledMediaSession Client, BundledMediaSession Server) CreatePair(
-        DtlsCertificate certA, DtlsCertificate certB, byte? transportCcExtId = null)
+        DtlsCertificate certA, DtlsCertificate certB, byte? transportCcExtId = null,
+        IReadOnlyList<BundledTrackConfig>? videoTracks = null)
     {
+        videoTracks ??= DefaultVideo();
         for (var attempt = 1; ; attempt++)
         {
             var portA = FreeUdpPort();
@@ -148,12 +279,12 @@ public sealed class BundledMediaSessionTests
                 client = new BundledMediaSession(
                     Options(portA, portB, isClient: true, certB.Fingerprint, controlling: true,
                         localUfrag: "cli0", localPwd: ClientPwd, remoteUfrag: "srv0", remotePwd: ServerPwd,
-                        transportCcExtId: transportCcExtId),
+                        transportCcExtId: transportCcExtId, videoTracks: videoTracks),
                     new DtlsSrtpHandshaker(NullLogger<DtlsSrtpHandshaker>.Instance), certA, NullLoggerFactory.Instance);
                 var server = new BundledMediaSession(
                     Options(portB, portA, isClient: false, certA.Fingerprint, controlling: false,
                         localUfrag: "srv0", localPwd: ServerPwd, remoteUfrag: "cli0", remotePwd: ClientPwd,
-                        transportCcExtId: transportCcExtId),
+                        transportCcExtId: transportCcExtId, videoTracks: videoTracks),
                     new DtlsSrtpHandshaker(NullLogger<DtlsSrtpHandshaker>.Instance), certB, NullLoggerFactory.Instance);
                 return (client, server);
             }
@@ -166,7 +297,8 @@ public sealed class BundledMediaSessionTests
 
     private static BundledMediaSessionOptions Options(
         int localPort, int remotePort, bool isClient, DtlsFingerprint remoteFingerprint, bool controlling,
-        string localUfrag, string localPwd, string remoteUfrag, string remotePwd, byte? transportCcExtId = null)
+        string localUfrag, string localPwd, string remoteUfrag, string remotePwd, byte? transportCcExtId = null,
+        IReadOnlyList<BundledTrackConfig>? videoTracks = null)
     {
         var remote = new IPEndPoint(IPAddress.Loopback, remotePort);
         return new BundledMediaSessionOptions
@@ -179,10 +311,7 @@ public sealed class BundledMediaSessionTests
             {
                 Mid = "audio", Ssrc = 0x0A0A0A0A, PayloadType = AudioPayloadType, SamplesPerPacket = 160,
             },
-            Video = new BundledTrackConfig
-            {
-                Mid = "video", Ssrc = 0x0B0B0B0B, PayloadType = VideoPayloadType, VideoCodecName = "H264",
-            },
+            VideoTracks = videoTracks ?? DefaultVideo(),
             DtlsIsClient = isClient,
             RemoteFingerprint = remoteFingerprint,
             Ice = new IceMediaParameters(

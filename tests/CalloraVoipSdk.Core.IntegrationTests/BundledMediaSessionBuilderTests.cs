@@ -41,11 +41,11 @@ public sealed class BundledMediaSessionBuilderTests
         Assert.Equal(160, options.Audio.SamplesPerPacket);
         Assert.Null(options.Audio.VideoCodecName);
 
-        Assert.NotNull(options.Video);
-        Assert.Equal("video", options.Video!.Mid);
-        Assert.Equal(0x22222222u, options.Video.Ssrc);
-        Assert.Equal(96, (int)options.Video.PayloadType);
-        Assert.Equal("H264", options.Video.VideoCodecName);
+        var videoTrack = Assert.Single(options.VideoTracks);
+        Assert.Equal("video", videoTrack.Mid);
+        Assert.Equal(0x22222222u, videoTrack.Ssrc);
+        Assert.Equal(96, (int)videoTrack.PayloadType);
+        Assert.Equal("H264", videoTrack.VideoCodecName);
 
         Assert.True(options.DtlsIsClient);
         Assert.Equal("sha-256", options.RemoteFingerprint.Algorithm);
@@ -64,7 +64,7 @@ public sealed class BundledMediaSessionBuilderTests
             AudioParams(5000, 6000, isClient: false, "sha-256", "DD:EE"), video: null,
             midExtensionId: 1, audioMid: "audio", audioSsrc: 1, videoMid: null, videoSsrc: null);
 
-        Assert.Null(options.Video);
+        Assert.Empty(options.VideoTracks);
         Assert.False(options.DtlsIsClient);
     }
 
