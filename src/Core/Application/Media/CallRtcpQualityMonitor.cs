@@ -175,6 +175,13 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
         _cts.Cancel();
         _udp?.Dispose();
 
+        // If StartAsync never adopted the pre-bound RTCP socket into _udp — disposed before start, or
+        // rtcp-mux was negotiated so the separate RTCP socket was never used — it is still open and would
+        // hold its reserved port until GC. Close it deterministically. ReferenceEquals avoids a
+        // double-dispose when it was adopted (then _udp already disposed it above).
+        if (!ReferenceEquals(_udp, _preBoundRtcpSocket))
+            _preBoundRtcpSocket?.Dispose();
+
         if (_sendLoop is not null)
         {
             try

@@ -4,7 +4,6 @@ using Microsoft.Extensions.Logging;
 using CalloraVoipSdk.Core.Application.Calls;
 using CalloraVoipSdk.Core.Application.Media;
 using CalloraVoipSdk.Core.Domain.Calls;
-using CalloraVoipSdk.Core.Application.Media;
 using CalloraVoipSdk.Core.Application.Ports.Sdp;
 using CalloraVoipSdk.Core.Infrastructure.Rtp;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
