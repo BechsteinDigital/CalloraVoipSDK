@@ -1010,6 +1010,8 @@
   CalloraVoipSdk.WebRtc.IPeerConnection.SendVideoFrameAsync(System.ReadOnlyMemory<System.Byte> encodedFrame, System.UInt32 rtpTimestamp, System.Threading.CancellationToken cancellationToken = default) : System.Threading.Tasks.Task
   CalloraVoipSdk.WebRtc.IPeerConnection.SendVideoFrameAsync(System.String rid, System.ReadOnlyMemory<System.Byte> encodedFrame, System.UInt32 rtpTimestamp, System.Threading.CancellationToken cancellationToken = default) : System.Threading.Tasks.Task
   CalloraVoipSdk.WebRtc.IPeerConnection.SetRemoteDescriptionAsync(System.String remoteSdp, System.Threading.CancellationToken cancellationToken = default) : System.Threading.Tasks.Task<System.String>
+  CalloraVoipSdk.WebRtc.IPeerConnection.SignalingState : CalloraVoipSdk.WebRtc.SignalingState { get }
+  CalloraVoipSdk.WebRtc.IPeerConnection.SignalingStateChanged : event System.EventHandler<CalloraVoipSdk.WebRtc.SignalingState>
   CalloraVoipSdk.WebRtc.IPeerConnection.StartAsync(System.Threading.CancellationToken cancellationToken = default) : System.Threading.Tasks.Task
   CalloraVoipSdk.WebRtc.IPeerConnection.State : CalloraVoipSdk.WebRtc.PeerConnectionState { get }
   CalloraVoipSdk.WebRtc.IPeerConnection.TrackReceived : event System.EventHandler<CalloraVoipSdk.WebRtc.RemoteTrack>
@@ -1056,6 +1058,10 @@
   CalloraVoipSdk.WebRtc.RemoteTrack.Mid : System.String { get }
   CalloraVoipSdk.WebRtc.RemoteTrack.StreamId : System.String { get }
   CalloraVoipSdk.WebRtc.RemoteTrack.TrackId : System.String { get }
+  CalloraVoipSdk.WebRtc.SignalingState.Closed = enum-value
+  CalloraVoipSdk.WebRtc.SignalingState.HaveLocalOffer = enum-value
+  CalloraVoipSdk.WebRtc.SignalingState.HaveRemoteOffer = enum-value
+  CalloraVoipSdk.WebRtc.SignalingState.Stable = enum-value
   CalloraVoipSdk.WebRtc.TrackDirection.Inactive = enum-value
   CalloraVoipSdk.WebRtc.TrackDirection.RecvOnly = enum-value
   CalloraVoipSdk.WebRtc.TrackDirection.SendOnly = enum-value
@@ -1247,6 +1253,7 @@ TYPE enum CalloraVoipSdk.IceTransport
 TYPE enum CalloraVoipSdk.SipTransport
 TYPE enum CalloraVoipSdk.WebRtc.MediaDirection
 TYPE enum CalloraVoipSdk.WebRtc.PeerConnectionState
+TYPE enum CalloraVoipSdk.WebRtc.SignalingState
 TYPE enum CalloraVoipSdk.WebRtc.TrackDirection
 TYPE enum CalloraVoipSdk.WebRtc.TrackKind
 TYPE enum CalloraVoipSdk.WebRtc.WebRtcRole

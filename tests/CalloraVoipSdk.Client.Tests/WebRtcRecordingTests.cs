@@ -107,9 +107,11 @@ public sealed class WebRtcRecordingTests
         public WebRtcStats GetStats() => new() { ConnectionState = State };
 
         public PeerConnectionState State => PeerConnectionState.Connected;
+        public SignalingState SignalingState => SignalingState.Stable;
         public string? LocalDescription => null;
         public IPEndPoint? LocalMediaEndPoint => null;
         public event EventHandler<PeerConnectionState>? ConnectionStateChanged { add { } remove { } }
+        public event EventHandler<SignalingState>? SignalingStateChanged { add { } remove { } }
         public event EventHandler<RemoteTrack>? TrackReceived { add { } remove { } }
         public event EventHandler<string>? LocalIceCandidateDiscovered { add { } remove { } }
         public event EventHandler<DtmfTone>? DtmfReceived { add { } remove { } }

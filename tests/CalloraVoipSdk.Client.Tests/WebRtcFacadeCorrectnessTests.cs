@@ -84,6 +84,40 @@ public sealed class WebRtcFacadeCorrectnessTests
         Assert.Contains(tracks, t => t.Kind == TrackKind.Video);
     }
 
+    [Fact]
+    public async Task Signalling_state_is_projected_and_the_event_fires_through_the_facade()
+    {
+        // P3a: the facade surfaces the RFC 8829 §4.1.3 signalling state and its change event. Offerer runs
+        // Stable → HaveLocalOffer → Stable; answerer runs Stable → HaveRemoteOffer → Stable (both edges fire).
+        var offererClient = new WebRtcClient(new WebRtcConfiguration
+        {
+            EnableVideo = true,
+            LocalEndPoint = new IPEndPoint(IPAddress.Loopback, 0),
+        });
+        var answererClient = new WebRtcClient();
+        await using var offerer = offererClient.CreatePeer();
+        await using var answerer = answererClient.CreatePeer();
+
+        Assert.Equal(SignalingState.Stable, offerer.SignalingState);
+
+        var offererStates = new List<SignalingState>();
+        var answererStates = new List<SignalingState>();
+        offerer.SignalingStateChanged += (_, s) => offererStates.Add(s);
+        answerer.SignalingStateChanged += (_, s) => answererStates.Add(s);
+
+        var offer = offerer.CreateOffer();
+        Assert.Equal(SignalingState.HaveLocalOffer, offerer.SignalingState);
+
+        var answer = await answerer.SetRemoteDescriptionAsync(offer);
+        Assert.Equal(SignalingState.Stable, answerer.SignalingState);
+
+        await offerer.SetRemoteDescriptionAsync(answer);
+        Assert.Equal(SignalingState.Stable, offerer.SignalingState);
+
+        Assert.Equal([SignalingState.HaveLocalOffer, SignalingState.Stable], offererStates);
+        Assert.Equal([SignalingState.HaveRemoteOffer, SignalingState.Stable], answererStates);
+    }
+
     // The payload type of the a=rtpmap line for a codec name (e.g. "a=rtpmap:97 H264/90000" -> 97).
     private static int PayloadType(string sdp, string codec)
         => sdp.Split('\n')
