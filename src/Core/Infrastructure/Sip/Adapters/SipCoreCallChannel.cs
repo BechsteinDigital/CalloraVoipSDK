@@ -4,7 +4,6 @@ using Microsoft.Extensions.Logging;
 using CalloraVoipSdk.Core.Application.Calls;
 using CalloraVoipSdk.Core.Application.Media;
 using CalloraVoipSdk.Core.Domain.Calls;
-using CalloraVoipSdk.Core.Application.Media;
 using CalloraVoipSdk.Core.Application.Ports.Sdp;
 using CalloraVoipSdk.Core.Infrastructure.Rtp;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
@@ -387,6 +386,34 @@ internal sealed class SipCoreCallChannel : ICallChannel, IRtcpSocketHandoff
         await EnsureLocalIceDescriptionAsync(localEndPoint, CancellationToken.None).ConfigureAwait(false);
         var unholdSdp = _sdpNegotiator.BuildDefaultSdp(localEndPoint, hold: false, BuildReofferSdpOptions());
         await session.UnholdAsync(unholdSdp).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task RestartIceAsync()
+    {
+        var session = EnsureSession();
+
+        // A restart only makes sense once ICE was negotiated (RFC 8445 §9) — no agent or gathered
+        // description means there is nothing to restart; surface the misuse rather than re-INVITE without ICE.
+        if (_iceAgent is null || _localIceDescription is null)
+            throw new InvalidOperationException(
+                "ICE restart requires an ICE-negotiated call; ICE was not established on this leg.");
+
+        var localIp = ResolveAdvertisedMediaAddress(session);
+        var localEndPoint = new IPEndPoint(localIp, _localMediaPort);
+
+        // RFC 8445 §9: a restart MUST change BOTH ufrag and pwd. Clearing the cache makes
+        // EnsureLocalIceDescriptionAsync re-gather on the SAME media socket with fresh credentials; the role
+        // (_iceControlling) is deliberately preserved — a restart does not redetermine roles.
+        _localIceDescription = null;
+        await EnsureLocalIceDescriptionAsync(localEndPoint, CancellationToken.None).ConfigureAwait(false);
+        if (_localIceDescription is null)
+            throw new InvalidOperationException("ICE re-gathering produced no local description for the restart.");
+
+        // Direction-preserving re-INVITE with the new ICE block. The answer re-publishes media parameters
+        // (new #10 generation) → fresh ICE selection on the existing socket, media continuity on the old pair.
+        var reofferSdp = _sdpNegotiator.BuildDefaultSdp(localEndPoint, hold: false, BuildReofferSdpOptions());
+        await session.ReinviteAsync(reofferSdp, CancellationToken.None).ConfigureAwait(false);
     }
 
     /// <summary>

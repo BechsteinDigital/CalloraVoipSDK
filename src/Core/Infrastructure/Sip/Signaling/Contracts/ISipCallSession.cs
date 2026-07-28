@@ -204,6 +204,20 @@ internal interface ISipCallSession : IDisposable
         CancellationToken ct = default);
 
     /// <summary>
+    /// Sends a direction-preserving in-dialog re-INVITE carrying <paramref name="sessionDescription"/>
+    /// and stays in <see cref="SipDialogState.Established"/>. Unlike <see cref="HoldAsync"/>/
+    /// <see cref="UnholdAsync"/> it does not change the media direction — it is the transport for an
+    /// ICE restart (RFC 8445 §9): the caller supplies a fresh offer with new ice-ufrag/ice-pwd on the
+    /// same media 5-tuple. Only valid on an <see cref="SipDialogState.Established"/> dialog. The default
+    /// implementation throws <see cref="NotSupportedException"/> so existing fakes keep compiling.
+    /// </summary>
+    /// <param name="sessionDescription">The re-offer SDP body to put in the re-INVITE. Required.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task ReinviteAsync(
+        string sessionDescription,
+        CancellationToken ct = default) => throw new NotSupportedException();
+
+    /// <summary>
     /// Sends DTMF tone via SIP INFO (RFC 2833 <c>application/dtmf-relay</c>).
     /// Valid digits: 0–9, *, #, A–D.
     /// Only valid on established or on-hold dialogs.

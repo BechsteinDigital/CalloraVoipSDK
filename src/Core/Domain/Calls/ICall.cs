@@ -216,6 +216,23 @@ public interface ICall
     Task UnholdAsync(CancellationToken ct = default);
 
     /// <summary>
+    /// Initiates a local ICE restart (RFC 8445 §9) on a connected, ICE-negotiated call: the SDK
+    /// re-gathers on the existing media socket with fresh ICE credentials — a new ice-ufrag <b>and</b>
+    /// ice-pwd — and re-offers them in a direction-preserving re-INVITE. The ICE role is preserved and
+    /// media keeps flowing on the previously validated candidate pair until the new connectivity checks
+    /// nominate a pair. Use this to recover a media path after a network change or a consent loss
+    /// surfaced by <see cref="IceConnectionStateChanged"/>.
+    /// </summary>
+    /// <param name="ct">
+    /// Accepted for signature symmetry but currently not forwarded to the transport, so the restart is
+    /// not cancelled via this token.
+    /// </param>
+    /// <exception cref="InvalidOperationException">
+    /// The call state is not <see cref="CallState.Connected"/>, or ICE was not negotiated on this call.
+    /// </exception>
+    Task RestartIceAsync(CancellationToken ct = default);
+
+    /// <summary>
     /// Sends one DTMF tone while the call is connected.
     /// </summary>
     /// <param name="tone">The tone to send.</param>

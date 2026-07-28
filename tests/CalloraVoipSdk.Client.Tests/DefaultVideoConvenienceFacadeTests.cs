@@ -123,6 +123,7 @@ internal sealed class FakeCall : ICall
     public Task HangupAsync(CancellationToken ct = default) => throw new NotImplementedException();
     public Task HoldAsync(CancellationToken ct = default) => throw new NotImplementedException();
     public Task UnholdAsync(CancellationToken ct = default) => throw new NotImplementedException();
+    public Task RestartIceAsync(CancellationToken ct = default) => throw new NotImplementedException();
     public Task SendDtmfAsync(DtmfTone tone, CancellationToken ct = default) => throw new NotImplementedException();
     public Task BlindTransferAsync(string targetUri, CancellationToken ct = default) => throw new NotImplementedException();
     public Task<bool> AttendedTransferAsync(ICall consultationCall, CancellationToken ct = default) => throw new NotImplementedException();
