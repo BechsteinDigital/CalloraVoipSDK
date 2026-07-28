@@ -28,6 +28,19 @@ Der Media-Socket ist SDK-intern (`RtpCallMediaSession` bindet `CallMediaParamete
 
 Pro Slice: Injektor/Test → grün → Commit. Review + eigener CI-Job + PR am Paketende. Die erste Slice liefert `FaultInjectingUdpRelay` + `ChaosRtpMediaLoopback` (die Fault-Klassen 2 & 4 bauen darauf auf).
 
+## ★ Umgesetzt (2026-07-28)
+
+Alle 4 Fault-Klassen + PR-CI-Job gebaut, 5 Tests grün (15 s), `Category=Chaos`:
+
+- **Seam** (`FaultInjectingUdpRelay` + `ChaosRtpMediaLoopback`): MITM-UDP-Relay zwischen den Legs, source-basiertes A↔B-Mapping (kein Lernen — einseitiger Media-Flow enthüllt die Empfangsseite nicht), pro Paket forward/drop/corrupt/delay + HardFault/Heal + InjectAsync. Kein src/-Eingriff.
+- **Slice 1 Transport-Loss** (`MediaTransportLossChaosTests`): HardFault mid-call → Relay leitet nichts durch (Sender toleriert es), Heal → Erholung. Fault-Fenster über `Relay.Forwarded` statt playout-gepuffertem `FrameReceived` (der Jitter-Buffer drainet noch kurz).
+- **Slice 2 Malformed** (`MediaMalformedPacketChaosTests`): Plain-RTP übersteht Garbage-Salve + Korruption (robustes Verwerfen); SRTP fail-closed unter Korruption + Erholung.
+- **Slice 3 Signaling-Outage** (`FaultInjectingRegistrationService` + `ChaosSipRegisterHarness` + `SignalingOutageChaosTests`): Registrar unerreichbar → Loop retryt weiter (RFC 3261 back-off), kein Wedge; Heal → Registered.
+- **Slice 4 Churn-under-Fault** (`ChurnUnderFaultChaosTests`): schnelles Connect/Disconnect mit aktiven Faults → NoUpwardSlope auf Managed/Private-Memory + Threads + Socket-Descriptors (Linux). **Befund: initiale Managed-Drift = Cold-Start-Ramp der Chaos-Codepfade, kein echter Leak — mit Warm-up 20 sauber.**
+- **CI:** eigener `chaos`-Job (`ci.yml`, Linux, jeder PR); `build-and-test` schließt `Category=Chaos` aus.
+
+**CORE-011 = der letzte offene GA-Kern-P0 — abgeschlossen.**
+
 ## Nicht in Scope
 
 Der „wired-up performance gate" (README) — separat. Native Fault-Injection *im* SDK-Transport (bräuchte src/-Seam) — das MITM-Relay deckt die realen Wire-Fehler ohne src/-Eingriff.
