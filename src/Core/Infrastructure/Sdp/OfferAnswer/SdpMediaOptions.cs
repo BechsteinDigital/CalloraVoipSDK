@@ -78,6 +78,35 @@ internal sealed class SdpVideoMediaOptions
 }
 
 /// <summary>
+/// One media track to offer as its own m-line on the shared BUNDLE transport (RFC 8843 / RFC 8829).
+/// Feeds the multi-track offer path: a caller supplies a <see cref="SdpMediaOptions.Tracks"/> list of these,
+/// one per m-line, and the negotiator emits an m-line per track with a numeric <c>a=mid</c> by index
+/// (0, 1, 2, …) and a <c>a=group:BUNDLE 0 1 …</c> — mirroring how libwebrtc/SIPSorcery build multi-track SDP.
+/// A single-typed track carries the same per-m-line facts the fixed audio/video path does (codecs, msid,
+/// per-m-line SDES crypto, header extensions, and — for video — send-side simulcast rids).
+/// </summary>
+internal sealed class SdpTrackOptions
+{
+    /// <summary>Media kind: <c>"audio"</c> or <c>"video"</c> (the m-line media type, RFC 4566 §5.14).</summary>
+    public required string Kind { get; init; }
+
+    /// <summary>Codec capabilities to offer on this m-line (audio codecs, or VP8/H264 at 90 kHz for video).</summary>
+    public required IReadOnlyList<SdpCodecDefinition> Codecs { get; init; }
+
+    /// <summary>WebRTC MediaStream/track identity for this m-line (<c>a=msid</c>, RFC 8830); null emits none.</summary>
+    public SdpMsid? Msid { get; init; }
+
+    /// <summary>Per-m-line SDES crypto lines (RFC 4568), independent of other m-lines; empty for plain/DTLS keying.</summary>
+    public IReadOnlyList<SdpCryptoAttribute> Crypto { get; init; } = [];
+
+    /// <summary>RTP header-extension URIs supported/offered on this m-line (RFC 8285); ids assigned per offer.</summary>
+    public IReadOnlyList<string> HeaderExtensionUris { get; init; } = [];
+
+    /// <summary>Send-side simulcast layer ids (RFC 8853), video only; empty offers a single stream.</summary>
+    public IReadOnlyList<string> SimulcastSendRids { get; init; } = [];
+}
+
+/// <summary>
 /// Options passed to offer/answer methods to include DTLS, ICE, rtcp-mux, and BUNDLE.
 /// All fields are optional; omitted features are not emitted in the SDP.
 /// </summary>
@@ -91,6 +120,16 @@ internal sealed class SdpMediaOptions
     /// (RFC 3264 §6) and offers audio only.
     /// </summary>
     public SdpVideoMediaOptions? Video { get; init; }
+
+    /// <summary>
+    /// Explicit multi-track m-line list for a WebRTC offer (RFC 8843 BUNDLE). When non-empty, the offer is
+    /// built from this list — one m-line per entry, numeric <c>a=mid</c> by index, <c>a=group:BUNDLE 0 1 …</c> —
+    /// instead of the fixed one-audio-plus-optional-video shape, and the <see cref="Video"/>/audio-codec inputs
+    /// are ignored for m-line layout. <see langword="null"/> or empty (default) keeps the byte-identical
+    /// single-audio (+ optional single-video) offer, so the SIP path and existing WebRTC 1+1 offers are unchanged.
+    /// Answer-side multi-track negotiation is separate (a later slice).
+    /// </summary>
+    public IReadOnlyList<SdpTrackOptions>? Tracks { get; init; }
 
     /// <summary>
     /// SDES crypto lines to advertise in an offer (RFC 4568). Empty = plain RTP/AVP;
