@@ -62,11 +62,23 @@ internal sealed class ScheduledActionScheduler : IScheduledActionScheduler
     /// </summary>
     private void Cancel(long id)
     {
+        bool affectsNextDue;
         lock (_sync)
         {
-            if (_entriesById.TryGetValue(id, out var entry))
-                entry.IsCanceled = true;
+            if (!_entriesById.TryGetValue(id, out var entry))
+                return;
+
+            entry.IsCanceled = true;
+
+            // The worker's current wait is derived from the queue head. Cancelling a non-head
+            // entry never shortens the required wait (the head is still due first) and never
+            // strands a still-due entry (the worker re-scans and skips cancelled entries on its
+            // next wake), so only a head cancellation must wake the worker to re-evaluate.
+            affectsNextDue = _queue.Count > 0 && _queue.Peek().Id == id;
         }
+
+        if (!affectsNextDue)
+            return;
 
         try
         {

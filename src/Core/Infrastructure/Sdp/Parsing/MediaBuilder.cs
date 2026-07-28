@@ -29,7 +29,7 @@ internal sealed class MediaBuilder
     public int? RtcpPort { get; set; }
     public string? Mid { get; set; }
     public SdpMsid? Msid { get; set; }
-    public int? Bandwidth { get; set; }
+    public SdpBandwidth? Bandwidth { get; set; }
     public string? IceUfrag { get; set; }
     public string? IcePwd { get; set; }
     public string? IceOptions { get; set; }
@@ -45,7 +45,7 @@ internal sealed class MediaBuilder
     public List<SdpRid> Rids { get; } = [];
     public SdpSimulcast? Simulcast { get; set; }
 
-    public SdpMediaDescription Build(SdpMediaDirection sessionDirection, string fallbackConnectionAddress) =>
+    public SdpMediaDescription Build(SdpMediaDirection sessionDirection) =>
         new()
         {
             MediaType = MediaType,

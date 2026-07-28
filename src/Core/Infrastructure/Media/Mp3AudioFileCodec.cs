@@ -1,4 +1,5 @@
 using CalloraVoipSdk.Core.Application.Ports.Media;
+using Microsoft.Extensions.Logging;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Media;
 
@@ -9,9 +10,22 @@ internal sealed class Mp3AudioFileCodec : IAudioFileCodec
 {
     private const string Mp3PassthroughCodecName = "MP3-PASSTHROUGH";
     private readonly WavAudioFileCodec _wavCodec = new();
+    private readonly ILogger? _logger;
+
+    /// <summary>
+    /// Creates an MP3 codec.
+    /// </summary>
+    /// <param name="logger">
+    /// Optional logger used to report transcode-encode failures during writer disposal; when
+    /// <see langword="null"/>, such failures are swallowed (never thrown from DisposeAsync).
+    /// </param>
+    public Mp3AudioFileCodec(ILogger? logger = null)
+    {
+        _logger = logger;
+    }
 
     /// <inheritdoc />
-    public ValueTask<IAudioFileWriter> CreateWriterAsync(
+    public async ValueTask<IAudioFileWriter> CreateWriterAsync(
         string filePath,
         AudioFileCodecContext context,
         CancellationToken ct = default)
@@ -19,9 +33,11 @@ internal sealed class Mp3AudioFileCodec : IAudioFileCodec
         ct.ThrowIfCancellationRequested();
 
         if (IsPassthroughMode(context))
-            return ValueTask.FromResult<IAudioFileWriter>(new Mp3PassthroughWriter(filePath));
+            return new Mp3PassthroughWriter(filePath);
 
-        return ValueTask.FromResult<IAudioFileWriter>(new Mp3TranscodingWriter(filePath, context, _wavCodec));
+        return await Mp3TranscodingWriter
+            .CreateAsync(filePath, context, _wavCodec, _logger, ct)
+            .ConfigureAwait(false);
     }
 
     /// <inheritdoc />

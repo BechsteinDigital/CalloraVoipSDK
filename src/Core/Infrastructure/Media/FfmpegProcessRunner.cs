@@ -46,10 +46,22 @@ internal static class FfmpegProcessRunner
         var stdoutTask = process.StandardOutput.ReadToEndAsync(ct);
         var stderrTask = process.StandardError.ReadToEndAsync(ct);
 
-        await process.WaitForExitAsync(ct).ConfigureAwait(false);
+        string stdout;
+        string stderr;
+        try
+        {
+            await process.WaitForExitAsync(ct).ConfigureAwait(false);
 
-        var stdout = await stdoutTask.ConfigureAwait(false);
-        var stderr = await stderrTask.ConfigureAwait(false);
+            stdout = await stdoutTask.ConfigureAwait(false);
+            stderr = await stderrTask.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // Media #16: on cancellation the ffmpeg process would otherwise leak. Kill the whole
+            // process tree best-effort before propagating the cancellation.
+            KillProcessTree(process);
+            throw;
+        }
 
         if (process.ExitCode == 0)
             return;
@@ -86,12 +98,34 @@ internal static class FfmpegProcessRunner
             if (process is null)
                 return false;
 
-            process.WaitForExit(1000);
+            if (!process.WaitForExit(1000))
+            {
+                // Media #16: the probe timed out — kill the process tree before returning so no
+                // ffmpeg -version process is left running.
+                KillProcessTree(process);
+                return false;
+            }
+
             return process.ExitCode == 0;
         }
-        catch
+        catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or IOException)
         {
+            // ffmpeg not on PATH, or the process could not be inspected — treat as unavailable.
             return false;
+        }
+    }
+
+    private static void KillProcessTree(Process process)
+    {
+        try
+        {
+            if (!process.HasExited)
+                process.Kill(entireProcessTree: true);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or Win32Exception or NotSupportedException)
+        {
+            // Process already exited or the OS refused the kill; nothing more we can do here.
+            _ = ex;
         }
     }
 }

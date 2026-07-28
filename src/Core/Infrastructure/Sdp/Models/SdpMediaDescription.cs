@@ -66,8 +66,12 @@ internal sealed class SdpMediaDescription
     // Bandwidth
     // -------------------------------------------------------------------------
 
-    /// <summary>Application-specific bandwidth limit in kbps (<c>b=AS:N</c>).</summary>
-    public int? Bandwidth { get; init; }
+    /// <summary>
+    /// Bandwidth limit for this media section (<c>b=</c>, RFC 4566 §5.8), preserving the type
+    /// token (<c>AS</c> kbit/s or <c>TIAS</c> bit/s) so it re-serializes unchanged.
+    /// <see langword="null"/> when no <c>b=</c> line is present.
+    /// </summary>
+    public SdpBandwidth? Bandwidth { get; init; }
 
     // -------------------------------------------------------------------------
     // Format parameters (RFC 4566 §6.6)

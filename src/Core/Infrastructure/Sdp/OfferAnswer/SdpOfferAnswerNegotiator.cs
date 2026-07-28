@@ -14,6 +14,11 @@ namespace CalloraVoipSdk.Core.Infrastructure.Sdp.OfferAnswer;
 /// </summary>
 internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
 {
+    // Highest IANA statically-assigned RTP payload type (RFC 3551 §6 — 0–34 are static;
+    // 96–127 are dynamic and require an rtpmap to carry meaning).
+    private const int MaxStaticPayloadType = 34;
+
+
     /// <inheritdoc />
     public SdpSessionDescription CreateOffer(
         IPEndPoint localEndPoint,
@@ -195,8 +200,12 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
         // Reflect ptime when the remote offer specifies one (RFC 3264 §6.1).
         var ptime = offeredAudio.Ptime;
 
-        // --- rtcp-mux (RFC 5761): mirror when offered ---
-        var rtcpMux = offeredAudio.RtcpMux || localOptions?.RtcpMux == true;
+        // --- rtcp-mux (RFC 5761 §5.1.1): confirm ONLY when the offer advertised it ---
+        // The answer may not enable mux on its own — an answerer that muxes while the peer
+        // (which never offered a=rtcp-mux) still listens on the separate RTCP port loses all
+        // RTCP. A local "I can mux" preference cannot force mux; it only matters when we offer.
+        // Mirrors the video path (RtcpMux = offered.RtcpMux).
+        var rtcpMux = offeredAudio.RtcpMux;
 
         // --- BUNDLE/MID (RFC 5888): mirror mid from remote ---
         var mid = offeredAudio.Mid;
@@ -394,13 +403,18 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             });
         }
 
-        // Fallback: static payload type intersection for codecs without rtpmap.
+        // Fallback: static payload type intersection for codecs without rtpmap. Restricted to the
+        // IANA statically-assigned range (0–34, RFC 3551): those numbers imply a fixed codec even
+        // without an rtpmap. Dynamic payload types (96–127) carry NO implied meaning — a bare PT
+        // match there could bind a codec the peer never offered, so they must have matched by name
+        // above (ResolveEffectiveName already maps 0/8/9) and are never taken by this fallback.
         if (negotiated.Count == 0)
         {
             var localByPt = localCapabilities.ToDictionary(c => c.PayloadType);
             foreach (var offer in offered)
             {
-                if (localByPt.TryGetValue(offer.PayloadType, out var local))
+                if (offer.PayloadType <= MaxStaticPayloadType
+                    && localByPt.TryGetValue(offer.PayloadType, out var local))
                     negotiated.Add(new SdpCodecDefinition
                     {
                         PayloadType = offer.PayloadType,
@@ -740,8 +754,12 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
     ///   <item><description><c>actpass</c> → local answers <c>active</c></description></item>
     ///   <item><description><c>active</c>  → local answers <c>passive</c></description></item>
     ///   <item><description><c>passive</c> → local answers <c>active</c></description></item>
-    ///   <item><description><c>holdconn</c> or null → local answers <c>actpass</c></description></item>
+    ///   <item><description><c>holdconn</c> or null → local answers <c>passive</c></description></item>
     /// </list>
+    /// An answer MUST be <c>active</c> or <c>passive</c>, never <c>actpass</c> (RFC 5763 §5).
+    /// <c>holdconn</c> (RFC 4145 §4 — establish no connection for now) has no valid answer role
+    /// that keeps the connection held; we fall through to <c>passive</c> (server side) so the
+    /// handshake can complete once the peer moves off hold, rather than emit an illegal role.
     /// </summary>
     private static string ResolveAnswerSetup(string? remoteSetup) =>
         remoteSetup?.ToLowerInvariant() switch
