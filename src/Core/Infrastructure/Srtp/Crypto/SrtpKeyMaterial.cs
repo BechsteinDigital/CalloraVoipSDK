@@ -26,7 +26,7 @@ internal sealed class SrtpKeyMaterial : IDisposable
     /// so the caller must not reuse or retain them elsewhere.
     /// </summary>
     /// <param name="masterKey">Master key — 16 bytes for AES-128 suites, 32 for AES-256 (RFC 3711 §3.2.1).</param>
-    /// <param name="masterSalt">Master salt — always 14 bytes (112 bits) (RFC 3711 §3.2.1).</param>
+    /// <param name="masterSalt">Master salt — 14 bytes for AES-CM (RFC 3711 §3.2.1), 12 bytes for AEAD-GCM (RFC 7714 §8.1).</param>
     /// <param name="suite">Crypto suite that determines how this key material is used.</param>
     public SrtpKeyMaterial(byte[] masterKey, byte[] masterSalt, SrtpCryptoSuite suite)
     {
@@ -44,7 +44,8 @@ internal sealed class SrtpKeyMaterial : IDisposable
     public ReadOnlyMemory<byte> MasterKey => _masterKey;
 
     /// <summary>
-    /// Master salt — always 14 bytes (112 bits) (RFC 3711 §3.2.1). Reads all-zero after <see cref="Dispose"/>.
+    /// Master salt — 14 bytes for AES-CM (RFC 3711 §3.2.1), 12 bytes for AEAD-GCM (RFC 7714 §8.1).
+    /// Reads all-zero after <see cref="Dispose"/>.
     /// </summary>
     public ReadOnlyMemory<byte> MasterSalt => _masterSalt;
 
@@ -69,9 +70,8 @@ internal sealed class SrtpKeyMaterial : IDisposable
 
         try
         {
-            var keyLength = suite is SrtpCryptoSuite.AesCm256HmacSha1_80 or SrtpCryptoSuite.AesCm256HmacSha1_32
-                ? 32 : 16;
-            const int saltLength = 14;
+            var keyLength = SrtpCryptoSuiteNames.KeyLength(suite);
+            var saltLength = SrtpCryptoSuiteNames.SaltLength(suite); // 14 for AES-CM, 12 for AEAD-GCM
 
             if (raw.Length < keyLength + saltLength)
                 throw new FormatException(

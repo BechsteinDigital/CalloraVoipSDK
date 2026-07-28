@@ -88,7 +88,7 @@ internal static class SdesCryptoSelector
     public static string GenerateInlineKeyParams(SrtpCryptoSuite suite)
     {
         var material = RandomNumberGenerator.GetBytes(
-            SrtpCryptoSuiteNames.KeyLength(suite) + SrtpCryptoSuiteNames.SaltLength);
+            SrtpCryptoSuiteNames.KeyLength(suite) + SrtpCryptoSuiteNames.SaltLength(suite));
         return $"inline:{Convert.ToBase64String(material)}";
     }
 }

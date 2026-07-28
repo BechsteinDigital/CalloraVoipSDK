@@ -1,40 +1,60 @@
 using CalloraVoipSdk.Core.Infrastructure.Dtls;
+using CalloraVoipSdk.Core.Infrastructure.Srtp.Crypto;
+using Org.BouncyCastle.Tls;
 
 namespace CalloraVoipSdk.Core.IntegrationTests;
 
 /// <summary>
-/// GA guardrail on the DTLS-SRTP profile negotiation: when no common protection profile exists the failure
-/// diagnoses the cause instead of surfacing an anonymous <c>insufficient_security</c> alert — in particular the
-/// common Firefox-only-GCM interop failure (peer offers only AEAD-GCM, RFC 7714, which the SDK does not implement).
+/// The DTLS-SRTP protection-profile policy (RFC 5764 §4.1.2): AEAD-GCM (RFC 7714) is offered and accepted,
+/// preferred over the classic AES-CM+HMAC suites, so the SDK negotiates GCM with peers that prefer it
+/// (Firefox, current SIPSorcery) while still interoperating with AES-CM-only peers.
 /// </summary>
 public sealed class DtlsSrtpProfilesGuardrailTests
 {
-    [Fact]
-    public void No_common_profile_error_names_gcm_when_the_peer_offered_only_gcm()
-    {
-        var message = DtlsSrtpProfiles.FormatNoCommonProfileError([0x0007, 0x0008]); // AEAD_AES_128/256_GCM
+    private const int SrtpAeadAes128Gcm = 0x0007;
+    private const int SrtpAeadAes256Gcm = 0x0008;
 
+    [Fact]
+    public void Aead_gcm_is_offered_and_preferred_over_aes_cm()
+    {
+        // GCM-128 leads, then GCM-256, then the AES-CM fallbacks.
+        Assert.Equal(
+            [SrtpAeadAes128Gcm,
+             SrtpAeadAes256Gcm,
+             SrtpProtectionProfile.SRTP_AES128_CM_HMAC_SHA1_80,
+             SrtpProtectionProfile.SRTP_AES128_CM_HMAC_SHA1_32],
+            DtlsSrtpProfiles.Supported);
+    }
+
+    [Fact]
+    public void SelectFromOffered_picks_gcm_when_the_peer_offers_both()
+    {
+        // A browser offering AES-CM and GCM negotiates GCM-128 — our top preference.
+        Assert.Equal(SrtpAeadAes128Gcm, DtlsSrtpProfiles.SelectFromOffered(
+            [SrtpProtectionProfile.SRTP_AES128_CM_HMAC_SHA1_80, SrtpAeadAes128Gcm, SrtpAeadAes256Gcm]));
+    }
+
+    [Fact]
+    public void SelectFromOffered_falls_back_to_aes_cm_for_an_aes_cm_only_peer()
+    {
+        Assert.Equal(SrtpProtectionProfile.SRTP_AES128_CM_HMAC_SHA1_80,
+            DtlsSrtpProfiles.SelectFromOffered([SrtpProtectionProfile.SRTP_AES128_CM_HMAC_SHA1_80]));
+    }
+
+    [Fact]
+    public void SelectFromOffered_returns_null_and_the_error_names_both_families_for_an_exotic_offer()
+    {
+        Assert.Null(DtlsSrtpProfiles.SelectFromOffered([0x0005])); // NULL_HMAC_SHA1_80 — unsupported
+
+        var message = DtlsSrtpProfiles.FormatNoCommonProfileError([0x0005]);
         Assert.Contains("AEAD-GCM", message, StringComparison.Ordinal);
         Assert.Contains("AES-CM-128", message, StringComparison.Ordinal);
-        Assert.Contains("0x0007", message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void No_common_profile_error_is_generic_for_a_non_gcm_offer()
+    public void ToCryptoSuite_maps_the_gcm_profiles()
     {
-        var message = DtlsSrtpProfiles.FormatNoCommonProfileError([0x0005]); // NULL_HMAC_SHA1_80 — unsupported, not GCM
-
-        Assert.DoesNotContain("AEAD-GCM", message, StringComparison.Ordinal);
-        Assert.Contains("AES-CM-128", message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void The_supported_profiles_are_aes_cm_128_only()
-    {
-        Assert.Equal(
-            [Org.BouncyCastle.Tls.SrtpProtectionProfile.SRTP_AES128_CM_HMAC_SHA1_80,
-             Org.BouncyCastle.Tls.SrtpProtectionProfile.SRTP_AES128_CM_HMAC_SHA1_32],
-            DtlsSrtpProfiles.Supported);
-        Assert.Null(DtlsSrtpProfiles.SelectFromOffered([0x0007, 0x0008])); // no overlap with GCM
+        Assert.Equal(SrtpCryptoSuite.AeadAes128Gcm, DtlsSrtpProfiles.ToCryptoSuite(SrtpAeadAes128Gcm));
+        Assert.Equal(SrtpCryptoSuite.AeadAes256Gcm, DtlsSrtpProfiles.ToCryptoSuite(SrtpAeadAes256Gcm));
     }
 }

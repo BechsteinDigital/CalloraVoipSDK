@@ -40,13 +40,17 @@ internal static class SrtpKeyDerivation
         ArgumentNullException.ThrowIfNull(material);
 
         var keyLength  = material.MasterKey.Length; // 16 or 32
-        var authLength = 20; // HMAC-SHA1 key = 20 bytes
+        var saltLength = SrtpCryptoSuiteNames.SaltLength(material.Suite); // 14 AES-CM, 12 AEAD-GCM (RFC 7714 §8.1)
 
         return new SrtpSessionKeys
         {
             CipherKey = DeriveKey(material, cipherLabel, keyLength),
-            Salt      = DeriveKey(material, saltLabel,   14),
-            AuthKey   = DeriveKey(material, authLabel,   authLength),
+            Salt      = DeriveKey(material, saltLabel, saltLength),
+            // AEAD-GCM authenticates intrinsically (RFC 7714 §11) — the HMAC auth key (label 0x01/0x04)
+            // is not derived. The same AES-CM PRF and label positioning applies to both salt lengths.
+            AuthKey   = SrtpCryptoSuiteNames.IsAead(material.Suite)
+                ? null
+                : DeriveKey(material, authLabel, 20),
         };
     }
 

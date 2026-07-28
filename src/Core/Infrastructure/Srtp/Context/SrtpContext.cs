@@ -5,19 +5,18 @@ using CalloraVoipSdk.Core.Infrastructure.Srtp.Crypto;
 namespace CalloraVoipSdk.Core.Infrastructure.Srtp.Context;
 
 /// <summary>
-/// SRTP context for one direction (RFC 3711) under one shared master key.
-/// Implements AES-CM encryption (§4.1), HMAC-SHA1 authentication (§4.2),
-/// and replay protection via a 64-packet sliding window (§3.3.2).
-/// The session keys are shared across SSRCs (RFC 3711 §4.3 derives them from the master key,
-/// not the SSRC — the SSRC only feeds the IV), while the rollover counter and replay window are
-/// per-SSRC (§3.2.1), so one context serves every SSRC a BUNDLE transport (RFC 8843) carries.
+/// SRTP context for one direction (RFC 3711) under one shared master key. Encryption and authentication
+/// are delegated to an <see cref="ISrtpPacketCipher"/> — AES-CM+HMAC-SHA1 (RFC 3711 §4.1/§4.2) or
+/// AEAD-AES-GCM (RFC 7714) — while this context owns replay protection via a 64-packet sliding window
+/// (§3.3.2) and the per-SSRC rollover counter. The session keys are shared across SSRCs (RFC 3711 §4.3
+/// derives them from the master key, not the SSRC — the SSRC only feeds the IV), while the rollover
+/// counter and replay window are per-SSRC (§3.2.1), so one context serves every SSRC a BUNDLE transport
+/// (RFC 8843) carries.
 /// </summary>
 internal sealed class SrtpContext : ISrtpContext
 {
-    private const int AuthTagFullLength = 20;
     private readonly SrtpSessionKeys _keys;
-    private readonly AesCmCipher _cipher;
-    private readonly SrtpCryptoSuite _suite;
+    private readonly ISrtpPacketCipher _cipher;
     private readonly int _authTagLength;
 
     // Per-SSRC ROC + replay state (RFC 3711 §3.2.1). One entry per synchronisation source seen on
@@ -34,12 +33,21 @@ internal sealed class SrtpContext : ISrtpContext
     public SrtpContext(SrtpKeyMaterial material)
     {
         ArgumentNullException.ThrowIfNull(material);
-        _suite         = material.Suite;
         _keys          = SrtpKeyDerivation.Derive(material);
-        _cipher        = new AesCmCipher(_keys.CipherKey);
-        _authTagLength = material.Suite is SrtpCryptoSuite.AesCm128HmacSha1_32
-                                       or SrtpCryptoSuite.AesCm256HmacSha1_32
+        _cipher        = CreateCipher(material.Suite, _keys);
+        _authTagLength = _cipher.TagLength;
+    }
+
+    // Picks the packet cipher for the negotiated suite: AEAD-GCM (RFC 7714, 16-byte tag) or the classic
+    // AES-CM + HMAC-SHA1 (RFC 3711, 10- or 4-byte tag). The context is otherwise suite-agnostic.
+    private static ISrtpPacketCipher CreateCipher(SrtpCryptoSuite suite, SrtpSessionKeys keys)
+    {
+        if (SrtpCryptoSuiteNames.IsAead(suite))
+            return new AesGcmPacketCipher(keys);
+
+        var tagLength = suite is SrtpCryptoSuite.AesCm128HmacSha1_32 or SrtpCryptoSuite.AesCm256HmacSha1_32
             ? 4 : 10;
+        return new AesCmSha1PacketCipher(keys, tagLength);
     }
 
     /// <summary>Derived session keys — internal test seam for dispose/zeroing evidence.</summary>
@@ -74,28 +82,18 @@ internal sealed class SrtpContext : ISrtpContext
     private byte[] ProtectLocked(ReadOnlySpan<byte> rtpPacket)
     {
         var headerLen   = GetRtpHeaderLength(rtpPacket);
-        var payloadLen  = rtpPacket.Length - headerLen;
         var ssrc        = BinaryPrimitives.ReadUInt32BigEndian(rtpPacket[8..]);
         var seq         = BinaryPrimitives.ReadUInt16BigEndian(rtpPacket[2..]);
         var state       = GetOrAddState(ssrc);
         var packetIndex = state.ComputeSenderIndex(seq);
 
-        // Encrypt payload in-place in final SRTP buffer.
+        // Copy into the final SRTP buffer, then encrypt the payload in place and append the tag.
         var result = GC.AllocateUninitializedArray<byte>(rtpPacket.Length + _authTagLength);
         rtpPacket.CopyTo(result);
-        if (payloadLen > 0)
-        {
-            Span<byte> iv = stackalloc byte[16];
-            BuildIv(ssrc, packetIndex, iv);
-            _cipher.Xor(iv, result.AsSpan(headerLen, payloadLen));
-        }
+        _cipher.Protect(ssrc, packetIndex, result.AsSpan(0, rtpPacket.Length), headerLen,
+            result.AsSpan(rtpPacket.Length, _authTagLength));
 
-        // Append auth tag over header + encrypted payload
-        Span<byte> tag = stackalloc byte[AuthTagFullLength];
-        ComputeAuthTag(result.AsSpan(0, rtpPacket.Length), GetRoc(packetIndex), tag);
-        tag[.._authTagLength].CopyTo(result.AsSpan(rtpPacket.Length, _authTagLength));
-
-        // Advance this SSRC's sender-side index so ROC is correct for subsequent packets
+        // Advance this SSRC's sender-side index so ROC is correct for subsequent packets.
         state.AdvanceSender(packetIndex);
 
         return result;
@@ -132,34 +130,21 @@ internal sealed class SrtpContext : ISrtpContext
         _ssrcState.TryGetValue(ssrc, out var existing);
         var state = existing ?? new SrtpSsrcState();
         var packetIndex = state.ComputePacketIndex(seq);
+        var headerLen = GetRtpHeaderLength(rtpSpan); // AEAD-GCM needs the header (AAD) to authenticate.
 
-        // 1. Verify auth tag before decryption (RFC 3711 §3.3 — verify-then-decrypt)
-        Span<byte> expectedTag = stackalloc byte[AuthTagFullLength];
-        ComputeAuthTag(rtpSpan, GetRoc(packetIndex), expectedTag);
-        if (!CryptographicOperations.FixedTimeEquals(receivedTag, expectedTag[.._authTagLength]))
-            throw new SrtpAuthenticationException("SRTP authentication tag mismatch.");
+        // Copy the encrypted RTP region out, then verify + decrypt it in place. A failed tag throws
+        // before any per-SSRC state is committed (RFC 3711 §3.3 — discard unauthenticated packets):
+        // AES-CM verifies then decrypts, AEAD-GCM verifies and decrypts atomically.
+        var output = GC.AllocateUninitializedArray<byte>(rtpLen);
+        rtpSpan.CopyTo(output);
+        _cipher.Unprotect(ssrc, packetIndex, output, headerLen, receivedTag);
 
         // Authenticated: commit the state for this SSRC so its ROC/replay window persists.
         if (existing is null)
             _ssrcState[ssrc] = state;
 
-        // 2. Replay check (RFC 3711 §3.3.2)
+        // Replay check + window update (RFC 3711 §3.3.2).
         state.CheckReplay(packetIndex);
-
-        // 3. Decrypt
-        var output = GC.AllocateUninitializedArray<byte>(rtpLen);
-        rtpSpan.CopyTo(output);
-        var headerLen = GetRtpHeaderLength(rtpSpan);
-        var payloadLen = output.Length - headerLen;
-
-        if (payloadLen > 0)
-        {
-            Span<byte> iv = stackalloc byte[16];
-            BuildIv(ssrc, packetIndex, iv);
-            _cipher.Xor(iv, output.AsSpan(headerLen, payloadLen));
-        }
-
-        // 4. Update this SSRC's replay window
         state.UpdateReplayWindow(packetIndex);
 
         return output;
@@ -171,62 +156,6 @@ internal sealed class SrtpContext : ISrtpContext
             _ssrcState[ssrc] = state = new SrtpSsrcState();
         return state;
     }
-
-    // -------------------------------------------------------------------------
-    // AES-CM encryption/decryption (symmetric, RFC 3711 §4.1)
-    // -------------------------------------------------------------------------
-
-    // -------------------------------------------------------------------------
-    // IV construction (RFC 3711 §4.1)
-    // IV = (salt XOR (SSRC * 2^64) XOR (index * 2^16)) as 128-bit big-endian
-    // -------------------------------------------------------------------------
-
-    private void BuildIv(uint ssrc, ulong index, Span<byte> iv)
-    {
-        iv.Clear();
-        _keys.Salt.CopyTo(iv); // k_s * 2^16 leaves bytes 14..15 reserved for the block counter.
-
-        // XOR SSRC into bytes 4..7 (SSRC * 2^64 means bits 64..95)
-        iv[4] ^= (byte)(ssrc >> 24);
-        iv[5] ^= (byte)(ssrc >> 16);
-        iv[6] ^= (byte)(ssrc >>  8);
-        iv[7] ^= (byte) ssrc;
-
-        // XOR packet index into bytes 8..13 (index * 2^16 means bits 16..63)
-        iv[ 8] ^= (byte)(index >> 40);
-        iv[ 9] ^= (byte)(index >> 32);
-        iv[10] ^= (byte)(index >> 24);
-        iv[11] ^= (byte)(index >> 16);
-        iv[12] ^= (byte)(index >>  8);
-        iv[13] ^= (byte) index;
-    }
-
-    // -------------------------------------------------------------------------
-    // Authentication (RFC 3711 §4.2) — HMAC-SHA1 over RTP packet plus ROC
-    // -------------------------------------------------------------------------
-
-    private void ComputeAuthTag(ReadOnlySpan<byte> data, uint roc, Span<byte> destination)
-    {
-        using var hmac = IncrementalHash.CreateHMAC(HashAlgorithmName.SHA1, _keys.AuthKey);
-        hmac.AppendData(data);
-
-        Span<byte> rocBytes = stackalloc byte[4];
-        BinaryPrimitives.WriteUInt32BigEndian(rocBytes, roc);
-        hmac.AppendData(rocBytes);
-
-        if (!hmac.TryGetHashAndReset(destination, out var bytesWritten)
-            || bytesWritten != AuthTagFullLength)
-        {
-            throw new CryptographicException("Failed to compute SRTP HMAC-SHA1 authentication tag.");
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    // Packet index (RFC 3711 §3.3.1) — the extended index estimation and the replay window
-    // now live per-SSRC on SrtpSsrcState; the context only maps the index to its ROC here.
-    // -------------------------------------------------------------------------
-
-    private static uint GetRoc(ulong packetIndex) => (uint)(packetIndex >> 16);
 
     // -------------------------------------------------------------------------
     // RTP header length (fixed + CSRC + optional extension)
