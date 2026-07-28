@@ -50,6 +50,28 @@ See [Events](events.md) for the threading contract these follow. Subscribe **bef
 accepting a call — events are delivered live to the handlers registered at the time of the
 transition and are not guaranteed to be replayed to a handler that subscribes afterwards.
 
+## Why a call ended
+
+Once a call reaches `Terminated`, `ICall.TerminationReason` explains **why** — so a busy, unanswered,
+cancelled or rejected call is distinguishable from a generic failure. The same value is on the
+terminating `StateChanged` event (`CallStateChangedEventArgs.TerminationReason`).
+
+```csharp
+call.StateChanged += (_, e) =>
+{
+    if (e.NewState != CallState.Terminated) return;
+    var reason = e.TerminationReason;
+    Console.WriteLine($"{reason?.Category} ({reason?.SipStatusCode} {reason?.ReasonPhrase}), " +
+                      $"ended by {reason?.TerminatedBy}");
+};
+```
+
+`CallTerminationReason` carries the `SipStatusCode` and `ReasonPhrase`, a protocol-neutral
+`Category` (busy, no answer, cancelled, rejected, …), `TerminatedBy` (local or remote) and
+`RetryAfterSeconds` where the peer supplied one. The classification follows the authoritative SIP
+response status (RFC 3261 §21), not the advisory Q.850 `Reason` header — the same choice PJSIP,
+SIPSorcery and Twilio make.
+
 ## Media
 
 Each call has a media session. Attach the default audio device with

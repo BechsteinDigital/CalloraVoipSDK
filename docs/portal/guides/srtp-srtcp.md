@@ -31,9 +31,15 @@ ICall call = await line.DialAsync(
 ## What is negotiated
 
 - **Offer as caller** — outbound INVITEs advertise `RTP/SAVP` with an `a=crypto` line
-  (AES-CM / HMAC-SHA1 suites).
+  (AES-CM / HMAC-SHA1 suites, 128- and 256-bit).
 - **Answer as callee** — inbound SRTP offers are accepted and keyed.
-- **SRTCP** — once SRTP is negotiated, RTCP is protected too (encrypted + authenticated).
+- **SRTCP** — once SRTP is negotiated, RTCP is protected too (encrypted + authenticated). The
+  SRTCP auth tag is 80 bit for **every** suite, including the `*_HMAC_SHA1_32` ones — the 32-bit
+  truncation of RFC 3711 §5.2 applies to SRTP only (RFC 4568 §6.2).
+- **AEAD-GCM** (`AEAD_AES_128_GCM` / `AEAD_AES_256_GCM`, RFC 7714) is implemented on the
+  **DTLS-SRTP** path, where it is offered *preferred* in the `use_srtp` extension with AES-CM kept
+  as the interoperable fallback. The SDES (`a=crypto`) path described here negotiates the AES-CM
+  suites.
 - **Rekey** — a rekey re-INVITE (RFC 3264 §8) swaps the SRTP keys. Hold/unhold sends a
   re-offer but **reuses** the existing keys (no rekey, by design — avoids needless key churn).
 
@@ -56,9 +62,7 @@ yields a failed call rather than a silent downgrade.
 
 - Keying is **SDES** (`a=crypto`). DTLS-SRTP is available separately (RFC 5763, opt-in via
   `VoipConfiguration.OfferDtlsSrtp`) and is not the SDES negotiation path described here.
-- For maximum interop, prefer the `AES_CM_128_HMAC_SHA1_80` suite. There is a known defect in
-  the `*_HMAC_SHA1_32` suites where the **SRTCP** auth tag is 4 bytes instead of the required
-  10 (RFC 4568 §6.2), which breaks RTCP interop with standards-compliant peers (e.g. libsrtp);
-  tracked in the [issue tracker](https://github.com/BechsteinDigital/callora-voip-sdk/issues).
+- For maximum interop over SDES, `AES_CM_128_HMAC_SHA1_80` remains the safest choice — it is what
+  virtually every PBX and trunk supports.
 - SRTP protects the media path; it does not by itself secure signaling — run SIP over TLS
   for signaling confidentiality.

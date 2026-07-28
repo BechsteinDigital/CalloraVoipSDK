@@ -6,6 +6,64 @@ The authoritative changelog lives in the repository:
 ## Release highlights
 
 ### Unreleased
+- **Local ICE restart (RFC 8445 §9):** `ICall.RestartIceAsync()` restarts ICE from the application —
+  new credentials on the existing socket, role preserved — instead of only detecting a peer-initiated
+  restart. Together with the consent-loss signal on `ICall.IceConnectionStateChanged` an app can now
+  detect a dead media path *and* repair it.
+- **RTP/RTCP port-pair reservation:** media binds an even RTP port and reserves its RTCP successor
+  (RFC 3550 §11), closing the race where the RTCP port could be taken between deriving and binding it.
+- **Recording encryption streams in constant memory:** an AES-GCM-HKDF STREAM construction encrypts in
+  fixed-size chunks with a per-file HKDF-derived key, so recordings of any length no longer load whole
+  into memory — and the long-term key never reuses a (key, nonce) pair across files.
+- **Two new per-PR CI gates:** a **chaos/fault-injection gate** (transport loss, malformed packets,
+  signalling outage, resource churn → graceful degradation, recovery, no leak) and a **performance
+  gate** on the SRTP crypto hot path.
+- **WebRTC is now browser-validated — Chromium *and* Firefox.** The facade runs end-to-end in CI
+  against real headless browsers (Playwright) — signalling → ICE → DTLS-SRTP → SRTP with
+  bidirectional Opus and browser-decoded VP8, in **both** roles (SDK as offerer and as answerer),
+  driven by a per-engine `BrowserEngine` matrix. A controlled answerer can use its own TURN relay,
+  verified against a real **coturn**. WebKit/Safari remains uncovered.
+- **AEAD-AES-GCM SRTP/SRTCP (RFC 7714):** the `AEAD_AES_128_GCM` / `AEAD_AES_256_GCM` suites are
+  implemented end to end and offered **preferred** in the DTLS-SRTP `use_srtp` negotiation, with
+  AES-CM-128 kept as the interoperable fallback. Note that browser interop never depended on it —
+  Firefox was verified negotiating AES-CM before GCM landed. See [SRTP/SRTCP](guides/srtp-srtcp.md).
+- **Client facade & audio hardening:** constructor-leak fix, thread-safe peer events, a monotonic
+  rate clock, a real `WebRtcClient` teardown, Windows/Linux audio parity (mute gate, drop-oldest,
+  playback metrics, no hot-path allocation) and shared PCM/codec helpers instead of per-platform
+  duplication. The weak-crypto analyzers (CA5350/CA5351) are no longer suppressed solution-wide.
+- **SDP & media-file hardening:** `rtcp-mux` is only answered when offered (RFC 5761), bandwidth
+  lines keep their original type token (no TIAS→AS corruption), an SDP missing mandatory lines or a
+  usable `c=` is rejected instead of defaulting to loopback, RTX payload types stay within the 7-bit
+  range, MP3 passthrough handles ID3v2 tags, ffmpeg is killed on cancellation, and the WAV parser
+  tolerates partial reads.
+- **Security hardening:** SAN matching parses ASN.1 directly (no locale-dependent text parsing) and
+  the TLS certificate load is thread-safe.
+- **IPv6 media for WebRTC:** the media socket binds to the address family of the configured
+  `LocalEndPoint` — IPv6 endpoints now work (previously hard-coded to IPv4).
+- **Comparison & capacity evidence:** scenario-by-scenario comparison against another stack, plus a
+  quality-gated capacity benchmark ramping to thousands of calls against a real Asterisk. Both run
+  outside regular CI.
+- **Core hardening:** playback-cancellation leak and recording-writer race closed, `Call.Dispose`
+  awaits the BYE before tearing down the channel, hold events fire only on a real change, and
+  `LineState` gained a rule table.
+  See [WebRTC](guides/webrtc.md).
+- **WebRTC video repair & congestion control:** NACK/PLI/FIR key-frame recovery (RFC 4585/5104),
+  RTX (RFC 4588) and transport-wide congestion control (transport-cc) on the BUNDLE path, with
+  `NackCount` / `PliCount` / `FramesDropped` / `AvailableOutgoingBitrateBps` wired into `getStats`
+  and a public `VideoKeyFrameRequested` event.
+- **WebRTC mDNS candidates (RFC 8828):** browser `.local` host candidates are resolved through an
+  `IMdnsResolver` seam instead of being dropped.
+- **Call termination reason:** `ICall.TerminationReason` tells a busy, unanswered, cancelled or
+  rejected call apart from a generic failure, classified from the SIP response status (RFC 3261 §21).
+  Cancelling a ringing dial now sends a proper **CANCEL** (§9.1) and keeps the call reachable.
+- **Security hardening:** RTP SSRC/sequence/timestamp seeded from a CSPRNG (RFC 3550), the
+  symmetric-RTP latch no longer re-points media at an unauthenticated source (the CVE-2017-14099
+  pattern), SRTP master key material is wiped after derivation, and jitter/loss/RTT run off a
+  monotonic clock. On the STUN/TURN/ICE side: CSPRNG DNS-SRV transaction ids (RFC 5452), an
+  over-length STUN body is rejected instead of truncated, and short-term credentials match strictly
+  on username **and** type.
+- **Interop:** a second PBX — **FreeSWITCH** — runs the same matrix behind a shared `IPbxFixture`
+  abstraction (local-first, not yet in the CI gate). See the [interop matrix](interop/matrix.md).
 - **SIP PUBLISH soft-state lifecycle (RFC 3903 §4/§6):** `RefreshPublicationAsync`,
   `ModifyPublicationAsync` and `RemovePublicationAsync` drive an existing publication via
   `SIP-If-Match` — a publication can now be kept alive, changed or withdrawn, not just created.

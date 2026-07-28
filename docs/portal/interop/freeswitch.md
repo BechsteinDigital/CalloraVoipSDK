@@ -1,8 +1,17 @@
 # FreeSWITCH
 
-**Status: ⚙️ configuration guidance — not yet formally verified.** The SDK is a standard SIP
-endpoint and is expected to register against a FreeSWITCH SIP profile, but we have not yet
-run a validated interop test. Run your own acceptance test first.
+**Status: 🧪 automated interop suite, run locally.** FreeSWITCH is the second PBX behind the shared
+`IPbxFixture` abstraction: the same interop matrix that runs against Asterisk also runs against a
+real FreeSWITCH container (`tests/CalloraVoipSdk.InteropTests`, trait `InteropFreeSwitch`).
+
+The suite is **not yet part of the PR CI gate** — it is a local-first check, so regressions are
+caught only when it is run explicitly:
+
+```bash
+dotnet test tests/CalloraVoipSdk.InteropTests -c Release --filter "Category=InteropFreeSwitch"
+```
+
+Run your own acceptance test for anything you depend on before production.
 
 ## Directory user
 

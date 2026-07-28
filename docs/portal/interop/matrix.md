@@ -10,14 +10,20 @@ interop test.
 | Platform | Status | Notes |
 |----------|--------|-------|
 | **Asterisk** | ✅ Full SIP/RTP flow automated in CI | Real PJSIP Asterisk container (Testcontainers), **all cases green / none skipped**: register (happy + failure), in/outbound calls with live RTP, codec negotiation (PCMU/PCMA/G722), SRTP-SDES, DTMF (RFC 4733), hold/unhold, blind & attended transfer, session timers (RFC 4028), early media (RFC 3960), TCP/TLS transport, plus a two-leg bridged call with byte-exact bidirectional media. See the [Asterisk page](asterisk.md) |
+| **Chromium** (WebRTC) | ✅ Automated in CI | Headless via Playwright: signalling → ICE → DTLS-SRTP → SRTP, bidirectional Opus and browser-decoded VP8, in **both** roles (SDK as offerer and as answerer). See [WebRTC](../guides/webrtc.md) |
+| **Mozilla Firefox** (WebRTC) | ✅ Automated in CI | The same three scenarios via the browser-agnostic `BrowserEngine` matrix. Negotiates DTLS-SRTP with **AES-CM** — the SDK needs no AES-GCM for Firefox interop |
+| **coturn** (TURN relay) | ✅ Automated in CI | TURN relay allocation and media over a real coturn server, end-to-end |
 | **AVM FRITZ!Box** | ✅ Verified against a live device (manual) | Register, dial, two-way audio, DTMF against real hardware; source of several hardening fixes. Not an automated CI test |
+| **FreeSWITCH** | 🧪 Automated, run locally | The same PBX matrix runs against a real FreeSWITCH container via the shared `IPbxFixture` abstraction, but the suite is **not yet in the PR CI gate** (trait `InteropFreeSwitch`) — it is a local-first check for now. See the [FreeSWITCH page](freeswitch.md) |
+| WebKit / Safari (WebRTC) | ⚙️ Not yet verified | The browser matrix has a WebKit engine, but the tests skip when the browser is not installed |
 | sipgate | ⚙️ Guidance only — not yet formally verified | Standard trunk registration expected to work; see the page |
-| FreeSWITCH | ⚙️ Guidance only — not yet formally verified | Standard SIP profile expected to work |
 | 3CX | ⚙️ Guidance only — not yet formally verified | Standard extension registration expected to work |
 
-- ✅ **Automated (CI)** — a repeatable interop suite runs the full SIP/RTP flow against a real
-  container on every relevant run.
+- ✅ **Automated (CI)** — a repeatable interop suite runs the full flow against a real container or
+  browser on every relevant run.
 - ✅ **Verified (manual)** — exercised against real hardware by hand; not reproducible in CI.
+- 🧪 **Automated, run locally** — a repeatable suite exists and passes, but is not (yet) part of the
+  CI gate, so regressions are caught only when it is run.
 - ⚙️ **Guidance only** — the SDK speaks standard SIP and *should* interoperate, and we provide
   configuration notes, but we have **not** yet run a validated end-to-end test against that
   platform. Do your own acceptance test before relying on it in production.
