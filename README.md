@@ -45,8 +45,9 @@ It exposes a stable, developer-friendly API through `VoipClient` while keeping t
   `IWebRtcClientModule`). The app owns signalling and the codec — the SDK moves bytes, it never
   encodes/decodes. Trickle ICE + early-bind (an ephemeral media port yields a live m-line) and
   send-side simulcast (RFC 8853, offerer-confirmed; receive-side RID demux is a later slice) are
-  included. See the `WebRtc*` samples. **Preview:** not yet browser-validated (Chrome/Firefox),
-  API may change; no data channels (SCTP) and no TCP/TLS TURN relay yet (UDP TURN relay is included).
+  included. See the `WebRtc*` samples. **Preview:** browser-validated against Chrome and Firefox
+  (DTLS-SRTP incl. AES-GCM); the API may still change before GA. No data channels (SCTP) and no
+  TCP/TLS TURN relay yet (UDP TURN relay is included).
 
 > **Breaking change in 4.6** — the SIP-facade configuration types were renamed so each facade owns a
 > facade-scoped name (parallel to `WebRtcConfiguration`/`WebRtcOptions`/`AddCalloraWebRtc`):
