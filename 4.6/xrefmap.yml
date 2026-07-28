@@ -4960,6 +4960,19 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.Core.Domain.Calls.ICall.RemoteParty
   nameWithType: ICall.RemoteParty
+- uid: CalloraVoipSdk.Core.Domain.Calls.ICall.RestartIceAsync(System.Threading.CancellationToken)
+  name: RestartIceAsync(CancellationToken)
+  href: _api/CalloraVoipSdk.Core.Domain.Calls.ICall.html#CalloraVoipSdk_Core_Domain_Calls_ICall_RestartIceAsync_System_Threading_CancellationToken_
+  commentId: M:CalloraVoipSdk.Core.Domain.Calls.ICall.RestartIceAsync(System.Threading.CancellationToken)
+  fullName: CalloraVoipSdk.Core.Domain.Calls.ICall.RestartIceAsync(System.Threading.CancellationToken)
+  nameWithType: ICall.RestartIceAsync(CancellationToken)
+- uid: CalloraVoipSdk.Core.Domain.Calls.ICall.RestartIceAsync*
+  name: RestartIceAsync
+  href: _api/CalloraVoipSdk.Core.Domain.Calls.ICall.html#CalloraVoipSdk_Core_Domain_Calls_ICall_RestartIceAsync_
+  commentId: Overload:CalloraVoipSdk.Core.Domain.Calls.ICall.RestartIceAsync
+  isSpec: "True"
+  fullName: CalloraVoipSdk.Core.Domain.Calls.ICall.RestartIceAsync
+  nameWithType: ICall.RestartIceAsync
 - uid: CalloraVoipSdk.Core.Domain.Calls.ICall.RtpStatistics
   name: RtpStatistics
   href: _api/CalloraVoipSdk.Core.Domain.Calls.ICall.html#CalloraVoipSdk_Core_Domain_Calls_ICall_RtpStatistics
