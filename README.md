@@ -264,6 +264,14 @@ dotnet test tests/CalloraVoipSdk.InteropTests -c Release -f net10.0 \
   --filter "Category=Capacity"
 ```
 
+> **Machine-bound capacity evidence (2026-07-28):** on an 8-core/16-thread
+> Intel i7-11800H host using Server GC, a restricted Office power profile and a co-located
+> Asterisk `Echo()` container, 1,408 full-duplex calls passed the strict per-call/per-direction
+> gate in independent runs. A 1,792-call stage passed once but crossed the p99 timing gate in a
+> repetition; at 1,920 calls every call remained connected with complete RTP/RTCP evidence and
+> at least 99% media delivery, while 27 calls recorded a 41-ms inbound p99 against the 40-ms
+> strict limit. These numbers describe that host/profile, not a global SDK maximum.
+
 The browser-safe interop runner is an explicit local Linux mode. It serializes Asterisk instances
 because host networking uses the fixed SIP ports 5060/5061 and RTP port range, disables the
 Testcontainers resource reaper only for that run, and removes only containers carrying its
