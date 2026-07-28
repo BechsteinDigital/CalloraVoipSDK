@@ -95,10 +95,28 @@ public sealed class SrtpContextTests
             () => new SrtpContext(CreateGcmMaterial()).Unprotect(protectedPacket));
     }
 
+    [Fact]
+    public void Protect_Unprotect_RoundTripsWithAeadGcm256()
+    {
+        var packet = CreateRtpPacket(sequenceNumber: 0x2222, ssrc: 0xABCD1234, payloadLength: 32);
+        var sender = new SrtpContext(CreateGcm256Material());
+        var receiver = new SrtpContext(CreateGcm256Material());
+
+        var protectedPacket = sender.Protect(packet);
+
+        Assert.Equal(packet.Length + 16, protectedPacket.Length);
+        Assert.Equal(packet, receiver.Unprotect(protectedPacket));
+    }
+
     private static SrtpKeyMaterial CreateGcmMaterial() =>
         new(Convert.FromHexString("000102030405060708090a0b0c0d0e0f"),
             Convert.FromHexString("517569642070726f2071756f"),
             SrtpCryptoSuite.AeadAes128Gcm);
+
+    private static SrtpKeyMaterial CreateGcm256Material() =>
+        new(Convert.FromHexString("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"),
+            Convert.FromHexString("517569642070726f2071756f"),
+            SrtpCryptoSuite.AeadAes256Gcm);
 
     private static SrtpKeyMaterial CreateRfcMaterial() =>
         new(RfcMasterKey, RfcMasterSalt, SrtpCryptoSuite.AesCm128HmacSha1_80);

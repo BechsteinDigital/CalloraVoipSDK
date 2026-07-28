@@ -21,7 +21,9 @@ public sealed class DtlsSrtpHandshakeTests
         using var client = clientResult;
         using var server = serverResult;
 
-        Assert.Equal(SrtpCryptoSuite.AesCm128HmacSha1_80, client.Keys.Suite);
+        // Two SDK peers both prefer AEAD-GCM, so the handshake negotiates GCM-128 and exports its
+        // 16-byte key + 12-byte salt on both sides (RFC 7714 preferred over AES-CM).
+        Assert.Equal(SrtpCryptoSuite.AeadAes128Gcm, client.Keys.Suite);
         Assert.Equal(client.Keys.Suite, server.Keys.Suite);
 
         // RFC 5764 §4.2: the client's write keys are the server's read keys and vice versa.
@@ -135,12 +137,14 @@ public sealed class DtlsSrtpHandshakeTests
     [Fact]
     public void Profiles_SelectFromOffered_HonoursLocalPreferenceOrder()
     {
-        // Peer prefers the 32-bit-tag profile, we prefer the 80-bit one (RFC 5764 §4.1.2).
+        // Among the AES-CM profiles the peer prefers the 32-bit tag, we prefer the 80-bit one (RFC 5764 §4.1.2).
         var offered = new[] { 0x0002, 0x0001 };
 
         Assert.Equal(0x0001, DtlsSrtpProfiles.SelectFromOffered(offered));
         Assert.Equal(0x0002, DtlsSrtpProfiles.SelectFromOffered(new[] { 0x0002 }));
-        Assert.Null(DtlsSrtpProfiles.SelectFromOffered(new[] { 0x0007 }));
+        // AEAD-GCM outranks AES-CM: a GCM-only offer selects GCM-128, and GCM wins even when AES-CM is also offered.
+        Assert.Equal(0x0007, DtlsSrtpProfiles.SelectFromOffered(new[] { 0x0007 }));
+        Assert.Equal(0x0007, DtlsSrtpProfiles.SelectFromOffered(new[] { 0x0001, 0x0007 }));
     }
 
     // -------------------------------------------------------------------------
