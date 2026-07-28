@@ -104,6 +104,11 @@ the ADR itself). <code>Proposed</code> = decided in principle, not fully realise
 where the original prose diverged from the shipped code; the errata state the verified reality.</li>
 <li>Two decisions were verified as <em>already covered</em> by existing ADRs and deliberately not
 duplicated: BUNDLE/multi-track (ADR-010/011) and the WebRTC peer facade (ADR-009/012).</li>
+<li><strong>Type names are time-bound.</strong> ADRs written before 4.6.0 name the old SIP-facade types. In 4.6.0
+they were renamed: <code>SdkConfiguration</code> → <code>VoipConfiguration</code>, <code>SdkOptions</code> → <code>VoipOptions</code>,
+<code>AddCallora(...)</code> → <code>AddCalloraVoip(...)</code> (no compatibility aliases). The ADR texts stay unchanged
+as a dated record — translate as you read. The current state is in
+<a href="../../CHANGELOG.md"><code>CHANGELOG.md</code></a>.</li>
 </ul>
 <h3 id="architecture-layering--delivery-process">Architecture, Layering &amp; Delivery Process</h3>
 <table>

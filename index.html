@@ -87,19 +87,20 @@ and intelligent decision logic.</p>
 <li>Fraud, spam and scam detection systems</li>
 </ul>
 <h2 id="current-status">Current Status</h2>
-<p>Latest stable package: <strong>v4.5.0</strong> on <a href="https://www.nuget.org/packages/CalloraVoipSdk">nuget.org</a>.
-The <strong>4.6 line is in preview</strong> (this documentation): it adds the WebRTC facade, DTLS-SRTP and a
-self-hostable STUN/TURN server on top of the stable SIP + RTP core.</p>
+<p>Latest release: <strong>v4.6.0</strong> on <a href="https://www.nuget.org/packages/CalloraVoipSdk">nuget.org</a> (this
+documentation). It adds the WebRTC facade, DTLS-SRTP with AEAD-AES-GCM, and a self-hostable
+STUN/TURN server on top of the stable SIP + RTP core.</p>
 <blockquote>
-<p><strong>How to read the status column.</strong> <em>Stable</em> = mature, heavily covered by the RFC-oriented test
-suite, and the intended production surface. <em>Preview</em> = implemented but not yet validated against
-a broad interop matrix — validate for your environment first. The production-proven NAT path is
-symmetric RTP (comedia), which needs no ICE or STUN. The SIP + RTP core is additionally exercised
-by an <strong>automated interop suite against a real Asterisk (PJSIP) container in CI</strong> — calls, media,
-codecs, SRTP-SDES, DTMF, transfer, session timers, early media and TCP/TLS, plus a two-leg bridged
-call with byte-exact bidirectional media (see the <a href="interop/matrix.html">interop matrix</a>; currently
-all cases green, none skipped). Known gaps and interop defects are tracked openly in the
-<a href="https://github.com/BechsteinDigital/callora-voip-sdk/issues">issue tracker</a>.</p>
+<p><strong>How to read the status column.</strong> <em>Stable</em> = mature, covered by the RFC-oriented test suite and
+by automated interop, and the intended production surface. <em>Opt-in</em> = shipped and tested, but off
+by default and not yet proven in production traffic — validate for your environment first. The
+production-proven NAT path is symmetric RTP (comedia), which needs no ICE or STUN. The SIP + RTP
+core is exercised by an <strong>automated interop suite against a real Asterisk (PJSIP) container in
+CI</strong> — calls, media, codecs, SRTP-SDES, DTMF, transfer, session timers, early media and TCP/TLS,
+plus a two-leg bridged call with byte-exact bidirectional media (currently all cases green, none
+skipped). The WebRTC path is validated in CI against <strong>real Chromium and Firefox</strong> and a real
+<strong>coturn</strong> relay (see the <a href="interop/matrix.html">interop matrix</a>). Known gaps and interop defects are
+tracked openly in the <a href="https://github.com/BechsteinDigital/callora-voip-sdk/issues">issue tracker</a>.</p>
 </blockquote>
 <p><strong>Core (SIP + RTP):</strong></p>
 <table>
@@ -135,8 +136,8 @@ all cases green, none skipped). Known gaps and interop defects are tracked openl
 <td>✅ Stable</td>
 </tr>
 <tr>
-<td>DTLS-SRTP media encryption (RFC 5763, opt-in)</td>
-<td>🧪 Preview</td>
+<td>DTLS-SRTP media encryption (RFC 5763, incl. AEAD-AES-GCM per RFC 7714)</td>
+<td>✅ Stable</td>
 </tr>
 <tr>
 <td>Adaptive jitter buffer</td>
@@ -192,7 +193,7 @@ all cases green, none skipped). Known gaps and interop defects are tracked openl
 </tr>
 </tbody>
 </table>
-<p><strong>Preview / in progress:</strong></p>
+<p><strong>WebRTC and NAT traversal:</strong></p>
 <table>
 <thead>
 <tr>
@@ -203,15 +204,31 @@ all cases green, none skipped). Known gaps and interop defects are tracked openl
 <tbody>
 <tr>
 <td>WebRTC facade: peer connections, SDK-driven signalling, W3C tracks, media taps (<a href="guides/webrtc.html">transport-only</a>)</td>
-<td>🧪 Preview (not browser-validated; no SCTP; UDP TURN only)</td>
+<td>✅ Stable — browser-validated (Chromium + Firefox, both roles)</td>
 </tr>
 <tr>
-<td>Self-hostable STUN / TURN server (RFC 5389 / 5766)</td>
-<td>🧪 Preview (validate against your clients)</td>
+<td>WebRTC video repair &amp; congestion control: NACK/PLI/FIR, RTX, transport-cc, <code>getStats</code></td>
+<td>✅ Stable</td>
 </tr>
 <tr>
-<td>ICE for NAT traversal (RFC 8445/7675: role + tie-breaker, check-list FSM, nomination, inbound/triggered checks, consent freshness, restart)</td>
-<td>🧪 Preview — opt-in, unproven in production</td>
+<td>Send-side simulcast (RFC 8853 / 8852)</td>
+<td>✅ Stable (send-side only — receive-side RID demux not included)</td>
+</tr>
+<tr>
+<td>Data channels (SCTP)</td>
+<td>🚫 Not included</td>
+</tr>
+<tr>
+<td>Self-hostable STUN / TURN server (RFC 5389 / 5766 / 8656)</td>
+<td>✅ Stable — verified against coturn (UDP relay only)</td>
+</tr>
+<tr>
+<td>ICE for NAT traversal (RFC 8445/7675: role + tie-breaker, check-list FSM, nomination, inbound/triggered checks, consent freshness, restart incl. <code>RestartIceAsync</code>)</td>
+<td>⚙️ Opt-in — off by default, unproven in production trunks</td>
+</tr>
+<tr>
+<td>ICE-TCP candidates (RFC 6544)</td>
+<td>🚫 Not included (deliberate — trunk calls use symmetric RTP)</td>
 </tr>
 <tr>
 <td>Backend/API for signed plugin marketplace + tenant entitlements</td>
@@ -271,7 +288,7 @@ if (!dialResult.IsSuccess || dialResult.Call is null)
 await client.AttachDefaultAudioAsync(dialResult.Call);
 await dialResult.Call.HangupAsync();
 </code></pre>
-<p><a href="getting-started/install.html">→ Getting Started</a> · <a href="concepts/progressive-api.html">Progressive API</a> · <a href="concepts/voipclient.html">Core Concepts</a> · <a href="guides/making-calls.html">Guides</a> · <a href="interop/matrix.html">Interop</a> · <a href="production/lifecycle-dispose.html">Production</a></p>
+<p><a href="getting-started/install.html">→ Getting Started</a> · <a href="concepts/progressive-api.html">Progressive API</a> · <a href="concepts/voipclient.html">Core Concepts</a> · <a href="guides/making-calls.html">Guides</a> · <a href="guides/webrtc.html">WebRTC</a> · <a href="interop/matrix.html">Interop</a> · <a href="production/lifecycle-dispose.html">Production</a> · <a href="production/capacity.html">Capacity</a></p>
 
 </article>
 

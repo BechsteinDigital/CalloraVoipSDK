@@ -117,11 +117,13 @@ force the public media IP into the SDP <code>c=</code> line:</p>
 <p><code>PublicMediaHost</code> is an advanced opt-in: leave it unset (the default) to keep the auto-resolved,
 symmetric-RTP-friendly address. Only set it when the RTP port is preserved end-to-end; a public
 address with a remapped port breaks media. Non-IP values are ignored.</p>
-<h2 id="ice-opt-in-experimental">ICE (opt-in, experimental)</h2>
-<p>Full ICE (RFC 8445 / RFC 7675) is implemented <strong>opt-in</strong> and is still marked unproven in
-production. Enable it via <code>VoipConfiguration.Ice</code>. Treat it as experimental and validate
-against your own network before relying on it. Without ICE, plan for a
-media-relaying/SBC path on hostile NAT.</p>
+<h2 id="ice-opt-in">ICE (opt-in)</h2>
+<p>Full ICE (RFC 8445 / RFC 7675) is implemented and <strong>opt-in</strong> — role + tie-breaker, check-list FSM,
+<code>USE-CANDIDATE</code> nomination, inbound/triggered checks, consent freshness, restart detection and local
+restart initiation (<code>ICall.RestartIceAsync()</code>, RFC 8445 §9). Enable it via <code>VoipConfiguration.Ice</code>.
+It is off by default and <strong>not yet proven in production trunks</strong>, so validate it against your own
+network before relying on it; without ICE, plan for a media-relaying/SBC path on hostile NAT. On the
+WebRTC side the same ICE stack <em>is</em> exercised in CI against real browsers and a real coturn relay.</p>
 <h2 id="registering-against-a-trunk">Registering against a trunk</h2>
 <pre><code class="lang-csharp">var connect = await client.ConnectAsync(new SipAccount
 {
@@ -159,11 +161,16 @@ that don't expect PRACK.</p>
 <ul>
 <li><a href="../interop/fritzbox.html">FRITZ!Box</a> — verified <strong>manually</strong> against a live device (not an
 automated test); source of several hardening fixes</li>
-<li><a href="../interop/asterisk.html">Asterisk</a> — REGISTER covered by an <strong>automated</strong> CI interop test
-(full call/media not yet)</li>
-<li><a href="../interop/sipgate.html">sipgate</a>, <a href="../interop/freeswitch.html">FreeSWITCH</a>,
-<a href="../interop/3cx.html">3CX</a> — configuration guidance only; see the
-<a href="../interop/matrix.html">matrix</a> for the full verification status</li>
+<li><a href="../interop/asterisk.html">Asterisk</a> — the <strong>full</strong> SIP/RTP flow is automated in CI: register,
+in/outbound calls with live RTP, codec negotiation, SRTP-SDES, DTMF, hold, blind &amp; attended
+transfer, session timers, early media and TCP/TLS, plus a two-leg bridged call with byte-exact
+bidirectional media</li>
+<li><a href="../interop/freeswitch.html">FreeSWITCH</a> — the two-leg scenario matrix (bridged media, hold,
+transfer, DTMF, SDES) runs against a real FreeSWITCH container, but local-first and narrower than
+the Asterisk matrix</li>
+<li><a href="../interop/sipgate.html">sipgate</a>, <a href="../interop/3cx.html">3CX</a> — configuration guidance only; see the
+<a href="../interop/matrix.html">matrix</a> for the full verification status, including the browser (Chromium,
+Firefox) and coturn coverage</li>
 </ul>
 <h2 id="diagnostics">Diagnostics</h2>
 <p>Enable the SIP wire trace (Trace log level) to see the actual SDP being offered/answered

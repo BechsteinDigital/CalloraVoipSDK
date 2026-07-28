@@ -95,14 +95,77 @@
   Application/     Use-cases and orchestration
                    (CallManager, MediaManager)
                    Port interfaces: ISdpNegotiator, IAudioDevice, ICallIceAgent
-  Infrastructure/  Protocol adapters — SIP, RTP, SRTP, SDP, STUN, Audio
+  Infrastructure/  Protocol adapters — SIP, SDP, RTP, RTCP, SRTP, DTLS,
+                   STUN, TURN, WebRTC, Audio
                    (not used directly by SDK consumers)
 
 src/Client/
   Application/Facades    Public SDK entrypoint (`VoipClient`)
   Application/Managers   Developer-facing convenience/runtime managers
+  WebRtc/                Public WebRTC entrypoint (`WebRtcClient`, `IPeerConnection`)
+  Hosting/               Self-hostable STUN / TURN server hosts
   Infrastructure/DI      Host integration and dependency wiring
 </code></pre>
+<h2 id="two-facades">Two facades</h2>
+<p>The SDK ships two public facades that mirror the same shape — mutable <code>*Options</code> → immutable
+<code>*Configuration</code> → client → module registry as the plugin seam:</p>
+<table>
+<thead>
+<tr>
+<th>Facade</th>
+<th>Entrypoint</th>
+<th>DI</th>
+<th>Scope</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SIP</td>
+<td><code>VoipClient</code></td>
+<td><code>AddCalloraVoip(...)</code></td>
+<td>Registration, calls, SIP media</td>
+</tr>
+<tr>
+<td>WebRTC</td>
+<td><code>WebRtcClient</code></td>
+<td><code>AddCalloraWebRtc(...)</code></td>
+<td>Peer connections, BUNDLE media (<a href="../guides/webrtc.html">guide</a>)</td>
+</tr>
+</tbody>
+</table>
+<p>They compose in one chain: <code>services.AddCalloraVoip(sip =&gt; …).AddWebRtc(rtc =&gt; …)</code>.</p>
+<h2 id="two-media-session-families">Two media session families</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Single stream (SIP calls)</th>
+<th>BUNDLE (WebRTC)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Socket</td>
+<td>one per m-line</td>
+<td>one 5-tuple for everything (RFC 8843), MID/RID demux</td>
+</tr>
+<tr>
+<td>Keying</td>
+<td>SDES (RFC 4568) <strong>or</strong> DTLS-SRTP</td>
+<td>DTLS-SRTP only</td>
+</tr>
+<tr>
+<td>Jitter/PLC</td>
+<td>adaptive jitter buffer + playout loop + concealment</td>
+<td>video reorder buffer (no jitter buffer)</td>
+</tr>
+<tr>
+<td>Repair / feedback</td>
+<td>NACK/RTX, PLI/FIR, transport-cc per stream</td>
+<td>the same, with <strong>one transport-wide</strong> transport-cc plane per bundle</td>
+</tr>
+</tbody>
+</table>
 <h2 id="dependency-rule">Dependency Rule</h2>
 <p>Dependencies flow <strong>inward only</strong>: Client facade → Core Application → Core Domain. Infrastructure implements Application ports.</p>
 <h2 id="voipclient">VoipClient</h2>

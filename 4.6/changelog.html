@@ -76,88 +76,140 @@
 <p>The authoritative changelog lives in the repository:
 <a href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/main/CHANGELOG.md"><code>CHANGELOG.md</code></a></p>
 <h2 id="release-highlights">Release highlights</h2>
-<h3 id="unreleased">Unreleased</h3>
+<h3 id="460--2026-07-28">4.6.0 — 2026-07-28</h3>
+<p>The 4.6 line adds a <strong>WebRTC facade</strong> and a <strong>self-hostable STUN/TURN server</strong> on top of the SIP + RTP
+core, and closes every interop- and stability-critical finding of a full source audit. WebRTC is
+validated end-to-end in CI against <strong>real browsers</strong> (Chromium and Firefox) and a real <strong>coturn</strong>; the
+SIP core runs a full interop matrix against a real <strong>Asterisk</strong> with zero skipped cases, plus a second
+PBX (<strong>FreeSWITCH</strong>) and a two-leg bridged call verified <strong>byte-exact in both directions</strong>.</p>
+<blockquote>
+<p><strong>BREAKING (from 4.5):</strong> SIP-facade config types renamed — <code>SdkConfiguration</code> → <code>VoipConfiguration</code>,
+<code>SdkOptions</code> → <code>VoipOptions</code>, <code>AddCallora(...)</code> → <code>AddCalloraVoip(...)</code> (no compatibility aliases).
+<code>VoipClient</code> and all other public types are unchanged. See
+<a href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/main/CHANGELOG.md"><code>CHANGELOG.md</code></a>.</p>
+</blockquote>
+<p><strong>WebRTC</strong></p>
 <ul>
-<li><strong>SIP PUBLISH soft-state lifecycle (RFC 3903 §4/§6):</strong> <code>RefreshPublicationAsync</code>,
-<code>ModifyPublicationAsync</code> and <code>RemovePublicationAsync</code> drive an existing publication via
-<code>SIP-If-Match</code> — a publication can now be kept alive, changed or withdrawn, not just created.
-See <a href="guides/presence-publish.html">Presence &amp; event state</a>.</li>
-<li><strong>SIP stack hardening:</strong> precise transport-failure classification, 488 on an unanswerable
-re-INVITE/UPDATE offer (RFC 3264), <code>Via</code>-branch-strict response matching (RFC 3261 §17.1.3),
-registrar DNS off the inbound dispatch thread, bounded <code>Dispose</code> joins, WebSocket listener bind
-retry, and a redirect fan-out cap.</li>
-<li><strong>Interop:</strong> two-leg scenario tests over the bridged call (DTMF, hold/unhold, attended transfer,
-codec-mismatch transcoding), a concurrent-call soak, and a PBX-agnostic <code>IPbxFixture</code> abstraction
-so the matrix can run against further PBXs.</li>
+<li><strong>WebRTC facade (transport-only)</strong> in the <code>CalloraVoipSdk.WebRtc</code> namespace: a signalling-neutral
+browser/peer surface mirroring <code>VoipClient</code> — <code>WebRtcClient.CreatePeer()</code> (ICE, DTLS-SRTP, BUNDLE,
+RTP/RTCP), an SDK-driven handshake (<code>peer.ConnectAsync(signalling, role)</code>), the W3C track model
+(<code>TrackReceived</code> → <code>RemoteTrack</code>/<code>EncodedFrame</code>), a multi-peer manager (<code>client.Peers</code>) and L3 seams
+(<code>IMediaTap</code>, <code>IWebRtcClientModule</code>). Bring your own codec. See <a href="guides/webrtc.html">WebRTC</a>.</li>
+<li><strong>Browser-validated — Chromium <em>and</em> Firefox.</strong> The facade runs end-to-end in CI against real
+headless browsers (Playwright) — signalling → ICE → DTLS-SRTP → SRTP with bidirectional Opus and
+browser-decoded VP8, in <strong>both</strong> roles (SDK as offerer and as answerer), driven by a per-engine
+<code>BrowserEngine</code> matrix. A controlled answerer can use its own TURN relay, verified against a real
+<strong>coturn</strong>. WebKit/Safari remains uncovered.</li>
+<li><strong>Trickle ICE + early-bind</strong> (an ephemeral media port still yields a live m-line) and <strong>send-side
+simulcast</strong> (RFC 8853, offerer-confirmed; receive-side RID demux is a later slice).</li>
+<li><strong>Video repair &amp; congestion control:</strong> NACK/PLI/FIR key-frame recovery (RFC 4585/5104), RTX
+(RFC 4588) and transport-wide congestion control (transport-cc, RFC 8888) on the BUNDLE path, with
+<code>NackCount</code> / <code>PliCount</code> / <code>FramesDropped</code> / <code>AvailableOutgoingBitrateBps</code> wired into <code>getStats</code>
+and a public <code>VideoKeyFrameRequested</code> event.</li>
+<li><strong>mDNS candidates (RFC 8828):</strong> browser <code>.local</code> host candidates are resolved through an
+<code>IMdnsResolver</code> seam instead of being dropped.</li>
+<li><strong>RTCP quality</strong> (RFC 3550: periodic SR/RR, per-SSRC reception statistics, RTT from RR/SR, per-SSRC
+and per-MID snapshots on <code>WebRtcStats</code>) and <strong>DTMF (RFC 4733)</strong> end-to-end on the BUNDLE path.</li>
+<li><strong>IPv6 media:</strong> the media socket binds to the address family of the configured <code>LocalEndPoint</code>.</li>
 </ul>
-<h3 id="460-preview3--2026-07-25">4.6.0-preview.3 — 2026-07-25</h3>
-<ul>
-<li><strong>Early media (RFC 3960):</strong> a 180/183 carrying SDP now starts a <strong>receive-only</strong> media session
-before the call is answered — network announcements and ringback reach the app pre-answer.
-New surface: <code>IPhoneLine.OutboundCallRinging</code> (a call handle while <code>DialAsync</code> is still
-blocking), <code>ICall.EarlyMediaSdp</code>, and DTMF in the early dialog (<code>SendDtmfAsync</code> while ringing —
-IVR / AI outbound). Verified end-to-end against a real Asterisk, plain and SRTP-SDES.</li>
-<li><strong>SIP MESSAGE (RFC 3428):</strong> send and receive out-of-dialog instant messages —
-<code>VoipClient.SendMessageAsync(...)</code> and the <code>IncomingMessage</code> event.
-See <a href="guides/messaging.html">Instant messages</a>.</li>
-<li><strong>SIP PUBLISH (RFC 3903):</strong> publish event state such as presence via <code>PublishAsync</code>, returning the
-assigned SIP-ETag and granted lifetime. See <a href="guides/presence-publish.html">Presence &amp; event state</a>.</li>
-<li><strong>REFER transfer progress (RFC 3515 / 6665):</strong> an incoming REFER now carries an
-<code>IReferSubscription</code> (<code>TransferRequestedEventArgs.Subscription</code>) reporting the referred call's
-progress, with an auto-timeout bound to the session lifetime — instead of an optimistic
-&quot;100 Trying → 200 OK&quot;.</li>
-<li><strong>Interop- and stability-critical fixes</strong> found by a full source audit:
-<ul>
-<li><strong>SIP:</strong> re-ACK on a retransmitted 2xx of a confirmed dialog (RFC 3261 §13.2.2.4) — a lost ACK
-no longer lets the peer tear the call down; digest retry on the session-timer UPDATE and
-SUBSCRIBE refresh paths (a 401 on a refresh no longer terminates a healthy call); a correctly
-formed <code>+sip.instance</code> contact parameter (RFC 5626 §4.1); and the INVITE auth retry no longer
-adopts the 401's To-tag (RFC 3261 §12.1.2) — which had made <strong>all authenticated outbound calls</strong>
-fail with <code>481</code> against strict registrars.</li>
-<li><strong>SRTP:</strong> SRTCP now uses an 80-bit auth tag for every suite (RFC 4568 §6.2) — fixes RTCP interop
-with libsrtp-based peers when <code>AES_CM_128_HMAC_SHA1_32</code> is negotiated. SDES over insecure
-signalling is warned about, with an opt-in <code>RequireSecureSignalingForSdes</code> enforcement.</li>
-<li><strong>TURN:</strong> Send indications are no longer required to be authenticated (RFC 8656 §10), which had
-rejected RFC-conformant third-party clients; a configurable <code>PublicRelayAddress</code> replaces a
-loopback relay address that was unreachable off-host.</li>
-<li><strong>Media/Core:</strong> a transfer can no longer wedge the call in <code>Transferring</code> on a signalling
-failure; no media-session leak when a call terminates during ICE selection; G.722 is transcoded
-statefully across frames (removing audible artefacts); and the media sockets' kernel receive
-buffer is no longer capped at 8 KiB.</li>
-</ul>
-</li>
-<li><strong>Interop:</strong> the Asterisk matrix runs with <strong>no skipped cases</strong>, and a <strong>two-leg bridged-call</strong>
-suite verifies bidirectional, byte-exact media through the PBX.
-See the <a href="interop/matrix.html">interop matrix</a>.</li>
-</ul>
-<h3 id="460-preview2--2026-07-22">4.6.0-preview.2 — 2026-07-22</h3>
+<p><strong>Connectivity</strong></p>
 <ul>
 <li><strong>Self-hostable STUN &amp; TURN server</strong> via <code>AddCalloraStunServer(...)</code> / <code>AddCalloraTurnServer(...)</code>,
 with TURN control over UDP/TCP/TLS, FINGERPRINT validation, and EVEN-PORT + RESERVATION-TOKEN
-(RFC 8656 §7); plus the TURN relay lifecycle (permission refresh and channel rebind, §9/§12).</li>
-<li><strong>RTCP quality on the WebRTC/BUNDLE media path</strong> (RFC 3550): periodic Sender/Receiver Reports,
-per-SSRC reception statistics, RTT from RR/SR, and per-SSRC/MID quality snapshots on <code>WebRtcStats</code>.</li>
-<li><strong>DTMF (RFC 4733) end-to-end on the WebRTC/BUNDLE path.</strong></li>
+(RFC 8656 §7); plus the TURN relay lifecycle (permission refresh and channel rebind, §9/§12) and a
+configurable <code>PublicRelayAddress</code> replacing a loopback relay address that was unreachable off-host.</li>
+<li><strong>Local ICE restart (RFC 8445 §9):</strong> <code>ICall.RestartIceAsync()</code> restarts ICE from the application —
+new credentials on the existing socket, role preserved — instead of only detecting a peer-initiated
+restart. Together with the consent-loss signal on <code>ICall.IceConnectionStateChanged</code> an app can now
+detect a dead media path <em>and</em> repair it.</li>
+</ul>
+<p><strong>Call control and signalling</strong></p>
+<ul>
+<li><strong>Early media (RFC 3960):</strong> a 180/183 carrying SDP starts a <strong>receive-only</strong> media session before the
+call is answered — network announcements and ringback reach the app pre-answer. New surface:
+<code>IPhoneLine.OutboundCallRinging</code> (a call handle while <code>DialAsync</code> is still blocking),
+<code>ICall.EarlyMediaSdp</code>, and DTMF in the early dialog (<code>SendDtmfAsync</code> while ringing — IVR / AI
+outbound). Verified against a real Asterisk, plain and SRTP-SDES.</li>
+<li><strong>SIP MESSAGE (RFC 3428):</strong> send and receive out-of-dialog instant messages —
+<code>VoipClient.SendMessageAsync(...)</code> and the <code>IncomingMessage</code> event.
+See <a href="guides/messaging.html">Instant messages</a>.</li>
+<li><strong>SIP PUBLISH (RFC 3903)</strong> with the full soft-state lifecycle: <code>PublishAsync</code> plus
+<code>RefreshPublicationAsync</code>, <code>ModifyPublicationAsync</code> and <code>RemovePublicationAsync</code> (<code>SIP-If-Match</code>,
+§4/§6) — a publication can be kept alive, changed or withdrawn, not just created.
+See <a href="guides/presence-publish.html">Presence &amp; event state</a>.</li>
+<li><strong>REFER transfer progress (RFC 3515 / 6665):</strong> an incoming REFER carries an <code>IReferSubscription</code>
+(<code>TransferRequestedEventArgs.Subscription</code>) reporting the referred call's progress, with an
+auto-timeout bound to the session lifetime — instead of an optimistic &quot;100 Trying → 200 OK&quot;.</li>
+<li><strong>Call termination reason:</strong> <code>ICall.TerminationReason</code> tells a busy, unanswered, cancelled or
+rejected call apart from a generic failure, classified from the SIP response status (RFC 3261 §21).
+Cancelling a ringing dial sends a proper <strong>CANCEL</strong> (§9.1) and keeps the call reachable.</li>
 <li><strong>SHA-512-256 SIP digest authentication</strong> (RFC 8760), digest <code>qop=auth-int</code> (RFC 7616) and the
 RFC 5626 outbound <code>;ob</code> contact parameter.</li>
-<li>Broad SIP/RTP conformance fixes: dialog route-set routing (§12.2.1.1), dialog identity matching
-(§12.2.2), <code>received=</code>/<code>rport=</code> handling (RFC 3581), strictly in-order PRACK (RFC 3262 §4),
-SSRC-collision handling and randomized RTCP intervals (RFC 3550 §6.3.1/§8.2).</li>
 </ul>
-<h3 id="460-preview1--2026-07-18">4.6.0-preview.1 — 2026-07-18</h3>
+<p><strong>Media security</strong></p>
 <ul>
-<li><strong>WebRTC facade (preview, transport-only)</strong> in the <code>CalloraVoipSdk.WebRtc</code> namespace: a
-signalling-neutral browser/peer surface mirroring <code>VoipClient</code> — <code>WebRtcClient.CreatePeer()</code>
-(ICE, DTLS-SRTP, BUNDLE, RTP/RTCP), an SDK-driven handshake (<code>peer.ConnectAsync(signalling, role)</code>),
-the W3C track model (<code>TrackReceived</code> → <code>RemoteTrack</code>/<code>EncodedFrame</code>), a multi-peer manager
-(<code>client.Peers</code>) and L3 seams (<code>IMediaTap</code>, <code>IWebRtcClientModule</code>). Transport-only — bring your own
-codec. See <a href="guides/webrtc.html">WebRTC</a>. Includes trickle ICE + early-bind (an ephemeral media port
-yields a live m-line) and send-side simulcast (RFC 8853, offerer-confirmed; receive-side RID demux is
-a later slice). <strong>Preview:</strong> not yet browser-validated; API may change; no data channels (SCTP) or
-TURN relay yet.</li>
-<li><strong>BREAKING (from 4.6):</strong> SIP-facade config types renamed — <code>SdkConfiguration</code> → <code>VoipConfiguration</code>,
-<code>SdkOptions</code> → <code>VoipOptions</code>, <code>AddCallora(...)</code> → <code>AddCalloraVoip(...)</code> (no aliases). <code>VoipClient</code> is
-unchanged. See <a href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/main/CHANGELOG.md"><code>CHANGELOG.md</code></a>.</li>
+<li><strong>AEAD-AES-GCM SRTP/SRTCP (RFC 7714):</strong> the <code>AEAD_AES_128_GCM</code> / <code>AEAD_AES_256_GCM</code> suites are
+implemented end to end and offered <strong>preferred</strong> in the DTLS-SRTP <code>use_srtp</code> negotiation, with
+AES-CM-128 kept as the interoperable fallback. Browser interop never depended on it — Firefox was
+verified negotiating AES-CM before GCM landed. See <a href="guides/srtp-srtcp.html">SRTP/SRTCP</a>.</li>
+<li><strong>SRTCP auth tag:</strong> an 80-bit tag for every suite (RFC 4568 §6.2) — fixes RTCP interop with
+libsrtp-based peers when <code>AES_CM_128_HMAC_SHA1_32</code> is negotiated. SDES over insecure signalling is
+warned about, with an opt-in <code>RequireSecureSignalingForSdes</code> enforcement.</li>
+<li><strong>Recording encryption streams in constant memory:</strong> an AES-GCM-HKDF STREAM construction encrypts in
+fixed-size chunks with a per-file HKDF-derived key, so recordings of any length no longer load whole
+into memory — and the long-term key never reuses a (key, nonce) pair across files.</li>
+<li><strong>Security hardening:</strong> RTP SSRC/sequence/timestamp seeded from a CSPRNG (RFC 3550), the
+symmetric-RTP latch no longer re-points media at an unauthenticated source (the CVE-2017-14099
+pattern), SRTP master key material is wiped after derivation, and jitter/loss/RTT run off a
+monotonic clock. On the STUN/TURN/ICE side: CSPRNG DNS-SRV transaction ids (RFC 5452), an
+over-length STUN body is rejected instead of truncated, and short-term credentials match strictly
+on username <strong>and</strong> type. SAN matching parses ASN.1 directly and the TLS certificate load is
+thread-safe.</li>
+</ul>
+<p><strong>Media transport and SIP hardening</strong></p>
+<ul>
+<li><strong>RTP/RTCP port-pair reservation:</strong> media binds an even RTP port and reserves its RTCP successor
+(RFC 3550 §11), closing the race where the RTCP port could be taken between deriving and binding it.</li>
+<li><strong>SIP fixes</strong> found by the source audit: re-ACK on a retransmitted 2xx of a confirmed dialog
+(RFC 3261 §13.2.2.4); digest retry on the session-timer UPDATE and SUBSCRIBE refresh paths; a
+correctly formed <code>+sip.instance</code> contact parameter (RFC 5626 §4.1); and the INVITE auth retry no
+longer adopts the 401's To-tag (§12.1.2) — which had made <strong>all authenticated outbound calls</strong> fail
+with <code>481</code> against strict registrars. Plus dialog route-set routing (§12.2.1.1), dialog identity
+matching (§12.2.2), <code>received=</code>/<code>rport=</code> handling (RFC 3581), strictly in-order PRACK (RFC 3262 §4),
+SSRC-collision handling and randomized RTCP intervals (RFC 3550 §6.3.1/§8.2), precise
+transport-failure classification, 488 on an unanswerable re-INVITE/UPDATE offer (RFC 3264),
+<code>Via</code>-branch-strict response matching (§17.1.3), registrar DNS off the inbound dispatch thread,
+bounded <code>Dispose</code> joins, WebSocket listener bind retry, and a redirect fan-out cap.</li>
+<li><strong>TURN:</strong> Send indications are no longer required to be authenticated (RFC 8656 §10), which had
+rejected RFC-conformant third-party clients.</li>
+<li><strong>SDP &amp; media-file hardening:</strong> <code>rtcp-mux</code> is only answered when offered (RFC 5761), bandwidth lines
+keep their original type token (no TIAS→AS corruption), an SDP missing mandatory lines or a usable
+<code>c=</code> is rejected instead of defaulting to loopback, RTX payload types stay within the 7-bit range,
+MP3 passthrough handles ID3v2 tags, ffmpeg is killed on cancellation, and the WAV parser tolerates
+partial reads.</li>
+<li><strong>Core &amp; audio hardening:</strong> constructor-leak fix, thread-safe peer events, a monotonic rate clock, a
+real <code>WebRtcClient</code> teardown, playback-cancellation leak and recording-writer race closed,
+<code>Call.Dispose</code> awaits the BYE before tearing down the channel, hold events fire only on a real
+change, a <code>LineState</code> rule table, a transfer can no longer wedge the call in <code>Transferring</code> on a
+signalling failure, no media-session leak when a call terminates during ICE selection, G.722 is
+transcoded statefully across frames, and Windows/Linux audio parity (mute gate, drop-oldest,
+playback metrics, no hot-path allocation) with shared PCM/codec helpers. The weak-crypto analyzers
+(CA5350/CA5351) are no longer suppressed solution-wide.</li>
+</ul>
+<p><strong>Interop and CI</strong></p>
+<ul>
+<li><strong>Asterisk</strong> runs the full matrix with <strong>no skipped cases</strong>, and a <strong>two-leg bridged-call</strong> suite
+verifies bidirectional, byte-exact media through the PBX, alongside two-leg scenario tests (DTMF,
+hold/unhold, attended transfer, codec-mismatch transcoding) and a concurrent-call soak.</li>
+<li><strong>FreeSWITCH</strong> — a second PBX runs the <strong>two-leg scenario matrix</strong> behind a shared <code>IPbxFixture</code>
+abstraction (local-first, not in the CI gate; narrower than the Asterisk matrix). See the
+<a href="interop/freeswitch.html">FreeSWITCH page</a>.</li>
+<li><strong>Two new per-PR CI gates:</strong> a <strong>chaos/fault-injection gate</strong> (transport loss, malformed packets,
+signalling outage, resource churn → graceful degradation, recovery, no leak) and a <strong>performance
+gate</strong> on the SRTP crypto hot path.</li>
+<li><strong>Comparison &amp; capacity evidence:</strong> scenario-by-scenario comparison against another stack, plus a
+quality-gated capacity benchmark ramping to thousands of calls against a real Asterisk. Both run
+outside regular CI.</li>
 </ul>
 <h3 id="450--2026-07-15">4.5.0 — 2026-07-15</h3>
 <ul>

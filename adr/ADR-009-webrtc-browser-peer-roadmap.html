@@ -89,6 +89,15 @@
 
 <p>Status: Accepted
 Date: 2026-07-15</p>
+<blockquote>
+<p><strong>Nachtrag 2026-07-28 (Release 4.6.0).</strong> Der unten festgehaltene „Ist-Stand&quot; ist der Stand vom
+2026-07-15 und damit historisch. Inzwischen erledigt: BUNDLE mit gemeinsamem Transport,
+Track-Identity (<code>a=msid</code>/<code>a=ssrc</code>), <code>IceConnectionStateChanged</code> inkl. Consent-Loss, mDNS-Kandidaten
+(RFC 8828) — und die Fassade ist in CI <strong>gegen echte Browser validiert</strong> (Chromium + Firefox, beide
+Rollen). Weiterhin offen bzw. bewusst außerhalb des Scopes: SCTP-Datachannels, TCP/TLS-TURN-Relay,
+native Video-Codecs (transport-only bleibt die Entscheidung). Der aktuelle Stand steht in
+<a href="../../CHANGELOG.md"><code>CHANGELOG.md</code></a> und im <a href="../guides/webrtc.html">WebRTC-Guide</a>.</p>
+</blockquote>
 <h2 id="context">Context</h2>
 <p>Callora (Host/CPaaS) soll WebRTC als eigenes Modul auf der SDK-Engine anbieten — die Engine
 selbst soll ein WebRTC-<strong>Peer</strong> sein (Browser ⇄ SDK), nicht bloß ein SIP-Stack. Referenzen:

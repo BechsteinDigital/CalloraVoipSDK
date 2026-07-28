@@ -3710,6 +3710,16 @@
     },
     {
       "type": "Conceptual",
+      "source_relative_path": "docs/portal/interop/browsers.md",
+      "output": {
+        ".html": {
+          "relative_path": "interop/browsers.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
       "source_relative_path": "docs/portal/interop/freeswitch.md",
       "output": {
         ".html": {
@@ -3757,6 +3767,16 @@
         },
         ".json": {
           "relative_path": "interop/toc.json"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/portal/production/capacity.md",
+      "output": {
+        ".html": {
+          "relative_path": "production/capacity.html"
         }
       },
       "version": ""

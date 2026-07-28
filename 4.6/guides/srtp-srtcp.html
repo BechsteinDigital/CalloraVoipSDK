@@ -125,9 +125,15 @@ swaps the keys; a hold/unhold re-offer deliberately <strong>reuses</strong> the 
 <h2 id="what-is-negotiated">What is negotiated</h2>
 <ul>
 <li><strong>Offer as caller</strong> — outbound INVITEs advertise <code>RTP/SAVP</code> with an <code>a=crypto</code> line
-(AES-CM / HMAC-SHA1 suites).</li>
+(AES-CM / HMAC-SHA1 suites, 128- and 256-bit).</li>
 <li><strong>Answer as callee</strong> — inbound SRTP offers are accepted and keyed.</li>
-<li><strong>SRTCP</strong> — once SRTP is negotiated, RTCP is protected too (encrypted + authenticated).</li>
+<li><strong>SRTCP</strong> — once SRTP is negotiated, RTCP is protected too (encrypted + authenticated). The
+SRTCP auth tag is 80 bit for <strong>every</strong> suite, including the <code>*_HMAC_SHA1_32</code> ones — the 32-bit
+truncation of RFC 3711 §5.2 applies to SRTP only (RFC 4568 §6.2).</li>
+<li><strong>AEAD-GCM</strong> (<code>AEAD_AES_128_GCM</code> / <code>AEAD_AES_256_GCM</code>, RFC 7714) is implemented on the
+<strong>DTLS-SRTP</strong> path, where it is offered <em>preferred</em> in the <code>use_srtp</code> extension with AES-CM kept
+as the interoperable fallback. The SDES (<code>a=crypto</code>) path described here negotiates the AES-CM
+suites.</li>
 <li><strong>Rekey</strong> — a rekey re-INVITE (RFC 3264 §8) swaps the SRTP keys. Hold/unhold sends a
 re-offer but <strong>reuses</strong> the existing keys (no rekey, by design — avoids needless key churn).</li>
 </ul>
@@ -145,10 +151,8 @@ yields a failed call rather than a silent downgrade.</p>
 <ul>
 <li>Keying is <strong>SDES</strong> (<code>a=crypto</code>). DTLS-SRTP is available separately (RFC 5763, opt-in via
 <code>VoipConfiguration.OfferDtlsSrtp</code>) and is not the SDES negotiation path described here.</li>
-<li>For maximum interop, prefer the <code>AES_CM_128_HMAC_SHA1_80</code> suite. There is a known defect in
-the <code>*_HMAC_SHA1_32</code> suites where the <strong>SRTCP</strong> auth tag is 4 bytes instead of the required
-10 (RFC 4568 §6.2), which breaks RTCP interop with standards-compliant peers (e.g. libsrtp);
-tracked in the <a href="https://github.com/BechsteinDigital/callora-voip-sdk/issues">issue tracker</a>.</li>
+<li>For maximum interop over SDES, <code>AES_CM_128_HMAC_SHA1_80</code> remains the safest choice — it is what
+virtually every PBX and trunk supports.</li>
 <li>SRTP protects the media path; it does not by itself secure signaling — run SIP over TLS
 for signaling confidentiality.</li>
 </ul>

@@ -189,14 +189,64 @@ it on shutdown.</p>
 <td><code>ILoggerFactory</code> for diagnostics</td>
 </tr>
 <tr>
+<td><code>DefaultTransport</code></td>
+<td><code>Udp</code></td>
+<td>Default outbound SIP transport: UDP / TCP / TLS / WS / WSS</td>
+</tr>
+<tr>
+<td><code>Tls</code></td>
+<td><code>null</code></td>
+<td>TLS settings for the TLS/WSS transports</td>
+</tr>
+<tr>
 <td><code>SrtpPolicy</code></td>
 <td><code>Optional</code></td>
 <td><code>Disabled</code> / <code>Optional</code> / <code>Required</code> — see <a href="../guides/srtp-srtcp.html">SRTP/SRTCP</a></td>
 </tr>
 <tr>
+<td><code>OfferDtlsSrtp</code></td>
+<td><code>false</code></td>
+<td>Offer DTLS-SRTP keying (RFC 5763) instead of SDES</td>
+</tr>
+<tr>
+<td><code>RequireSecureSignalingForSdes</code></td>
+<td><code>false</code></td>
+<td>Refuse SDES keying over insecure signalling (UDP/TCP/WS)</td>
+</tr>
+<tr>
+<td><code>DtlsCertificate</code></td>
+<td><code>null</code></td>
+<td>Certificate for the DTLS-SRTP handshake; self-signed when unset</td>
+</tr>
+<tr>
 <td><code>PreferredAudioCodecs</code></td>
 <td><code>null</code></td>
 <td>Ordered codec preference for offers/answers</td>
+</tr>
+<tr>
+<td><code>BridgeAudioFormat</code></td>
+<td><code>Passthrough</code></td>
+<td>Wire format when bridging two calls (<code>Passthrough</code> or <code>Pcmu</code>)</td>
+</tr>
+<tr>
+<td><code>EnableVideo</code></td>
+<td><code>false</code></td>
+<td>Negotiate a video m-line (<a href="../guides/video-calls.html">transport-only</a>)</td>
+</tr>
+<tr>
+<td><code>PreferredVideoCodecs</code></td>
+<td><code>null</code></td>
+<td>Ordered video codec preference</td>
+</tr>
+<tr>
+<td><code>AudioDevice</code></td>
+<td><code>SilenceAudioDevice</code></td>
+<td>Default audio device when none is attached</td>
+</tr>
+<tr>
+<td><code>EnableAutomaticAudioDeviceSelection</code></td>
+<td><code>true</code></td>
+<td>Load the platform audio package by reflection</td>
 </tr>
 <tr>
 <td><code>MaxConcurrentCallsPerLine</code></td>
@@ -209,9 +259,19 @@ it on shutdown.</p>
 <td>Drop inbound calls with no media</td>
 </tr>
 <tr>
+<td><code>HangupHeldCallOnMediaSilence</code></td>
+<td><code>false</code></td>
+<td>Also apply the media timeout to held calls</td>
+</tr>
+<tr>
 <td><code>Ice</code></td>
 <td><code>IceConfiguration</code></td>
-<td>Opt-in ICE (unproven in production)</td>
+<td>Full ICE (RFC 8445/7675) — opt-in, off by default, unproven in production trunks</td>
+</tr>
+<tr>
+<td><code>Services</code></td>
+<td><code>null</code></td>
+<td><code>IServiceProvider</code> used to resolve ports (DI composition)</td>
 </tr>
 </tbody>
 </table>

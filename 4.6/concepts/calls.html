@@ -155,6 +155,23 @@ await call.SendNotifyAsync(/* … */);
 <p>See <a href="events.html">Events</a> for the threading contract these follow. Subscribe <strong>before</strong> placing or
 accepting a call — events are delivered live to the handlers registered at the time of the
 transition and are not guaranteed to be replayed to a handler that subscribes afterwards.</p>
+<h2 id="why-a-call-ended">Why a call ended</h2>
+<p>Once a call reaches <code>Terminated</code>, <code>ICall.TerminationReason</code> explains <strong>why</strong> — so a busy, unanswered,
+cancelled or rejected call is distinguishable from a generic failure. The same value is on the
+terminating <code>StateChanged</code> event (<code>CallStateChangedEventArgs.TerminationReason</code>).</p>
+<pre><code class="lang-csharp">call.StateChanged += (_, e) =&gt;
+{
+    if (e.NewState != CallState.Terminated) return;
+    var reason = e.TerminationReason;
+    Console.WriteLine($&quot;{reason?.Category} ({reason?.SipStatusCode} {reason?.ReasonPhrase}), &quot; +
+                      $&quot;ended by {reason?.TerminatedBy}&quot;);
+};
+</code></pre>
+<p><code>CallTerminationReason</code> carries the <code>SipStatusCode</code> and <code>ReasonPhrase</code>, a protocol-neutral
+<code>Category</code> (busy, no answer, cancelled, rejected, …), <code>TerminatedBy</code> (local or remote) and
+<code>RetryAfterSeconds</code> where the peer supplied one. The classification follows the authoritative SIP
+response status (RFC 3261 §21), not the advisory Q.850 <code>Reason</code> header — the same choice PJSIP,
+SIPSorcery and Twilio make.</p>
 <h2 id="media">Media</h2>
 <p>Each call has a media session. Attach the default audio device with
 <code>client.AttachDefaultAudioAsync(call)</code>, or attach a <a href="../guides/media-tap.html">media tap</a>

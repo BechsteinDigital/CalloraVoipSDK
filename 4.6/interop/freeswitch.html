@@ -87,9 +87,82 @@
         <article data-uid="">
 <h1 id="freeswitch">FreeSWITCH</h1>
 
-<p><strong>Status: ⚙️ configuration guidance — not yet formally verified.</strong> The SDK is a standard SIP
-endpoint and is expected to register against a FreeSWITCH SIP profile, but we have not yet
-run a validated interop test. Run your own acceptance test first.</p>
+<p><strong>Status: 🧪 automated interop suite, run locally.</strong> FreeSWITCH is the second PBX behind the shared
+<code>IPbxFixture</code> abstraction: the <strong>two-leg scenario matrix</strong> that runs against Asterisk also runs
+against a real FreeSWITCH container (<code>tests/CalloraVoipSdk.InteropTests</code>, trait
+<code>InteropFreeSwitch</code>).</p>
+<p>The suite is <strong>not part of the PR CI gate</strong> — it is a local-first check, so regressions are caught
+only when it is run explicitly:</p>
+<pre><code class="lang-bash">dotnet test tests/CalloraVoipSdk.InteropTests -c Release --filter &quot;Category=InteropFreeSwitch&quot;
+</code></pre>
+<h2 id="what-is-verified-against-freeswitch">What is verified against FreeSWITCH</h2>
+<p>Each of these runs against a real FreeSWITCH container, with two SDK legs bridged through the PBX:</p>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Assertion</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Registration</td>
+<td>A directory user registers over UDP through the fixture adapter</td>
+</tr>
+<tr>
+<td>Bridged call</td>
+<td>Both legs reach <code>Connected</code></td>
+</tr>
+<tr>
+<td>Media</td>
+<td>RTP flows in <strong>both</strong> directions, with RTP counters on each leg</td>
+</tr>
+<tr>
+<td>Media content</td>
+<td>A marked PCMU payload arrives <strong>byte-exact</strong> A→B through the PBX</td>
+</tr>
+<tr>
+<td>RTCP</td>
+<td>Local quality metrics <em>and</em> the remote SR/RR report are populated</td>
+</tr>
+<tr>
+<td>SRTP-SDES</td>
+<td>An encrypted bridged call flows in both directions</td>
+</tr>
+<tr>
+<td>Codec mismatch</td>
+<td>Legs with different codecs still flow, via transcoding</td>
+</tr>
+<tr>
+<td>Hold / unhold</td>
+<td>Unhold resumes bidirectional media</td>
+</tr>
+<tr>
+<td>Attended transfer</td>
+<td>The callee is bridged to a new target, with media flowing after the transfer</td>
+</tr>
+<tr>
+<td>DTMF (RFC 4733)</td>
+<td>A digit traverses the bridge, caller → callee</td>
+</tr>
+<tr>
+<td>Concurrent calls</td>
+<td>A short concurrent-call soak: all calls connect and flow media</td>
+</tr>
+</tbody>
+</table>
+<h2 id="what-is-not-covered-against-freeswitch">What is <em>not</em> covered against FreeSWITCH</h2>
+<p>These are exercised against <strong>Asterisk only</strong> — do your own acceptance test before relying on them
+with FreeSWITCH:</p>
+<ul>
+<li>Registration failure paths (wrong credentials, <code>423 Interval Too Brief</code>)</li>
+<li>Single-leg in/outbound calls and the codec-negotiation matrix (PCMU / PCMA / G722)</li>
+<li>Blind transfer (REFER) as a separate scenario</li>
+<li>Session timers (RFC 4028)</li>
+<li>Early media (RFC 3960)</li>
+<li>TCP and TLS transport</li>
+</ul>
+<p>See the <a href="matrix.html">interop matrix</a> for the full picture.</p>
 <h2 id="directory-user">Directory user</h2>
 <p>A standard directory user (e.g. <code>conf/directory/default/1001.xml</code>) with a password works:</p>
 <pre><code class="lang-xml">&lt;user id=&quot;1001&quot;&gt;

@@ -107,19 +107,39 @@ interop test.</p>
 <td>Real PJSIP Asterisk container (Testcontainers), <strong>all cases green / none skipped</strong>: register (happy + failure), in/outbound calls with live RTP, codec negotiation (PCMU/PCMA/G722), SRTP-SDES, DTMF (RFC 4733), hold/unhold, blind &amp; attended transfer, session timers (RFC 4028), early media (RFC 3960), TCP/TLS transport, plus a two-leg bridged call with byte-exact bidirectional media. See the <a href="asterisk.html">Asterisk page</a></td>
 </tr>
 <tr>
+<td><strong>Chromium</strong> (WebRTC)</td>
+<td>✅ Automated in CI</td>
+<td>Headless via Playwright: signalling → ICE → DTLS-SRTP → SRTP, bidirectional Opus and browser-decoded VP8, in <strong>both</strong> roles (SDK as offerer and as answerer). See the <a href="browsers.html">browsers page</a></td>
+</tr>
+<tr>
+<td><strong>Mozilla Firefox</strong> (WebRTC)</td>
+<td>✅ Automated in CI</td>
+<td>The same three scenarios via the browser-agnostic <code>BrowserEngine</code> matrix. Negotiates DTLS-SRTP with <strong>AES-CM</strong> — the SDK needs no AES-GCM for Firefox interop</td>
+</tr>
+<tr>
+<td><strong>coturn</strong> (TURN relay)</td>
+<td>✅ Automated in CI</td>
+<td>TURN relay allocation and media over a real coturn server, end-to-end</td>
+</tr>
+<tr>
 <td><strong>AVM FRITZ!Box</strong></td>
 <td>✅ Verified against a live device (manual)</td>
 <td>Register, dial, two-way audio, DTMF against real hardware; source of several hardening fixes. Not an automated CI test</td>
 </tr>
 <tr>
+<td><strong>FreeSWITCH</strong></td>
+<td>🧪 Automated, run locally</td>
+<td>The <strong>two-leg scenario matrix</strong> runs against a real FreeSWITCH container via the shared <code>IPbxFixture</code> abstraction: registration, bridged media (plain, SDES, codec-mismatch transcoding), byte-exact content, RTCP, hold/unhold, attended transfer, DTMF, concurrent-call soak. <strong>Not in the PR CI gate</strong> (trait <code>InteropFreeSwitch</code>) and narrower than the Asterisk matrix — no session timers, early media, TCP/TLS or codec-negotiation matrix. See the <a href="freeswitch.html">FreeSWITCH page</a></td>
+</tr>
+<tr>
+<td>WebKit / Safari (WebRTC)</td>
+<td>⚙️ Not yet verified</td>
+<td>The browser matrix has a WebKit engine, but the tests skip when the browser is not installed — see the <a href="browsers.html">browsers page</a></td>
+</tr>
+<tr>
 <td>sipgate</td>
 <td>⚙️ Guidance only — not yet formally verified</td>
 <td>Standard trunk registration expected to work; see the page</td>
-</tr>
-<tr>
-<td>FreeSWITCH</td>
-<td>⚙️ Guidance only — not yet formally verified</td>
-<td>Standard SIP profile expected to work</td>
 </tr>
 <tr>
 <td>3CX</td>
@@ -129,9 +149,11 @@ interop test.</p>
 </tbody>
 </table>
 <ul>
-<li>✅ <strong>Automated (CI)</strong> — a repeatable interop suite runs the full SIP/RTP flow against a real
-container on every relevant run.</li>
+<li>✅ <strong>Automated (CI)</strong> — a repeatable interop suite runs the full flow against a real container or
+browser on every relevant run.</li>
 <li>✅ <strong>Verified (manual)</strong> — exercised against real hardware by hand; not reproducible in CI.</li>
+<li>🧪 <strong>Automated, run locally</strong> — a repeatable suite exists and passes, but is not (yet) part of the
+CI gate, so regressions are caught only when it is run.</li>
 <li>⚙️ <strong>Guidance only</strong> — the SDK speaks standard SIP and <em>should</em> interoperate, and we provide
 configuration notes, but we have <strong>not</strong> yet run a validated end-to-end test against that
 platform. Do your own acceptance test before relying on it in production.</li>
@@ -139,12 +161,16 @@ platform. Do your own acceptance test before relying on it in production.</li>
 <h2 id="what-standard-support-means">What &quot;standard&quot; support means</h2>
 <p>The SDK covers the interop-relevant basics broadly:</p>
 <ul>
-<li>Digest authentication (RFC 2617), bounded stale-nonce retry</li>
-<li><code>Expires</code> precedence and registration refresh (RFC 3261 §10.2.1.1 / §10.3)</li>
+<li>Digest authentication (RFC 7616 / RFC 8760: MD5, SHA-256, SHA-512-256, <code>qop=auth-int</code>),
+bounded stale-nonce retry</li>
+<li><code>Expires</code> precedence and registration refresh (RFC 3261 §10.2.1.1 / §10.3), RFC 5626 <code>;ob</code></li>
 <li>Reliable provisionals (RFC 3262) only when the peer requires <code>100rel</code></li>
+<li>Early media (RFC 3960): pre-answer receive-only media and DTMF in the early dialog</li>
 <li>Static payload types without <code>rtpmap</code>, ordered codec preference</li>
 <li>RTCP compound decoding tolerant of unknown packet types (e.g. RFC 3611 XR)</li>
-<li>SRTP/SRTCP via SDES (RFC 4568 / RFC 3711), offered and answered</li>
+<li>SRTP/SRTCP via SDES (RFC 4568 / RFC 3711), offered and answered — the SRTCP auth tag is 80 bit
+for every suite (§6.2), which is what libsrtp-based peers expect</li>
+<li>DTLS-SRTP (RFC 5763) with AEAD-AES-GCM offered preferred (RFC 7714) and AES-CM as the fallback</li>
 </ul>
 <h2 id="reporting-interop-results">Reporting interop results</h2>
 <p>If you validate against a platform not marked verified here, interop reports are

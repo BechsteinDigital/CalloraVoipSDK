@@ -2,9 +2,9 @@
 <html>
   <head>
     <meta charset="utf-8">
-      <title>SRTP / SRTCP | CalloraVoipSdk </title>
+      <title>Browsers (WebRTC) | CalloraVoipSdk </title>
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <meta name="title" content="SRTP / SRTCP | CalloraVoipSdk ">
+      <meta name="title" content="Browsers (WebRTC) | CalloraVoipSdk ">
       
       
       <link rel="icon" href="../favicon.ico">
@@ -16,7 +16,7 @@
       <meta name="docfx:rel" content="../">
       
       
-      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/portal/guides/srtp-srtcp.md/#L1">
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/portal/interop/browsers.md/#L1">
       <meta name="loc:inThisArticle" content="In this article">
       <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
       <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
@@ -85,82 +85,68 @@
         </div>
 
         <article data-uid="">
-<h1 id="srtp--srtcp">SRTP / SRTCP</h1>
+<h1 id="browsers-webrtc">Browsers (WebRTC)</h1>
 
-<p>The SDK encrypts media with SRTP (SDES keying, RFC 4568) and encrypts/authenticates RTCP
-with SRTCP (RFC 3711 §3.4). It acts as <strong>both</strong> offerer and answerer. A rekey re-INVITE
-swaps the keys; a hold/unhold re-offer deliberately <strong>reuses</strong> the existing keys (no rekey).</p>
-<h2 id="policy">Policy</h2>
-<p><code>VoipConfiguration.SrtpPolicy</code> sets the default for all calls:</p>
+<p><strong>Status: ✅ Chromium and Firefox are automated in CI.</strong> The <a href="../guides/webrtc.html">WebRTC facade</a>
+is verified end-to-end against real, headless browsers driven by Playwright — not against a mock
+peer. Safari/WebKit is <strong>not</strong> verified.</p>
+<h2 id="what-is-actually-verified">What is actually verified</h2>
+<p>Three scenarios run per engine, so six tests in total (trait <code>BrowserInterop</code>):</p>
 <table>
 <thead>
 <tr>
-<th>Value</th>
-<th>Behaviour</th>
+<th>Scenario</th>
+<th>What it proves</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>Disabled</code></td>
-<td>Never use SRTP; media is plain RTP</td>
+<td><strong>Audio</strong></td>
+<td>SDK as offerer: signalling → ICE → DTLS-SRTP → SRTP, with the browser's Opus frames arriving on <code>TrackReceived</code>/<code>FrameReceived</code> and echoed back so media flows in <strong>both</strong> directions</td>
 </tr>
 <tr>
-<td><code>Optional</code> <em>(default)</em></td>
-<td>Offer/accept SRTP when the peer supports it, else fall back to RTP</td>
+<td><strong>Video</strong></td>
+<td>The same path with VP8, decoded by the browser — the SDK never encodes (transport-only)</td>
 </tr>
 <tr>
-<td><code>Required</code></td>
-<td>Only complete calls with SRTP; calls without it fail</td>
+<td><strong>Offerer role reversal</strong></td>
+<td>The <strong>browser</strong> offers and the SDK answers, so both ICE roles (controlling and controlled) are exercised</td>
 </tr>
 </tbody>
 </table>
-<pre><code class="lang-csharp">new VoipConfiguration { SrtpPolicy = SrtpPolicy.Required };
+<p>The browsers run against the same plain <code>RTCPeerConnection</code> pages (<code>peer.html</code>,
+<code>peer-offerer.html</code>, <code>peer-video.html</code>) — no browser-specific shims. Only two things differ per
+engine and are encapsulated in <code>BrowserEngine</code>: how fake media and mDNS are enabled (Chromium via
+launch flags, Firefox via <code>about:config</code> prefs) and where the executable lives in the Playwright
+cache.</p>
+<p>Firefox negotiates DTLS-SRTP with <strong>AES-CM</strong>; the SDK needs no AES-GCM for Firefox interop, though
+it offers the AEAD-GCM suites preferred (RFC 7714) and falls back cleanly.</p>
+<h2 id="running-it-yourself">Running it yourself</h2>
+<pre><code class="lang-bash">dotnet test tests/CalloraVoipSdk.BrowserInteropTests -c Release -f net10.0 \
+  --filter &quot;Category=BrowserInterop&quot;
 </code></pre>
-<h2 id="per-call-override">Per-call override</h2>
-<pre><code class="lang-csharp">ICall call = await line.DialAsync(
-    &quot;sip:1002@pbx.example.com&quot;,
-    new DialOptions { UseSrtp = true });
-</code></pre>
-<p><code>DialOptions.UseSrtp</code> overrides the configured policy for a single outbound call.</p>
-<h2 id="what-is-negotiated">What is negotiated</h2>
+<p>Tests <strong>skip</strong> when the engine is not installed in the Playwright cache — a green run without the
+browser proves nothing. That skip is exactly why WebKit is listed as unverified.</p>
+<h2 id="networking-note">Networking note</h2>
+<p>The peer binds to the host's LAN IPv4 rather than loopback: Firefox does not generate <code>127.0.0.1</code>
+candidates, so both sides must offer the same routable address. Browser <code>.local</code> mDNS candidates
+are resolved through the SDK's <code>IMdnsResolver</code> seam (RFC 8828) instead of being dropped.</p>
+<h2 id="known-limits">Known limits</h2>
 <ul>
-<li><strong>Offer as caller</strong> — outbound INVITEs advertise <code>RTP/SAVP</code> with an <code>a=crypto</code> line
-(AES-CM / HMAC-SHA1 suites, 128- and 256-bit).</li>
-<li><strong>Answer as callee</strong> — inbound SRTP offers are accepted and keyed.</li>
-<li><strong>SRTCP</strong> — once SRTP is negotiated, RTCP is protected too (encrypted + authenticated). The
-SRTCP auth tag is 80 bit for <strong>every</strong> suite, including the <code>*_HMAC_SHA1_32</code> ones — the 32-bit
-truncation of RFC 3711 §5.2 applies to SRTP only (RFC 4568 §6.2).</li>
-<li><strong>AEAD-GCM</strong> (<code>AEAD_AES_128_GCM</code> / <code>AEAD_AES_256_GCM</code>, RFC 7714) is implemented on the
-<strong>DTLS-SRTP</strong> path, where it is offered <em>preferred</em> in the <code>use_srtp</code> extension with AES-CM kept
-as the interoperable fallback. The SDES (<code>a=crypto</code>) path described here negotiates the AES-CM
-suites.</li>
-<li><strong>Rekey</strong> — a rekey re-INVITE (RFC 3264 §8) swaps the SRTP keys. Hold/unhold sends a
-re-offer but <strong>reuses</strong> the existing keys (no rekey, by design — avoids needless key churn).</li>
+<li><strong>Safari / WebKit</strong> — a <code>BrowserEngine.WebKit</code> exists in the matrix, but no verified run.</li>
+<li><strong>Data channels (SCTP)</strong> — not implemented, so anything relying on them will not work.</li>
+<li><strong>TURN relay is UDP-only</strong> — no TCP/TLS relay. The relay path itself is verified against a real
+coturn server.</li>
+<li><strong>Simulcast is send-side only</strong> — receiving and demultiplexing a browser's simulcast layers by
+rid is a later slice.</li>
 </ul>
-<h2 id="verifying">Verifying</h2>
-<p>The negotiated crypto is readable on the call once connected — no wire trace required:</p>
-<pre><code class="lang-csharp">var media = call.MediaParameters;
-bool    encrypted = media?.IsSrtpNegotiated ?? false;
-string? suite     = media?.SrtpSuite;                 // e.g. &quot;AES_CM_128_HMAC_SHA1_80&quot;, null = plain RTP
-bool    srtcp     = media?.IsSrtcpEncrypted ?? false; // RTCP protected too (RFC 3711 §3.4)
-</code></pre>
-<p>The key material itself stays internal. You can still confirm the <code>a=crypto</code> line via the
-<a href="../production/diagnostics.html">SIP wire trace</a>. With <code>Required</code>, a peer that cannot do SRTP
-yields a failed call rather than a silent downgrade.</p>
-<h2 id="limitations">Limitations</h2>
-<ul>
-<li>Keying is <strong>SDES</strong> (<code>a=crypto</code>). DTLS-SRTP is available separately (RFC 5763, opt-in via
-<code>VoipConfiguration.OfferDtlsSrtp</code>) and is not the SDES negotiation path described here.</li>
-<li>For maximum interop over SDES, <code>AES_CM_128_HMAC_SHA1_80</code> remains the safest choice — it is what
-virtually every PBX and trunk supports.</li>
-<li>SRTP protects the media path; it does not by itself secure signaling — run SIP over TLS
-for signaling confidentiality.</li>
-</ul>
+<p>Interop reports for other browsers are welcome:
+<a href="mailto:info@bechstein.digital">info@bechstein.digital</a>.</p>
 
 </article>
 
         <div class="contribution d-print-none">
-          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/portal/guides/srtp-srtcp.md/#L1" class="edit-link">Edit this page</a>
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/portal/interop/browsers.md/#L1" class="edit-link">Edit this page</a>
         </div>
 
         <div class="next-article d-print-none border-top" id="nextArticle"></div>
