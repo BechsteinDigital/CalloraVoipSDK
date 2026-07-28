@@ -13,6 +13,17 @@ accumulate the consumer-visible changes for 4.7.0.
 ### Added
 
 #### WebRTC facade (`CalloraVoipSdk.WebRtc`)
+- **Multiple video tracks before connect** — `IPeerConnection.AddVideoTrack()` (and the
+  `AddVideoTrack(VideoTrackOptions)` overload for direction/codecs/simulcast/stream id) adds a further video
+  track — its own `m=video` line on the shared BUNDLE transport — before the first offer, returning an
+  `IVideoTrack` handle to send frames on (`var cam = peer.AddVideoTrack(); await cam.SendFrameAsync(frame, ts);`).
+  Each track carries its own SSRC, so a camera and a screen-share stay separable on the wire (RFC 3550 §8.1),
+  and `RemoteTrack` now exposes its `Mid` so several remote video tracks are told apart on receive. New public
+  types: `IVideoTrack`, `VideoTrackOptions`, `TrackDirection`. **Preview-grade / additive:** a peer that uses
+  only `WebRtcConfiguration.EnableVideo` (and no `AddVideoTrack`) emits the byte-identical 1+1 SDP as before,
+  and `SendVideoFrameAsync` still addresses the primary track. **Limitation:** tracks must be added *before*
+  the offer is produced — mid-call add / renegotiation throws and is a later package. Multi-track stays under
+  preview reifung until that lands.
 - **`IPeerConnection.RequestVideoKeyFrameAsync`** — the receiving side can now actively request a fresh video
   key frame from the peer (RFC 4585 §6.3.1 PLI): for a newly attached renderer or a decoder reset, independent
   of the existing automatic loss-driven feedback. A tolerant no-op when no BUNDLE session is negotiated, the
@@ -46,10 +57,11 @@ implementation-detail status (the public seam is the corresponding interface):
 - `SipDomainCertificateValidator` (an internal RFC 5922 helper of the TLS transport).
 
 ### Internal / in progress (not yet consumer-visible)
-- **Multi-track SDP groundwork.** The shared SDP negotiator can now generate and answer *N* BUNDLE m-lines
-  with numeric mids (offer + answer). This is **internal only** — there is **no public multi-track API yet**,
-  and the media runtime is not wired for it. Per the claim-gating policy (ADR-006 §5), multi-track is **not**
-  announced as a feature until offer, answer, and the runtime work together end-to-end.
+- **Multi-track: mid-call add / renegotiation is still missing.** SDP (offer + answer), the media runtime, and
+  the public `AddVideoTrack` API now work together for tracks declared **before** the first offer (see *Added*).
+  What remains before multi-track leaves preview reifung: adding/removing a track **after** the offer
+  (renegotiation, RFC 8829), *N* audio tracks, and receive-side simulcast demux. Per the claim-gating policy
+  (ADR-006 §5), multi-track is described honestly as "multiple video tracks before connect", not "done".
 
 ## [4.6.0] - 2026-07-28
 

@@ -65,6 +65,8 @@ public sealed class WebRtcTrickleSignalingTests
         public event EventHandler? VideoKeyFrameRequested { add { } remove { } }
 
         public string CreateOffer() => "OFFER";
+        public IVideoTrack AddVideoTrack() => throw new NotSupportedException();
+        public IVideoTrack AddVideoTrack(VideoTrackOptions options) => throw new NotSupportedException();
 
         public Task<string> SetRemoteDescriptionAsync(string remoteSdp, CancellationToken cancellationToken = default)
         {

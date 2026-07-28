@@ -193,11 +193,14 @@ public sealed class WebRtcPeerToPeerTests
             {
                 LocalEndPoint = new IPEndPoint(IPAddress.Loopback, localPort),
                 AudioCodecs = Pcmu,
-                Video = new SdpVideoMediaOptions
-                {
-                    Port = localPort + 1,
-                    Codecs = [new SdpCodecDefinition { PayloadType = 96, Name = "H264", ClockRate = 90000 }],
-                },
+                VideoTracks =
+                [
+                    new SdpVideoMediaOptions
+                    {
+                        Port = localPort + 1,
+                        Codecs = [new SdpCodecDefinition { PayloadType = 96, Name = "H264", ClockRate = 90000 }],
+                    },
+                ],
                 Dtls = new SdpDtlsParameters { Algorithm = cert.Fingerprint.Algorithm, Fingerprint = cert.Fingerprint.Value },
                 Ice = new SdpIceParameters { Ufrag = iceTag, Pwd = iceTag + "password1234567890" },
             },

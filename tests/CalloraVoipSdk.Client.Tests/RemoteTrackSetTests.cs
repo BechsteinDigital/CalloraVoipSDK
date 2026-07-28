@@ -64,7 +64,7 @@ public sealed class RemoteTrackSetTests
         var set = new RemoteTrackSet(tracks.Add);
 
         set.DeliverAudioFrame("stream-1", "audio-track", Audio(1));
-        set.DeliverVideoFrame("stream-1", "video-track", Video(90000, true, 2));
+        set.DeliverVideoFrame("1", "stream-1", "video-track", Video(90000, true, 2));
 
         Assert.Equal(2, tracks.Count);
         Assert.Equal(TrackKind.Audio, tracks[0].Kind);
@@ -79,7 +79,7 @@ public sealed class RemoteTrackSetTests
         EncodedFrame? received = null;
         var set = new RemoteTrackSet(track => track.FrameReceived += (_, f) => received = f);
 
-        set.DeliverVideoFrame("s", "t", Video(123456, key: true, 7, 8));
+        set.DeliverVideoFrame("1", "s", "t", Video(123456, key: true, 7, 8));
 
         Assert.NotNull(received);
         Assert.Equal(123456u, received!.Value.RtpTimestamp);

@@ -71,14 +71,19 @@ public sealed class WebRtcClient : IWebRtcClient
         {
             LocalEndPoint = _config.LocalEndPoint,
             AudioCodecs = ResolveCodecs(_config.AudioCodecs, WebRtcCodecCatalog.Audio),
-            Video = _config.EnableVideo
-                ? new SdpVideoMediaOptions
-                {
-                    Port = _config.LocalEndPoint.Port,
-                    Codecs = ResolveVideoCodecs(_config.VideoCodecs),
-                    SimulcastSendRids = _config.SimulcastLayers,
-                }
-                : null,
+            // The config-time EnableVideo primary is the first (and, absent AddVideoTrack, only) video track;
+            // an empty list is audio-only. Further tracks the app adds via AddVideoTrack are appended at runtime.
+            VideoTracks = _config.EnableVideo
+                ?
+                [
+                    new SdpVideoMediaOptions
+                    {
+                        Port = _config.LocalEndPoint.Port,
+                        Codecs = ResolveVideoCodecs(_config.VideoCodecs),
+                        SimulcastSendRids = _config.SimulcastLayers,
+                    }
+                ]
+                : [],
             Dtls = new SdpDtlsParameters
             {
                 Algorithm = certificate.Fingerprint.Algorithm,
@@ -115,7 +120,8 @@ public sealed class WebRtcClient : IWebRtcClient
             stunProbe,
             turnProbe);
 
-        var connection = new PeerConnection(peer, _loggerFactory.CreateLogger<PeerConnection>(), _peers.Untrack);
+        var connection = new PeerConnection(
+            peer, _loggerFactory.CreateLogger<PeerConnection>(), _peers.Untrack, _config.VideoCodecs);
         _peers.Track(connection);
         return connection;
     }

@@ -90,6 +90,13 @@ internal sealed class SdpTrackOptions
     /// <summary>Media kind: <c>"audio"</c> or <c>"video"</c> (the m-line media type, RFC 4566 §5.14).</summary>
     public required string Kind { get; init; }
 
+    /// <summary>
+    /// The negotiated direction of this m-line (RFC 3264 §5.1). Defaults to <see cref="SdpMediaDirection.SendRecv"/>
+    /// so a track list that does not set it emits the same <c>a=sendrecv</c> m-lines the pre-direction
+    /// multi-track path did (byte-identity preserved).
+    /// </summary>
+    public SdpMediaDirection Direction { get; init; } = SdpMediaDirection.SendRecv;
+
     /// <summary>Codec capabilities to offer on this m-line (audio codecs, or VP8/H264 at 90 kHz for video).</summary>
     public required IReadOnlyList<SdpCodecDefinition> Codecs { get; init; }
 

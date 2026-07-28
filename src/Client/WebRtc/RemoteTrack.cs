@@ -12,15 +12,23 @@ namespace CalloraVoipSdk.WebRtc;
 /// </remarks>
 public sealed class RemoteTrack
 {
-    internal RemoteTrack(TrackKind kind, string? streamId, string? trackId)
+    internal RemoteTrack(TrackKind kind, string? streamId, string? trackId, string? mid)
     {
         Kind = kind;
         StreamId = streamId;
         TrackId = trackId;
+        Mid = mid;
     }
 
     /// <summary>The media kind of this track.</summary>
     public TrackKind Kind { get; }
+
+    /// <summary>
+    /// The remote m-line's MID (<c>a=mid</c>, RFC 5888) this track was received on, or <see langword="null"/>
+    /// when the remote advertised none (a legacy 1+1 offer). With several remote video tracks the MID
+    /// distinguishes them (P2c).
+    /// </summary>
+    public string? Mid { get; }
 
     /// <summary>The remote MediaStream id (a=msid stream id), or <see langword="null"/> when the remote advertised none.</summary>
     public string? StreamId { get; }
