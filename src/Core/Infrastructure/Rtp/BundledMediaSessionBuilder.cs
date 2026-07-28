@@ -114,7 +114,7 @@ internal static class BundledMediaSessionBuilder
                 SamplesPerPacket = audio.SamplesPerPacket,
                 ClockRate = audio.ClockRate, // negotiated audio clock (CF-004e: §A.8 jitter + SR RTP extrapolation)
             },
-            Video = videoTrack,
+            VideoTracks = videoTrack is not null ? [videoTrack] : [],
             DtlsIsClient = audio.DtlsIsClient,
             RemoteFingerprint = new DtlsFingerprint
             {

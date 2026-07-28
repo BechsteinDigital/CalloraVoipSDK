@@ -8,8 +8,10 @@ namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
 
 /// <summary>
 /// The negotiated parameters a <see cref="BundledMediaSession"/> assembles a BUNDLE group from
-/// (RFC 8843): the shared 5-tuple, the MID header-extension id, the audio and optional video tracks,
-/// and the DTLS-SRTP (RFC 5763) and ICE (RFC 8445) views of the one shared association and agent.
+/// (RFC 8843): the shared 5-tuple, the MID header-extension id, the audio and the (zero or more) video
+/// tracks, and the DTLS-SRTP (RFC 5763) and ICE (RFC 8445) views of the one shared association and agent.
+/// Each video m-line (P2b: N video tracks — a camera plus a screen-share pattern) is one entry in
+/// <see cref="VideoTracks"/>, carried under its own MID on its own bundle-wide-distinct SSRC(s).
 /// </summary>
 internal sealed record BundledMediaSessionOptions
 {
@@ -56,8 +58,16 @@ internal sealed record BundledMediaSessionOptions
     /// </summary>
     public bool AudioSendEnabled { get; init; } = true;
 
-    /// <summary>The video m-line configuration, or null for an audio-only bundle.</summary>
-    public BundledTrackConfig? Video { get; init; }
+    /// <summary>
+    /// The video m-line configurations (P2b: N video tracks, RFC 8843 §9). Empty for an audio-only bundle;
+    /// one entry per negotiated sending video m-line, each keyed by its own <see cref="BundledTrackConfig.Mid"/>
+    /// and carried on its own bundle-wide-distinct SSRC(s) (RFC 3550 §8.1). The order is stable — the first
+    /// entry is the primary video track (the one the single-track mid-less send/receive facade addresses for
+    /// backward compatibility). All entries share the one transport, DTLS association, and ICE agent; inbound
+    /// packets are demultiplexed to the right track by MID header extension (RFC 9143) when they share a
+    /// payload type, so two same-codec video streams never cross-talk.
+    /// </summary>
+    public IReadOnlyList<BundledTrackConfig> VideoTracks { get; init; } = [];
 
     /// <summary>Whether this side runs the DTLS client role (RFC 5763 setup:active).</summary>
     public required bool DtlsIsClient { get; init; }

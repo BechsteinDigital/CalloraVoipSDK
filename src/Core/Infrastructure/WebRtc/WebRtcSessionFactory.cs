@@ -135,22 +135,37 @@ internal static class WebRtcSessionFactory
                 "direction {RemoteDirection}); outbound audio is suppressed (the audio m-line still anchors the " +
                 "bundle transport and inbound audio is still received).", localAudio.Direction, remoteAudio.Direction);
 
-        var videoTrack = TryBuildVideoTrack(localDescription, remoteDescription, audioSsrc, loggerFactory);
-        var localVideoSection = localDescription.Media.FirstOrDefault(m => m.MediaType.Equals("video", Ci));
-
-        // Transport-wide-cc (transport-cc / RFC 8888): the negotiated a=extmap id on the video m-line, when the
-        // extension survived offer/answer. Enables one transport-wide sequence stamp across the bundle plus the
-        // congestion controller and receive-side feedback. Null (not negotiated, or an audio-only bundle) leaves
-        // the transport un-stamped and the congestion plane off.
-        var transportCcExtensionId = videoTrack is not null ? TransportCcExtensionId(localVideoSection) : null;
-
-        // A simulcast video track (RFC 8853) needs the negotiated RID header-extension id (RFC 8852) to
-        // stamp each layer's RID on outbound packets; without it in our own description we cannot key the
-        // encodings, so the exchange is not a usable simulcast session.
-        byte? ridExtensionId = null;
-        if (videoTrack is { Encodings.Count: > 0 })
+        // Build one video track per negotiated sending video m-line (P2b: N video tracks — e.g. a camera and a
+        // screen-share). Each track's SSRCs (primary, per-encoding, and RTX repair) are allocated distinct from
+        // every SSRC already issued on this bundle — audio and every earlier video track — so no two tracks (or
+        // their repair streams) collide (RFC 3550 §8.1). A cross-talk / SRTP-context collision would otherwise
+        // follow from a shared SSRC, since per-SSRC SRTP keys ROC/replay by SSRC.
+        var usedSsrcs = new HashSet<uint> { audioSsrc };
+        var videoTracks = new List<BundledTrackConfig>();
+        var localVideoSections = localDescription.Media.Where(m => m.MediaType.Equals("video", Ci)).ToArray();
+        foreach (var localVideoSection in localVideoSections)
         {
-            ridExtensionId = RidExtensionId(localVideoSection);
+            var videoTrack = TryBuildVideoTrack(localVideoSection, remoteDescription, usedSsrcs, loggerFactory);
+            if (videoTrack is not null)
+                videoTracks.Add(videoTrack);
+        }
+
+        // Transport-wide-cc (transport-cc / RFC 8888): the negotiated a=extmap id, one plane for the WHOLE bundle
+        // (transport-cc numbers the transport, not a stream). Read from the first sending video section that
+        // carries it. Null (not negotiated, or an audio-only bundle) leaves the transport un-stamped and the
+        // congestion plane off.
+        var firstVideoSection = localVideoSections.Length > 0 ? localVideoSections[0] : null;
+        var transportCcExtensionId = videoTracks.Count > 0 ? TransportCcExtensionId(firstVideoSection) : null;
+
+        // A simulcast video track (RFC 8853) needs the negotiated RID header-extension id (RFC 8852) to stamp
+        // each layer's RID on outbound packets; the id is session-wide (RFC 8285 keeps extmap ids consistent
+        // across m-lines), so it is taken from the first video section that carries simulcast encodings. Without
+        // it in our own description we cannot key the encodings, so the exchange is not a usable simulcast session.
+        byte? ridExtensionId = null;
+        if (videoTracks.Any(v => v.Encodings.Count > 0))
+        {
+            var simulcastSection = localVideoSections.FirstOrDefault(s => RidExtensionId(s) is not null);
+            ridExtensionId = simulcastSection is not null ? RidExtensionId(simulcastSection) : null;
             if (ridExtensionId is null)
             {
                 loggerFactory.CreateLogger(typeof(WebRtcSessionFactory)).LogWarning(
@@ -170,7 +185,7 @@ internal static class WebRtcSessionFactory
             TransportWideCcExtensionId = transportCcExtensionId,
             Audio = audioTrack,
             AudioSendEnabled = audioSendEnabled,
-            Video = videoTrack,
+            VideoTracks = videoTracks,
             DtlsIsClient = dtlsIsClient,
             RemoteFingerprint = new DtlsFingerprint { Algorithm = fingerprint.Algorithm, Value = fingerprint.Value },
             Ice = new IceMediaParameters(
@@ -214,23 +229,31 @@ internal static class WebRtcSessionFactory
         return firstMatch;
     }
 
+    // Builds one outbound video track from a specific local video m-line (P2b: called once per video section).
+    // <paramref name="usedSsrcs"/> accumulates every SSRC already issued on this bundle (audio and earlier video
+    // tracks); this track's primary, per-encoding, and RTX SSRCs are allocated distinct from that set and added
+    // back to it, so no two tracks or their repair streams ever share an SSRC (RFC 3550 §8.1). Returns null when
+    // this m-line is not negotiated for sending.
     private static BundledTrackConfig? TryBuildVideoTrack(
-        SdpSessionDescription localDescription,
+        SdpMediaDescription video,
         SdpSessionDescription remoteDescription,
-        uint audioSsrc,
+        ISet<uint> usedSsrcs,
         ILoggerFactory loggerFactory)
     {
         // Gated by the MID (grouped into the bundle), not the placeholder port under ICE.
-        var video = localDescription.Media.FirstOrDefault(m => m.MediaType.Equals("video", Ci));
-        if (video is null || string.IsNullOrEmpty(video.Mid))
+        if (string.IsNullOrEmpty(video.Mid))
             return null;
 
         // Build an outbound video track only when both sides negotiated it for sending (RFC 8829/3264):
         // this peer sends (send-recv/send-only) AND the remote will receive (enabled, send-recv/recv-only).
         // A remote that rejected video (port 0), made it inactive, or is send-only must not be streamed to —
         // the outbound mirror of the inbound port/direction gate. The local m-line's port is an ICE
-        // placeholder, so the local side is gated by direction, not a zero port.
-        var remoteVideo = remoteDescription.Media.FirstOrDefault(m => m.MediaType.Equals("video", Ci));
+        // placeholder, so the local side is gated by direction, not a zero port. The remote section is paired
+        // by MID (RFC 9143) so, with several video m-lines, each track sees its own peer section — not just the
+        // first — and its own recv/feedback state.
+        var remoteVideo = remoteDescription.Media.FirstOrDefault(
+            m => m.MediaType.Equals("video", Ci) && string.Equals(m.Mid, video.Mid, StringComparison.Ordinal))
+            ?? remoteDescription.Media.FirstOrDefault(m => m.MediaType.Equals("video", Ci) && string.IsNullOrEmpty(m.Mid));
         if (!LocalSends(video) || !RemoteReceives(remoteVideo))
         {
             loggerFactory.CreateLogger(typeof(WebRtcSessionFactory)).LogInformation(
@@ -259,15 +282,16 @@ internal static class WebRtcSessionFactory
         var sendRids = video.Rids.Where(r => r.Direction.Equals("send", Ci)).Select(r => r.Id).ToArray();
         if (sendRids.Length > 0)
         {
-            var confirmedRids = ConfirmedSimulcastRids(sendRids, remoteDescription);
+            var confirmedRids = ConfirmedSimulcastRids(sendRids, remoteVideo);
             if (confirmedRids.Count > 0)
             {
-                var used = new HashSet<uint> { audioSsrc };
+                // Each layer's SSRC is distinct from every SSRC already issued on the bundle (audio + earlier
+                // video tracks), accumulated into the shared set so a later track avoids these too.
                 var encodings = new List<BundledVideoEncoding>(confirmedRids.Count);
                 foreach (var rid in confirmedRids)
                 {
-                    var ssrc = NewSsrc(used);
-                    used.Add(ssrc);
+                    var ssrc = NewSsrc(usedSsrcs);
+                    usedSsrcs.Add(ssrc);
                     encodings.Add(new BundledVideoEncoding { Rid = rid, Ssrc = ssrc });
                 }
 
@@ -300,14 +324,20 @@ internal static class WebRtcSessionFactory
             rtxPayloadType = (byte)rtxPt;
         }
 
-        var videoSsrc = NewSsrc(distinctFrom: audioSsrc);
+        // This video track's primary SSRC, distinct from every SSRC already issued on the bundle (audio +
+        // earlier video tracks), then accumulated so a later track and the RTX stream below avoid it.
+        var videoSsrc = NewSsrc(usedSsrcs);
+        usedSsrcs.Add(videoSsrc);
         // The RTX repair stream carries its own SSRC (RFC 4588 §4), which must be distinct from every other
         // outbound SSRC on the bundle — not merely the primary (RFC 3550 §8.1). Allocate it against the full
-        // set of SSRCs already issued on this bundle (audio + this video primary); the factory owns the
-        // bundle-wide allocation, so the track no longer has to guess with only the primary to avoid.
-        uint? rtxSsrc = rtxPayloadType is not null
-            ? NewSsrc(new HashSet<uint> { audioSsrc, videoSsrc })
-            : null;
+        // set of SSRCs already issued on this bundle; the factory owns the bundle-wide allocation, so the
+        // track no longer has to guess with only the primary to avoid.
+        uint? rtxSsrc = null;
+        if (rtxPayloadType is not null)
+        {
+            rtxSsrc = NewSsrc(usedSsrcs);
+            usedSsrcs.Add(rtxSsrc.Value);
+        }
 
         return new BundledTrackConfig
         {
@@ -332,12 +362,14 @@ internal static class WebRtcSessionFactory
         remoteVideo is not null && remoteVideo.RtcpFeedback.Any(
             f => f.FeedbackType.Equals("nack", Ci) && string.Equals(f.Parameter, "pli", Ci));
 
-    // The subset of our offered send RIDs the remote answer confirmed as recv (RFC 8853): it must echo the
-    // RID header extension (RFC 8852) — else it cannot demux the layers — and list the RID as recv via
-    // a=simulcast:recv and/or an a=rid … recv line. Our offered order is preserved.
+    // The subset of our offered send RIDs the remote answer confirmed as recv (RFC 8853): the peer's paired
+    // video section must echo the RID header extension (RFC 8852) — else it cannot demux the layers — and list
+    // the RID as recv via a=simulcast:recv and/or an a=rid … recv line. Our offered order is preserved. The
+    // remote section is the one already paired to this local video m-line by MID (P2b), so, with several video
+    // m-lines, each track's simulcast is confirmed against its own peer section — not just the first.
     //
     // Role assumption: this confirmation is only meaningful for the OFFERER, where localSendRids come from our
-    // offer and remoteDescription is the peer's answer. The answerer's local description carries no a=rid send
+    // offer and the remote section is the peer's answer. The answerer's local description carries no a=rid send
     // today (answerer-side simulcast is a separate follow-up), so this is never reached on the answerer path.
     //
     // Limitation (RFC 8853 §5.1): comma-separated alternatives within one simulcast stream (e.g.
@@ -345,9 +377,8 @@ internal static class WebRtcSessionFactory
     // is treated as unconfirmed — a safe conservative fallback (we never stamp a RID the peer did not confirm).
     // Splitting alternatives is deferred (their either/or semantics must not be flattened into "both").
     private static IReadOnlyList<string> ConfirmedSimulcastRids(
-        IReadOnlyList<string> localSendRids, SdpSessionDescription remoteDescription)
+        IReadOnlyList<string> localSendRids, SdpMediaDescription? remoteVideo)
     {
-        var remoteVideo = remoteDescription.Media.FirstOrDefault(m => m.MediaType.Equals("video", Ci));
         if (remoteVideo is null || RidExtensionId(remoteVideo) is null)
             return [];
 
