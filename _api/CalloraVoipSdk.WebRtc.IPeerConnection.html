@@ -284,7 +284,7 @@ a malformed or unusable candidate is ignored.</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_IPeerConnection_AttachMediaTap_CalloraVoipSdk_WebRtc_IMediaTap_" data-uid="CalloraVoipSdk.WebRtc.IPeerConnection.AttachMediaTap(CalloraVoipSdk.WebRtc.IMediaTap)">
   AttachMediaTap(IMediaTap)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IPeerConnection.cs/#L118"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IPeerConnection.cs/#L131"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Attaches an <a class="xref" href="CalloraVoipSdk.WebRtc.IMediaTap.html">IMediaTap</a> that observes the encoded media flowing through this peer in both
@@ -396,7 +396,7 @@ address equals the host candidate; redundant-candidate pruning (RFC 8445 §5.4) 
 
   <h3 id="CalloraVoipSdk_WebRtc_IPeerConnection_GetStats" data-uid="CalloraVoipSdk.WebRtc.IPeerConnection.GetStats">
   GetStats()
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IPeerConnection.cs/#L124"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IPeerConnection.cs/#L137"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Takes a statistics snapshot for this peer (the SDK's <code>getStats</code>). Bitrates are derived per call,
@@ -413,6 +413,51 @@ so poll periodically (e.g. once per second) for meaningful rate values.</p>
   <dl class="parameters">
     <dt><a class="xref" href="CalloraVoipSdk.WebRtc.WebRtcStats.html">WebRtcStats</a></dt>
     <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_WebRtc_IPeerConnection_RequestVideoKeyFrameAsync_" data-uid="CalloraVoipSdk.WebRtc.IPeerConnection.RequestVideoKeyFrameAsync*"></a>
+
+  <h3 id="CalloraVoipSdk_WebRtc_IPeerConnection_RequestVideoKeyFrameAsync_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.WebRtc.IPeerConnection.RequestVideoKeyFrameAsync(System.Threading.CancellationToken)">
+  RequestVideoKeyFrameAsync(CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IPeerConnection.cs/#L125"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Asks the peer to send a fresh video key frame (RFC 4585 §6.3.1 PLI). This is the receiving side's
+counterpart to <a class="xref" href="CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_VideoKeyFrameRequested">VideoKeyFrameRequested</a>: call it when a newly attached renderer or a decoder
+reset needs an intra frame to start/recover decoding, independent of automatic loss-driven feedback.
+Tolerant by design — a no-op returning <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a> when no BUNDLE session is negotiated yet,
+the bundle has no video track, the peer did not advertise PLI (<code>a=rtcp-fb … nack pli</code>), or the
+built-in 500 ms throttle still holds; returns <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a> when a PLI was sent. Safe to
+call from any thread and after disposal (a no-op).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">ValueTask&lt;bool&gt; RequestVideoKeyFrameAsync(CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Cancels the RTCP send.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.valuetask-1">ValueTask</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a>&gt;</dt>
+    <dd><p><a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a> when a PLI was sent to the peer; otherwise <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a>.</p>
+</dd>
   </dl>
 
 
