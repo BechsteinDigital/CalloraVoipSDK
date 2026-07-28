@@ -1,6 +1,8 @@
 using System.Net;
+using System.Net.Sockets;
 using CalloraVoipSdk.Core.Application.Media;
 using CalloraVoipSdk.Core.Domain.Calls;
+using CalloraVoipSdk.Core.Infrastructure.Rtp;
 using CalloraVoipSdk.Core.Application.Media.Rtcp.Packets;
 using CalloraVoipSdk.Core.Infrastructure.Rtcp.Wire;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.JitterBuffer;
@@ -208,6 +210,50 @@ public sealed class QosMetricsTests
         Assert.Null(snapshot.RemoteMosListeningQuality);
         Assert.Null(snapshot.RemoteMosConversationalQuality);
     }
+
+    // --- RTCP port-ownership race (the reservation fix) ---
+
+    [Fact]
+    public async Task RtcpMonitor_goes_inactive_on_a_taken_port_but_stays_active_with_the_reserved_socket()
+    {
+        var interval = TimeSpan.FromMilliseconds(20);
+
+        // The bug: the RTCP port (N+1) was never held, a concurrent socket grabbed it, and the monitor's
+        // late bind fails → quality reporting is silently disabled for the call.
+        using var reservationA = MediaPortReservation.Reserve(IPAddress.Loopback);
+        var portA = reservationA.RtpPort;
+        reservationA.TakeRtcpSocket().Dispose();                              // release N+1 …
+        using var thief = new UdpClient(new IPEndPoint(IPAddress.Loopback, portA + 1)); // … and let another socket take it
+        await using var monitorA = new CallRtcpQualityMonitor(
+            new RecordingMediaSession(0xAA55), ParametersFor(portA), NullLoggerFactory.Instance,
+            new RtcpPacketCodec(), interval);
+        monitorA.StartAsync();
+        Assert.False(monitorA.GetLatestSnapshot().RtcpActive);
+
+        // The fix: the pair is reserved and the RTCP socket handed over. N+1 cannot be stolen, and the
+        // monitor binds the held socket → the send loop marks RTCP active.
+        using var reservationB = MediaPortReservation.Reserve(IPAddress.Loopback);
+        var portB = reservationB.RtpPort;
+        Assert.Throws<SocketException>(() => new UdpClient(new IPEndPoint(IPAddress.Loopback, portB + 1)));
+        await using var monitorB = new CallRtcpQualityMonitor(
+            new RecordingMediaSession(0xBB66), ParametersFor(portB), NullLoggerFactory.Instance,
+            new RtcpPacketCodec(), interval, preBoundRtcpSocket: reservationB.TakeRtcpSocket());
+        monitorB.StartAsync();
+
+        for (var i = 0; i < 50 && !monitorB.GetLatestSnapshot().RtcpActive; i++)
+            await Task.Delay(20);
+        Assert.True(monitorB.GetLatestSnapshot().RtcpActive);
+    }
+
+    private static CallMediaParameters ParametersFor(int rtpPort) => new()
+    {
+        LocalEndPoint = new IPEndPoint(IPAddress.Loopback, rtpPort),
+        RemoteEndPoint = new IPEndPoint(IPAddress.Loopback, rtpPort + 100),
+        PayloadType = 0,
+        ClockRate = 8000,
+        SamplesPerPacket = 160,
+        PayloadTypeCodecMap = new Dictionary<int, string> { [0] = "PCMU" },
+    };
 
     private sealed class RecordingMediaSession : ICallMediaSession
     {

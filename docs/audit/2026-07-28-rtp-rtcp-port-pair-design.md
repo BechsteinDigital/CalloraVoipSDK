@@ -27,6 +27,10 @@ Die `RtpSession` bindet `parameters.LocalEndPoint` = `IPEndPoint(ResolveAdvertis
 3. Verdrahtung: `SipCoreCallChannel` → Sidecar → Factory/Orchestrator → Übergabe; Release+Rebind entfällt (Nicht-ICE).
 4. Deterministischer Kollisionstest (Fremd-Socket auf N+1 → RTCP bleibt mit Fix aktiv), Review, PR.
 
+## ★ Umgesetzter Scope (2026-07-28): minimal-invasiv, nur RTCP-Handoff
+
+Beim Verdrahten (Slice 3) zeigten sich zwei Integrationssubtilitäten: (1) der ICE-Pfad übergibt `_localMediaSocket.Client` an den ICE-Agent (Gathering); (2) `ReleasePortReservationSockets` läuft unbedingt. Um den **RTP-/ICE-Pfad NICHT anzufassen** (Reliability), ist der finale Fix bewusst minimal: das RTP/RTCP-**Paar** wird reserviert (schützt N+1), der **RTP-Socket behält seinen Lebenszyklus unverändert** (release+rebind — bewiesen stabil, ICE-Gathering unberührt), und **nur der RTCP-Socket** wird gehalten und via `IRtcpSocketHandoff` an den `CallRtcpQualityMonitor` übergeben (non-mux). Das trifft exakt den beobachteten Bug (RTCP N+1) ohne Risiko am RTP/ICE-Pfad. Wildcard-Bind + voller RTP-Handoff (Referenz-Parität) bleiben als optionale Folge-Verfeinerung. Video hat keinen RTCP-Monitor → unberührt.
+
 ## Nicht in Scope (Follow-up)
 
 Media-Hotpath-Profiling (`MediaReceiver` erzeugt pro Frame EventArgs + Invocation-List-Kopie); Server-GC-Rampentest.
