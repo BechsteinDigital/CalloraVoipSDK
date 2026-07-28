@@ -1177,6 +1177,76 @@
     },
     {
       "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Application.Observability.ISipTelemetrySink.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Application.Observability.ISipTelemetrySink.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Application.Observability.ISipTelemetrySink",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Application.Observability.ISipTelemetrySink.yml\" sourcestartlinenumber=\"1\">Sink for SIP observability artifacts (events, metrics, CDR).</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Application.Observability.SipCdrRecord.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Application.Observability.SipCdrRecord.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Application.Observability.SipCdrRecord",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Application.Observability.SipCdrRecord.yml\" sourcestartlinenumber=\"1\">Call detail record emitted for SIP dialog lifecycles.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Application.Observability.SipEventRecord.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Application.Observability.SipEventRecord.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Application.Observability.SipEventRecord",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Application.Observability.SipEventRecord.yml\" sourcestartlinenumber=\"1\">Structured SIP event record for diagnostics and event-stream consumers.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Application.Observability.SipMetricRecord.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Application.Observability.SipMetricRecord.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Application.Observability.SipMetricRecord",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Application.Observability.SipMetricRecord.yml\" sourcestartlinenumber=\"1\">Simple metric data point for SIP counters/timers.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Application.Observability.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Application.Observability.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Application.Observability",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
       "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Application.Ports.Audio.AudioConnectionParameters.yml",
       "output": {
         ".html": {
@@ -1999,76 +2069,6 @@
       "Uid": null,
       "IsMRef": true,
       "Title": "CalloraVoipSdk.Core.Domain.Security",
-      "Summary": null
-    },
-    {
-      "type": "ManagedReference",
-      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Infrastructure.Sip.Observability.ISipTelemetrySink.yml",
-      "output": {
-        ".html": {
-          "relative_path": "_api/CalloraVoipSdk.Core.Infrastructure.Sip.Observability.ISipTelemetrySink.html"
-        }
-      },
-      "version": "",
-      "Uid": null,
-      "IsMRef": true,
-      "Title": "CalloraVoipSdk.Core.Infrastructure.Sip.Observability.ISipTelemetrySink",
-      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Infrastructure.Sip.Observability.ISipTelemetrySink.yml\" sourcestartlinenumber=\"1\">Sink for SIP observability artifacts (events, metrics, CDR).</p>\n"
-    },
-    {
-      "type": "ManagedReference",
-      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipCdrRecord.yml",
-      "output": {
-        ".html": {
-          "relative_path": "_api/CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipCdrRecord.html"
-        }
-      },
-      "version": "",
-      "Uid": null,
-      "IsMRef": true,
-      "Title": "CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipCdrRecord",
-      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipCdrRecord.yml\" sourcestartlinenumber=\"1\">Call detail record emitted for SIP dialog lifecycles.</p>\n"
-    },
-    {
-      "type": "ManagedReference",
-      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipEventRecord.yml",
-      "output": {
-        ".html": {
-          "relative_path": "_api/CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipEventRecord.html"
-        }
-      },
-      "version": "",
-      "Uid": null,
-      "IsMRef": true,
-      "Title": "CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipEventRecord",
-      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipEventRecord.yml\" sourcestartlinenumber=\"1\">Structured SIP event record for diagnostics and event-stream consumers.</p>\n"
-    },
-    {
-      "type": "ManagedReference",
-      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipMetricRecord.yml",
-      "output": {
-        ".html": {
-          "relative_path": "_api/CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipMetricRecord.html"
-        }
-      },
-      "version": "",
-      "Uid": null,
-      "IsMRef": true,
-      "Title": "CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipMetricRecord",
-      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Infrastructure.Sip.Observability.SipMetricRecord.yml\" sourcestartlinenumber=\"1\">Simple metric data point for SIP counters/timers.</p>\n"
-    },
-    {
-      "type": "ManagedReference",
-      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Infrastructure.Sip.Observability.yml",
-      "output": {
-        ".html": {
-          "relative_path": "_api/CalloraVoipSdk.Core.Infrastructure.Sip.Observability.html"
-        }
-      },
-      "version": "",
-      "Uid": null,
-      "IsMRef": true,
-      "Title": "CalloraVoipSdk.Core.Infrastructure.Sip.Observability",
       "Summary": null
     },
     {
