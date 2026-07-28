@@ -137,12 +137,17 @@ public sealed class AsteriskContainer : IAsyncDisposable
         "same => n,Wait(3600)\n" +                // → aufrufer-seitiger Timeout / CANCEL
         "exten => answer,1,Answer()\n" +          // → 200 OK, Dialog etabliert
         "same => n,Milliwatt()\n" +               // endloser 1004-Hz-Testton → RTP fließt SDK-wärts
+        "exten => echo,1,Answer()\n" +            // → 200 OK, bidirektionales RTP-Echo für Kapazitätsmessung
+        "same => n,Echo()\n" +
         "exten => dtmf,1,Answer()\n" +            // → 200 OK, dann RFC-4733-Ziffern senden
         "same => n,Wait(4)\n" +                   // Media etablieren, BEVOR gesendet wird: Wait startet bei Answer,
                                                   // aber das SDK registriert DtmfReceived erst nach connected —
                                                   // auf langsamem CI fiel Ziffer 1 sonst weg (Wait(2) war zu knapp).
         "same => n,SendDTMF(1234)\n" +            // sendet 1-2-3-4 als telephone-event
         "same => n,Wait(30)\n" +                  // Call offen halten für den Empfang
+        "exten => remotehangup,1,Answer()\n" +     // → 200 OK, danach Peer-seitiges BYE
+        "same => n,Wait(2)\n" +
+        "same => n,Hangup()\n" +
         "exten => earlymedia,1,Progress()\n" +    // → 183 Session Progress mit SDP (Early Media)
         "same => n,Playtones(dial)\n" +           // Dial-Ton als Early-Media-RTP vor dem 200 OK (Playtones
                                                   //   antwortet NICHT — Wait() hält das Fenster wirklich offen)
@@ -169,7 +174,12 @@ public sealed class AsteriskContainer : IAsyncDisposable
     /// Paar <c>i</c> besteht aus Caller <c>sc{i}</c> und Callee <c>se{i}</c>, beide PCMU-only.
     /// 0 (Standard) → Konfiguration byte-identisch mit dem Basis-Setup.
     /// </param>
-    public AsteriskContainer(int extraBridgePairs = 0)
+    /// <param name="openFileLimit">
+    /// Optionales Soft-/Hard-Limit für offene Dateien im Container. Der Standard bleibt unverändert;
+    /// manuelle Kapazitätsläufe setzen es explizit höher, damit nicht Dockers 1024er-Default die
+    /// Messung bei ungefähr 250 RTP-Calls beendet.
+    /// </param>
+    public AsteriskContainer(int extraBridgePairs = 0, long? openFileLimit = null)
     {
         _usesBrowserSafeNetwork = IsBrowserSafeModeRequested(
             Environment.GetEnvironmentVariable(BrowserSafeModeEnvironmentVariable));
@@ -223,6 +233,23 @@ public sealed class AsteriskContainer : IAsyncDisposable
             : builder
                 .WithExposedPort(SipPortWithProtocol)
                 .WithPortBinding(SipPortWithProtocol, assignRandomHostPort: true);
+
+        if (openFileLimit is > 0)
+        {
+            builder = builder.WithCreateParameterModifier(parameters =>
+            {
+                parameters.HostConfig ??= new Docker.DotNet.Models.HostConfig();
+                parameters.HostConfig.Ulimits =
+                [
+                    new Docker.DotNet.Models.Ulimit
+                    {
+                        Name = "nofile",
+                        Soft = openFileLimit.Value,
+                        Hard = openFileLimit.Value,
+                    },
+                ];
+            });
+        }
 
         _container = builder
             .WithWaitStrategy(Wait.ForUnixContainer().UntilMessageIsLogged("Asterisk Ready."))

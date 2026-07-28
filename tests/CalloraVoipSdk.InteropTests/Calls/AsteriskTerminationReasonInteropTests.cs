@@ -65,6 +65,44 @@ public sealed class AsteriskTerminationReasonInteropTests
     }
 
     [DockerRequiredFact]
+    public async Task DeclinedTarget_SurfacesRejectedTerminationReason()
+    {
+        await using var asterisk = new AsteriskContainer();
+        await asterisk.StartAsync();
+        using var client = NewClient();
+        var line = await RegisterAsync(asterisk, client);
+
+        var result = await client.DialAndWaitUntilConnectedAsync(
+            line, asterisk.CallTargetUri("decline"), new DialWaitOptions { ConnectTimeout = TimeSpan.FromSeconds(10) });
+
+        Assert.False(result.IsSuccess);
+        var reason = result.Call?.TerminationReason;
+        Assert.NotNull(reason);
+        Assert.Equal(CallTerminationCategory.Rejected, reason!.Category);
+        Assert.Equal(403, reason.SipStatusCode);
+        Assert.Equal(CallTerminatedBy.Remote, reason.TerminatedBy);
+    }
+
+    [DockerRequiredFact]
+    public async Task UnknownTarget_SurfacesFailedTerminationReasonWith404()
+    {
+        await using var asterisk = new AsteriskContainer();
+        await asterisk.StartAsync();
+        using var client = NewClient();
+        var line = await RegisterAsync(asterisk, client);
+
+        var result = await client.DialAndWaitUntilConnectedAsync(
+            line, asterisk.CallTargetUri("nonexistent"), new DialWaitOptions { ConnectTimeout = TimeSpan.FromSeconds(10) });
+
+        Assert.False(result.IsSuccess);
+        var reason = result.Call?.TerminationReason;
+        Assert.NotNull(reason);
+        Assert.Equal(CallTerminationCategory.Failed, reason!.Category);
+        Assert.Equal(404, reason.SipStatusCode);
+        Assert.Equal(CallTerminatedBy.Remote, reason.TerminatedBy);
+    }
+
+    [DockerRequiredFact]
     public async Task NoAnswer_SurfacesNoAnswerTerminationReason()
     {
         await using var asterisk = new AsteriskContainer();
@@ -113,5 +151,29 @@ public sealed class AsteriskTerminationReasonInteropTests
         Assert.NotNull(reason);
         Assert.Equal(CallTerminationCategory.Completed, reason!.Category);
         Assert.Equal(CallTerminatedBy.Local, reason.TerminatedBy);
+    }
+
+    [DockerRequiredFact]
+    public async Task RemoteByeAfterAnswer_SurfacesCompletedRemoteTerminationReason()
+    {
+        await using var asterisk = new AsteriskContainer();
+        await asterisk.StartAsync();
+        using var client = NewClient();
+        var line = await RegisterAsync(asterisk, client);
+
+        var result = await client.DialAndWaitUntilConnectedAsync(
+            line, asterisk.CallTargetUri("remotehangup"), new DialWaitOptions { ConnectTimeout = TimeSpan.FromSeconds(10) });
+        Assert.True(result.IsSuccess, $"DialStatus: {result.Status}");
+        var call = result.Call!;
+
+        var deadline = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(8);
+        while (call.State != CallState.Terminated && DateTimeOffset.UtcNow < deadline)
+            await Task.Delay(100);
+
+        var reason = call.TerminationReason;
+        Assert.NotNull(reason);
+        Assert.Equal(CallTerminationCategory.Completed, reason!.Category);
+        Assert.Null(reason.SipStatusCode);
+        Assert.Equal(CallTerminatedBy.Remote, reason.TerminatedBy);
     }
 }

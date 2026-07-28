@@ -256,6 +256,11 @@ dotnet test tests/CalloraVoipSdk.InteropTests -c Release --filter "Category=Inte
 
 # Long soak tests — media-quality drift + resource-leak/plateau guards over extended runs
 dotnet test tests/CalloraVoipSdk.SoakTests -c Release --filter "Category=SoakLong"
+
+# Manual machine-capacity envelope — real Asterisk echo, per-call/per-direction quality gate.
+# Defaults ramp from 64 to 4096 calls and are intentionally not part of regular CI.
+dotnet test tests/CalloraVoipSdk.InteropTests -c Release -f net10.0 \
+  --filter "Category=Capacity"
 ```
 
 The browser-safe interop runner is an explicit local Linux mode. It serializes Asterisk instances
@@ -278,6 +283,8 @@ no jitter-buffer overflow, correct loss accounting, and no monotone resource dri
 
 > The full test matrix and the L0–L4 test model are documented in
 > [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`MAINTAINING.md`](MAINTAINING.md).
+> The capacity profile, quality gates, report fields and interpretation limits are documented in
+> [`docs/maintainers/capacity-quality-benchmark.md`](docs/maintainers/capacity-quality-benchmark.md).
 
 ## Quickstart
 
