@@ -15,37 +15,37 @@ public sealed class Issue16SecurityHardeningTests
     // ── Media 2: AES-GCM recording encryption ────────────────────────────────────────────────
 
     [Fact]
-    public async Task AesGcm_encrypt_roundtrips_with_in_place_encryption()
+    public async Task AesGcm_encrypt_roundtrips_through_streaming_decrypt()
     {
         var key = RandomNumberGenerator.GetBytes(32);
-        var plaintext = RandomNumberGenerator.GetBytes(50_000);
+        // Larger than one 64 KiB chunk so the roundtrip exercises the multi-chunk STREAM path.
+        var plaintext = RandomNumberGenerator.GetBytes(200_000);
         var inputPath = Path.GetTempFileName();
-        var outputPath = inputPath + ".enc";
+        var encryptedPath = inputPath + ".enc";
+        var decryptedPath = inputPath + ".dec";
         try
         {
             await File.WriteAllBytesAsync(inputPath, plaintext);
             using (var provider = new AesGcmRecordingEncryptionProvider(key))
-                await provider.EncryptFileAsync(inputPath, outputPath);
+            {
+                await provider.EncryptFileAsync(inputPath, encryptedPath);
+                await provider.DecryptFileAsync(encryptedPath, decryptedPath);
+            }
 
-            var enc = await File.ReadAllBytesAsync(outputPath);
-            // Format: "VREC1"(5) + nonce(12) + tag(16) + ciphertext(== plaintext length).
-            Assert.Equal("VREC1", Encoding.ASCII.GetString(enc, 0, 5));
-            var nonce = enc[5..17];
-            var tag = enc[17..33];
-            var ciphertext = enc[33..];
-            Assert.Equal(plaintext.Length, ciphertext.Length);
+            var enc = await File.ReadAllBytesAsync(encryptedPath);
+            // Streaming format header: "VREC2"(5) + salt(16) + noncePrefix(7); ciphertext is chunked.
+            Assert.Equal("VREC2", Encoding.ASCII.GetString(enc, 0, 5));
+            // Header + per-chunk tags make the container strictly larger than the raw plaintext.
+            Assert.True(enc.Length > plaintext.Length);
 
-            var decrypted = new byte[ciphertext.Length];
-            using (var aes = new AesGcm(key, 16))
-                aes.Decrypt(nonce, ciphertext, tag, decrypted, associatedData: null);
-
-            // In-place encryption still produced a valid GCM blob that decrypts to the original bytes.
+            var decrypted = await File.ReadAllBytesAsync(decryptedPath);
             Assert.Equal(plaintext, decrypted);
         }
         finally
         {
             File.Delete(inputPath);
-            File.Delete(outputPath);
+            File.Delete(encryptedPath);
+            File.Delete(decryptedPath);
         }
     }
 
