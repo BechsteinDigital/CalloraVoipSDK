@@ -37,6 +37,9 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
     private readonly object _sync = new();
 
     private UdpClient? _udp;
+    // Handed over from MediaPortReservation (already bound to the RTCP port and held since setup). When
+    // present, StartAsync uses it instead of a late bind, closing the "N+1 stolen before StartAsync" race.
+    private readonly UdpClient? _preBoundRtcpSocket;
     private Task? _sendLoop;
     private Task? _receiveLoop;
     private double? _remoteReportJitterMs;
@@ -72,13 +75,15 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
         ILoggerFactory loggerFactory,
         IRtcpPacketCodec codec,
         TimeSpan? sendInterval = null,
-        Func<DateTimeOffset>? monotonicNow = null)
+        Func<DateTimeOffset>? monotonicNow = null,
+        UdpClient? preBoundRtcpSocket = null)
     {
         ArgumentNullException.ThrowIfNull(mediaSession);
         ArgumentNullException.ThrowIfNull(mediaParameters);
         ArgumentNullException.ThrowIfNull(loggerFactory);
 
         _mediaSession = mediaSession;
+        _preBoundRtcpSocket = preBoundRtcpSocket;
         _localRtcpEndPoint = ResolveLocalRtcpEndPoint(mediaParameters);
         _remoteRtcpEndPoint = ResolveRemoteRtcpEndPoint(mediaParameters);
         _rtcpMux = mediaParameters.RtcpMux;
@@ -117,7 +122,9 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
         {
             try
             {
-                _udp = new UdpClient(_localRtcpEndPoint);
+                // Prefer the pre-bound RTCP socket (reserved as a pair and held since setup) over a late
+                // bind: the late bind is exactly what could lose the race for N+1 under concurrent setup.
+                _udp = _preBoundRtcpSocket ?? new UdpClient(_localRtcpEndPoint);
                 _receiveLoop = RunReceiveLoopAsync(_cts.Token);
             }
             catch (Exception ex)

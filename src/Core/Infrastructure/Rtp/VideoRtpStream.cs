@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net.Sockets;
 using CalloraVoipSdk.Core.Application.Media;
 using CalloraVoipSdk.Core.Domain.Calls;
 using CalloraVoipSdk.Core.Infrastructure.Dtls;
@@ -130,7 +131,8 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
         CallMediaParameters parameters,
         ILoggerFactory loggerFactory,
         IDtlsSrtpHandshaker? dtlsHandshaker,
-        DtlsCertificate? dtlsCertificate)
+        DtlsCertificate? dtlsCertificate,
+        UdpClient? preBoundSocket)
     {
         _logger = loggerFactory.CreateLogger<VideoRtpStream>();
         _payloadType = (byte)video.PayloadType;
@@ -165,7 +167,8 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
                 TransportWideCcExtensionId = video.TransportWideCcExtensionId,
             },
             new RtpPacketCodec(),
-            loggerFactory.CreateLogger<RtpSession>());
+            loggerFactory.CreateLogger<RtpSession>(),
+            preBoundSocket);
         _rtp.PacketReceived += OnPacketReceived;
 
         // RTX repair stream (RFC 4588): configure the negotiated payload type so inbound RTX
@@ -346,7 +349,8 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
         CallMediaParameters parameters,
         ILoggerFactory loggerFactory,
         IDtlsSrtpHandshaker? dtlsHandshaker,
-        DtlsCertificate? dtlsCertificate)
+        DtlsCertificate? dtlsCertificate,
+        UdpClient? preBoundSocket = null)
     {
         ArgumentNullException.ThrowIfNull(parameters);
         ArgumentNullException.ThrowIfNull(loggerFactory);
@@ -354,7 +358,7 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
         if (parameters.Video is not { } video)
             return null;
 
-        return new VideoRtpStream(video, parameters, loggerFactory, dtlsHandshaker, dtlsCertificate);
+        return new VideoRtpStream(video, parameters, loggerFactory, dtlsHandshaker, dtlsCertificate, preBoundSocket);
     }
 
     /// <summary>Starts the RTP receive loop and, on DTLS-keyed legs, the handshake.</summary>
