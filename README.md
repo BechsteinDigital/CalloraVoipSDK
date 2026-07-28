@@ -575,11 +575,12 @@ The SDK core stays open and free; plugins are licensed separately. Contact
   post-GA limitation**, since real trunk calls run over symmetric RTP (comedia), which needs no ICE or STUN.
 - Commercial plugin line-up (private feed, licensed): Callora.Realtime, WebSocket
   streaming, Privacy/Risk/Intelligence — in development
-- CI/CD hardening: soak, Asterisk interop, and chaos/fault-injection gates are in place (media-quality
-  matrix, resource-leak guards, full SIP/RTP flow against a real container with zero skipped cases, a
-  two-leg byte-exact bidirectional media test, plus a per-PR chaos gate that injects transport loss,
+- CI/CD hardening: soak, Asterisk interop, chaos/fault-injection, and performance gates are all in place
+  (media-quality matrix, resource-leak guards, full SIP/RTP flow against a real container with zero skipped
+  cases, a two-leg byte-exact bidirectional media test, a per-PR chaos gate that injects transport loss,
   malformed/adversarial packets, signaling outage, and resource churn under fault and asserts graceful
-  degradation + recovery + no leak); remaining: a wired-up performance gate
+  degradation + recovery + no leak, and a per-PR performance gate that holds the SRTP per-packet crypto hot
+  path above a catastrophic-regression throughput floor); the machine-specific capacity envelope runs nightly
 - Broader interop validation against more PBXs/trunks/browsers (Asterisk is automated;
   FRITZ!Box is manually verified — the rest is configuration guidance so far)
 
