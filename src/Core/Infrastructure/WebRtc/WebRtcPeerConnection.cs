@@ -835,7 +835,9 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         {
             if (_mediaSocket is null)
             {
-                var socket = new UdpClient(AddressFamily.InterNetwork);
+                // Match the socket family to the configured local bind address; binding an IPv4
+                // UdpClient to an IPv6 endpoint (or vice versa) throws on family mismatch.
+                var socket = new UdpClient(_options.LocalEndPoint.AddressFamily);
                 // Kernel SO_RCVBUF for the shared media socket; sized for video bitrates, not the max
                 // datagram (MediaSocketDefaults keeps those two concerns separate).
                 socket.Client.ReceiveBufferSize = MediaSocketDefaults.SocketReceiveBufferBytes;

@@ -427,10 +427,4 @@ internal sealed class SdpSessionParser : ISdpSessionParser
             "inactive" => SdpMediaDirection.Inactive,
             _ => null
         };
-
-    // -------------------------------------------------------------------------
-    // Mutable media builder used during the parse pass
-    // -------------------------------------------------------------------------
-
-
 }

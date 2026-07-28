@@ -151,14 +151,6 @@ internal sealed class SdpSessionSerializer : ISdpSessionSerializer
             sb.AppendLine("a=end-of-candidates");
     }
 
-    // -------------------------------------------------------------------------
-    // Direction
-    // -------------------------------------------------------------------------
-
-    // -------------------------------------------------------------------------
-    // Address family
-    // -------------------------------------------------------------------------
-
     private static string GetNetType(string address) =>
         IPAddress.TryParse(address, out var ip) && ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6
             ? "IP6"
