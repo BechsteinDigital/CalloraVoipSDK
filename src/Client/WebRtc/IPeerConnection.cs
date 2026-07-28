@@ -112,6 +112,19 @@ public interface IPeerConnection : IAsyncDisposable
     Task SendVideoFrameAsync(string rid, ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Asks the peer to send a fresh video key frame (RFC 4585 §6.3.1 PLI). This is the receiving side's
+    /// counterpart to <see cref="VideoKeyFrameRequested"/>: call it when a newly attached renderer or a decoder
+    /// reset needs an intra frame to start/recover decoding, independent of automatic loss-driven feedback.
+    /// Tolerant by design — a no-op returning <see langword="false"/> when no BUNDLE session is negotiated yet,
+    /// the bundle has no video track, the peer did not advertise PLI (<c>a=rtcp-fb … nack pli</c>), or the
+    /// built-in 500&#160;ms throttle still holds; returns <see langword="true"/> when a PLI was sent. Safe to
+    /// call from any thread and after disposal (a no-op).
+    /// </summary>
+    /// <param name="cancellationToken">Cancels the RTCP send.</param>
+    /// <returns><see langword="true"/> when a PLI was sent to the peer; otherwise <see langword="false"/>.</returns>
+    ValueTask<bool> RequestVideoKeyFrameAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Attaches an <see cref="IMediaTap"/> that observes the encoded media flowing through this peer in both
     /// directions (L3 recording/analytics/AI seam). Dispose the returned handle to detach.
     /// </summary>

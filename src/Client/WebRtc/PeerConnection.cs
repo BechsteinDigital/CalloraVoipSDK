@@ -238,6 +238,9 @@ internal sealed class PeerConnection : IPeerConnection
     public Task SendDtmfAsync(byte toneCode, int durationMs = 160, CancellationToken cancellationToken = default)
         => _peer.SendDtmfAsync(toneCode, durationMs, cancellationToken);
 
+    public ValueTask<bool> RequestVideoKeyFrameAsync(CancellationToken cancellationToken = default)
+        => _peer.RequestVideoKeyFrameAsync(cancellationToken);
+
     public async ValueTask DisposeAsync()
     {
         _peer.ConnectionStateChanged -= OnInternalStateChanged;

@@ -123,6 +123,7 @@ public sealed class WebRtcRecordingTests
         public Task SendVideoFrameAsync(ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task SendVideoFrameAsync(string rid, ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task SendDtmfAsync(byte toneCode, int durationMs = 160, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public ValueTask<bool> RequestVideoKeyFrameAsync(CancellationToken cancellationToken = default) => ValueTask.FromResult(false);
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 
         private sealed class Detacher(RecordingFakePeer peer) : IDisposable

@@ -189,6 +189,62 @@ public sealed class VideoKeyFrameFeedbackTests
         Assert.Equal(0, retransmits);
     }
 
+    // ── App-driven keyframe request (RequestKeyFrameAsync) ───────────────────────
+
+    [Fact]
+    public async Task App_keyframe_request_sends_a_single_pli_naming_the_remote_ssrc()
+    {
+        var feedback = CreateFeedback(() => { }, out var sent, supportsPli: true);
+        const uint remoteSsrc = 0x0BADF00D;
+
+        var sentPli = await feedback.RequestKeyFrameAsync(remoteSsrc);
+
+        Assert.True(sentPli);
+        var pli = Assert.IsType<RtcpPictureLossIndication>(Assert.Single(Codec.Decode(Assert.Single(sent))));
+        Assert.Equal(LocalSsrc, pli.SenderSsrc);
+        Assert.Equal(remoteSsrc, pli.MediaSsrc);
+        Assert.Equal(1, feedback.PlisSent);
+    }
+
+    [Fact]
+    public async Task App_keyframe_request_without_advertised_pli_is_a_no_op()
+    {
+        var feedback = CreateFeedback(() => { }, out var sent, supportsPli: false);
+
+        var sentPli = await feedback.RequestKeyFrameAsync(0x1234);
+
+        Assert.False(sentPli);
+        Assert.Empty(sent);
+        Assert.Equal(0, feedback.PlisSent);
+    }
+
+    [Fact]
+    public async Task App_keyframe_request_is_throttled_across_rapid_calls()
+    {
+        var feedback = CreateFeedback(() => { }, out var sent, supportsPli: true);
+
+        var first = await feedback.RequestKeyFrameAsync(0x1234);
+        var second = await feedback.RequestKeyFrameAsync(0x1234); // within the 500 ms window → collapsed
+
+        Assert.True(first);
+        Assert.False(second);
+        Assert.Single(sent);
+        Assert.Equal(1, feedback.PlisSent);
+    }
+
+    [Fact]
+    public async Task App_keyframe_request_shares_the_throttle_with_the_loss_pli()
+    {
+        var feedback = CreateFeedback(() => { }, out var sent, supportsNack: false, supportsPli: true);
+
+        feedback.OnLoss(0x1234, [101]);                          // loss-driven PLI claims the window
+        var appPli = await feedback.RequestKeyFrameAsync(0x1234); // same window → collapsed
+
+        Assert.False(appPli);
+        Assert.Single(sent);
+        Assert.Equal(1, feedback.PlisSent);
+    }
+
     private static VideoKeyFrameFeedback CreateFeedback(
         Action onKeyFrameRequested, out List<byte[]> sentDatagrams,
         bool supportsNack = false, bool supportsPli = true,

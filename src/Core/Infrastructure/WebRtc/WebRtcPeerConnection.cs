@@ -484,6 +484,31 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     }
 
     /// <summary>
+    /// Asks the peer for a fresh video key frame on the app's demand (RFC 4585 §6.3.1) — the receiving side
+    /// requests an intra frame when a new renderer or a decoder reset needs one, independent of detected loss.
+    /// Tolerant by design: a no-op returning <see langword="false"/> when the peer is disposing, no BUNDLE
+    /// session has been negotiated yet, the bundle has no video track, the peer did not advertise PLI, or the
+    /// 500 ms throttle still holds; returns <see langword="true"/> when a PLI was sent. Takes a drain lease so
+    /// the RTCP send never races session teardown.
+    /// </summary>
+    public async ValueTask<bool> RequestVideoKeyFrameAsync(CancellationToken cancellationToken = default)
+    {
+        if (!_sendGate.TryEnter())
+            return false;
+        try
+        {
+            BundledMediaSession? session;
+            lock (_sync) { session = _session; }
+            return session is not null
+                && await session.RequestVideoKeyFrameAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _sendGate.Exit();
+        }
+    }
+
+    /// <summary>
     /// Sends one out-of-band DTMF tone (RFC 4733 telephone-event) on the peer's audio track (suppressed until
     /// the handshake keys the transport). The tone shares the audio stream's RTP timestamp clock.
     /// </summary>
@@ -643,7 +668,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             .TryGetServerReflexiveEndPointAsync(local, server, socket, ct)
             .ConfigureAwait(false);
         if (reflexive is not null)
-            RaiseCandidate(ServerReflexiveCandidate(reflexive, local));
+            RaiseCandidate(WebRtcIceCandidateFactory.ServerReflexiveCandidate(reflexive, local));
     }
 
     // Allocates a TURN relay on the media socket and emits a relay candidate on success, retaining the first
@@ -705,7 +730,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         }
 
         // raddr/rport carry the mapped (server-reflexive) base the server reported, else the host base.
-        RaiseCandidate(RelayCandidate(allocation.RelayedEndPoint, allocation.MappedEndPoint ?? local));
+        RaiseCandidate(WebRtcIceCandidateFactory.RelayCandidate(allocation.RelayedEndPoint, allocation.MappedEndPoint ?? local));
 
         // Adopt outside the lock: AdoptRelay builds the TURN control stack and takes the ICE driver's own gate,
         // and needs no _sync-guarded state of ours. AdoptRelay is idempotent, so a session that already wired
@@ -736,7 +761,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     }
 
     // Emits the local host candidate for the bound endpoint as an RFC 8829 candidate string (trickle).
-    private void RaiseLocalCandidate(IPEndPoint local) => RaiseCandidate(LocalHostCandidate(local));
+    private void RaiseLocalCandidate(IPEndPoint local) => RaiseCandidate(WebRtcIceCandidateFactory.LocalHostCandidate(local));
 
     // Emits a gathered local candidate as an RFC 8829 candidate string on the trickle event.
     private void RaiseCandidate(SdpIceCandidate candidate)
@@ -803,7 +828,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             // Advertise our bound media address as a host candidate (RFC 8839) so the peer can reach us.
             // Early-bind gives us the real ephemeral port before the session exists, so a host candidate is
             // always emitted (no more zero-port disabled offer).
-            Candidates = [LocalHostCandidate(local), .. _options.Ice.Candidates],
+            Candidates = [WebRtcIceCandidateFactory.LocalHostCandidate(local), .. _options.Ice.Candidates],
         },
         // All BUNDLE m-lines share the one bound transport port (the video m-line's own port is nominal).
         Video = _options.Video is { } video
@@ -854,50 +879,6 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     // media to us (RFC 8829 / RFC 3264 directionality), so it must not materialise a phantom remote track.
     private static bool RemoteSends(SdpMediaDescription? media)
         => media is { Disabled: false, Direction: SdpMediaDirection.SendRecv or SdpMediaDirection.SendOnly };
-
-    // A host ICE candidate for the bound local media endpoint (RFC 8445 §5.1.2.1 priority: host type-pref
-    // 126, local-pref 65535, RTP component 1). rtcp-mux shares component 1, so no RTCP candidate is needed.
-    private static SdpIceCandidate LocalHostCandidate(IPEndPoint local) => new()
-    {
-        Foundation = "1",
-        Component = 1,
-        Transport = "udp",
-        Priority = (126L << 24) | (65535L << 8) | 255L,
-        Address = local.Address.ToString(),
-        Port = local.Port,
-        Type = "host",
-    };
-
-    // A server-reflexive candidate for the STUN-discovered public endpoint (RFC 8445 §5.1.2.1 priority:
-    // srflx type-pref 100, local-pref 65535, RTP component 1). raddr/rport carry the local base (host).
-    private static SdpIceCandidate ServerReflexiveCandidate(IPEndPoint reflexive, IPEndPoint host) => new()
-    {
-        Foundation = "2",
-        Component = 1,
-        Transport = "udp",
-        Priority = (100L << 24) | (65535L << 8) | 255L,
-        Address = reflexive.Address.ToString(),
-        Port = reflexive.Port,
-        Type = "srflx",
-        RelatedAddress = host.Address.ToString(),
-        RelatedPort = host.Port,
-    };
-
-    // A relay candidate for the TURN-allocated relayed endpoint (RFC 8445 §5.1.2.1 priority: relay type-pref
-    // 0, local-pref 65535, RTP component 1). raddr/rport carry the base the relay relates to (RFC 8839): the
-    // server-reflexive address from the Allocate response when present, else the local host base.
-    private static SdpIceCandidate RelayCandidate(IPEndPoint relayed, IPEndPoint relatedBase) => new()
-    {
-        Foundation = "3",
-        Component = 1,
-        Transport = "udp",
-        Priority = (0L << 24) | (65535L << 8) | 255L,
-        Address = relayed.Address.ToString(),
-        Port = relayed.Port,
-        Type = "relay",
-        RelatedAddress = relatedBase.Address.ToString(),
-        RelatedPort = relatedBase.Port,
-    };
 
     // Long-term TURN credentials from the configured username/password, or null for an open server. A
     // bootstrap realm (the server host, replaced by the server's real realm on the 401 challenge, and never

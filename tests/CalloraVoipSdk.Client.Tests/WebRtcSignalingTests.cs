@@ -134,6 +134,7 @@ public sealed class WebRtcSignalingTests
         public Task SendVideoFrameAsync(ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task SendVideoFrameAsync(string rid, ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task SendDtmfAsync(byte toneCode, int durationMs = 160, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public ValueTask<bool> RequestVideoKeyFrameAsync(CancellationToken cancellationToken = default) => ValueTask.FromResult(false);
         public IDisposable AttachMediaTap(IMediaTap tap) => NoopDisposable.Instance;
         public WebRtcStats GetStats() => new() { ConnectionState = State };
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;

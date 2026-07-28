@@ -51,4 +51,17 @@ public sealed class WebRtcClientTests
         var rtc = new WebRtcClient(new WebRtcConfiguration { AudioCodecs = ["nope"] });
         Assert.Throws<ArgumentException>(() => rtc.CreatePeer());
     }
+
+    [Fact]
+    public async Task Requesting_a_keyframe_before_a_session_is_negotiated_is_a_no_op()
+    {
+        var rtc = new WebRtcClient(new WebRtcConfiguration { EnableVideo = true });
+        await using var peer = rtc.CreatePeer();
+
+        // No remote description applied yet → no BUNDLE session, so the request is tolerated as a no-op
+        // (RFC 4585 PLI has nowhere to go) rather than throwing.
+        var sentPli = await peer.RequestVideoKeyFrameAsync();
+
+        Assert.False(sentPli);
+    }
 }

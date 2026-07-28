@@ -83,6 +83,40 @@ public sealed class BundledVideoTrackStatsTests
         Assert.Equal(0, track.PlisSent);
     }
 
+    [Fact]
+    public async Task App_keyframe_request_sends_a_pli_naming_the_received_stream()
+    {
+        var sender = new CapturingSender();
+        using var track = VideoTrack(Outbound(sender), remoteSupportsNack: false, remoteSupportsPli: true);
+
+        // A primary arrival captures the remote media SSRC that an app-driven PLI must name; a single contiguous
+        // packet triggers no loss feedback, so the only PLI on the wire is the app-requested one.
+        track.OnRtpPacket(Primary(1));
+        var sentPli = await track.RequestKeyFrameAsync();
+
+        Assert.True(sentPli);
+        Assert.Equal(1, track.PlisSent);
+        var codec = new RtcpPacketCodec();
+        var pli = Assert.IsType<Application.Media.Rtcp.Packets.RtcpPictureLossIndication>(
+            Assert.Single(sender.Captured.SelectMany(d => codec.Decode(d))));
+        Assert.Equal(LocalSsrc, pli.SenderSsrc);
+        Assert.Equal(RemoteMediaSsrc, pli.MediaSsrc);
+    }
+
+    [Fact]
+    public async Task App_keyframe_request_without_advertised_pli_is_a_no_op()
+    {
+        var sender = new CapturingSender();
+        using var track = VideoTrack(Outbound(sender), remoteSupportsNack: false, remoteSupportsPli: false);
+        track.OnRtpPacket(Primary(1));
+
+        var sentPli = await track.RequestKeyFrameAsync();
+
+        Assert.False(sentPli);
+        Assert.Equal(0, track.PlisSent);
+        Assert.Empty(sender.Captured);
+    }
+
     // ── harness (mirrors BundledVideoRtxReceiveTests) ─────────────────────────────
 
     private static BundledVideoTrack VideoTrack(
