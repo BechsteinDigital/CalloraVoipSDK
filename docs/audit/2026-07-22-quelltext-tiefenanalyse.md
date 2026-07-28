@@ -4,6 +4,12 @@
 **Umfang:** Sämtliche 1091 C#-Dateien des Repositories wurden gelesen — `src/` (≈750 Quelldateien) vollständig Datei für Datei bis in jede Klasse, dazu Tests (322 Dateien, Harness-Klassen vollständig), Performance-Projekte, Beispiele, Build/CI und Dokumentationskonfiguration.
 **Methode:** Sieben parallele Tiefenanalysen je Subsystem (SIP, RTP/SRTP/DTLS, STUN/TURN/ICE, SDP/Media/Common, Core-Application/Domain, Client/Audio/WebRTC-Fassade, Tests/CI/Beispiele), anschließend Konsolidierung. Jeder Teilbericht enthält einen vollständigen Klassenkatalog seines Bereichs mit Datei- und Zeilenangaben.
 
+> **Zum Umgang mit diesem Dokument.** Es ist eine Momentaufnahme vom 2026-07-22 und wird **nicht** fortlaufend gepflegt — der aktuelle Stand steht im [Issue-Tracker](https://github.com/BechsteinDigital/callora-voip-sdk/issues) und in `docs/audit/INTEROP_SOAK_AUDIT.md`. Die Befunde sind Analyse-Ergebnisse, keine verifizierten Defekte: **vor einer Änderung an angeblichen RFC-Abweichungen den RFC-Wortlaut selbst nachschlagen.** Zurückgezogene Befunde bleiben durchgestrichen stehen, statt gelöscht zu werden, damit die Spur nachvollziehbar bleibt.
+>
+> **Korrekturen:**
+> - *2026-07-27* — Teil 3 (STUN/TURN/ICE): der Befund „Rollenkonflikt-Auflösung nutzt `>=` statt striktem `>`" ist **zurückgezogen**. RFC 8445 §7.3.1.1 schreibt `>=` vor; der Code war korrekt, dokumentiert und getestet.
+> - *2026-07-27* — Teil 3 (STUN/TURN/ICE): der Befund „Consent-Check sendet Rollen-Attribut — potenzieller 487-Rollenkonflikt-Trigger" ist **zurückgezogen**. RFC 7675 §1 hält ausdrücklich fest, dass der Mechanismus die ICE-Prozeduren *nicht* ändert und Consent-Checks „processed as normal ICE connectivity checks" werden; §5.1 nutzt dieselben Short-Term-Credentials wie der ICE-Austausch. Das Rollen-Attribut gehört damit dazu — sein Weglassen wäre die Abweichung.
+
 ---
 
 ## 1. Gesamtüberblick
@@ -52,7 +58,7 @@ Die vollständigen Befundlisten mit Datei:Zeile stehen in den Teilberichten (Kap
 
 - Plain-RTP-Symmetric-Latch re-latcht auf jedes valide Paket (Media-Hijack-Fenster ohne SRTP; `RtpSession.cs:645-651`); SSRC/Seq-Zufall nicht kryptographisch.
 - SDP: rtcp-mux in der Answer auch ohne Offer (`SdpOfferAnswerNegotiator.cs:199`, RFC 5761-Verstoß mit potenziellem RTCP-Verlust); `b=TIAS` wird als kbps interpretiert und als `b=AS` re-serialisiert; fehlende `c=`-Zeile defaultet still auf Loopback statt Ablehnung.
-- ICE: Rollenkonflikt-Auflösung mit `>=` statt striktem `>` (formale RFC-8445-Abweichung); zwei parallele ICE-Implementierungen (`IceConnectivityScheduler` vs. `IceNominationDriver`) — Redundanz-/Verwirrungsquelle.
+- ICE: ~~Rollenkonflikt-Auflösung mit `>=` statt striktem `>` (formale RFC-8445-Abweichung)~~ — **Befund zurückgezogen (2026-07-27), siehe Korrektur in Teil 3**: `>=` ist genau das RFC-konforme Verhalten; ~~Consent-Check sendet Rollen-Attribut~~ — **ebenfalls zurückgezogen**: RFC 7675 lässt Consent-Checks als normale ICE-Connectivity-Checks verarbeiten, das Rollen-Attribut gehört dazu; zwei parallele ICE-Implementierungen (`IceConnectivityScheduler` vs. `IceNominationDriver`) — Redundanz-/Verwirrungsquelle.
 - `VoipClient`-Konstruktor räumt bei mittigem Fehlschlag nicht auf (Socket-/Listener-Leak); `WebRtcOptions` ohne Startup-Validator (asymmetrisch zur SIP-Seite); nicht thread-sichere Event-Accessors in `PeerConnection`; `DateTime.UtcNow` statt monotoner Uhr in Stats und Jitter-Buffer-Scheduling.
 - Windows-/Linux-Audiogeräte: erhebliche Code-Duplikation, invertierte Drop-Politik (Windows verwirft Neuestes statt Ältestes), totes Konfigfeld `FramesPerBuffer` (Linux), fehlende Playback-Metriken (Windows), Aliasing durch Nearest-Neighbor-Resampling, fire-and-forget-Sends auf dem Capture-Pfad.
 - MP3-Passthrough scheitert an ID3v2-Tags; Recording-Verschlüsselung lädt ganze Dateien in den RAM; ffmpeg-Prozesse werden bei Cancellation nicht gekillt.
@@ -876,9 +882,25 @@ Vier saubere Schichten, mit strikter Modul-Isolation:
 
 - **DNS-SRV nutzt nicht-kryptographische Transaction-ID.** `DnsSrvQuery.QueryAsync` (`Stun/Client/DnsSrvQuery.cs:263`) erzeugt die DNS-Query-ID mit `Random.Shared` statt Crypto-RNG. Die Antwort wird nur per TxID + Source-Connect gefiltert → theoretisches DNS-Spoofing-Fenster (praxisüblich, aber im Kontrast zur sonst durchgängigen Crypto-RNG-Nutzung erwähnenswert).
 
-- **Rollenkonflikt-Auflösung nutzt `>=` statt striktem `>`.** `IceRoleConflict.Resolve` (`Application/Media/Ice/IceRoleConflict.cs:659`): `ownWins = ownTieBreaker >= peerTieBreaker`. Bei exakt gleichem Tie-Breaker gewinnen *beide* Seiten lokal → beide könnten „controlling" behalten. RFC 8445 §7.3.1.1 spezifiziert striktes „größer". Da Tie-Breaker per `IceTieBreaker.Derive(localPassword)` aus dem *pro-Session zufälligen* Passwort abgeleitet werden, ist eine Kollision extrem unwahrscheinlich, aber die Randbedingung weicht formal ab.
+- ~~**Rollenkonflikt-Auflösung nutzt `>=` statt striktem `>`.**~~ **→ BEFUND ZURÜCKGEZOGEN (Korrektur 2026-07-27).**
 
-- **Consent-Check sendet Rollen-Attribut — potenzieller Rollenkonflikt-Trigger.** `IceMediaConsentSession` baut Consent-Checks mit dem eigenen `_controlling`-Flag und Tie-Breaker (`IceConsentCheckBuilder`). Läuft Consent parallel zum inbound-Handler und wechselt eine Seite nach Nomination die Rolle nicht konsistent, könnte ein Consent-Check einen 487-Rollenkonflikt beim Peer auslösen. In der Praxis durch die deterministische `Derive`-Ableitung (beide Richtungen desselben Agents identisch) entschärft, aber die Kopplung ist subtil.
+  *Ursprüngliche Behauptung:* `IceRoleConflict.Resolve`: `ownWins = ownTieBreaker >= peerTieBreaker`; RFC 8445 §7.3.1.1 spezifiziere striktes „größer", die Randbedingung weiche formal ab.
+
+  *Das ist falsch.* **RFC 8445 §7.3.1.1 schreibt `>=` ausdrücklich vor** — beide Zweige sind im RFC-Text mit „larger than or **equal to**" formuliert: der Controlling-Agent behält bei `>=` seine Rolle und antwortet 487; der Controlled-Agent wechselt bei `>=` auf Controlling. Der Code ist damit spec-konform; ein striktes `>` wäre die Abweichung gewesen.
+
+  Zusätzlich wäre `>` funktional schlechter: bei identischem Tie-Breaker würden **beide** Seiten verlieren (Controlling→Controlled, Controlled bleibt Controlled) — es gäbe **gar keinen** Controlling-Agent mehr und damit nie eine Nomination. Das RFC-Verhalten lässt stattdessen beide ihre Rolle behaupten und löst über 487 auf.
+
+  Der Gleichstand ist ohnehin praktisch ausgeschlossen: `IceTieBreaker.Generate()` zieht 64 Bit aus einem CSPRNG (~2⁻⁶⁴). Das Verhalten war von Anfang an dokumentiert (XML-Doc der Klasse mit RFC-Zitat) und bewusst getestet (`IceRoleConflictTests`: `[InlineData(20, 20, true, true)] // ties go to "own wins"`). **Keine Änderung nötig.** *(Nebenbei war auch die Zeilenangabe `:659` falsch — die Datei hat 53 Zeilen; die Stelle ist `:37`.)*
+
+- ~~**Consent-Check sendet Rollen-Attribut — potenzieller Rollenkonflikt-Trigger.**~~ **→ BEFUND ZURÜCKGEZOGEN (Korrektur 2026-07-27).**
+
+  *Ursprüngliche Behauptung:* `IceMediaConsentSession` baue Consent-Checks mit dem eigenen `_controlling`-Flag und Tie-Breaker (`IceConsentCheckBuilder`); ein Consent-Check könne dadurch einen 487-Rollenkonflikt beim Peer auslösen.
+
+  *Das ist keine Abweichung.* **RFC 7675** hält in **§1** ausdrücklich fest: „The consent mechanism **does not update the ICE procedures** defined in [RFC5245]" und — zur ICE-lite-Gegenseite — Consent-Checks „are **processed as normal ICE connectivity checks**". **§5.1** ergänzt, dass die Binding-Requests „authenticated using the **same short-term credentials as the initial ICE exchange**" sind. Ein Consent-Check ist damit auf dem Draht ein ICE-Connectivity-Check; Connectivity-Checks tragen nach RFC 8445 `ICE-CONTROLLING`/`ICE-CONTROLLED` (darauf beruht die Rollenkonflikt-Erkennung in §7.3.1.1 überhaupt). Das Attribut mitzusenden ist korrekt — **sein Weglassen wäre die Abweichung**.
+
+  Bleibt als reiner *interner* Konsistenzpunkt (kein Protokollfehler): das für Consent genutzte Rollen-Flag muss zur nominierten Rolle passen. Durch die deterministische `Derive`-Ableitung ist das gegeben. **Keine Änderung nötig.**
+
+- **Consent-Intervall: 4-Sekunden-Untergrenze nicht erzwungen** *(neu, 2026-07-27)*. RFC 7675 §5.1: „Implementations **MUST NOT** set the period between checks to less than 4 seconds." `IceConsentFreshnessPolicy` (`Application/Media/Ice/IceConsentFreshnessPolicy.cs`) validiert im Konstruktor nur `0 < interval < 30 s`; ein Basis-Intervall von z. B. 2 s ergäbe mit der 0.8–1.2-Randomisierung 1,6–2,4 s. **Praktisch folgenlos**, weil die Produktion die Policy immer mit dem Default (5 s → 4–6 s) konstruiert (`IceMediaConsentSession.cs:84`) — der Guard fehlt aber. Die übrigen §5.1-Vorgaben sind erfüllt (30 s Expiry, 0.8–1.2-Pacing, frische Transaction-ID je Check, kein Retransmit, gleiche Short-Term-Credentials).
 
 - **`StunServer.TrackConnectionTask`-Mikrorace.** (`Stun/Server/StunServer.cs:1825`, ident. in `TurnServer:1967`) Die `ContinueWith`-Cleanup kann theoretisch vor dem `_connectionTasks[taskId]=task` laufen, wenn der Task synchron completet; Folge wäre ein nie entfernter Eintrag. Praktisch harmlos (Tasks sind async), aber ein latentes Leak-Risiko unter Shutdown-Last.
 

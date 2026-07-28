@@ -45,10 +45,11 @@ und mutieren (absichtlich brechen, Fehlermeldung ansehen, zurückbauen):
 - L2-Media mit echten Sockets: `RtpMediaLoopback`-basierter Test aus dem InteropHarness.
 - L0-Wire: `SipWireRobustnessTests` — Malformed-Input-Muster.
 
-**Tag 5 — Erste Änderung.** Ein P3-Befund aus MAINTAINING.md §5 ist der ideale
-Einstiegs-PR (klein, testbar, ohne Protokollrisiko), z. B. der `samples/`→`examples/`-Scan
-in `EngineeringRulesTests.cs:117`. Dabei den kompletten Workflow üben: Regel in
-ENGINEERING_RULES.md prüfen, Test zuerst, Architektur-Gates lokal laufen lassen.
+**Tag 5 — Erste Änderung.** Ein offener Infrastruktur-Punkt aus MAINTAINING.md §5 ist der
+ideale Einstiegs-PR (klein, testbar, ohne Protokollrisiko), z. B. die drei toten
+`InternalsVisibleTo`-Einträge in `src/Core/Properties/AssemblyInfo.cs` oder ein Coverage-
+Schwellwert im CI. Dabei den kompletten Workflow üben: Regel in ENGINEERING_RULES.md prüfen,
+Test zuerst, Architektur-Gates lokal laufen lassen.
 
 ## 2. Diagnose-Werkzeuge
 
@@ -112,10 +113,13 @@ auf der der Bug lebt.
    (Shared-Socket); `IceConnectivityScheduler`/`IceCheckList` ist der klassische
    RFC-Scheduler und wird vom `CallIceAgent` genutzt. Vor ICE-Änderungen klären, welcher
    Pfad betroffen ist.
-2. **Zwei Session-Familien mit ungleichem Reifegrad:** Einzelstream (SIP) hat
-   Jitter-Buffer/PLC/RTX/TWCC; Bundle (WebRTC) transportseitig komplett, aber ohne
-   NACK/RTX/PLI-Feedback-Pfad. Ein „funktioniert bei SIP"-Feature existiert auf dem
-   Bundle nicht automatisch.
+2. **Zwei Session-Familien, zwei Implementierungen desselben Mechanismus:** Reparatur und
+   Congestion Control gibt es seit 4.6.0 auf **beiden** Pfaden — Einzelstream im
+   `VideoRtpStream`, Bundle in `BundledCongestionPlane`/`VideoKeyFrameFeedback`/
+   `Retransmission/`. Der Unterschied ist die Achse: transport-cc ist im Bundle
+   **transportweit** (eine Ebene je 5-Tupel über alle MIDs), im Einzelstream pro Stream; einen
+   Jitter-Buffer hat nur der Einzelstream (Bundle-Video nutzt `VideoReorderBuffer`). Ein Fix
+   auf einem Pfad ist deshalb nie automatisch auch auf dem anderen drin.
 3. **`internal` ist produktweite API:** `InternalsVisibleTo` öffnet Core-Internals für
    Client, Audio-Pakete, Tests und InteropHarness. Signaturänderungen an internals
    brechen halbe Solution — vorher `grep` über alle Projekte.
@@ -129,7 +133,8 @@ auf der der Bug lebt.
    `EngineeringRulesTests` im selben Commit entfernen — sonst ist CI rot (gewollt).
 8. **`VoipOptions` erweitern heißt drei Stellen:** Options + Configuration + Mapping;
    der Reflection-Guard `VoipOptionsMappingCompletenessTests` erzwingt es.
-9. **Wanduhr vs. Monotonik:** neue Zeitlogik im Medienpfad monoton (`Stopwatch`) bauen;
-   mehrere Bestandspfade nutzen noch `UtcNow` (bekannte Befunde, nicht nachahmen).
+9. **Wanduhr vs. Monotonik:** neue *Delta*-Logik im Medienpfad monoton bauen
+   (`MonotonicClock.Now`, ADR-061). `UtcNow` ist nur für echte Tageszeit korrekt —
+   SR-NTP auf dem Draht, `CapturedAtUtc`, Publish-Intervalle, Aktivitäts-Timeouts.
 10. **Dispose-Reihenfolgen sind Verträge** (siehe threading-map.md §5) — insbesondere
     close_notify vor Cancel (DTLS) und Tap-Detach vor Sink-Complete (Recording).

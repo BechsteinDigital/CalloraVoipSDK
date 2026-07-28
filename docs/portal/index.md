@@ -21,19 +21,20 @@ and intelligent decision logic.
 
 ## Current Status
 
-Latest stable package: **v4.5.0** on [nuget.org](https://www.nuget.org/packages/CalloraVoipSdk).
-The **4.6 line is in preview** (this documentation): it adds the WebRTC facade, DTLS-SRTP and a
-self-hostable STUN/TURN server on top of the stable SIP + RTP core.
+Latest release: **v4.6.0** on [nuget.org](https://www.nuget.org/packages/CalloraVoipSdk) (this
+documentation). It adds the WebRTC facade, DTLS-SRTP with AEAD-AES-GCM, and a self-hostable
+STUN/TURN server on top of the stable SIP + RTP core.
 
-> **How to read the status column.** *Stable* = mature, heavily covered by the RFC-oriented test
-> suite, and the intended production surface. *Preview* = implemented but not yet validated against
-> a broad interop matrix — validate for your environment first. The production-proven NAT path is
-> symmetric RTP (comedia), which needs no ICE or STUN. The SIP + RTP core is additionally exercised
-> by an **automated interop suite against a real Asterisk (PJSIP) container in CI** — calls, media,
-> codecs, SRTP-SDES, DTMF, transfer, session timers, early media and TCP/TLS, plus a two-leg bridged
-> call with byte-exact bidirectional media (see the [interop matrix](interop/matrix.md); currently
-> all cases green, none skipped). Known gaps and interop defects are tracked openly in the
-> [issue tracker](https://github.com/BechsteinDigital/callora-voip-sdk/issues).
+> **How to read the status column.** *Stable* = mature, covered by the RFC-oriented test suite and
+> by automated interop, and the intended production surface. *Opt-in* = shipped and tested, but off
+> by default and not yet proven in production traffic — validate for your environment first. The
+> production-proven NAT path is symmetric RTP (comedia), which needs no ICE or STUN. The SIP + RTP
+> core is exercised by an **automated interop suite against a real Asterisk (PJSIP) container in
+> CI** — calls, media, codecs, SRTP-SDES, DTMF, transfer, session timers, early media and TCP/TLS,
+> plus a two-leg bridged call with byte-exact bidirectional media (currently all cases green, none
+> skipped). The WebRTC path is validated in CI against **real Chromium and Firefox** and a real
+> **coturn** relay (see the [interop matrix](interop/matrix.md)). Known gaps and interop defects are
+> tracked openly in the [issue tracker](https://github.com/BechsteinDigital/callora-voip-sdk/issues).
 
 **Core (SIP + RTP):**
 
@@ -45,7 +46,7 @@ self-hostable STUN/TURN server on top of the stable SIP + RTP core.
 | Early media (RFC 3960): pre-answer receive-only media + DTMF in the early dialog | ✅ Stable |
 | RTP media transport | ✅ Stable |
 | SRTP + SRTCP media encryption (SDES, offer & answer; RFC 4568 / RFC 3711) | ✅ Stable |
-| DTLS-SRTP media encryption (RFC 5763, opt-in) | 🧪 Preview |
+| DTLS-SRTP media encryption (RFC 5763, incl. AEAD-AES-GCM per RFC 7714) | ✅ Stable |
 | Adaptive jitter buffer | ✅ Stable |
 | Media cross-connect / bridge | ✅ Stable |
 | Per-call media tap (frame receivers/senders for bots and streaming) | ✅ Stable |
@@ -60,13 +61,17 @@ self-hostable STUN/TURN server on top of the stable SIP + RTP core.
 | Runtime device hot-switch + controls | ✅ Stable |
 | Encoded video: send/receive, transport-cc bitrate recommendation, keyframe feedback ([transport-only](guides/video-calls.md)) | ✅ Stable (single-stream) |
 
-**Preview / in progress:**
+**WebRTC and NAT traversal:**
 
 | Capability | Status |
 |-----------|--------|
-| WebRTC facade: peer connections, SDK-driven signalling, W3C tracks, media taps ([transport-only](guides/webrtc.md)) | 🧪 Preview (not browser-validated; no SCTP; UDP TURN only) |
-| Self-hostable STUN / TURN server (RFC 5389 / 5766) | 🧪 Preview (validate against your clients) |
-| ICE for NAT traversal (RFC 8445/7675: role + tie-breaker, check-list FSM, nomination, inbound/triggered checks, consent freshness, restart) | 🧪 Preview — opt-in, unproven in production |
+| WebRTC facade: peer connections, SDK-driven signalling, W3C tracks, media taps ([transport-only](guides/webrtc.md)) | ✅ Stable — browser-validated (Chromium + Firefox, both roles) |
+| WebRTC video repair & congestion control: NACK/PLI/FIR, RTX, transport-cc, `getStats` | ✅ Stable |
+| Send-side simulcast (RFC 8853 / 8852) | ✅ Stable (send-side only — receive-side RID demux not included) |
+| Data channels (SCTP) | 🚫 Not included |
+| Self-hostable STUN / TURN server (RFC 5389 / 5766 / 8656) | ✅ Stable — verified against coturn (UDP relay only) |
+| ICE for NAT traversal (RFC 8445/7675: role + tie-breaker, check-list FSM, nomination, inbound/triggered checks, consent freshness, restart incl. `RestartIceAsync`) | ⚙️ Opt-in — off by default, unproven in production trunks |
+| ICE-TCP candidates (RFC 6544) | 🚫 Not included (deliberate — trunk calls use symmetric RTP) |
 | Backend/API for signed plugin marketplace + tenant entitlements | 📋 Roadmap |
 
 ## Choose your integration depth
@@ -132,4 +137,4 @@ await client.AttachDefaultAudioAsync(dialResult.Call);
 await dialResult.Call.HangupAsync();
 ```
 
-[→ Getting Started](getting-started/install.md) · [Progressive API](concepts/progressive-api.md) · [Core Concepts](concepts/voipclient.md) · [Guides](guides/making-calls.md) · [Interop](interop/matrix.md) · [Production](production/lifecycle-dispose.md)
+[→ Getting Started](getting-started/install.md) · [Progressive API](concepts/progressive-api.md) · [Core Concepts](concepts/voipclient.md) · [Guides](guides/making-calls.md) · [WebRTC](guides/webrtc.md) · [Interop](interop/matrix.md) · [Production](production/lifecycle-dispose.md) · [Capacity](production/capacity.md)

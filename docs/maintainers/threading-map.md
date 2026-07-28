@@ -130,9 +130,18 @@ Reihenfolgen sind im Code dokumentiert und teils testgesichert — beim Ändern 
 
 ## 6. Zeitquellen
 
-Monotone `Stopwatch`-Ticks für TWCC und PLI-Throttle. **Wanduhr** (`DateTimeOffset.UtcNow`)
-für Jitter-Buffer-Scheduling, RTT-Ableitung, SR-NTP und die WebRTC-Statistik-Raten —
-im Bundle-Pfad injizierbar (`utcNow`-Funcs) für Tests. NTP-Sprünge verfälschen die
-Wanduhr-Pfade (bekannter Befund); neue Zeitlogik bitte monoton bauen. Im SIP-Signaling
-gibt es **keine** Zeitabstraktion (Register-Befund F003) — Soaks können dort nicht
-zeitgerafft werden.
+Seit 4.6.0 (ADR-061) sind die **Delta-Rechnungen monoton**: `MonotonicClock.Now`
+(`Common/Timing/MonotonicClock.cs`, `Stopwatch`-gestützt) speist Jitter-Schätzung und
+Playout-Scheduling des `JitterBuffer`, die RTT-/DLSR-Ableitung (RFC 3550 §6.4.1) in
+`CallRtcpQualityMonitor` und `BundledRtcpReporter` sowie die Raten im
+`BundledOutboundQualityTracker`. Monotone `Stopwatch`-Ticks außerdem für transport-cc und
+PLI-Throttle.
+
+**Wanduhr** (`DateTimeOffset.UtcNow`) bleibt dort, wo eine echte Tageszeit gebraucht wird:
+SR-NTP-Zeitstempel auf dem Draht, `CapturedAtUtc` der Snapshots, das Metrik-Publish-Intervall
+der `RtpCallMediaSession` und der Medien-Aktivitäts-Timeout im `CallMediaOrchestrator`. Beides
+ist im Bundle-Pfad injizierbar (`utcNow`/`monotonicNow`-Funcs) für Tests.
+
+Regel: **neue Delta-Logik monoton bauen**, Wanduhr nur für Wire-/Anzeige-Zeitstempel. Im
+SIP-Signaling gibt es weiterhin **keine** Zeitabstraktion (Register-Befund F003) — Soaks können
+dort nicht zeitgerafft werden.

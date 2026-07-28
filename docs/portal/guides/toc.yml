@@ -16,6 +16,8 @@
   href: bridge-calls.md
 - name: Recording / playback
   href: recording-playback.md
+- name: WebRTC
+  href: webrtc.md
 - name: NAT and SIP trunks
   href: nat-and-trunks.md
 - name: SRTP / SRTCP

@@ -19,35 +19,61 @@ It exposes a stable, developer-friendly API through `VoipClient` while keeping t
 🧪 **Examples:** [`examples/`](examples) — runnable samples (BasicCalling, Dialer, Transfer, CustomAudio, VideoCalling, WebRtcPeer, WebRtcRecording, WebRtcDependencyInjection, and a browser video-call website `WebRtcVideoCall.Web`)
 🛠️ **Maintainers:** [`MAINTAINING.md`](MAINTAINING.md) — architecture map, invariants, workflows; rules in [`ENGINEERING_RULES.md`](ENGINEERING_RULES.md)
 
-> **Project status — preview (`4.6.0-preview`).** The **SIP + RTP core** is the mature,
-> production-oriented surface: registration, in/outbound call control, transfer, DTMF, SRTP
-> (SDES) and measured RTCP quality metrics — with symmetric RTP (comedia) as the
-> production-proven NAT path. It is exercised in CI by an **automated interop suite against a
-> real Asterisk (PJSIP) container** — registration, in/outbound calls with live RTP, codec
-> negotiation (PCMU/PCMA/G722), SRTP-SDES, DTMF (RFC 4733), hold, blind & attended transfer,
-> session timers (RFC 4028), early media (RFC 3960) and TCP/TLS transport, plus a two-leg bridged
-> call with **byte-exact bidirectional media** verified through the PBX — the matrix runs with zero
-> skipped cases. Newer surfaces — the **WebRTC facade**, **full ICE** (RFC 8445/7675),
-> **DTLS-SRTP**, and the **self-hostable STUN/TURN server** — are implemented but not yet
-> validated against a broad interop matrix; treat them as preview and validate for your
-> environment before production. Known gaps and interop defects are tracked openly in the
+> **Project status — 4.6.0.** The **SIP + RTP core** is the mature, production-oriented surface:
+> registration, in/outbound call control, transfer, DTMF, SRTP (SDES) and measured RTCP quality
+> metrics — with symmetric RTP (comedia) as the production-proven NAT path. It is exercised in CI
+> by an **automated interop suite against a real Asterisk (PJSIP) container** — registration,
+> in/outbound calls with live RTP, codec negotiation (PCMU/PCMA/G722), SRTP-SDES, DTMF (RFC 4733),
+> hold, blind & attended transfer, session timers (RFC 4028), early media (RFC 3960) and TCP/TLS
+> transport, plus a two-leg bridged call with **byte-exact bidirectional media** verified through
+> the PBX — the matrix runs with zero skipped cases. The **WebRTC facade** and **DTLS-SRTP** are
+> validated in CI against **real browsers** (Chromium and Firefox, headless via Playwright: audio
+> and VP8 video, SDK as offerer *and* as answerer), and the **self-hostable STUN/TURN server** is
+> exercised end-to-end against a real **coturn** relay. Deliberate limits in this line: no data
+> channels (SCTP), TURN relay is **UDP-only**, simulcast is **send-side only**, and **full ICE**
+> (RFC 8445/7675) is opt-in and not yet production-proven — validate it for your trunk before
+> enabling it. Known gaps and interop defects are tracked openly in the
 > [issue tracker](../../issues) — bug reports and interop feedback are especially welcome.
 
 **Contents:** [Why](#why-calloravoipsdk) · [Progressive API](#progressive-api-simple-first-deeper-when-needed) · [Features](#current-feature-set) · [Install](#installation) · [Quickstart](#quickstart) · [Architecture](#architecture) · [Contributing](#contributing) · [Security](#security) · [License](#license)
 
-## What's new in 4.6 (preview)
+## What's new in 4.6
 
-- **WebRTC facade (preview, transport-only)** — a signalling-neutral browser/peer surface in the
+- **WebRTC facade (transport-only)** — a signalling-neutral browser/peer surface in the
   `CalloraVoipSdk.WebRtc` namespace that mirrors the four-level design of `VoipClient`:
   `WebRtcClient.CreatePeer()` → `IPeerConnection` (ICE, DTLS-SRTP, BUNDLE, RTP/RTCP), a signalling
   happy path (`peer.ConnectAsync(signalling, role)`), the W3C track model (`TrackReceived` →
   `RemoteTrack`/`EncodedFrame`), a multi-peer manager (`client.Peers`), and L3 seams (`IMediaTap`,
   `IWebRtcClientModule`). The app owns signalling and the codec — the SDK moves bytes, it never
-  encodes/decodes. Trickle ICE + early-bind (an ephemeral media port yields a live m-line) and
-  send-side simulcast (RFC 8853, offerer-confirmed; receive-side RID demux is a later slice) are
-  included. See the `WebRtc*` samples. **Preview:** browser-validated against Chrome and Firefox
-  (DTLS-SRTP incl. AES-GCM); the API may still change before GA. No data channels (SCTP) and no
-  TCP/TLS TURN relay yet (UDP TURN relay is included).
+  encodes/decodes. Included: trickle ICE + early-bind (an ephemeral media port still yields a live
+  m-line), mDNS `.local` candidate resolution (RFC 8828), NACK/PLI/FIR + RTX video repair
+  (RFC 4585 / 5104 / 4588), transport-cc congestion feedback (RFC 8888), `getStats`, DTMF and RTCP
+  quality on the BUNDLE path, and send-side simulcast (RFC 8853, offerer-confirmed). **Validated in
+  CI against real browsers** — Chromium and Firefox, audio and VP8 video, SDK as offerer *and* as
+  answerer. See the `WebRtc*` samples.
+- **Self-hostable STUN & TURN server** — `AddCalloraStunServer(...)` / `AddCalloraTurnServer(...)`
+  with TURN control over UDP/TCP/TLS, EVEN-PORT + RESERVATION-TOKEN (RFC 8656 §7), and a relay
+  lifecycle that keeps allocations alive via permission-refresh and channel-rebind keepalives.
+  Exercised end-to-end in CI against a real **coturn**.
+- **AEAD-AES-GCM SRTP/SRTCP (RFC 7714)** — `AEAD_AES_128_GCM` and `AEAD_AES_256_GCM` end to end,
+  offered preferred in DTLS-SRTP `use_srtp` with `AES_CM_128_HMAC_SHA1_80` as the interoperable
+  fallback.
+- **Early media (RFC 3960)** — receive-only media from a 180/183 SDP, a pre-answer call handle
+  (`IPhoneLine.OutboundCallRinging`), `ICall.EarlyMediaSdp`, and DTMF while ringing (IVR / AI outbound).
+- **SIP `MESSAGE` (RFC 3428)** and **SIP `PUBLISH` (RFC 3903)** with the full soft-state lifecycle,
+  plus **REFER transfer progress subscriptions** (RFC 3515 / 6665) and
+  **`ICall.TerminationReason`** — a protocol-neutral end cause that tells busy, unanswered,
+  cancelled and rejected apart from a generic failure.
+- **Local ICE restart** — `ICall.RestartIceAsync()` (RFC 8445 §9): new credentials on the existing
+  socket, role preserved, so an app can both *detect* a dead media path and repair it.
+- **Hardening across the stack** — a full source audit closed every interop- and stability-critical
+  finding; CI grew **chaos/fault-injection** and **performance** gates alongside the existing
+  interop, soak and browser suites. See [`CHANGELOG.md`](CHANGELOG.md) for the complete list.
+
+**Known limits in this line:** no data channels (SCTP), TURN relay is UDP-only (no TCP/TLS relay),
+simulcast is send-side only (receive-side RID demux is a later slice), Safari/WebKit is not yet
+verified, and ICE-TCP candidates (RFC 6544) are a deliberate omission — real trunk calls run over
+symmetric RTP (comedia), which needs no ICE or STUN.
 
 > **Breaking change in 4.6** — the SIP-facade configuration types were renamed so each facade owns a
 > facade-scoped name (parallel to `WebRtcConfiguration`/`WebRtcOptions`/`AddCalloraWebRtc`):
@@ -123,9 +149,10 @@ Available in the repository today:
   RFC 3550 RTP counters (`ICall.RtpStatistics`)
 - NAT/trunk controls: public signaling contact (`SipAccount.PublicSipHost`) and an opt-in public
   media address for CGNAT / static 1:1 NAT (`SipAccount.PublicMediaHost`)
-- Self-hostable **STUN and TURN server** (RFC 5389 / RFC 5766) via `AddCalloraStunServer(...)` /
-  `AddCalloraTurnServer(...)` — for development and self-hosted NAT traversal. Newer surface;
-  validate against your clients before production (see [open issues](../../issues))
+- Self-hostable **STUN and TURN server** (RFC 5389 / RFC 5766 / RFC 8656) via
+  `AddCalloraStunServer(...)` / `AddCalloraTurnServer(...)` — TURN control over UDP/TCP/TLS,
+  EVEN-PORT + RESERVATION-TOKEN, permission/channel keepalives; the client side is verified in CI
+  against a real coturn relay (UDP relay only)
 - Per-call media tap: attach frame receivers/senders to any call for bots, bridging
   and streaming scenarios (`client.Media.CreateReceiver()/CreateSender()`)
 - Encoded video (transport-only): send/receive encoded frames
@@ -136,10 +163,10 @@ Available in the repository today:
   The SDK never encodes/decodes — bring your own VP8/H.264 codec
 - Module registry (`client.Modules`) as the extension point for separately shipped
   feature modules
-- **WebRTC facade (preview, `CalloraVoipSdk.WebRtc`)**: signalling-neutral browser/peer connections
+- **WebRTC facade (`CalloraVoipSdk.WebRtc`)**: signalling-neutral browser/peer connections
   (`WebRtcClient.CreatePeer()`), an SDK-driven handshake (`peer.ConnectAsync(signalling, role)`), the
   W3C track model (`TrackReceived`/`RemoteTrack`/`EncodedFrame`), a multi-peer manager (`client.Peers`)
-  and L3 media taps/modules — transport-only, bring your own codec (see [What's new in 4.6](#whats-new-in-46-preview))
+  and L3 media taps/modules — transport-only, bring your own codec (see [What's new in 4.6](#whats-new-in-46))
 - Configurable audio codec preference (`VoipConfiguration.PreferredAudioCodecs`)
 - RTCP quality metrics with measured values: local/remote jitter, packet loss and
   round-trip time from SR/RR (LSR/DLSR); RFC 3611 XR-tolerant compound decoding
@@ -201,7 +228,8 @@ logic without depending on internal implementation types.
 
 CalloraVoipSdk follows Semantic Versioning (`MAJOR.MINOR.PATCH`).
 
-- Current public release line: `4.x` (preview; see [releases](https://github.com/BechsteinDigital/callora-voip-sdk/releases))
+- Current public release line: `4.x` — latest release `4.6.0`
+  (see [releases](https://github.com/BechsteinDigital/callora-voip-sdk/releases))
 - Public API removals only happen in MAJOR releases; deprecations are introduced
   through `[Obsolete(...)]` before removal
 - Consumer-relevant changes are documented in [`CHANGELOG.md`](CHANGELOG.md)
@@ -270,7 +298,10 @@ dotnet test tests/CalloraVoipSdk.InteropTests -c Release -f net10.0 \
 > gate in independent runs. A 1,792-call stage passed once but crossed the p99 timing gate in a
 > repetition; at 1,920 calls every call remained connected with complete RTP/RTCP evidence and
 > at least 99% media delivery, while 27 calls recorded a 41-ms inbound p99 against the 40-ms
-> strict limit. These numbers describe that host/profile, not a global SDK maximum.
+> strict limit. The first thing to fail was scheduler timing — not RAM or CPU. These numbers
+> describe that host/profile, not a global SDK maximum; measure your own envelope with the same
+> gate. Sizing guidance:
+> [Capacity and sizing](https://bechsteindigital.github.io/callora-voip-sdk/production/capacity.html).
 
 The browser-safe interop runner is an explicit local Linux mode. It serializes Asterisk instances
 because host networking uses the fixed SIP ports 5060/5061 and RTP port range, disables the
@@ -284,7 +315,16 @@ in/outbound calls with live RTP, codec negotiation (PCMU/PCMA/G722), SRTP-SDES m
 early media (RFC 3960, pre-answer receive + DTMF in the early dialog) and TCP/TLS transport. A
 separate two-leg suite bridges two SDK legs through the PBX and verifies **bidirectional,
 byte-exact media** (RTP counters both ways, local + remote RTCP quality, and byte-identical
-PCMU payload A→B).
+PCMU payload A→B). The **two-leg scenario matrix** additionally runs against a real **FreeSWITCH**
+container through the shared `IPbxFixture` abstraction — registration, bridged media (plain, SDES,
+codec-mismatch transcoding), byte-exact content, RTCP, hold/unhold, attended transfer, DTMF and a
+concurrent-call soak (trait `InteropFreeSwitch`, local-first — not in the PR gate). The Asterisk-only
+scenarios are listed on the [FreeSWITCH page](docs/portal/interop/freeswitch.md).
+
+**Browser + TURN coverage.** A dedicated browser-interop suite drives **Chromium and Firefox**
+headless via Playwright through the full path — signalling → ICE → DTLS-SRTP → SRTP — with
+bidirectional Opus and browser-decoded VP8, in **both** roles (SDK as offerer and as answerer). TURN
+relay allocation and media are verified end-to-end against a real **coturn** server.
 
 **Soak coverage.** The soak suite runs the media-quality matrix (PCMU/Opus × plain/SRTP) plus
 resource plateau/leak guards over long runs (`SoakShort` on PRs, `SoakLong` nightly), asserting
@@ -590,8 +630,10 @@ The SDK core stays open and free; plugins are licensed separately. Contact
   malformed/adversarial packets, signaling outage, and resource churn under fault and asserts graceful
   degradation + recovery + no leak, and a per-PR performance gate that holds the SRTP per-packet crypto hot
   path above a catastrophic-regression throughput floor); the machine-specific capacity envelope runs nightly
-- Broader interop validation against more PBXs/trunks/browsers (Asterisk is automated;
-  FRITZ!Box is manually verified — the rest is configuration guidance so far)
+- Broader interop validation against more PBXs, trunks and browsers. Automated in CI today:
+  Asterisk (PJSIP), Chromium, Firefox and coturn. FreeSWITCH is automated but local-first;
+  FRITZ!Box is manually verified; Safari/WebKit and the commercial trunks are configuration
+  guidance so far — see the [interop matrix](docs/portal/interop/matrix.md)
 
 ## License
 

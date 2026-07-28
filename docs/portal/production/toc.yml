@@ -6,6 +6,8 @@
   href: threading.md
 - name: Timeouts
   href: timeouts.md
+- name: Capacity and sizing
+  href: capacity.md
 - name: Diagnostics
   href: diagnostics.md
 - name: Troubleshooting

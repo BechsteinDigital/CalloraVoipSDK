@@ -1,15 +1,15 @@
-# WebRTC (preview)
+# WebRTC
 
-> **Preview (v4.6.0-preview.1).** The WebRTC facade has been **validated against real browsers**
-> (Chrome and Firefox — audio and VP8 video, both offerer and answerer, DTLS-SRTP including AES-GCM);
-> its API may still change before it is declared stable. Data channels (SCTP) are not
-> included and TURN relay is **UDP-only** (no TCP/TLS TURN). Simulcast is send-side only
-> (offerer-confirmed; receive-side RID demux is a later slice). Additional known limits: the media
-> socket is currently **IPv4-only** (an IPv6 `LocalEndPoint` fails to bind); browser **mDNS
-> (`.local`) host candidates are resolved** via the OS resolver (RFC 8828),
-> and the socket receive buffer is small — expect drops for high-bitrate video under load. Trickle ICE
-> and early-bind have landed: an ephemeral media port yields a live m-line, and a fixed, reachable port
-> is still recommended for NAT reachability without TURN.
+> **Status (v4.6.0).** The WebRTC facade is **validated in CI against real browsers** — Chromium and
+> Firefox, headless via Playwright, audio and VP8 video, in both roles (SDK as offerer and as
+> answerer), over DTLS-SRTP including AES-GCM. Known scope limits: data channels (SCTP) are **not
+> included**; TURN relay is **UDP-only** (no TCP/TLS relay); simulcast is **send-side only**
+> (offerer-confirmed — receive-side RID demux is a later slice); and Safari/WebKit is not yet
+> verified. The media socket follows the address family of the configured `LocalEndPoint`, so IPv4
+> and IPv6 both work. Browser **mDNS (`.local`) host candidates are resolved** via the OS resolver
+> (RFC 8828). Trickle ICE and early-bind are included: an ephemeral media port still yields a live
+> m-line, though a fixed, reachable port remains the recommendation for NAT reachability without
+> TURN.
 
 The `CalloraVoipSdk.WebRtc` namespace is a signalling-neutral WebRTC peer surface that mirrors the
 four-level design of `VoipClient`. It is **transport-only**: the SDK runs ICE, DTLS-SRTP, BUNDLE and

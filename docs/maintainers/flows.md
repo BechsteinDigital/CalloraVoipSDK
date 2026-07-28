@@ -3,7 +3,7 @@
 Die fünf Sequenzen, die man als Maintainer im Kopf haben muss. Jeder Schritt nennt die
 Klassenkette und — wo relevant — den ausführenden Thread (Definitionen der Threads in
 [`threading-map.md`](threading-map.md)). Quelle: Tiefenanalyse 2026-07-22; Stand der
-Klassennamen: Branch-Basis `main`/4.6.0-preview.
+Klassennamen: Branch-Basis `main`/4.6.0.
 
 ---
 
@@ -86,8 +86,10 @@ Dialog-Identitäts-Gate (CF-013, 481 bei Tag-Mismatch) → Handler je Methode
 1. `CallMediaOrchestrator.OnMediaParametersNegotiated`
    (`src/Core/Application/Media/CallMediaOrchestrator.cs`): ohne ICE synchron
    `SetUpMediaSession`; mit ICE `Task.Run` → `ResolveIceCandidatePairAsync`.
-   ⚠ Bekanntes Race: terminiert der Call währenddessen, wird die Session trotzdem
-   registriert und leakt bis zum Orchestrator-Dispose (P1-Befund #6 in MAINTAINING.md).
+   Das frühere Terminierungs-Race ist seit 4.6.0 geschlossen (#10): Zustand und
+   Negotiation-Generation werden unter `_setupSync` **direkt vor** der Registrierung neu
+   geprüft, sodass eine Session, die während der ICE-Auflösung obsolet wird, verworfen und
+   disposed statt installiert wird.
 2. ICE (`CallIceAgent`): Gathering auf dem **Media-Socket** (host; srflx via
    `StunIceProbe`; relay via `TurnAllocationProbe`/`TurnIceRelayAllocator`) →
    Connectivity-Checks + reguläre Nominierung → Ergebnis als `with`-Klon der Parameter
@@ -157,8 +159,12 @@ Dialog-Identitäts-Gate (CF-013, 481 bei Tag-Mismatch) → Handler je Methode
    STUN, relay via TURN-Probe) → gepufferte Kandidaten senden → `SendEndOfCandidatesAsync`.
 4. `SetRemoteDescriptionAsync` materialisiert Remote-Tracks sofort (W3C-`ontrack`) und
    `WebRtcSessionFactory.TryCreate` leitet die `BundledMediaSession` ab (MID/RID-Ids,
-   DTLS-Rolle aus beiden `a=setup`, Remote-Endpoint via `WebRtcRemoteEndPoint` —
-   Single-Candidate, kein voller ICE-FSM; SSRCs kollisionfrei zufällig).
+   DTLS-Rolle aus beiden `a=setup`, SSRCs kollisionfrei zufällig). Zwei Dinge nicht
+   verwechseln: `WebRtcRemoteEndPoint.Resolve` liefert nur das **Bootstrap-Sendeziel**
+   (bester angekündigter Kandidat bzw. m-line-Adresse); die eigentliche Paarauswahl macht
+   `BundledIceControl`/`IceMediaAttachment` mit echten Connectivity-Checks und Nominierung
+   (RFC 8445 §7.2.2/§8) über die volle `a=candidate`-Liste — inklusive Relay-Kandidat, wenn
+   eine TURN-Allocation gegathert wurde.
 5. `StartAsync`: Bundle-Receive-Loop, ICE-Consent-Loop, DTLS-Handshake → bei
    installierten Keys `Connected` → TCS erfüllt. `finally`: Events abhängen, CTS
    canceln, Kandidaten-Pump awaiten.
