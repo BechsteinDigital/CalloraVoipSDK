@@ -39,10 +39,25 @@ The relevant environment variables are:
 | `CALLORA_CAPACITY_REPETITIONS` | `1` | Measurements per stage |
 | `CALLORA_CAPACITY_SETTLE_SECONDS` | `10` | Stabilization before each measurement |
 | `CALLORA_CAPACITY_MEDIA_SECONDS` | `30` | Exact frame-timing window |
-| `CALLORA_CAPACITY_MEDIA_WORKERS` | logical CPUs | Shared 20-ms media-pump workers |
+| `CALLORA_CAPACITY_MEDIA_WORKERS` | auto-calibrated | Shared 20-ms media-pump workers; starts at logical CPUs and doubles until the highest configured stage has at most 64 calls per worker (maximum 256) |
 | `CALLORA_CAPACITY_ASTERISK_NOFILE` | `65536` | Container soft/hard open-file limit |
 | `CALLORA_CAPACITY_REPORT` | temporary JSON path | Atomic checkpoint and final report |
 | `CALLORA_CAPACITY_CONTINUE_AFTER_FAILURE` | `false` | Diagnostic-only continuation after a failed quality stage |
+
+### Load-generator calibration
+
+`CalloraCapacityMediaPump` is part of the test load generator, not the SDK. Each worker sends its
+assigned calls sequentially every 20 ms. An under-provisioned pump can therefore cross the 40-ms
+p99 gate before the SDK does. The characteristic signature is an outbound failure cluster whose
+call indices share the same remainder modulo `MediaWorkers`, while delivery, RTP evidence and
+inbound timing remain healthy.
+
+The default worker count is calibrated from the highest configured stage. It starts with the
+logical CPU count and doubles until no worker owns more than 64 configured calls. This preserves
+the CPU-sized default for smaller runs and selected 32 workers for the validated 1336–1920-call
+profile on a 16-logical-CPU host. An explicit `CALLORA_CAPACITY_MEDIA_WORKERS` override remains
+available for controlled A/B diagnosis, but its value is serialized into the report and results
+from different worker profiles are not directly comparable.
 
 ## Evidence and gate
 
@@ -80,6 +95,20 @@ stages remain failed and `FirstUnstableTarget`/`LargestValidatedCallCount` retai
 meaning; the option merely gathers later diagnostic stages when investigating a known
 observability or resource failure.
 
+## Capacity classifications
+
+- **Strict capacity** is the largest stage where every call passes every configured per-direction
+  gate. A single p99, delivery, silence, loss, jitter, connection or evidence failure rejects it.
+- **Functional full-duplex evidence** means every call stayed connected, sent and received media,
+  retained complete RTP/RTCP evidence and met the delivery/loss/silence gates, but at least one
+  strict timing gate failed. It is diagnostic evidence, not a strict capacity claim.
+- **Generator-limited evidence** has the media-pump shard signature described above. It measures
+  the configured test generator and must not be presented as an SDK boundary.
+
+Near the scheduler boundary, strict outcomes can vary between repetitions even when all calls
+remain functional. Reports must therefore state both the largest repeatedly validated stage and
+any higher single-window observation instead of publishing one universal maximum.
+
 ## Interpretation limits
 
 Inbound RTP exposes exact local sequence-range evidence. For outbound RTP, the current public SDK
@@ -89,20 +118,10 @@ but not the peer's extended-highest-sequence counter. Therefore
 gap count from a percentage. Adding raw remote receiver-report counters to the public quality
 snapshot would close that observability gap.
 
-For non-multiplexed RTCP, the SDK currently also has a port-ownership race:
-
-- `SipCoreCallChannel` reserves only an OS-selected RTP port before it creates the SDP;
-- `SdpUtilities` derives the advertised local RTCP port as RTP plus one;
-- `CallRtcpQualityMonitor` binds that unreserved RTCP port later.
-
-At higher concurrency, another RTP session can already own that adjacent port. The monitor then
-logs `Address already in use`, publishes a single `RtcpActive=false` fallback snapshot and disables
-quality reporting for that call while RTP audio continues. The benchmark captures those warnings
-and reports `RtcpActiveAtEnd`, RTCP packet counters, `RtpEvidenceCompleteCalls`, and
-`ApplicationQualityPassedCalls` separately. A full strict capacity claim is blocked by even one
-such observability failure. The product fix is to reserve and transfer ownership of the RTP/RTCP
-socket pair atomically; merely retrying a different RTCP port after SDP publication would send the
-peer to the wrong address.
+The initial evidence run exposed a non-multiplexed RTCP port-ownership race. The SDK now reserves
+and transfers the RTP/RTCP socket pair atomically before SDP publication. Post-fix runs still
+require `RtcpActiveAtEnd`, RTCP packet counters and `RtpEvidenceCompleteCalls` for every call; the
+benchmark does not infer that the transport fix worked merely because RTP audio continued.
 
 The previous high-call experiment that only required some RTP progress does not prove this quality
 SLA and must not be compared as if it used the same gate. A validated capacity claim requires the

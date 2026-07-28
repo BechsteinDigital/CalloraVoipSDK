@@ -56,4 +56,27 @@ public sealed class CalloraCapacityProfileTests
         Assert.Throws<InvalidOperationException>(
             () => CalloraCapacityProfile.ParseLevels(raw, start: 8, ceiling: 16));
     }
+
+    /// <summary>
+    /// Die Default-Workerzahl hält auch oberhalb der CPU-Anzahl höchstens 64 konfigurierte Calls
+    /// pro Media-Pump-Shard und verhindert damit eine künstliche Generatorgrenze.
+    /// </summary>
+    [Theory]
+    [InlineData(16, 1024, 16)]
+    [InlineData(16, 1336, 32)]
+    [InlineData(16, 1920, 32)]
+    [InlineData(16, 4096, 64)]
+    [InlineData(1, 4096, 64)]
+    [InlineData(512, 4096, 256)]
+    public void DetermineDefaultMediaWorkers_CalibratesForHighestLevel(
+        int logicalProcessors,
+        int highestLevel,
+        int expected)
+    {
+        Assert.Equal(
+            expected,
+            CalloraCapacityProfile.DetermineDefaultMediaWorkers(
+                logicalProcessors,
+                highestLevel));
+    }
 }

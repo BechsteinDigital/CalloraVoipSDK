@@ -26,6 +26,8 @@ internal sealed record CalloraCapacityProfile(
     private const int MaximumLevel = 4096;
     private const int FineGrainedThreshold = 1024;
     private const int FineGrainedStep = 256;
+    private const int TargetMaximumCallsPerMediaWorker = 64;
+    private const int MaximumMediaWorkers = 256;
 
     public static CalloraCapacityProfile FromEnvironment()
     {
@@ -67,8 +69,10 @@ internal sealed record CalloraCapacityProfile(
             maximum: 1048576);
         var mediaWorkers = ReadPositiveInt(
             "CALLORA_CAPACITY_MEDIA_WORKERS",
-            defaultValue: Environment.ProcessorCount,
-            maximum: 256);
+            defaultValue: DetermineDefaultMediaWorkers(
+                Environment.ProcessorCount,
+                levels[^1]),
+            maximum: MaximumMediaWorkers);
         var continueAfterQualityFailure = ReadBoolean(
             "CALLORA_CAPACITY_CONTINUE_AFTER_FAILURE",
             defaultValue: false);
@@ -136,6 +140,27 @@ internal sealed record CalloraCapacityProfile(
         levels.Add(ceiling);
 
         return levels;
+    }
+
+    internal static int DetermineDefaultMediaWorkers(int logicalProcessors, int highestLevel)
+    {
+        if (logicalProcessors <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(logicalProcessors));
+        }
+        if (highestLevel <= 0 || highestLevel > MaximumLevel)
+        {
+            throw new ArgumentOutOfRangeException(nameof(highestLevel));
+        }
+
+        var workers = Math.Min(logicalProcessors, MaximumMediaWorkers);
+        while (workers < MaximumMediaWorkers &&
+               highestLevel > workers * TargetMaximumCallsPerMediaWorker)
+        {
+            workers = Math.Min(checked(workers * 2), MaximumMediaWorkers);
+        }
+
+        return workers;
     }
 
     private static int ReadPositiveInt(string name, int defaultValue, int maximum)

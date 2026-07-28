@@ -11,7 +11,7 @@ window. The gate and fields are defined in
 [`docs/maintainers/capacity-quality-benchmark.md`](../maintainers/capacity-quality-benchmark.md).
 Every completed run tore down to zero Asterisk channels.
 
-## Results
+## Initial pre-fix results
 
 The original permissive experiment that only required RTP progression is not comparable to this
 gate.
@@ -52,23 +52,65 @@ a `MediaFrameReceivedEventArgs` and enumerates a copied invocation list per fram
 allocation total also includes RTP/session and benchmark activity, so a profiler is required before
 assigning every byte to that callback.
 
+## Post-fix calibrated results
+
+After atomic RTP/RTCP port-pair reservation was merged, a cumulative Server-GC confirmation run
+at 512, 1024 and 1280 calls produced complete RTP/RTCP evidence and strict quality for every call.
+No `Address already in use` RTCP bind warning remained.
+
+The first follow-up used 16 media-pump workers, matching the host's logical CPU count. At 1336
+calls, 27 calls missed only the 40-ms p99 gate. Twenty-two outbound failures belonged to one
+generator shard (indices separated by 16), while delivery and RTP/RTCP evidence remained healthy.
+Repeating the same stages with 32 workers removed that false boundary:
+
+| Calls | Strict passed | Complete RTP evidence | Process/PBX CPU | Observation |
+| ---: | ---: | ---: | ---: | --- |
+| 1336 | 1336 | 1336 | 16.53% / 13.29% | all strict gates passed |
+| 1344 | 1344 | 1344 | 16.41% / 12.70% | all strict gates passed |
+| 1408 | 1408 | 1408 | 17.83% / 14.27% | independently repeated strict stage |
+| 1536 | 1536 | 1536 | 20.92% / 17.10% | all strict gates passed |
+| 1664 | 1664 | 1664 | 22.14% / 18.08% | all strict gates passed |
+| 1792 | 1792 | 1792 | 23.50% / 19.23% | single strict window; not repeatable |
+| 1920 | 1893 | 1920 | 24.57% / 20.32% | 27 inbound p99 values at 41 ms |
+
+At 1920 calls, every call stayed connected and full-duplex, every call retained complete RTP/RTCP
+evidence, no call fell below the 99-percent application or RTP delivery gates, no inbound sequence
+gap was observed, and the longest gap stayed below 50 ms. The failed calls crossed only the strict
+40-ms p99 threshold by one millisecond. This is functional full-duplex evidence, not a strict
+1920-call claim.
+
+A fresh 1792-call repetition demonstrated the scheduler transition rather than a deterministic
+hard limit: 128 calls recorded inbound p99 values of 41–43 ms, while all calls remained connected,
+retained complete RTP/RTCP evidence, stayed above 99-percent delivery and had no gap above 61 ms.
+The repeatedly demonstrated strict lower bound on this setup is therefore 1408 calls; 1792 is a
+single-window strict observation inside a variable timing region.
+
+RAM did not define the observed boundary. At 1920 calls, the SDK testhost used approximately
+0.85 GiB current/1.10 GiB peak working set and Asterisk approximately 0.41 GiB. Managed
+allocations were approximately 3.35 GiB over 30 seconds (about 120 MB/s). The first failing signal
+was scheduler timing, while aggregate SDK/PBX CPU remained below 45 percent of the 16-logical-CPU
+machine. The operator-selected Office profile was reported as capped at 65 percent without turbo,
+so this remains a deliberately conservative shared-host measurement.
+
 ## Product findings
 
-1. **RTCP port-pair ownership — highest priority.** `SipCoreCallChannel` reserves RTP only
-   (`src/Core/Infrastructure/Sip/Adapters/SipCoreCallChannel.cs`), `SdpUtilities` derives RTCP as
-   RTP+1, and `CallRtcpQualityMonitor` later binds that unreserved port. Repeated runs captured
-   `SocketException: Address already in use`; RTP audio continued while quality reporting was
-   disabled. Reserve and ownership-transfer the RTP/RTCP pair atomically, with a deterministic
-   collision test.
+1. **RTCP port-pair ownership — post-fix evidence.** Atomic RTP/RTCP socket-pair reservation and
+   ownership transfer removed the probabilistic bind failure from the repeated high-call runs.
+   Capacity reports continue to require active RTCP and complete counter evidence per call.
 2. **Aligned raw counter observation.** Public `ICall.RtpStatistics` updates on a five-second RTCP
    cadence. Its counter window is necessarily broader than the exact application timing window,
    which can create boundary-sensitive delivery ratios under changing load. Expose an immediate,
    thread-safe current-counter snapshot or a windowed delta API. Also expose raw remote receiver
    report sequence counters if exact outbound sequence-gap counts are required.
-3. **Media hot-path allocation and scheduling.** Profile the sender, RTP decode/playout and public
-   `MediaReceiver` callback at 1024–1536 calls. Eliminate avoidable per-frame allocations and copied
-   invocation lists, then repeat with an explicit production runtime profile. The strong difference
-   between Workstation and Server GC must be reflected in deployment guidance and benchmark claims.
+3. **Media hot-path scheduling.** The first post-calibration failure is inbound playout timing, not
+   RAM, connection loss or RTP transport. `RtpCallMediaSession` currently owns one 20-ms
+   `PeriodicTimer` per call. Profile TimerQueue/ThreadPool wake latency around 1664–1920 calls before
+   deciding whether to shard playout scheduling.
+4. **Media hot-path allocation.** Profile the sender, RTP decode/playout and public
+   `MediaReceiver` callback. Eliminate avoidable per-frame allocations and copied invocation lists,
+   then repeat with an explicit production runtime profile. Server GC and the power profile remain
+   part of every defensible capacity claim.
 
-Until item 1 is fixed, strict capacity runs are expected to fail probabilistically before the
-audible media limit and must not be marketed as a fixed maximum.
+These results must not be marketed as a fixed maximum. They establish a reproducible strict lower
+bound, a higher non-repeatable strict observation and a functional timing-transition region for
+one concrete machine and profile.
