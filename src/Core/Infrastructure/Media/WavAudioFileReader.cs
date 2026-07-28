@@ -83,10 +83,17 @@ internal sealed class WavAudioFileReader : IAudioFileReader
         await _stream.DisposeAsync().ConfigureAwait(false);
     }
 
-    private static (long DataStart, long DataLength, int SampleRate) ParseHeader(FileStream stream, int fallbackSampleRate)
+    /// <summary>
+    /// Parses the WAV RIFF/fmt/data header. Exposed to tests so the partial-read tolerance
+    /// (Media #16) can be exercised with a short-read stream. Takes <see cref="Stream"/> because it
+    /// only requires read/seek/position/length, all of which the base type provides.
+    /// </summary>
+    internal static (long DataStart, long DataLength, int SampleRate) ParseHeader(Stream stream, int fallbackSampleRate)
     {
+        // Media #16: use ReadExactly so a header delivered in several short reads (e.g. from a
+        // rate-limited stream) is assembled correctly instead of failing on the first partial read.
         Span<byte> riffHeader = stackalloc byte[12];
-        if (stream.Read(riffHeader) != riffHeader.Length)
+        if (!TryReadExactly(stream, riffHeader))
             throw new InvalidOperationException("Invalid WAV header: missing RIFF preamble.");
 
         if (riffHeader[0] != 'R' || riffHeader[1] != 'I' || riffHeader[2] != 'F' || riffHeader[3] != 'F')
@@ -100,21 +107,20 @@ internal sealed class WavAudioFileReader : IAudioFileReader
         long dataLength = 0;
         var fmtFound = false;
 
-        var chunkHeader = new byte[8];
+        Span<byte> chunkHeader = stackalloc byte[8];
         while (stream.Position + 8 <= stream.Length)
         {
-            if (stream.Read(chunkHeader, 0, chunkHeader.Length) != chunkHeader.Length)
+            if (!TryReadExactly(stream, chunkHeader))
                 break;
 
-            var chunkId = chunkHeader.AsSpan(0, 4).ToArray();
-            var chunkSize = BinaryPrimitives.ReadInt32LittleEndian(chunkHeader.AsSpan(4, 4));
+            var chunkSize = BinaryPrimitives.ReadInt32LittleEndian(chunkHeader.Slice(4, 4));
             if (chunkSize < 0)
                 throw new InvalidOperationException("Invalid WAV chunk size.");
 
-            if (chunkId[0] == 'f' && chunkId[1] == 'm' && chunkId[2] == 't' && chunkId[3] == ' ')
+            if (chunkHeader[0] == 'f' && chunkHeader[1] == 'm' && chunkHeader[2] == 't' && chunkHeader[3] == ' ')
             {
                 var fmt = new byte[chunkSize];
-                if (stream.Read(fmt) != chunkSize)
+                if (!TryReadExactly(stream, fmt))
                     throw new InvalidOperationException("Invalid WAV fmt chunk.");
 
                 if (chunkSize < 16)
@@ -135,7 +141,7 @@ internal sealed class WavAudioFileReader : IAudioFileReader
 
                 fmtFound = true;
             }
-            else if (chunkId[0] == 'd' && chunkId[1] == 'a' && chunkId[2] == 't' && chunkId[3] == 'a')
+            else if (chunkHeader[0] == 'd' && chunkHeader[1] == 'a' && chunkHeader[2] == 't' && chunkHeader[3] == 'a')
             {
                 dataStart = stream.Position;
                 dataLength = chunkSize;
@@ -157,5 +163,24 @@ internal sealed class WavAudioFileReader : IAudioFileReader
             throw new InvalidOperationException("Invalid WAV file: data chunk missing.");
 
         return (dataStart, dataLength, sampleRate > 0 ? sampleRate : 8000);
+    }
+
+    /// <summary>
+    /// Reads exactly <paramref name="buffer"/>.Length bytes, looping across short reads. Returns
+    /// <see langword="false"/> if the stream ends before the buffer is filled (Media #16).
+    /// </summary>
+    private static bool TryReadExactly(Stream stream, Span<byte> buffer)
+    {
+        var total = 0;
+        while (total < buffer.Length)
+        {
+            var read = stream.Read(buffer[total..]);
+            if (read == 0)
+                return false;
+
+            total += read;
+        }
+
+        return true;
     }
 }

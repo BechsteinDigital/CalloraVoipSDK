@@ -1,5 +1,6 @@
 using CalloraVoipSdk.Core.Application.Media;
 using CalloraVoipSdk.Core.Application.Ports.Media;
+using Microsoft.Extensions.Logging;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Media;
 
@@ -13,12 +14,16 @@ internal sealed class AudioFileCodecRegistry : IAudioFileCodecRegistry
     /// <summary>
     /// Creates a codec registry with WAV and MP3 adapters.
     /// </summary>
-    public AudioFileCodecRegistry()
+    /// <param name="loggerFactory">
+    /// Optional logger factory. When supplied, the MP3 codec logs transcode-encode failures that
+    /// occur during writer disposal instead of swallowing them silently.
+    /// </param>
+    public AudioFileCodecRegistry(ILoggerFactory? loggerFactory = null)
     {
         _codecs = new Dictionary<AudioFileFormat, IAudioFileCodec>
         {
             [AudioFileFormat.Wav] = new WavAudioFileCodec(),
-            [AudioFileFormat.Mp3] = new Mp3AudioFileCodec(),
+            [AudioFileFormat.Mp3] = new Mp3AudioFileCodec(loggerFactory?.CreateLogger<Mp3AudioFileCodec>()),
         };
     }
 

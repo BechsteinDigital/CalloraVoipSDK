@@ -203,7 +203,8 @@ public sealed class EngineeringRulesTests
         // legitim ist (IDisposable erlaubt kein await) — pro Eintrag durch Auditor/Reviewer
         // zu bewerten.
         "src/Core/Application/Media/MediaConnection.cs",
-        "src/Core/Infrastructure/Media/Mp3TranscodingWriter.cs",
+        // #16: Mp3TranscodingWriter no longer blocks on async in its constructor — the intermediate
+        // WAV writer is now opened via the async Mp3TranscodingWriter.CreateAsync factory.
         // #13: SipStreamConnection/SipWebSocketConnection Dispose now use a bounded _receiveLoop.Wait(timeout)
         // instead of an unbounded GetAwaiter().GetResult(), so they are no longer sync-over-async violations.
     ];

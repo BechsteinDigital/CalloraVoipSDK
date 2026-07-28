@@ -277,7 +277,7 @@ public sealed class VoipClient : IVoipClient
             callManager.CallStateChanged += (_, e) => CallStateChanged?.Invoke(this, e);
 
             var audioFileCodecs = ResolveService<IAudioFileCodecRegistry>(services)
-                ?? new AudioFileCodecRegistry();
+                ?? new AudioFileCodecRegistry(logFactory);
             var mediaManager = new MediaManager(logFactory, audioFileCodecs);
             Media = mediaManager;
             var moduleManager = new ModuleManager(mediaManager);
