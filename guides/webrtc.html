@@ -88,12 +88,13 @@
 <h1 id="webrtc-preview">WebRTC (preview)</h1>
 
 <blockquote>
-<p><strong>Preview (v4.6.0-preview.1).</strong> The WebRTC facade has not yet been validated against real browsers
-(Chrome/Firefox); its API may change before it is declared stable. Data channels (SCTP) are not
+<p><strong>Preview (v4.6.0-preview.1).</strong> The WebRTC facade has been <strong>validated against real browsers</strong>
+(Chrome and Firefox — audio and VP8 video, both offerer and answerer, DTLS-SRTP including AES-GCM);
+its API may still change before it is declared stable. Data channels (SCTP) are not
 included and TURN relay is <strong>UDP-only</strong> (no TCP/TLS TURN). Simulcast is send-side only
 (offerer-confirmed; receive-side RID demux is a later slice). Additional known limits: the media
-socket is currently <strong>IPv4-only</strong> (an IPv6 <code>LocalEndPoint</code> fails to bind), browser <strong>mDNS
-(<code>.local</code>) host candidates are ignored</strong> (interop then relies on server-reflexive/relay candidates),
+socket is currently <strong>IPv4-only</strong> (an IPv6 <code>LocalEndPoint</code> fails to bind); browser <strong>mDNS
+(<code>.local</code>) host candidates are resolved</strong> via the OS resolver (RFC 8828),
 and the socket receive buffer is small — expect drops for high-bitrate video under load. Trickle ICE
 and early-bind have landed: an ephemeral media port yields a live m-line, and a fixed, reachable port
 is still recommended for NAT reachability without TURN.</p>
