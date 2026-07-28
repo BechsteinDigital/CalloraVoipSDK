@@ -864,6 +864,16 @@ internal sealed class BundledMediaSession : IAsyncDisposable
             : throw new InvalidOperationException("This bundle has no video track.");
 
     /// <summary>
+    /// Asks the peer for a fresh video key frame on the app's demand (RFC 4585 §6.3.1). A no-op returning
+    /// <see langword="false"/> when this bundle has no video track, when the peer did not advertise PLI, or
+    /// when the 500 ms throttle still holds; otherwise sends the PLI and returns <see langword="true"/>.
+    /// </summary>
+    public ValueTask<bool> RequestVideoKeyFrameAsync(CancellationToken cancellationToken = default)
+        => _video is { } video
+            ? video.RequestKeyFrameAsync(cancellationToken)
+            : ValueTask.FromResult(false);
+
+    /// <summary>
     /// Tears the session down: stops ICE and DTLS (closing the association, zeroing keys) before
     /// disposing the video track and finally the transport (which stops the receive loop and the socket).
     /// </summary>

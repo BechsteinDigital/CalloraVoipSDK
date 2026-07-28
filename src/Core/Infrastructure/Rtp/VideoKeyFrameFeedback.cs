@@ -126,29 +126,70 @@ internal sealed class VideoKeyFrameFeedback
                 Entries = BuildNackEntries(missingSequenceNumbers),
             };
             Interlocked.Increment(ref _nacksSent);
-            _ = SendAsync(nack, "NACK");
+            _ = SendAsync(nack, "NACK", _lifetime);
         }
 
         if (_remoteSupportsPli)
             RequestThrottledPli(remoteSsrc);
     }
 
-    private void RequestThrottledPli(uint remoteSsrc)
+    /// <summary>
+    /// Sends a PLI keyframe request to the peer on the application's demand (RFC 4585 §6.3.1), independent of
+    /// detected inbound loss — e.g. a newly attached renderer or a decoder reset needs a fresh reference frame.
+    /// A no-op returning <see langword="false"/> when the peer did not advertise PLI, or when the shared 500 ms
+    /// throttle still holds; otherwise sends the PLI, counts it (<see cref="PlisSent"/>), and returns
+    /// <see langword="true"/> once the send completes. Thread-safe: may be called from any thread, concurrently
+    /// with the receive-loop loss path, and shares that path's throttle.
+    /// </summary>
+    /// <param name="remoteSsrc">
+    /// The media SSRC of the received video stream to name in the PLI (0 before the first inbound packet — a
+    /// lenient peer honours a PLI on its dedicated video RTCP channel regardless of the named media SSRC).
+    /// </param>
+    /// <param name="cancellationToken">Cancels the RTCP send; linked with the stream lifetime.</param>
+    /// <returns><see langword="true"/> when a PLI was sent; <see langword="false"/> on a no-op.</returns>
+    public async ValueTask<bool> RequestKeyFrameAsync(uint remoteSsrc, CancellationToken cancellationToken = default)
     {
-        var now = Stopwatch.GetTimestamp();
-        if (_lastPliSentTimestamp != long.MinValue && now - _lastPliSentTimestamp < PliThrottleTicks)
-            return;
+        if (!_remoteSupportsPli || !TryClaimPliSlot())
+            return false;
 
-        _lastPliSentTimestamp = now;
         Interlocked.Increment(ref _plisSent);
-        _ = SendAsync(new RtcpPictureLossIndication { SenderSsrc = _localSsrc, MediaSsrc = remoteSsrc }, "PLI");
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(_lifetime, cancellationToken);
+        await SendAsync(
+                new RtcpPictureLossIndication { SenderSsrc = _localSsrc, MediaSsrc = remoteSsrc }, "PLI", linked.Token)
+            .ConfigureAwait(false);
+        return true;
     }
 
-    private async Task SendAsync(RtcpPacket feedback, string kind)
+    private void RequestThrottledPli(uint remoteSsrc)
+    {
+        if (!TryClaimPliSlot())
+            return;
+
+        Interlocked.Increment(ref _plisSent);
+        _ = SendAsync(new RtcpPictureLossIndication { SenderSsrc = _localSsrc, MediaSsrc = remoteSsrc }, "PLI", _lifetime);
+    }
+
+    // Thread-safe 500 ms PLI throttle shared by the loss path (receive loop) and the app-driven request
+    // (any thread, RequestKeyFrameAsync): a lock-free CAS claim so a burst across both paths still sends at
+    // most one PLI per window. Exactly one caller claims a given window; the rest observe the live timestamp.
+    private bool TryClaimPliSlot()
+    {
+        var now = Stopwatch.GetTimestamp();
+        while (true)
+        {
+            var last = Interlocked.Read(ref _lastPliSentTimestamp);
+            if (last != long.MinValue && now - last < PliThrottleTicks)
+                return false;
+            if (Interlocked.CompareExchange(ref _lastPliSentTimestamp, now, last) == last)
+                return true;
+        }
+    }
+
+    private async Task SendAsync(RtcpPacket feedback, string kind, CancellationToken cancellationToken)
     {
         try
         {
-            await _sendControl(_codec.Encode([feedback]), _lifetime).ConfigureAwait(false);
+            await _sendControl(_codec.Encode([feedback]), cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {

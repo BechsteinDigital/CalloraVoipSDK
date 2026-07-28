@@ -422,6 +422,15 @@ internal sealed class BundledVideoTrack : IDisposable
         _keyFrameFeedback.OnRtcpPackets(packets);
     }
 
+    /// <summary>
+    /// Asks the peer for a fresh key frame on the app's demand (RFC 4585 §6.3.1) by sending a PLI naming the
+    /// received stream's media SSRC — for the receiving side when a new renderer or a decoder reset needs an
+    /// intra frame, independent of detected loss. A no-op returning <see langword="false"/> when the peer did
+    /// not advertise PLI or the shared 500 ms throttle still holds. Thread-safe; shares the loss path's throttle.
+    /// </summary>
+    public ValueTask<bool> RequestKeyFrameAsync(CancellationToken cancellationToken = default)
+        => _keyFrameFeedback.RequestKeyFrameAsync(_remoteMediaSsrc, cancellationToken);
+
     // Delivers one packet in sequence order to the depacketiser. A discontinuity is a gap the reorder
     // window could not fill: the frame under assembly is torn, so reset before feeding on.
     private void DeliverOrdered(RtpPacket packet)
