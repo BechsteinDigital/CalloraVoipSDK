@@ -129,7 +129,7 @@ public sealed class LinuxAudioDevice : IAudioDeviceProvider, IAudioDeviceRuntime
             _outboundPayloadType = parameters.PayloadType;
             _negotiatedPayloadType = parameters.PayloadType;
             _payloadTypeCodecMap = parameters.PayloadTypeCodecMap ?? EmptyPayloadTypeCodecMap;
-            _activeCodec = ResolveActiveCodec(
+            _activeCodec = AudioCodecResolver.ResolveActiveCodec(
                 parameters.PayloadType,
                 parameters.SampleRate,
                 parameters.CodecName,
@@ -446,9 +446,9 @@ public sealed class LinuxAudioDevice : IAudioDeviceProvider, IAudioDeviceRuntime
             outputVolume = _outputVolume;
         }
 
-        var playbackPcm = ConvertPcmSampleRate(
+        var playbackPcm = PcmSampleRateConverter.ConvertPcmSampleRate(
             decodedPcm,
-            GetCodecSampleRate(inboundCodec),
+            AudioCodecResolver.GetCodecSampleRate(inboundCodec),
             playbackSampleRate);
         var adjustedPlayback = PcmGain.ApplyInPlace(playbackPcm, outputMuted, outputVolume);
         _playbackQueue.Enqueue(adjustedPlayback);
@@ -536,8 +536,8 @@ public sealed class LinuxAudioDevice : IAudioDeviceProvider, IAudioDeviceRuntime
 
         var adjustedCapture = PcmGain.ApplyInPlace(pcm, inputMuted, inputVolume);
 
-        var outboundSampleRate = GetCodecSampleRate(outboundCodec);
-        var outboundPcm = ConvertPcmSampleRate(
+        var outboundSampleRate = AudioCodecResolver.GetCodecSampleRate(outboundCodec);
+        var outboundPcm = PcmSampleRateConverter.ConvertPcmSampleRate(
             adjustedCapture,
             captureSampleRate,
             outboundSampleRate);
@@ -839,32 +839,10 @@ public sealed class LinuxAudioDevice : IAudioDeviceProvider, IAudioDeviceRuntime
         }
     }
 
-    private static ActiveCodec ResolveActiveCodec(
-        int payloadType,
-        int sampleRate,
-        string codecName,
-        IReadOnlyDictionary<int, string> payloadTypeCodecMap)
-    {
-        if (MapCodecNameToActiveCodec(codecName) is { } named)
-            return named;
-
-        if (payloadTypeCodecMap.TryGetValue(payloadType, out var mapped)
-            && MapCodecNameToActiveCodec(mapped) is { } mappedCodec)
-        {
-            return mappedCodec;
-        }
-
-        if (payloadType == 9 || sampleRate >= 16000)
-            return ActiveCodec.G722;
-        if (payloadType == 8)
-            return ActiveCodec.Pcma;
-        return ActiveCodec.Pcmu;
-    }
-
     private bool TryResolveCodecFromMap(int payloadType, out ActiveCodec codec)
     {
         if (_payloadTypeCodecMap.TryGetValue(payloadType, out var codecName)
-            && MapCodecNameToActiveCodec(codecName) is { } mappedCodec)
+            && AudioCodecResolver.MapCodecNameToActiveCodec(codecName) is { } mappedCodec)
         {
             codec = mappedCodec;
             return true;
@@ -874,33 +852,11 @@ public sealed class LinuxAudioDevice : IAudioDeviceProvider, IAudioDeviceRuntime
         return false;
     }
 
-    private static ActiveCodec? MapCodecNameToActiveCodec(string? codecName)
-    {
-        if (string.IsNullOrWhiteSpace(codecName))
-            return null;
-
-        return codecName.Trim().ToUpperInvariant() switch
-        {
-            "G722" or "G.722" => ActiveCodec.G722,
-            "PCMA" or "A-LAW" or "A_LAW" => ActiveCodec.Pcma,
-            "PCMU" or "MU-LAW" or "MU_LAW" => ActiveCodec.Pcmu,
-            "OPUS" => ActiveCodec.Opus,
-            _ => null
-        };
-    }
-
-    private static int GetCodecSampleRate(ActiveCodec codec) => codec switch
-    {
-        ActiveCodec.Opus => OpusPayloadCodec.RtpClockRate, // 48 kHz
-        ActiveCodec.G722 => 16_000,
-        _ => 8_000
-    };
-
     private byte[] Decode(byte[] payload, ActiveCodec codec)
     {
         return codec switch
         {
-            ActiveCodec.G722 => DecodeG722(payload),
+            ActiveCodec.G722 => G722Frame.Decode(_g722DecodeCodec, _g722DecodeState, payload),
             ActiveCodec.Opus => _opusCodec?.Decode(payload) ?? Array.Empty<byte>(),
             ActiveCodec.Pcma => LinuxG711Codec.Decode(payload, payloadType: 8),
             _ => LinuxG711Codec.Decode(payload, payloadType: 0)
@@ -911,82 +867,15 @@ public sealed class LinuxAudioDevice : IAudioDeviceProvider, IAudioDeviceRuntime
     {
         return codec switch
         {
-            ActiveCodec.G722 => EncodeG722(pcm),
+            ActiveCodec.G722 => G722Frame.Encode(_g722EncodeCodec, _g722EncodeState, pcm),
             ActiveCodec.Pcma => LinuxG711Codec.Encode(pcm, payloadType: 8),
             _ => LinuxG711Codec.Encode(pcm, payloadType: 0)
         };
-    }
-
-    private byte[] EncodeG722(byte[] pcm)
-    {
-        var state = _g722EncodeState;
-        if (state is null)
-            return Array.Empty<byte>();
-
-        var sampleCount = pcm.Length / 2;
-        var samples = new short[sampleCount];
-        Buffer.BlockCopy(pcm, 0, samples, 0, pcm.Length);
-
-        var encoded = new byte[Math.Max(1, sampleCount / 2)];
-        _g722EncodeCodec.Encode(state, encoded, samples, sampleCount);
-        return encoded;
-    }
-
-    private byte[] DecodeG722(byte[] payload)
-    {
-        var state = _g722DecodeState;
-        if (state is null)
-            return Array.Empty<byte>();
-
-        var samples = new short[payload.Length * 2];
-        _g722DecodeCodec.Decode(state, samples, payload, payload.Length);
-
-        var pcm = new byte[samples.Length * 2];
-        Buffer.BlockCopy(samples, 0, pcm, 0, pcm.Length);
-        return pcm;
-    }
-
-    private static byte[] ConvertPcmSampleRate(byte[] pcm, int sourceSampleRate, int targetSampleRate)
-    {
-        if (pcm.Length == 0)
-            return pcm;
-        if (sourceSampleRate <= 0 || targetSampleRate <= 0)
-            return pcm;
-        if (sourceSampleRate == targetSampleRate)
-            return pcm;
-
-        var sourceSamples = pcm.Length / 2;
-        if (sourceSamples == 0)
-            return Array.Empty<byte>();
-
-        var targetSamples = Math.Max(
-            1,
-            (int)Math.Round(
-                sourceSamples * (double)targetSampleRate / sourceSampleRate,
-                MidpointRounding.AwayFromZero));
-
-        var converted = new byte[targetSamples * 2];
-        for (var i = 0; i < targetSamples; i++)
-        {
-            var sourceIndex = (int)Math.Min(sourceSamples - 1, (long)i * sourceSampleRate / targetSampleRate);
-            converted[i * 2] = pcm[sourceIndex * 2];
-            converted[i * 2 + 1] = pcm[sourceIndex * 2 + 1];
-        }
-
-        return converted;
     }
 
     private void ThrowIfDisposed()
     {
         if (_disposed)
             throw new ObjectDisposedException(nameof(LinuxAudioDevice));
-    }
-
-    private enum ActiveCodec
-    {
-        Pcmu,
-        Pcma,
-        G722,
-        Opus
     }
 }
