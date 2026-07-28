@@ -182,8 +182,16 @@ internal sealed class CallMediaOrchestrator : IDisposable
         // Take the RTCP socket the channel reserved as a pair with the media socket (non-mux path) so the
         // monitor binds a port it already owns, instead of a late bind that can race concurrent call setup.
         System.Net.Sockets.UdpClient? rtcpSocket = null;
-        if (!effectiveParameters.RtcpMux && channel is IRtcpSocketHandoff rtcpHandoff)
-            rtcpSocket = rtcpHandoff.TakeRtcpSocket();
+        if (channel is IRtcpSocketHandoff rtcpHandoff)
+        {
+            if (effectiveParameters.RtcpMux)
+                // rtcp-mux: RTCP shares the RTP port, so the reserved N+1 socket is never used. Release it
+                // now instead of leaving it bound in the channel until the call ends (one wasted UDP port
+                // per call at scale).
+                rtcpHandoff.TakeRtcpSocket()?.Dispose();
+            else
+                rtcpSocket = rtcpHandoff.TakeRtcpSocket();
+        }
 
         var qualityMonitor = new CallRtcpQualityMonitor(
             session, effectiveParameters, _loggerFactory, _rtcpPacketCodec, preBoundRtcpSocket: rtcpSocket);

@@ -6,11 +6,13 @@ namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
 /// <summary>
 /// Reserves a consecutive RTP/RTCP UDP port pair (even N for RTP, odd N+1 for RTCP — RFC 3550 §11)
 /// atomically and holds both bound sockets, so no other call can claim N+1 between SDP publication and
-/// the RTCP monitor start. The bound sockets are handed straight to the <c>RtpSession</c> and the RTCP
-/// monitor via <see cref="TakeRtpSocket"/>/<see cref="TakeRtcpSocket"/> — the reserved socket <em>is</em>
-/// the media socket, there is no release-and-rebind. That is what removes the port-ownership race: N+1 is
-/// never released, so nothing can grab it, and a port change after the SDP advertised N+1 would be too
-/// late anyway. This mirrors pjsip/SIPSorcery/baresip: wildcard bind, even RTP port, both-or-none retry.
+/// the RTCP monitor start. The reserved <b>RTCP</b> socket (N+1) is handed straight to the RTCP monitor
+/// via <see cref="TakeRtcpSocket"/> and used as-is — no release-and-rebind. That is what removes the
+/// port-ownership race: N+1 is never released, so nothing can grab it, and a port change after the SDP
+/// advertised N+1 would be too late anyway. The <b>RTP</b> socket (N) is reserved to lock the even/odd
+/// pair atomically and handed off via <see cref="TakeRtpSocket"/>, but the RTP media path retains its own
+/// bind lifecycle (release/rebind) rather than using the reserved socket unchanged. This mirrors
+/// pjsip/SIPSorcery/baresip: wildcard bind, even RTP port, both-or-none retry.
 /// </summary>
 internal sealed class MediaPortReservation : IDisposable
 {

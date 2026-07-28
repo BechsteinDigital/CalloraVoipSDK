@@ -227,7 +227,7 @@ public sealed class QosMetricsTests
         await using var monitorA = new CallRtcpQualityMonitor(
             new RecordingMediaSession(0xAA55), ParametersFor(portA), NullLoggerFactory.Instance,
             new RtcpPacketCodec(), interval);
-        monitorA.StartAsync();
+        await monitorA.StartAsync();
         Assert.False(monitorA.GetLatestSnapshot().RtcpActive);
 
         // The fix: the pair is reserved and the RTCP socket handed over. N+1 cannot be stolen, and the
@@ -238,11 +238,29 @@ public sealed class QosMetricsTests
         await using var monitorB = new CallRtcpQualityMonitor(
             new RecordingMediaSession(0xBB66), ParametersFor(portB), NullLoggerFactory.Instance,
             new RtcpPacketCodec(), interval, preBoundRtcpSocket: reservationB.TakeRtcpSocket());
-        monitorB.StartAsync();
+        await monitorB.StartAsync();
 
         for (var i = 0; i < 50 && !monitorB.GetLatestSnapshot().RtcpActive; i++)
             await Task.Delay(20);
         Assert.True(monitorB.GetLatestSnapshot().RtcpActive);
+    }
+
+    [Fact]
+    public async Task Disposing_the_monitor_before_start_releases_the_reserved_rtcp_port()
+    {
+        using var reservation = MediaPortReservation.Reserve(IPAddress.Loopback);
+        var rtcpPort = reservation.RtpPort + 1; // the reserved N+1 RTCP port
+        var monitor = new CallRtcpQualityMonitor(
+            new RecordingMediaSession(0xCC77), ParametersFor(reservation.RtpPort), NullLoggerFactory.Instance,
+            new RtcpPacketCodec(), preBoundRtcpSocket: reservation.TakeRtcpSocket());
+
+        // Dispose before StartAsync ever adopts the socket into _udp.
+        await monitor.DisposeAsync();
+
+        // The pre-bound RTCP socket must be closed deterministically so its reserved port is released.
+        // Before the fix it stayed bound until GC and this rebind would fail with SocketException.
+        using var rebind = new UdpClient(new IPEndPoint(IPAddress.Loopback, rtcpPort));
+        Assert.Equal(rtcpPort, ((IPEndPoint)rebind.Client.LocalEndPoint!).Port);
     }
 
     private static CallMediaParameters ParametersFor(int rtpPort) => new()
