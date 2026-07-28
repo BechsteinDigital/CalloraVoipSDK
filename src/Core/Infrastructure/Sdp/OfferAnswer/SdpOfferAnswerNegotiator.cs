@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using CalloraVoipSdk.Core.Infrastructure.Common.Network;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
@@ -30,112 +31,51 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
         ArgumentNullException.ThrowIfNull(codecs);
 
         var host = LocalEndPointHostResolver.ResolveHost(localEndPoint);
-        var fmtp = BuildFmtpForCodecs(codecs);
         var dtls = options?.Dtls;
         var ice = options?.Ice;
+        var bundle = options?.Bundle == true;
+        var rtcpMux = options?.RtcpMux == true;
+
+        // Multi-track offer (RFC 8843 BUNDLE): one m-line per supplied track with a numeric a=mid by index
+        // (0, 1, 2, …, mirroring libwebrtc/SIPSorcery) over one shared transport port. Chosen only when the
+        // caller supplies an explicit track list; the fixed single-audio path below stays byte-identical, so
+        // the SIP path and existing 1+1 WebRTC offers are unchanged.
+        if (options?.Tracks is { Count: > 0 } tracks)
+            return BuildMultiTrackOffer(tracks, localEndPoint, host, direction, bundle, rtcpMux, dtls, ice, options);
+
         var crypto = options?.Crypto ?? [];
 
         // Profile selection: DTLS wins (RFC 5763, UDP/TLS/RTP/SAVPF); otherwise SDES
         // a=crypto lines key an RTP/SAVP profile (RFC 4568); otherwise plain RTP/AVP.
-        var profile = dtls is not null
-            ? "UDP/TLS/RTP/SAVPF"
-            : crypto.Count > 0
-                ? "RTP/SAVP"
-                : "RTP/AVP";
+        var profile = ResolveOfferProfile(dtls, crypto.Count > 0);
 
         // Video (WebRTC phase 2): a second m-line when requested. SDES keying is per-m-line
         // (RFC 4568): the video m-line carries its own a=crypto (options.Video.Crypto), keyed
         // independently of audio, on the same secure profile.
         var offerVideo = options?.Video is not null;
 
-        // BUNDLE: session-level group + media-level mid
+        // BUNDLE: session-level group + media-level mid (the fixed path keeps the historic semantic mids).
         string? group = null;
         string? mid = null;
-        if (options?.Bundle == true)
+        if (bundle)
         {
             group = offerVideo ? "BUNDLE audio video" : "BUNDLE audio";
             mid = "audio";
         }
 
-        // The MID SDES header extension (RFC 9143 / RFC 8843 §9) rides every bundled m-line so the peer
-        // stamps each packet's MID on the shared transport. It must carry the SAME extmap id on every
-        // m-line — the demultiplexer reads one id — so offer it first on each so BuildOfferExtmaps
-        // assigns it the same id (1). Outside BUNDLE the extmaps are unchanged.
-        IReadOnlyList<string> BundledExtmapUris(IReadOnlyList<string> uris) =>
-            options?.Bundle == true ? [RtpHeaderExtensionUris.Mid, .. uris] : uris;
-
-        var media = new SdpMediaDescription
+        var mediaLines = new List<SdpMediaDescription>
         {
-            MediaType = "audio",
-            Port = localEndPoint.Port,
-            Profile = profile,
-            Direction = direction,
-            Codecs = codecs,
-            Fmtp = fmtp,
-            Mid = mid,
-            Msid = options?.AudioMsid,
-            Crypto = crypto,
-            Extensions = BuildOfferExtmaps(BundledExtmapUris([])),
-            RtcpMux = options?.RtcpMux == true,
-            IceUfrag = ice?.Ufrag,
-            IcePwd = ice?.Pwd,
-            IceOptions = ice?.Options,
-            Candidates = ice?.Candidates ?? [],
-            Fingerprint = dtls is not null
-                ? new SdpFingerprint { Algorithm = dtls.Algorithm, Value = dtls.Fingerprint }
-                : null,
-            DtlsSetup = dtls?.Setup
+            BuildAudioOfferMedia(
+                codecs, localEndPoint.Port, profile, direction, mid, options?.AudioMsid, crypto,
+                headerExtUris: [], bundle, rtcpMux, dtls, ice, ice?.Candidates ?? [])
         };
-
-        var mediaLines = new List<SdpMediaDescription> { media };
         if (offerVideo)
         {
             var video = options!.Video!;
-            // RTX repair streams (RFC 4588 §8.1): one rtx payload type per video codec,
-            // appended to the m-line with an apt fmtp binding it to the original.
-            var (rtxCodecs, rtxFmtp) = VideoCodecCatalog.BuildRtx(video.Codecs);
-
-            // Send-side simulcast (RFC 8853): one a=rid per layer (send) restricted to the primary codec's
-            // payload type, plus a=simulcast:send. The RID header extension (RFC 8852) is offered before
-            // the app's own extensions so it gets a low one-byte id alongside MID.
-            var simulcast = video.SimulcastSendRids;
-            var videoExtmapUris = simulcast.Count > 0
-                ? BundledExtmapUris([RtpHeaderExtensionUris.Rid, .. video.HeaderExtensionUris])
-                : BundledExtmapUris(video.HeaderExtensionUris);
-            var (rids, simulcastDeclaration) = BuildSimulcast(simulcast, video.Codecs);
-
-            mediaLines.Add(new SdpMediaDescription
-            {
-                MediaType = "video",
-                Port = video.Port,
-                Profile = profile,
-                Direction = direction,
-                Codecs = [.. video.Codecs, .. rtxCodecs],
-                Fmtp = [.. VideoCodecCatalog.BuildFmtp(video.Codecs), .. rtxFmtp],
-                RtcpFeedback = VideoCodecCatalog.StandardFeedback,
-                Mid = options.Bundle == true ? "video" : null,
-                Msid = options.VideoMsid,
-                RtcpMux = options.RtcpMux == true,
-                Crypto = video.Crypto,
-                // ICE (RFC 8839): advertise the session-shared ufrag/pwd on the video m-line so a
-                // peer applies ICE to the video 5-tuple (this SDK shares one credential set across
-                // m-lines — no BUNDLE). Per-m-line video candidates are a documented follow-up;
-                // the consent path derives the video 5-tuple from the m-line address/port.
-                IceUfrag = ice?.Ufrag,
-                IcePwd = ice?.Pwd,
-                IceOptions = ice?.Options,
-                Candidates = video.Candidates,
-                // RTP header extensions (RFC 8285 §5): the offer assigns one-byte ids to the
-                // supported URIs (the MID SDES extension first under BUNDLE, the RID extension next
-                // for simulcast, then transport-wide-cc, etc.) — MID keeps the same id as the audio m-line.
-                Extensions = BuildOfferExtmaps(videoExtmapUris),
-                Rids = rids,
-                Simulcast = simulcastDeclaration,
-                Fingerprint = dtls is not null
-                    ? new SdpFingerprint { Algorithm = dtls.Algorithm, Value = dtls.Fingerprint }
-                    : null,
-                DtlsSetup = dtls?.Setup
-            });
+            mediaLines.Add(BuildVideoOfferMedia(
+                video.Codecs, video.SimulcastSendRids, video.Port, profile, direction,
+                bundle ? "video" : null, options.VideoMsid, video.Crypto, video.HeaderExtensionUris,
+                bundle, rtcpMux, dtls, ice, video.Candidates));
         }
 
         return new SdpSessionDescription
@@ -147,6 +87,144 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             Media = mediaLines,
             SessionId = options?.SessionId ?? 0,
             SessionVersion = options?.SessionVersion ?? 0
+        };
+    }
+
+    // Builds a multi-track offer (RFC 8843 §7): one m-line per track, numeric a=mid by list index, all sharing
+    // the one bound transport port under BUNDLE. The group lists the mids in m-line order. Reuses the same
+    // per-m-line builders as the fixed path so a track's audio/video m-line is byte-for-byte the shape the 1+1
+    // path emits — only the mid (numeric) and the group differ.
+    private static SdpSessionDescription BuildMultiTrackOffer(
+        IReadOnlyList<SdpTrackOptions> tracks,
+        IPEndPoint localEndPoint,
+        string host,
+        SdpMediaDirection direction,
+        bool bundle,
+        bool rtcpMux,
+        SdpDtlsParameters? dtls,
+        SdpIceParameters? ice,
+        SdpMediaOptions options)
+    {
+        // One shared profile for every m-line (DTLS wins; else SDES if any track keys with a=crypto; else plain).
+        var profile = ResolveOfferProfile(dtls, tracks.Any(t => t.Crypto.Count > 0));
+        // All BUNDLE m-lines share the one bound transport port and the session ICE candidates (RFC 8843).
+        var sharedCandidates = ice?.Candidates ?? [];
+
+        var mediaLines = new List<SdpMediaDescription>(tracks.Count);
+        var mids = new List<string>(tracks.Count);
+        for (var index = 0; index < tracks.Count; index++)
+        {
+            var track = tracks[index];
+            var trackMid = index.ToString(CultureInfo.InvariantCulture);
+            mids.Add(trackMid);
+
+            mediaLines.Add(track.Kind.Equals("video", StringComparison.OrdinalIgnoreCase)
+                ? BuildVideoOfferMedia(
+                    track.Codecs, track.SimulcastSendRids, localEndPoint.Port, profile, direction,
+                    trackMid, track.Msid, track.Crypto, track.HeaderExtensionUris,
+                    bundle, rtcpMux, dtls, ice, sharedCandidates)
+                : BuildAudioOfferMedia(
+                    track.Codecs, localEndPoint.Port, profile, direction,
+                    trackMid, track.Msid, track.Crypto, track.HeaderExtensionUris,
+                    bundle, rtcpMux, dtls, ice, sharedCandidates));
+        }
+
+        return new SdpSessionDescription
+        {
+            OriginAddress = host,
+            ConnectionAddress = host,
+            SessionDirection = direction,
+            Group = bundle ? "BUNDLE " + string.Join(' ', mids) : null,
+            Media = mediaLines,
+            SessionId = options.SessionId,
+            SessionVersion = options.SessionVersion
+        };
+    }
+
+    // Profile selection shared by the fixed and multi-track offer paths: DTLS wins (RFC 5763,
+    // UDP/TLS/RTP/SAVPF); otherwise SDES a=crypto keys an RTP/SAVP profile (RFC 4568); otherwise plain RTP/AVP.
+    private static string ResolveOfferProfile(SdpDtlsParameters? dtls, bool hasSdesCrypto) =>
+        dtls is not null ? "UDP/TLS/RTP/SAVPF" : hasSdesCrypto ? "RTP/SAVP" : "RTP/AVP";
+
+    // The MID SDES header extension (RFC 9143 / RFC 8843 §9) rides every bundled m-line so the peer stamps
+    // each packet's MID on the shared transport. It carries the SAME extmap id on every m-line (the
+    // demultiplexer reads one id) — offered first so BuildOfferExtmaps assigns it id 1. Outside BUNDLE the
+    // extmaps are unchanged.
+    private static IReadOnlyList<string> BundledOfferExtmapUris(bool bundle, IReadOnlyList<string> uris) =>
+        bundle ? [RtpHeaderExtensionUris.Mid, .. uris] : uris;
+
+    // Builds one audio offer m-line: the given codecs plus telephone-event fmtp, per-m-line SDES crypto, the
+    // negotiated header extensions (MID first under BUNDLE), and the session-level DTLS/ICE. Shared by the
+    // fixed single-audio path and the multi-track path so both emit byte-identical audio m-lines.
+    private static SdpMediaDescription BuildAudioOfferMedia(
+        IReadOnlyList<SdpCodecDefinition> codecs, int port, string profile, SdpMediaDirection direction,
+        string? mid, SdpMsid? msid, IReadOnlyList<SdpCryptoAttribute> crypto, IReadOnlyList<string> headerExtUris,
+        bool bundle, bool rtcpMux, SdpDtlsParameters? dtls, SdpIceParameters? ice,
+        IReadOnlyList<SdpIceCandidate> candidates) =>
+        new()
+        {
+            MediaType = "audio",
+            Port = port,
+            Profile = profile,
+            Direction = direction,
+            Codecs = codecs,
+            Fmtp = BuildFmtpForCodecs(codecs),
+            Mid = mid,
+            Msid = msid,
+            Crypto = crypto,
+            Extensions = BuildOfferExtmaps(BundledOfferExtmapUris(bundle, headerExtUris)),
+            RtcpMux = rtcpMux,
+            IceUfrag = ice?.Ufrag,
+            IcePwd = ice?.Pwd,
+            IceOptions = ice?.Options,
+            Candidates = candidates,
+            Fingerprint = dtls is not null
+                ? new SdpFingerprint { Algorithm = dtls.Algorithm, Value = dtls.Fingerprint }
+                : null,
+            DtlsSetup = dtls?.Setup
+        };
+
+    // Builds one video offer m-line (WebRTC phase 2): codecs plus RTX repair streams (RFC 4588 §8.1),
+    // standard rtcp-fb, send-side simulcast rids (RFC 8853) with the RID header extension (RFC 8852) offered
+    // before the app's extensions (MID first under BUNDLE), and session-level DTLS/ICE. Shared by the fixed
+    // and multi-track paths.
+    private static SdpMediaDescription BuildVideoOfferMedia(
+        IReadOnlyList<SdpCodecDefinition> codecs, IReadOnlyList<string> simulcastSendRids, int port,
+        string profile, SdpMediaDirection direction, string? mid, SdpMsid? msid,
+        IReadOnlyList<SdpCryptoAttribute> crypto, IReadOnlyList<string> headerExtUris,
+        bool bundle, bool rtcpMux, SdpDtlsParameters? dtls, SdpIceParameters? ice,
+        IReadOnlyList<SdpIceCandidate> candidates)
+    {
+        var (rtxCodecs, rtxFmtp) = VideoCodecCatalog.BuildRtx(codecs);
+        var videoExtmapUris = simulcastSendRids.Count > 0
+            ? BundledOfferExtmapUris(bundle, [RtpHeaderExtensionUris.Rid, .. headerExtUris])
+            : BundledOfferExtmapUris(bundle, headerExtUris);
+        var (rids, simulcastDeclaration) = BuildSimulcast(simulcastSendRids, codecs);
+
+        return new SdpMediaDescription
+        {
+            MediaType = "video",
+            Port = port,
+            Profile = profile,
+            Direction = direction,
+            Codecs = [.. codecs, .. rtxCodecs],
+            Fmtp = [.. VideoCodecCatalog.BuildFmtp(codecs), .. rtxFmtp],
+            RtcpFeedback = VideoCodecCatalog.StandardFeedback,
+            Mid = mid,
+            Msid = msid,
+            RtcpMux = rtcpMux,
+            Crypto = crypto,
+            IceUfrag = ice?.Ufrag,
+            IcePwd = ice?.Pwd,
+            IceOptions = ice?.Options,
+            Candidates = candidates,
+            Extensions = BuildOfferExtmaps(videoExtmapUris),
+            Rids = rids,
+            Simulcast = simulcastDeclaration,
+            Fingerprint = dtls is not null
+                ? new SdpFingerprint { Algorithm = dtls.Algorithm, Value = dtls.Fingerprint }
+                : null,
+            DtlsSetup = dtls?.Setup
         };
     }
 
