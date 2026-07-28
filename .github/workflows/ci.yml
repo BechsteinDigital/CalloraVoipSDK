@@ -46,7 +46,7 @@ jobs:
         run: dotnet test tests/CalloraVoipSdk.ArchitectureTests/CalloraVoipSdk.ArchitectureTests.csproj --configuration Release --no-build --nologo --verbosity minimal
 
       - name: Test + Coverage (Non-Core)
-        run: dotnet test CalloraVoipSdk.sln --configuration Release --no-build --filter "Category!=SoakLong&Category!=Interop&Category!=InteropFreeSwitch&Category!=BrowserInterop&FullyQualifiedName!~ArchitectureTests" --collect:"XPlat Code Coverage" --results-directory ./TestResults --nologo --verbosity minimal
+        run: dotnet test CalloraVoipSdk.sln --configuration Release --no-build --filter "Category!=SoakLong&Category!=Interop&Category!=InteropFreeSwitch&Category!=BrowserInterop&Category!=Chaos&FullyQualifiedName!~ArchitectureTests" --collect:"XPlat Code Coverage" --results-directory ./TestResults --nologo --verbosity minimal
 
       - name: Upload Coverage Artifacts
         if: always()
@@ -85,6 +85,35 @@ jobs:
         # InteropFreeSwitch ausgeschlossen: FreeSWITCH-Matrix lokal-first (noch nicht im PR-CI-Gate,
         # bis über mehrere Läufe stabil) — läuft lokal grün gegen echtes FreeSWITCH.
         run: dotnet test tests/CalloraVoipSdk.InteropTests/CalloraVoipSdk.InteropTests.csproj --configuration Release --no-build -f net10.0 --filter "Category=Interop&Category!=InteropLocalMedia&Category!=InteropFreeSwitch" --nologo --verbosity minimal
+
+  chaos:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
+
+      - name: Restore
+        run: dotnet restore CalloraVoipSdk.sln
+
+      - name: Build
+        run: dotnet build CalloraVoipSdk.sln --configuration Release --no-restore
+
+      - name: Chaos / fault-injection gate (CORE-011)
+        # Fault-injection scenarios (transport loss, malformed/adversarial packets, signaling outage,
+        # resource churn under fault) assert graceful degradation + recovery + no leak. Own Linux job on every
+        # PR; the build-and-test job excludes Category=Chaos, so there is no double run. Socket-descriptor leak
+        # detection is Linux-only (the churn test guards the non-Linux sentinel).
+        run: dotnet test tests/CalloraVoipSdk.SoakTests/CalloraVoipSdk.SoakTests.csproj --configuration Release --no-build -f net10.0 --filter "Category=Chaos" --nologo --verbosity minimal
 
   browser-interop:
     runs-on: ubuntu-latest
