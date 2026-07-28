@@ -3,9 +3,12 @@ namespace CalloraVoipSdk.WebRtc;
 /// <summary>
 /// The WebRTC peer facade — the happy-path entry point for building signalling-neutral peer
 /// connections. Mirrors the SIP <c>IVoipClient</c>; the advanced peer-registry manager tier is added in a
-/// later slice (ADR-012).
+/// later slice (ADR-012). Disposing the client asynchronously closes every peer it still tracks. Peer
+/// teardown is inherently asynchronous (<see cref="IPeerConnection"/> is <see cref="IAsyncDisposable"/>),
+/// so the client is async-disposable only; a DI host disposes it on the async path (an <c>IHost</c>, or an
+/// explicit <c>await using</c> / <c>DisposeAsync</c> on a manually built provider).
 /// </summary>
-public interface IWebRtcClient
+public interface IWebRtcClient : IAsyncDisposable
 {
     /// <summary>
     /// Creates a new peer connection with the client's configured codecs, DTLS identity and local

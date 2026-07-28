@@ -2,9 +2,10 @@ namespace CalloraVoipSdk.WebRtc;
 
 /// <summary>
 /// A point-in-time statistics snapshot for a peer connection (the SDK's <c>getStats</c>). Transport
-/// counters, derived bitrates and the ICE state/selected pair are populated today; quality, video and
-/// congestion-control metrics are added in later slices and read <see langword="null"/> until then — a null
-/// value means "not yet measured", never a fabricated zero.
+/// counters, derived bitrates, RTCP-derived quality, video, congestion-control and the ICE state/selected
+/// pair are all populated. A nullable metric reads <see langword="null"/> when it has not yet been measured
+/// (for example no media session is active, the peer has not yet reported, or no inbound video has been
+/// received) — a null value means "not yet measured", never a fabricated zero.
 /// </summary>
 public sealed class WebRtcStats
 {
@@ -76,24 +77,27 @@ public sealed class WebRtcStats
     /// </summary>
     public IReadOnlyList<WebRtcMediaStreamStats> MediaStreams { get; init; } = [];
 
-    // ── Video — populated by a later slice ───────────────────────────────────────────
+    // ── Video ────────────────────────────────────────────────────────────────────────
 
-    /// <summary>Inbound frames per second, or <see langword="null"/> until video metrics are wired.</summary>
+    /// <summary>Inbound frames per second, or <see langword="null"/> until a media session is active.</summary>
     public double? FramesPerSecond { get; init; }
 
-    /// <summary>Frames dropped (e.g. by the reorder buffer), or <see langword="null"/> until video metrics are wired.</summary>
+    /// <summary>Frames dropped (e.g. by the reorder buffer), or <see langword="null"/> until a media session is active.</summary>
     public long? FramesDropped { get; init; }
 
-    /// <summary>Key frames received, or <see langword="null"/> until video metrics are wired.</summary>
+    /// <summary>Key frames received on inbound video, or <see langword="null"/> until a media session is active.</summary>
     public long? KeyFrames { get; init; }
 
-    /// <summary>Generic NACK feedback messages, or <see langword="null"/> until video feedback metrics are wired.</summary>
+    /// <summary>Generic NACK feedback messages sent, or <see langword="null"/> until a media session is active.</summary>
     public long? NackCount { get; init; }
 
-    /// <summary>Picture Loss Indication (PLI) messages, or <see langword="null"/> until video feedback metrics are wired.</summary>
+    /// <summary>Picture Loss Indication (PLI) messages sent, or <see langword="null"/> until a media session is active.</summary>
     public long? PliCount { get; init; }
 
-    /// <summary>Full Intra Request (FIR) messages, or <see langword="null"/> until video feedback metrics are wired.</summary>
+    /// <summary>
+    /// Full Intra Request (FIR) messages sent. Always <see langword="null"/>: the bundle honours an inbound
+    /// FIR as a keyframe request but never sends one itself, so this counter is never produced.
+    /// </summary>
     public long? FirCount { get; init; }
 
     // ── ICE ──────────────────────────────────────────────────────────────────────────
@@ -111,11 +115,12 @@ public sealed class WebRtcStats
     /// <summary>The selected remote candidate (the resolved remote media endpoint), or <see langword="null"/> before one is set.</summary>
     public string? SelectedRemoteCandidate { get; init; }
 
-    // ── Congestion control — populated by a later slice ──────────────────────────────
+    // ── Congestion control ───────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Estimated available outgoing bitrate in bits/second from congestion control, or
-    /// <see langword="null"/> until transport-cc is wired through the bundle.
+    /// Estimated available outgoing bitrate in bits/second from transport-cc congestion control, or
+    /// <see langword="null"/> until an estimate is available (no media session, or congestion control
+    /// inactive for this leg).
     /// </summary>
     public long? AvailableOutgoingBitrateBps { get; init; }
 }

@@ -64,7 +64,7 @@ public interface IVoipClient : IDisposable
     event EventHandler<CallStateChangedEventArgs>? CallStateChanged;
 
     /// <summary>Registers one line and waits for a terminal connect outcome.</summary>
-    [Obsolete("Use ConnectAsync(...) instead. RegisterAndWaitAsync(...) will be removed after v1.0.", false)]
+    [Obsolete("Use ConnectAsync(...) instead. RegisterAndWaitAsync(...) has been deprecated since v1.0 and is kept for backward compatibility; it may be removed in a future major release.", false)]
     Task<ConnectResult> RegisterAndWaitAsync(SipAccount account, ConnectOptions? options = null, CancellationToken ct = default);
 
     /// <summary>Registers one line and waits for a terminal connect outcome.</summary>

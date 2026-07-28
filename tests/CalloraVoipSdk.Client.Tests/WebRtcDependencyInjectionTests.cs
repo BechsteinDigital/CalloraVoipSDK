@@ -20,7 +20,9 @@ public sealed class WebRtcDependencyInjectionTests
         var services = new ServiceCollection();
         services.AddCalloraWebRtc();
 
-        using var provider = services.BuildServiceProvider();
+        // await using: the WebRtcClient singleton is async-disposable only, so the container is torn down
+        // on the async path.
+        await using var provider = services.BuildServiceProvider();
         var rtc = provider.GetRequiredService<IWebRtcClient>();
         await using var peer = rtc.CreatePeer();
 
@@ -36,7 +38,7 @@ public sealed class WebRtcDependencyInjectionTests
         var services = new ServiceCollection();
         services.AddCalloraWebRtc(options => options.AudioCodecs = ["PCMU"]);
 
-        using var provider = services.BuildServiceProvider();
+        await using var provider = services.BuildServiceProvider();
         var rtc = provider.GetRequiredService<IWebRtcClient>();
         await using var peer = rtc.CreatePeer();
 
@@ -52,7 +54,7 @@ public sealed class WebRtcDependencyInjectionTests
         var services = new ServiceCollection();
         services.AddCalloraWebRtc().WithVideo("VP8");
 
-        using var provider = services.BuildServiceProvider();
+        await using var provider = services.BuildServiceProvider();
         var rtc = provider.GetRequiredService<IWebRtcClient>();
         await using var peer = rtc.CreatePeer();
 
@@ -108,7 +110,7 @@ public sealed class WebRtcDependencyInjectionTests
             })
             .AddWebRtc();
 
-        using var provider = services.BuildServiceProvider();
+        await using var provider = services.BuildServiceProvider();
         using var voip = provider.GetRequiredService<IVoipClient>();
         var rtc = provider.GetRequiredService<IWebRtcClient>();
         await using var peer = rtc.CreatePeer();
@@ -118,12 +120,13 @@ public sealed class WebRtcDependencyInjectionTests
     }
 
     [Fact]
-    public void An_unknown_codec_configured_via_options_is_rejected()
+    public async Task An_unknown_codec_configured_via_options_is_rejected()
     {
         var services = new ServiceCollection();
         services.AddCalloraWebRtc(options => options.AudioCodecs = ["nope"]);
 
-        using var provider = services.BuildServiceProvider();
+        // await using: the resolved WebRtcClient singleton is async-disposable only.
+        await using var provider = services.BuildServiceProvider();
         var rtc = provider.GetRequiredService<IWebRtcClient>();
 
         Assert.Throws<ArgumentException>(() => rtc.CreatePeer());

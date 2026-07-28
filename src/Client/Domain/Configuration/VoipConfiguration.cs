@@ -34,7 +34,7 @@ public sealed class VoipConfiguration
     /// Legacy advanced dependency provider for replacing internal runtime services.
     /// Prefer <c>AddCalloraVoip(...)</c> with <see cref="DependencyInjection.CalloraBuilder"/> overrides.
     /// </summary>
-    [Obsolete("Use AddCalloraVoip(...)/CalloraBuilder overrides. VoipConfiguration.Services will be removed after v1.0.", false)]
+    [Obsolete("Use AddCalloraVoip(...)/CalloraBuilder overrides. VoipConfiguration.Services has been deprecated since v1.0 and is kept for backward compatibility; it may be removed in a future major release.", false)]
     public IServiceProvider? Services            { get; init; }
     /// <summary>
     /// Default media-encryption policy for calls; defaults to <see cref="SrtpPolicy.Optional"/>.

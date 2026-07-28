@@ -17,6 +17,10 @@ public sealed class AudioDeviceOptions
     /// <summary>G.711 = 8000 Hz. Must match negotiated codec.</summary>
     public int SampleRate { get; init; } = 8000;
 
-    /// <summary>Frames per PortAudio callback buffer. 160 = 20 ms @ 8 kHz.</summary>
-    public uint FramesPerBuffer { get; init; } = 160;
+    /// <summary>
+    /// Explicit override for the PortAudio callback buffer size, in frames. Leave at the default
+    /// <c>0</c> to derive a 20 ms buffer from the active sample rate (160 @ 8 kHz, 320 @ 16 kHz);
+    /// set a positive value to force a fixed buffer size regardless of sample rate.
+    /// </summary>
+    public uint FramesPerBuffer { get; init; }
 }

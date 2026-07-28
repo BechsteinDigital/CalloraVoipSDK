@@ -20,9 +20,16 @@ public sealed class AudioDeviceOptions
     /// </summary>
     public int SampleRate { get; init; } = 8000;
 
-    /// <summary>PCM bit depth. Standard: 16.</summary>
+    /// <summary>
+    /// PCM bit depth. Only 16-bit PCM is supported — the G.711/G.722 codecs and the capture/playback
+    /// path assume it — so this must be 16 (the default); any other value is rejected by the device
+    /// constructor.
+    /// </summary>
     public int BitsPerSample { get; init; } = 16;
 
-    /// <summary>Mono (1) or stereo (2). SIP audio is always mono.</summary>
+    /// <summary>
+    /// Channel count. SIP audio is always mono, so this must be 1 (the default); any other value is
+    /// rejected by the device constructor.
+    /// </summary>
     public int Channels { get; init; } = 1;
 }

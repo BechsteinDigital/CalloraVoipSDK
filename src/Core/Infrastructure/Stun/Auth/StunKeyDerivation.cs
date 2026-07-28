@@ -42,7 +42,12 @@ internal static class StunKeyDerivation
         ArgumentNullException.ThrowIfNull(password);
 
         var input = $"{username}:{realm}:{SasLPrep(password)}";
+        // CA5351 (weak crypto): MD5 is not a free algorithm choice here — RFC 5389 §10.2.3 defines the STUN
+        // long-term-credential key as exactly MD5(username ":" realm ":" SASLprep(password)). Using anything
+        // else would break interoperability with every conformant STUN/TURN server. Interop-mandated.
+#pragma warning disable CA5351
         return MD5.HashData(Encoding.UTF8.GetBytes(input));
+#pragma warning restore CA5351
     }
 
     /// <summary>

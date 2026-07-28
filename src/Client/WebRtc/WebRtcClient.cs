@@ -26,6 +26,7 @@ public sealed class WebRtcClient : IWebRtcClient
     private readonly ILoggerFactory _loggerFactory;
     private readonly WebRtcModuleRegistry _modules;
     private readonly PeerConnectionManager _peers = new();
+    private int _disposed;
 
     /// <summary>Creates a client with the given configuration, or all defaults when omitted.</summary>
     public WebRtcClient(WebRtcConfiguration? config = null) : this(config, services: null)
@@ -117,6 +118,41 @@ public sealed class WebRtcClient : IWebRtcClient
         var connection = new PeerConnection(peer, _loggerFactory.CreateLogger<PeerConnection>(), _peers.Untrack);
         _peers.Track(connection);
         return connection;
+    }
+
+    /// <summary>
+    /// Closes every peer connection still tracked by this client, then completes. Idempotent: a second call
+    /// is a no-op. Each peer untracks itself as it disposes, so no dead peer is left registered. A failure in
+    /// one peer's teardown does not prevent the others from being disposed; the first such error is rethrown.
+    /// </summary>
+    public async ValueTask DisposeAsync()
+    {
+        // Claim disposal atomically so concurrent DisposeAsync callers cannot double-drive the teardown.
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
+            return;
+        }
+
+        // Snapshot the live set; each DisposeAsync untracks the peer from the manager under its own lock,
+        // so iterating the snapshot is safe against that concurrent mutation.
+        Exception? firstFailure = null;
+        foreach (var peer in _peers.Active)
+        {
+            try
+            {
+                await peer.DisposeAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                // Keep closing the remaining peers even if one teardown faults; surface the first error.
+                firstFailure ??= ex;
+            }
+        }
+
+        if (firstFailure is not null)
+        {
+            throw firstFailure;
+        }
     }
 
     private static IReadOnlyList<SdpCodecDefinition> ResolveCodecs(

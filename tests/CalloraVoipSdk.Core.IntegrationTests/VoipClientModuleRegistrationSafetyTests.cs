@@ -1,4 +1,6 @@
 using System.Net;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using CalloraVoipSdk.DependencyInjection;
 using CalloraVoipSdk.Modules;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Transport;
@@ -13,6 +15,8 @@ namespace CalloraVoipSdk.Core.IntegrationTests;
 /// <summary>
 /// Pins the A2 follow-up: a module throwing during OnAttached must not leak
 /// already constructed runtime resources out of a failed VoipClient constructor.
+/// Issue #18.1 widens this to <em>any</em> mid-constructor failure — not only the last (module) step —
+/// so an early throw after the transport is built still disposes it.
 /// </summary>
 public sealed class VoipClientModuleRegistrationSafetyTests
 {
@@ -37,6 +41,41 @@ public sealed class VoipClientModuleRegistrationSafetyTests
         Assert.Equal("attach-boom", ex.Message);
         Assert.NotNull(factory.CreatedRuntime);
         Assert.True(factory.CreatedRuntime!.IsDisposed);
+    }
+
+    // #18.1: the DTLS-identity step runs after the transport is bound but well before module registration —
+    // the stage the pre-fix inner try/catch never covered. A non-ECDSA certificate makes DtlsCertificate.FromX509
+    // throw there, so the transport socket would leak unless the whole constructor is guarded. Asserting the
+    // transport was disposed pins that the guard now covers an early-stage failure, not just the module step.
+    [Fact]
+    public void Early_constructor_failure_after_transport_build_disposes_transport_runtime()
+    {
+        var factory = new RecordingTransportFactory();
+        using var rsaCertificate = CreateRsaCertificate(); // not ECDSA → FromX509 rejects it
+
+        var services = new ServiceCollection();
+        services.AddCalloraVoip(options =>
+        {
+            options.UserAgent = "CalloraVoipSdk.Core.IntegrationTests/1.0";
+            options.EnableAutomaticAudioDeviceSelection = false;
+            options.DtlsCertificate = rsaCertificate;
+        });
+        services.AddSingleton<ISipTransportFactory>(factory);
+
+        using var provider = services.BuildServiceProvider();
+
+        // FromX509 throws ArgumentException for a non-ECDSA certificate mid-constructor.
+        Assert.Throws<ArgumentException>(() => { _ = provider.GetRequiredService<IVoipClient>(); });
+
+        Assert.NotNull(factory.CreatedRuntime);
+        Assert.True(factory.CreatedRuntime!.IsDisposed);
+    }
+
+    private static X509Certificate2 CreateRsaCertificate()
+    {
+        using var rsa = RSA.Create(2048);
+        var request = new CertificateRequest("CN=callora-test-rsa", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        return request.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-5), DateTimeOffset.UtcNow.AddHours(1));
     }
 }
 

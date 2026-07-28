@@ -344,7 +344,12 @@ internal sealed class StunServer : IAsyncDisposable
                 && _options.ConnectionCapPolicy == StunConnectionCapPolicy.RejectNew
                 && !slotAcquired)
             {
+                // CA2016: Wait(0) is a non-blocking try-acquire — forwarding the accept-loop token would
+                // switch it to Wait(0, ct), which throws on an already-cancelled token instead of returning
+                // false, bypassing the connection-cap reject path below. The non-throwing poll is intended.
+#pragma warning disable CA2016
                 slotAcquired = _streamConnectionSlots.Wait(0);
+#pragma warning restore CA2016
                 if (!slotAcquired)
                 {
                     var remote = client.Client.RemoteEndPoint;

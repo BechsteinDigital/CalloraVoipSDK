@@ -22,6 +22,13 @@ public static class WebRtcPeerConnectionExtensions
     /// fixed, reachable media port is still recommended for NAT reachability without TURN. When
     /// <paramref name="signalling"/> also implements <see cref="IWebRtcTrickleSignaling"/>, local candidates
     /// (host + server-reflexive) trickle out and remote candidates are applied during negotiation (ADR-012).
+    /// <para>
+    /// Trickle contract: the remote-candidate pump is cancelled and awaited to completion before this method
+    /// returns. Your <see cref="IWebRtcTrickleSignaling.ReceiveCandidateAsync"/> implementation MUST honour the
+    /// supplied <see cref="CancellationToken"/> (return or throw <see cref="OperationCanceledException"/> when
+    /// it fires); a pump that blocks indefinitely on a token it ignores will hang <c>ConnectAsync</c> at
+    /// teardown. The SDK cancels correctly — it cannot force a non-cooperative channel to unblock.
+    /// </para>
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="peer"/> or <paramref name="signalling"/> is null.</exception>
     /// <exception cref="WebRtcConnectException">The connection failed or was closed during negotiation.</exception>
