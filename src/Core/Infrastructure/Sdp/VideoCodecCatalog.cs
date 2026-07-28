@@ -94,20 +94,34 @@ internal static class VideoCodecCatalog
     /// <summary>The SDP codec name of an RTX repair stream (RFC 4588 §8.1).</summary>
     public const string RtxCodecName = "rtx";
 
+    /// <summary>The highest valid RTP payload type — the field is 7-bit (RFC 3550 §5.1).</summary>
+    private const int MaxPayloadType = 127;
+
     /// <summary>
     /// Builds one RTX repair codec (RFC 4588 §8.1) per video codec for an offer:
     /// <c>a=rtpmap:&lt;pt&gt; rtx/90000</c> plus <c>a=fmtp:&lt;pt&gt; apt=&lt;origpt&gt;</c>.
-    /// RTX payload types are assigned above the highest video payload type.
+    /// RTX payload types are assigned above the highest video payload type, capped at the
+    /// 7-bit maximum (127, RFC 3550 §5.1): if no free payload type ≤127 remains for a codec,
+    /// RTX is omitted for it rather than emitting an out-of-range payload type.
     /// </summary>
     public static (IReadOnlyList<SdpCodecDefinition> RtxCodecs, IReadOnlyList<SdpFmtpAttribute> AptFmtp)
         BuildRtx(IReadOnlyList<SdpCodecDefinition> videoCodecs)
     {
+        // Payload types already claimed by the offered video codecs — never reuse them.
+        var used = new HashSet<int>(videoCodecs.Select(c => c.PayloadType));
         var nextPt = videoCodecs.Count == 0 ? 96 : videoCodecs.Max(c => c.PayloadType) + 1;
         var rtx = new List<SdpCodecDefinition>(videoCodecs.Count);
         var fmtp = new List<SdpFmtpAttribute>(videoCodecs.Count);
         foreach (var codec in videoCodecs)
         {
+            // Advance to the next free payload type ≤127; skip RTX for this codec when exhausted.
+            while (nextPt <= MaxPayloadType && used.Contains(nextPt))
+                nextPt++;
+            if (nextPt > MaxPayloadType)
+                continue;
+
             var pt = nextPt++;
+            used.Add(pt);
             rtx.Add(new SdpCodecDefinition { PayloadType = pt, Name = RtxCodecName, ClockRate = codec.ClockRate });
             fmtp.Add(new SdpFmtpAttribute { PayloadType = pt, Parameters = $"apt={codec.PayloadType}" });
         }

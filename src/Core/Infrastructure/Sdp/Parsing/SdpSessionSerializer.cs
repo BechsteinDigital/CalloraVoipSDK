@@ -72,9 +72,9 @@ internal sealed class SdpSessionSerializer : ISdpSessionSerializer
             !string.Equals(media.ConnectionAddress, sessionConnectionAddress, StringComparison.OrdinalIgnoreCase))
             sb.AppendLine($"c=IN {GetNetType(media.ConnectionAddress)} {media.ConnectionAddress}");
 
-        // Bandwidth (RFC 4566 §5.8)
-        if (media.Bandwidth.HasValue)
-            sb.AppendLine($"b=AS:{media.Bandwidth.Value}");
+        // Bandwidth (RFC 4566 §5.8) — re-serialize with the original type token (AS/TIAS/…)
+        if (media.Bandwidth is not null)
+            sb.AppendLine($"b={media.Bandwidth.Type}:{media.Bandwidth.Value}");
 
         // MID (RFC 5888)
         if (media.Mid is not null)

@@ -20,7 +20,9 @@ internal sealed class SdpSessionParser : ISdpSessionParser
             StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
         string originAddress = "127.0.0.1";
-        string connectionAddress = "127.0.0.1";
+        // No silent loopback default: a session with neither a session-level nor a media-level
+        // c= line has no destination and is rejected below (RFC 4566 §5.7), not sent to 127.0.0.1.
+        string? sessionConnectionAddress = null;
         var sessionDirection = SdpMediaDirection.SendRecv;
         string? sessionGroup = null;
         string? sessionIceUfrag = null;
@@ -28,6 +30,11 @@ internal sealed class SdpSessionParser : ISdpSessionParser
         string? sessionIceOptions = null;
         SdpFingerprint? sessionFingerprint = null;
         string? sessionDtlsSetup = null;
+
+        // RFC 4566 §5: v=, s= and t= are mandatory session-description lines.
+        var hasVersion = false;
+        var hasSessionName = false;
+        var hasTiming = false;
 
         var media = new List<SdpMediaDescription>();
         MediaBuilder? current = null;
@@ -42,6 +49,18 @@ internal sealed class SdpSessionParser : ISdpSessionParser
 
             switch (type)
             {
+                case 'v':
+                    hasVersion = true;
+                    break;
+
+                case 's':
+                    hasSessionName = true;
+                    break;
+
+                case 't':
+                    hasTiming = true;
+                    break;
+
                 case 'o':
                     originAddress = ParseAddressTail(value) ?? originAddress;
                     break;
@@ -51,7 +70,7 @@ internal sealed class SdpSessionParser : ISdpSessionParser
                     if (!string.IsNullOrWhiteSpace(addr))
                     {
                         if (current is null)
-                            connectionAddress = addr;
+                            sessionConnectionAddress = addr;
                         else
                             current.ConnectionAddress = addr;
                     }
@@ -64,7 +83,7 @@ internal sealed class SdpSessionParser : ISdpSessionParser
 
                 case 'm':
                     if (current is not null)
-                        media.Add(current.Build(sessionDirection, connectionAddress));
+                        media.Add(current.Build(sessionDirection));
                     current = ParseMediaLine(value);
                     break;
 
@@ -84,12 +103,23 @@ internal sealed class SdpSessionParser : ISdpSessionParser
         }
 
         if (current is not null)
-            media.Add(current.Build(sessionDirection, connectionAddress));
+            media.Add(current.Build(sessionDirection));
+
+        // RFC 4566 §5: reject an SDP missing a mandatory v=, s= or t= line rather than
+        // accepting a structurally invalid description.
+        if (!hasVersion || !hasSessionName || !hasTiming)
+            throw new FormatException("SDP is missing a mandatory v=, s= or t= line (RFC 4566 §5).");
+
+        // RFC 4566 §5.7: a connection address must be present at the session level or on every
+        // media section. Without any valid c=, the media has no destination — reject instead of
+        // silently defaulting to loopback (which would send media to 127.0.0.1).
+        if (sessionConnectionAddress is null && media.Any(m => m.ConnectionAddress is null))
+            throw new FormatException("SDP has no connection address (RFC 4566 §5.7).");
 
         return new SdpSessionDescription
         {
             OriginAddress = originAddress,
-            ConnectionAddress = connectionAddress,
+            ConnectionAddress = sessionConnectionAddress ?? string.Empty,
             SessionDirection = sessionDirection,
             Media = media,
             Group = sessionGroup,
@@ -363,17 +393,25 @@ internal sealed class SdpSessionParser : ISdpSessionParser
     }
 
     // -------------------------------------------------------------------------
-    // Bandwidth: b=AS:N  (RFC 4566 §5.8)
+    // Bandwidth: b=<bwtype>:<value>  (RFC 4566 §5.8, e.g. AS in kbit/s, TIAS in bit/s)
     // -------------------------------------------------------------------------
 
-    private static int? ParseBandwidth(string value)
+    private static SdpBandwidth? ParseBandwidth(string value)
     {
-        // value: "AS:64" or "TIAS:64000"
+        // value: "AS:64" or "TIAS:64000" — the type token must round-trip so AS (kbit/s) and
+        // TIAS (bit/s, RFC 3890) are not conflated (a factor-1000 error otherwise).
         var colonIndex = value.IndexOf(':');
         if (colonIndex <= 0)
             return null;
 
-        return int.TryParse(value[(colonIndex + 1)..].Trim(), out var kbps) ? kbps : null;
+        var type = value[..colonIndex].Trim();
+        if (type.Length == 0
+            || !int.TryParse(value[(colonIndex + 1)..].Trim(), out var bandwidth))
+        {
+            return null;
+        }
+
+        return new SdpBandwidth { Type = type, Value = bandwidth };
     }
 
     // -------------------------------------------------------------------------

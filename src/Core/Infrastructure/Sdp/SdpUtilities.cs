@@ -495,7 +495,11 @@ internal static class SdpUtilities
         if (rtcpPortFromSdp is > 0)
             return rtcpPortFromSdp.Value;
 
-        return checked(rtpPort + 1);
+        // RTCP defaults to RTP+1 (RFC 3550 §11). At the top of the UDP port range the +1 would
+        // overflow past 65535 — clamp to 65535 instead of throwing, which would otherwise let the
+        // surrounding catch discard the entire media negotiation for a single edge-case port.
+        const int maxUdpPort = 65535;
+        return rtpPort >= maxUdpPort ? maxUdpPort : rtpPort + 1;
     }
 
     private static bool IsValidPayloadType(int payloadType)
