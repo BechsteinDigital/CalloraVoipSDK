@@ -393,9 +393,9 @@ internal sealed class SipCoreCallChannel : ICallChannel, IRtcpSocketHandoff
     {
         var session = EnsureSession();
 
-        // A restart only makes sense once ICE was negotiated (RFC 8445 §9) — no agent or gathered
-        // description means there is nothing to restart; surface the misuse rather than re-INVITE without ICE.
-        if (_iceAgent is null || _localIceDescription is null)
+        // A restart needs ICE negotiated BILATERALLY (RFC 8445 §9). We gather locally on every outbound offer,
+        // so _localIceDescription alone is not proof — check the peer's SDP too (§5.4: no ice-ufrag = mismatch).
+        if (_iceAgent is null || _localIceDescription is null || !RemoteOfferHasIce(session.RemoteSdp))
             throw new InvalidOperationException(
                 "ICE restart requires an ICE-negotiated call; ICE was not established on this leg.");
 

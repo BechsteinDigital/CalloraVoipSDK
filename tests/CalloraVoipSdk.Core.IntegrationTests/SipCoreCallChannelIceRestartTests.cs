@@ -35,6 +35,19 @@ public sealed class SipCoreCallChannelIceRestartTests
         + "a=rtpmap:0 PCMU/8000\r\n"
         + "a=sendrecv\r\n";
 
+    // Peer answer that accepted ICE (carries ice-ufrag/ice-pwd) — a bilaterally ICE-negotiated call.
+    private static string IceAnswer(int mediaPort) =>
+        "v=0\r\n"
+        + "o=- 2 2 IN IP4 127.0.0.1\r\n"
+        + "s=peer\r\n"
+        + "c=IN IP4 127.0.0.1\r\n"
+        + "t=0 0\r\n"
+        + $"m=audio {mediaPort} RTP/AVP 0\r\n"
+        + "a=rtpmap:0 PCMU/8000\r\n"
+        + "a=ice-ufrag:peerfrag\r\n"
+        + "a=ice-pwd:peerpassword0000000000000000\r\n"
+        + "a=sendrecv\r\n";
+
     private static string? ExtractAttribute(string sdp, string attribute)
     {
         foreach (var line in sdp.Split("\r\n"))
@@ -59,7 +72,7 @@ public sealed class SipCoreCallChannelIceRestartTests
         Assert.NotNull(initialUfrag);
         Assert.NotNull(initialPwd);
 
-        var session = new RecordingReinviteSession(PlainAnswer(channel.LocalMediaPort));
+        var session = new RecordingReinviteSession(IceAnswer(channel.LocalMediaPort));
         channel.AttachSession(session);
 
         await channel.RestartIceAsync();
@@ -90,6 +103,23 @@ public sealed class SipCoreCallChannelIceRestartTests
     public async Task RestartIce_on_a_non_ice_call_is_rejected()
     {
         using var channel = CreateChannel(iceAgent: null);
+        var localEndPoint = new IPEndPoint(IPAddress.Loopback, channel.LocalMediaPort);
+        await channel.BuildOfferSdpAsync(localEndPoint, hold: false, CancellationToken.None);
+
+        var session = new RecordingReinviteSession(PlainAnswer(channel.LocalMediaPort));
+        channel.AttachSession(session);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => channel.RestartIceAsync());
+        Assert.Empty(session.ReinviteBodies);
+    }
+
+    [Fact]
+    public async Task RestartIce_when_the_peer_declined_ice_is_rejected()
+    {
+        // The SDK is ICE-capable and gathered locally (so _localIceDescription is populated), but the peer
+        // answered with plain RTP — no ICE was negotiated bilaterally (RFC 8445 §5.4). A restart must not
+        // send ICE credentials to a non-ICE peer.
+        using var channel = CreateChannel(new SequentialIceAgent());
         var localEndPoint = new IPEndPoint(IPAddress.Loopback, channel.LocalMediaPort);
         await channel.BuildOfferSdpAsync(localEndPoint, hold: false, CancellationToken.None);
 
