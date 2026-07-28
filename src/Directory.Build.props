@@ -3,8 +3,12 @@
     <!-- Fallback for local/dev builds; released packages get the version from the git tag via the
          release workflow (/p:Version=X.Y.Z), which drives PackageVersion, AssemblyVersion,
          FileVersion and InformationalVersion together. -->
-    <VersionPrefix>4.6.0</VersionPrefix>
-    <!-- Empty for a stable release. Pass -p:VersionSuffix=preview.1 for a prerelease build. -->
+    <VersionPrefix>4.7.0</VersionPrefix>
+    <!-- main tracks the 4.7 preview line: dev/local/CI builds are versioned 4.7.0-preview so no build off
+         main is ever mistaken for a stable release. The release workflow pins the real version by passing an
+         explicit -p:Version=X.Y.Z from the git tag (which wins over both conditions below); a specific
+         prerelease build can still pass -p:VersionSuffix=preview.N to override the default suffix. -->
+    <VersionSuffix Condition="'$(Version)' == '' and '$(VersionSuffix)' == ''">preview</VersionSuffix>
     <Version Condition="'$(Version)' == '' and '$(VersionSuffix)' != ''">$(VersionPrefix)-$(VersionSuffix)</Version>
     <Version Condition="'$(Version)' == ''">$(VersionPrefix)</Version>
     <Authors>Bechstein Digital</Authors>

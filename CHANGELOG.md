@@ -6,6 +6,25 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
 
 ## [Unreleased]
 
+The **`4.7.0-preview`** line. Every build off `main` is versioned `4.7.0-preview` (the stable version is
+pinned only by the release tag), so no build off `main` is mistaken for a stable release. The entries below
+accumulate the consumer-visible changes for 4.7.0.
+
+### Added
+
+#### WebRTC facade (`CalloraVoipSdk.WebRtc`)
+- **`IPeerConnection.RequestVideoKeyFrameAsync`** — the receiving side can now actively request a fresh video
+  key frame from the peer (RFC 4585 §6.3.1 PLI): for a newly attached renderer or a decoder reset, independent
+  of the existing automatic loss-driven feedback. A tolerant no-op when no BUNDLE session is negotiated, the
+  bundle has no video track, the peer did not advertise `nack pli`, or the built-in 500 ms throttle still
+  holds. Additive — the existing 1 audio + 1 video API is unchanged.
+
+### Internal / in progress (not yet consumer-visible)
+- **Multi-track SDP groundwork.** The shared SDP negotiator can now generate and answer *N* BUNDLE m-lines
+  with numeric mids (offer + answer). This is **internal only** — there is **no public multi-track API yet**,
+  and the media runtime is not wired for it. Per the claim-gating policy (ADR-006 §5), multi-track is **not**
+  announced as a feature until offer, answer, and the runtime work together end-to-end.
+
 ## [4.6.0] - 2026-07-28
 
 The 4.6 line adds a **WebRTC facade** and a **self-hostable STUN/TURN server** on top of the SIP + RTP
