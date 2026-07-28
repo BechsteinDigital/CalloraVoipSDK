@@ -69,9 +69,8 @@ internal sealed class SrtpKeyMaterial : IDisposable
 
         try
         {
-            var keyLength = suite is SrtpCryptoSuite.AesCm256HmacSha1_80 or SrtpCryptoSuite.AesCm256HmacSha1_32
-                ? 32 : 16;
-            const int saltLength = 14;
+            var keyLength = SrtpCryptoSuiteNames.KeyLength(suite);
+            var saltLength = SrtpCryptoSuiteNames.SaltLength(suite); // 14 for AES-CM, 12 for AEAD-GCM
 
             if (raw.Length < keyLength + saltLength)
                 throw new FormatException(

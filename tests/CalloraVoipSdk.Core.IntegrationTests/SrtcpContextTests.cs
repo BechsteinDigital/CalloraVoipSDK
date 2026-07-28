@@ -52,6 +52,38 @@ public sealed class SrtcpContextTests
         return packet;
     }
 
+    // ── AEAD-GCM SRTCP (RFC 7714 §9) ──────────────────────────────────────────────
+
+    [Fact]
+    public void ProtectRtcp_UnprotectRtcp_RoundTripsWithAeadGcm()
+    {
+        using var sender = new SrtcpContext(Material(20, SrtpCryptoSuite.AeadAes128Gcm));
+        using var receiver = new SrtcpContext(Material(20, SrtpCryptoSuite.AeadAes128Gcm));
+        var rtcp = Rtcp(ssrc: 0xDEADBEEF, payloadLength: 20);
+
+        var protectedPacket = sender.ProtectRtcp(rtcp);
+
+        // GCM layout: [8-byte header][ciphertext][16-byte tag][4-byte E|index] — tag before the trailer,
+        // unlike AES-CM's [..][E|index][10-byte tag].
+        Assert.Equal(rtcp.Length + 16 + 4, protectedPacket.Length);
+        // Header stays clear-text (AAD); the payload is encrypted.
+        Assert.Equal(rtcp[..8], protectedPacket[..8]);
+        Assert.NotEqual(rtcp[8..], protectedPacket[8..rtcp.Length]);
+
+        Assert.Equal(rtcp, receiver.UnprotectRtcp(protectedPacket));
+    }
+
+    [Fact]
+    public void UnprotectRtcp_RejectsTamperedAeadGcmPacket()
+    {
+        using var sender = new SrtcpContext(Material(21, SrtpCryptoSuite.AeadAes128Gcm));
+        using var receiver = new SrtcpContext(Material(21, SrtpCryptoSuite.AeadAes128Gcm));
+        var protectedPacket = sender.ProtectRtcp(Rtcp(0x11223344, 16));
+        protectedPacket[9] ^= 0xFF; // flip a byte inside the (authenticated) ciphertext
+
+        Assert.Throws<SrtpAuthenticationException>(() => receiver.UnprotectRtcp(protectedPacket));
+    }
+
     // ── KDF: independent known-answer for SRTCP labels 3/4/5 ──────────────────────
 
     [Fact]
