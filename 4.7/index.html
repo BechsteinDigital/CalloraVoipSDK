@@ -87,9 +87,11 @@ and intelligent decision logic.</p>
 <li>Fraud, spam and scam detection systems</li>
 </ul>
 <h2 id="current-status">Current Status</h2>
-<p>Latest release: <strong>v4.6.0</strong> on <a href="https://www.nuget.org/packages/CalloraVoipSdk">nuget.org</a> (this
-documentation). It adds the WebRTC facade, DTLS-SRTP with AEAD-AES-GCM, and a self-hostable
-STUN/TURN server on top of the stable SIP + RTP core.</p>
+<p>Latest release: <strong>v4.7.0</strong> on <a href="https://www.nuget.org/packages/CalloraVoipSdk">nuget.org</a> (this
+documentation). It builds multi-party / SFU enablement onto the WebRTC facade — multiple video and audio
+tracks over one BUNDLE with mid-call renegotiation, receive-side simulcast demux, and a per-peer
+send-bitrate recommendation — all additive and transport-only on top of the 4.6 WebRTC facade,
+DTLS-SRTP with AEAD-AES-GCM, self-hostable STUN/TURN server, and the stable SIP + RTP core.</p>
 <blockquote>
 <p><strong>How to read the status column.</strong> <em>Stable</em> = mature, covered by the RFC-oriented test suite and
 by automated interop, and the intended production surface. <em>Opt-in</em> = shipped and tested, but off
