@@ -112,6 +112,8 @@ public sealed class WebRtcSignalingTests
         public event EventHandler<string>? LocalIceCandidateDiscovered { add { } remove { } }
         public event EventHandler<DtmfTone>? DtmfReceived { add { } remove { } }
         public event EventHandler? VideoKeyFrameRequested { add { } remove { } }
+        public event EventHandler<BitrateRecommendation>? RecommendedBitrateChanged { add { } remove { } }
+        public long? RecommendedOutgoingBitrateBps => null;
 
         public string CreateOffer() { OfferCreated = true; return "OFFER"; }
         public IVideoTrack AddVideoTrack() => throw new NotSupportedException();

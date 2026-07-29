@@ -57,4 +57,20 @@ public sealed class WebRtcStatsTests
         Assert.Null(stats.AvailableOutgoingBitrateBps);  // no session / transport-cc not negotiated yet
         Assert.Empty(stats.MediaStreams);                // no session → no per-stream quality (CF-004f)
     }
+
+    [Fact]
+    public async Task Recommended_outgoing_bitrate_is_null_and_the_event_is_silent_before_a_session()
+    {
+        var rtc = new WebRtcClient();
+        await using var peer = rtc.CreatePeer();
+        var recommendations = new List<BitrateRecommendation>();
+        void OnRecommendation(object? sender, BitrateRecommendation r) => recommendations.Add(r);
+
+        // Subscribing/unsubscribing is safe before any session, and no transport-cc → the reactive recommendation
+        // never fires and the point-in-time property reads null (the SDK reports honest absence, not a fabricated 0).
+        peer.RecommendedBitrateChanged += OnRecommendation;
+        Assert.Null(peer.RecommendedOutgoingBitrateBps);
+        Assert.Empty(recommendations);
+        peer.RecommendedBitrateChanged -= OnRecommendation;
+    }
 }

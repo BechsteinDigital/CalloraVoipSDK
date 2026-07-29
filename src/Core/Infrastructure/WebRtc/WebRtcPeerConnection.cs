@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Sockets;
 using CalloraVoipSdk;
 using CalloraVoipSdk.Core.Application.Ports.Connectivity;
+using CalloraVoipSdk.Core.Domain.Calls;
 using CalloraVoipSdk.Core.Infrastructure.Common.Network;
 using CalloraVoipSdk.Core.Infrastructure.Dtls;
 using CalloraVoipSdk.Core.Infrastructure.Rtp;
@@ -95,10 +96,8 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     private UdpClient? _mediaSocket;
     private bool _socketHandedOver;
     private bool _started;
-    // The relay allocation gathered on the media socket (RFC 8656), retained so the relay coordinator can
-    // adopt it post-Start without re-allocating: the allocation is keyed to the socket's 5-tuple, which
-    // survives the hand-over to the transport. Holds the first successful allocation and its TURN server; _sync-guarded.
-    private (IPEndPoint ServerEndPoint, TurnAllocateResult Allocation)? _gatheredRelay;
+    // Owns the gathered TURN relay allocation (RFC 8656), retained for post-Start adoption; see the store.
+    private readonly WebRtcRelayAllocationStore _relayAllocation;
     // Trickle ICE (RFC 8838): receives remote candidates, buffering those that arrive before the session exists
     // and routing them to the check list on AttachSession, then routing later ones live. Parsing + mDNS live in
     // the collaborator (keeps this file under the size limit); it owns its own no-loss buffering gate.
@@ -110,6 +109,8 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     // connection-/signalling-state events; pure event fan-out (holds no state, takes no lock, extracted for the
     // size limit) — the peer keeps sole ownership of the _sync-guarded state.
     private readonly WebRtcSessionEventBridge _sessionEvents;
+    // Projects the session's transport-cc congestion signal (RFC 8888) onto this peer's public surface; see the relay.
+    private readonly WebRtcCongestionRelay _congestion;
 
     /// <summary>Raised when the connection state changes (RFC 8829 <c>connectionstatechange</c>).</summary>
     public event Action<WebRtcConnectionState>? ConnectionStateChanged;
@@ -169,6 +170,14 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     /// </summary>
     public event Action<string>? LocalIceCandidateDiscovered;
 
+    /// <summary>
+    /// Raised whenever the sender-side transport-wide congestion control (transport-cc / RFC 8888) revises the
+    /// recommended outbound bitrate for this peer, carrying the new bitrate (bits/second) and coarse network
+    /// quality. Silent when transport-cc was not negotiated. Reactive per feedback report; the app decides when
+    /// to act (the SDK does not throttle). Projected from the media session by <see cref="WebRtcCongestionRelay"/>.
+    /// </summary>
+    public event Action<long, NetworkQuality>? RecommendedBitrateChanged;
+
     public WebRtcPeerConnection(
         WebRtcPeerOptions options,
         ISdpOfferAnswerNegotiator negotiator,
@@ -197,6 +206,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
         _logger = loggerFactory.CreateLogger<WebRtcPeerConnection>();
         _renegotiator = new WebRtcRenegotiator(_loggerFactory);
+        _relayAllocation = new WebRtcRelayAllocationStore(_loggerFactory);
         // The config primary video count (0 or 1) is fixed for the peer's lifetime, so the added-track set can do
         // the numeric-MID arithmetic without re-reading _options; it captures it once here.
         _addedTracks = new WebRtcAddedTrackSet(_options.VideoTracks.Count);
@@ -205,6 +215,8 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         // is captured atomically (the event field may be reassigned between candidates).
         _candidateEmitter = new WebRtcLocalCandidateEmitter(() => LocalIceCandidateDiscovered, _logger);
         _sessionEvents = new WebRtcSessionEventBridge(_logger);
+        // Congestion projection reads the live session under _sync via the same snapshot discipline as the lease.
+        _congestion = new WebRtcCongestionRelay(() => { lock (_sync) { return _session; } });
         // The send-lease runner reads the live session under _sync via this snapshot delegate; the lock stays here.
         _sendLease = new WebRtcSendLease(_sendGate, () => { lock (_sync) { return _session; } });
     }
@@ -256,9 +268,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     /// is keyed to the media socket's 5-tuple, preserved across the hand-over to the transport.
     /// </summary>
     internal (IPEndPoint ServerEndPoint, TurnAllocateResult Allocation)? GatheredRelayAllocation
-    {
-        get { lock (_sync) { return _gatheredRelay; } }
-    }
+        => _relayAllocation.Snapshot;
 
     /// <summary>
     /// The remote peer's (primary) audio-track identity (a=msid, RFC 8830) from the applied remote description, or
@@ -316,6 +326,20 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     {
         lock (_sync) { return _session?.SnapshotStats(); }
     }
+
+    /// <summary>
+    /// Point-in-time recommended outbound bitrate (bits/second) and coarse network quality from transport-cc
+    /// (RFC 8888); each null before a session is built or when transport-cc was not negotiated. Reactive
+    /// counterpart: <see cref="RecommendedBitrateChanged"/>. Projected by <see cref="WebRtcCongestionRelay"/>.
+    /// </summary>
+    public long? RecommendedOutgoingBitrateBps => _congestion.RecommendedOutgoingBitrateBps;
+
+    /// <summary>
+    /// Point-in-time coarse outbound network quality from transport-cc (RFC 8888); null before a session is
+    /// built or when transport-cc was not negotiated. Reactive counterpart: <see cref="RecommendedBitrateChanged"/>.
+    /// Projected by <see cref="WebRtcCongestionRelay"/>.
+    /// </summary>
+    public NetworkQuality? OutgoingNetworkQuality => _congestion.OutgoingNetworkQuality;
 
     /// <summary>
     /// RTCP-derived outbound quality (round-trip time and the loss the peer reports on our media, RFC 3550
@@ -545,17 +569,10 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         // (the offerer gathers between CreateOffer and applying the answer; the answerer binds its socket here
         // and gathers afterwards, so its allocation is adopted later — a follow-up). The allocation lives on the
         // same socket the session's transport takes over, so the relay data path rides it.
-        (IPEndPoint ServerEndPoint, TurnAllocateResult Allocation)? gatheredRelay;
-        lock (_sync)
-            gatheredRelay = _gatheredRelay;
-        var relayIceBindingFactory = gatheredRelay is { } relay
-            ? WebRtcRelayBinding.CreateFactory(relay.ServerEndPoint, relay.Allocation, _loggerFactory)
-            : null;
-
         var session = WebRtcSessionFactory.TryCreate(
             remote, localModel, _options, _handshaker, _certificate, _loggerFactory, _mediaSocket,
             iceControlling: pendingOffer is not null,
-            relayIceBindingFactory: relayIceBindingFactory);
+            relayIceBindingFactory: _relayAllocation.BuildOfferFactory());
         if (session is null)
             _logger.LogWarning("The remote description did not negotiate a BUNDLE media session; no transport was built.");
 
@@ -832,42 +849,21 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         // the wire steps (each temporarily runs its own receive loop on the shared media socket, so they must
         // not overlap the transport's post-Start loop).
         var gatherer = new WebRtcCandidateGatherer(_stunProbe, _turnProbe, _logger);
+        // The relay store latches first-wins and adopts into an already-built (answerer) session; it reads the
+        // adopt target through this _sync-guarded session snapshot, so the peer keeps sole ownership of _session.
         await gatherer.GatherAsync(
-            _options.IceServers, local, socket, _candidateEmitter.Emit, OnRelayGathered, cancellationToken).ConfigureAwait(false);
-    }
-
-    // Retains the first successful TURN allocation for the relay coordinator to adopt post-Start; further
-    // successes do not replace the retained one. When THIS allocation is the one retained AND a media session
-    // already exists — the answerer, which built its session (direct-only, no gathered allocation yet) before
-    // gathering — adopt the relay candidate into it now. The offerer gathers before applying the answer, so its
-    // session does not exist yet here (adoptInto stays null) and wires the relay at construction from the
-    // options factory instead. Returns the raddr/rport base for the relay candidate: the mapped
-    // (server-reflexive) base the server reported, else the host base.
-    private IPEndPoint OnRelayGathered(IPEndPoint serverEndPoint, TurnAllocateResult allocation, IPEndPoint local)
-    {
-        BundledMediaSession? adoptInto = null;
-        lock (_sync)
-        {
-            if (_gatheredRelay is null)
-            {
-                _gatheredRelay = (serverEndPoint, allocation);
-                adoptInto = _session;
-            }
-        }
-
-        // Adopt outside the lock: AdoptRelay builds the TURN control stack and takes the ICE driver's own gate,
-        // and needs no _sync-guarded state of ours. AdoptRelay is idempotent, so a session that already wired
-        // a relay (it should not on the answerer, but defensively) is unaffected.
-        adoptInto?.AdoptRelay(WebRtcRelayBinding.CreateFactory(serverEndPoint, allocation, _loggerFactory));
-
-        return allocation.MappedEndPoint ?? local;
+            _options.IceServers, local, socket, _candidateEmitter.Emit,
+            (serverEndPoint, allocation, gatheredLocal) => _relayAllocation.OnGathered(
+                serverEndPoint, allocation, gatheredLocal, () => { lock (_sync) { return _session; } }),
+            cancellationToken).ConfigureAwait(false);
     }
 
     // Wires the built session's transport-lifecycle and inbound-media events onto this peer via the event bridge.
     // The peer supplies the raise delegates (null-conditional invoke of THIS peer's events); TransitionTo, which
     // owns the _sync-guarded connection state, stays here and is passed as a delegate.
     private void WireSession(BundledMediaSession session)
-        => _sessionEvents.WireSession(
+    {
+        _sessionEvents.WireSession(
             session,
             TransitionTo,
             payload => AudioReceived?.Invoke(payload),
@@ -877,6 +873,9 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             (mid, rid, frame, timestamp, isKeyFrame) => VideoLayerFrameReceived?.Invoke(mid, rid, frame, timestamp, isKeyFrame),
             () => VideoKeyFrameRequested?.Invoke(),
             (toneCode, durationMs) => DtmfReceived?.Invoke(toneCode, durationMs));
+        // Fan the session's transport-cc recommended-bitrate revisions onto the peer's reactive surface (4.7.0).
+        _congestion.WireSession(session, (bps, quality) => RecommendedBitrateChanged?.Invoke(bps, quality));
+    }
 
     // The SDP media options for the offer/answer, assembled by WebRtcSdpOptionsBuilder (extracted to keep this
     // file under the size limit): the 1+1 semantic-MID path when no track was added (byte-identical to pre-P2c),
