@@ -248,7 +248,7 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         }
 
         var router = new BundledTrackRouter(
-            BundledRtpDemultiplexerFactory.Create(options.MidExtensionId, payloadTypesByMid));
+            BundledRtpDemultiplexerFactory.Create(options.MidExtensionId, payloadTypesByMid, options.RidExtensionId));
         _router = router;
         router.RegisterTrack(options.Audio.Mid, RaiseAudioReceived);
 

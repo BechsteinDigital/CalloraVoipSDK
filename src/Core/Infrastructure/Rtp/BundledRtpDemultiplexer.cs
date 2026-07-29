@@ -22,12 +22,19 @@ namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
 internal sealed class BundledRtpDemultiplexer
 {
     private readonly byte _midExtensionId;
+    private readonly byte? _ridExtensionId;
 
     // Accepted m-line MIDs, used as a set (value byte is ignored). ConcurrentDictionary gives lock-free
     // ContainsKey reads on the receive hot path while AddKnownMid extends it via TryAdd (P3b).
     private readonly ConcurrentDictionary<string, byte> _knownMids;
     private readonly IReadOnlyDictionary<int, string> _payloadTypeToMid;
     private readonly ConcurrentDictionary<uint, string> _ssrcToMid = new();
+
+    // Learned SSRC→RID associations for recv-side simulcast (RFC 8853 / RFC 8852). Browsers stamp the RID
+    // header extension only on the first packets of each encoding, so — exactly like _ssrcToMid — the first
+    // sighting is latched and later RID-less packets on the same SSRC resolve from here. Lock-free reads on
+    // the receive loop. Populated only by TryResolveRid, which no dispatch path calls yet (4.7.0 slice 1).
+    private readonly ConcurrentDictionary<uint, string> _ssrcToRid = new();
 
     /// <summary>
     /// Creates the demultiplexer from the negotiated BUNDLE parameters.
@@ -41,12 +48,20 @@ internal sealed class BundledRtpDemultiplexer
     /// Payload types that unambiguously belong to exactly one m-line, mapped to that m-line's MID. The
     /// caller must exclude any payload type shared across m-lines — an ambiguous PT cannot demultiplex.
     /// </param>
+    /// <param name="ridExtensionId">
+    /// The negotiated one-byte <c>a=extmap</c> id for the RID header extension (RFC 8852
+    /// <c>sdes:rtp-stream-id</c>), or <see langword="null"/> when no simulcast encoding was negotiated.
+    /// Used only by <see cref="TryResolveRid(RtpPacket, out string)"/> to resolve a simulcast encoding's
+    /// <c>a=rid</c> within an m-line (RFC 8853) — orthogonal to the MID demux, which routes to the m-line.
+    /// </param>
     public BundledRtpDemultiplexer(
         byte midExtensionId,
         IReadOnlySet<string> knownMids,
-        IReadOnlyDictionary<int, string> payloadTypeToMid)
+        IReadOnlyDictionary<int, string> payloadTypeToMid,
+        byte? ridExtensionId = null)
     {
         _midExtensionId = midExtensionId;
+        _ridExtensionId = ridExtensionId;
         ArgumentNullException.ThrowIfNull(knownMids);
         _payloadTypeToMid = payloadTypeToMid ?? throw new ArgumentNullException(nameof(payloadTypeToMid));
 
@@ -143,6 +158,53 @@ internal sealed class BundledRtpDemultiplexer
         }
 
         mid = string.Empty;
+        return false;
+    }
+
+    /// <summary>
+    /// Resolves the RID (RFC 8852 <c>a=rid</c> stream id) of an inbound RTP packet within its m-line,
+    /// learning the SSRC→RID association on the way — the per-encoding counterpart to <see cref="TryResolveMid(RtpPacket, out string)"/>,
+    /// which routes to the m-line. Used for recv-side simulcast demultiplexing (RFC 8853): one sender emits
+    /// several video encodings under one MID, each with its own SSRC and RID.
+    ///
+    /// Semantics mirror <see cref="TryResolveMid(uint, int, RtpExtension?, out string)"/>: an already-latched
+    /// SSRC resolves from the learned table (the hot path — browsers stamp the RID extension only on the
+    /// first packets of an encoding, then omit it); otherwise the RID header extension latches the SSRC on
+    /// first sighting. Returns <see langword="false"/> when no RID extension was negotiated
+    /// (<c>ridExtensionId</c> is <see langword="null"/>), or the packet carries no RID and its SSRC has not
+    /// been latched yet.
+    ///
+    /// This is exposed for a later slice to route simulcast layers; no dispatch path calls it yet, so the
+    /// method is behaviour-neutral — it does not change how any packet is currently demultiplexed.
+    /// </summary>
+    public bool TryResolveRid(RtpPacket packet, out string rid)
+    {
+        ArgumentNullException.ThrowIfNull(packet);
+        return TryResolveRid(packet.Ssrc, packet.HeaderExtension, out rid);
+    }
+
+    /// <summary>
+    /// Resolves the RID from the demux keys directly (SSRC, header extension). The granular form used by
+    /// <see cref="TryResolveRid(RtpPacket, out string)"/> and testable in isolation.
+    /// </summary>
+    public bool TryResolveRid(uint ssrc, RtpExtension? headerExtension, out string rid)
+    {
+        // 1. Already latched: the stable hot path (the RID extension is absent on most packets of a stream).
+        if (_ssrcToRid.TryGetValue(ssrc, out var associated))
+        {
+            rid = associated;
+            return true;
+        }
+
+        // 2. RID header extension (RFC 8852): latch the SSRC to the advertised encoding id on first sighting.
+        if (_ridExtensionId is { } ridId
+            && RtpRidHeaderExtension.TryRead(headerExtension, ridId, out var readRid))
+        {
+            rid = _ssrcToRid.GetOrAdd(ssrc, readRid);
+            return true;
+        }
+
+        rid = string.Empty;
         return false;
     }
 }
