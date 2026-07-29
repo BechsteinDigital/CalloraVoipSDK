@@ -7,12 +7,13 @@ namespace CalloraVoipSdk.WebRtc;
 public readonly struct EncodedFrame
 {
     /// <summary>Creates an encoded frame.</summary>
-    public EncodedFrame(ReadOnlyMemory<byte> payload, uint? rtpTimestamp, bool isKeyFrame, long? presentationTimeUsec)
+    public EncodedFrame(ReadOnlyMemory<byte> payload, uint? rtpTimestamp, bool isKeyFrame, long? presentationTimeUsec, string? rid = null)
     {
         Payload = payload;
         RtpTimestamp = rtpTimestamp;
         IsKeyFrame = isKeyFrame;
         PresentationTimeUsec = presentationTimeUsec;
+        Rid = rid;
     }
 
     /// <summary>The encoded codec payload. Valid for the duration of the <see cref="RemoteTrack.FrameReceived"/> callback.</summary>
@@ -32,4 +33,11 @@ public readonly struct EncodedFrame
     /// <see langword="null"/> until the RTCP-SR RTP↔NTP mapping lands (ADR-012 deferred item).
     /// </summary>
     public long? PresentationTimeUsec { get; }
+
+    /// <summary>
+    /// The frame's <c>a=rid</c> simulcast encoding id (RFC 8852) for receive-side simulcast-layer
+    /// discrimination / SFU forwarding; <see langword="null"/> for the non-simulcast/primary (RID-less)
+    /// stream and for audio.
+    /// </summary>
+    public string? Rid { get; }
 }

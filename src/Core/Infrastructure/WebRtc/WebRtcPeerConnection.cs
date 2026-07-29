@@ -97,8 +97,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     private bool _started;
     // The relay allocation gathered on the media socket (RFC 8656), retained so the relay coordinator can
     // adopt it post-Start without re-allocating: the allocation is keyed to the socket's 5-tuple, which
-    // survives the hand-over to the transport. Holds the first successful allocation and its TURN server.
-    // Guarded by _sync.
+    // survives the hand-over to the transport. Holds the first successful allocation and its TURN server; _sync-guarded.
     private (IPEndPoint ServerEndPoint, TurnAllocateResult Allocation)? _gatheredRelay;
     // Trickle ICE (RFC 8838): receives remote candidates, buffering those that arrive before the session exists
     // and routing them to the check list on AttachSession, then routing later ones live. Parsing + mDNS live in
@@ -108,30 +107,28 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     // isolating a throwing app callback from the media core (extracted to keep this file under the size limit).
     private readonly WebRtcLocalCandidateEmitter _candidateEmitter;
     // Bridges a built session's transport-lifecycle/inbound-media events onto this peer's surface and fires the
-    // connection-/signalling-state events; pure event fan-out, holds no state and takes no lock (extracted to
-    // keep this file under the size limit). The peer keeps sole ownership of the _sync-guarded state.
+    // connection-/signalling-state events; pure event fan-out (holds no state, takes no lock, extracted for the
+    // size limit) — the peer keeps sole ownership of the _sync-guarded state.
     private readonly WebRtcSessionEventBridge _sessionEvents;
 
     /// <summary>Raised when the connection state changes (RFC 8829 <c>connectionstatechange</c>).</summary>
     public event Action<WebRtcConnectionState>? ConnectionStateChanged;
 
     /// <summary>
-    /// Raised when the RFC 8829 §4.1.3 signalling state changes (the W3C <c>signalingstatechange</c>).
-    /// The answerer fires twice within one <see cref="SetRemoteDescriptionAsync"/> — HaveRemoteOffer then
-    /// back to Stable — as it applies the offer and produces the answer.
+    /// Raised when the RFC 8829 §4.1.3 signalling state changes (W3C <c>signalingstatechange</c>). The answerer
+    /// fires twice within one <see cref="SetRemoteDescriptionAsync"/> — HaveRemoteOffer then back to Stable.
     /// </summary>
     public event Action<WebRtcSignalingState>? SignalingStateChanged;
 
     /// <summary>
-    /// Raised with each inbound audio RTP payload on the <em>primary</em> audio track (the app owns the codec —
-    /// transport-only). Never fires for an additional audio m-line — use <see cref="AudioTrackFrameReceived"/> for those.
+    /// Raised per inbound audio RTP payload on the <em>primary</em> audio track (transport-only; the app owns the
+    /// codec). Never fires for an additional audio m-line — use <see cref="AudioTrackFrameReceived"/> for those.
     /// </summary>
     public event Action<byte[]>? AudioReceived;
 
     /// <summary>
-    /// Raised with each inbound audio RTP payload tagged with its track MID (4.7.0: N remote audio tracks — the SFU
-    /// pattern of one audio stream per remote participant). Fires only for the additional tracks, never for the
-    /// primary (which stays on the mid-less <see cref="AudioReceived"/>).
+    /// Raised per inbound audio RTP payload tagged with its track MID (4.7.0: N remote audio tracks). Fires only
+    /// for the additional tracks, never the primary (which stays on the mid-less <see cref="AudioReceived"/>).
     /// </summary>
     public event Action<string, byte[]>? AudioTrackFrameReceived;
 
@@ -139,11 +136,18 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     public event Action<byte[], uint, bool>? VideoFrameReceived;
 
     /// <summary>
-    /// Raised with each reassembled inbound video frame tagged with its track MID (P2c: N remote video
-    /// tracks) — MID, frame, RTP timestamp, is-key-frame. Lets the receiver route a frame to the right
-    /// <see cref="WebRtc.RemoteTrack"/> when several remote video m-lines share the bundle.
+    /// Raised per reassembled inbound video frame tagged with its track MID (P2c) — MID, frame, RTP timestamp,
+    /// is-key-frame — so the receiver routes a frame to the right <see cref="WebRtc.RemoteTrack"/> when several
+    /// remote video m-lines share the bundle.
     /// </summary>
     public event Action<string, byte[], uint, bool>? VideoTrackFrameReceived;
+
+    /// <summary>
+    /// Raised per reassembled inbound simulcast-layer frame (4.7.0, RFC 8853/8852) — MID, the layer's
+    /// <c>a=rid</c>, frame, RTP timestamp, is-key-frame — the recv-side simulcast / SFU-forwarding surface. Fires
+    /// <em>only</em> for RID-tagged layers, never the primary RID-less stream (on <see cref="VideoTrackFrameReceived"/>).
+    /// </summary>
+    public event Action<string, string, byte[], uint, bool>? VideoLayerFrameReceived;
 
     /// <summary>
     /// Raised when the peer requests a key frame via an inbound PLI/FIR (RFC 4585/5104); the app should
@@ -152,18 +156,16 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     public event Action? VideoKeyFrameRequested;
 
     /// <summary>
-    /// Raised once per fully received inbound DTMF tone (RFC 4733 telephone-event), carrying the tone code
-    /// (0–15) and the tone duration in milliseconds. Telephone-event packets are consumed here and never
-    /// surfaced as audio on <see cref="AudioReceived"/>.
+    /// Raised once per fully received inbound DTMF tone (RFC 4733 telephone-event) with the tone code (0–15) and
+    /// duration in milliseconds. Telephone-event packets are consumed here, never surfaced on <see cref="AudioReceived"/>.
     /// </summary>
     public event Action<byte, int>? DtmfReceived;
 
     /// <summary>
     /// Raised as each local ICE candidate is gathered (RFC 8838 trickle), carrying the RFC 8829
-    /// <c>candidate:</c> line so the app can signal it out-of-band. The host candidate (the early-bound
-    /// media endpoint) is emitted right after the offer/answer is produced; server-reflexive candidates
-    /// follow from <see cref="GatherCandidatesAsync"/> when STUN servers are configured, and relay (TURN)
-    /// candidates when a UDP TURN server is configured and its allocation on the media socket succeeds.
+    /// <c>candidate:</c> line so the app can signal it out-of-band: the host candidate right after the
+    /// offer/answer, then server-reflexive and relay candidates from <see cref="GatherCandidatesAsync"/> when
+    /// STUN / UDP TURN servers are configured.
     /// </summary>
     public event Action<string>? LocalIceCandidateDiscovered;
 
@@ -861,10 +863,9 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         return allocation.MappedEndPoint ?? local;
     }
 
-    // Wires the built session's transport-lifecycle and inbound-media events onto this peer via the event
-    // bridge. The peer supplies the raise delegates so each event still invokes THIS peer's public events with
-    // the exact null-conditional snapshot-and-invoke semantics; TransitionTo (which owns the _sync-guarded
-    // connection state) stays here and is passed as a delegate.
+    // Wires the built session's transport-lifecycle and inbound-media events onto this peer via the event bridge.
+    // The peer supplies the raise delegates (null-conditional invoke of THIS peer's events); TransitionTo, which
+    // owns the _sync-guarded connection state, stays here and is passed as a delegate.
     private void WireSession(BundledMediaSession session)
         => _sessionEvents.WireSession(
             session,
@@ -873,6 +874,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             (mid, payload) => AudioTrackFrameReceived?.Invoke(mid, payload),
             (frame, timestamp, isKeyFrame) => VideoFrameReceived?.Invoke(frame, timestamp, isKeyFrame),
             (mid, frame, timestamp, isKeyFrame) => VideoTrackFrameReceived?.Invoke(mid, frame, timestamp, isKeyFrame),
+            (mid, rid, frame, timestamp, isKeyFrame) => VideoLayerFrameReceived?.Invoke(mid, rid, frame, timestamp, isKeyFrame),
             () => VideoKeyFrameRequested?.Invoke(),
             (toneCode, durationMs) => DtmfReceived?.Invoke(toneCode, durationMs));
 

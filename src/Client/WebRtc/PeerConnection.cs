@@ -67,6 +67,10 @@ internal sealed class PeerConnection : IPeerConnection
         // subscribing to both would double-deliver the primary track's frames. The MID-tagged path covers the
         // 1+1 case (one MID) and the N case (one per m-line) with a single subscription.
         _peer.VideoTrackFrameReceived += OnVideoTrackReceived;
+        // Inbound simulcast layers (4.7.0, RFC 8853) arrive per (mid, rid) on VideoLayerFrameReceived; the peer
+        // fires it ONLY for RID-tagged layers (the primary RID-less stream stays on VideoTrackFrameReceived), so
+        // subscribing to both delivers each frame exactly once — no double-delivery.
+        _peer.VideoLayerFrameReceived += OnVideoLayerReceived;
         _peer.LocalIceCandidateDiscovered += OnLocalIceCandidate;
         _peer.DtmfReceived += OnDtmfReceived;
         _peer.VideoKeyFrameRequested += OnVideoKeyFrameRequested;
@@ -360,6 +364,7 @@ internal sealed class PeerConnection : IPeerConnection
         _peer.AudioReceived -= OnAudioReceived;
         _peer.AudioTrackFrameReceived -= OnAudioTrackReceived;
         _peer.VideoTrackFrameReceived -= OnVideoTrackReceived;
+        _peer.VideoLayerFrameReceived -= OnVideoLayerReceived;
         _peer.LocalIceCandidateDiscovered -= OnLocalIceCandidate;
         _peer.DtmfReceived -= OnDtmfReceived;
         _peer.VideoKeyFrameRequested -= OnVideoKeyFrameRequested;
@@ -468,12 +473,26 @@ internal sealed class PeerConnection : IPeerConnection
     // double-delivery the untagged event would cause on the primary.
     private void OnVideoTrackReceived(string mid, byte[] frame, uint rtpTimestamp, bool isKeyFrame)
     {
-        // Inbound RID demux is a later slice; the layer is not yet distinguished on the receive path.
+        // The primary / RID-less stream: no simulcast layer to distinguish (RID-tagged layers arrive on the
+        // separate VideoLayerFrameReceived path). After the recv-side simulcast wiring this fires only for
+        // the non-simulcast frames, so frame.Rid is always null here.
         _taps.Video(MediaDirection.Inbound, frame, rtpTimestamp, isKeyFrame, rid: null);
         // The remote m-line's msid for this MID (for stream grouping); null when the remote advertised none.
         var msid = _peer.RemoteVideoTracks.FirstOrDefault(t => string.Equals(t.Mid, mid, StringComparison.Ordinal))?.Msid
             ?? _peer.RemoteVideoMsid;
-        _tracks.DeliverVideoFrame(mid, StreamId(msid), msid?.TrackId, new EncodedFrame(frame, rtpTimestamp, isKeyFrame, presentationTimeUsec: null));
+        _tracks.DeliverVideoFrame(mid, StreamId(msid), msid?.TrackId, new EncodedFrame(frame, rtpTimestamp, isKeyFrame, presentationTimeUsec: null, rid: null));
+    }
+
+    // Mid-tagged inbound simulcast layer (4.7.0, RFC 8853): the demultiplexed encoding lands on the SAME mid
+    // RemoteTrack as the primary stream — each frame is distinguished per EncodedFrame.Rid (an SFU reads
+    // frame.Rid to forward the right layer). There is no per-rid RemoteTrack identity: one RemoteTrack per mid.
+    private void OnVideoLayerReceived(string mid, string rid, byte[] frame, uint rtpTimestamp, bool isKeyFrame)
+    {
+        _taps.Video(MediaDirection.Inbound, frame, rtpTimestamp, isKeyFrame, rid: rid);
+        // The remote m-line's msid for this MID (for stream grouping); null when the remote advertised none.
+        var msid = _peer.RemoteVideoTracks.FirstOrDefault(t => string.Equals(t.Mid, mid, StringComparison.Ordinal))?.Msid
+            ?? _peer.RemoteVideoMsid;
+        _tracks.DeliverVideoFrame(mid, StreamId(msid), msid?.TrackId, new EncodedFrame(frame, rtpTimestamp, isKeyFrame, presentationTimeUsec: null, rid: rid));
     }
 
     // RFC 8830: a stream id of "-" means the track belongs to no MediaStream.

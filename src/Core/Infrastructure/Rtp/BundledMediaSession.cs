@@ -101,6 +101,11 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     // so control-plane mutations stay serialised against each other; extracted to keep this file under the size limit.
     private readonly BundledMediaSessionTrackMutation _trackMutation;
 
+    // Inbound-media event wiring collaborator (per-video-track frame/key-frame subscriptions + the guarded
+    // additional-audio raise), extracted to keep this file under the size limit (R3). The session's inbound events
+    // stay on the session; this holds only the subscription plumbing both the ctor loop and AddVideoTrack share.
+    private readonly BundledMediaSessionInboundEventWiring _inboundEventWiring;
+
     // Every outbound SSRC live on the bundle right now (RFC 3550 §8.1): seeded from the ctor tracks, extended on
     // AddVideoTrack and pruned on SetVideoTrackInactive under _trackMutationGate, so OutboundSsrcs always reflects
     // the SSRCs in use — the seed a renegotiator allocates a new track's SSRCs against. MID-keyed internally so a
@@ -227,6 +232,16 @@ internal sealed class BundledMediaSession : IAsyncDisposable
             options.Audio.TelephoneEventPayloadType is >= 0 and <= 127 ? options.Audio.TelephoneEventPayloadType : null;
         _telephoneEventClockRate = options.Audio.TelephoneEventClockRate > 0 ? options.Audio.TelephoneEventClockRate : 8000;
         _logger = loggerFactory.CreateLogger<BundledMediaSession>();
+        // Inbound-media event wiring (per-video-track frame/key-frame subscriptions + guarded additional-audio raise)
+        // lives in a collaborator to keep this file under the size limit (R3); the events stay on this session (they
+        // can only be invoked from here), so it is handed thin raise delegates that null-conditionally invoke each.
+        _inboundEventWiring = new BundledMediaSessionInboundEventWiring(
+            (frame, timestamp, isKeyFrame) => VideoFrameReceived?.Invoke(frame, timestamp, isKeyFrame),
+            (mid, frame, timestamp, isKeyFrame) => VideoTrackFrameReceived?.Invoke(mid, frame, timestamp, isKeyFrame),
+            (mid, rid, frame, timestamp, isKeyFrame) => VideoLayerFrameReceived?.Invoke(mid, rid, frame, timestamp, isKeyFrame),
+            () => VideoKeyFrameRequested?.Invoke(),
+            (mid, packet) => AudioTrackFrameReceived?.Invoke(mid, packet),
+            _logger);
         // Inbound DTMF reassembler only when telephone-event was negotiated (RFC 4733): it fires DtmfReceived on a
         // completed tone. Driven solely by the receive loop (via RaiseAudioReceived), so it needs no locking.
         _dtmfReassembler = _telephoneEventPayloadType is not null
@@ -318,7 +333,7 @@ internal sealed class BundledMediaSession : IAsyncDisposable
             var track = BundledMediaSessionComposition.BuildVideoTrack(options, video, _outbound, loggerFactory);
             var mid = video.Mid;
             var isPrimary = builtVideo.Count == 0;
-            WireVideoTrackEvents(mid, track, isPrimary);
+            _inboundEventWiring.WireVideoTrackEvents(mid, track, isPrimary);
             router.RegisterTrack(mid, track.OnRtpPacket);
             builtVideo.Add((mid, track));
         }
@@ -386,14 +401,15 @@ internal sealed class BundledMediaSession : IAsyncDisposable
 
         // The live track-mutation engine (4.7.0 renegotiation). It shares _trackMutationGate (the same object, so
         // add/remove stays serialised) and reads _disposed under it via the passed predicate so a late add fails
-        // fast. WireVideoTrackEvents / RaiseAudioTrackReceivedGuarded are handed in so the wiring semantics stay
-        // identical to the ctor path (and, for audio, the K3 subscriber guard lives on this session).
+        // fast. The inbound-event wiring collaborator's WireVideoTrackEvents / RaiseAudioTrackReceivedGuarded are
+        // handed in so the wiring semantics (incl. the K3 additional-audio subscriber guard) stay identical to the
+        // ctor path.
         _trackMutation = new BundledMediaSessionTrackMutation(
             _trackMutationGate,
             () => Volatile.Read(ref _disposed) != 0,
             _router, _outbound, _video, _audioTracks, _outboundSsrcs, _deactivatedVideoTracks,
             options, loggerFactory, _audioMid,
-            WireVideoTrackEvents, RaiseAudioTrackReceivedGuarded);
+            _inboundEventWiring.WireVideoTrackEvents, _inboundEventWiring.RaiseAudioTrackReceivedGuarded);
 
         // A relay candidate wired at construction (offerer path) closes the door on a later AdoptRelay.
         _relayWired = relayBinding is not null ? 1 : 0;
@@ -660,41 +676,6 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     /// <param name="mid">The MID of the additional audio track to deactivate.</param>
     /// <exception cref="ArgumentException"><paramref name="mid"/> is <see langword="null"/> or empty.</exception>
     public void SetAudioTrackInactive(string mid) => _trackMutation.SetAudioTrackInactive(mid);
-
-    // Raises the mid-tagged inbound-audio event for a LIVE-added additional audio track, guarded so a throwing
-    // subscriber never tears down the shared receive loop (K3). The ctor-time additional tracks are guarded inside
-    // BundledAudioTrackSet; a live-added track's sink is registered by the session, so the guard lives here to keep
-    // the exact same K3 semantics on both paths.
-    private void RaiseAudioTrackReceivedGuarded(string mid, RtpPacket packet)
-    {
-        try
-        {
-            AudioTrackFrameReceived?.Invoke(mid, packet);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unhandled exception in bundled audio AudioTrackFrameReceived handler for MID '{Mid}'.", mid);
-        }
-    }
-
-    // Wires one video track's inbound events to the session's surface. The mid-less legacy VideoFrameReceived
-    // tracks only the primary (ctor-first) track; the mid-tagged VideoTrackFrameReceived fires for every track
-    // so N tracks are distinguishable on the inbound path. Used by both the ctor loop and the live AddVideoTrack.
-    private void WireVideoTrackEvents(string mid, BundledVideoTrack track, bool isPrimary)
-    {
-        track.FrameReceived += (frame, timestamp, isKeyFrame, rid) =>
-        {
-            if (isPrimary)
-                VideoFrameReceived?.Invoke(frame, timestamp, isKeyFrame);
-            VideoTrackFrameReceived?.Invoke(mid, frame, timestamp, isKeyFrame);
-            // A RID-tagged frame is a demultiplexed simulcast layer (RFC 8853) — surface it on the per-layer
-            // SFU forwarding event. The default/RID-less stream (rid null) raises no extra event, so the
-            // existing surface stays byte-identical on the non-simulcast path.
-            if (rid is not null)
-                VideoLayerFrameReceived?.Invoke(mid, rid, frame, timestamp, isKeyFrame);
-        };
-        track.KeyFrameRequested += () => VideoKeyFrameRequested?.Invoke();
-    }
 
     // A connectivity-checked ICE nomination (RFC 8445 §8) redirects the whole 5-tuple onto the nominated
     // pair: the transport's send target and the DTLS association's inbound source filter both follow it, so

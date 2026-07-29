@@ -987,10 +987,11 @@
   CalloraVoipSdk.WebRtc.DtmfTone.GetHashCode() : System.Int32
   CalloraVoipSdk.WebRtc.DtmfTone.ToneCode : System.Byte { get, init }
   CalloraVoipSdk.WebRtc.DtmfTone.ToString() : System.String
-  CalloraVoipSdk.WebRtc.EncodedFrame..ctor(System.ReadOnlyMemory<System.Byte> payload, System.Nullable<System.UInt32> rtpTimestamp, System.Boolean isKeyFrame, System.Nullable<System.Int64> presentationTimeUsec)
+  CalloraVoipSdk.WebRtc.EncodedFrame..ctor(System.ReadOnlyMemory<System.Byte> payload, System.Nullable<System.UInt32> rtpTimestamp, System.Boolean isKeyFrame, System.Nullable<System.Int64> presentationTimeUsec, System.String rid = default)
   CalloraVoipSdk.WebRtc.EncodedFrame.IsKeyFrame : System.Boolean { get }
   CalloraVoipSdk.WebRtc.EncodedFrame.Payload : System.ReadOnlyMemory<System.Byte> { get }
   CalloraVoipSdk.WebRtc.EncodedFrame.PresentationTimeUsec : System.Nullable<System.Int64> { get }
+  CalloraVoipSdk.WebRtc.EncodedFrame.Rid : System.String { get }
   CalloraVoipSdk.WebRtc.EncodedFrame.RtpTimestamp : System.Nullable<System.UInt32> { get }
   CalloraVoipSdk.WebRtc.IAudioTrack.Direction : CalloraVoipSdk.WebRtc.TrackDirection { get }
   CalloraVoipSdk.WebRtc.IAudioTrack.Mid : System.String { get }

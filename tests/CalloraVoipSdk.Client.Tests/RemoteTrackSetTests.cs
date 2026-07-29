@@ -12,6 +12,7 @@ public sealed class RemoteTrackSetTests
 {
     private static EncodedFrame Audio(params byte[] payload) => new(payload, rtpTimestamp: null, isKeyFrame: false, presentationTimeUsec: null);
     private static EncodedFrame Video(uint ts, bool key, params byte[] payload) => new(payload, ts, key, presentationTimeUsec: null);
+    private static EncodedFrame VideoLayer(uint ts, bool key, string rid, params byte[] payload) => new(payload, ts, key, presentationTimeUsec: null, rid: rid);
 
     [Fact]
     public void First_frame_materialises_the_track_and_raises_TrackReceived_once()
@@ -84,6 +85,48 @@ public sealed class RemoteTrackSetTests
         Assert.NotNull(received);
         Assert.Equal(123456u, received!.Value.RtpTimestamp);
         Assert.True(received.Value.IsKeyFrame);
+    }
+
+    [Fact]
+    public void A_rid_less_video_frame_carries_a_null_rid()
+    {
+        // The primary / non-simulcast receive path (OnVideoTrackReceived) delivers frames with no encoding id.
+        EncodedFrame? received = null;
+        var set = new RemoteTrackSet(track => track.FrameReceived += (_, f) => received = f);
+
+        set.DeliverVideoFrame("1", "s", "t", Video(90000, key: true, 1));
+
+        Assert.NotNull(received);
+        Assert.Null(received!.Value.Rid);
+    }
+
+    [Fact]
+    public void Simulcast_layer_frames_land_on_the_one_mid_track_each_tagged_with_its_rid()
+    {
+        // 4.7.0 recv-side simulcast (RFC 8853): several layers of ONE video m-line arrive on the same MID via the
+        // per-layer path (OnVideoLayerReceived → DeliverVideoFrame with EncodedFrame.Rid set). They must land on a
+        // SINGLE RemoteTrack for that MID (no per-rid track identity), each frame distinguished by frame.Rid so an
+        // SFU can forward the right layer — and each frame is delivered exactly once (no double-delivery).
+        var tracks = new List<RemoteTrack>();
+        var frames = new List<EncodedFrame>();
+        var set = new RemoteTrackSet(t =>
+        {
+            tracks.Add(t);
+            t.FrameReceived += (_, f) => frames.Add(f);
+        });
+
+        set.DeliverVideoFrame("1", "s", "t", VideoLayer(90000, key: true, rid: "h", 0xAA));
+        set.DeliverVideoFrame("1", "s", "t", VideoLayer(90000, key: true, rid: "l", 0xBB));
+        set.DeliverVideoFrame("1", "s", "t", VideoLayer(93000, key: false, rid: "h", 0xAC));
+
+        // One RemoteTrack for the mid — the two encodings share the track identity.
+        var track = Assert.Single(tracks);
+        Assert.Equal(TrackKind.Video, track.Kind);
+        // Each frame delivered exactly once, tagged with its own rid.
+        Assert.Equal(new[] { "h", "l", "h" }, frames.Select(f => f.Rid));
+        Assert.Equal(
+            new[] { new byte[] { 0xAA }, new byte[] { 0xBB }, new byte[] { 0xAC } },
+            frames.Select(f => f.Payload.ToArray()));
     }
 
     [Fact]
