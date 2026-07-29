@@ -147,4 +147,61 @@ public sealed class BundledRtpDemultiplexerTests
     {
         Assert.Throws<ArgumentException>(() => Demuxer().AddKnownMid(mid!));
     }
+
+    // ---- RFC 8853 recv-side simulcast RID resolution (4.7.0 slice 1) ----
+    // TryResolveRid latches SSRC→RID exactly as TryResolveMid latches SSRC→MID. No dispatch path calls it
+    // yet, so these tests exercise the resolution capability in isolation; the demux boundary is unchanged.
+
+    private const byte RidExtId = 4;
+
+    private static BundledRtpDemultiplexer SimulcastDemuxer() => new(
+        MidExtId,
+        new HashSet<string> { "audio", "video" },
+        new Dictionary<int, string> { [111] = "audio", [96] = "video" },
+        ridExtensionId: RidExtId);
+
+    private static RtpPacket RidPacket(uint ssrc, int pt, string? rid = null) => new()
+    {
+        Ssrc = ssrc,
+        PayloadType = (byte)pt,
+        HeaderExtension = rid is null ? null : RtpRidHeaderExtension.Encode(RidExtId, rid),
+    };
+
+    [Fact]
+    public void Rid_extension_resolves_and_latches_the_ssrc()
+    {
+        var demux = SimulcastDemuxer();
+
+        Assert.True(demux.TryResolveRid(RidPacket(ssrc: 100, pt: 96, rid: "hi"), out var rid));
+        Assert.Equal("hi", rid);
+    }
+
+    [Fact]
+    public void Latched_rid_resolves_a_later_packet_without_the_extension()
+    {
+        var demux = SimulcastDemuxer();
+        demux.TryResolveRid(RidPacket(ssrc: 100, pt: 96, rid: "lo"), out _); // first packet carries the RID
+
+        // Browsers omit the RID extension after the first packets of an encoding → resolve from the latch.
+        Assert.True(demux.TryResolveRid(RidPacket(ssrc: 100, pt: 96), out var rid));
+        Assert.Equal("lo", rid);
+    }
+
+    [Fact]
+    public void Rid_extension_id_null_returns_false()
+    {
+        // No simulcast encoding negotiated (RidExtensionId null) → RID resolution is off entirely.
+        var demux = Demuxer(); // constructed without a RID extension id
+
+        Assert.False(demux.TryResolveRid(RidPacket(ssrc: 100, pt: 96, rid: "hi"), out var rid));
+        Assert.Equal(string.Empty, rid);
+    }
+
+    [Fact]
+    public void Unlatched_ssrc_without_a_rid_extension_returns_false()
+    {
+        // An SSRC never seen with a RID and no RID on this packet → cannot resolve an encoding.
+        Assert.False(SimulcastDemuxer().TryResolveRid(RidPacket(ssrc: 300, pt: 96), out var rid));
+        Assert.Equal(string.Empty, rid);
+    }
 }

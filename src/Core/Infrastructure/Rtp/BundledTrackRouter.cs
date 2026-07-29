@@ -18,7 +18,10 @@ namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
 internal sealed class BundledTrackRouter
 {
     private readonly BundledRtpDemultiplexer _demultiplexer;
-    private readonly ConcurrentDictionary<string, Action<RtpPacket>> _sinksByMid = new(StringComparer.Ordinal);
+    // Each sink receives the packet plus its resolved RID (RFC 8852 <c>a=rid</c>), or null when no simulcast
+    // encoding was negotiated or the packet carries no RID and its SSRC is not yet latched. Simple sinks
+    // (audio, non-simulcast video) ignore the RID; a simulcast-aware video sink demultiplexes on it.
+    private readonly ConcurrentDictionary<string, Action<RtpPacket, string?>> _sinksByMid = new(StringComparer.Ordinal);
     private long _droppedPackets;
 
     public BundledTrackRouter(BundledRtpDemultiplexer demultiplexer)
@@ -31,11 +34,26 @@ internal sealed class BundledTrackRouter
     public long DroppedPackets => Interlocked.Read(ref _droppedPackets);
 
     /// <summary>
-    /// Registers the sink for one m-line's MID. The sink runs synchronously on the receive path via
-    /// <see cref="DispatchInboundRtp"/> — it must not block or perform inline I/O.
+    /// Registers a RID-unaware sink for one m-line's MID. The resolved RID is ignored — the back-compat
+    /// overload for audio and non-simulcast video sinks. The sink runs synchronously on the receive path
+    /// via <see cref="DispatchInboundRtp"/> — it must not block or perform inline I/O.
     /// </summary>
     /// <exception cref="InvalidOperationException">A sink is already registered for <paramref name="mid"/>.</exception>
     public void RegisterTrack(string mid, Action<RtpPacket> sink)
+    {
+        ArgumentNullException.ThrowIfNull(sink);
+        RegisterTrack(mid, (packet, _) => sink(packet));
+    }
+
+    /// <summary>
+    /// Registers a RID-aware sink for one m-line's MID (RFC 8852 <c>a=rid</c>): the sink receives each
+    /// packet with its resolved RID, or null when the packet carries no RID and simulcast demultiplexing
+    /// therefore does not apply. Used by the video track to split simulcast encodings under one MID
+    /// (RFC 8853). The sink runs synchronously on the receive path via <see cref="DispatchInboundRtp"/> —
+    /// it must not block or perform inline I/O.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">A sink is already registered for <paramref name="mid"/>.</exception>
+    public void RegisterTrack(string mid, Action<RtpPacket, string?> sink)
     {
         ArgumentException.ThrowIfNullOrEmpty(mid);
         ArgumentNullException.ThrowIfNull(sink);
@@ -49,7 +67,7 @@ internal sealed class BundledTrackRouter
     /// <summary>
     /// Starts accepting inbound RTP for a MID added mid-call (RFC 8843 §9.2 / RFC 8829 renegotiation, P3b) by
     /// extending the underlying <see cref="BundledRtpDemultiplexer"/>'s accepted-MID set. Call this
-    /// <em>before</em> <see cref="RegisterTrack"/> so the first packets of the new stream demultiplex (rather
+    /// <em>before</em> <see cref="RegisterTrack(string, Action{RtpPacket})"/> so the first packets of the new stream demultiplex (rather
     /// than being rejected as an unknown MID) — until a sink is registered they are dropped and counted, never
     /// crash. Thread-safe against the receive loop and idempotent (an already-known MID is a no-op).
     /// </summary>
@@ -68,7 +86,12 @@ internal sealed class BundledTrackRouter
         if (_demultiplexer.TryResolveMid(packet, out var mid)
             && _sinksByMid.TryGetValue(mid, out var sink))
         {
-            sink(packet);
+            // Resolve the simulcast RID only when an encoding was negotiated (RFC 8853); otherwise skip it so
+            // the non-simulcast dispatch stays byte-identical — rid is always null and RID-unaware sinks ignore it.
+            var rid = _demultiplexer.RidDemuxEnabled && _demultiplexer.TryResolveRid(packet, out var resolved)
+                ? resolved
+                : null;
+            sink(packet, rid);
             return true;
         }
 

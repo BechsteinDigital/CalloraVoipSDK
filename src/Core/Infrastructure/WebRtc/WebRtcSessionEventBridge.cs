@@ -39,6 +39,7 @@ internal sealed class WebRtcSessionEventBridge
     /// <param name="raiseAudioTrackFrameReceived">Raises the peer's mid-tagged additional inbound-audio event (4.7.0).</param>
     /// <param name="raiseVideoFrameReceived">Raises the peer's inbound-video-frame event.</param>
     /// <param name="raiseVideoTrackFrameReceived">Raises the peer's mid-tagged inbound-video-frame event.</param>
+    /// <param name="raiseVideoLayerFrameReceived">Raises the peer's per-layer (mid, rid) inbound-video-frame event for recv-side simulcast/SFU forwarding (4.7.0).</param>
     /// <param name="raiseVideoKeyFrameRequested">Raises the peer's inbound key-frame-request event.</param>
     /// <param name="raiseDtmfReceived">Raises the peer's inbound-DTMF event.</param>
     public void WireSession(
@@ -48,11 +49,13 @@ internal sealed class WebRtcSessionEventBridge
         Action<string, byte[]> raiseAudioTrackFrameReceived,
         Action<byte[], uint, bool> raiseVideoFrameReceived,
         Action<string, byte[], uint, bool> raiseVideoTrackFrameReceived,
+        Action<string, string, byte[], uint, bool> raiseVideoLayerFrameReceived,
         Action raiseVideoKeyFrameRequested,
         Action<byte, int> raiseDtmfReceived)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(raiseAudioTrackFrameReceived);
+        ArgumentNullException.ThrowIfNull(raiseVideoLayerFrameReceived);
         session.Connected += () => transitionTo(WebRtcConnectionState.Connected);
         session.HandshakeFailed += () => transitionTo(WebRtcConnectionState.Failed);
         session.MediaConsentLost += () => transitionTo(WebRtcConnectionState.Failed);
@@ -64,6 +67,9 @@ internal sealed class WebRtcSessionEventBridge
         session.VideoFrameReceived += (frame, timestamp, isKeyFrame) => raiseVideoFrameReceived(frame, timestamp, isKeyFrame);
         // Mid-tagged inbound video (P2b) → the receiver routes each frame to its remote track (P2c).
         session.VideoTrackFrameReceived += (mid, frame, timestamp, isKeyFrame) => raiseVideoTrackFrameReceived(mid, frame, timestamp, isKeyFrame);
+        // Per-layer inbound video (4.7.0 recv-side simulcast, RFC 8853) → the receiver forwards each demuxed
+        // encoding tagged with its a=rid; fires only for RID-tagged layers, never the primary RID-less stream.
+        session.VideoLayerFrameReceived += (mid, rid, frame, timestamp, isKeyFrame) => raiseVideoLayerFrameReceived(mid, rid, frame, timestamp, isKeyFrame);
         session.VideoKeyFrameRequested += () => raiseVideoKeyFrameRequested();
         session.DtmfReceived += (toneCode, durationMs) => raiseDtmfReceived(toneCode, durationMs);
     }

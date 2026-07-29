@@ -18,10 +18,16 @@ internal static class BundledRtpDemultiplexerFactory
     /// then relies on SSRC and unambiguous payload types only).
     /// </param>
     /// <param name="payloadTypesByMid">Each m-line's MID mapped to the payload types it negotiated.</param>
+    /// <param name="ridExtensionId">
+    /// The negotiated RID header-extension id (RFC 8852 <c>sdes:rtp-stream-id</c>), or
+    /// <see langword="null"/> when no simulcast encoding was negotiated. Passed through to the
+    /// demultiplexer for recv-side simulcast RID resolution (RFC 8853); it does not affect m-line demux.
+    /// </param>
     /// <exception cref="ArgumentException">A MID is empty.</exception>
     public static BundledRtpDemultiplexer Create(
         byte midExtensionId,
-        IReadOnlyDictionary<string, IReadOnlyCollection<int>> payloadTypesByMid)
+        IReadOnlyDictionary<string, IReadOnlyCollection<int>> payloadTypesByMid,
+        byte? ridExtensionId = null)
     {
         ArgumentNullException.ThrowIfNull(payloadTypesByMid);
 
@@ -52,6 +58,7 @@ internal static class BundledRtpDemultiplexerFactory
         return new BundledRtpDemultiplexer(
             midExtensionId,
             new HashSet<string>(payloadTypesByMid.Keys, StringComparer.Ordinal),
-            payloadTypeToMid);
+            payloadTypeToMid,
+            ridExtensionId);
     }
 }

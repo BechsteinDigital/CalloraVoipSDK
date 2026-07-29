@@ -17,15 +17,19 @@ namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
 /// DTLS, ICE, SRTP) is the bundle's, so this track no longer needs its own <see cref="Session.RtpSession"/>.
 /// </summary>
 /// <remarks>
-/// The receive path (<see cref="OnRtpPacket"/>) is single-consumer — the depacketiser is stateful and not
-/// thread-safe, so it must be driven only from the bundle's single receive loop, exactly as the
-/// single-stream video path drives it from the RTP receive loop. Sends are serialised per encoding so a
-/// frame's packets never interleave with another frame's on the same RTP stream; distinct simulcast
-/// encodings (distinct SSRCs) send independently.
+/// The receive path (<see cref="OnRtpPacket"/>) is single-consumer — the depacketiser and each reorder
+/// window are stateful and not thread-safe, so they must be driven only from the bundle's single receive
+/// loop, exactly as the single-stream video path drives it from the RTP receive loop. This single-consumer
+/// guarantee is why the per-RID lane map (<c>_ridLayers</c>) is a plain dictionary. Sends are serialised
+/// per encoding so a frame's packets never interleave with another frame's on the same RTP stream;
+/// distinct simulcast encodings (distinct SSRCs) send independently.
 /// <para>
-/// Send-side simulcast (RFC 8853): when built with encodings, the track sends N independent RTP streams
-/// under one MID — one per <c>a=rid</c> layer, each on its own SSRC with the RID stamped per packet
-/// (RFC 8852). The receive path stays single-stream; receive-side RID demux is out of scope.
+/// Simulcast (RFC 8853): when built with encodings, the track sends N independent RTP streams under one
+/// MID — one per <c>a=rid</c> layer, each on its own SSRC with the RID stamped per packet (RFC 8852).
+/// Receive-side, each inbound RID is demultiplexed into its own reassembly lane (own depacketiser, reorder
+/// window, and arrival-loss tracker) so interleaved encodings never corrupt each other's reassembly or
+/// raise phantom NACKs; frames are surfaced on <see cref="FrameReceived"/> tagged with their RID. This is a
+/// forwarding-only SFU demux — per-layer selection/BWE and per-encoding RTX are follow-up work.
 /// </para>
 /// <para>
 /// RTX retransmission (RFC 4588) is wired for the non-simulcast track when an rtx payload type is negotiated:
@@ -38,14 +42,27 @@ internal sealed class BundledVideoTrack : IDisposable
 {
     private readonly string _mid;
     private readonly BundledOutboundPipeline _outbound;
-    private readonly IVideoDepacketiser _depacketiser;
-    private readonly VideoReorderBuffer _reorderBuffer;
     private readonly ILogger<BundledVideoTrack> _logger;
+
+    // Retained so a simulcast RID lane can be built lazily with the same codec and reorder window as the
+    // default lane (a browser stamps the RID extension only on the first packets of each encoding, so the
+    // second/third encoding's lane is created on first sighting, not up front).
+    private readonly string _codecName;
+    private readonly int _reorderWindowDepth;
+
+    // The default inbound lane (RID null): the non-simulcast single stream, and — on a simulcast receive —
+    // the base/primary encoding that carries no RID (or arrives before its RID is latched). Each simulcast
+    // RID gets its own lane in _ridLayers so interleaved SSRCs never share reorder/loss state.
+    private readonly BundledVideoInboundLayer _defaultLane;
+    // Per-RID inbound lanes, built lazily on first RID sighting. A plain Dictionary — the receive path is
+    // single-consumer (see the class remarks), so no concurrent map is needed; it is only ever mutated and
+    // read from the bundle's single receive loop.
+    private readonly Dictionary<string, BundledVideoInboundLayer> _ridLayers = new(StringComparer.Ordinal);
 
     // RTCP keyframe/loss feedback for this stream (RFC 4585/5104), mirroring the single-stream
     // VideoRtpStream: inbound PLI/FIR → KeyFrameRequested; detected inbound loss → outbound NACK/PLI.
+    // Shared across all lanes: it names loss by the packet's SSRC, which is already per-encoding correct.
     private readonly VideoKeyFrameFeedback _keyFrameFeedback;
-    private readonly VideoArrivalLossTracker _arrivalLoss = new();
     // Cancels in-flight feedback sends when the track is disposed, so a NACK/PLI never races teardown.
     private readonly CancellationTokenSource _lifetimeCts = new();
 
@@ -81,16 +98,17 @@ internal sealed class BundledVideoTrack : IDisposable
     // RTP payload budget: MTU minus RTP/SRTP/extension overhead (mirrors the single-stream video path).
     private const int MaxRtpPayloadSize = 1200;
 
-    // Receive-loop-only ordered-delivery state (reset the depacketiser on a genuine gap so a fragment of
-    // a lost packet is never glued to the next frame).
-    private bool _hasDelivered;
-    private ushort _lastDeliveredSequence;
+    // Track-wide inbound frame counters (aggregated across every lane), updated with Interlocked.
     private long _framesReceived;
     private long _keyFrames;
     private long _framesDropped;
 
-    /// <summary>Raised with a reassembled encoded frame, its RTP timestamp, and whether it is a key frame.</summary>
-    public event Action<byte[], uint, bool>? FrameReceived;
+    /// <summary>
+    /// Raised with a reassembled encoded frame, its RTP timestamp, whether it is a key frame, and the
+    /// simulcast <c>a=rid</c> the frame belongs to (RFC 8853) — <see langword="null"/> for the default
+    /// (non-simulcast, or base RID-less) stream.
+    /// </summary>
+    public event Action<byte[], uint, bool, string?>? FrameReceived;
 
     /// <summary>
     /// Raised when the peer requests a key frame via an inbound PLI/FIR (RFC 4585/5104); the app should
@@ -162,10 +180,11 @@ internal sealed class BundledVideoTrack : IDisposable
         _mid = mid;
         _outbound = outbound ?? throw new ArgumentNullException(nameof(outbound));
         _logger = loggerFactory.CreateLogger<BundledVideoTrack>();
+        _codecName = codecName;
+        _reorderWindowDepth = reorderWindowDepth;
 
         var (packetiser, depacketiser) = VideoPayloadFormat.Create(codecName);
-        _depacketiser = depacketiser;
-        _reorderBuffer = new VideoReorderBuffer(reorderWindowDepth);
+        _defaultLane = new BundledVideoInboundLayer(rid: null, depacketiser, new VideoReorderBuffer(reorderWindowDepth));
         _single = new BundledVideoSendEncoding(rid: null, payloadType, packetiser);
         _layers = new Dictionary<string, BundledVideoSendEncoding>(StringComparer.Ordinal);
         _videoPayloadType = payloadType;
@@ -201,14 +220,16 @@ internal sealed class BundledVideoTrack : IDisposable
 
     /// <summary>
     /// Builds a simulcast video track (RFC 8853): one RTP stream per <paramref name="rids"/> layer under
-    /// the shared MID, each with its own packetiser and send lock. The receive path stays single-stream.
+    /// the shared MID, each with its own packetiser and send lock. On receive, each inbound RID is
+    /// demultiplexed into its own reassembly lane (built lazily on first sighting).
     /// </summary>
     /// <param name="mid">The video m-line's MID token.</param>
     /// <param name="codecName">The negotiated video codec ("H264"/"VP8").</param>
     /// <param name="payloadType">The negotiated RTP payload type shared by every layer.</param>
     /// <param name="localSsrc">
-    /// The primary outbound SSRC — the SenderSsrc of any outbound NACK/PLI. The single-stream receive path
-    /// (and thus loss feedback) is shared across the simulcast layers, matching the single-stream receive scope.
+    /// The primary outbound SSRC — the SenderSsrc of any outbound NACK/PLI. The RTCP loss/keyframe feedback
+    /// is shared across the receive lanes; it names loss by the arriving packet's SSRC, which is already
+    /// per-encoding correct.
     /// </param>
     /// <param name="remoteSupportsNack">Whether the peer advertised Generic NACK (RFC 4585) for this m-line.</param>
     /// <param name="remoteSupportsPli">Whether the peer advertised PLI (RFC 4585 §6.3.1) for this m-line.</param>
@@ -237,11 +258,14 @@ internal sealed class BundledVideoTrack : IDisposable
         _mid = mid;
         _outbound = outbound ?? throw new ArgumentNullException(nameof(outbound));
         _logger = loggerFactory.CreateLogger<BundledVideoTrack>();
+        _codecName = codecName;
+        _reorderWindowDepth = reorderWindowDepth;
 
-        // One depacketiser drives the single-stream receive path; each send layer gets its own packetiser
+        // The default receive lane handles the base/RID-less inbound stream; a per-RID lane is built lazily
+        // on first RID sighting (recv-side simulcast demux, RFC 8853). Each send layer gets its own packetiser
         // (the packetiser is stateful, so layers must not share one).
-        _depacketiser = VideoPayloadFormat.Create(codecName).Depacketiser;
-        _reorderBuffer = new VideoReorderBuffer(reorderWindowDepth);
+        _defaultLane = new BundledVideoInboundLayer(
+            rid: null, VideoPayloadFormat.Create(codecName).Depacketiser, new VideoReorderBuffer(reorderWindowDepth));
 
         var layers = new Dictionary<string, BundledVideoSendEncoding>(rids.Count, StringComparer.Ordinal);
         foreach (var rid in rids)
@@ -360,19 +384,27 @@ internal sealed class BundledVideoTrack : IDisposable
 
     /// <summary>
     /// The router sink for the video MID: reorders an arriving RTP packet and depacketises released
-    /// packets into frames. When RTX was negotiated the peer's repair stream shares this MID (its rtx SSRC
+    /// packets into frames. On a simulcast receive the packet's resolved <c>a=rid</c> (RFC 8853/8852)
+    /// selects a per-encoding reassembly lane so interleaved encodings never corrupt each other's reorder
+    /// state or raise phantom NACKs; <see langword="null"/> (non-simulcast, or the base RID-less stream)
+    /// uses the default lane. When RTX was negotiated the peer's repair stream shares this MID (its rtx SSRC
     /// carries the same <c>a=mid</c>, RFC 9143), so a packet on the rtx payload type is decapsulated (RFC 4588 §4)
-    /// and the recovered original is fed into the same reorder window — filling the gap that prompted the NACK.
-    /// Runs on the bundle receive loop (single consumer).
+    /// and the recovered original is fed into the default lane — filling the gap that prompted the NACK
+    /// (RTX is non-simulcast-only). Runs on the bundle receive loop (single consumer).
     /// </summary>
-    public void OnRtpPacket(RtpPacket packet)
+    /// <param name="packet">The inbound RTP packet.</param>
+    /// <param name="rid">
+    /// The packet's resolved simulcast RID (RFC 8852), or <see langword="null"/> for the default stream.
+    /// </param>
+    public void OnRtpPacket(RtpPacket packet, string? rid = null)
     {
         ArgumentNullException.ThrowIfNull(packet);
 
         // Inbound RTX recovery (RFC 4588 §4): a repair packet is not a new primary arrival — it must not drive
         // arrival-order loss detection (that would NACK the very gaps a retransmit is closing, a NACK storm) nor
-        // be inserted raw. Strip the OSN prefix to recover the original, then feed it through the shared reorder
-        // path exactly like a primary packet. Mirrors VideoRtpStream's separate secondary receive path.
+        // be inserted raw. Strip the OSN prefix to recover the original, then feed it through the default lane's
+        // reorder path exactly like a primary packet. RTX is non-simulcast-only, so it never targets a RID lane.
+        // Mirrors VideoRtpStream's separate secondary receive path.
         if (_rtxConfigured && packet.PayloadType == _rtxPayloadType)
         {
             if (!RtxPacketFactory.TryDecapsulate(packet, _videoPayloadType, _remoteMediaSsrc, out var original))
@@ -381,31 +413,52 @@ internal sealed class BundledVideoTrack : IDisposable
                 return;
             }
 
-            Enqueue(original!);
+            Enqueue(_defaultLane, original!);
             return;
         }
 
+        var lane = LayerFor(rid);
+
         // Primary arrival: remember the remote media SSRC so a recovered RTX packet can be stamped with it.
+        // Single field track-wide — RTX is non-simulcast, so on a simulcast receive this is overwritten by the
+        // last encoding seen; per-layer PLI/RTX is follow-up work and needs a per-lane media SSRC.
         _remoteMediaSsrc = packet.Ssrc;
 
-        // Arrival-order loss signalling (RFC 4585): the tracker holds a forward gap for a small reorder window
-        // and only reports it once it ages past that window — a reordered packet that arrives first is never
-        // NACKed (Track returns null for a reorder/duplicate; the reorder buffer below corrects it). Mirrors
-        // VideoRtpStream.
-        if (_arrivalLoss.Track(packet.SequenceNumber) is { } missing)
+        // Arrival-order loss signalling (RFC 4585), per lane: the tracker holds a forward gap for a small
+        // reorder window and only reports it once it ages past that window. Per lane is essential — one shared
+        // tracker fed the interleaved sequence spaces of several SSRCs would see phantom gaps and NACK-storm.
+        // A reordered packet that arrives first is never NACKed (Track returns null; the reorder buffer below
+        // corrects it). The feedback names loss by packet.Ssrc, which is already per-encoding. Mirrors VideoRtpStream.
+        if (lane.ArrivalLoss.Track(packet.SequenceNumber) is { } missing)
             _keyFrameFeedback.OnLoss(packet.Ssrc, missing);
 
-        Enqueue(packet);
+        Enqueue(lane, packet);
     }
 
-    // Feeds one video packet (freshly received or RTX-recovered) through the reorder window toward the
-    // depacketiser. The window releases in ascending sequence order (letting a late retransmit slot into its
+    // Resolves the reassembly lane for a resolved RID: null → the default lane; a RID → its lane, built lazily
+    // on first sighting (a browser stamps the RID extension only on the first packets of each encoding). Safe
+    // as a plain dictionary because OnRtpPacket is single-consumer (see the class remarks).
+    private BundledVideoInboundLayer LayerFor(string? rid)
+    {
+        if (rid is null)
+            return _defaultLane;
+        if (!_ridLayers.TryGetValue(rid, out var lane))
+        {
+            lane = new BundledVideoInboundLayer(
+                rid, VideoPayloadFormat.Create(_codecName).Depacketiser, new VideoReorderBuffer(_reorderWindowDepth));
+            _ridLayers[rid] = lane;
+        }
+        return lane;
+    }
+
+    // Feeds one video packet (freshly received or RTX-recovered) through the given lane's reorder window toward
+    // its depacketiser. The window releases in ascending sequence order (letting a late retransmit slot into its
     // gap) and drops duplicates and too-late sequences — so an RTX for a sequence that was never missing, or
     // already released, is harmlessly absorbed. Mirrors VideoRtpStream.Enqueue.
-    private void Enqueue(RtpPacket packet)
+    private void Enqueue(BundledVideoInboundLayer lane, RtpPacket packet)
     {
-        foreach (var released in _reorderBuffer.Insert(packet))
-            DeliverOrdered(released);
+        foreach (var released in lane.ReorderBuffer.Insert(packet))
+            DeliverOrdered(lane, released);
     }
 
     /// <summary>
@@ -431,19 +484,20 @@ internal sealed class BundledVideoTrack : IDisposable
     public ValueTask<bool> RequestKeyFrameAsync(CancellationToken cancellationToken = default)
         => _keyFrameFeedback.RequestKeyFrameAsync(_remoteMediaSsrc, cancellationToken);
 
-    // Delivers one packet in sequence order to the depacketiser. A discontinuity is a gap the reorder
-    // window could not fill: the frame under assembly is torn, so reset before feeding on.
-    private void DeliverOrdered(RtpPacket packet)
+    // Delivers one packet in sequence order to the lane's depacketiser. A discontinuity is a gap the reorder
+    // window could not fill: the frame under assembly is torn, so reset before feeding on. Ordered-delivery
+    // state (HasDelivered/LastDeliveredSequence) is per lane so one encoding's gap never resets another's.
+    private void DeliverOrdered(BundledVideoInboundLayer lane, RtpPacket packet)
     {
-        if (_hasDelivered && packet.SequenceNumber != unchecked((ushort)(_lastDeliveredSequence + 1)))
+        if (lane.HasDelivered && packet.SequenceNumber != unchecked((ushort)(lane.LastDeliveredSequence + 1)))
         {
-            _depacketiser.Reset();
+            lane.Depacketiser.Reset();
             Interlocked.Increment(ref _framesDropped);
         }
-        _lastDeliveredSequence = packet.SequenceNumber;
-        _hasDelivered = true;
+        lane.LastDeliveredSequence = packet.SequenceNumber;
+        lane.HasDelivered = true;
 
-        if (!_depacketiser.TryProcess(packet.Payload, packet.Timestamp, packet.Marker, out var frame, out var isKeyFrame))
+        if (!lane.Depacketiser.TryProcess(packet.Payload, packet.Timestamp, packet.Marker, out var frame, out var isKeyFrame))
             return;
 
         Interlocked.Increment(ref _framesReceived);
@@ -454,7 +508,7 @@ internal sealed class BundledVideoTrack : IDisposable
 
         try
         {
-            FrameReceived?.Invoke(frame!, packet.Timestamp, isKeyFrame);
+            FrameReceived?.Invoke(frame!, packet.Timestamp, isKeyFrame, lane.Rid);
         }
         catch (Exception ex)
         {

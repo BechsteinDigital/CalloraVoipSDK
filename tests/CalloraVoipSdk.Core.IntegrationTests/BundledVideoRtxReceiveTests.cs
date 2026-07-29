@@ -36,7 +36,7 @@ public sealed class BundledVideoRtxReceiveTests
         using var track = VideoTrack(Outbound(sender), remoteSupportsNack: true, rtxPayloadType: RtxPayloadType);
 
         var delivered = new List<int>();
-        track.FrameReceived += (frame, _, _) => delivered.Add(frame[0]);
+        track.FrameReceived += (frame, _, _, _) => delivered.Add(frame[0]);
 
         // Frames 1 and 2 arrive; 3 is dropped but retransmitted as RTX; the stream keeps flowing so the
         // reorder window releases in order once 3 slots into its gap.
@@ -59,7 +59,7 @@ public sealed class BundledVideoRtxReceiveTests
         using var track = VideoTrack(Outbound(sender), remoteSupportsNack: true, rtxPayloadType: RtxPayloadType);
 
         var delivered = new List<int>();
-        track.FrameReceived += (frame, _, _) => delivered.Add(frame[0]);
+        track.FrameReceived += (frame, _, _, _) => delivered.Add(frame[0]);
 
         // Every primary packet arrives in order; then a stale RTX for an already-released sequence arrives.
         for (ushort seq = 1; seq <= 10; seq++)
