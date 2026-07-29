@@ -204,8 +204,8 @@ public sealed class BundledMediaSessionTests
         {
             overall.Token.ThrowIfCancellationRequested();
             await client.SendAudioAsync(primaryPayload);
-            await client.SendAudioTrackFrameAsync("p1", p1Payload);
-            await client.SendAudioTrackFrameAsync("p2", p2Payload);
+            await client.SendAudioTrackFrameAsync("p1", p1Payload, rtpTimestamp: 8000u);
+            await client.SendAudioTrackFrameAsync("p2", p2Payload, rtpTimestamp: 8000u);
             await Task.Delay(20, overall.Token);
         }
 
@@ -319,7 +319,7 @@ public sealed class BundledMediaSessionTests
                     break;
             phase2.Token.ThrowIfCancellationRequested();
             await client.SendAudioAsync(primaryPayload);
-            await client.SendAudioTrackFrameAsync("p1", p1Payload);
+            await client.SendAudioTrackFrameAsync("p1", p1Payload, rtpTimestamp: 8000u);
             await Task.Delay(20, phase2.Token);
         }
 
@@ -327,6 +327,51 @@ public sealed class BundledMediaSessionTests
         lock (sync) firstP1 = p1[0];
         Assert.Equal(p1Payload, firstP1); // the new track carried its OWN payload (not the primary's)
         Assert.NotEqual(primaryPayload, p1Payload);
+    }
+
+    [Fact]
+    public async Task An_added_audio_track_stamps_the_supplied_rtp_timestamp_on_the_wire_not_a_cursor()
+    {
+        // 4.7.0 Slice 4 follow-up (Option B): SendAudioTrackFrameAsync now threads an explicit rtpTimestamp all the
+        // way to the outbound RTP header (RFC 3550 §5.1), so an SFU forwarding an added-audio stream preserves the
+        // source's timestamp for A/V-sync — instead of the 20 ms cursor the frameless SendAudioAsync uses. Prove it
+        // over the real DTLS-SRTP loopback: send a payload with a distinctive timestamp far from any cursor value and
+        // assert the RECEIVED RtpPacket.Timestamp equals exactly what was sent, on the added track's mid-tagged path.
+        var certA = DtlsCertificate.GenerateEcdsaP256();
+        var certB = DtlsCertificate.GenerateEcdsaP256();
+
+        IReadOnlyList<BundledTrackConfig> extraAudio =
+            [new BundledTrackConfig { Mid = "p1", Ssrc = 0x0A0B0C0D, PayloadType = AudioPayloadType, SamplesPerPacket = 160 }];
+
+        var (client, server) = CreatePair(certA, certB, additionalAudioTracks: extraAudio);
+        await using var clientLease = client;
+        await using var serverLease = server;
+
+        // A timestamp that a 20 ms/160-sample cursor would never land on from a zero/near-zero start, so a cursor
+        // regression (the pre-Option-B behaviour) fails this assertion rather than coincidentally matching.
+        const uint sentTimestamp = 0xDEADBEEF;
+        var receivedTimestamp = new TaskCompletionSource<uint>(TaskCreationOptions.RunContinuationsAsynchronously);
+        server.AudioTrackFrameReceived += (mid, pkt) =>
+        {
+            if (mid == "p1") receivedTimestamp.TrySetResult(pkt.Timestamp);
+        };
+
+        await server.StartAsync();
+        await client.StartAsync();
+
+        var p1Payload = new byte[] { 10, 20, 30 };
+        using var overall = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        while (!receivedTimestamp.Task.IsCompleted)
+        {
+            overall.Token.ThrowIfCancellationRequested();
+            // Same explicit timestamp every send (the sender does NOT advance a cursor for the added track), so the
+            // received value is unambiguous regardless of which packet arrives first.
+            await client.SendAudioTrackFrameAsync("p1", p1Payload, rtpTimestamp: sentTimestamp);
+            await Task.Delay(20, overall.Token);
+        }
+
+        // The exact timestamp the app supplied reached the wire and survived depacketisation on the receiver.
+        Assert.Equal(sentTimestamp, await receivedTimestamp.Task.WaitAsync(TimeSpan.FromSeconds(5)));
     }
 
     [Fact]
@@ -364,7 +409,7 @@ public sealed class BundledMediaSessionTests
             lock (sync) if (p1Count >= 3) break;
             phase1.Token.ThrowIfCancellationRequested();
             await client.SendAudioAsync(primaryPayload);
-            await client.SendAudioTrackFrameAsync("p1", p1Payload);
+            await client.SendAudioTrackFrameAsync("p1", p1Payload, rtpTimestamp: 8000u);
             await Task.Delay(20, phase1.Token);
         }
 
@@ -382,7 +427,7 @@ public sealed class BundledMediaSessionTests
             lock (sync) if (primaryCount > primaryAtDeactivation + 5) break;
             phase2.Token.ThrowIfCancellationRequested();
             await client.SendAudioAsync(primaryPayload);
-            await client.SendAudioTrackFrameAsync("p1", p1Payload);
+            await client.SendAudioTrackFrameAsync("p1", p1Payload, rtpTimestamp: 8000u);
             await Task.Delay(20, phase2.Token);
         }
 

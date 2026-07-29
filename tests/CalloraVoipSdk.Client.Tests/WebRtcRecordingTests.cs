@@ -119,6 +119,8 @@ public sealed class WebRtcRecordingTests
         public string CreateOffer() => string.Empty;
         public IVideoTrack AddVideoTrack() => throw new NotSupportedException();
         public IVideoTrack AddVideoTrack(VideoTrackOptions options) => throw new NotSupportedException();
+        public IAudioTrack AddAudioTrack() => throw new NotSupportedException();
+        public IAudioTrack AddAudioTrack(AudioTrackOptions options) => throw new NotSupportedException();
         public Task AddIceCandidateAsync(string candidate, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<string> SetRemoteDescriptionAsync(string remoteSdp, CancellationToken cancellationToken = default) => Task.FromResult(string.Empty);
         public Task GatherCandidatesAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;

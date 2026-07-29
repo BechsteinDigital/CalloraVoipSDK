@@ -22,6 +22,8 @@ internal sealed class PeerConnection : IPeerConnection
     private readonly Action<IPeerConnection>? _onDisposed;
     // The client's default video codecs (config VideoCodecs) for a track added without explicit codecs.
     private readonly IReadOnlyList<string> _defaultVideoCodecs;
+    // The client's default audio codecs (config AudioCodecs) for an added audio track without explicit codecs.
+    private readonly IReadOnlyList<string> _defaultAudioCodecs;
     private readonly BitrateMeter _outgoingBitrate = new();
     private readonly BitrateMeter _incomingBitrate = new();
     private readonly RateMeter _frameRate = new();
@@ -42,13 +44,15 @@ internal sealed class PeerConnection : IPeerConnection
         WebRtcPeerConnection peer,
         ILogger<PeerConnection> logger,
         Action<IPeerConnection>? onDisposed = null,
-        IReadOnlyList<string>? defaultVideoCodecs = null)
+        IReadOnlyList<string>? defaultVideoCodecs = null,
+        IReadOnlyList<string>? defaultAudioCodecs = null)
     {
         ArgumentNullException.ThrowIfNull(peer);
         ArgumentNullException.ThrowIfNull(logger);
         _peer = peer;
         _onDisposed = onDisposed;
         _defaultVideoCodecs = defaultVideoCodecs ?? [];
+        _defaultAudioCodecs = defaultAudioCodecs ?? [];
         _tracks = new RemoteTrackSet(RaiseTrackReceived);
         _taps = new MediaTapSet(logger);
         _peer.ConnectionStateChanged += OnInternalStateChanged;
@@ -110,6 +114,37 @@ internal sealed class PeerConnection : IPeerConnection
     }
 
     public string CreateOffer() => _peer.CreateOffer();
+
+    public IAudioTrack AddAudioTrack() => AddAudioTrack(new AudioTrackOptions());
+
+    public IAudioTrack AddAudioTrack(AudioTrackOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        // Resolve the track's codecs: explicit names, else the client's configured default audio codecs.
+        // WebRtcCodecCatalog.Audio throws on unknown names (consistent with the primary-audio path) before the
+        // track is added, so an unusable offer never reaches the wire.
+        var codecNames = options.Codecs ?? _defaultAudioCodecs;
+        var codecs = codecNames.Select(WebRtcCodecCatalog.Audio).ToArray();
+
+        var mid = _peer.AddAudioTrack(new WebRtcAddedAudioTrack
+        {
+            Codecs = codecs,
+            Direction = MapDirection(options.Direction),
+            StreamId = options.StreamId,
+        });
+
+        // The handle routes each send through this facade's tap fan-out (so a recorder/analytics sees the
+        // outbound payload) and the peer's mid-targeted send-lease path (drained against dispose).
+        return new AudioTrack(
+            mid,
+            options.Direction,
+            (frame, ts, ct) =>
+            {
+                _taps.Audio(MediaDirection.Outbound, frame);
+                return _peer.SendAudioTrackFrameAsync(mid, frame, ts, ct);
+            });
+    }
 
     public IVideoTrack AddVideoTrack() => AddVideoTrack(new VideoTrackOptions());
 

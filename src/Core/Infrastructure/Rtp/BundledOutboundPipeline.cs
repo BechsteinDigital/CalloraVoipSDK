@@ -227,6 +227,25 @@ internal sealed class BundledOutboundPipeline
     }
 
     /// <summary>
+    /// Sends one audio RTP payload on the given MID's track with an explicit <paramref name="timestamp"/> and
+    /// without advancing the track's timestamp cursor (RFC 3550 §5.1). This is the audio pendant to
+    /// <see cref="SendTimestampedAsync"/>: it resolves the track's default payload type (like the frameless
+    /// <see cref="SendAsync"/>) instead of taking an explicit one, so an SFU forwarding an added-audio stream
+    /// preserves the source's timestamp (A/V-sync against forwarded video) rather than re-clocking on the cursor.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No track is registered for <paramref name="mid"/>.</exception>
+    public ValueTask SendAudioTimestampedAsync(
+        string mid,
+        ReadOnlyMemory<byte> payload,
+        uint timestamp,
+        bool marker = false,
+        CancellationToken cancellationToken = default)
+    {
+        var track = ResolveTrack(mid, rid: null);
+        return SendCoreAsync(mid, track, payload, marker, track.DefaultPayloadType, timestampOverride: timestamp, advanceTimestamp: false, cancellationToken);
+    }
+
+    /// <summary>
     /// Reserves <paramref name="units"/> of the (non-simulcast) track's timestamp space for an out-of-band
     /// RFC 4733 telephone-event registered for <paramref name="mid"/>: returns the current cursor to stamp the
     /// event on the audio stream's clock (RFC 4733 §2.1) and advances the cursor past the event so a following

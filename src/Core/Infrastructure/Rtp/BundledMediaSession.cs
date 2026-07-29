@@ -823,13 +823,15 @@ internal sealed class BundledMediaSession : IAsyncDisposable
 
     /// <summary>
     /// Internal seam: sends one audio RTP payload on the additional audio track <paramref name="mid"/> (4.7.0),
-    /// suppressed until DTLS keys the transport. Drives the symmetric outbound sender wired at construction; there
-    /// is no public N-audio send API in this slice, so this serves composition and the loopback tests.
+    /// stamping the explicit <paramref name="rtpTimestamp"/> on the outbound packets (RFC 3550 §5.1) rather than a
+    /// cursor value, so an SFU forwarding this stream preserves the source's timestamp (A/V-sync against forwarded
+    /// video). Suppressed until DTLS keys the transport; the track's timestamp cursor is not advanced. Backs the
+    /// public <see cref="WebRtc.IAudioTrack"/> handle via <c>WebRtcPeerConnection.SendAudioTrackFrameAsync</c>.
     /// </summary>
     /// <exception cref="InvalidOperationException">This bundle has no additional audio track with that MID.</exception>
     internal ValueTask SendAudioTrackFrameAsync(
-        string mid, ReadOnlyMemory<byte> payload, bool marker = false, CancellationToken cancellationToken = default)
-        => _audioTracks.SendAsync(mid, payload, marker, cancellationToken);
+        string mid, ReadOnlyMemory<byte> payload, uint rtpTimestamp, bool marker = false, CancellationToken cancellationToken = default)
+        => _audioTracks.SendAsync(mid, payload, rtpTimestamp, marker, cancellationToken);
 
     /// <summary>
     /// Sends one out-of-band DTMF tone as an RFC 4733 telephone-event burst on the audio track: an event-start

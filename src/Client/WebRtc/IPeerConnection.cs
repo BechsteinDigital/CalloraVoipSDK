@@ -95,6 +95,34 @@ public interface IPeerConnection : IAsyncDisposable
     /// <exception cref="InvalidOperationException">The offer has already been produced (mid-call add is a later package).</exception>
     IVideoTrack AddVideoTrack(VideoTrackOptions options);
 
+    /// <summary>
+    /// Adds an audio track (its own <c>m=audio</c> line on the shared BUNDLE transport, beyond the primary audio
+    /// anchor) before the first offer, returning a handle to send payloads on it. The happy path:
+    /// <c>var extra = peer.AddAudioTrack(); await extra.SendFrameAsync(payload, ts);</c>. The SFU pattern of one
+    /// audio stream per remote participant on a single peer connection.
+    /// </summary>
+    /// <remarks>
+    /// The peer's implicit primary audio track stays the always-on transport anchor; <c>AddAudioTrack</c> adds a
+    /// further audio m-line. The frameless <see cref="SendAudioAsync"/> keeps addressing the primary track, and
+    /// DTMF (<see cref="SendDtmfAsync"/>, RFC 4733) stays on that primary track. A track added before
+    /// <see cref="CreateOffer"/> is negotiated in the first offer; a track added mid-call is pending until the next
+    /// offer/answer cycle applies it to the running session (RFC 8829 renegotiation). Throws only after the peer is
+    /// closed.
+    /// </remarks>
+    /// <returns>A handle to send encoded audio payloads on the new track.</returns>
+    /// <exception cref="InvalidOperationException">The peer is closed.</exception>
+    IAudioTrack AddAudioTrack();
+
+    /// <summary>
+    /// Adds an audio track with deeper control — direction, codecs, and the MediaStream it belongs to (see
+    /// <see cref="AudioTrackOptions"/>) — before the first offer. See <see cref="AddAudioTrack()"/> for the
+    /// primary-anchor semantics and the mid-call renegotiation behaviour.
+    /// </summary>
+    /// <param name="options">The track's direction, codecs, and stream id.</param>
+    /// <returns>A handle to send encoded audio payloads on the new track.</returns>
+    /// <exception cref="InvalidOperationException">The peer is closed.</exception>
+    IAudioTrack AddAudioTrack(AudioTrackOptions options);
+
     /// <summary>Produces a local WebRTC offer (BUNDLE, DTLS-SRTP, ICE, rtcp-mux) for the app to signal out.</summary>
     string CreateOffer();
 

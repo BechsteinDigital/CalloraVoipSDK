@@ -171,16 +171,18 @@ internal sealed class BundledAudioTrackSet
     }
 
     /// <summary>
-    /// Internal send seam: sends one audio RTP payload on the additional audio track <paramref name="mid"/>
-    /// through its registered outbound sender (suppressed until DTLS keys the transport like every bundle send).
-    /// Drives the symmetric sender wired at construction; there is no public N-audio send API in this slice.
+    /// Internal send seam: sends one audio RTP payload on the additional audio track <paramref name="mid"/> with
+    /// the explicit <paramref name="rtpTimestamp"/> stamped on the outbound packets (RFC 3550 §5.1), through its
+    /// registered outbound sender (suppressed until DTLS keys the transport like every bundle send). The timestamp
+    /// is set, not cursor-derived, so an SFU forwarding this stream preserves the source's timestamp for A/V-sync;
+    /// the track's timestamp cursor is not advanced. Drives the symmetric sender wired at construction.
     /// </summary>
     /// <exception cref="InvalidOperationException">This bundle has no additional audio track with that MID.</exception>
-    public ValueTask SendAsync(string mid, ReadOnlyMemory<byte> payload, bool marker, CancellationToken cancellationToken)
+    public ValueTask SendAsync(string mid, ReadOnlyMemory<byte> payload, uint rtpTimestamp, bool marker, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrEmpty(mid);
         if (!_byMid.ContainsKey(mid))
             throw new InvalidOperationException($"This bundle has no additional audio track with MID '{mid}'.");
-        return _outbound.SendAsync(mid, payload, marker, cancellationToken: cancellationToken);
+        return _outbound.SendAudioTimestampedAsync(mid, payload, rtpTimestamp, marker, cancellationToken);
     }
 }
