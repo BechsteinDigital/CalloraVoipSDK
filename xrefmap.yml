@@ -11566,15 +11566,15 @@ references:
   commentId: T:CalloraVoipSdk.WebRtc.EncodedFrame
   fullName: CalloraVoipSdk.WebRtc.EncodedFrame
   nameWithType: EncodedFrame
-- uid: CalloraVoipSdk.WebRtc.EncodedFrame.#ctor(System.ReadOnlyMemory{System.Byte},System.Nullable{System.UInt32},System.Boolean,System.Nullable{System.Int64})
-  name: EncodedFrame(ReadOnlyMemory<byte>, uint?, bool, long?)
-  href: _api/CalloraVoipSdk.WebRtc.EncodedFrame.html#CalloraVoipSdk_WebRtc_EncodedFrame__ctor_System_ReadOnlyMemory_System_Byte__System_Nullable_System_UInt32__System_Boolean_System_Nullable_System_Int64__
-  commentId: M:CalloraVoipSdk.WebRtc.EncodedFrame.#ctor(System.ReadOnlyMemory{System.Byte},System.Nullable{System.UInt32},System.Boolean,System.Nullable{System.Int64})
-  name.vb: New(ReadOnlyMemory(Of Byte), UInteger?, Boolean, Long?)
-  fullName: CalloraVoipSdk.WebRtc.EncodedFrame.EncodedFrame(System.ReadOnlyMemory<byte>, uint?, bool, long?)
-  fullName.vb: CalloraVoipSdk.WebRtc.EncodedFrame.New(System.ReadOnlyMemory(Of Byte), UInteger?, Boolean, Long?)
-  nameWithType: EncodedFrame.EncodedFrame(ReadOnlyMemory<byte>, uint?, bool, long?)
-  nameWithType.vb: EncodedFrame.New(ReadOnlyMemory(Of Byte), UInteger?, Boolean, Long?)
+- uid: CalloraVoipSdk.WebRtc.EncodedFrame.#ctor(System.ReadOnlyMemory{System.Byte},System.Nullable{System.UInt32},System.Boolean,System.Nullable{System.Int64},System.String)
+  name: EncodedFrame(ReadOnlyMemory<byte>, uint?, bool, long?, string?)
+  href: _api/CalloraVoipSdk.WebRtc.EncodedFrame.html#CalloraVoipSdk_WebRtc_EncodedFrame__ctor_System_ReadOnlyMemory_System_Byte__System_Nullable_System_UInt32__System_Boolean_System_Nullable_System_Int64__System_String_
+  commentId: M:CalloraVoipSdk.WebRtc.EncodedFrame.#ctor(System.ReadOnlyMemory{System.Byte},System.Nullable{System.UInt32},System.Boolean,System.Nullable{System.Int64},System.String)
+  name.vb: New(ReadOnlyMemory(Of Byte), UInteger?, Boolean, Long?, String)
+  fullName: CalloraVoipSdk.WebRtc.EncodedFrame.EncodedFrame(System.ReadOnlyMemory<byte>, uint?, bool, long?, string?)
+  fullName.vb: CalloraVoipSdk.WebRtc.EncodedFrame.New(System.ReadOnlyMemory(Of Byte), UInteger?, Boolean, Long?, String)
+  nameWithType: EncodedFrame.EncodedFrame(ReadOnlyMemory<byte>, uint?, bool, long?, string?)
+  nameWithType.vb: EncodedFrame.New(ReadOnlyMemory(Of Byte), UInteger?, Boolean, Long?, String)
 - uid: CalloraVoipSdk.WebRtc.EncodedFrame.#ctor*
   name: EncodedFrame
   href: _api/CalloraVoipSdk.WebRtc.EncodedFrame.html#CalloraVoipSdk_WebRtc_EncodedFrame__ctor_
@@ -11624,6 +11624,19 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.WebRtc.EncodedFrame.PresentationTimeUsec
   nameWithType: EncodedFrame.PresentationTimeUsec
+- uid: CalloraVoipSdk.WebRtc.EncodedFrame.Rid
+  name: Rid
+  href: _api/CalloraVoipSdk.WebRtc.EncodedFrame.html#CalloraVoipSdk_WebRtc_EncodedFrame_Rid
+  commentId: P:CalloraVoipSdk.WebRtc.EncodedFrame.Rid
+  fullName: CalloraVoipSdk.WebRtc.EncodedFrame.Rid
+  nameWithType: EncodedFrame.Rid
+- uid: CalloraVoipSdk.WebRtc.EncodedFrame.Rid*
+  name: Rid
+  href: _api/CalloraVoipSdk.WebRtc.EncodedFrame.html#CalloraVoipSdk_WebRtc_EncodedFrame_Rid_
+  commentId: Overload:CalloraVoipSdk.WebRtc.EncodedFrame.Rid
+  isSpec: "True"
+  fullName: CalloraVoipSdk.WebRtc.EncodedFrame.Rid
+  nameWithType: EncodedFrame.Rid
 - uid: CalloraVoipSdk.WebRtc.EncodedFrame.RtpTimestamp
   name: RtpTimestamp
   href: _api/CalloraVoipSdk.WebRtc.EncodedFrame.html#CalloraVoipSdk_WebRtc_EncodedFrame_RtpTimestamp
