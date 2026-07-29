@@ -11509,6 +11509,57 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.WebRtc.AudioTrackOptions.StreamId
   nameWithType: AudioTrackOptions.StreamId
+- uid: CalloraVoipSdk.WebRtc.BitrateRecommendation
+  name: BitrateRecommendation
+  href: _api/CalloraVoipSdk.WebRtc.BitrateRecommendation.html
+  commentId: T:CalloraVoipSdk.WebRtc.BitrateRecommendation
+  fullName: CalloraVoipSdk.WebRtc.BitrateRecommendation
+  nameWithType: BitrateRecommendation
+- uid: CalloraVoipSdk.WebRtc.BitrateRecommendation.#ctor(System.Int64,CalloraVoipSdk.Core.Domain.Calls.NetworkQuality)
+  name: BitrateRecommendation(long, NetworkQuality)
+  href: _api/CalloraVoipSdk.WebRtc.BitrateRecommendation.html#CalloraVoipSdk_WebRtc_BitrateRecommendation__ctor_System_Int64_CalloraVoipSdk_Core_Domain_Calls_NetworkQuality_
+  commentId: M:CalloraVoipSdk.WebRtc.BitrateRecommendation.#ctor(System.Int64,CalloraVoipSdk.Core.Domain.Calls.NetworkQuality)
+  name.vb: New(Long, NetworkQuality)
+  fullName: CalloraVoipSdk.WebRtc.BitrateRecommendation.BitrateRecommendation(long, CalloraVoipSdk.Core.Domain.Calls.NetworkQuality)
+  fullName.vb: CalloraVoipSdk.WebRtc.BitrateRecommendation.New(Long, CalloraVoipSdk.Core.Domain.Calls.NetworkQuality)
+  nameWithType: BitrateRecommendation.BitrateRecommendation(long, NetworkQuality)
+  nameWithType.vb: BitrateRecommendation.New(Long, NetworkQuality)
+- uid: CalloraVoipSdk.WebRtc.BitrateRecommendation.#ctor*
+  name: BitrateRecommendation
+  href: _api/CalloraVoipSdk.WebRtc.BitrateRecommendation.html#CalloraVoipSdk_WebRtc_BitrateRecommendation__ctor_
+  commentId: Overload:CalloraVoipSdk.WebRtc.BitrateRecommendation.#ctor
+  isSpec: "True"
+  name.vb: New
+  fullName: CalloraVoipSdk.WebRtc.BitrateRecommendation.BitrateRecommendation
+  fullName.vb: CalloraVoipSdk.WebRtc.BitrateRecommendation.New
+  nameWithType: BitrateRecommendation.BitrateRecommendation
+  nameWithType.vb: BitrateRecommendation.New
+- uid: CalloraVoipSdk.WebRtc.BitrateRecommendation.BitrateBps
+  name: BitrateBps
+  href: _api/CalloraVoipSdk.WebRtc.BitrateRecommendation.html#CalloraVoipSdk_WebRtc_BitrateRecommendation_BitrateBps
+  commentId: P:CalloraVoipSdk.WebRtc.BitrateRecommendation.BitrateBps
+  fullName: CalloraVoipSdk.WebRtc.BitrateRecommendation.BitrateBps
+  nameWithType: BitrateRecommendation.BitrateBps
+- uid: CalloraVoipSdk.WebRtc.BitrateRecommendation.BitrateBps*
+  name: BitrateBps
+  href: _api/CalloraVoipSdk.WebRtc.BitrateRecommendation.html#CalloraVoipSdk_WebRtc_BitrateRecommendation_BitrateBps_
+  commentId: Overload:CalloraVoipSdk.WebRtc.BitrateRecommendation.BitrateBps
+  isSpec: "True"
+  fullName: CalloraVoipSdk.WebRtc.BitrateRecommendation.BitrateBps
+  nameWithType: BitrateRecommendation.BitrateBps
+- uid: CalloraVoipSdk.WebRtc.BitrateRecommendation.Quality
+  name: Quality
+  href: _api/CalloraVoipSdk.WebRtc.BitrateRecommendation.html#CalloraVoipSdk_WebRtc_BitrateRecommendation_Quality
+  commentId: P:CalloraVoipSdk.WebRtc.BitrateRecommendation.Quality
+  fullName: CalloraVoipSdk.WebRtc.BitrateRecommendation.Quality
+  nameWithType: BitrateRecommendation.Quality
+- uid: CalloraVoipSdk.WebRtc.BitrateRecommendation.Quality*
+  name: Quality
+  href: _api/CalloraVoipSdk.WebRtc.BitrateRecommendation.html#CalloraVoipSdk_WebRtc_BitrateRecommendation_Quality_
+  commentId: Overload:CalloraVoipSdk.WebRtc.BitrateRecommendation.Quality
+  isSpec: "True"
+  fullName: CalloraVoipSdk.WebRtc.BitrateRecommendation.Quality
+  nameWithType: BitrateRecommendation.Quality
 - uid: CalloraVoipSdk.WebRtc.DtmfTone
   name: DtmfTone
   href: _api/CalloraVoipSdk.WebRtc.DtmfTone.html
@@ -11927,6 +11978,25 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.WebRtc.IPeerConnection.LocalMediaEndPoint
   nameWithType: IPeerConnection.LocalMediaEndPoint
+- uid: CalloraVoipSdk.WebRtc.IPeerConnection.RecommendedBitrateChanged
+  name: RecommendedBitrateChanged
+  href: _api/CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_RecommendedBitrateChanged
+  commentId: E:CalloraVoipSdk.WebRtc.IPeerConnection.RecommendedBitrateChanged
+  fullName: CalloraVoipSdk.WebRtc.IPeerConnection.RecommendedBitrateChanged
+  nameWithType: IPeerConnection.RecommendedBitrateChanged
+- uid: CalloraVoipSdk.WebRtc.IPeerConnection.RecommendedOutgoingBitrateBps
+  name: RecommendedOutgoingBitrateBps
+  href: _api/CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_RecommendedOutgoingBitrateBps
+  commentId: P:CalloraVoipSdk.WebRtc.IPeerConnection.RecommendedOutgoingBitrateBps
+  fullName: CalloraVoipSdk.WebRtc.IPeerConnection.RecommendedOutgoingBitrateBps
+  nameWithType: IPeerConnection.RecommendedOutgoingBitrateBps
+- uid: CalloraVoipSdk.WebRtc.IPeerConnection.RecommendedOutgoingBitrateBps*
+  name: RecommendedOutgoingBitrateBps
+  href: _api/CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_RecommendedOutgoingBitrateBps_
+  commentId: Overload:CalloraVoipSdk.WebRtc.IPeerConnection.RecommendedOutgoingBitrateBps
+  isSpec: "True"
+  fullName: CalloraVoipSdk.WebRtc.IPeerConnection.RecommendedOutgoingBitrateBps
+  nameWithType: IPeerConnection.RecommendedOutgoingBitrateBps
 - uid: CalloraVoipSdk.WebRtc.IPeerConnection.RequestVideoKeyFrameAsync(System.String,System.Threading.CancellationToken)
   name: RequestVideoKeyFrameAsync(string, CancellationToken)
   href: _api/CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_RequestVideoKeyFrameAsync_System_String_System_Threading_CancellationToken_

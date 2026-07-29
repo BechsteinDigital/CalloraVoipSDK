@@ -137,8 +137,9 @@ are resolved through the SDK's <code>IMdnsResolver</code> seam (RFC 8828) instea
 <li><strong>Data channels (SCTP)</strong> — not implemented, so anything relying on them will not work.</li>
 <li><strong>TURN relay is UDP-only</strong> — no TCP/TLS relay. The relay path itself is verified against a real
 coturn server.</li>
-<li><strong>Simulcast is send-side only</strong> — receiving and demultiplexing a browser's simulcast layers by
-rid is a later slice.</li>
+<li><strong>Receive-side simulcast</strong> ships in <strong>4.7.0-preview</strong> (transport-only, forwarding-only) — a
+browser's simulcast layers arrive demultiplexed and RID-tagged (<code>EncodedFrame.Rid</code>), but the
+preview primitives are not yet covered by the browser-interop CI matrix.</li>
 </ul>
 <p>Interop reports for other browsers are welcome:
 <a href="mailto:info@bechstein.digital">info@bechstein.digital</a>.</p>

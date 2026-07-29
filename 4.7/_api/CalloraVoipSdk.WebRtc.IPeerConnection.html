@@ -203,6 +203,42 @@ WebRTC facade, mirroring the SIP <code>ICall</code>.</p>
 
 
 
+  <a id="CalloraVoipSdk_WebRtc_IPeerConnection_RecommendedOutgoingBitrateBps_" data-uid="CalloraVoipSdk.WebRtc.IPeerConnection.RecommendedOutgoingBitrateBps*"></a>
+
+  <h3 id="CalloraVoipSdk_WebRtc_IPeerConnection_RecommendedOutgoingBitrateBps" data-uid="CalloraVoipSdk.WebRtc.IPeerConnection.RecommendedOutgoingBitrateBps">
+  RecommendedOutgoingBitrateBps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IPeerConnection.cs/#L232"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The SDK's current recommended outbound send bitrate to this peer in bits per second (transport-cc /
+RFC 8888), for setting the encoder or — for an SFU — selecting which simulcast layer to forward to this
+receiver. <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> until a media session is running and transport-cc has been negotiated
+for this leg. The point-in-time counterpart to <a class="xref" href="CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_RecommendedBitrateChanged">RecommendedBitrateChanged</a>; the same value
+the last event carried.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">long? RecommendedOutgoingBitrateBps { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
   <a id="CalloraVoipSdk_WebRtc_IPeerConnection_SignalingState_" data-uid="CalloraVoipSdk.WebRtc.IPeerConnection.SignalingState*"></a>
 
   <h3 id="CalloraVoipSdk_WebRtc_IPeerConnection_SignalingState" data-uid="CalloraVoipSdk.WebRtc.IPeerConnection.SignalingState">
@@ -1106,6 +1142,42 @@ are configured.</p>
   <h4 class="section">Event Type</h4>
   <dl class="parameters">
     <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.eventhandler-1">EventHandler</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h3 id="CalloraVoipSdk_WebRtc_IPeerConnection_RecommendedBitrateChanged" data-uid="CalloraVoipSdk.WebRtc.IPeerConnection.RecommendedBitrateChanged">
+  RecommendedBitrateChanged
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IPeerConnection.cs/#L242"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Raised whenever the SDK revises its recommended send bitrate to this peer (transport-cc / RFC 8888),
+carrying the finished <a class="xref" href="CalloraVoipSdk.WebRtc.BitrateRecommendation.html">BitrateRecommendation</a> (bitrate + coarse quality). This is the reactive
+signal an SFU reacts to per receiver, re-choosing the simulcast layer it forwards when the path's
+bandwidth changes. Reactive per feedback report (roughly once per round-trip); the SDK does not throttle
+it — the app decides when and how to act on a change. Stays silent when transport-cc was not negotiated
+(and <a class="xref" href="CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_RecommendedOutgoingBitrateBps">RecommendedOutgoingBitrateBps</a> reads <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">event EventHandler&lt;BitrateRecommendation&gt;? RecommendedBitrateChanged</code></pre>
+  </div>
+
+
+
+
+
+
+  <h4 class="section">Event Type</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.eventhandler-1">EventHandler</a>&lt;<a class="xref" href="CalloraVoipSdk.WebRtc.BitrateRecommendation.html">BitrateRecommendation</a>&gt;</dt>
     <dd></dd>
   </dl>
 

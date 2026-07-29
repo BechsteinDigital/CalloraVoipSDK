@@ -192,6 +192,16 @@ received) — a null value means &quot;not yet measured&quot;, never a fabricate
 Structs
 </h3>
     <dl class="jumplist">
+      <dt><a class="xref" href="CalloraVoipSdk.WebRtc.BitrateRecommendation.html">BitrateRecommendation</a></dt>
+      <dd><p>A ready-to-use send-bitrate recommendation for a peer connection, derived by the SDK from transport-wide
+congestion control (transport-cc / RFC 8888). The SDK does the estimation and hands back a finished
+recommendation — the app sets its encoder (or, for an SFU, selects the simulcast layer to forward to this
+receiver) to this value; it never has to interpret raw delay/loss metrics. Carried by
+<a class="xref" href="CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_RecommendedBitrateChanged">RecommendedBitrateChanged</a> and mirrored point-in-time by
+<a class="xref" href="CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_RecommendedOutgoingBitrateBps">RecommendedOutgoingBitrateBps</a>.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
       <dt><a class="xref" href="CalloraVoipSdk.WebRtc.DtmfTone.html">DtmfTone</a></dt>
       <dd><p>One fully received inbound DTMF tone (RFC 4733 telephone-event), surfaced on
 <a class="xref" href="CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_DtmfReceived">DtmfReceived</a> once per tone after its end-of-event packet.</p>

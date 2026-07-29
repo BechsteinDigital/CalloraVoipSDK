@@ -76,6 +76,34 @@
 <p>The authoritative changelog lives in the repository:
 <a href="https://github.com/BechsteinDigital/CalloraVoipSDK/blob/main/CHANGELOG.md"><code>CHANGELOG.md</code></a></p>
 <h2 id="release-highlights">Release highlights</h2>
+<h3 id="470-preview--2026-07-29">4.7.0-preview — 2026-07-29</h3>
+<p>Three <strong>additive, transport-only</strong> WebRTC primitives that enable an external SFU / conference host to
+run multi-party video on top of the peer surface. All three are <strong>preview-grade</strong> and additive: a peer
+that uses none of them negotiates byte-identical SDP and behaves exactly as in 4.6. The SDK stays a
+peer — it <strong>forwards, it does not mix or transcode</strong>. See <a href="guides/webrtc.html">WebRTC</a>.</p>
+<p><strong>WebRTC (preview)</strong></p>
+<ul>
+<li><strong>Multiple audio tracks over one BUNDLE.</strong> <code>IPeerConnection.AddAudioTrack()</code> (and an
+<code>AddAudioTrack(AudioTrackOptions)</code> overload) returns an <code>IAudioTrack</code> (<code>Mid</code>, <code>Direction</code>,
+<code>SendFrameAsync(frame, rtpTimestamp)</code>) — each track its own <code>m=audio</code> line, SSRC and per-participant
+<code>a=msid</code> on the shared transport, received per track (<code>RemoteTrack.Mid</code>), added/removed mid-call via
+renegotiation. The <strong>primary</strong> audio m-line anchors ICE/DTLS and is never deactivated (single-track
+SDP is byte-identical); DTMF stays on the primary track. The send path threads the RTP timestamp
+through so A/V sync holds against forwarded video. Forwarding building block for conference audio —
+the SDK does not mix.</li>
+<li><strong>Receive-side simulcast demux (RFC 8853/8852).</strong> A peer's multiple encodings of one video m-line are
+separated receive-side into independent per-RID reassembly and tagged on the new <code>EncodedFrame.Rid</code>
+(<code>string?</code>); one <code>RemoteTrack</code> per m-line, layers told apart by <code>frame.Rid</code>. Completes simulcast
+(send side already shipped). <strong>Forwarding-only</strong> — no layer is dropped or transcoded; that is SFU
+logic. Non-simulcast receive is byte-identical (<code>Rid</code> is <code>null</code>).</li>
+<li><strong>Per-peer bitrate recommendation (transport-cc, RFC 8888).</strong>
+<code>IPeerConnection.RecommendedOutgoingBitrateBps</code> (<code>long?</code>) plus a <code>RecommendedBitrateChanged</code> event
+carrying a <code>BitrateRecommendation</code> (<code>BitrateBps</code>, <code>Quality</code> <code>NetworkQuality</code>) — a finished
+recommended send bitrate toward the peer, derived from the peer's returned congestion feedback; for an
+SFU, the per-receiver signal of which layer to forward. A recommendation, not raw metrics, and
+<strong>reactive</strong> (fires per feedback interval, no poll); <code>null</code>/silent when transport-cc is not
+negotiated. No SDK throttling, no layer decision in the SDK.</li>
+</ul>
 <h3 id="460--2026-07-28">4.6.0 — 2026-07-28</h3>
 <p>The 4.6 line adds a <strong>WebRTC facade</strong> and a <strong>self-hostable STUN/TURN server</strong> on top of the SIP + RTP
 core, and closes every interop- and stability-critical finding of a full source audit. WebRTC is

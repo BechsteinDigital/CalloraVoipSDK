@@ -2871,6 +2871,20 @@
     },
     {
       "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.WebRtc.BitrateRecommendation.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.WebRtc.BitrateRecommendation.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.WebRtc.BitrateRecommendation",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.WebRtc.BitrateRecommendation.yml\" sourcestartlinenumber=\"1\">A ready-to-use send-bitrate recommendation for a peer connection, derived by the SDK from transport-wide\ncongestion control (transport-cc / RFC 8888). The SDK does the estimation and hands back a finished\nrecommendation — the app sets its encoder (or, for an SFU, selects the simulcast layer to forward to this\nreceiver) to this value; it never has to interpret raw delay/loss metrics. Carried by\n<xref href=\"CalloraVoipSdk.WebRtc.IPeerConnection.RecommendedBitrateChanged\" data-throw-if-not-resolved=\"false\"></xref> and mirrored point-in-time by\n<xref href=\"CalloraVoipSdk.WebRtc.IPeerConnection.RecommendedOutgoingBitrateBps\" data-throw-if-not-resolved=\"false\"></xref>.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
       "source_relative_path": "docs/portal/_api/CalloraVoipSdk.WebRtc.DtmfTone.yml",
       "output": {
         ".html": {
