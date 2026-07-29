@@ -96,4 +96,55 @@ public sealed class BundledRtpDemultiplexerTests
         Assert.False(Demuxer().TryResolveBySsrc(999, out var mid));
         Assert.Equal(string.Empty, mid);
     }
+
+    [Fact]
+    public void Add_known_mid_accepts_and_latches_a_mid_call_track()
+    {
+        var demux = Demuxer();
+
+        // Before the track is added, its MID is outside the demux boundary → dropped, not latched.
+        Assert.False(demux.TryResolveMid(Packet(ssrc: 400, pt: 96, mid: "screenshare"), out _));
+        Assert.False(demux.TryResolveBySsrc(400, out _));
+
+        demux.AddKnownMid("screenshare");
+
+        // Now a packet with the newly negotiated MID (and a fresh SSRC) is accepted and latches.
+        Assert.True(demux.TryResolveMid(Packet(ssrc: 401, pt: 96, mid: "screenshare"), out var mid));
+        Assert.Equal("screenshare", mid);
+        Assert.True(demux.TryResolveBySsrc(401, out var latched));
+        Assert.Equal("screenshare", latched);
+    }
+
+    [Fact]
+    public void Unadded_mid_stays_outside_the_demux_boundary()
+    {
+        var demux = Demuxer();
+        demux.AddKnownMid("screenshare");
+
+        // A different, never-added MID is still rejected — the boundary is not weakened.
+        Assert.False(demux.TryResolveMid(Packet(ssrc: 500, pt: 96, mid: "datachannel"), out var mid));
+        Assert.Equal(string.Empty, mid);
+        Assert.False(demux.TryResolveBySsrc(500, out _));
+    }
+
+    [Fact]
+    public void Add_known_mid_is_idempotent()
+    {
+        var demux = Demuxer();
+
+        demux.AddKnownMid("screenshare");
+        demux.AddKnownMid("screenshare"); // duplicate must not throw
+        demux.AddKnownMid("video");       // already known from construction must not throw
+
+        Assert.True(demux.TryResolveMid(Packet(ssrc: 600, pt: 96, mid: "screenshare"), out var mid));
+        Assert.Equal("screenshare", mid);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public void Add_known_mid_rejects_null_or_empty(string? mid)
+    {
+        Assert.Throws<ArgumentException>(() => Demuxer().AddKnownMid(mid!));
+    }
 }
