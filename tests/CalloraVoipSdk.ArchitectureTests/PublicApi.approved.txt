@@ -728,6 +728,8 @@
   CalloraVoipSdk.Hosting.IStunServerHost.Start() : System.Void
   CalloraVoipSdk.Hosting.ITurnServerHost.LocalEndPoint : System.Net.IPEndPoint { get }
   CalloraVoipSdk.Hosting.ITurnServerHost.Start() : System.Void
+  CalloraVoipSdk.Hosting.RecordingEncryption.FromKey(System.ReadOnlySpan<System.Byte> key) : CalloraVoipSdk.Core.Application.Media.IRecordingEncryptionProvider
+  CalloraVoipSdk.Hosting.RecordingEncryption.FromPassphrase(System.String passphrase, System.ReadOnlySpan<System.Byte> salt, System.Int32 iterations = default) : CalloraVoipSdk.Core.Application.Media.IRecordingEncryptionProvider
   CalloraVoipSdk.Hosting.StunServerHost..ctor(CalloraVoipSdk.Hosting.StunServerHostConfiguration configuration)
   CalloraVoipSdk.Hosting.StunServerHost.DisposeAsync() : System.Threading.Tasks.ValueTask
   CalloraVoipSdk.Hosting.StunServerHost.LocalEndPoint : System.Net.IPEndPoint { get }
@@ -1202,6 +1204,7 @@ TYPE class CalloraVoipSdk.DependencyInjection.WebRtcServiceCollectionExtensions
 TYPE class CalloraVoipSdk.DeviceManager
 TYPE class CalloraVoipSdk.DialResult
 TYPE class CalloraVoipSdk.DialWaitOptions
+TYPE class CalloraVoipSdk.Hosting.RecordingEncryption
 TYPE class CalloraVoipSdk.Hosting.StunServerHost
 TYPE class CalloraVoipSdk.Hosting.StunServerHostConfiguration
 TYPE class CalloraVoipSdk.Hosting.StunServerHostOptions

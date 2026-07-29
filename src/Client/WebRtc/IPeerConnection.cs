@@ -69,30 +69,30 @@ public interface IPeerConnection : IAsyncDisposable
     event EventHandler? VideoKeyFrameRequested;
 
     /// <summary>
-    /// Adds a video track (its own <c>m=video</c> line on the shared BUNDLE transport) before the first
-    /// offer, returning a handle to send frames on it. The happy path: <c>var cam = peer.AddVideoTrack();
-    /// await cam.SendFrameAsync(frame, ts);</c>.
+    /// Adds a video track (its own <c>m=video</c> line on the shared BUNDLE transport), returning a handle to
+    /// send frames on it. The happy path: <c>var cam = peer.AddVideoTrack(); await cam.SendFrameAsync(frame, ts);</c>.
     /// </summary>
     /// <remarks>
     /// Backward-compatible semantics: <see cref="WebRtcConfiguration.EnableVideo"/> stays the implicit primary
     /// video track (unchanged SDP); <c>AddVideoTrack</c> adds a further track (or the first, when
     /// <c>EnableVideo</c> is false). The frameless
     /// <see cref="SendVideoFrameAsync(System.ReadOnlyMemory{byte}, uint, System.Threading.CancellationToken)"/>
-    /// keeps addressing the primary track. Preview-grade: adding a track after the offer is produced is a later
-    /// package (mid-call add / renegotiation) and throws today.
+    /// keeps addressing the primary track. A track added before the first offer is negotiated in that offer; a
+    /// track added mid-call is pending until the next <see cref="CreateOffer"/>/<see cref="SetRemoteDescriptionAsync"/>
+    /// cycle applies it to the running session (RFC 8829 renegotiation).
     /// </remarks>
     /// <returns>A handle to send encoded frames on the new track.</returns>
-    /// <exception cref="InvalidOperationException">The offer has already been produced (mid-call add is a later package).</exception>
+    /// <exception cref="InvalidOperationException">The peer is closed.</exception>
     IVideoTrack AddVideoTrack();
 
     /// <summary>
     /// Adds a video track with deeper control — direction, codecs, send-side simulcast layers, and the
-    /// MediaStream it belongs to (see <see cref="VideoTrackOptions"/>) — before the first offer. See
-    /// <see cref="AddVideoTrack()"/> for the backward-compatibility semantics and the mid-call limitation.
+    /// MediaStream it belongs to (see <see cref="VideoTrackOptions"/>). See
+    /// <see cref="AddVideoTrack()"/> for the backward-compatibility and mid-call renegotiation semantics.
     /// </summary>
     /// <param name="options">The track's direction, codecs, simulcast layers, and stream id.</param>
     /// <returns>A handle to send encoded frames on the new track.</returns>
-    /// <exception cref="InvalidOperationException">The offer has already been produced (mid-call add is a later package).</exception>
+    /// <exception cref="InvalidOperationException">The peer is closed.</exception>
     IVideoTrack AddVideoTrack(VideoTrackOptions options);
 
     /// <summary>Produces a local WebRTC offer (BUNDLE, DTLS-SRTP, ICE, rtcp-mux) for the app to signal out.</summary>
