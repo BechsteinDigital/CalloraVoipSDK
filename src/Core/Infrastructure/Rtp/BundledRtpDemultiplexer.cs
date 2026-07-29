@@ -14,13 +14,18 @@ namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
 ///
 /// This is the routing brain of the bundled transport (ADR-010 B2) — pure decision logic over the
 /// negotiated maps plus a learned SSRC→MID table; it moves no bytes and owns no socket. Thread-safe: the
-/// learned table is a <see cref="ConcurrentDictionary{TKey,TValue}"/> (lock-free reads on the receive
-/// path); the negotiated maps are immutable after construction.
+/// learned table and the accepted-MID set are <see cref="ConcurrentDictionary{TKey,TValue}"/> instances
+/// (lock-free reads on the receive path); the payload-type map is immutable after construction. The
+/// accepted-MID set is live-extensible via <see cref="AddKnownMid"/> for mid-call track additions
+/// (RFC 8843 §9.2 / RFC 8829 renegotiation, P3b) without weakening the demux security boundary.
 /// </summary>
 internal sealed class BundledRtpDemultiplexer
 {
     private readonly byte _midExtensionId;
-    private readonly IReadOnlySet<string> _knownMids;
+
+    // Accepted m-line MIDs, used as a set (value byte is ignored). ConcurrentDictionary gives lock-free
+    // ContainsKey reads on the receive hot path while AddKnownMid extends it via TryAdd (P3b).
+    private readonly ConcurrentDictionary<string, byte> _knownMids;
     private readonly IReadOnlyDictionary<int, string> _payloadTypeToMid;
     private readonly ConcurrentDictionary<uint, string> _ssrcToMid = new();
 
@@ -42,8 +47,36 @@ internal sealed class BundledRtpDemultiplexer
         IReadOnlyDictionary<int, string> payloadTypeToMid)
     {
         _midExtensionId = midExtensionId;
-        _knownMids = knownMids ?? throw new ArgumentNullException(nameof(knownMids));
+        ArgumentNullException.ThrowIfNull(knownMids);
         _payloadTypeToMid = payloadTypeToMid ?? throw new ArgumentNullException(nameof(payloadTypeToMid));
+
+        // Copy the caller's fixed set into a mutable, thread-safe set so it can be extended live (P3b)
+        // while the receive loop reads it lock-free. The ctor parameter type stays IReadOnlySet<string>
+        // so existing callers/factory are unaffected.
+        _knownMids = new ConcurrentDictionary<string, byte>();
+        foreach (var knownMid in knownMids)
+        {
+            _knownMids.TryAdd(knownMid, 0);
+        }
+    }
+
+    /// <summary>
+    /// Extends the set of accepted m-line MIDs for a track added mid-call (RFC 8843 §9.2 / RFC 8829
+    /// renegotiation, P3b). Only MIDs from an already-negotiated description may be passed — the caller is
+    /// responsible for ensuring that no invalid MID weakens the demux boundary. Thread-safe against the
+    /// receive loop (lock-free <c>TryAdd</c>) and idempotent: passing an already-known MID is a no-op and
+    /// does not throw.
+    /// </summary>
+    /// <param name="mid">The MID token of the newly negotiated m-line to start accepting.</param>
+    /// <exception cref="ArgumentException"><paramref name="mid"/> is <see langword="null"/> or empty.</exception>
+    public void AddKnownMid(string mid)
+    {
+        if (string.IsNullOrEmpty(mid))
+        {
+            throw new ArgumentException("MID must not be null or empty.", nameof(mid));
+        }
+
+        _knownMids.TryAdd(mid, 0);
     }
 
     /// <summary>
@@ -75,7 +108,7 @@ internal sealed class BundledRtpDemultiplexer
         if (_midExtensionId != 0
             && RtpMidHeaderExtension.TryRead(headerExtension, _midExtensionId, out var readMid))
         {
-            if (!_knownMids.Contains(readMid))
+            if (!_knownMids.ContainsKey(readMid))
             {
                 mid = string.Empty;
                 return false;
