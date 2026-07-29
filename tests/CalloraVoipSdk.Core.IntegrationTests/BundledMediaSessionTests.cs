@@ -149,6 +149,116 @@ public sealed class BundledMediaSessionTests
     }
 
     [Fact]
+    public async Task Primary_and_two_additional_audio_tracks_flow_over_one_bundle_without_cross_talk()
+    {
+        // 4.7.0 N-audio (the SFU pattern: one audio stream per remote participant): the primary audio anchor plus
+        // two ADDITIONAL audio m-lines ride the ONE bundle. All three share the audio payload type (PT 0), so
+        // inbound demux cannot rely on the PT — it must route by the MID header extension (RFC 9143). Each track
+        // sends on its own bundle-wide-distinct SSRC, and per-SSRC SRTP (ADR-011) keys ROC/replay per SSRC, so
+        // three simultaneous audio streams decrypt independently. This proves each additional track's packet lands
+        // on its own MID (never on the other's or on the primary), and the primary stays on the mid-less event.
+        var certA = DtlsCertificate.GenerateEcdsaP256();
+        var certB = DtlsCertificate.GenerateEcdsaP256();
+
+        // Two additional audio m-lines: distinct MIDs, distinct SSRCs (bundle-wide-distinct across primary + both),
+        // shared PT 0 with the primary — so demux is forced onto the MID header extension, not the payload type.
+        IReadOnlyList<BundledTrackConfig> extraAudio =
+        [
+            new BundledTrackConfig { Mid = "p1", Ssrc = 0x0A0B0C0D, PayloadType = AudioPayloadType, SamplesPerPacket = 160 },
+            new BundledTrackConfig { Mid = "p2", Ssrc = 0x0A0B0C0E, PayloadType = AudioPayloadType, SamplesPerPacket = 160 },
+        ];
+
+        var (client, server) = CreatePair(certA, certB, additionalAudioTracks: extraAudio);
+        await using var clientLease = client;
+        await using var serverLease = server;
+
+        Assert.Equal(2, server.AdditionalAudioTrackCount);
+        Assert.True(server.HasAdditionalAudio);
+        Assert.Equal(new[] { "p1", "p2" }, server.AdditionalAudioMids);
+
+        // Collect the first payload per MID on the receiver, and the first PRIMARY payload on the mid-less event.
+        // A cross-talk bug would land p1's payload under "p2" (or a mid-tagged event firing for the primary) — the
+        // per-MID content assertions below catch it.
+        var primary = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var p1 = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var p2 = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
+        server.AudioReceived += pkt => primary.TrySetResult(pkt.Payload.ToArray());
+        server.AudioTrackFrameReceived += (mid, pkt) =>
+        {
+            // The primary MID must NEVER surface here — the primary is the mid-less path only.
+            Assert.NotEqual("audio", mid);
+            if (mid == "p1") p1.TrySetResult(pkt.Payload.ToArray());
+            else if (mid == "p2") p2.TrySetResult(pkt.Payload.ToArray());
+        };
+
+        await server.StartAsync();
+        await client.StartAsync();
+
+        // Three visibly different payloads so a mixed-up MID mapping is detectable by content, not just by count.
+        var primaryPayload = new byte[] { 1, 2, 3, 4 };
+        var p1Payload = new byte[] { 10, 20, 30 };
+        var p2Payload = new byte[] { 40, 50, 60, 70 };
+
+        using var overall = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        while (!(primary.Task.IsCompleted && p1.Task.IsCompleted && p2.Task.IsCompleted))
+        {
+            overall.Token.ThrowIfCancellationRequested();
+            await client.SendAudioAsync(primaryPayload);
+            await client.SendAudioTrackFrameAsync("p1", p1Payload);
+            await client.SendAudioTrackFrameAsync("p2", p2Payload);
+            await Task.Delay(20, overall.Token);
+        }
+
+        // Each MID received exactly its own track's payload — no cross-talk between the three SSRCs, and the primary
+        // arrived on the mid-less event (proven by the completion above; the mid-tagged handler asserted != "audio").
+        Assert.Equal(primaryPayload, await primary.Task.WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.Equal(p1Payload, await p1.Task.WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.Equal(p2Payload, await p2.Task.WaitAsync(TimeSpan.FromSeconds(5)));
+
+        // The three payloads differ, so a swapped mapping would have failed one of the equalities above.
+        Assert.NotEqual(primaryPayload, p1Payload);
+        Assert.NotEqual(p1Payload, p2Payload);
+    }
+
+    [Fact]
+    public async Task Single_audio_bundle_receives_only_on_the_primary_event_and_reports_no_additional_tracks()
+    {
+        // Byte-identity guard: with no additional audio m-lines the bundle is the pre-4.7.0 single-audio path —
+        // inbound audio surfaces ONLY on the mid-less AudioReceived, the mid-tagged event never fires, and the
+        // additional-audio accessors report empty. Proven over the real DTLS-SRTP loopback.
+        var certA = DtlsCertificate.GenerateEcdsaP256();
+        var certB = DtlsCertificate.GenerateEcdsaP256();
+
+        var (client, server) = CreatePair(certA, certB); // no additionalAudioTracks → single-audio path
+        await using var clientLease = client;
+        await using var serverLease = server;
+
+        Assert.False(server.HasAdditionalAudio);
+        Assert.Equal(0, server.AdditionalAudioTrackCount);
+        Assert.Empty(server.AdditionalAudioMids);
+
+        var primary = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var midTaggedFired = false;
+        server.AudioReceived += pkt => primary.TrySetResult(pkt.Payload.ToArray());
+        server.AudioTrackFrameReceived += (_, _) => midTaggedFired = true;
+
+        await server.StartAsync();
+        await client.StartAsync();
+
+        var payload = new byte[] { 7, 7, 7 };
+        using var overall = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        while (!primary.Task.IsCompleted)
+        {
+            overall.Token.ThrowIfCancellationRequested();
+            await client.SendAudioAsync(payload);
+            await Task.Delay(20, overall.Token);
+        }
+
+        Assert.Equal(payload, await primary.Task.WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.False(midTaggedFired, "the mid-tagged additional-audio event must not fire on a single-audio bundle");
+    }
+
+    [Fact]
     public async Task Two_simultaneous_video_ssrcs_decrypt_independently_with_per_ssrc_replay_windows()
     {
         // per-SSRC SRTP (ADR-011): each SSRC on the bundle has its own ROC + replay window. Two video tracks
@@ -477,7 +587,8 @@ public sealed class BundledMediaSessionTests
     // with fresh ports rather than flake.
     private static (BundledMediaSession Client, BundledMediaSession Server) CreatePair(
         DtlsCertificate certA, DtlsCertificate certB, byte? transportCcExtId = null,
-        IReadOnlyList<BundledTrackConfig>? videoTracks = null)
+        IReadOnlyList<BundledTrackConfig>? videoTracks = null,
+        IReadOnlyList<BundledTrackConfig>? additionalAudioTracks = null)
     {
         videoTracks ??= DefaultVideo();
         for (var attempt = 1; ; attempt++)
@@ -490,12 +601,14 @@ public sealed class BundledMediaSessionTests
                 client = new BundledMediaSession(
                     Options(portA, portB, isClient: true, certB.Fingerprint, controlling: true,
                         localUfrag: "cli0", localPwd: ClientPwd, remoteUfrag: "srv0", remotePwd: ServerPwd,
-                        transportCcExtId: transportCcExtId, videoTracks: videoTracks),
+                        transportCcExtId: transportCcExtId, videoTracks: videoTracks,
+                        additionalAudioTracks: additionalAudioTracks),
                     new DtlsSrtpHandshaker(NullLogger<DtlsSrtpHandshaker>.Instance), certA, NullLoggerFactory.Instance);
                 var server = new BundledMediaSession(
                     Options(portB, portA, isClient: false, certA.Fingerprint, controlling: false,
                         localUfrag: "srv0", localPwd: ServerPwd, remoteUfrag: "cli0", remotePwd: ClientPwd,
-                        transportCcExtId: transportCcExtId, videoTracks: videoTracks),
+                        transportCcExtId: transportCcExtId, videoTracks: videoTracks,
+                        additionalAudioTracks: additionalAudioTracks),
                     new DtlsSrtpHandshaker(NullLogger<DtlsSrtpHandshaker>.Instance), certB, NullLoggerFactory.Instance);
                 return (client, server);
             }
@@ -509,7 +622,8 @@ public sealed class BundledMediaSessionTests
     private static BundledMediaSessionOptions Options(
         int localPort, int remotePort, bool isClient, DtlsFingerprint remoteFingerprint, bool controlling,
         string localUfrag, string localPwd, string remoteUfrag, string remotePwd, byte? transportCcExtId = null,
-        IReadOnlyList<BundledTrackConfig>? videoTracks = null)
+        IReadOnlyList<BundledTrackConfig>? videoTracks = null,
+        IReadOnlyList<BundledTrackConfig>? additionalAudioTracks = null)
     {
         var remote = new IPEndPoint(IPAddress.Loopback, remotePort);
         return new BundledMediaSessionOptions
@@ -522,6 +636,7 @@ public sealed class BundledMediaSessionTests
             {
                 Mid = "audio", Ssrc = 0x0A0A0A0A, PayloadType = AudioPayloadType, SamplesPerPacket = 160,
             },
+            AdditionalAudioTracks = additionalAudioTracks ?? [],
             VideoTracks = videoTracks ?? DefaultVideo(),
             DtlsIsClient = isClient,
             RemoteFingerprint = remoteFingerprint,

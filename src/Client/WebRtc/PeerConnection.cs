@@ -54,6 +54,10 @@ internal sealed class PeerConnection : IPeerConnection
         _peer.ConnectionStateChanged += OnInternalStateChanged;
         _peer.SignalingStateChanged += OnInternalSignalingStateChanged;
         _peer.AudioReceived += OnAudioReceived;
+        // Inbound audio for the ADDITIONAL tracks (4.7.0: N remote audio m-lines) arrives MID-tagged; the primary
+        // stays on the mid-less OnAudioReceived. The two paths are disjoint (the peer never fires the mid-tagged
+        // event for the primary), so subscribing to both delivers each track exactly once.
+        _peer.AudioTrackFrameReceived += OnAudioTrackReceived;
         // Inbound video is projected via the MID-tagged event only (P2c): the peer fires it for EVERY video
         // track — including the primary, for which the legacy untagged VideoFrameReceived also fires — so
         // subscribing to both would double-deliver the primary track's frames. The MID-tagged path covers the
@@ -319,6 +323,7 @@ internal sealed class PeerConnection : IPeerConnection
         _peer.ConnectionStateChanged -= OnInternalStateChanged;
         _peer.SignalingStateChanged -= OnInternalSignalingStateChanged;
         _peer.AudioReceived -= OnAudioReceived;
+        _peer.AudioTrackFrameReceived -= OnAudioTrackReceived;
         _peer.VideoTrackFrameReceived -= OnVideoTrackReceived;
         _peer.LocalIceCandidateDiscovered -= OnLocalIceCandidate;
         _peer.DtmfReceived -= OnDtmfReceived;
@@ -343,8 +348,14 @@ internal sealed class PeerConnection : IPeerConnection
         if (_peer.HasRemoteAudio)
         {
             var msid = _peer.RemoteAudioMsid;
-            _tracks.EnsureAudioTrack(StreamId(msid), msid?.TrackId);
+            // The primary audio anchor is the mid-less track (keyed under the empty string), materialised from the
+            // has-remote-audio flag exactly as the pre-4.7.0 single-audio path.
+            _tracks.EnsureAudioTrack(mid: null, StreamId(msid), msid?.TrackId);
         }
+        // One RemoteTrack per ADDITIONAL remote audio m-line (4.7.0: N tracks), keyed by MID, so several remote
+        // participants' audio streams each surface a distinct track with the right MID/msid.
+        foreach (var audio in _peer.RemoteAudioTracks)
+            _tracks.EnsureAudioTrack(audio.Mid, StreamId(audio.Msid), audio.Msid?.TrackId);
         // One RemoteTrack per remote video m-line (P2c: N tracks), keyed by MID, so several remote cameras /
         // screen-shares each surface a distinct track with the right MID/msid.
         foreach (var video in _peer.RemoteVideoTracks)
@@ -402,7 +413,19 @@ internal sealed class PeerConnection : IPeerConnection
     {
         _taps.Audio(MediaDirection.Inbound, payload);
         var msid = _peer.RemoteAudioMsid;
-        _tracks.DeliverAudioFrame(StreamId(msid), msid?.TrackId, new EncodedFrame(payload, rtpTimestamp: null, isKeyFrame: false, presentationTimeUsec: null));
+        // The primary audio anchor is the mid-less track (keyed under the empty string).
+        _tracks.DeliverAudioFrame(mid: null, StreamId(msid), msid?.TrackId, new EncodedFrame(payload, rtpTimestamp: null, isKeyFrame: false, presentationTimeUsec: null));
+    }
+
+    // Mid-tagged inbound audio (4.7.0: N remote audio tracks — the SFU pattern): route each frame to its own
+    // RemoteTrack by MID. The peer fires this only for the additional tracks (never the primary), so a single
+    // subscription alongside OnAudioReceived covers 1-audio and N-audio without double-delivering the primary.
+    private void OnAudioTrackReceived(string mid, byte[] payload)
+    {
+        _taps.Audio(MediaDirection.Inbound, payload);
+        // The remote m-line's msid for this MID (for stream grouping); null when the remote advertised none.
+        var msid = _peer.RemoteAudioTracks.FirstOrDefault(t => string.Equals(t.Mid, mid, StringComparison.Ordinal))?.Msid;
+        _tracks.DeliverAudioFrame(mid, StreamId(msid), msid?.TrackId, new EncodedFrame(payload, rtpTimestamp: null, isKeyFrame: false, presentationTimeUsec: null));
     }
 
     // Mid-tagged inbound video (P2c): route each frame to its own RemoteTrack (by MID). The peer fires this

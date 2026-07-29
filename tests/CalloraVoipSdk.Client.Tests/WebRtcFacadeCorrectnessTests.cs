@@ -50,13 +50,13 @@ public sealed class WebRtcFacadeCorrectnessTests
             track.FrameReceived += (_, f) => frames.Add(f);
         });
 
-        var track = set.EnsureAudioTrack("stream-1", "track-a");   // materialise, no frame yet
+        var track = set.EnsureAudioTrack(mid: null, "stream-1", "track-a");   // materialise, no frame yet
 
         Assert.Single(raised);
         Assert.Empty(frames);
         Assert.Equal("stream-1", track.StreamId);
 
-        set.DeliverAudioFrame("stream-1", "track-a", new EncodedFrame(new byte[] { 1 }, null, false, null));
+        set.DeliverAudioFrame(mid: null, "stream-1", "track-a", new EncodedFrame(new byte[] { 1 }, null, false, null));
 
         Assert.Single(raised);   // no second TrackReceived — the existing track is reused
         Assert.Single(frames);   // the frame reached the pre-materialised track

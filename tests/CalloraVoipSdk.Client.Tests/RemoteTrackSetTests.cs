@@ -19,7 +19,7 @@ public sealed class RemoteTrackSetTests
         var tracks = new List<RemoteTrack>();
         var set = new RemoteTrackSet(tracks.Add);
 
-        set.DeliverAudioFrame("stream-1", "track-a", Audio(1, 2));
+        set.DeliverAudioFrame(mid: null, "stream-1", "track-a", Audio(1, 2));
 
         var track = Assert.Single(tracks);
         Assert.Equal(TrackKind.Audio, track.Kind);
@@ -33,7 +33,7 @@ public sealed class RemoteTrackSetTests
         var frames = new List<EncodedFrame>();
         var set = new RemoteTrackSet(track => track.FrameReceived += (_, f) => frames.Add(f));
 
-        set.DeliverAudioFrame("s", "t", Audio(9));
+        set.DeliverAudioFrame(mid: null, "s", "t", Audio(9));
 
         var frame = Assert.Single(frames);
         Assert.Equal(new byte[] { 9 }, frame.Payload.ToArray());
@@ -49,9 +49,9 @@ public sealed class RemoteTrackSetTests
         var frames = new List<EncodedFrame>();
         var set = new RemoteTrackSet(track => { trackCount++; track.FrameReceived += (_, f) => frames.Add(f); });
 
-        set.DeliverAudioFrame("s", "t", Audio(1));
-        set.DeliverAudioFrame("s", "t", Audio(2));
-        set.DeliverAudioFrame("s", "t", Audio(3));
+        set.DeliverAudioFrame(mid: null, "s", "t", Audio(1));
+        set.DeliverAudioFrame(mid: null, "s", "t", Audio(2));
+        set.DeliverAudioFrame(mid: null, "s", "t", Audio(3));
 
         Assert.Equal(1, trackCount);
         Assert.Equal(3, frames.Count);
@@ -63,7 +63,7 @@ public sealed class RemoteTrackSetTests
         var tracks = new List<RemoteTrack>();
         var set = new RemoteTrackSet(tracks.Add);
 
-        set.DeliverAudioFrame("stream-1", "audio-track", Audio(1));
+        set.DeliverAudioFrame(mid: null, "stream-1", "audio-track", Audio(1));
         set.DeliverVideoFrame("1", "stream-1", "video-track", Video(90000, true, 2));
 
         Assert.Equal(2, tracks.Count);
@@ -92,9 +92,42 @@ public sealed class RemoteTrackSetTests
         var tracks = new List<RemoteTrack>();
         var set = new RemoteTrackSet(tracks.Add);
 
-        set.DeliverAudioFrame(null, null, Audio(1));
+        set.DeliverAudioFrame(mid: null, null, null, Audio(1));
 
         Assert.Null(Assert.Single(tracks).StreamId);
+    }
+
+    [Fact]
+    public void N_additional_audio_mids_materialise_distinct_tracks_and_route_by_mid()
+    {
+        // 4.7.0 N-audio (the SFU pattern): the primary anchor (mid: null) plus two additional audio MIDs each
+        // materialise a distinct RemoteTrack, and each inbound frame routes to its own track by MID — never
+        // cross-delivered. The primary and the two MIDs are three separate tracks over one bundle.
+        var tracks = new List<RemoteTrack>();
+        var perTrackFrames = new Dictionary<RemoteTrack, List<EncodedFrame>>();
+        var set = new RemoteTrackSet(t =>
+        {
+            tracks.Add(t);
+            var list = perTrackFrames[t] = [];
+            t.FrameReceived += (_, f) => list.Add(f);
+        });
+
+        set.DeliverAudioFrame(mid: null, "stream", "primary", Audio(0));
+        set.DeliverAudioFrame("p1", "stream", "part-1", Audio(1));
+        set.DeliverAudioFrame("p2", "stream", "part-2", Audio(2));
+        // Second frames on the SAME MIDs must reuse the existing track (no re-materialisation).
+        set.DeliverAudioFrame("p1", "stream", "part-1", Audio(11));
+        set.DeliverAudioFrame(mid: null, "stream", "primary", Audio(99));
+
+        Assert.Equal(3, tracks.Count); // primary + p1 + p2, exactly once each
+        Assert.All(tracks, t => Assert.Equal(TrackKind.Audio, t.Kind));
+        // The MID-tagged tracks carry their MID; the primary anchor carries none.
+        Assert.Equal(new string?[] { null, "p1", "p2" }, tracks.Select(t => t.Mid));
+
+        // Each MID's frames landed only on its own track — content proves no cross-talk.
+        Assert.Equal(new[] { new byte[] { 0 }, new byte[] { 99 } }, perTrackFrames[tracks[0]].Select(f => f.Payload.ToArray()));
+        Assert.Equal(new[] { new byte[] { 1 }, new byte[] { 11 } }, perTrackFrames[tracks[1]].Select(f => f.Payload.ToArray()));
+        Assert.Equal(new[] { new byte[] { 2 } }, perTrackFrames[tracks[2]].Select(f => f.Payload.ToArray()));
     }
 
     [Fact]
@@ -108,7 +141,7 @@ public sealed class RemoteTrackSetTests
             track.FrameReceived += (_, _) => Interlocked.Increment(ref frameCount);
         });
 
-        var tasks = Enumerable.Range(0, 64).Select(_ => Task.Run(() => set.DeliverAudioFrame("s", "t", Audio(1))));
+        var tasks = Enumerable.Range(0, 64).Select(_ => Task.Run(() => set.DeliverAudioFrame(mid: null, "s", "t", Audio(1))));
         await Task.WhenAll(tasks);
 
         Assert.Equal(1, trackCount);        // the lock admits exactly one materialisation, no torn state

@@ -51,6 +51,10 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     // The bundle's video tracks (P2b: N video m-lines, RFC 8843 §9), keyed by MID. Empty for an audio-only
     // bundle; the first is the primary, addressed by the mid-less send/receive facade for backward compatibility.
     private readonly BundledVideoTrackSet _video;
+    // The bundle's ADDITIONAL inbound audio tracks (4.7.0: N audio m-lines, RFC 8843 §9), keyed by MID. Empty for
+    // a single-audio bundle. The PRIMARY audio (options.Audio, the transport anchor) is NOT in this set — it keeps
+    // the mid-less AudioReceived event; these extra receive-only sinks surface on the mid-tagged event instead.
+    private readonly BundledAudioTrackSet _audioTracks;
 
     // Transport-wide congestion control (transport-cc / RFC 8888), one plane for the WHOLE bundle because
     // transport-cc numbers the transport, not a stream. Null unless the a=extmap was negotiated. See
@@ -124,8 +128,20 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     // Volatile for the transition-thread write / dispose-thread read.
     private IRelayKeepAlive? _channelRebind;
 
-    /// <summary>Raised with each decrypted inbound audio RTP packet.</summary>
+    /// <summary>
+    /// Raised with each decrypted inbound audio RTP packet on the <em>primary</em> audio track (the transport
+    /// anchor). Backward-compatible with the pre-4.7.0 single-audio path: it never fires for an additional audio
+    /// m-line — use <see cref="AudioTrackFrameReceived"/> for those.
+    /// </summary>
     public event Action<RtpPacket>? AudioReceived;
+
+    /// <summary>
+    /// Raised with each decrypted inbound audio RTP packet on an <em>additional</em> audio m-line (4.7.0: N audio
+    /// tracks — the SFU pattern of one audio stream per remote participant), tagged with its MID. Fires only for
+    /// the additional receive-only tracks, never for the primary anchor (which stays on the mid-less
+    /// <see cref="AudioReceived"/>). Runs on the shared receive loop.
+    /// </summary>
+    public event Action<string, RtpPacket>? AudioTrackFrameReceived;
 
     /// <summary>
     /// Raised once per fully received inbound RFC 4733 telephone-event (DTMF), carrying the tone code (0–15)
@@ -211,6 +227,15 @@ internal sealed class BundledMediaSession : IAsyncDisposable
                 throw new ArgumentException(
                     $"Duplicate video MID '{videoConfig.Mid}' in the bundle options.", nameof(options));
         }
+        // One entry per additional inbound audio m-line (4.7.0). As for video, a PT shared across audio tracks is
+        // dropped from the demux map by the factory below and those packets route by MID header extension
+        // (RFC 9143) — never an ambiguous PT. A MID colliding with the primary audio or a video m-line is rejected.
+        foreach (var audioConfig in options.AdditionalAudioTracks)
+        {
+            if (!payloadTypesByMid.TryAdd(audioConfig.Mid, new[] { (int)audioConfig.PayloadType }))
+                throw new ArgumentException(
+                    $"Duplicate audio MID '{audioConfig.Mid}' in the bundle options.", nameof(options));
+        }
 
         var router = new BundledTrackRouter(
             BundledRtpDemultiplexerFactory.Create(options.MidExtensionId, payloadTypesByMid));
@@ -256,6 +281,14 @@ internal sealed class BundledMediaSession : IAsyncDisposable
             new RtpPacketCodec(), _transport, loggerFactory.CreateLogger<BundledOutboundPipeline>(),
             stampsTransportCc: options.TransportWideCcExtensionId is not null);
         _outbound.RegisterTrack(options.Audio.Mid, BundledMediaSessionComposition.BuildOutboundTrack(options, options.Audio));
+
+        // The additional inbound audio tracks (4.7.0) — each a bare receive sink plus a symmetric outbound sender —
+        // are wired by the collaborator (kept out of this ctor for the size limit): it registers each MID's router
+        // sink (raising the mid-tagged AudioTrackFrameReceived) and its outbound sender. The demux boundary was
+        // extended above; the primary anchor is untouched. Empty list → empty set (byte-identical single-audio path).
+        _audioTracks = options.AdditionalAudioTracks.Count > 0
+            ? new BundledAudioTrackSet(options, router, _outbound, RaiseAudioTrackReceived, _logger)
+            : new BundledAudioTrackSet(_outbound, _logger);
 
         // One BundledVideoTrack per negotiated video m-line (P2b: N video tracks). Each registers its own
         // outbound sender(s) and its own inbound router sink on its MID; per-SSRC SRTP keeps them independent.
@@ -356,6 +389,11 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         }
     }
 
+    // Raises the mid-tagged inbound-audio event for an additional audio m-line (4.7.0). Passed to the audio-track
+    // collaborator, which guards it against a throwing subscriber (K3). DTMF is not reassembled here — RFC 4733
+    // telephone-event stays on the primary audio track (the send/DTMF facade addresses only the primary).
+    private void RaiseAudioTrackReceived(string mid, RtpPacket packet) => AudioTrackFrameReceived?.Invoke(mid, packet);
+
     /// <summary>
     /// Test seam: injects one inbound audio-MID RTP packet straight into the audio dispatch path
     /// (<see cref="RaiseAudioReceived"/>), bypassing the socket/SRTP so the telephone-event reassembly and
@@ -452,6 +490,15 @@ internal sealed class BundledMediaSession : IAsyncDisposable
 
     /// <summary>The MID tokens of the video tracks on this bundle, in build order (primary first).</summary>
     public IReadOnlyList<string> VideoMids => _video.Mids;
+
+    /// <summary>Whether this bundle carries at least one additional inbound audio track beyond the primary anchor (4.7.0).</summary>
+    public bool HasAdditionalAudio => _audioTracks.Any;
+
+    /// <summary>The number of additional inbound audio tracks on this bundle (excluding the primary anchor).</summary>
+    public int AdditionalAudioTrackCount => _audioTracks.Count;
+
+    /// <summary>The MID tokens of the additional inbound audio tracks on this bundle, in negotiated order.</summary>
+    public IReadOnlyList<string> AdditionalAudioMids => _audioTracks.Mids;
 
     /// <summary>
     /// Whether outbound audio is sent. False when the negotiated directions do not carry audio from this peer
@@ -755,24 +802,10 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         _outboundQuality.Snapshot() with { JitterMs = _receptionStats.SnapshotJitterMs() };
 
     /// <summary>
-    /// Point-in-time derived quality per media stream (CF-004f). Two families of metric are folded together by
-    /// MID:
-    /// <list type="bullet">
-    /// <item><description>
-    /// RTT and the loss the peer reports on our media (RFC 3550 §6.4.1) are per <em>our sending</em> SSRC — each
-    /// is attributed to its track (audio/video MID) via the negotiated outbound SSRC map. A simulcast MID folds
-    /// its encodings' SSRCs into one video entry, taking the worst RTT/loss across them.
-    /// </description></item>
-    /// <item><description>
-    /// The local receive-side interarrival jitter (RFC 3550 §A.8) is per <em>remote inbound</em> SSRC — attributed
-    /// to a track by matching the first packet's payload type (audio PT → audio, video PT → video). An inbound
-    /// source whose payload type was not negotiated, or seen only via an RTCP SR, has an unknown kind and is
-    /// reported under its own SSRC with a null MID.
-    /// </description></item>
-    /// </list>
-    /// The two directions do not share an SSRC (ours vs the remote's), so an entry carries RTT/loss (outbound) or
-    /// jitter (inbound) depending on which direction it describes; a MID with both directions active folds them
-    /// into one entry. Every metric is <see langword="null"/> until it is available.
+    /// Point-in-time derived quality per media stream (CF-004f): the per-SSRC outbound RTT/loss (RFC 3550 §6.4.1)
+    /// and the per-SSRC inbound interarrival jitter (RFC 3550 §A.8) folded together by MID. See
+    /// <see cref="BundledMediaSessionComposition.FoldStreamQuality"/> for the full attribution rules; every metric
+    /// is <see langword="null"/> until it is available.
     /// </summary>
     public IReadOnlyList<BundledStreamQuality> SnapshotStreamQuality() =>
         BundledMediaSessionComposition.FoldStreamQuality(
@@ -806,6 +839,16 @@ internal sealed class BundledMediaSession : IAsyncDisposable
             : default;
 
     /// <summary>
+    /// Internal seam: sends one audio RTP payload on the additional audio track <paramref name="mid"/> (4.7.0),
+    /// suppressed until DTLS keys the transport. Drives the symmetric outbound sender wired at construction; there
+    /// is no public N-audio send API in this slice, so this serves composition and the loopback tests.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">This bundle has no additional audio track with that MID.</exception>
+    internal ValueTask SendAudioTrackFrameAsync(
+        string mid, ReadOnlyMemory<byte> payload, bool marker = false, CancellationToken cancellationToken = default)
+        => _audioTracks.SendAsync(mid, payload, marker, cancellationToken);
+
+    /// <summary>
     /// Sends one out-of-band DTMF tone as an RFC 4733 telephone-event burst on the audio track: an event-start
     /// packet (marker set, half the duration) followed by two end-of-event packets (E-bit set, full duration —
     /// the second a reliability retransmission per RFC 4733 §2.5.1.4), all sharing one RTP timestamp on the
@@ -837,27 +880,12 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         var payloadType = _telephoneEventPayloadType
             ?? throw new InvalidOperationException("RTP telephone-event (DTMF) was not negotiated for this WebRTC session.");
 
-        var durationRtpUnits = RtpTelephoneEventCodec.DurationMsToRtpUnits(durationMs, _telephoneEventClockRate);
-        var startDurationRtpUnits = (ushort)Math.Max(1, durationRtpUnits / 2);
-        // The event shares the audio stream's timestamp clock (RFC 4733 §2.1): stamp the whole burst with the
-        // audio track's current cursor, and reserve the event's full duration so the cursor advances past it —
-        // otherwise a following DTMF event (or media) reuses this timestamp and a receiver folds it into this
-        // event, dropping the repeated tone (RFC 4733 §2.5.1.4).
-        var eventTimestamp = _outbound.ReserveTrackTimestamp(_audioMid, durationRtpUnits);
-
-        var startPayload = RtpTelephoneEventCodec.BuildPayload(toneCode, endOfEvent: false, durationRtpUnits: startDurationRtpUnits);
-        var endPayload = RtpTelephoneEventCodec.BuildPayload(toneCode, endOfEvent: true, durationRtpUnits: durationRtpUnits);
-
-        await _outbound.SendTimestampedAsync(
-            _audioMid, startPayload, marker: true, payloadType: (byte)payloadType, timestamp: eventTimestamp,
-            cancellationToken: cancellationToken).ConfigureAwait(false);
-        await _outbound.SendTimestampedAsync(
-            _audioMid, endPayload, marker: false, payloadType: (byte)payloadType, timestamp: eventTimestamp,
-            cancellationToken: cancellationToken).ConfigureAwait(false);
-        // RFC 4733 §2.5.1.4 reliability recommendation: repeat the final (end-of-event) packet.
-        await _outbound.SendTimestampedAsync(
-            _audioMid, endPayload, marker: false, payloadType: (byte)payloadType, timestamp: eventTimestamp,
-            cancellationToken: cancellationToken).ConfigureAwait(false);
+        // The RFC 4733 burst (start + two end-of-event packets sharing one timestamp on the telephone-event PT,
+        // advancing the audio cursor past the event) is emitted by the composition helper — extracted so this
+        // session stays under the size limit.
+        await BundledMediaSessionComposition.SendDtmfBurstAsync(
+            _outbound, _audioMid, toneCode, durationMs, _telephoneEventClockRate, (byte)payloadType, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <summary>
