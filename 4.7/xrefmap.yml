@@ -11464,6 +11464,51 @@ references:
   commentId: N:CalloraVoipSdk.WebRtc
   fullName: CalloraVoipSdk.WebRtc
   nameWithType: CalloraVoipSdk.WebRtc
+- uid: CalloraVoipSdk.WebRtc.AudioTrackOptions
+  name: AudioTrackOptions
+  href: _api/CalloraVoipSdk.WebRtc.AudioTrackOptions.html
+  commentId: T:CalloraVoipSdk.WebRtc.AudioTrackOptions
+  fullName: CalloraVoipSdk.WebRtc.AudioTrackOptions
+  nameWithType: AudioTrackOptions
+- uid: CalloraVoipSdk.WebRtc.AudioTrackOptions.Codecs
+  name: Codecs
+  href: _api/CalloraVoipSdk.WebRtc.AudioTrackOptions.html#CalloraVoipSdk_WebRtc_AudioTrackOptions_Codecs
+  commentId: P:CalloraVoipSdk.WebRtc.AudioTrackOptions.Codecs
+  fullName: CalloraVoipSdk.WebRtc.AudioTrackOptions.Codecs
+  nameWithType: AudioTrackOptions.Codecs
+- uid: CalloraVoipSdk.WebRtc.AudioTrackOptions.Codecs*
+  name: Codecs
+  href: _api/CalloraVoipSdk.WebRtc.AudioTrackOptions.html#CalloraVoipSdk_WebRtc_AudioTrackOptions_Codecs_
+  commentId: Overload:CalloraVoipSdk.WebRtc.AudioTrackOptions.Codecs
+  isSpec: "True"
+  fullName: CalloraVoipSdk.WebRtc.AudioTrackOptions.Codecs
+  nameWithType: AudioTrackOptions.Codecs
+- uid: CalloraVoipSdk.WebRtc.AudioTrackOptions.Direction
+  name: Direction
+  href: _api/CalloraVoipSdk.WebRtc.AudioTrackOptions.html#CalloraVoipSdk_WebRtc_AudioTrackOptions_Direction
+  commentId: P:CalloraVoipSdk.WebRtc.AudioTrackOptions.Direction
+  fullName: CalloraVoipSdk.WebRtc.AudioTrackOptions.Direction
+  nameWithType: AudioTrackOptions.Direction
+- uid: CalloraVoipSdk.WebRtc.AudioTrackOptions.Direction*
+  name: Direction
+  href: _api/CalloraVoipSdk.WebRtc.AudioTrackOptions.html#CalloraVoipSdk_WebRtc_AudioTrackOptions_Direction_
+  commentId: Overload:CalloraVoipSdk.WebRtc.AudioTrackOptions.Direction
+  isSpec: "True"
+  fullName: CalloraVoipSdk.WebRtc.AudioTrackOptions.Direction
+  nameWithType: AudioTrackOptions.Direction
+- uid: CalloraVoipSdk.WebRtc.AudioTrackOptions.StreamId
+  name: StreamId
+  href: _api/CalloraVoipSdk.WebRtc.AudioTrackOptions.html#CalloraVoipSdk_WebRtc_AudioTrackOptions_StreamId
+  commentId: P:CalloraVoipSdk.WebRtc.AudioTrackOptions.StreamId
+  fullName: CalloraVoipSdk.WebRtc.AudioTrackOptions.StreamId
+  nameWithType: AudioTrackOptions.StreamId
+- uid: CalloraVoipSdk.WebRtc.AudioTrackOptions.StreamId*
+  name: StreamId
+  href: _api/CalloraVoipSdk.WebRtc.AudioTrackOptions.html#CalloraVoipSdk_WebRtc_AudioTrackOptions_StreamId_
+  commentId: Overload:CalloraVoipSdk.WebRtc.AudioTrackOptions.StreamId
+  isSpec: "True"
+  fullName: CalloraVoipSdk.WebRtc.AudioTrackOptions.StreamId
+  nameWithType: AudioTrackOptions.StreamId
 - uid: CalloraVoipSdk.WebRtc.DtmfTone
   name: DtmfTone
   href: _api/CalloraVoipSdk.WebRtc.DtmfTone.html
@@ -11592,6 +11637,54 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.WebRtc.EncodedFrame.RtpTimestamp
   nameWithType: EncodedFrame.RtpTimestamp
+- uid: CalloraVoipSdk.WebRtc.IAudioTrack
+  name: IAudioTrack
+  href: _api/CalloraVoipSdk.WebRtc.IAudioTrack.html
+  commentId: T:CalloraVoipSdk.WebRtc.IAudioTrack
+  fullName: CalloraVoipSdk.WebRtc.IAudioTrack
+  nameWithType: IAudioTrack
+- uid: CalloraVoipSdk.WebRtc.IAudioTrack.Direction
+  name: Direction
+  href: _api/CalloraVoipSdk.WebRtc.IAudioTrack.html#CalloraVoipSdk_WebRtc_IAudioTrack_Direction
+  commentId: P:CalloraVoipSdk.WebRtc.IAudioTrack.Direction
+  fullName: CalloraVoipSdk.WebRtc.IAudioTrack.Direction
+  nameWithType: IAudioTrack.Direction
+- uid: CalloraVoipSdk.WebRtc.IAudioTrack.Direction*
+  name: Direction
+  href: _api/CalloraVoipSdk.WebRtc.IAudioTrack.html#CalloraVoipSdk_WebRtc_IAudioTrack_Direction_
+  commentId: Overload:CalloraVoipSdk.WebRtc.IAudioTrack.Direction
+  isSpec: "True"
+  fullName: CalloraVoipSdk.WebRtc.IAudioTrack.Direction
+  nameWithType: IAudioTrack.Direction
+- uid: CalloraVoipSdk.WebRtc.IAudioTrack.Mid
+  name: Mid
+  href: _api/CalloraVoipSdk.WebRtc.IAudioTrack.html#CalloraVoipSdk_WebRtc_IAudioTrack_Mid
+  commentId: P:CalloraVoipSdk.WebRtc.IAudioTrack.Mid
+  fullName: CalloraVoipSdk.WebRtc.IAudioTrack.Mid
+  nameWithType: IAudioTrack.Mid
+- uid: CalloraVoipSdk.WebRtc.IAudioTrack.Mid*
+  name: Mid
+  href: _api/CalloraVoipSdk.WebRtc.IAudioTrack.html#CalloraVoipSdk_WebRtc_IAudioTrack_Mid_
+  commentId: Overload:CalloraVoipSdk.WebRtc.IAudioTrack.Mid
+  isSpec: "True"
+  fullName: CalloraVoipSdk.WebRtc.IAudioTrack.Mid
+  nameWithType: IAudioTrack.Mid
+- uid: CalloraVoipSdk.WebRtc.IAudioTrack.SendFrameAsync(System.ReadOnlyMemory{System.Byte},System.UInt32,System.Threading.CancellationToken)
+  name: SendFrameAsync(ReadOnlyMemory<byte>, uint, CancellationToken)
+  href: _api/CalloraVoipSdk.WebRtc.IAudioTrack.html#CalloraVoipSdk_WebRtc_IAudioTrack_SendFrameAsync_System_ReadOnlyMemory_System_Byte__System_UInt32_System_Threading_CancellationToken_
+  commentId: M:CalloraVoipSdk.WebRtc.IAudioTrack.SendFrameAsync(System.ReadOnlyMemory{System.Byte},System.UInt32,System.Threading.CancellationToken)
+  name.vb: SendFrameAsync(ReadOnlyMemory(Of Byte), UInteger, CancellationToken)
+  fullName: CalloraVoipSdk.WebRtc.IAudioTrack.SendFrameAsync(System.ReadOnlyMemory<byte>, uint, System.Threading.CancellationToken)
+  fullName.vb: CalloraVoipSdk.WebRtc.IAudioTrack.SendFrameAsync(System.ReadOnlyMemory(Of Byte), UInteger, System.Threading.CancellationToken)
+  nameWithType: IAudioTrack.SendFrameAsync(ReadOnlyMemory<byte>, uint, CancellationToken)
+  nameWithType.vb: IAudioTrack.SendFrameAsync(ReadOnlyMemory(Of Byte), UInteger, CancellationToken)
+- uid: CalloraVoipSdk.WebRtc.IAudioTrack.SendFrameAsync*
+  name: SendFrameAsync
+  href: _api/CalloraVoipSdk.WebRtc.IAudioTrack.html#CalloraVoipSdk_WebRtc_IAudioTrack_SendFrameAsync_
+  commentId: Overload:CalloraVoipSdk.WebRtc.IAudioTrack.SendFrameAsync
+  isSpec: "True"
+  fullName: CalloraVoipSdk.WebRtc.IAudioTrack.SendFrameAsync
+  nameWithType: IAudioTrack.SendFrameAsync
 - uid: CalloraVoipSdk.WebRtc.IEncodedMediaSink
   name: IEncodedMediaSink
   href: _api/CalloraVoipSdk.WebRtc.IEncodedMediaSink.html
@@ -11671,6 +11764,25 @@ references:
   commentId: T:CalloraVoipSdk.WebRtc.IPeerConnection
   fullName: CalloraVoipSdk.WebRtc.IPeerConnection
   nameWithType: IPeerConnection
+- uid: CalloraVoipSdk.WebRtc.IPeerConnection.AddAudioTrack
+  name: AddAudioTrack()
+  href: _api/CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_AddAudioTrack
+  commentId: M:CalloraVoipSdk.WebRtc.IPeerConnection.AddAudioTrack
+  fullName: CalloraVoipSdk.WebRtc.IPeerConnection.AddAudioTrack()
+  nameWithType: IPeerConnection.AddAudioTrack()
+- uid: CalloraVoipSdk.WebRtc.IPeerConnection.AddAudioTrack(CalloraVoipSdk.WebRtc.AudioTrackOptions)
+  name: AddAudioTrack(AudioTrackOptions)
+  href: _api/CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_AddAudioTrack_CalloraVoipSdk_WebRtc_AudioTrackOptions_
+  commentId: M:CalloraVoipSdk.WebRtc.IPeerConnection.AddAudioTrack(CalloraVoipSdk.WebRtc.AudioTrackOptions)
+  fullName: CalloraVoipSdk.WebRtc.IPeerConnection.AddAudioTrack(CalloraVoipSdk.WebRtc.AudioTrackOptions)
+  nameWithType: IPeerConnection.AddAudioTrack(AudioTrackOptions)
+- uid: CalloraVoipSdk.WebRtc.IPeerConnection.AddAudioTrack*
+  name: AddAudioTrack
+  href: _api/CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_AddAudioTrack_
+  commentId: Overload:CalloraVoipSdk.WebRtc.IPeerConnection.AddAudioTrack
+  isSpec: "True"
+  fullName: CalloraVoipSdk.WebRtc.IPeerConnection.AddAudioTrack
+  nameWithType: IPeerConnection.AddAudioTrack
 - uid: CalloraVoipSdk.WebRtc.IPeerConnection.AddIceCandidateAsync(System.String,System.Threading.CancellationToken)
   name: AddIceCandidateAsync(string, CancellationToken)
   href: _api/CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_AddIceCandidateAsync_System_String_System_Threading_CancellationToken_

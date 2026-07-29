@@ -95,6 +95,16 @@
 Classes
 </h3>
     <dl class="jumplist">
+      <dt><a class="xref" href="CalloraVoipSdk.WebRtc.AudioTrackOptions.html">AudioTrackOptions</a></dt>
+      <dd><p>Deeper control for <a class="xref" href="CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_AddAudioTrack_CalloraVoipSdk_WebRtc_AudioTrackOptions_">AddAudioTrack(AudioTrackOptions)</a>: the track's direction,
+its codec preferences, and the MediaStream it belongs to. Every field is optional —
+<code>new AudioTrackOptions()</code> yields a send-recv track using the client's configured
+<a class="xref" href="CalloraVoipSdk.WebRtc.WebRtcConfiguration.html#CalloraVoipSdk_WebRtc_WebRtcConfiguration_AudioCodecs">AudioCodecs</a>, matching the parameterless
+<a class="xref" href="CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_AddAudioTrack">AddAudioTrack()</a> happy path. Audio has no simulcast, so there is no
+per-layer/rid surface here.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
       <dt><a class="xref" href="CalloraVoipSdk.WebRtc.RemoteTrack.html">RemoteTrack</a></dt>
       <dd><p>A remote media track surfaced by <a class="xref" href="CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_TrackReceived">TrackReceived</a> (the W3C per-track model).
 Encoded frames arrive on <a class="xref" href="CalloraVoipSdk.WebRtc.RemoteTrack.html#CalloraVoipSdk_WebRtc_RemoteTrack_FrameReceived">FrameReceived</a>.</p>
@@ -202,6 +212,15 @@ is the raw depacketised codec bitstream — the app owns decoding.</p>
     <h3 id="interfaces">
 Interfaces
 </h3>
+    <dl class="jumplist">
+      <dt><a class="xref" href="CalloraVoipSdk.WebRtc.IAudioTrack.html">IAudioTrack</a></dt>
+      <dd><p>A handle to an outbound audio track added with <a class="xref" href="CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_AddAudioTrack">AddAudioTrack()</a> (its own
+<code>m=audio</code> line on the shared BUNDLE transport, beyond the peer's primary audio anchor). Send encoded
+audio payloads on this track with <a class="xref" href="CalloraVoipSdk.WebRtc.IAudioTrack.html#CalloraVoipSdk_WebRtc_IAudioTrack_SendFrameAsync_System_ReadOnlyMemory_System_Byte__System_UInt32_System_Threading_CancellationToken_">SendFrameAsync(ReadOnlyMemory&lt;byte&gt;, uint, CancellationToken)</a>;
+each track carries its own SSRC, so payloads sent on distinct handles never collide (RFC 3550 §8.1). The
+SFU pattern of one audio stream per remote participant on a single peer connection.</p>
+</dd>
+    </dl>
     <dl class="jumplist">
       <dt><a class="xref" href="CalloraVoipSdk.WebRtc.IEncodedMediaSink.html">IEncodedMediaSink</a></dt>
       <dd><p>A destination for recorded encoded media. The recorder writes every captured <a class="xref" href="CalloraVoipSdk.WebRtc.RecordedFrame.html">RecordedFrame</a>
