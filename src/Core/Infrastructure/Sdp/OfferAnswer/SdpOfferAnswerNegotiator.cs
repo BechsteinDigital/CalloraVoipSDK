@@ -432,7 +432,10 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             Fmtp = carriedFmtp,
             Ptime = ptime,
             Mid = offered.Mid,
-            Msid = localOptions?.AudioMsid,
+            // Multi-track (RFC 8843): each answered audio m-line takes its own a=msid (RFC 8830) keyed by
+            // the offered MID; absent from the map (or single-audio) it falls back to the one AudioMsid, so
+            // the 1+1 answer path is byte-identical.
+            Msid = ResolveAnswerAudioMsid(localOptions, offered.Mid),
             RtcpMux = rtcpMux,
             Crypto = crypto,
             Fingerprint = fingerprint,
@@ -446,6 +449,25 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
         };
 
         return new AudioAnswerNegotiation(media, negotiated, rtcpMux, remoteFp, remoteSetup, remoteCrypto, localCrypto);
+    }
+
+    // Resolves the a=msid (RFC 8830) for one answered audio m-line. A multi-track answer (RFC 8843) names
+    // the msid per offered MID via AudioMsidByMid so an SFU forwards N distinct participant audios; a MID the
+    // map does not name — and every m-line on the single-audio path, which supplies only AudioMsid — falls
+    // back to the one AudioMsid, keeping the 1+1 answer byte-identical.
+    private static SdpMsid? ResolveAnswerAudioMsid(SdpMediaOptions? localOptions, string? offeredMid)
+    {
+        if (localOptions is null)
+            return null;
+
+        if (offeredMid is not null
+            && localOptions.AudioMsidByMid is { } byMid
+            && byMid.TryGetValue(offeredMid, out var perLineMsid))
+        {
+            return perLineMsid;
+        }
+
+        return localOptions.AudioMsid;
     }
 
     // -------------------------------------------------------------------------
