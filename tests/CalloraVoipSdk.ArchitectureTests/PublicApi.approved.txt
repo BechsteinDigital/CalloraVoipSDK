@@ -1004,6 +1004,7 @@
   CalloraVoipSdk.WebRtc.IPeerConnection.LocalDescription : System.String { get }
   CalloraVoipSdk.WebRtc.IPeerConnection.LocalIceCandidateDiscovered : event System.EventHandler<System.String>
   CalloraVoipSdk.WebRtc.IPeerConnection.LocalMediaEndPoint : System.Net.IPEndPoint { get }
+  CalloraVoipSdk.WebRtc.IPeerConnection.RequestVideoKeyFrameAsync(System.String mid, System.Threading.CancellationToken cancellationToken = default) : System.Threading.Tasks.ValueTask<System.Boolean>
   CalloraVoipSdk.WebRtc.IPeerConnection.RequestVideoKeyFrameAsync(System.Threading.CancellationToken cancellationToken = default) : System.Threading.Tasks.ValueTask<System.Boolean>
   CalloraVoipSdk.WebRtc.IPeerConnection.SendAudioAsync(System.ReadOnlyMemory<System.Byte> payload, System.Threading.CancellationToken cancellationToken = default) : System.Threading.Tasks.ValueTask
   CalloraVoipSdk.WebRtc.IPeerConnection.SendDtmfAsync(System.Byte toneCode, System.Int32 durationMs = default, System.Threading.CancellationToken cancellationToken = default) : System.Threading.Tasks.Task

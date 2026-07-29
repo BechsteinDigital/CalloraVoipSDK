@@ -75,6 +75,64 @@ public sealed class WebRtcMultiTrackPeerToPeerTests
         Assert.NotEqual(Convert.ToBase64String(trackA), Convert.ToBase64String(trackB));   // not the same stream
     }
 
+    // 4.7.0 P2c multi-track keyframe: the per-MID RequestVideoKeyFrameAsync(mid) overload targets ONE video
+    // track. Requesting a key frame for the added track MID "2" sends exactly one PLI over the wire (its SSRC is
+    // captured once a frame has arrived), the answerer's peer that owns MID "2" observes the inbound key-frame
+    // request, and requesting an unknown MID is a tolerant no-op (returns false, sends nothing more).
+    [Fact]
+    public async Task RequestVideoKeyFrameAsync_for_one_mid_pings_only_that_track()
+    {
+        var (offerer, answerer) = await ConnectPeersAsync();
+        await using var offererLease = offerer;
+        await using var answererLease = answerer;
+
+        var offererConnected = Connected(offerer);
+        var answererConnected = Connected(answerer);
+
+        // The answerer sends video back on MID "2" and, on the offerer's PLI, raises VideoKeyFrameRequested —
+        // the observable end-to-end signal that the offerer's request for MID "2" reached the answerer's track.
+        var keyFrameRequests = 0;
+        var requestSeen = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        answerer.VideoKeyFrameRequested += () =>
+        {
+            Interlocked.Increment(ref keyFrameRequests);
+            requestSeen.TrySetResult();
+        };
+
+        // The answerer must have this offerer's MID "2" SSRC before it can name it in a PLI — capture it by
+        // receiving a frame on that track at the offerer (both peers send on MID "2").
+        var offererGotMid2 = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        offerer.VideoTrackFrameReceived += (mid, _, _, _) => { if (mid == "2") offererGotMid2.TrySetResult(); };
+
+        await offerer.StartAsync();
+        await answerer.StartAsync();
+        await Task.WhenAll(offererConnected, answererConnected).WaitAsync(TimeSpan.FromSeconds(20));
+
+        var frame = AnnexB(Nal(0x67, 20), Nal(0x65, 300));
+        var timestamp = 90000u;
+        using var pump = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+
+        // Drive both directions on MID "2" until the answerer has captured the offerer's MID "2" SSRC (so its
+        // app-requested PLI can name that source).
+        while (!offererGotMid2.Task.IsCompleted)
+        {
+            pump.Token.ThrowIfCancellationRequested();
+            await offerer.SendVideoTrackFrameAsync("2", frame, timestamp);
+            await answerer.SendVideoTrackFrameAsync("2", frame, timestamp);
+            timestamp += 3000;
+            await Task.Delay(20, pump.Token);
+        }
+
+        // An unknown MID is a tolerant no-op — no PLI leaves the offerer, so the answerer sees no request from it.
+        Assert.False(await offerer.RequestVideoKeyFrameAsync("does-not-exist"));
+
+        // Request a key frame for the added track MID "2": a PLI is sent, and the answerer's MID "2" track
+        // observes the inbound key-frame request end-to-end.
+        Assert.True(await offerer.RequestVideoKeyFrameAsync("2"));
+        await requestSeen.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.True(Volatile.Read(ref keyFrameRequests) >= 1);
+    }
+
     // ── harness ──────────────────────────────────────────────────────────────────
 
     private static Task Connected(WebRtcPeerConnection peer)

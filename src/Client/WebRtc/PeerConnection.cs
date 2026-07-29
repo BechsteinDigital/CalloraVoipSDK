@@ -311,6 +311,9 @@ internal sealed class PeerConnection : IPeerConnection
     public ValueTask<bool> RequestVideoKeyFrameAsync(CancellationToken cancellationToken = default)
         => _peer.RequestVideoKeyFrameAsync(cancellationToken);
 
+    public ValueTask<bool> RequestVideoKeyFrameAsync(string mid, CancellationToken cancellationToken = default)
+        => _peer.RequestVideoKeyFrameAsync(mid, cancellationToken);
+
     public async ValueTask DisposeAsync()
     {
         _peer.ConnectionStateChanged -= OnInternalStateChanged;
