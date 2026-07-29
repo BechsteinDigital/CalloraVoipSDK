@@ -95,6 +95,15 @@ internal sealed class BundledRtpDemultiplexer
     }
 
     /// <summary>
+    /// Whether a RID header extension was negotiated for this session (RFC 8852 <c>sdes:rtp-stream-id</c>),
+    /// so recv-side simulcast RID demultiplexing is possible. A cheap gate for the dispatch path: when this
+    /// is <see langword="false"/> no encoding was negotiated and <see cref="TryResolveRid(RtpPacket, out string)"/>
+    /// would always fail, so callers can skip RID resolution entirely and keep the single-stream path
+    /// byte-identical.
+    /// </summary>
+    public bool RidDemuxEnabled => _ridExtensionId is not null;
+
+    /// <summary>
     /// Resolves the MID for an inbound RTP packet, learning the SSRC→MID association on the way. Returns
     /// <see langword="false"/> when the packet carries an explicit unknown MID, or cannot be associated by
     /// SSRC, MID, or payload type — the caller then drops it.

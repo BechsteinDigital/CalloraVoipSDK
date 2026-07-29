@@ -177,6 +177,16 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     public event Action<string, byte[], uint, bool>? VideoTrackFrameReceived;
 
     /// <summary>
+    /// Raised with each reassembled inbound video frame that belongs to a specific simulcast layer
+    /// (RFC 8853): the m-line MID, the layer's <c>a=rid</c> (RFC 8852), the encoded frame, its RTP
+    /// timestamp, and whether it is a key frame. The Core recv-side surface for SFU forwarding — one event
+    /// per demultiplexed encoding. Fires <em>only</em> for RID-tagged layers, never for the primary/default
+    /// (RID-less) stream, which continues to surface on <see cref="VideoFrameReceived"/> /
+    /// <see cref="VideoTrackFrameReceived"/>. Runs on the shared receive loop.
+    /// </summary>
+    internal event Action<string, string, byte[], uint, bool>? VideoLayerFrameReceived;
+
+    /// <summary>
     /// Raised when the peer requests a key frame via an inbound PLI/FIR (RFC 4585/5104) on the video track;
     /// the app should encode and send a key frame.
     /// </summary>
@@ -672,11 +682,16 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     // so N tracks are distinguishable on the inbound path. Used by both the ctor loop and the live AddVideoTrack.
     private void WireVideoTrackEvents(string mid, BundledVideoTrack track, bool isPrimary)
     {
-        track.FrameReceived += (frame, timestamp, isKeyFrame) =>
+        track.FrameReceived += (frame, timestamp, isKeyFrame, rid) =>
         {
             if (isPrimary)
                 VideoFrameReceived?.Invoke(frame, timestamp, isKeyFrame);
             VideoTrackFrameReceived?.Invoke(mid, frame, timestamp, isKeyFrame);
+            // A RID-tagged frame is a demultiplexed simulcast layer (RFC 8853) — surface it on the per-layer
+            // SFU forwarding event. The default/RID-less stream (rid null) raises no extra event, so the
+            // existing surface stays byte-identical on the non-simulcast path.
+            if (rid is not null)
+                VideoLayerFrameReceived?.Invoke(mid, rid, frame, timestamp, isKeyFrame);
         };
         track.KeyFrameRequested += () => VideoKeyFrameRequested?.Invoke();
     }

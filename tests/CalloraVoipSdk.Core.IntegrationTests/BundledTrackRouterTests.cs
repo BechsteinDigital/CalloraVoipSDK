@@ -100,6 +100,75 @@ public sealed class BundledTrackRouterTests
         router.AddKnownMid("vid2");
     }
 
+    // ---- RFC 8853 recv-side simulcast: a RID-aware sink receives the resolved a=rid (4.7.0 slice 2) ----
+
+    private const byte RidExtId = 4;
+
+    private static BundledTrackRouter SimulcastRouter() => new(new BundledRtpDemultiplexer(
+        MidExtId,
+        new HashSet<string> { "audio", "video" },
+        new Dictionary<int, string> { [111] = "audio", [96] = "video" },
+        ridExtensionId: RidExtId));
+
+    private static RtpPacket RidPacket(uint ssrc, int pt, string? mid = null, string? rid = null)
+    {
+        RtpExtension? ext = (mid, rid) switch
+        {
+            (not null, null) => RtpMidHeaderExtension.Encode(MidExtId, mid),
+            (null, not null) => RtpRidHeaderExtension.Encode(RidExtId, rid),
+            _ => null,
+        };
+        return new RtpPacket { Ssrc = ssrc, PayloadType = (byte)pt, HeaderExtension = ext };
+    }
+
+    [Fact]
+    public void With_no_rid_extension_negotiated_the_video_sink_receives_a_null_rid()
+    {
+        // RidDemuxEnabled is false (the base Router() has no ridExtensionId) → no RID resolution runs and the
+        // dispatch stays byte-identical to the pre-simulcast path: the sink always sees rid null.
+        var router = Router();
+        var seen = new List<string?>();
+        router.RegisterTrack("video", (_, rid) => seen.Add(rid));
+
+        Assert.True(router.DispatchInboundRtp(Packet(ssrc: 20, pt: 96, mid: "video")));
+        Assert.Null(Assert.Single(seen));
+    }
+
+    [Fact]
+    public void With_a_rid_extension_the_video_sink_receives_the_resolved_rid()
+    {
+        var router = SimulcastRouter();
+        var seen = new List<(uint Ssrc, string? Rid)>();
+        router.RegisterTrack("video", (p, rid) => seen.Add((p.Ssrc, rid)));
+
+        // Two encodings under the one video MID (routed by MID ext) each carry their RID ext on first sighting.
+        Assert.True(router.DispatchInboundRtp(RidPacket(ssrc: 0x1111, pt: 96, mid: "video")));       // latch MID
+        Assert.True(router.DispatchInboundRtp(RidPacket(ssrc: 0x1111, pt: 96, rid: "h")));           // RID "h"
+        Assert.True(router.DispatchInboundRtp(RidPacket(ssrc: 0x2222, pt: 96, mid: "video")));       // latch MID
+        Assert.True(router.DispatchInboundRtp(RidPacket(ssrc: 0x2222, pt: 96, rid: "l")));           // RID "l"
+        // Later RID-less packet on a latched SSRC resolves the RID from the SSRC→RID latch (the hot path).
+        Assert.True(router.DispatchInboundRtp(RidPacket(ssrc: 0x1111, pt: 96)));                     // resolves "h"
+
+        // Every RID-resolved packet on 0x1111 is "h"; on 0x2222 is "l" — no cross-talk in the SSRC→RID latch.
+        Assert.All(seen.Where(s => s is { Ssrc: 0x1111u, Rid: not null }), s => Assert.Equal("h", s.Rid));
+        Assert.All(seen.Where(s => s is { Ssrc: 0x2222u, Rid: not null }), s => Assert.Equal("l", s.Rid));
+        Assert.Equal(2, seen.Count(s => s is { Ssrc: 0x1111u, Rid: "h" })); // the RID packet + the latched hot-path packet
+    }
+
+    [Fact]
+    public void A_rid_unaware_back_compat_sink_still_receives_every_packet()
+    {
+        // The single-arg RegisterTrack overload wraps a RID-unaware sink — it must keep working unchanged even
+        // when a RID extension is negotiated (audio, or non-simulcast video).
+        var router = SimulcastRouter();
+        var audio = new List<RtpPacket>();
+        router.RegisterTrack("audio", audio.Add);
+
+        Assert.True(router.DispatchInboundRtp(RidPacket(ssrc: 10, pt: 111, mid: "audio")));
+        Assert.True(router.DispatchInboundRtp(RidPacket(ssrc: 10, pt: 111))); // latched
+        Assert.Equal(2, audio.Count);
+    }
+
     [Fact]
     public void Unregistering_a_track_stops_delivery()
     {
