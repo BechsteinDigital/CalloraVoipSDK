@@ -49,8 +49,8 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     private readonly CancellationTokenSource _mdnsLifetime = new();
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<WebRtcPeerConnection> _logger;
-    // Applies a second offer/answer cycle to the live session as a video-track diff (RFC 8829 renegotiation,
-    // P3b-3) — no transport/DTLS/ICE/SRTP rebuild. Stateless; used only once a session exists.
+    // Applies a second offer/answer cycle to the live session as a track-set diff (video + additional-audio,
+    // RFC 8829 renegotiation, 4.7.0) — no transport/DTLS/ICE/SRTP rebuild. Stateless; used only once a session exists.
     private readonly WebRtcRenegotiator _renegotiator;
     private readonly object _sync = new();
 
@@ -86,6 +86,10 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     private SdpSessionDescription? _localOfferModel;
     private BundledMediaSession? _session;
     private readonly SendDrainGate _sendGate = new();
+    // Runs each media send / key-frame request under the drain lease (HARD-C6). Lock-free: it reads the live
+    // session behind a snapshot delegate that takes _sync here, so the peer keeps sole ownership of its guarded
+    // state (extracted to keep this file under the size limit).
+    private readonly WebRtcSendLease _sendLease;
     private UdpClient? _mediaSocket;
     private bool _socketHandedOver;
     private bool _started;
@@ -194,6 +198,8 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         // is captured atomically (the event field may be reassigned between candidates).
         _candidateEmitter = new WebRtcLocalCandidateEmitter(() => LocalIceCandidateDiscovered, _logger);
         _sessionEvents = new WebRtcSessionEventBridge(_logger);
+        // The send-lease runner reads the live session under _sync via this snapshot delegate; the lock stays here.
+        _sendLease = new WebRtcSendLease(_sendGate, () => { lock (_sync) { return _session; } });
     }
 
     /// <summary>The current connection state.</summary>
@@ -664,13 +670,13 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     /// <exception cref="InvalidOperationException">No BUNDLE media session was built.</exception>
     /// <exception cref="ObjectDisposedException">The peer is disposing or disposed.</exception>
     public ValueTask SendAudioAsync(ReadOnlyMemory<byte> payload, CancellationToken cancellationToken = default)
-        => new(SendViaLeaseAsync(s => s.SendAudioAsync(payload, cancellationToken: cancellationToken).AsTask()));
+        => new(_sendLease.SendViaLeaseAsync(s => s.SendAudioAsync(payload, cancellationToken: cancellationToken).AsTask()));
 
     /// <summary>Packetises and sends one encoded video frame on the peer's (primary) video track.</summary>
     /// <exception cref="InvalidOperationException">No BUNDLE media session, or the bundle has no video track.</exception>
     /// <exception cref="ObjectDisposedException">The peer is disposing or disposed.</exception>
     public Task SendVideoFrameAsync(ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default)
-        => SendViaLeaseAsync(s => s.SendVideoFrameAsync(encodedFrame, rtpTimestamp, cancellationToken));
+        => _sendLease.SendViaLeaseAsync(s => s.SendVideoFrameAsync(encodedFrame, rtpTimestamp, cancellationToken));
 
     /// <summary>
     /// Packetises and sends one encoded video frame on a simulcast <paramref name="rid"/> layer (RFC 8853); the
@@ -680,7 +686,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     /// <exception cref="ArgumentException">No encoding is configured for <paramref name="rid"/>.</exception>
     /// <exception cref="ObjectDisposedException">The peer is disposing or disposed.</exception>
     public Task SendVideoFrameAsync(string rid, ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default)
-        => SendViaLeaseAsync(s => s.SendVideoFrameAsync(rid, encodedFrame, rtpTimestamp, cancellationToken));
+        => _sendLease.SendViaLeaseAsync(s => s.SendVideoFrameAsync(rid, encodedFrame, rtpTimestamp, cancellationToken));
 
     /// <summary>
     /// Packetises and sends one encoded video frame on the video track identified by <paramref name="mid"/> (P2c
@@ -689,7 +695,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     /// <exception cref="InvalidOperationException">No BUNDLE media session, or the bundle has no video track with that MID.</exception>
     /// <exception cref="ObjectDisposedException">The peer is disposing or disposed.</exception>
     public Task SendVideoTrackFrameAsync(string mid, ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default)
-        => SendViaLeaseAsync(s => s.SendVideoTrackFrameAsync(mid, encodedFrame, rtpTimestamp, cancellationToken));
+        => _sendLease.SendViaLeaseAsync(s => s.SendVideoTrackFrameAsync(mid, encodedFrame, rtpTimestamp, cancellationToken));
 
     /// <summary>
     /// Packetises and sends one encoded video frame on the <paramref name="mid"/> video track's simulcast
@@ -699,22 +705,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     /// <exception cref="ArgumentException">No encoding is configured for <paramref name="rid"/>.</exception>
     /// <exception cref="ObjectDisposedException">The peer is disposing or disposed.</exception>
     public Task SendVideoTrackFrameAsync(string mid, string rid, ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default)
-        => SendViaLeaseAsync(s => s.SendVideoTrackFrameAsync(mid, rid, encodedFrame, rtpTimestamp, cancellationToken));
-
-    // Runs one send under a drain lease: the lease keeps DisposeAsync from tearing down the session mid-send
-    // (HARD-C6), and a send begun after dispose is refused (AcquireSendLease throws ObjectDisposedException).
-    private async Task SendViaLeaseAsync(Func<BundledMediaSession, Task> send)
-    {
-        var session = AcquireSendLease();
-        try
-        {
-            await send(session).ConfigureAwait(false);
-        }
-        finally
-        {
-            _sendGate.Exit();
-        }
-    }
+        => _sendLease.SendViaLeaseAsync(s => s.SendVideoTrackFrameAsync(mid, rid, encodedFrame, rtpTimestamp, cancellationToken));
 
     /// <summary>
     /// Asks the peer for a fresh video key frame on the app's demand (RFC 4585 §6.3.1) — an intra frame when a new
@@ -724,7 +715,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     /// RTCP send never races session teardown.
     /// </summary>
     public ValueTask<bool> RequestVideoKeyFrameAsync(CancellationToken cancellationToken = default)
-        => RequestKeyFrameCoreAsync(
+        => _sendLease.RequestKeyFrameCoreAsync(
             static (session, ct) => session.RequestVideoKeyFrameAsync(ct), cancellationToken);
 
     /// <summary>
@@ -737,30 +728,8 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     public ValueTask<bool> RequestVideoKeyFrameAsync(string mid, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrEmpty(mid);
-        return RequestKeyFrameCoreAsync(
+        return _sendLease.RequestKeyFrameCoreAsync(
             (session, ct) => session.RequestVideoTrackKeyFrameAsync(mid, ct), cancellationToken);
-    }
-
-    // Shared gate/snapshot boilerplate for the key-frame overloads: takes a drain lease so the RTCP send never
-    // races session teardown, snapshots the live session under _sync, and delegates the actual PLI to the
-    // caller's request. A no-op returning false when the peer is draining/disposed or no session exists yet —
-    // byte-identical gate/snapshot/Exit semantics to the pre-extraction inline bodies.
-    private async ValueTask<bool> RequestKeyFrameCoreAsync(
-        Func<BundledMediaSession, CancellationToken, ValueTask<bool>> request, CancellationToken cancellationToken)
-    {
-        if (!_sendGate.TryEnter())
-            return false;
-        try
-        {
-            BundledMediaSession? session;
-            lock (_sync) { session = _session; }
-            return session is not null
-                && await request(session, cancellationToken).ConfigureAwait(false);
-        }
-        finally
-        {
-            _sendGate.Exit();
-        }
     }
 
     /// <summary>
@@ -771,7 +740,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     /// <exception cref="InvalidOperationException">No BUNDLE media session, or telephone-event was not negotiated.</exception>
     /// <exception cref="ObjectDisposedException">The peer is disposing or disposed.</exception>
     public Task SendDtmfAsync(byte toneCode, int durationMs = 160, CancellationToken cancellationToken = default)
-        => SendViaLeaseAsync(s => s.SendDtmfAsync(toneCode, durationMs, cancellationToken));
+        => _sendLease.SendViaLeaseAsync(s => s.SendDtmfAsync(toneCode, durationMs, cancellationToken));
 
     /// <summary>
     /// Adds a remote ICE candidate that trickled in out-of-band (RFC 8838), given as an RFC 8829 <c>candidate:</c>
@@ -846,25 +815,6 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         adoptInto?.AdoptRelay(WebRtcRelayBinding.CreateFactory(serverEndPoint, allocation, _loggerFactory));
 
         return allocation.MappedEndPoint ?? local;
-    }
-
-    // Takes a drain lease for one send and returns the live session. The lease keeps DisposeAsync from
-    // disposing the session until the send's Exit; a send begun after dispose is refused. Callers MUST
-    // Exit the gate (the send methods do so in a finally) once the returned session is no longer used.
-    private BundledMediaSession AcquireSendLease()
-    {
-        if (!_sendGate.TryEnter())
-            throw new ObjectDisposedException(nameof(WebRtcPeerConnection));
-
-        BundledMediaSession? session;
-        lock (_sync) { session = _session; }
-        if (session is null)
-        {
-            _sendGate.Exit();
-            throw new InvalidOperationException("Apply a BUNDLE remote description before exchanging media.");
-        }
-
-        return session;
     }
 
     // Wires the built session's transport-lifecycle and inbound-media events onto this peer via the event

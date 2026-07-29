@@ -27,9 +27,11 @@ namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
 /// </para>
 /// <para>
 /// Thread-safety: the MID map is a <see cref="ConcurrentDictionary{TKey,TValue}"/> so the receive loop reads it
-/// lock-free and a later live-add (a subsequent slice) can extend it without tearing an enumeration. In this
-/// slice the set is only populated at construction — no live mutation. A throwing inbound subscriber is caught
-/// and logged so it never tears down the shared receive loop (K3), matching the primary and video paths.
+/// lock-free while a mid-call renegotiation (4.7.0 Slice 3) extends or prunes it via <see cref="TryAdd"/> /
+/// <see cref="Remove"/> without tearing an enumeration. Those mutations run under the session's own track-mutation
+/// gate (which orders control-plane changes against each other, never against the receive loop). A throwing inbound
+/// subscriber is caught and logged so it never tears down the shared receive loop (K3), matching the primary and
+/// video paths.
 /// </para>
 /// </remarks>
 internal sealed class BundledAudioTrackSet
@@ -110,6 +112,40 @@ internal sealed class BundledAudioTrackSet
         {
             _logger.LogError(ex, "Unhandled exception in bundled audio AudioTrackFrameReceived handler for MID '{Mid}'.", mid);
         }
+    }
+
+    /// <summary>
+    /// Records an additional audio MID as live (4.7.0 renegotiation): the session has already registered the MID's
+    /// inbound router sink and outbound sender under its track-mutation gate, so this only publishes the MID into
+    /// the set so <see cref="Contains"/>/<see cref="Mids"/>/<see cref="SendAsync"/> find it. Returns
+    /// <see langword="false"/> when a track with that MID is already present (the caller holds the gate, so this is
+    /// an unexpected race it unwinds). The caller MUST hold the session's track-mutation gate.
+    /// </summary>
+    /// <param name="mid">The additional audio track's MID (never the primary anchor's MID).</param>
+    public bool TryAdd(string mid)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(mid);
+        if (!_byMid.TryAdd(mid, mid))
+            return false;
+        lock (_orderGate)
+            _midOrder.Add(mid);
+        return true;
+    }
+
+    /// <summary>
+    /// Removes an additional audio MID from the set (4.7.0 renegotiation): the session has already unregistered the
+    /// MID's inbound router sink and outbound sender under its track-mutation gate, so this only drops the MID from
+    /// the set. Idempotent — a no-op when the MID is not present. The caller MUST hold the session's track-mutation
+    /// gate. Audio has no per-track object to dispose (the sink lives on the router, the sender on the pipeline), so
+    /// unlike video there is no deferred-dispose concern here.
+    /// </summary>
+    /// <param name="mid">The additional audio track's MID to remove.</param>
+    public void Remove(string mid)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(mid);
+        if (_byMid.TryRemove(mid, out _))
+            lock (_orderGate)
+                _midOrder.Remove(mid);
     }
 
     /// <summary>Whether the bundle carries at least one additional inbound audio track (beyond the primary).</summary>

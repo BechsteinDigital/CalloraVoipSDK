@@ -98,6 +98,88 @@ public sealed class WebRtcRenegotiatorTests
         Assert.Contains("ICE restart", ex.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Diff_adds_a_new_additional_audio_track_with_an_ssrc_distinct_from_the_live_session()
+    {
+        // Start with one audio m-line (the primary anchor, MID "0") — no additional audio yet.
+        var (offer, answer) = AudioExchange(audioMids: ["0"]);
+        await using var session = BuildSession(offer, answer);
+        Assert.Empty(session.AudioMids);
+        Assert.Equal("0", session.PrimaryAudioMid);
+        var liveSsrcs = session.OutboundSsrcs;
+
+        // Re-offer adds a SECOND audio m-line (MID "1"); both sides send-recv, so it is an inbound additional track.
+        var (reOffer, reAnswer) = AudioExchange(audioMids: ["0", "1"]);
+        var renegotiator = new WebRtcRenegotiator(NullLoggerFactory.Instance);
+
+        var diff = renegotiator.ComputeDiff(session, reAnswer, reOffer);
+
+        // Exactly MID "1" is a new additional audio track with a distinct SSRC; no removals, no video changes.
+        Assert.Empty(diff.AudioMidsToDeactivate);
+        Assert.Empty(diff.TracksToAdd);
+        Assert.Empty(diff.MidsToDeactivate);
+        var added = Assert.Single(diff.AudioTracksToAdd);
+        Assert.Equal("1", added.Mid);
+        Assert.DoesNotContain(added.Ssrc, liveSsrcs); // RFC 3550 §8.1: distinct from every running SSRC
+
+        renegotiator.Apply(session, diff);
+        Assert.Equal(["1"], session.AudioMids); // now a live additional audio track
+        Assert.Contains(added.Ssrc, session.OutboundSsrcs);
+    }
+
+    [Fact]
+    public async Task Diff_deactivates_an_additional_audio_track_the_re_offer_dropped()
+    {
+        // Start with two audio m-lines: the anchor "0" plus one additional "1".
+        var (offer, answer) = AudioExchange(audioMids: ["0", "1"]);
+        await using var session = BuildSession(offer, answer);
+        Assert.Equal(["1"], session.AudioMids);
+
+        // Re-offer keeps only the anchor "0" (drops the additional "1").
+        var (reOffer, reAnswer) = AudioExchange(audioMids: ["0"]);
+        var renegotiator = new WebRtcRenegotiator(NullLoggerFactory.Instance);
+
+        var diff = renegotiator.ComputeDiff(session, reAnswer, reOffer);
+
+        Assert.Empty(diff.AudioTracksToAdd);
+        Assert.Equal(["1"], diff.AudioMidsToDeactivate);
+
+        renegotiator.Apply(session, diff);
+        Assert.Empty(session.AudioMids); // the dropped additional audio track is gone from the live session
+    }
+
+    [Fact]
+    public async Task The_primary_audio_anchor_is_never_diffed_or_deactivated()
+    {
+        // Anchor protection: start with two additional audio tracks ("1","2") on top of the anchor "0".
+        var (offer, answer) = AudioExchange(audioMids: ["0", "1", "2"]);
+        await using var session = BuildSession(offer, answer);
+        Assert.Equal(["1", "2"], session.AudioMids);
+        Assert.Equal("0", session.PrimaryAudioMid);
+
+        // A re-offer that drops EVERY audio m-line except the anchor "0" must deactivate the two additional tracks
+        // but NEVER the anchor — the anchor is not in AudioMids, so it can never appear in the deactivate list.
+        var (reOffer, reAnswer) = AudioExchange(audioMids: ["0"]);
+        var renegotiator = new WebRtcRenegotiator(NullLoggerFactory.Instance);
+
+        var diff = renegotiator.ComputeDiff(session, reAnswer, reOffer);
+
+        Assert.DoesNotContain("0", diff.AudioMidsToDeactivate); // the anchor is never deactivated
+        Assert.Equal(new[] { "1", "2" }, diff.AudioMidsToDeactivate.OrderBy(m => m, StringComparer.Ordinal));
+
+        renegotiator.Apply(session, diff);
+        Assert.Empty(session.AudioMids);
+        // The primary anchor still carries the mid-less audio path (it was never a diffable/additional track).
+        Assert.Equal("0", session.PrimaryAudioMid);
+
+        // Directly deactivating the anchor MID is a no-op (belt-and-suspenders anchor protection at the session).
+        session.SetAudioTrackInactive("0");
+        Assert.Equal("0", session.PrimaryAudioMid);
+        // Adding the anchor MID as an additional track is rejected.
+        Assert.Throws<InvalidOperationException>(() =>
+            session.AddAudioTrack(new BundledTrackConfig { Mid = "0", Ssrc = 0x1234, PayloadType = 0, SamplesPerPacket = 160 }));
+    }
+
     // ── harness ──────────────────────────────────────────────────────────────────
 
     // Builds a running (not started) bundle session for the answerer from a negotiated exchange: localDescription
@@ -132,6 +214,26 @@ public sealed class WebRtcRenegotiatorTests
                 Ice = AnswerIce(),
                 Video = new SdpVideoMediaOptions { Port = 6002, Codecs = [H264] },
             }).Answer!;
+        return (offer, answer);
+    }
+
+    // A BUNDLE offer/answer with N send-recv audio m-lines (the SFU pattern): the first is the primary anchor, the
+    // rest are additional inbound audio tracks. Numeric MIDs "0","1",… come from the track order. Both sides
+    // send-recv, so every audio m-line negotiates for receiving and TryBuildAudioTrack builds a sink for each
+    // beyond the anchor. The answer mirrors the offer's audio tracks so each additional MID is present locally too.
+    private static (SdpSessionDescription Offer, SdpSessionDescription Answer) AudioExchange(
+        IReadOnlyList<string> audioMids, string offerUfrag = "remoteU")
+    {
+        var negotiator = new SdpOfferAnswerNegotiator();
+        var audioTracks = audioMids
+            .Select(_ => new SdpTrackOptions { Kind = "audio", Codecs = Pcmu, Direction = SdpMediaDirection.SendRecv })
+            .ToList();
+        var offer = negotiator.CreateOffer(
+            new IPEndPoint(IPAddress.Loopback, 5000), Pcmu, SdpMediaDirection.SendRecv,
+            new SdpMediaOptions { Bundle = true, RtcpMux = true, Dtls = OfferDtls(), Ice = OfferIce(offerUfrag), Tracks = audioTracks });
+        var answer = negotiator.NegotiateAnswer(
+            offer, new IPEndPoint(IPAddress.Loopback, 6000), Pcmu, SdpMediaDirection.SendRecv,
+            new SdpMediaOptions { Bundle = true, RtcpMux = true, Dtls = AnswerDtls(), Ice = AnswerIce() }).Answer!;
         return (offer, answer);
     }
 

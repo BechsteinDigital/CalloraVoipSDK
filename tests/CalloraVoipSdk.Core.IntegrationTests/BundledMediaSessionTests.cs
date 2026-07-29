@@ -259,6 +259,140 @@ public sealed class BundledMediaSessionTests
     }
 
     [Fact]
+    public async Task Adding_an_audio_track_mid_call_starts_it_flowing_while_the_primary_keeps_flowing()
+    {
+        // 4.7.0 Slice 3 live audio renegotiation: connect a single-audio bundle, then add an ADDITIONAL audio track
+        // (MID "p1") on BOTH peers mid-call — while media flows and the receive loop runs, with no transport/DTLS/
+        // ICE/SRTP rebuild. The new track carries frames on its own MID/SSRC while the primary keeps flowing,
+        // proven over the real DTLS-SRTP loopback (the same shared 5-tuple/SRTP context carries both).
+        var certA = DtlsCertificate.GenerateEcdsaP256();
+        var certB = DtlsCertificate.GenerateEcdsaP256();
+
+        var (client, server) = CreatePair(certA, certB); // single-audio bundle
+        await using var clientLease = client;
+        await using var serverLease = server;
+
+        var primary = new List<byte[]>();
+        var p1 = new List<byte[]>();
+        var sync = new object();
+        server.AudioReceived += pkt => { lock (sync) primary.Add(pkt.Payload.ToArray()); };
+        server.AudioTrackFrameReceived += (mid, pkt) =>
+        {
+            Assert.Equal("p1", mid); // the primary must NEVER surface on the mid-tagged path
+            lock (sync) p1.Add(pkt.Payload.ToArray());
+        };
+
+        await server.StartAsync();
+        await client.StartAsync();
+
+        var primaryPayload = new byte[] { 1, 2, 3, 4 };
+        var p1Payload = new byte[] { 10, 20, 30 };
+
+        // Phase 1: drive the primary until it is received, so we have a live single-audio bundle before the add.
+        using var phase1 = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        while (true)
+        {
+            lock (sync) if (primary.Count > 0) break;
+            phase1.Token.ThrowIfCancellationRequested();
+            await client.SendAudioAsync(primaryPayload);
+            await Task.Delay(20, phase1.Token);
+        }
+
+        // Add the additional audio track LIVE on both peers (distinct bundle-wide SSRCs; shared PT 0 with the
+        // primary, so demux is forced onto the MID header extension). No public N-audio send API in this slice, so
+        // the client emits via the internal SendAudioTrackFrameAsync seam.
+        client.AddAudioTrack(new BundledTrackConfig { Mid = "p1", Ssrc = 0x0A0B0C0D, PayloadType = AudioPayloadType, SamplesPerPacket = 160 });
+        server.AddAudioTrack(new BundledTrackConfig { Mid = "p1", Ssrc = 0x0A0B0C0E, PayloadType = AudioPayloadType, SamplesPerPacket = 160 });
+        Assert.Equal(new[] { "p1" }, server.AudioMids);
+        Assert.Equal(new[] { "p1" }, client.AudioMids);
+
+        int primaryBaseline;
+        lock (sync) primaryBaseline = primary.Count;
+
+        // Phase 2: send on BOTH the primary and the new track; wait until the new MID "p1" is received AND the
+        // primary advanced past its pre-add baseline (proving the primary kept flowing across the live add).
+        using var phase2 = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        while (true)
+        {
+            lock (sync)
+                if (p1.Count > 0 && primary.Count > primaryBaseline)
+                    break;
+            phase2.Token.ThrowIfCancellationRequested();
+            await client.SendAudioAsync(primaryPayload);
+            await client.SendAudioTrackFrameAsync("p1", p1Payload);
+            await Task.Delay(20, phase2.Token);
+        }
+
+        byte[] firstP1;
+        lock (sync) firstP1 = p1[0];
+        Assert.Equal(p1Payload, firstP1); // the new track carried its OWN payload (not the primary's)
+        Assert.NotEqual(primaryPayload, p1Payload);
+    }
+
+    [Fact]
+    public async Task Deactivating_an_additional_audio_track_stops_its_flow_and_leaves_the_primary_intact()
+    {
+        // Deactivate half of the live-audio path: start with one additional audio track ("p1"), verify it flows,
+        // then SetAudioTrackInactive("p1") — after which no further "p1" frame is delivered while the primary keeps
+        // flowing uninterrupted (the shared transport/DTLS/ICE/SRTP is untouched).
+        var certA = DtlsCertificate.GenerateEcdsaP256();
+        var certB = DtlsCertificate.GenerateEcdsaP256();
+
+        IReadOnlyList<BundledTrackConfig> extraAudio =
+            [new BundledTrackConfig { Mid = "p1", Ssrc = 0x0A0B0C0D, PayloadType = AudioPayloadType, SamplesPerPacket = 160 }];
+
+        var (client, server) = CreatePair(certA, certB, additionalAudioTracks: extraAudio);
+        await using var clientLease = client;
+        await using var serverLease = server;
+
+        var sync = new object();
+        var primaryCount = 0;
+        var p1Count = 0;
+        server.AudioReceived += _ => { lock (sync) primaryCount++; };
+        server.AudioTrackFrameReceived += (mid, _) => { if (mid == "p1") lock (sync) p1Count++; };
+
+        await server.StartAsync();
+        await client.StartAsync();
+
+        var primaryPayload = new byte[] { 1, 2, 3, 4 };
+        var p1Payload = new byte[] { 10, 20, 30 };
+
+        // Phase 1: drive both until "p1" has been received a few times, so it is provably flowing.
+        using var phase1 = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        while (true)
+        {
+            lock (sync) if (p1Count >= 3) break;
+            phase1.Token.ThrowIfCancellationRequested();
+            await client.SendAudioAsync(primaryPayload);
+            await client.SendAudioTrackFrameAsync("p1", p1Payload);
+            await Task.Delay(20, phase1.Token);
+        }
+
+        // Deactivate "p1" on the RECEIVER: its inbound sink is unregistered, so no further "p1" frame is delivered.
+        server.SetAudioTrackInactive("p1");
+        Assert.Empty(server.AudioMids);
+        int p1AtDeactivation, primaryAtDeactivation;
+        lock (sync) { p1AtDeactivation = p1Count; primaryAtDeactivation = primaryCount; }
+
+        // Phase 2: keep sending both; the primary must keep advancing while "p1" stays frozen at its deactivation
+        // count (a small settle window absorbs any packet already in flight at the exact deactivation instant).
+        using var phase2 = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        while (true)
+        {
+            lock (sync) if (primaryCount > primaryAtDeactivation + 5) break;
+            phase2.Token.ThrowIfCancellationRequested();
+            await client.SendAudioAsync(primaryPayload);
+            await client.SendAudioTrackFrameAsync("p1", p1Payload);
+            await Task.Delay(20, phase2.Token);
+        }
+
+        int p1Final;
+        lock (sync) p1Final = p1Count;
+        // "p1" stopped being delivered at deactivation (allow at most one in-flight straggler); the primary kept flowing.
+        Assert.True(p1Final <= p1AtDeactivation + 1, $"deactivated audio track kept delivering: {p1AtDeactivation} → {p1Final}");
+    }
+
+    [Fact]
     public async Task Two_simultaneous_video_ssrcs_decrypt_independently_with_per_ssrc_replay_windows()
     {
         // per-SSRC SRTP (ADR-011): each SSRC on the bundle has its own ROC + replay window. Two video tracks

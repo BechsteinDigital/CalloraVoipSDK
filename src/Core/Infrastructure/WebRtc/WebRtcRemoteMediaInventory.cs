@@ -33,13 +33,19 @@ internal sealed record WebRtcRemoteMediaInventory(
     /// </summary>
     public static WebRtcRemoteMediaInventory FromRemoteDescription(SdpSessionDescription remote)
     {
-        var audioMedia = remote.Media.FirstOrDefault(m => m.MediaType.Equals("audio", Ci));
+        // The SAME primary/additional audio selection the session factory uses (WebRtcSessionFactory.SelectAudioLines):
+        // the primary is the first NON-disabled audio m-line (a leading port-0/rejected audio m-line is not the
+        // anchor), and every other audio m-line is additional. This keeps the receiver's inventory consistent with
+        // the transport the factory builds — the anchor is never surfaced as an additional track, and an additional
+        // track is never mistaken for the anchor, even when a leading audio m-line is disabled.
+        var (audioMedia, additionalAudio) = WebRtcSessionFactory.SelectAudioLines(remote.Media);
         var videoMedia = remote.Media.FirstOrDefault(m => m.MediaType.Equals("video", Ci));
-        // The additional audio tracks are the sending remote audio m-lines EXCEPT the primary (the first audio
-        // m-line, the bundle transport anchor, surfaced via the mid-less audio path). Skipping the primary keeps
-        // the 1-audio case producing zero additional tracks (byte-identical to the pre-4.7.0 receiver path).
-        var audioTracks = remote.Media
-            .Where(m => m.MediaType.Equals("audio", Ci) && !ReferenceEquals(m, audioMedia) && Sends(m))
+        // The additional audio tracks are the additional sending remote audio m-lines (the anchor, surfaced via the
+        // mid-less audio path, is excluded by SelectAudioLines). A non-sending (recvonly/inactive/disabled)
+        // additional m-line sends us nothing, so it contributes no phantom track. Keeps the 1-audio case producing
+        // zero additional tracks (byte-identical to the pre-4.7.0 receiver path).
+        var audioTracks = additionalAudio
+            .Where(Sends)
             .Select(m => new RemoteAudioTrackInfo(m.Mid, m.Msid))
             .ToArray();
         var videoTracks = remote.Media

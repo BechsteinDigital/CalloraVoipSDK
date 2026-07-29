@@ -48,6 +48,11 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     private readonly BundledInboundReceptionStats _receptionStats;
     private readonly BundledOutboundQualityTracker _outboundQuality;
     private readonly IRtcpPacketCodec _rtcpCodec;
+    // Decodes each inbound RTCP compound and fans it out to reception stats, outbound quality, the per-track
+    // feedback path, and the congestion plane (extracted to keep this session under the size limit). Built after
+    // the video set and congestion plane exist; only ever invoked from the receive loop, which starts in StartAsync
+    // (after construction), so it is always assigned by dispatch time.
+    private readonly BundledInboundRtcpDispatcher _rtcpDispatcher;
     // The bundle's video tracks (P2b: N video m-lines, RFC 8843 §9), keyed by MID. Empty for an audio-only
     // bundle; the first is the primary, addressed by the mid-less send/receive facade for backward compatibility.
     private readonly BundledVideoTrackSet _video;
@@ -90,6 +95,11 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     // Tracks removed by SetVideoTrackInactive: routing already dropped, but disposed only in DisposeAsync (never
     // live — BundledVideoTrack.Dispose needs in-flight send/receive drained first, HARD-C6). Added under the gate.
     private readonly List<BundledVideoTrack> _deactivatedVideoTracks = [];
+
+    // The live (mid-call) track-mutation engine (4.7.0 renegotiation): adds/deactivates a video or additional audio
+    // track on the running bundle. Shares _trackMutationGate with this session (the same lock object, not a new one)
+    // so control-plane mutations stay serialised against each other; extracted to keep this file under the size limit.
+    private readonly BundledMediaSessionTrackMutation _trackMutation;
 
     // Every outbound SSRC live on the bundle right now (RFC 3550 §8.1): seeded from the ctor tracks, extended on
     // AddVideoTrack and pruned on SetVideoTrackInactive under _trackMutationGate, so OutboundSsrcs always reflects
@@ -313,6 +323,12 @@ internal sealed class BundledMediaSession : IAsyncDisposable
             _congestion = new BundledCongestionPlane(
                 transportCcExtensionId, _outbound, _inbound, _rtcpCodec, options.Audio.Ssrc, loggerFactory);
 
+        // Inbound RTCP decode + fan-out (RFC 3550 §6.4.1 / RFC 4585 / RFC 8888): built now that the video set and
+        // congestion plane exist. Invoked only from the receive loop (subscribed on _inbound above), which starts
+        // in StartAsync, so this field is always assigned before the first dispatch.
+        _rtcpDispatcher = new BundledInboundRtcpDispatcher(
+            _rtcpCodec, _receptionStats, _outboundQuality, _video, _congestion, _logger);
+
         // One shared DTLS association keys every track; one shared ICE agent keeps the group alive.
         _dtls = new BundledDtlsKeying(
             options.DtlsIsClient, options.RemoteEndPoint, options.RemoteFingerprint,
@@ -357,6 +373,18 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         foreach (var video in options.VideoTracks)
             _outboundSsrcs.Add(video.Mid, video);
         _outboundStreamIdentity = BundledMediaSessionComposition.BuildOutboundStreamIdentity(options);
+
+        // The live track-mutation engine (4.7.0 renegotiation). It shares _trackMutationGate (the same object, so
+        // add/remove stays serialised) and reads _disposed under it via the passed predicate so a late add fails
+        // fast. WireVideoTrackEvents / RaiseAudioTrackReceivedGuarded are handed in so the wiring semantics stay
+        // identical to the ctor path (and, for audio, the K3 subscriber guard lives on this session).
+        _trackMutation = new BundledMediaSessionTrackMutation(
+            _trackMutationGate,
+            () => Volatile.Read(ref _disposed) != 0,
+            _router, _outbound, _video, _audioTracks, _outboundSsrcs, _deactivatedVideoTracks,
+            options, loggerFactory, _audioMid,
+            WireVideoTrackEvents, RaiseAudioTrackReceivedGuarded);
+
         // A relay candidate wired at construction (offerer path) closes the door on a later AdoptRelay.
         _relayWired = relayBinding is not null ? 1 : 0;
         // Its keepalive (if any) is started in StartAsync, once the transport's receive loop is up.
@@ -405,60 +433,10 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         RaiseAudioReceived(packet);
     }
 
-    // Decodes an inbound decrypted RTCP compound (RFC 3550 §6.4.1). Two directions: every Sender Report's LSR
-    // (middle 32 NTP bits) + arrival is recorded per sender SSRC so our next report echoes LSR/DLSR back for the
-    // peer's RTT; and every report block the peer sends about OUR outbound streams (carried in an inbound SR or
-    // RR) feeds the outbound quality tracker to derive our own RTT and the loss the peer sees. Runs on the
-    // receive loop; a malformed compound must not tear it down, so decode failures are swallowed with a log.
-    private void OnControlPacketReceived(byte[] rtcp)
-    {
-        // Monotonic arrival for the RTT delta (matched against the SR's monotonic send instant) so a system-
-        // clock step between sending our SR and its echo arriving cannot corrupt the derived RTT.
-        var arrival = MonotonicClock.Now;
-
-        IReadOnlyList<RtcpPacket> packets;
-        try
-        {
-            packets = _rtcpCodec.Decode(rtcp);
-        }
-        catch (Exception ex) when (ex is ArgumentException or NotSupportedException)
-        {
-            _logger.LogDebug(ex, "Ignoring undecodable inbound RTCP compound on the bundle path.");
-            return;
-        }
-
-        foreach (var packet in packets)
-        {
-            switch (packet)
-            {
-                case RtcpSenderReport senderReport:
-                    _receptionStats.RecordSenderReport(senderReport.Ssrc, senderReport.NtpTimestamp);
-                    RecordRemoteReportBlocks(senderReport.ReportBlocks, arrival);
-                    break;
-                case RtcpReceiverReport receiverReport:
-                    RecordRemoteReportBlocks(receiverReport.ReportBlocks, arrival);
-                    break;
-            }
-        }
-
-        // Fan the already-decoded compound out to every video track for RTCP feedback (PLI/FIR → keyframe
-        // request; Generic NACK → RTX). Each track filters to its own SSRC, so a NACK for one track never
-        // resends another's. Runs on this same receive-loop thread, so each track's confinement is preserved.
-        _video.OnRtcpPackets(packets);
-
-        // And to the transport-wide congestion controller: any transport-cc feedback report in the compound
-        // (RFC 8888) updates its delay-trend + loss estimators and the recommended bitrate. Same thread — no
-        // added confinement concern.
-        _congestion?.OnRtcpPackets(packets);
-    }
-
-    // Feeds the peer's reception report blocks (about our outbound streams) into the outbound quality tracker.
-    private void RecordRemoteReportBlocks(IReadOnlyList<RtcpReportBlock> blocks, DateTimeOffset arrival)
-    {
-        foreach (var block in blocks)
-            _outboundQuality.RecordRemoteReportBlock(
-                block.Ssrc, block.FractionLost, block.LastSr, block.DelaySinceLastSr, arrival);
-    }
+    // Decodes an inbound decrypted RTCP compound and fans it out (RFC 3550 §6.4.1 / RFC 4585 / RFC 8888) via the
+    // extracted dispatcher. Runs on the receive loop; the dispatcher swallows a malformed compound with a log so it
+    // cannot tear the loop down.
+    private void OnControlPacketReceived(byte[] rtcp) => _rtcpDispatcher.Dispatch(rtcp);
 
     /// <summary>The endpoint the shared socket is bound to (the actual port after an ephemeral bind).</summary>
     public IPEndPoint LocalEndPoint => _transport.LocalEndPoint;
@@ -499,6 +477,21 @@ internal sealed class BundledMediaSession : IAsyncDisposable
 
     /// <summary>The MID tokens of the additional inbound audio tracks on this bundle, in negotiated order.</summary>
     public IReadOnlyList<string> AdditionalAudioMids => _audioTracks.Mids;
+
+    /// <summary>
+    /// The MID tokens of the active <em>additional</em> audio tracks on this bundle (4.7.0), the audio pendant to
+    /// <see cref="VideoMids"/> and the set a renegotiator diffs a re-offer's audio m-lines against. The PRIMARY
+    /// audio m-line (the transport anchor) is never in this set — it is never diff'd, added, or deactivated. An
+    /// alias of <see cref="AdditionalAudioMids"/> named for the renegotiation diff path.
+    /// </summary>
+    public IReadOnlyList<string> AudioMids => _audioTracks.Mids;
+
+    /// <summary>
+    /// The MID of the PRIMARY audio m-line (the bundle transport anchor). It carries ICE/DTLS and the mid-less
+    /// audio path, so it is never one of the additional/diffable audio tracks: a renegotiator must never add,
+    /// deactivate, or diff it, and <see cref="SetAudioTrackInactive"/> refuses it (anchor protection).
+    /// </summary>
+    public string PrimaryAudioMid => _audioMid;
 
     /// <summary>
     /// Whether outbound audio is sent. False when the negotiated directions do not carry audio from this peer
@@ -600,50 +593,7 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     /// <exception cref="ArgumentNullException"><paramref name="video"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="video"/> has no MID or names no codec.</exception>
     /// <exception cref="InvalidOperationException">A video track with that MID already exists, or the session is disposed.</exception>
-    public void AddVideoTrack(BundledTrackConfig video)
-    {
-        ArgumentNullException.ThrowIfNull(video);
-        ArgumentException.ThrowIfNullOrEmpty(video.Mid, nameof(video));
-
-        lock (_trackMutationGate)
-        {
-            if (Volatile.Read(ref _disposed) != 0)
-                throw new InvalidOperationException("Cannot add a video track to a disposed bundled media session.");
-            if (_video.Find(video.Mid) is not null)
-                throw new InvalidOperationException($"A video track with MID '{video.Mid}' already exists on this bundle.");
-
-            // 1. Extend the demux boundary FIRST: inbound packets for the new MID are now accepted (rather than
-            //    rejected as an unknown MID) and, until the sink is registered below, cleanly dropped/counted.
-            _router.AddKnownMid(video.Mid);
-
-            // 2. Register the outbound sender(s) for the MID (simulcast: one per a=rid encoding; plain: one, with
-            //    RTX when negotiated) — identical to the ctor path — and build the track that will be its sink.
-            //    BuildVideoTrack registers the outbound sender(s) as a side effect and returns the inbound track.
-            var track = BundledMediaSessionComposition.BuildVideoTrack(_options, video, _outbound, _loggerFactory);
-
-            // 3. Wire the track's inbound frame / key-frame events. A live-added track is never the primary, so it
-            //    fires only the mid-tagged VideoTrackFrameReceived, leaving the mid-less facade on the ctor primary.
-            WireVideoTrackEvents(video.Mid, track, isPrimary: false);
-
-            // 4. Register the inbound router sink LAST, so no packet can hit a half-built track: only now can an
-            //    inbound datagram for the new MID reach a live, fully-wired track.
-            _router.RegisterTrack(video.Mid, track.OnRtpPacket);
-
-            // 5. Publish to the video set so the send API and RTCP feedback fan-out find it.
-            if (!_video.TryAdd(video.Mid, track))
-            {
-                // Lost a race we hold the gate against — should be unreachable. Unwind the partial wiring so no
-                // orphaned sink/sender lingers, and surface it rather than leak a half-registered track.
-                _router.UnregisterTrack(video.Mid);
-                _outbound.UnregisterTrack(video.Mid);
-                track.Dispose();
-                throw new InvalidOperationException($"A video track with MID '{video.Mid}' already exists on this bundle.");
-            }
-
-            // 6. Record the track's SSRCs as live (RFC 3550 §8.1) so a later renegotiation allocates around them.
-            _outboundSsrcs.Add(video.Mid, video);
-        }
-    }
+    public void AddVideoTrack(BundledTrackConfig video) => _trackMutation.AddVideoTrack(video);
 
     /// <summary>
     /// Deactivates the video track identified by <paramref name="mid"/> <em>live</em> (P3b): stops its inbound
@@ -660,27 +610,60 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     /// </summary>
     /// <param name="mid">The MID of the video track to deactivate.</param>
     /// <exception cref="ArgumentException"><paramref name="mid"/> is <see langword="null"/> or empty.</exception>
-    public void SetVideoTrackInactive(string mid)
+    public void SetVideoTrackInactive(string mid) => _trackMutation.SetVideoTrackInactive(mid);
+
+    /// <summary>
+    /// Adds an additional inbound/outbound audio track to this bundle <em>live</em> (4.7.0 renegotiation): after
+    /// construction, while the receive loop runs and media flows on the existing tracks, without touching the shared
+    /// transport, DTLS association, ICE agent, or SRTP context — and without interrupting any existing track
+    /// (including the primary anchor). The new track rides its own MID on its own bundle-wide-distinct SSRC (which
+    /// the caller allocates in <paramref name="audio"/>) and surfaces inbound frames on
+    /// <see cref="AudioTrackFrameReceived"/> (never on the mid-less <see cref="AudioReceived"/>, which stays pinned
+    /// to the primary anchor). The exact audio pendant to <see cref="AddVideoTrack"/>: same race-free
+    /// register-order against the single-consumer receive loop (extend the demux boundary first, then the outbound
+    /// sender, then the inbound sink last), and the same MID-header-extension demux (RFC 9143).
+    /// </summary>
+    /// <param name="audio">The new audio m-line's configuration — its MID, codec, payload type, and its own distinct
+    /// SSRC — exactly as a ctor-time additional audio track.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="audio"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="audio"/> has no MID.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The MID is the primary anchor's MID (never diffable), an audio/video track with that MID already exists, or
+    /// the session is disposed.
+    /// </exception>
+    public void AddAudioTrack(BundledTrackConfig audio) => _trackMutation.AddAudioTrack(audio);
+
+    /// <summary>
+    /// Deactivates the additional audio track identified by <paramref name="mid"/> <em>live</em> (4.7.0
+    /// renegotiation): stops its inbound dispatch and outbound sending without tearing down the shared transport,
+    /// DTLS, ICE, or SRTP context — every other track (including the primary anchor and the transport itself) keeps
+    /// flowing uninterrupted. Idempotent: a no-op when no additional audio track with that MID is registered.
+    /// <para>
+    /// <b>Anchor protection:</b> deactivating the PRIMARY audio m-line's MID is a no-op — that m-line anchors
+    /// ICE/DTLS for the whole bundle and must never be torn from the media path, so a renegotiation that (mistakenly)
+    /// targeted it silently changes nothing. Removal order mirrors the add: the inbound sink is unregistered first
+    /// (inbound stops), then the outbound sender (outbound stops), then the MID is dropped from the set. The demux
+    /// boundary keeps the MID known (a stray late packet is harmlessly dropped once its sink is gone). Audio has no
+    /// per-track object, so there is no deferred dispose (unlike video's <see cref="SetVideoTrackInactive"/>).
+    /// </para>
+    /// </summary>
+    /// <param name="mid">The MID of the additional audio track to deactivate.</param>
+    /// <exception cref="ArgumentException"><paramref name="mid"/> is <see langword="null"/> or empty.</exception>
+    public void SetAudioTrackInactive(string mid) => _trackMutation.SetAudioTrackInactive(mid);
+
+    // Raises the mid-tagged inbound-audio event for a LIVE-added additional audio track, guarded so a throwing
+    // subscriber never tears down the shared receive loop (K3). The ctor-time additional tracks are guarded inside
+    // BundledAudioTrackSet; a live-added track's sink is registered by the session, so the guard lives here to keep
+    // the exact same K3 semantics on both paths.
+    private void RaiseAudioTrackReceivedGuarded(string mid, RtpPacket packet)
     {
-        ArgumentException.ThrowIfNullOrEmpty(mid);
-
-        lock (_trackMutationGate)
+        try
         {
-            if (Volatile.Read(ref _disposed) != 0)
-                return; // teardown in progress — every track is disposed by DisposeAsync.
-
-            // Inbound first: no further datagram for this MID reaches a sink (the router drops/counts it instead).
-            _router.UnregisterTrack(mid);
-            // Then outbound: every RID layer registered under the MID is removed, so no further frame is sent.
-            _outbound.UnregisterTrack(mid);
-            // Drop it from the set, but do NOT dispose here: the receive loop may be inside its OnRtpPacket (a
-            // loss-triggered feedback send reads its lifetime token), and a live dispose would throw
-            // ObjectDisposedException on the loop → whole-bundle teardown. Defer to DisposeAsync (HARD-C6 drain).
-            if (_video.Remove(mid) is { } removed)
-                _deactivatedVideoTracks.Add(removed);
-            // Release the track's SSRCs from the live bookkeeping so a later renegotiation may reuse them (the
-            // per-SSRC SRTP context is gone with the track). No-op when the MID was already inactive (idempotent).
-            _outboundSsrcs.Remove(mid);
+            AudioTrackFrameReceived?.Invoke(mid, packet);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled exception in bundled audio AudioTrackFrameReceived handler for MID '{Mid}'.", mid);
         }
     }
 

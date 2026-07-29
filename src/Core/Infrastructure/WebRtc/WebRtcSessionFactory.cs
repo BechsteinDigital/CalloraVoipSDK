@@ -62,7 +62,9 @@ internal static class WebRtcSessionFactory
         ArgumentNullException.ThrowIfNull(certificate);
         ArgumentNullException.ThrowIfNull(loggerFactory);
 
-        var remoteAudio = remoteDescription.Media.FirstOrDefault(m => m.MediaType.Equals("audio", Ci) && !m.Disabled);
+        // One canonical selection of the primary (transport-anchor) audio m-line and the additional ones (below),
+        // so the anchor and the additional-skip agree even when a leading audio m-line is port-0/rejected.
+        var (remoteAudio, additionalRemoteAudio) = SelectAudioLines(remoteDescription.Media);
         // The local m-line's port is a placeholder under ICE (the real address comes via candidates), so
         // the local side is gated by its MID below, not by a zero port.
         var localAudio = localDescription.Media.FirstOrDefault(m => m.MediaType.Equals("audio", Ci));
@@ -142,16 +144,15 @@ internal static class WebRtcSessionFactory
         var usedSsrcs = new HashSet<uint> { audioSsrc };
 
         // Build one ADDITIONAL inbound audio track per remote audio m-line beyond the primary (4.7.0: N audio
-        // m-lines — the SFU pattern of one audio stream per remote participant). The FIRST audio m-line is the
-        // primary above (the bundle/transport anchor) and is skipped here; each further remote audio m-line the
-        // remote will send becomes a receive-only sink keyed by its own MID on its own bundle-wide-distinct SSRC.
-        // Demux is by MID header extension (RFC 9143) when they share a payload type, so two same-codec audio
-        // streams never cross-talk. Paired to the local m-line by MID so each track sees its own peer section.
+        // m-lines — the SFU pattern of one audio stream per remote participant). The primary (the bundle/transport
+        // anchor selected above by SelectAudioLines) is excluded from additionalRemoteAudio; each further remote
+        // audio m-line the remote will send becomes a receive-only sink keyed by its own MID on its own
+        // bundle-wide-distinct SSRC. Demux is by MID header extension (RFC 9143) when they share a payload type, so
+        // two same-codec audio streams never cross-talk. Paired to the local m-line by MID so each sees its own peer.
         var additionalAudioTracks = new List<BundledTrackConfig>();
-        var remoteAudioSections = remoteDescription.Media.Where(m => m.MediaType.Equals("audio", Ci)).ToArray();
-        for (var i = 1; i < remoteAudioSections.Length; i++)
+        foreach (var remoteAudioSection in additionalRemoteAudio)
         {
-            var audioTrackConfig = TryBuildAudioTrack(remoteAudioSections[i], localDescription, usedSsrcs, loggerFactory);
+            var audioTrackConfig = TryBuildAudioTrack(remoteAudioSection, localDescription, usedSsrcs, loggerFactory);
             if (audioTrackConfig is not null)
                 additionalAudioTracks.Add(audioTrackConfig);
         }
@@ -390,8 +391,13 @@ internal static class WebRtcSessionFactory
     /// it is paired to our matching local m-line by MID (RFC 9143) to gate on our recv direction. Unlike the
     /// primary, an additional audio track has no telephone-event/DTMF wiring — DTMF stays on the primary.
     /// </para>
+    /// <para>
+    /// Exposed to the renegotiator (4.7.0 Slice 3): a mid-call re-offer seeds <paramref name="usedSsrcs"/> from the
+    /// live session's outbound SSRCs and builds a config for each newly-negotiated additional audio MID to hand to
+    /// <c>BundledMediaSession.AddAudioTrack</c>, so the added track's SSRC stays distinct from the running ones.
+    /// </para>
     /// </summary>
-    private static BundledTrackConfig? TryBuildAudioTrack(
+    internal static BundledTrackConfig? TryBuildAudioTrack(
         SdpMediaDescription remoteAudio,
         SdpSessionDescription localDescription,
         ISet<uint> usedSsrcs,
@@ -521,6 +527,27 @@ internal static class WebRtcSessionFactory
         if (string.Equals(remoteSetup, "active", Ci)) return false;
         if (string.Equals(remoteSetup, "passive", Ci)) return true;
         return true;
+    }
+
+    /// <summary>
+    /// The one canonical rule for which audio m-line is the PRIMARY (the bundle transport anchor, RFC 8843) and
+    /// which are ADDITIONAL: the primary is the first <em>non-disabled</em> audio m-line (a port-0/rejected leading
+    /// audio m-line is not a usable transport anchor, so it is skipped). Every audio m-line that is not that one —
+    /// including a leading disabled one — is additional. Shared by <see cref="TryCreate"/> (anchor + additional
+    /// skip) and <see cref="WebRtcRemoteMediaInventory"/> so the anchor is chosen identically everywhere and the
+    /// anchor is never also surfaced as an additional track (nor an additional track ever mistaken for the anchor).
+    /// </summary>
+    /// <param name="media">All media sections of a description, in m-line order.</param>
+    /// <returns>The primary audio section (or null when there is no non-disabled audio m-line) and every additional
+    /// audio section (every audio m-line other than the primary), in m-line order.</returns>
+    internal static (SdpMediaDescription? Primary, IReadOnlyList<SdpMediaDescription> Additional) SelectAudioLines(
+        IReadOnlyList<SdpMediaDescription> media)
+    {
+        var primary = media.FirstOrDefault(m => m.MediaType.Equals("audio", Ci) && !m.Disabled);
+        var additional = media
+            .Where(m => m.MediaType.Equals("audio", Ci) && !ReferenceEquals(m, primary))
+            .ToArray();
+        return (primary, additional);
     }
 
     private static byte? MidExtensionId(SdpMediaDescription media)
