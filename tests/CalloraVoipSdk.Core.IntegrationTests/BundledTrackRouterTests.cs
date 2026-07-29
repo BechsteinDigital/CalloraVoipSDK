@@ -73,6 +73,34 @@ public sealed class BundledTrackRouterTests
     }
 
     [Fact]
+    public void AddKnownMid_then_RegisterTrack_routes_a_live_added_mid_and_drops_it_cleanly_until_the_sink_exists()
+    {
+        // P3b live add: a packet for a MID the demux does not yet know is dropped (unknown MID rejected). After
+        // AddKnownMid the MID demultiplexes; until the sink is registered it is dropped/counted (never crashes),
+        // and once the sink is registered the packet is delivered — the exact known-mid → sink registration order.
+        var router = Router();
+        var vid2 = new List<RtpPacket>();
+
+        // Before AddKnownMid: an explicit unknown MID is rejected by the demux (RFC 8843 §9.2).
+        Assert.False(router.DispatchInboundRtp(Packet(ssrc: 30, pt: 96, mid: "vid2")));
+        Assert.Equal(1, router.DroppedPackets);
+
+        // Step 1 of the live add: make the MID known. Now it demultiplexes, but has no sink yet → clean drop.
+        router.AddKnownMid("vid2");
+        Assert.False(router.DispatchInboundRtp(Packet(ssrc: 31, pt: 96, mid: "vid2")));
+        Assert.Equal(2, router.DroppedPackets);
+
+        // Step 2: register the sink. The MID now delivers.
+        router.RegisterTrack("vid2", vid2.Add);
+        Assert.True(router.DispatchInboundRtp(Packet(ssrc: 32, pt: 96, mid: "vid2")));
+        Assert.Equal(32u, Assert.Single(vid2).Ssrc);
+        Assert.Equal(2, router.DroppedPackets); // unchanged — the delivered packet was not dropped.
+
+        // Idempotent: re-adding a known MID is a no-op and does not throw.
+        router.AddKnownMid("vid2");
+    }
+
+    [Fact]
     public void Unregistering_a_track_stops_delivery()
     {
         var router = Router();

@@ -38,6 +38,10 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     private readonly BundledMediaTransport _transport;
     private readonly BundledOutboundPipeline _outbound;
     private readonly BundledInboundPipeline _inbound;
+    // The MID→sink router, retained so a video track added mid-call (AddVideoTrack, P3b) can extend the demux
+    // boundary (AddKnownMid) and register its inbound sink live, and SetVideoTrackInactive can unregister it —
+    // both without touching the shared transport/DTLS/ICE. Its registry is a ConcurrentDictionary (K3).
+    private readonly BundledTrackRouter _router;
     private readonly BundledDtlsKeying _dtls;
     private readonly BundledIceControl _ice;
     private readonly BundledRtcpReporter _rtcpReporter;
@@ -67,6 +71,21 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     private readonly int? _telephoneEventPayloadType;
     private readonly int _telephoneEventClockRate;
     private readonly ILogger<BundledMediaSession> _logger;
+    // Retained for the live add-a-track path (AddVideoTrack, P3b): the negotiated options carry the header-
+    // extension ids, initial sequence/timestamp, and reorder depth the composition helper needs to build a new
+    // BundledVideoTrack identically to the ctor path, plus the factory to wire its outbound sender + events.
+    private readonly BundledMediaSessionOptions _options;
+    private readonly ILoggerFactory _loggerFactory;
+    // Serialises live structural changes (AddVideoTrack / SetVideoTrackInactive) so two concurrent mutations
+    // cannot interleave their known-mid → outbound → track → sink → set registration steps. The receive loop is
+    // NOT gated by this — it reads the router/set lock-free; this only orders control-plane mutations against
+    // each other. 0 = live, 1 = disposed (set in DisposeAsync so a late add fails fast rather than leaking a track).
+    private readonly object _trackMutationGate = new();
+    private int _disposed;
+
+    // Tracks removed by SetVideoTrackInactive: routing already dropped, but disposed only in DisposeAsync (never
+    // live — BundledVideoTrack.Dispose needs in-flight send/receive drained first, HARD-C6). Added under the gate.
+    private readonly List<BundledVideoTrack> _deactivatedVideoTracks = [];
 
     // RFC 4733 inbound DTMF reassembly state. Touched only by RaiseAudioReceived, which runs solely on the
     // single shared receive loop (the inbound pipeline dispatches sequentially per the transport's one receive
@@ -164,6 +183,8 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(certificate);
         ArgumentNullException.ThrowIfNull(loggerFactory);
 
+        _options = options;
+        _loggerFactory = loggerFactory;
         _audioMid = options.Audio.Mid;
         _audioSendEnabled = options.AudioSendEnabled;
         _telephoneEventPayloadType =
@@ -188,6 +209,7 @@ internal sealed class BundledMediaSession : IAsyncDisposable
 
         var router = new BundledTrackRouter(
             BundledRtpDemultiplexerFactory.Create(options.MidExtensionId, payloadTypesByMid));
+        _router = router;
         router.RegisterTrack(options.Audio.Mid, RaiseAudioReceived);
 
         // Per-SSRC inbound reception statistics (RFC 3550 §6.4.1) feed the periodic RTCP report blocks: the
@@ -236,17 +258,9 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         foreach (var video in options.VideoTracks)
         {
             var track = BundledMediaSessionComposition.BuildVideoTrack(options, video, _outbound, loggerFactory);
-            // The mid-less legacy event tracks only the primary (first) video track; the mid-tagged event
-            // fires for every track so N tracks are distinguishable on the inbound path.
             var mid = video.Mid;
             var isPrimary = builtVideo.Count == 0;
-            track.FrameReceived += (frame, timestamp, isKeyFrame) =>
-            {
-                if (isPrimary)
-                    VideoFrameReceived?.Invoke(frame, timestamp, isKeyFrame);
-                VideoTrackFrameReceived?.Invoke(mid, frame, timestamp, isKeyFrame);
-            };
-            track.KeyFrameRequested += () => VideoKeyFrameRequested?.Invoke();
+            WireVideoTrackEvents(mid, track, isPrimary);
             router.RegisterTrack(mid, track.OnRtpPacket);
             builtVideo.Add((mid, track));
         }
@@ -545,6 +559,123 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         binding.KeepAlive?.Start();
     }
 
+    /// <summary>
+    /// Adds a video track to this bundle <em>live</em> (P3b): after construction, while the receive loop runs
+    /// and media flows on the existing tracks, without touching the shared transport, DTLS association, ICE
+    /// agent, or SRTP context — and without interrupting any existing track. The new track rides its own MID on
+    /// its own bundle-wide-distinct SSRC(s) (which the caller allocates in <paramref name="video"/>), and after
+    /// this call is sendable via <see cref="SendVideoTrackFrameAsync(string, System.ReadOnlyMemory{byte}, uint, System.Threading.CancellationToken)"/>
+    /// and surfaces inbound frames on <see cref="VideoTrackFrameReceived"/> (never on the mid-less
+    /// <see cref="VideoFrameReceived"/>, which stays pinned to the construction-time primary).
+    /// <para>
+    /// Registration order is deliberate and race-free against the single-consumer receive loop: the demux
+    /// boundary is extended first (so inbound packets for the new MID are no longer rejected as unknown), then
+    /// the outbound sender, then the track and its inbound sink last. During the window after the MID is known
+    /// but before the sink exists, a packet for the new MID is cleanly dropped and counted by the router — never
+    /// mis-delivered and never a crash. Inbound demultiplexes by the MID header extension (RFC 9143); the
+    /// construction-time payload-type→MID map is not extended, so this requires the peer to stamp the MID
+    /// extension on the new track's packets (always the case for a renegotiated WebRTC m-line, RFC 8829).
+    /// </para>
+    /// This is the session-level half of a mid-call track addition; wiring it to an SDP renegotiation
+    /// (<c>SetRemoteDescription</c> diff) is P3b-3 and out of scope here.
+    /// </summary>
+    /// <param name="video">The new video m-line's configuration — its MID, codec, payload type, and its own
+    /// distinct SSRC(s) (plus optional RTX / simulcast encodings), exactly as a ctor-time video track.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="video"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="video"/> has no MID or names no codec.</exception>
+    /// <exception cref="InvalidOperationException">A video track with that MID already exists, or the session is disposed.</exception>
+    public void AddVideoTrack(BundledTrackConfig video)
+    {
+        ArgumentNullException.ThrowIfNull(video);
+        ArgumentException.ThrowIfNullOrEmpty(video.Mid, nameof(video));
+
+        lock (_trackMutationGate)
+        {
+            if (Volatile.Read(ref _disposed) != 0)
+                throw new InvalidOperationException("Cannot add a video track to a disposed bundled media session.");
+            if (_video.Find(video.Mid) is not null)
+                throw new InvalidOperationException($"A video track with MID '{video.Mid}' already exists on this bundle.");
+
+            // 1. Extend the demux boundary FIRST: inbound packets for the new MID are now accepted (rather than
+            //    rejected as an unknown MID) and, until the sink is registered below, cleanly dropped/counted.
+            _router.AddKnownMid(video.Mid);
+
+            // 2. Register the outbound sender(s) for the MID (simulcast: one per a=rid encoding; plain: one, with
+            //    RTX when negotiated) — identical to the ctor path — and build the track that will be its sink.
+            //    BuildVideoTrack registers the outbound sender(s) as a side effect and returns the inbound track.
+            var track = BundledMediaSessionComposition.BuildVideoTrack(_options, video, _outbound, _loggerFactory);
+
+            // 3. Wire the track's inbound frame / key-frame events. A live-added track is never the primary, so it
+            //    fires only the mid-tagged VideoTrackFrameReceived, leaving the mid-less facade on the ctor primary.
+            WireVideoTrackEvents(video.Mid, track, isPrimary: false);
+
+            // 4. Register the inbound router sink LAST, so no packet can hit a half-built track: only now can an
+            //    inbound datagram for the new MID reach a live, fully-wired track.
+            _router.RegisterTrack(video.Mid, track.OnRtpPacket);
+
+            // 5. Publish to the video set so the send API and RTCP feedback fan-out find it.
+            if (!_video.TryAdd(video.Mid, track))
+            {
+                // Lost a race we hold the gate against — should be unreachable. Unwind the partial wiring so no
+                // orphaned sink/sender lingers, and surface it rather than leak a half-registered track.
+                _router.UnregisterTrack(video.Mid);
+                _outbound.UnregisterTrack(video.Mid);
+                track.Dispose();
+                throw new InvalidOperationException($"A video track with MID '{video.Mid}' already exists on this bundle.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Deactivates the video track identified by <paramref name="mid"/> <em>live</em> (P3b): stops its inbound
+    /// dispatch and outbound sending and releases its send lock / in-flight feedback, without tearing down the
+    /// shared transport, DTLS, ICE, or SRTP context — every other track (and the transport itself) keeps
+    /// flowing uninterrupted. Idempotent: a no-op when no video track with that MID is registered.
+    /// <para>
+    /// Removal order mirrors the add: the inbound sink is unregistered first (inbound stops), then the outbound
+    /// sender(s) (outbound stops), then the track is removed from the set and disposed. The demux boundary
+    /// keeps the MID known — an unknown MID is a security-relevant demux decision, and re-accepting a MID we
+    /// already negotiated costs nothing while a stray late packet for it is harmlessly dropped once its sink is
+    /// gone. The construction-time primary is not special-cased away here; removing it is the caller's choice.
+    /// </para>
+    /// </summary>
+    /// <param name="mid">The MID of the video track to deactivate.</param>
+    /// <exception cref="ArgumentException"><paramref name="mid"/> is <see langword="null"/> or empty.</exception>
+    public void SetVideoTrackInactive(string mid)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(mid);
+
+        lock (_trackMutationGate)
+        {
+            if (Volatile.Read(ref _disposed) != 0)
+                return; // teardown in progress — every track is disposed by DisposeAsync.
+
+            // Inbound first: no further datagram for this MID reaches a sink (the router drops/counts it instead).
+            _router.UnregisterTrack(mid);
+            // Then outbound: every RID layer registered under the MID is removed, so no further frame is sent.
+            _outbound.UnregisterTrack(mid);
+            // Drop it from the set, but do NOT dispose here: the receive loop may be inside its OnRtpPacket (a
+            // loss-triggered feedback send reads its lifetime token), and a live dispose would throw
+            // ObjectDisposedException on the loop → whole-bundle teardown. Defer to DisposeAsync (HARD-C6 drain).
+            if (_video.Remove(mid) is { } removed)
+                _deactivatedVideoTracks.Add(removed);
+        }
+    }
+
+    // Wires one video track's inbound events to the session's surface. The mid-less legacy VideoFrameReceived
+    // tracks only the primary (ctor-first) track; the mid-tagged VideoTrackFrameReceived fires for every track
+    // so N tracks are distinguishable on the inbound path. Used by both the ctor loop and the live AddVideoTrack.
+    private void WireVideoTrackEvents(string mid, BundledVideoTrack track, bool isPrimary)
+    {
+        track.FrameReceived += (frame, timestamp, isKeyFrame) =>
+        {
+            if (isPrimary)
+                VideoFrameReceived?.Invoke(frame, timestamp, isKeyFrame);
+            VideoTrackFrameReceived?.Invoke(mid, frame, timestamp, isKeyFrame);
+        };
+        track.KeyFrameRequested += () => VideoKeyFrameRequested?.Invoke();
+    }
+
     // A connectivity-checked ICE nomination (RFC 8445 §8) redirects the whole 5-tuple onto the nominated
     // pair: the transport's send target and the DTLS association's inbound source filter both follow it, so
     // the handshake completes against the checked candidate rather than the initial SDP endpoint.
@@ -668,57 +799,9 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     /// jitter (inbound) depending on which direction it describes; a MID with both directions active folds them
     /// into one entry. Every metric is <see langword="null"/> until it is available.
     /// </summary>
-    public IReadOnlyList<BundledStreamQuality> SnapshotStreamQuality()
-    {
-        // Fold outbound (per our sending SSRC) and inbound (per remote SSRC) into per-stream entries. Streams with
-        // a known MID are keyed by MID so both directions of a track land in one entry; an unknown-kind inbound
-        // source (no negotiated PT match) is keyed by its own SSRC so it is still surfaced, honestly, on its own.
-        var byMid = new Dictionary<string, BundledStreamQualityAccumulator>(StringComparer.Ordinal);
-        var unkeyed = new List<BundledStreamQuality>();
-
-        foreach (var outbound in _outboundQuality.SnapshotPerSsrc())
-        {
-            if (!_outboundStreamIdentity.TryGetValue(outbound.Ssrc, out var identity))
-                continue; // a report about an SSRC we do not send (should not happen) — do not fabricate a stream.
-
-            var acc = GetOrAddMid(byMid, identity.Mid, identity.Kind, outbound.Ssrc);
-            acc.MergeOutbound(outbound.RoundTripTimeMs, outbound.RemotePacketLossFraction);
-        }
-
-        foreach (var inbound in _receptionStats.SnapshotJitterMsPerSsrc())
-        {
-            if (inbound.Mid is { } mid)
-            {
-                var acc = GetOrAddMid(byMid, mid, inbound.Kind, inbound.Ssrc);
-                acc.MergeInboundJitter(inbound.JitterMs);
-            }
-            else
-            {
-                // No MID resolvable (unmapped payload type / SR-only source): surface it on its own SSRC with the
-                // kind we could derive — the honest limit of inbound remote-SSRC attribution.
-                unkeyed.Add(new BundledStreamQuality(
-                    Mid: null, inbound.Ssrc, inbound.Kind, PacketLoss: null, JitterMs: inbound.JitterMs, RoundTripTimeMs: null));
-            }
-        }
-
-        var result = new List<BundledStreamQuality>(byMid.Count + unkeyed.Count);
-        foreach (var acc in byMid.Values)
-            result.Add(acc.ToStreamQuality());
-        result.AddRange(unkeyed);
-        return result;
-    }
-
-    private static BundledStreamQualityAccumulator GetOrAddMid(
-        Dictionary<string, BundledStreamQualityAccumulator> byMid, string mid, BundledStreamKind kind, uint ssrc)
-    {
-        if (!byMid.TryGetValue(mid, out var acc))
-        {
-            acc = new BundledStreamQualityAccumulator(mid, ssrc, kind);
-            byMid[mid] = acc;
-        }
-
-        return acc;
-    }
+    public IReadOnlyList<BundledStreamQuality> SnapshotStreamQuality() =>
+        BundledMediaSessionComposition.FoldStreamQuality(
+            _outboundQuality.SnapshotPerSsrc(), _receptionStats.SnapshotJitterMsPerSsrc(), _outboundStreamIdentity);
 
     /// <summary>Starts the shared receive loop, the ICE consent loop, and the DTLS handshake.</summary>
     public async Task StartAsync(CancellationToken cancellationToken = default)
@@ -873,6 +956,12 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     /// </summary>
     public async ValueTask DisposeAsync()
     {
+        // Mark disposed under the mutation gate so a concurrent AddVideoTrack either completes before teardown
+        // (and its track is disposed by _video.Dispose() below) or fails fast — never wires a track onto a
+        // half-torn-down session. Take the gate only to flip the flag; the async teardown runs outside it.
+        lock (_trackMutationGate)
+            Volatile.Write(ref _disposed, 1);
+
         await _ice.DisposeAsync().ConfigureAwait(false);
         // Drain a relay data-path transition in flight before disposing the transport it rides: the driver is
         // now stopped (no new transition starts), so cancel and await the running one.
@@ -898,6 +987,10 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         await _rtcpReporter.DisposeAsync().ConfigureAwait(false);
         await _dtls.DisposeAsync().ConfigureAwait(false);
         _video.Dispose();
+        // Dispose the tracks SetVideoTrackInactive deferred — safe now (send gate drained, receive loop stopping;
+        // _disposed set, so no concurrent SetVideoTrackInactive can add here).
+        foreach (var deactivated in _deactivatedVideoTracks)
+            deactivated.Dispose();
         await _transport.DisposeAsync().ConfigureAwait(false);
     }
 }

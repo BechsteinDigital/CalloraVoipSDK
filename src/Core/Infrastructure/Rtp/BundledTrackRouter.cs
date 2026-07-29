@@ -47,6 +47,17 @@ internal sealed class BundledTrackRouter
     public bool UnregisterTrack(string mid) => _sinksByMid.TryRemove(mid, out _);
 
     /// <summary>
+    /// Starts accepting inbound RTP for a MID added mid-call (RFC 8843 §9.2 / RFC 8829 renegotiation, P3b) by
+    /// extending the underlying <see cref="BundledRtpDemultiplexer"/>'s accepted-MID set. Call this
+    /// <em>before</em> <see cref="RegisterTrack"/> so the first packets of the new stream demultiplex (rather
+    /// than being rejected as an unknown MID) — until a sink is registered they are dropped and counted, never
+    /// crash. Thread-safe against the receive loop and idempotent (an already-known MID is a no-op).
+    /// </summary>
+    /// <param name="mid">The MID token of the newly negotiated m-line to start accepting.</param>
+    /// <exception cref="ArgumentException"><paramref name="mid"/> is <see langword="null"/> or empty.</exception>
+    public void AddKnownMid(string mid) => _demultiplexer.AddKnownMid(mid);
+
+    /// <summary>
     /// Dispatches one inbound RTP packet to its m-line's sink. Returns <see langword="false"/> (and
     /// increments <see cref="DroppedPackets"/>) when the packet cannot be associated to an m-line or that
     /// m-line has no registered sink.
