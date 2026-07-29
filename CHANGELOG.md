@@ -13,31 +13,51 @@ accumulate the consumer-visible changes for 4.7.0.
 ### Added
 
 #### WebRTC facade (`CalloraVoipSdk.WebRtc`)
-- **Multiple video tracks before connect** — `IPeerConnection.AddVideoTrack()` (and the
+- **Multiple video tracks** — `IPeerConnection.AddVideoTrack()` (and the
   `AddVideoTrack(VideoTrackOptions)` overload for direction/codecs/simulcast/stream id) adds a further video
-  track — its own `m=video` line on the shared BUNDLE transport — before the first offer, returning an
+  track — its own `m=video` line on the shared BUNDLE transport — returning an
   `IVideoTrack` handle to send frames on (`var cam = peer.AddVideoTrack(); await cam.SendFrameAsync(frame, ts);`).
   Each track carries its own SSRC, so a camera and a screen-share stay separable on the wire (RFC 3550 §8.1),
-  and `RemoteTrack` now exposes its `Mid` so several remote video tracks are told apart on receive. New public
-  types: `IVideoTrack`, `VideoTrackOptions`, `TrackDirection`. **Preview-grade / additive:** a peer that uses
+  and `RemoteTrack` now exposes its `Mid` so several remote video tracks are told apart on receive. Frames on two
+  video tracks travelling both directions over one BUNDLE transport are covered end-to-end. New public
+  types: `IVideoTrack`, `VideoTrackOptions`, `TrackDirection`. **Additive:** a peer that uses
   only `WebRtcConfiguration.EnableVideo` (and no `AddVideoTrack`) emits the byte-identical 1+1 SDP as before,
-  and `SendVideoFrameAsync` still addresses the primary track. **Limitation:** tracks must be added *before*
-  the offer is produced — mid-call add / renegotiation throws and is a later package. Multi-track stays under
-  preview reifung until that lands.
+  and `SendVideoFrameAsync` still addresses the primary track. Tracks declared before the first offer are
+  negotiated in that offer; adding one after connect is supported via renegotiation (see below).
 - **`IPeerConnection.RequestVideoKeyFrameAsync`** — the receiving side can now actively request a fresh video
   key frame from the peer (RFC 4585 §6.3.1 PLI): for a newly attached renderer or a decoder reset, independent
-  of the existing automatic loss-driven feedback. A tolerant no-op when no BUNDLE session is negotiated, the
-  bundle has no video track, the peer did not advertise `nack pli`, or the built-in 500 ms throttle still
-  holds. Additive — the existing 1 audio + 1 video API is unchanged.
+  of the existing automatic loss-driven feedback. The parameterless overload targets the primary video track;
+  the `RequestVideoKeyFrameAsync(string mid)` overload targets one specific track by MID, so a consumer with
+  several video tracks can refresh exactly one. A tolerant no-op (returns `false`) when no BUNDLE session is
+  negotiated, the bundle has no such video track, the peer did not advertise `nack pli`, or the built-in 500 ms
+  throttle still holds. Additive — the existing 1 audio + 1 video API is unchanged.
 - **RFC 8829 signalling state observation** — `IPeerConnection.SignalingState` and the
   `SignalingStateChanged` event surface the peer's offer/answer signalling state (W3C `RTCSignalingState`),
   distinct from the ICE/DTLS transport `State`. New public enum `SignalingState` (`Stable`, `HaveLocalOffer`,
   `HaveRemoteOffer`, `Closed` — no `pranswer` path in this SDK). The offerer runs
   `Stable → HaveLocalOffer → Stable` and the answerer `Stable → HaveRemoteOffer → Stable`, with an invalid
   transition (e.g. creating an offer after close) throwing `InvalidOperationException` instead of silently
-  overwriting negotiation state. **Observation + guards only, additive:** the SDP/wire/session behaviour of the
-  existing single offer/answer exchange is byte-identical; re-offer / renegotiation apply remains a later
-  package (a second `SetRemoteDescriptionAsync` still fails loudly).
+  overwriting negotiation state. **Additive:** the SDP/wire/session behaviour of the existing single offer/answer
+  exchange is byte-identical; the mid-call renegotiation apply built on top of it is the next entry.
+- **Mid-call renegotiation (RFC 8829)** — `AddVideoTrack` may now be called on a connected peer, and a second
+  `CreateOffer` / `SetRemoteDescriptionAsync` cycle applies the video-track delta (add a newly negotiated track,
+  deactivate a dropped one) to the running session **live** — no transport / DTLS / ICE / SRTP rebuild; the
+  existing tracks keep flowing. A newly added track's SSRCs are allocated distinct from every live one, so it
+  never collides a running stream's per-SSRC SRTP context (RFC 3550 §8.1). The offerer-driven mid-call track add
+  is covered end-to-end (the new track carries frames while the first is uninterrupted and the peer stays
+  connected). **Not supported:** ICE restart — a re-offer that rotates the ICE ufrag on the shared transport is
+  rejected (dispose and re-create the peer to restart ICE). Broader renegotiation test coverage (answerer-driven
+  add, deactivate-then-add in one cycle, direction toggle) is in progress (see *Internal / in progress*).
+
+#### Recording encryption
+- **`CalloraVoipSdk.Hosting.RecordingEncryption`** — a public factory for the SDK's built-in AES-256-GCM
+  recording encryption, so a consumer can encrypt finalized recordings with the shipped reference
+  implementation without writing their own crypto: `RecordingEncryption.FromKey(key)` (raw 32-byte AES-256 key)
+  or `RecordingEncryption.FromPassphrase(passphrase, salt, iterations = 100_000)` (PBKDF2-SHA256 derivation).
+  Both return an `IRecordingEncryptionProvider` ready to assign to `RecordingOptions.EncryptionProvider`. This
+  restores the construction capability that was lost when the concrete provider became `internal` earlier in
+  this preview line (see *Changed* → the provider itself stays internal; this Client-layer facade is the public
+  seam, mirroring the built-in TURN/STUN server hosting facades).
 
 ### Changed
 
@@ -62,15 +82,19 @@ Additionally, two types that were public only by accident are now `internal`, ma
 implementation-detail status (the public seam is the corresponding interface):
 
 - `AesGcmRecordingEncryptionProvider` (the public contract remains
-  `CalloraVoipSdk.Core.Application.Media.IRecordingEncryptionProvider`).
+  `CalloraVoipSdk.Core.Application.Media.IRecordingEncryptionProvider`; the built-in provider is now
+  constructed through the public `CalloraVoipSdk.Hosting.RecordingEncryption` factory — see *Added*).
 - `SipDomainCertificateValidator` (an internal RFC 5922 helper of the TLS transport).
 
 ### Internal / in progress (not yet consumer-visible)
-- **Multi-track: mid-call add / renegotiation is still missing.** SDP (offer + answer), the media runtime, and
-  the public `AddVideoTrack` API now work together for tracks declared **before** the first offer (see *Added*).
-  What remains before multi-track leaves preview reifung: adding/removing a track **after** the offer
-  (renegotiation, RFC 8829), *N* audio tracks, and receive-side simulcast demux. Per the claim-gating policy
-  (ADR-006 §5), multi-track is described honestly as "multiple video tracks before connect", not "done".
+- **Multi-track / renegotiation: broadening test coverage before the full claim.** SDP (offer + answer), the
+  media runtime, the public `AddVideoTrack` API, and mid-call renegotiation apply now work together (see
+  *Added*): multiple video tracks travel end-to-end, and the offerer-driven mid-call track add is covered.
+  What remains before multi-track leaves preview reifung, per the claim-gating policy (ADR-006 §6): renegotiation
+  test coverage for the answerer-driven add, deactivate-then-add in one cycle, direction toggle on a live track,
+  and renegotiation racing teardown; *N* audio tracks; and receive-side simulcast demux (deferred to 4.8.0).
+  Until that lands multi-track is described honestly as "multiple video tracks + offerer-driven renegotiation",
+  not "done".
 
 ## [4.6.0] - 2026-07-28
 
