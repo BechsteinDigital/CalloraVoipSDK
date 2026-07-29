@@ -87,16 +87,16 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     // live — BundledVideoTrack.Dispose needs in-flight send/receive drained first, HARD-C6). Added under the gate.
     private readonly List<BundledVideoTrack> _deactivatedVideoTracks = [];
 
-    // RFC 4733 inbound DTMF reassembly state. Touched only by RaiseAudioReceived, which runs solely on the
-    // single shared receive loop (the inbound pipeline dispatches sequentially per the transport's one receive
-    // task) — no other thread reads or writes it, so no synchronization is needed. Keep it that way: any new
-    // reader from another thread must add explicit synchronization.
-    private bool _hasPendingDtmfEvent;
-    private uint _pendingDtmfSsrc;
-    private uint _pendingDtmfTimestamp;
-    private byte _pendingDtmfToneCode;
-    private ushort _pendingDtmfDurationRtpUnits;
-    private bool _pendingDtmfCompleted;
+    // Every outbound SSRC live on the bundle right now (RFC 3550 §8.1): seeded from the ctor tracks, extended on
+    // AddVideoTrack and pruned on SetVideoTrackInactive under _trackMutationGate, so OutboundSsrcs always reflects
+    // the SSRCs in use — the seed a renegotiator allocates a new track's SSRCs against. MID-keyed internally so a
+    // deactivated track's SSRCs are released exactly (BundledVideoTrack does not expose its SSRCs).
+    private readonly BundledOutboundSsrcTracker _outboundSsrcs;
+
+    // RFC 4733 inbound DTMF reassembly (extracted to BundledInboundDtmfReassembler). Driven only by
+    // RaiseAudioReceived, which runs solely on the single shared receive loop, so the reassembler needs no
+    // synchronization. Null when the peer did not negotiate telephone-event (no reassembly path).
+    private readonly BundledInboundDtmfReassembler? _dtmfReassembler;
     // 0 = no relay candidate wired; 1 = wired (at construction from the options factory, or later via
     // AdoptRelay). Guards against wiring the relay path twice (a second indication relay / relay candidate).
     private int _relayWired;
@@ -191,6 +191,11 @@ internal sealed class BundledMediaSession : IAsyncDisposable
             options.Audio.TelephoneEventPayloadType is >= 0 and <= 127 ? options.Audio.TelephoneEventPayloadType : null;
         _telephoneEventClockRate = options.Audio.TelephoneEventClockRate > 0 ? options.Audio.TelephoneEventClockRate : 8000;
         _logger = loggerFactory.CreateLogger<BundledMediaSession>();
+        // Inbound DTMF reassembler only when telephone-event was negotiated (RFC 4733): it fires DtmfReceived on a
+        // completed tone. Driven solely by the receive loop (via RaiseAudioReceived), so it needs no locking.
+        _dtmfReassembler = _telephoneEventPayloadType is not null
+            ? new BundledInboundDtmfReassembler(_telephoneEventClockRate, (tone, ms) => DtmfReceived?.Invoke(tone, ms), _logger)
+            : null;
 
         // Inbound: demux the shared socket by the negotiated m-lines' payload types, route each MID.
         var payloadTypesByMid = new Dictionary<string, IReadOnlyCollection<int>>(StringComparer.Ordinal)
@@ -313,6 +318,11 @@ internal sealed class BundledMediaSession : IAsyncDisposable
             onSenderReportSent: _outboundQuality.RecordLocalSenderReport);
 
         _audioSsrc = options.Audio.Ssrc;
+        // Seed the live outbound-SSRC bookkeeping (RFC 3550 §8.1) from the ctor tracks so OutboundSsrcs reflects the
+        // SSRCs in use from the start — the seed a renegotiation allocates around.
+        _outboundSsrcs = new BundledOutboundSsrcTracker(options.Audio.Ssrc);
+        foreach (var video in options.VideoTracks)
+            _outboundSsrcs.Add(video.Mid, video);
         _outboundStreamIdentity = BundledMediaSessionComposition.BuildOutboundStreamIdentity(options);
         // A relay candidate wired at construction (offerer path) closes the door on a later AdoptRelay.
         _relayWired = relayBinding is not null ? 1 : 0;
@@ -328,10 +338,11 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     // are reassembled and surfaced on DtmfReceived, never forwarded to AudioReceived.
     private void RaiseAudioReceived(RtpPacket packet)
     {
-        if (_telephoneEventPayloadType is { } telephoneEventPayloadType
+        if (_dtmfReassembler is not null
+            && _telephoneEventPayloadType is { } telephoneEventPayloadType
             && packet.PayloadType == telephoneEventPayloadType)
         {
-            HandleInboundTelephoneEvent(packet);
+            _dtmfReassembler.Handle(packet);
             return;
         }
 
@@ -354,64 +365,6 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     {
         ArgumentNullException.ThrowIfNull(packet);
         RaiseAudioReceived(packet);
-    }
-
-    // Reassembles an inbound RFC 4733 telephone-event stream (RFC 4733 §2.5.1.2): a DTMF tone is carried by a
-    // burst of packets sharing one RTP timestamp with a growing duration, the last marked end-of-event (E-bit).
-    // The complete tone is surfaced once, on the first end-of-event packet, with the reassembled duration.
-    // Mirrors the SIP path (RtpCallMediaSession.HandleInboundTelephoneEvent) so both paths behave alike. Runs
-    // solely on the shared receive loop, so the reassembly state needs no synchronization.
-    private void HandleInboundTelephoneEvent(RtpPacket packet)
-    {
-        if (!RtpTelephoneEventCodec.TryParse(
-                packet.Payload.Span, out var toneCode, out var endOfEvent, out var durationRtpUnits))
-        {
-            _logger.LogDebug(
-                "Ignoring malformed telephone-event RTP payload from SSRC={Ssrc:X8} (payloadLength={PayloadLength}).",
-                packet.Ssrc, packet.Payload.Length);
-            return;
-        }
-
-        if (toneCode > 15)
-        {
-            _logger.LogDebug("Ignoring unsupported telephone-event code {ToneCode}; supported range is 0-15.", toneCode);
-            return;
-        }
-
-        var isSameEvent =
-            _hasPendingDtmfEvent &&
-            _pendingDtmfSsrc == packet.Ssrc &&
-            _pendingDtmfTimestamp == packet.Timestamp &&
-            _pendingDtmfToneCode == toneCode;
-
-        if (!isSameEvent)
-        {
-            _hasPendingDtmfEvent = true;
-            _pendingDtmfSsrc = packet.Ssrc;
-            _pendingDtmfTimestamp = packet.Timestamp;
-            _pendingDtmfToneCode = toneCode;
-            _pendingDtmfDurationRtpUnits = durationRtpUnits;
-            _pendingDtmfCompleted = false;
-        }
-        else if (durationRtpUnits > _pendingDtmfDurationRtpUnits)
-        {
-            _pendingDtmfDurationRtpUnits = durationRtpUnits;
-        }
-
-        if (!endOfEvent || _pendingDtmfCompleted)
-            return;
-
-        _pendingDtmfCompleted = true;
-        var durationMs = RtpTelephoneEventCodec.DurationRtpUnitsToMs(_pendingDtmfDurationRtpUnits, _telephoneEventClockRate);
-
-        try
-        {
-            DtmfReceived?.Invoke(toneCode, durationMs);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unhandled exception in bundled DtmfReceived handler.");
-        }
     }
 
     // Decodes an inbound decrypted RTCP compound (RFC 3550 §6.4.1). Two directions: every Sender Report's LSR
@@ -472,8 +425,24 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     /// <summary>The endpoint the shared socket is bound to (the actual port after an ephemeral bind).</summary>
     public IPEndPoint LocalEndPoint => _transport.LocalEndPoint;
 
+    /// <summary>
+    /// The remote peer's ICE username fragment the shared transport was built with (RFC 8839), or null when the
+    /// exchange carried no remote ICE credentials. A renegotiator compares it against a re-offer's ufrag to detect
+    /// an ICE restart (RFC 8829 §5.3.1), which the live track-diff path does not support.
+    /// </summary>
+    public string? RemoteIceUfrag => _options.Ice.RemoteIceUfrag;
+
     /// <summary>The local audio track's synchronisation source.</summary>
     public uint AudioSsrc => _audioSsrc;
+
+    /// <summary>
+    /// A snapshot of every outbound synchronisation source live on the bundle right now (RFC 3550 §8.1): the
+    /// audio SSRC plus each active video track's primary/per-encoding and RTX SSRC(s). A renegotiator seeds its
+    /// SSRC allocation with this so a mid-call-added track's SSRCs stay distinct from every SSRC already in use —
+    /// a shared SSRC would collide the per-SSRC SRTP context (ROC/replay keyed by SSRC). The set is snapshotted
+    /// under the track-mutation gate, so it reflects a consistent point between live add/remove mutations.
+    /// </summary>
+    public IReadOnlySet<uint> OutboundSsrcs => _outboundSsrcs.Snapshot();
 
     /// <summary>Whether this bundle carries at least one video track.</summary>
     public bool HasVideo => _video.Any;
@@ -576,8 +545,8 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     /// construction-time payload-type→MID map is not extended, so this requires the peer to stamp the MID
     /// extension on the new track's packets (always the case for a renegotiated WebRTC m-line, RFC 8829).
     /// </para>
-    /// This is the session-level half of a mid-call track addition; wiring it to an SDP renegotiation
-    /// (<c>SetRemoteDescription</c> diff) is P3b-3 and out of scope here.
+    /// This is the session-level half of a mid-call track addition; the SDP-renegotiation wiring that computes the
+    /// track diff from a <c>SetRemoteDescription</c> re-offer and drives this lives in <c>WebRtcRenegotiator</c>.
     /// </summary>
     /// <param name="video">The new video m-line's configuration — its MID, codec, payload type, and its own
     /// distinct SSRC(s) (plus optional RTX / simulcast encodings), exactly as a ctor-time video track.</param>
@@ -623,6 +592,9 @@ internal sealed class BundledMediaSession : IAsyncDisposable
                 track.Dispose();
                 throw new InvalidOperationException($"A video track with MID '{video.Mid}' already exists on this bundle.");
             }
+
+            // 6. Record the track's SSRCs as live (RFC 3550 §8.1) so a later renegotiation allocates around them.
+            _outboundSsrcs.Add(video.Mid, video);
         }
     }
 
@@ -659,6 +631,9 @@ internal sealed class BundledMediaSession : IAsyncDisposable
             // ObjectDisposedException on the loop → whole-bundle teardown. Defer to DisposeAsync (HARD-C6 drain).
             if (_video.Remove(mid) is { } removed)
                 _deactivatedVideoTracks.Add(removed);
+            // Release the track's SSRCs from the live bookkeeping so a later renegotiation may reuse them (the
+            // per-SSRC SRTP context is gone with the track). No-op when the MID was already inactive (idempotent).
+            _outboundSsrcs.Remove(mid);
         }
     }
 

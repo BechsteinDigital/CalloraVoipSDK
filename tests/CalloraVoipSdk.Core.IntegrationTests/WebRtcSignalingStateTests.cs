@@ -130,16 +130,20 @@ public sealed class WebRtcSignalingStateTests
     }
 
     [Fact]
-    public async Task A_second_set_remote_description_still_throws_the_re_offer_boundary()
+    public async Task A_second_set_remote_description_renegotiates_and_returns_to_stable()
     {
-        // P3b boundary is unchanged: once a session exists (Stable after a completed answerer cycle), a second
-        // SetRemoteDescription fails loudly — the re-offer apply is a later package, not P3a.
+        // P3b-3: once a session exists (Stable after a completed answerer cycle), a second SetRemoteDescription is
+        // renegotiation — it applies the track diff to the live session and runs the answerer's two transitions
+        // (Stable → HaveRemoteOffer → Stable) again, ending back in Stable rather than throwing the old boundary.
         await using var peer = Peer(Pcmu);
         await peer.SetRemoteDescriptionAsync(WebRtcOffer());
+        var states = new List<WebRtcSignalingState>();
+        peer.SignalingStateChanged += states.Add;
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => peer.SetRemoteDescriptionAsync(WebRtcOffer()));
-        Assert.Contains("Re-Offer", ex.Message, StringComparison.Ordinal);
+        var answer = await peer.SetRemoteDescriptionAsync(WebRtcOffer());
+
+        Assert.False(string.IsNullOrWhiteSpace(answer));
+        Assert.Equal([WebRtcSignalingState.HaveRemoteOffer, WebRtcSignalingState.Stable], states);
         Assert.Equal(WebRtcSignalingState.Stable, peer.SignalingState);
     }
 

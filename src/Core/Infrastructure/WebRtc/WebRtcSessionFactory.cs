@@ -229,12 +229,19 @@ internal static class WebRtcSessionFactory
         return firstMatch;
     }
 
-    // Builds one outbound video track from a specific local video m-line (P2b: called once per video section).
-    // <paramref name="usedSsrcs"/> accumulates every SSRC already issued on this bundle (audio and earlier video
-    // tracks); this track's primary, per-encoding, and RTX SSRCs are allocated distinct from that set and added
-    // back to it, so no two tracks or their repair streams ever share an SSRC (RFC 3550 §8.1). Returns null when
-    // this m-line is not negotiated for sending.
-    private static BundledTrackConfig? TryBuildVideoTrack(
+    /// <summary>
+    /// Builds one outbound video track config from a specific local video m-line (P2b: called once per video
+    /// section), paired with its peer section in <paramref name="remoteDescription"/> by MID. This track's
+    /// primary, per-encoding, and RTX SSRCs are allocated distinct from <paramref name="usedSsrcs"/> — every SSRC
+    /// already issued on this bundle — and added back to it, so no two tracks or their repair streams ever share an
+    /// SSRC (RFC 3550 §8.1). Returns <see langword="null"/> when this m-line is not negotiated for sending.
+    /// <para>
+    /// Exposed to the renegotiator (P3b-3): a mid-call re-offer seeds <paramref name="usedSsrcs"/> from the live
+    /// session's outbound SSRCs and builds a config for each newly-negotiated video MID to hand to
+    /// <c>BundledMediaSession.AddVideoTrack</c>, so the added track's SSRCs stay distinct from the running ones.
+    /// </para>
+    /// </summary>
+    internal static BundledTrackConfig? TryBuildVideoTrack(
         SdpMediaDescription video,
         SdpSessionDescription remoteDescription,
         ISet<uint> usedSsrcs,

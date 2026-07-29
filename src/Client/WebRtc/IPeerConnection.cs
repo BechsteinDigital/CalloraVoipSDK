@@ -168,6 +168,21 @@ public interface IPeerConnection : IAsyncDisposable
     ValueTask<bool> RequestVideoKeyFrameAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Asks the peer to send a fresh video key frame on the track identified by <paramref name="mid"/> (RFC 4585
+    /// §6.3.1 PLI) — the multi-track overload of <see cref="RequestVideoKeyFrameAsync(CancellationToken)"/>. Use
+    /// it when the bundle carries several video tracks and only one needs an intra frame (a renderer attach or a
+    /// decoder reset on that track). Tolerant by design — a no-op returning <see langword="false"/> when no
+    /// BUNDLE session is negotiated yet, no track carries that MID, the peer did not advertise PLI
+    /// (<c>a=rtcp-fb … nack pli</c>), or the built-in throttle still holds; returns <see langword="true"/> when a
+    /// PLI was sent. Safe to call from any thread and after disposal (a no-op).
+    /// </summary>
+    /// <param name="mid">The media identification (<c>a=mid</c>) of the video track to request a key frame for.</param>
+    /// <param name="cancellationToken">Cancels the RTCP send.</param>
+    /// <returns><see langword="true"/> when a PLI was sent to the peer; otherwise <see langword="false"/>.</returns>
+    /// <exception cref="ArgumentException"><paramref name="mid"/> is null or empty.</exception>
+    ValueTask<bool> RequestVideoKeyFrameAsync(string mid, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Attaches an <see cref="IMediaTap"/> that observes the encoded media flowing through this peer in both
     /// directions (L3 recording/analytics/AI seam). Dispose the returned handle to detach.
     /// </summary>

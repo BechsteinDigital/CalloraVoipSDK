@@ -51,16 +51,34 @@ public sealed class WebRtcPeerConnectionTests
     }
 
     [Fact]
-    public async Task A_second_SetRemoteDescription_is_rejected_as_an_unsupported_re_offer()
+    public async Task A_second_SetRemoteDescription_with_the_same_tracks_renegotiates_without_error()
     {
         await using var peer = Peer(Pcmu);
         await peer.SetRemoteDescriptionAsync(WebRtcOffer());   // first: builds the session
 
-        // Re-Offer / ICE restart is a documented post-GA follow-up: a second SetRemoteDescription must fail loudly
-        // rather than silently overwrite the session (leaking the transport, double-wiring events).
+        // A second offer/answer cycle on a running session is renegotiation (RFC 8829, 4.7.0 P3b-3): the shared
+        // transport/DTLS/ICE/SRTP is kept and only the video-track diff is applied. Re-offering the same tracks is
+        // a no-op diff — it must succeed (not throw) and return a fresh answer, staying in Stable/Connecting.
+        var answer = await peer.SetRemoteDescriptionAsync(WebRtcOffer());
+
+        Assert.Equal(WebRtcSignalingState.Stable, peer.SignalingState);
+        Assert.Equal(WebRtcConnectionState.Connecting, peer.State);
+        var parsed = new SdpSessionParser().Parse(answer);
+        Assert.Contains(parsed.Media, m => m.MediaType == "audio");
+        Assert.Contains(parsed.Media, m => m.MediaType == "video");
+    }
+
+    [Fact]
+    public async Task An_ice_restart_re_offer_is_rejected_on_a_running_peer()
+    {
+        await using var peer = Peer(Pcmu);
+        await peer.SetRemoteDescriptionAsync(WebRtcOffer());   // first: builds the session (remote ufrag "remoteU")
+
+        // ICE restart (RFC 8829 §5.3.1) is not supported on a running peer: this path diffs only the track set on
+        // the existing transport, so a re-offer that rotates the remote ICE ufrag must fail loudly.
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => peer.SetRemoteDescriptionAsync(WebRtcOffer()));
-        Assert.Contains("Re-Offer", ex.Message, StringComparison.Ordinal);
+            () => peer.SetRemoteDescriptionAsync(WebRtcOffer(iceUfrag: "restartedUfrag")));
+        Assert.Contains("ICE restart", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -368,8 +386,9 @@ public sealed class WebRtcPeerConnectionTests
             NullLoggerFactory.Instance);
 
     // A remote WebRTC offer (BUNDLE + DTLS + ICE + video), built with the negotiator and serialized.
-    // The audio direction is parameterised so a recvonly/inactive offer (the remote will not send) can be built.
-    private static string WebRtcOffer(SdpMediaDirection audioDirection = SdpMediaDirection.SendRecv) => new SdpSessionSerializer().Serialize(
+    // The audio direction is parameterised so a recvonly/inactive offer (the remote will not send) can be built;
+    // the ICE ufrag is parameterised so a re-offer that rotates it (an ICE restart) can be built.
+    private static string WebRtcOffer(SdpMediaDirection audioDirection = SdpMediaDirection.SendRecv, string iceUfrag = "remoteU") => new SdpSessionSerializer().Serialize(
         new SdpOfferAnswerNegotiator().CreateOffer(
             new IPEndPoint(IPAddress.Loopback, 5000), Pcmu, audioDirection,
             new SdpMediaOptions
@@ -377,7 +396,7 @@ public sealed class WebRtcPeerConnectionTests
                 Bundle = true,
                 RtcpMux = true,
                 Dtls = new SdpDtlsParameters { Algorithm = "sha-256", Fingerprint = "AA:BB:CC", Setup = "actpass" },
-                Ice = new SdpIceParameters { Ufrag = "remoteU", Pwd = "remotepassword1234567890" },
+                Ice = new SdpIceParameters { Ufrag = iceUfrag, Pwd = "remotepassword1234567890" },
                 Video = new SdpVideoMediaOptions
                 {
                     Port = 5002,

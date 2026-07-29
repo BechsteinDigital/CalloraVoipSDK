@@ -128,6 +128,16 @@ public sealed class WebRtcRecordingTests
         public Task SendVideoFrameAsync(string rid, ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task SendDtmfAsync(byte toneCode, int durationMs = 160, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public ValueTask<bool> RequestVideoKeyFrameAsync(CancellationToken cancellationToken = default) => ValueTask.FromResult(false);
+
+        // Records the MID the per-track key-frame overload was asked for, so a passthrough test can assert the
+        // client hands the exact MID down to the peer.
+        public string? LastKeyFrameMid { get; private set; }
+        public ValueTask<bool> RequestVideoKeyFrameAsync(string mid, CancellationToken cancellationToken = default)
+        {
+            LastKeyFrameMid = mid;
+            return ValueTask.FromResult(true);
+        }
+
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 
         private sealed class Detacher(RecordingFakePeer peer) : IDisposable
