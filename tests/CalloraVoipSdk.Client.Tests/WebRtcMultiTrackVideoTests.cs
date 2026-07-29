@@ -47,16 +47,27 @@ public sealed class WebRtcMultiTrackVideoTests
         Assert.Equal(TrackDirection.SendOnly, screen.Direction);
     }
 
-    // AK#1 / P3 boundary: adding a track after the offer is produced throws (mid-call add is a later package).
+    // 4.7.0 renegotiation: adding a track after the first offer is now allowed (mid-call add). The track is
+    // pending — its handle already carries the next numeric MID — and a subsequent re-offer advertises it, so a
+    // full offer/answer cycle can apply it to the running session (RFC 8829). This replaces the former P3 boundary
+    // (mid-call add throwing), which is no longer the behaviour.
     [Fact]
-    public async Task AddVideoTrack_after_the_offer_throws()
+    public async Task AddVideoTrack_after_the_offer_is_allowed_and_re_offered()
     {
-        var rtc = VideoClient();
+        var rtc = VideoClient();   // EnableVideo primary → audio=0, primary video=1
         await using var peer = rtc.CreatePeer();
 
-        peer.CreateOffer();
+        var firstOffer = peer.CreateOffer();
+        Assert.Equal(1, CountMediaLines(firstOffer, "video"));
 
-        Assert.Throws<InvalidOperationException>(() => peer.AddVideoTrack());
+        // Mid-call add: no longer throws; returns a handle with the next numeric MID (pending until re-offer).
+        var added = peer.AddVideoTrack();
+        Assert.Equal("2", added.Mid);
+
+        // The re-offer advertises the newly added track (the renegotiation offer the peer would send).
+        var reOffer = peer.CreateOffer();
+        Assert.Equal(2, CountMediaLines(reOffer, "video"));
+        Assert.Equal(["0", "1", "2"], MidsInOrder(reOffer));
     }
 
     // AK#2: EnableVideo + one AddVideoTrack = two video m-lines with numeric MIDs, and the handles carry
