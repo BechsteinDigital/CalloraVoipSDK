@@ -5,15 +5,20 @@ The authoritative changelog lives in the repository:
 
 ## Release highlights
 
-### 4.7.0-preview — 2026-07-29
+### 4.7.0 — 2026-07-29
 
-Three **additive, transport-only** WebRTC primitives that enable an external SFU / conference host to
-run multi-party video on top of the peer surface. All three are **preview-grade** and additive: a peer
-that uses none of them negotiates byte-identical SDP and behaves exactly as in 4.6. The SDK stays a
-peer — it **forwards, it does not mix or transcode**. See [WebRTC](guides/webrtc.md).
+The 4.7 line builds **multi-party / SFU enablement** onto the WebRTC facade. Everything is **additive and
+transport-only**: a peer that uses none of it negotiates byte-identical SDP and behaves exactly as in 4.6.
+The SDK stays a peer — it **forwards, it does not mix or transcode**. See [WebRTC](guides/webrtc.md).
 
-**WebRTC (preview)**
+**WebRTC**
 
+- **Multiple video tracks + mid-call renegotiation (RFC 8829).** `IPeerConnection.AddVideoTrack()` adds a
+  further video track (its own `m=video` line, SSRC and `RemoteTrack.Mid`) before *or* after connect — a
+  second `CreateOffer`/`SetRemoteDescriptionAsync` cycle applies the delta live, with no transport / DTLS /
+  ICE / SRTP rebuild. New public types `IVideoTrack`, `VideoTrackOptions`, `TrackDirection`; ICE restart is
+  not supported (dispose and re-create the peer). `IPeerConnection.SignalingState` /`SignalingStateChanged`
+  surface the RFC 8829 state, and `RequestVideoKeyFrameAsync(mid)` targets one track.
 - **Multiple audio tracks over one BUNDLE.** `IPeerConnection.AddAudioTrack()` (and an
   `AddAudioTrack(AudioTrackOptions)` overload) returns an `IAudioTrack` (`Mid`, `Direction`,
   `SendFrameAsync(frame, rtpTimestamp)`) — each track its own `m=audio` line, SSRC and per-participant

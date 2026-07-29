@@ -21,9 +21,11 @@ and intelligent decision logic.
 
 ## Current Status
 
-Latest release: **v4.6.0** on [nuget.org](https://www.nuget.org/packages/CalloraVoipSdk) (this
-documentation). It adds the WebRTC facade, DTLS-SRTP with AEAD-AES-GCM, and a self-hostable
-STUN/TURN server on top of the stable SIP + RTP core.
+Latest release: **v4.7.0** on [nuget.org](https://www.nuget.org/packages/CalloraVoipSdk) (this
+documentation). It builds multi-party / SFU enablement onto the WebRTC facade — multiple video and audio
+tracks over one BUNDLE with mid-call renegotiation, receive-side simulcast demux, and a per-peer
+send-bitrate recommendation — all additive and transport-only on top of the 4.6 WebRTC facade,
+DTLS-SRTP with AEAD-AES-GCM, self-hostable STUN/TURN server, and the stable SIP + RTP core.
 
 > **How to read the status column.** *Stable* = mature, covered by the RFC-oriented test suite and
 > by automated interop, and the intended production surface. *Opt-in* = shipped and tested, but off

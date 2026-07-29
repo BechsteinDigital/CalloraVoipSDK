@@ -19,7 +19,7 @@ It exposes a stable, developer-friendly API through `VoipClient` while keeping t
 🧪 **Examples:** [`examples/`](examples) — runnable samples (BasicCalling, Dialer, Transfer, CustomAudio, VideoCalling, WebRtcPeer, WebRtcRecording, WebRtcDependencyInjection, and a browser video-call website `WebRtcVideoCall.Web`)
 🛠️ **Maintainers:** [`MAINTAINING.md`](MAINTAINING.md) — architecture map, invariants, workflows; rules in [`ENGINEERING_RULES.md`](ENGINEERING_RULES.md)
 
-> **Project status — 4.6.0.** The **SIP + RTP core** is the mature, production-oriented surface:
+> **Project status — 4.7.0.** The **SIP + RTP core** is the mature, production-oriented surface:
 > registration, in/outbound call control, transfer, DTMF, SRTP (SDES) and measured RTCP quality
 > metrics — with symmetric RTP (comedia) as the production-proven NAT path. It is exercised in CI
 > by an **automated interop suite against a real Asterisk (PJSIP) container** — registration,
@@ -30,12 +30,34 @@ It exposes a stable, developer-friendly API through `VoipClient` while keeping t
 > validated in CI against **real browsers** (Chromium and Firefox, headless via Playwright: audio
 > and VP8 video, SDK as offerer *and* as answerer), and the **self-hostable STUN/TURN server** is
 > exercised end-to-end against a real **coturn** relay. Deliberate limits in this line: no data
-> channels (SCTP), TURN relay is **UDP-only**, simulcast is **send-side only**, and **full ICE**
+> channels (SCTP), TURN relay is **UDP-only**, and **full ICE**
 > (RFC 8445/7675) is opt-in and not yet production-proven — validate it for your trunk before
 > enabling it. Known gaps and interop defects are tracked openly in the
 > [issue tracker](../../issues) — bug reports and interop feedback are especially welcome.
 
 **Contents:** [Why](#why-calloravoipsdk) · [Progressive API](#progressive-api-simple-first-deeper-when-needed) · [Features](#current-feature-set) · [Install](#installation) · [Quickstart](#quickstart) · [Architecture](#architecture) · [Contributing](#contributing) · [Security](#security) · [License](#license)
+
+## What's new in 4.7
+
+Multi-party / SFU enablement on the WebRTC facade — additive and transport-only (a peer that uses none of
+it negotiates byte-identical SDP to 4.6). Full detail in [`CHANGELOG.md`](CHANGELOG.md).
+
+- **Multiple video tracks + mid-call renegotiation (RFC 8829)** — `IPeerConnection.AddVideoTrack()` adds a
+  video track (its own `m=video`, SSRC and `RemoteTrack.Mid`) before *or* after connect; a second
+  offer/answer cycle applies the delta live with no transport / DTLS / ICE / SRTP rebuild. New public types
+  `IVideoTrack`, `VideoTrackOptions`, `TrackDirection`, `SignalingState`; `RequestVideoKeyFrameAsync(mid)`
+  refreshes one track. ICE restart is not supported (dispose and re-create the peer).
+- **Multiple audio tracks over one BUNDLE** — `IPeerConnection.AddAudioTrack()` returns an `IAudioTrack`;
+  each track carries its own `m=audio`, SSRC and per-participant `a=msid`, so an SFU can forward several
+  participants' audio. The primary audio m-line anchors ICE/DTLS and is never deactivated.
+- **Receive-side simulcast demux (RFC 8853/8852)** — inbound frames carry their `a=rid` layer id on
+  `EncodedFrame.Rid`; the SDK reassembles each layer independently, one `RemoteTrack` per m-line.
+  Forwarding-only — which layer to forward is the SFU application's decision.
+- **Per-peer send-bitrate recommendation (transport-cc, RFC 8888)** —
+  `IPeerConnection.RecommendedOutgoingBitrateBps` and the `RecommendedBitrateChanged` event give a finished
+  recommended send bitrate per peer, the signal an SFU uses to pick which simulcast layer to forward.
+- **Public recording-encryption factory** — `CalloraVoipSdk.Hosting.RecordingEncryption.FromKey` /
+  `FromPassphrase` build the built-in AES-256-GCM `IRecordingEncryptionProvider`.
 
 ## What's new in 4.6
 
@@ -228,7 +250,7 @@ logic without depending on internal implementation types.
 
 CalloraVoipSdk follows Semantic Versioning (`MAJOR.MINOR.PATCH`).
 
-- Current public release line: `4.x` — latest release `4.6.0`
+- Current public release line: `4.x` — latest release `4.7.0`
   (see [releases](https://github.com/BechsteinDigital/callora-voip-sdk/releases))
 - Public API removals only happen in MAJOR releases; deprecations are introduced
   through `[Obsolete(...)]` before removal

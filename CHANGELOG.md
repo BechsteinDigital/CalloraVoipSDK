@@ -6,9 +6,15 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
 
 ## [Unreleased]
 
-The **`4.7.0-preview`** line. Every build off `main` is versioned `4.7.0-preview` (the stable version is
-pinned only by the release tag), so no build off `main` is mistaken for a stable release. The entries below
-accumulate the consumer-visible changes for 4.7.0.
+The next line. Entries here accumulate the consumer-visible changes not yet released.
+
+## [4.7.0] - 2026-07-29
+
+The 4.7 line builds multi-party / SFU enablement onto the WebRTC facade: **multiple video tracks** with
+**mid-call renegotiation** (RFC 8829), **multiple audio tracks** over one BUNDLE, **receive-side simulcast
+demux** (RFC 8853/8852), and a **per-peer send-bitrate recommendation** from transport-cc (RFC 8888). All
+additive and transport-only — a peer that uses none of them negotiates byte-identical SDP to 4.6. It also
+adds a public recording-encryption factory and completes the public-API surface cleanup.
 
 ### Added
 
@@ -55,7 +61,7 @@ accumulate the consumer-visible changes for 4.7.0.
   audio is surfaced per track (mid-tagged, `RemoteTrack.Mid`). The added-audio send path forwards the frame's
   RTP timestamp to the wire, so a forwarding SFU keeps A/V sync against the same participant's video. Tracks can
   be added/removed mid-call over the renegotiation path. New public types: `IAudioTrack`, `AudioTrackOptions`.
-  **Additive / preview-grade:** the primary audio m-line anchors ICE/DTLS and is never deactivated; a peer that
+  **Additive:** the primary audio m-line anchors ICE/DTLS and is never deactivated; a peer that
   uses only the single audio track emits byte-identical SDP as before; DTMF stays on the primary track.
 - **Receive-side simulcast demultiplexing** (RFC 8853 / RFC 8852) — inbound frames now carry their `a=rid`
   layer id on `EncodedFrame.Rid`. When a peer sends several encodings of one video m-line, the SDK
@@ -79,15 +85,15 @@ accumulate the consumer-visible changes for 4.7.0.
   or `RecordingEncryption.FromPassphrase(passphrase, salt, iterations = 100_000)` (PBKDF2-SHA256 derivation).
   Both return an `IRecordingEncryptionProvider` ready to assign to `RecordingOptions.EncryptionProvider`. This
   restores the construction capability that was lost when the concrete provider became `internal` earlier in
-  this preview line (see *Changed* → the provider itself stays internal; this Client-layer facade is the public
+  the 4.7 line (see *Changed* → the provider itself stays internal; this Client-layer facade is the public
   seam, mirroring the built-in TURN/STUN server hosting facades).
 
 ### Changed
 
-#### Public API surface cleanup (preview-only namespace moves)
+#### Public API surface cleanup (namespace moves)
 Public types that were exported from the `Core.Infrastructure.*` layer — a violation of the "infrastructure
 stays an internal implementation detail" rule — were relocated to the `Core.Application.*` layer where the
-public seam belongs. These are **consumer-visible namespace changes** (permitted while in preview); consumers
+public seam belongs. These are **consumer-visible namespace changes** in the 4.7 line; consumers
 referencing these types must update their `using` directives:
 
 - **SIP telemetry contract** moved from `CalloraVoipSdk.Core.Infrastructure.Sip.Observability` to
@@ -114,7 +120,7 @@ implementation-detail status (the public seam is the corresponding interface):
   media runtime, the public track APIs, and mid-call renegotiation apply now work together (see *Added*):
   multiple video and audio tracks, receive-side simulcast demultiplexing, and the offerer-driven mid-call track
   add are covered.
-  What remains before multi-track leaves preview reifung, per the claim-gating policy (ADR-006 §6): renegotiation
+  What remains before the unqualified "multi-track done" claim, per the claim-gating policy (ADR-006 §6): renegotiation
   test coverage for the answerer-driven add, deactivate-then-add in one cycle, direction toggle on a live track,
   and renegotiation racing teardown. Until that lands multi-track is described honestly as "multiple
   video/audio tracks + offerer-driven renegotiation", not "done".
