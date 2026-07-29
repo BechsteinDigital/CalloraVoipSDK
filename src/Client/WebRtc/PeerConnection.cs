@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Net;
+using CalloraVoipSdk.Core.Domain.Calls;
 using CalloraVoipSdk.Core.Infrastructure.Rtp;
 using CalloraVoipSdk.Core.Infrastructure.Sdp;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Models;
@@ -39,6 +40,7 @@ internal sealed class PeerConnection : IPeerConnection
     private EventHandler<string>? _localIceCandidateDiscovered;
     private EventHandler<DtmfTone>? _dtmfReceived;
     private EventHandler? _videoKeyFrameRequested;
+    private EventHandler<BitrateRecommendation>? _recommendedBitrateChanged;
 
     public PeerConnection(
         WebRtcPeerConnection peer,
@@ -74,12 +76,14 @@ internal sealed class PeerConnection : IPeerConnection
         _peer.LocalIceCandidateDiscovered += OnLocalIceCandidate;
         _peer.DtmfReceived += OnDtmfReceived;
         _peer.VideoKeyFrameRequested += OnVideoKeyFrameRequested;
+        _peer.RecommendedBitrateChanged += OnRecommendedBitrateChanged;
     }
 
     public PeerConnectionState State => Map(_peer.State);
     public SignalingState SignalingState => MapSignaling(_peer.SignalingState);
     public string? LocalDescription => _peer.LocalDescription;
     public IPEndPoint? LocalMediaEndPoint => _peer.LocalMediaEndPoint;
+    public long? RecommendedOutgoingBitrateBps => _peer.RecommendedOutgoingBitrateBps;
 
     public event EventHandler<PeerConnectionState>? ConnectionStateChanged
     {
@@ -115,6 +119,12 @@ internal sealed class PeerConnection : IPeerConnection
     {
         add { lock (_eventSync) _videoKeyFrameRequested += value; }
         remove { lock (_eventSync) _videoKeyFrameRequested -= value; }
+    }
+
+    public event EventHandler<BitrateRecommendation>? RecommendedBitrateChanged
+    {
+        add { lock (_eventSync) _recommendedBitrateChanged += value; }
+        remove { lock (_eventSync) _recommendedBitrateChanged -= value; }
     }
 
     public string CreateOffer() => _peer.CreateOffer();
@@ -368,6 +378,7 @@ internal sealed class PeerConnection : IPeerConnection
         _peer.LocalIceCandidateDiscovered -= OnLocalIceCandidate;
         _peer.DtmfReceived -= OnDtmfReceived;
         _peer.VideoKeyFrameRequested -= OnVideoKeyFrameRequested;
+        _peer.RecommendedBitrateChanged -= OnRecommendedBitrateChanged;
         try
         {
             await _peer.DisposeAsync().ConfigureAwait(false);
@@ -437,6 +448,16 @@ internal sealed class PeerConnection : IPeerConnection
         EventHandler? handler;
         lock (_eventSync) handler = _videoKeyFrameRequested;
         handler?.Invoke(this, EventArgs.Empty);
+    }
+
+    // The SDK revised its recommended send bitrate for this peer (transport-cc / RFC 8888). Surfaced as a
+    // top-level event carrying the finished recommendation (bitrate + coarse quality) — an SFU reacts per
+    // receiver. Snapshot the handler under the event lock and invoke outside it (K3), like the other fan-outs.
+    private void OnRecommendedBitrateChanged(long bitrateBps, NetworkQuality quality)
+    {
+        EventHandler<BitrateRecommendation>? handler;
+        lock (_eventSync) handler = _recommendedBitrateChanged;
+        handler?.Invoke(this, new BitrateRecommendation(bitrateBps, quality));
     }
 
     // Snapshotted TrackReceived fire path used by the RemoteTrackSet when a remote track materialises.

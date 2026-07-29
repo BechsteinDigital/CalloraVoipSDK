@@ -221,4 +221,23 @@ public interface IPeerConnection : IAsyncDisposable
     /// so poll periodically (e.g. once per second) for meaningful rate values.
     /// </summary>
     WebRtcStats GetStats();
+
+    /// <summary>
+    /// The SDK's current recommended outbound send bitrate to this peer in bits per second (transport-cc /
+    /// RFC 8888), for setting the encoder or — for an SFU — selecting which simulcast layer to forward to this
+    /// receiver. <see langword="null"/> until a media session is running and transport-cc has been negotiated
+    /// for this leg. The point-in-time counterpart to <see cref="RecommendedBitrateChanged"/>; the same value
+    /// the last event carried.
+    /// </summary>
+    long? RecommendedOutgoingBitrateBps { get; }
+
+    /// <summary>
+    /// Raised whenever the SDK revises its recommended send bitrate to this peer (transport-cc / RFC 8888),
+    /// carrying the finished <see cref="BitrateRecommendation"/> (bitrate + coarse quality). This is the reactive
+    /// signal an SFU reacts to per receiver, re-choosing the simulcast layer it forwards when the path's
+    /// bandwidth changes. Reactive per feedback report (roughly once per round-trip); the SDK does not throttle
+    /// it — the app decides when and how to act on a change. Stays silent when transport-cc was not negotiated
+    /// (and <see cref="RecommendedOutgoingBitrateBps"/> reads <see langword="null"/>).
+    /// </summary>
+    event EventHandler<BitrateRecommendation>? RecommendedBitrateChanged;
 }

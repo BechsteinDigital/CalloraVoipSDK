@@ -48,6 +48,29 @@ accumulate the consumer-visible changes for 4.7.0.
   connected). **Not supported:** ICE restart — a re-offer that rotates the ICE ufrag on the shared transport is
   rejected (dispose and re-create the peer to restart ICE). Broader renegotiation test coverage (answerer-driven
   add, deactivate-then-add in one cycle, direction toggle) is in progress (see *Internal / in progress*).
+- **Multiple audio tracks (N-audio) over one BUNDLE** — `IPeerConnection.AddAudioTrack()` (and the
+  `AddAudioTrack(AudioTrackOptions)` overload) adds a further audio track — its own `m=audio` line on the
+  shared BUNDLE transport — returning an `IAudioTrack` to send frames on. Each track carries its own SSRC and
+  per-participant `a=msid`, so an SFU can forward several participants' audio streams separately, and inbound
+  audio is surfaced per track (mid-tagged, `RemoteTrack.Mid`). The added-audio send path forwards the frame's
+  RTP timestamp to the wire, so a forwarding SFU keeps A/V sync against the same participant's video. Tracks can
+  be added/removed mid-call over the renegotiation path. New public types: `IAudioTrack`, `AudioTrackOptions`.
+  **Additive / preview-grade:** the primary audio m-line anchors ICE/DTLS and is never deactivated; a peer that
+  uses only the single audio track emits byte-identical SDP as before; DTMF stays on the primary track.
+- **Receive-side simulcast demultiplexing** (RFC 8853 / RFC 8852) — inbound frames now carry their `a=rid`
+  layer id on `EncodedFrame.Rid`. When a peer sends several encodings of one video m-line, the SDK
+  demultiplexes them into independent per-RID reassembly (each layer its own reorder + depacketise state) and
+  tags every frame with its RID on `RemoteTrack.FrameReceived` — one `RemoteTrack` per m-line, layers told
+  apart by `frame.Rid`. This completes simulcast (the send side was already present): an SFU receives every
+  layer addressably. **Forwarding-only:** the SDK never drops or transcodes a layer — which layer to forward is
+  the SFU application's decision. Non-simulcast receive is byte-identical (`Rid` is null).
+- **Per-peer send-bitrate recommendation** (transport-cc, RFC 8888) — `IPeerConnection.RecommendedOutgoingBitrateBps`
+  and the `RecommendedBitrateChanged` event surface a *finished* recommended send bitrate (plus a coarse
+  `NetworkQuality`) toward the connected peer, derived from the transport-wide congestion feedback that peer
+  returns. New public type `BitrateRecommendation` (`BitrateBps`, `Quality`). For an SFU this is the
+  per-receiver signal for choosing which simulcast layer to forward. **A recommendation, not raw metrics, and
+  reactive** (fires per feedback interval, not polled). Property and event are null/silent when transport-cc was
+  not negotiated; the SDK does not throttle the event (the app owns its cadence) and makes no layer decision.
 
 #### Recording encryption
 - **`CalloraVoipSdk.Hosting.RecordingEncryption`** — a public factory for the SDK's built-in AES-256-GCM
@@ -88,13 +111,13 @@ implementation-detail status (the public seam is the corresponding interface):
 
 ### Internal / in progress (not yet consumer-visible)
 - **Multi-track / renegotiation: broadening test coverage before the full claim.** SDP (offer + answer), the
-  media runtime, the public `AddVideoTrack` API, and mid-call renegotiation apply now work together (see
-  *Added*): multiple video tracks travel end-to-end, and the offerer-driven mid-call track add is covered.
+  media runtime, the public track APIs, and mid-call renegotiation apply now work together (see *Added*):
+  multiple video and audio tracks, receive-side simulcast demultiplexing, and the offerer-driven mid-call track
+  add are covered.
   What remains before multi-track leaves preview reifung, per the claim-gating policy (ADR-006 §6): renegotiation
   test coverage for the answerer-driven add, deactivate-then-add in one cycle, direction toggle on a live track,
-  and renegotiation racing teardown; *N* audio tracks; and receive-side simulcast demux (deferred to 4.8.0).
-  Until that lands multi-track is described honestly as "multiple video tracks + offerer-driven renegotiation",
-  not "done".
+  and renegotiation racing teardown. Until that lands multi-track is described honestly as "multiple
+  video/audio tracks + offerer-driven renegotiation", not "done".
 
 ## [4.6.0] - 2026-07-28
 

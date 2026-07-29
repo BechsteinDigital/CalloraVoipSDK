@@ -749,9 +749,9 @@ internal sealed class BundledMediaSession : IAsyncDisposable
 
     /// <summary>
     /// The bundle's sender-side transport-wide congestion controller (transport-cc / RFC 8888), or
-    /// <see langword="null"/> when the extension was not negotiated. Exposes the recommended outbound bitrate
-    /// and coarse network quality. Internal for now — surfacing it on the public WebRTC peer facade is a
-    /// documented follow-up (mirrors the single-stream <c>VideoRtpStream.Congestion</c> internal accessor).
+    /// <see langword="null"/> when the extension was not negotiated. Exposes the recommended outbound bitrate,
+    /// its change event, and coarse network quality; the public WebRTC facade projects these onto its own
+    /// reactive surface via <c>WebRtcCongestionRelay</c> (4.7.0 congestion API).
     /// </summary>
     internal TransportCcCongestionController? Congestion => _congestion?.Controller;
 

@@ -3,13 +3,19 @@
 > **Status (v4.6.0).** The WebRTC facade is **validated in CI against real browsers** — Chromium and
 > Firefox, headless via Playwright, audio and VP8 video, in both roles (SDK as offerer and as
 > answerer), over DTLS-SRTP including AES-GCM. Known scope limits: data channels (SCTP) are **not
-> included**; TURN relay is **UDP-only** (no TCP/TLS relay); simulcast is **send-side only**
-> (offerer-confirmed — receive-side RID demux is a later slice); and Safari/WebKit is not yet
+> included**; TURN relay is **UDP-only** (no TCP/TLS relay); and Safari/WebKit is not yet
 > verified. The media socket follows the address family of the configured `LocalEndPoint`, so IPv4
 > and IPv6 both work. Browser **mDNS (`.local`) host candidates are resolved** via the OS resolver
 > (RFC 8828). Trickle ICE and early-bind are included: an ephemeral media port still yields a live
 > m-line, though a fixed, reachable port remains the recommendation for NAT reachability without
 > TURN.
+
+> **Preview (v4.7.0-preview).** Three additive, transport-only SFU-enablement primitives ship in
+> preview: **multiple audio tracks** over one BUNDLE, **receive-side simulcast demux** (the RID a
+> layer arrived on is surfaced per frame), and a **per-peer recommended outgoing bitrate** derived
+> from transport-cc feedback. They are additive — a peer that uses none of them negotiates
+> byte-identical SDP and behaves exactly as before. The SDK stays a peer, not a conference server:
+> it forwards, it does not mix or transcode. See the sections below.
 
 The `CalloraVoipSdk.WebRtc` namespace is a signalling-neutral WebRTC peer surface that mirrors the
 four-level design of `VoipClient`. It is **transport-only**: the SDK runs ICE, DTLS-SRTP, BUNDLE and
@@ -108,8 +114,85 @@ await peer.SendVideoFrameAsync("lo", encodedLoRes, rtpTimestamp);
 
 The offer advertises the rids; the SDK confirms them against the answer and falls back to a single
 stream when the answerer does not confirm them. The active `rid` is surfaced to `IMediaTap.OnVideo` and
-to recording (RFC 8852). Receiving and demultiplexing a remote peer's simulcast layers by rid is a
-later slice — today simulcast is send-side only.
+to recording (RFC 8852). Receiving a remote peer's simulcast layers is covered by
+[Receive-side simulcast demux](#receive-side-simulcast-demux-preview) below.
+
+## Multiple audio tracks (preview)
+
+> **Preview (v4.7.0-preview), additive, transport-only.**
+
+Add more than one audio track on the shared BUNDLE transport — one `m=audio` line, SSRC and
+per-participant `a=msid` per track — so an SFU can forward several participants' audio to a peer
+without a second connection:
+
+```csharp
+// The primary audio track anchors ICE/DTLS and is created with the peer.
+IAudioTrack extra = peer.AddAudioTrack();                        // or AddAudioTrack(new AudioTrackOptions { ... })
+await extra.SendFrameAsync(encodedOpusPayload, rtpTimestamp);    // track.Mid / track.Direction describe it
+
+// Inbound audio tracks arrive tagged with their mid:
+peer.TrackReceived += (_, track) => { var mid = track.Mid; /* separate per participant */ };
+```
+
+Tracks add and remove mid-call through the renegotiation path. The added send path threads your RTP
+timestamp through unchanged, so A/V sync holds against the same participant's forwarded video.
+
+**Honest limits.** The **primary** audio m-line anchors ICE/DTLS and is never deactivated — a peer
+that uses only the one audio track produces byte-identical SDP to before. DTMF (RFC 4733) stays on
+the primary track, not per-MID. This is the forwarding building block for multi-party audio; the SDK
+**forwards, it does not mix** the conference.
+
+## Receive-side simulcast demux (preview)
+
+> **Preview (v4.7.0-preview), additive, forwarding-only.**
+
+When a remote peer sends several encodings of **one** video m-line, the SDK separates them
+receive-side into independent per-RID reassembly (each layer keeps its own reorder + depacketise
+state) and tags every frame with the RID it arrived on. There is still **one** `RemoteTrack` per
+m-line; distinguish the layers by `frame.Rid`:
+
+```csharp
+peer.TrackReceived += (_, track) =>
+    track.FrameReceived += (_, frame) =>
+    {
+        string? rid = frame.Rid;   // the a=rid layer id, e.g. "hi" / "lo"; null when not simulcast
+        // forward or select by rid — the SFU decides which layer goes where
+    };
+```
+
+This completes simulcast (the send side was already there): an SFU receives each layer addressably.
+**Forwarding-only** — the SDK never drops or transcodes a layer; which layer is forwarded is your
+SFU/app logic. Non-simulcast receive is byte-identical (`Rid` is `null`).
+
+## Per-peer bitrate recommendation (preview)
+
+> **Preview (v4.7.0-preview), additive.**
+
+A finished recommended send bitrate toward the connected peer — plus a coarse `NetworkQuality` —
+derived from the transport-wide congestion feedback the peer returns (transport-cc, RFC 8888). For an
+SFU this is the per-receiver signal of which simulcast layer to forward:
+
+```csharp
+peer.RecommendedBitrateChanged += (_, recommendation) =>
+{
+    long bps = recommendation.BitrateBps;         // recommendation.Quality is a coarse NetworkQuality
+    // choose the layer / pace your encoder — the SDK does not decide for you
+};
+
+long? bps = peer.RecommendedOutgoingBitrateBps;   // null until transport-cc is negotiated
+```
+
+**A recommendation, not raw metrics, and reactive** — it fires per feedback interval, no polling. The
+property and event stay `null`/silent when transport-cc was not negotiated. The SDK does **no**
+throttling (your app owns the cadence) and makes **no** layer decision.
+
+## SFU enablement — how the three fit together
+
+These three preview primitives are the peer-side building blocks for multi-party video conferencing:
+multiple audio tracks carry several participants' audio, receive-side simulcast makes each video layer
+addressable, and the per-peer bitrate recommendation tells the forwarder which layer each receiver can
+afford. The SDK supplies the peer primitives; the **SFU / selection logic lives in your app or
+conference host** — the SDK is not itself an SFU.
 
 ## Samples
 

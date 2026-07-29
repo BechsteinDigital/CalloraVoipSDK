@@ -118,3 +118,10 @@ Video mirrors the audio contract: `CreateVideoReceiver()/CreateVideoSender()` pa
 `CreateReceiver()/CreateSender()`, and `AttachDefaultVideoAsync` parallels
 `AttachDefaultAudioAsync`. The difference is that the SDK bundles audio codecs and OS audio
 devices, while video is transport-only — the codec lives in your `IVideoDevice`.
+
+## Receiving simulcast layers (WebRTC)
+
+This page covers the `ICall` / `IVideoSender` video contract. **Receiving** a remote peer's
+simulcast layers — demultiplexed and RID-tagged (`EncodedFrame.Rid`) — is a WebRTC-facade primitive
+that ships in **4.7.0-preview**; see
+[WebRTC → Receive-side simulcast demux](webrtc.md#receive-side-simulcast-demux-preview).
