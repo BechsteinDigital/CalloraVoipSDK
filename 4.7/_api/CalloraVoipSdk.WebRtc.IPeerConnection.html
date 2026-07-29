@@ -322,9 +322,8 @@ a malformed or unusable candidate is ignored.</p>
   <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IPeerConnection.cs/#L86"><i class="bi bi-code-slash"></i></a>
   </h3>
 
-  <div class="markdown level1 summary"><p>Adds a video track (its own <code>m=video</code> line on the shared BUNDLE transport) before the first
-offer, returning a handle to send frames on it. The happy path: <code>var cam = peer.AddVideoTrack();
-await cam.SendFrameAsync(frame, ts);</code>.</p>
+  <div class="markdown level1 summary"><p>Adds a video track (its own <code>m=video</code> line on the shared BUNDLE transport), returning a handle to
+send frames on it. The happy path: <code>var cam = peer.AddVideoTrack(); await cam.SendFrameAsync(frame, ts);</code>.</p>
 </div>
   <div class="markdown level1 conceptual"></div>
 
@@ -351,14 +350,15 @@ await cam.SendFrameAsync(frame, ts);</code>.</p>
 video track (unchanged SDP); <code>AddVideoTrack</code> adds a further track (or the first, when
 <code>EnableVideo</code> is false). The frameless
 <a class="xref" href="CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_SendVideoFrameAsync_System_ReadOnlyMemory_System_Byte__System_UInt32_System_Threading_CancellationToken_">SendVideoFrameAsync(ReadOnlyMemory&lt;byte&gt;, uint, CancellationToken)</a>
-keeps addressing the primary track. Preview-grade: adding a track after the offer is produced is a later
-package (mid-call add / renegotiation) and throws today.</p>
+keeps addressing the primary track. A track added before the first offer is negotiated in that offer; a
+track added mid-call is pending until the next <a class="xref" href="CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_CreateOffer">CreateOffer()</a>/<a class="xref" href="CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_SetRemoteDescriptionAsync_System_String_System_Threading_CancellationToken_">SetRemoteDescriptionAsync(string, CancellationToken)</a>
+cycle applies it to the running session (RFC 8829 renegotiation).</p>
 </div>
 
   <h4 class="section">Exceptions</h4>
   <dl class="parameters">
     <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
-    <dd><p>The offer has already been produced (mid-call add is a later package).</p>
+    <dd><p>The peer is closed.</p>
 </dd>
   </dl>
 
@@ -372,8 +372,8 @@ package (mid-call add / renegotiation) and throws today.</p>
   </h3>
 
   <div class="markdown level1 summary"><p>Adds a video track with deeper control — direction, codecs, send-side simulcast layers, and the
-MediaStream it belongs to (see <a class="xref" href="CalloraVoipSdk.WebRtc.VideoTrackOptions.html">VideoTrackOptions</a>) — before the first offer. See
-<a class="xref" href="CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_AddVideoTrack">AddVideoTrack()</a> for the backward-compatibility semantics and the mid-call limitation.</p>
+MediaStream it belongs to (see <a class="xref" href="CalloraVoipSdk.WebRtc.VideoTrackOptions.html">VideoTrackOptions</a>). See
+<a class="xref" href="CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_AddVideoTrack">AddVideoTrack()</a> for the backward-compatibility and mid-call renegotiation semantics.</p>
 </div>
   <div class="markdown level1 conceptual"></div>
 
@@ -405,7 +405,7 @@ MediaStream it belongs to (see <a class="xref" href="CalloraVoipSdk.WebRtc.Video
   <h4 class="section">Exceptions</h4>
   <dl class="parameters">
     <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
-    <dd><p>The offer has already been produced (mid-call add is a later package).</p>
+    <dd><p>The peer is closed.</p>
 </dd>
   </dl>
 

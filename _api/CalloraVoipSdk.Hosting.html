@@ -95,6 +95,14 @@
 Classes
 </h3>
     <dl class="jumplist">
+      <dt><a class="xref" href="CalloraVoipSdk.Hosting.RecordingEncryption.html">RecordingEncryption</a></dt>
+      <dd><p>Factory for the SDK's built-in AES-256-GCM recording encryption. It hands back an
+<a class="xref" href="CalloraVoipSdk.Core.Application.Media.IRecordingEncryptionProvider.html">IRecordingEncryptionProvider</a> ready to assign to
+<a class="xref" href="CalloraVoipSdk.Core.Application.Media.RecordingOptions.html#CalloraVoipSdk_Core_Application_Media_RecordingOptions_EncryptionProvider">EncryptionProvider</a>, so a consumer can encrypt finalized recording files
+with the shipped reference implementation without writing their own crypto.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
       <dt><a class="xref" href="CalloraVoipSdk.Hosting.StunServerHost.html">StunServerHost</a></dt>
       <dd><p>The public STUN server host (Level 2 facade). Assembles the internal <span class="xref">CalloraVoipSdk.Core.Infrastructure.Stun.Server.StunServer</span> from a
 <a class="xref" href="CalloraVoipSdk.Hosting.StunServerHostConfiguration.html">StunServerHostConfiguration</a> — binding the socket on construction — and answers Binding requests

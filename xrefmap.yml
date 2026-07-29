@@ -8148,6 +8148,44 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.Hosting.ITurnServerHost.Start
   nameWithType: ITurnServerHost.Start
+- uid: CalloraVoipSdk.Hosting.RecordingEncryption
+  name: RecordingEncryption
+  href: _api/CalloraVoipSdk.Hosting.RecordingEncryption.html
+  commentId: T:CalloraVoipSdk.Hosting.RecordingEncryption
+  fullName: CalloraVoipSdk.Hosting.RecordingEncryption
+  nameWithType: RecordingEncryption
+- uid: CalloraVoipSdk.Hosting.RecordingEncryption.FromKey(System.ReadOnlySpan{System.Byte})
+  name: FromKey(ReadOnlySpan<byte>)
+  href: _api/CalloraVoipSdk.Hosting.RecordingEncryption.html#CalloraVoipSdk_Hosting_RecordingEncryption_FromKey_System_ReadOnlySpan_System_Byte__
+  commentId: M:CalloraVoipSdk.Hosting.RecordingEncryption.FromKey(System.ReadOnlySpan{System.Byte})
+  name.vb: FromKey(ReadOnlySpan(Of Byte))
+  fullName: CalloraVoipSdk.Hosting.RecordingEncryption.FromKey(System.ReadOnlySpan<byte>)
+  fullName.vb: CalloraVoipSdk.Hosting.RecordingEncryption.FromKey(System.ReadOnlySpan(Of Byte))
+  nameWithType: RecordingEncryption.FromKey(ReadOnlySpan<byte>)
+  nameWithType.vb: RecordingEncryption.FromKey(ReadOnlySpan(Of Byte))
+- uid: CalloraVoipSdk.Hosting.RecordingEncryption.FromKey*
+  name: FromKey
+  href: _api/CalloraVoipSdk.Hosting.RecordingEncryption.html#CalloraVoipSdk_Hosting_RecordingEncryption_FromKey_
+  commentId: Overload:CalloraVoipSdk.Hosting.RecordingEncryption.FromKey
+  isSpec: "True"
+  fullName: CalloraVoipSdk.Hosting.RecordingEncryption.FromKey
+  nameWithType: RecordingEncryption.FromKey
+- uid: CalloraVoipSdk.Hosting.RecordingEncryption.FromPassphrase(System.String,System.ReadOnlySpan{System.Byte},System.Int32)
+  name: FromPassphrase(string, ReadOnlySpan<byte>, int)
+  href: _api/CalloraVoipSdk.Hosting.RecordingEncryption.html#CalloraVoipSdk_Hosting_RecordingEncryption_FromPassphrase_System_String_System_ReadOnlySpan_System_Byte__System_Int32_
+  commentId: M:CalloraVoipSdk.Hosting.RecordingEncryption.FromPassphrase(System.String,System.ReadOnlySpan{System.Byte},System.Int32)
+  name.vb: FromPassphrase(String, ReadOnlySpan(Of Byte), Integer)
+  fullName: CalloraVoipSdk.Hosting.RecordingEncryption.FromPassphrase(string, System.ReadOnlySpan<byte>, int)
+  fullName.vb: CalloraVoipSdk.Hosting.RecordingEncryption.FromPassphrase(String, System.ReadOnlySpan(Of Byte), Integer)
+  nameWithType: RecordingEncryption.FromPassphrase(string, ReadOnlySpan<byte>, int)
+  nameWithType.vb: RecordingEncryption.FromPassphrase(String, ReadOnlySpan(Of Byte), Integer)
+- uid: CalloraVoipSdk.Hosting.RecordingEncryption.FromPassphrase*
+  name: FromPassphrase
+  href: _api/CalloraVoipSdk.Hosting.RecordingEncryption.html#CalloraVoipSdk_Hosting_RecordingEncryption_FromPassphrase_
+  commentId: Overload:CalloraVoipSdk.Hosting.RecordingEncryption.FromPassphrase
+  isSpec: "True"
+  fullName: CalloraVoipSdk.Hosting.RecordingEncryption.FromPassphrase
+  nameWithType: RecordingEncryption.FromPassphrase
 - uid: CalloraVoipSdk.Hosting.StunServerHost
   name: StunServerHost
   href: _api/CalloraVoipSdk.Hosting.StunServerHost.html

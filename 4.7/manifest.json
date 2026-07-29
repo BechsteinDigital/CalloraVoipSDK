@@ -2325,6 +2325,20 @@
     },
     {
       "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Hosting.RecordingEncryption.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Hosting.RecordingEncryption.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Hosting.RecordingEncryption",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Hosting.RecordingEncryption.yml\" sourcestartlinenumber=\"1\">Factory for the SDK's built-in AES-256-GCM recording encryption. It hands back an\n<xref href=\"CalloraVoipSdk.Core.Application.Media.IRecordingEncryptionProvider\" data-throw-if-not-resolved=\"false\"></xref> ready to assign to\n<xref href=\"CalloraVoipSdk.Core.Application.Media.RecordingOptions.EncryptionProvider\" data-throw-if-not-resolved=\"false\"></xref>, so a consumer can encrypt finalized recording files\nwith the shipped reference implementation without writing their own crypto.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
       "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Hosting.StunServerHost.yml",
       "output": {
         ".html": {
