@@ -116,6 +116,8 @@ public sealed class WebRtcSignalingTests
         public string CreateOffer() { OfferCreated = true; return "OFFER"; }
         public IVideoTrack AddVideoTrack() => throw new NotSupportedException();
         public IVideoTrack AddVideoTrack(VideoTrackOptions options) => throw new NotSupportedException();
+        public IAudioTrack AddAudioTrack() => throw new NotSupportedException();
+        public IAudioTrack AddAudioTrack(AudioTrackOptions options) => throw new NotSupportedException();
 
         public Task AddIceCandidateAsync(string candidate, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task GatherCandidatesAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;

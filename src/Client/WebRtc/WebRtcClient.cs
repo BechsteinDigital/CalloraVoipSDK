@@ -121,7 +121,7 @@ public sealed class WebRtcClient : IWebRtcClient
             turnProbe);
 
         var connection = new PeerConnection(
-            peer, _loggerFactory.CreateLogger<PeerConnection>(), _peers.Untrack, _config.VideoCodecs);
+            peer, _loggerFactory.CreateLogger<PeerConnection>(), _peers.Untrack, _config.VideoCodecs, _config.AudioCodecs);
         _peers.Track(connection);
         return connection;
     }

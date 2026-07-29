@@ -977,6 +977,10 @@
   CalloraVoipSdk.VoipOptions.SrtpPolicy : CalloraVoipSdk.Core.Domain.Security.SrtpPolicy { get, set }
   CalloraVoipSdk.VoipOptions.Tls : CalloraVoipSdk.Core.Application.Ports.Security.TlsConfiguration { get, set }
   CalloraVoipSdk.VoipOptions.UserAgent : System.String { get, set }
+  CalloraVoipSdk.WebRtc.AudioTrackOptions..ctor()
+  CalloraVoipSdk.WebRtc.AudioTrackOptions.Codecs : System.Collections.Generic.IReadOnlyList<System.String> { get, init }
+  CalloraVoipSdk.WebRtc.AudioTrackOptions.Direction : CalloraVoipSdk.WebRtc.TrackDirection { get, init }
+  CalloraVoipSdk.WebRtc.AudioTrackOptions.StreamId : System.String { get, init }
   CalloraVoipSdk.WebRtc.DtmfTone..ctor(System.Byte ToneCode, System.Int32 DurationMs)
   CalloraVoipSdk.WebRtc.DtmfTone.Deconstruct(out System.Byte ToneCode, out System.Int32 DurationMs) : System.Void
   CalloraVoipSdk.WebRtc.DtmfTone.DurationMs : System.Int32 { get, init }
@@ -990,10 +994,15 @@
   CalloraVoipSdk.WebRtc.EncodedFrame.Payload : System.ReadOnlyMemory<System.Byte> { get }
   CalloraVoipSdk.WebRtc.EncodedFrame.PresentationTimeUsec : System.Nullable<System.Int64> { get }
   CalloraVoipSdk.WebRtc.EncodedFrame.RtpTimestamp : System.Nullable<System.UInt32> { get }
+  CalloraVoipSdk.WebRtc.IAudioTrack.Direction : CalloraVoipSdk.WebRtc.TrackDirection { get }
+  CalloraVoipSdk.WebRtc.IAudioTrack.Mid : System.String { get }
+  CalloraVoipSdk.WebRtc.IAudioTrack.SendFrameAsync(System.ReadOnlyMemory<System.Byte> encodedAudioFrame, System.UInt32 rtpTimestamp, System.Threading.CancellationToken cancellationToken = default) : System.Threading.Tasks.Task
   CalloraVoipSdk.WebRtc.IEncodedMediaSink.CompleteAsync(System.Threading.CancellationToken cancellationToken = default) : System.Threading.Tasks.ValueTask
   CalloraVoipSdk.WebRtc.IEncodedMediaSink.Write(in CalloraVoipSdk.WebRtc.RecordedFrame frame) : System.Void
   CalloraVoipSdk.WebRtc.IMediaTap.OnAudio(CalloraVoipSdk.WebRtc.MediaDirection direction, System.ReadOnlyMemory<System.Byte> payload) : System.Void
   CalloraVoipSdk.WebRtc.IMediaTap.OnVideo(CalloraVoipSdk.WebRtc.MediaDirection direction, System.ReadOnlyMemory<System.Byte> frame, System.Nullable<System.UInt32> rtpTimestamp, System.Boolean isKeyFrame, System.String rid) : System.Void
+  CalloraVoipSdk.WebRtc.IPeerConnection.AddAudioTrack() : CalloraVoipSdk.WebRtc.IAudioTrack
+  CalloraVoipSdk.WebRtc.IPeerConnection.AddAudioTrack(CalloraVoipSdk.WebRtc.AudioTrackOptions options) : CalloraVoipSdk.WebRtc.IAudioTrack
   CalloraVoipSdk.WebRtc.IPeerConnection.AddIceCandidateAsync(System.String candidate, System.Threading.CancellationToken cancellationToken = default) : System.Threading.Tasks.Task
   CalloraVoipSdk.WebRtc.IPeerConnection.AddVideoTrack() : CalloraVoipSdk.WebRtc.IVideoTrack
   CalloraVoipSdk.WebRtc.IPeerConnection.AddVideoTrack(CalloraVoipSdk.WebRtc.VideoTrackOptions options) : CalloraVoipSdk.WebRtc.IVideoTrack
@@ -1226,6 +1235,7 @@ TYPE class CalloraVoipSdk.VoipClient
 TYPE class CalloraVoipSdk.VoipClientInitializationException
 TYPE class CalloraVoipSdk.VoipConfiguration
 TYPE class CalloraVoipSdk.VoipOptions
+TYPE class CalloraVoipSdk.WebRtc.AudioTrackOptions
 TYPE class CalloraVoipSdk.WebRtc.RemoteTrack
 TYPE class CalloraVoipSdk.WebRtc.VideoTrackOptions
 TYPE class CalloraVoipSdk.WebRtc.WebRtcClient
@@ -1293,6 +1303,7 @@ TYPE interface CalloraVoipSdk.IVoipClient
 TYPE interface CalloraVoipSdk.Modules.IPlaybackModule
 TYPE interface CalloraVoipSdk.Modules.IRecordingModule
 TYPE interface CalloraVoipSdk.Modules.IVoipClientModule
+TYPE interface CalloraVoipSdk.WebRtc.IAudioTrack
 TYPE interface CalloraVoipSdk.WebRtc.IEncodedMediaSink
 TYPE interface CalloraVoipSdk.WebRtc.IMediaTap
 TYPE interface CalloraVoipSdk.WebRtc.IPeerConnection

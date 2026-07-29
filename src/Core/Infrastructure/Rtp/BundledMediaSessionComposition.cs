@@ -37,6 +37,17 @@ internal static class BundledMediaSessionComposition
                 BundledStreamKind.Audio,
                 options.Audio.Mid),
         };
+        // Each additional inbound audio m-line (4.7.0: N audio tracks) resolves to its own negotiated codec
+        // clock / Audio, attributed to its MID. When two audio tracks share a payload type (two same-codec
+        // streams), a single PT-keyed clock entry cannot carry both MIDs — the primary already holds that PT and
+        // wins the key; the extra track keeps the same Audio/clock, so only the per-track MID attribution of
+        // inbound jitter is affected for a shared PT (routing itself is by MID, RFC 9143, unaffected).
+        foreach (var audio in options.AdditionalAudioTracks)
+        {
+            if (!map.ContainsKey(audio.PayloadType))
+                map[audio.PayloadType] = new BundledInboundClockDescriptor(
+                    audio.ClockRate > 0 ? (uint)audio.ClockRate : 0u, BundledStreamKind.Audio, audio.Mid);
+        }
         // Each video PT resolves to 90 kHz / Video. When two video tracks share a payload type (two same-codec
         // streams), a single PT-keyed clock entry cannot carry both MIDs — the first video track's MID is kept
         // (both are Video/90 kHz, so only the per-track MID attribution of inbound jitter is affected, and only
@@ -194,6 +205,39 @@ internal static class BundledMediaSessionComposition
         }
 
         return acc;
+    }
+
+    /// <summary>
+    /// Emits one out-of-band DTMF tone as an RFC 4733 telephone-event burst on the primary audio track: an
+    /// event-start packet (marker set, half the duration) followed by two end-of-event packets (E-bit, full
+    /// duration — the second a reliability retransmission per RFC 4733 §2.5.1.4), all sharing one RTP timestamp on
+    /// the telephone-event payload type. The event shares the audio stream's timestamp clock (RFC 4733 §2.1): the
+    /// whole burst is stamped with the audio track's current cursor, and the event's full duration is reserved so
+    /// the cursor advances past it — otherwise a following event (or media) reuses this timestamp and a receiver
+    /// folds it into this event, dropping the repeated tone. Extracted from <see cref="BundledMediaSession"/> for
+    /// the size limit; the caller has already validated the tone/duration and resolved the payload type.
+    /// </summary>
+    public static async ValueTask SendDtmfBurstAsync(
+        BundledOutboundPipeline outbound, string audioMid, byte toneCode, int durationMs, int clockRate,
+        byte payloadType, CancellationToken cancellationToken)
+    {
+        var durationRtpUnits = RtpTelephoneEventCodec.DurationMsToRtpUnits(durationMs, clockRate);
+        var startDurationRtpUnits = (ushort)Math.Max(1, durationRtpUnits / 2);
+        var eventTimestamp = outbound.ReserveTrackTimestamp(audioMid, durationRtpUnits);
+
+        var startPayload = RtpTelephoneEventCodec.BuildPayload(toneCode, endOfEvent: false, durationRtpUnits: startDurationRtpUnits);
+        var endPayload = RtpTelephoneEventCodec.BuildPayload(toneCode, endOfEvent: true, durationRtpUnits: durationRtpUnits);
+
+        await outbound.SendTimestampedAsync(
+            audioMid, startPayload, marker: true, payloadType: payloadType, timestamp: eventTimestamp,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+        await outbound.SendTimestampedAsync(
+            audioMid, endPayload, marker: false, payloadType: payloadType, timestamp: eventTimestamp,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+        // RFC 4733 §2.5.1.4 reliability recommendation: repeat the final (end-of-event) packet.
+        await outbound.SendTimestampedAsync(
+            audioMid, endPayload, marker: false, payloadType: payloadType, timestamp: eventTimestamp,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
     // One simulcast encoding's outbound stream: its own SSRC, the shared video payload type, and a stamper

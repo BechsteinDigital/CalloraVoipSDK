@@ -35,7 +35,8 @@ internal sealed class WebRtcSessionEventBridge
     /// </summary>
     /// <param name="session">The freshly built media session whose events are wired.</param>
     /// <param name="transitionTo">The peer's connection-state transition (owns the <c>_sync</c>-guarded state).</param>
-    /// <param name="raiseAudioReceived">Raises the peer's inbound-audio event.</param>
+    /// <param name="raiseAudioReceived">Raises the peer's primary inbound-audio event.</param>
+    /// <param name="raiseAudioTrackFrameReceived">Raises the peer's mid-tagged additional inbound-audio event (4.7.0).</param>
     /// <param name="raiseVideoFrameReceived">Raises the peer's inbound-video-frame event.</param>
     /// <param name="raiseVideoTrackFrameReceived">Raises the peer's mid-tagged inbound-video-frame event.</param>
     /// <param name="raiseVideoKeyFrameRequested">Raises the peer's inbound key-frame-request event.</param>
@@ -44,18 +45,22 @@ internal sealed class WebRtcSessionEventBridge
         BundledMediaSession session,
         Action<WebRtcConnectionState> transitionTo,
         Action<byte[]> raiseAudioReceived,
+        Action<string, byte[]> raiseAudioTrackFrameReceived,
         Action<byte[], uint, bool> raiseVideoFrameReceived,
         Action<string, byte[], uint, bool> raiseVideoTrackFrameReceived,
         Action raiseVideoKeyFrameRequested,
         Action<byte, int> raiseDtmfReceived)
     {
         ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(raiseAudioTrackFrameReceived);
         session.Connected += () => transitionTo(WebRtcConnectionState.Connected);
         session.HandshakeFailed += () => transitionTo(WebRtcConnectionState.Failed);
         session.MediaConsentLost += () => transitionTo(WebRtcConnectionState.Failed);
         session.MediaConnectivityDegraded += () => transitionTo(WebRtcConnectionState.Disconnected);
         session.MediaConnectivityRecovered += () => transitionTo(WebRtcConnectionState.Connected);
         session.AudioReceived += packet => raiseAudioReceived(packet.Payload.ToArray());
+        // Mid-tagged inbound audio (4.7.0) → the receiver routes each frame to its remote audio track.
+        session.AudioTrackFrameReceived += (mid, packet) => raiseAudioTrackFrameReceived(mid, packet.Payload.ToArray());
         session.VideoFrameReceived += (frame, timestamp, isKeyFrame) => raiseVideoFrameReceived(frame, timestamp, isKeyFrame);
         // Mid-tagged inbound video (P2b) → the receiver routes each frame to its remote track (P2c).
         session.VideoTrackFrameReceived += (mid, frame, timestamp, isKeyFrame) => raiseVideoTrackFrameReceived(mid, frame, timestamp, isKeyFrame);

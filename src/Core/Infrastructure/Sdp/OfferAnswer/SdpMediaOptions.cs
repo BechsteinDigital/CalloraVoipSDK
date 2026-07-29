@@ -147,9 +147,20 @@ internal sealed class SdpMediaOptions
 
     /// <summary>
     /// WebRTC MediaStream/track identity for the audio m-line (<c>a=msid</c>, RFC 8830); null emits
-    /// no <c>a=msid</c>.
+    /// no <c>a=msid</c>. On a multi-track answer (RFC 8843) it is the fallback applied to every audio
+    /// m-line that <see cref="AudioMsidByMid"/> does not name explicitly.
     /// </summary>
     public SdpMsid? AudioMsid { get; init; }
+
+    /// <summary>
+    /// Per-m-line WebRTC MediaStream/track identity for a multi-track audio answer (RFC 8830 / RFC 8843),
+    /// keyed by the offered numeric <c>a=mid</c>. When answering an offer with N audio m-lines (an SFU
+    /// forwarding N participants), each forwarded audio needs its own <c>a=msid</c>; this map supplies one
+    /// per MID. A MID absent from the map falls back to <see cref="AudioMsid"/>, so the single-audio path —
+    /// which supplies only <see cref="AudioMsid"/> — stays byte-identical. <see langword="null"/> (default)
+    /// keeps every audio m-line on <see cref="AudioMsid"/>, unchanged from the pre-multi-track answer.
+    /// </summary>
+    public IReadOnlyDictionary<string, SdpMsid>? AudioMsidByMid { get; init; }
 
     /// <summary>
     /// WebRTC MediaStream/track identity for the video m-line (<c>a=msid</c>, RFC 8830); null emits

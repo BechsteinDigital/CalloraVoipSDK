@@ -45,6 +45,43 @@ public sealed class WebRtcSessionFactoryTests
     }
 
     [Fact]
+    public async Task It_builds_additional_inbound_audio_tracks_from_a_multi_audio_exchange()
+    {
+        // 4.7.0 N-audio (the SFU pattern): a WebRTC exchange with three send-recv audio m-lines under one BUNDLE.
+        // The factory keeps the FIRST audio m-line as the primary transport anchor and builds a receive-only sink
+        // for each further audio m-line — so a 3-audio exchange yields exactly two additional audio tracks, keyed
+        // by their MIDs, on the one shared transport.
+        var (offer, answer) = MultiAudioExchange("0", "1", "2");
+
+        // TryCreate takes (remoteDescription, localDescription): from the answerer's view the offer is remote.
+        var session = WebRtcSessionFactory.TryCreate(
+            offer, answer, PeerOptions(), Handshaker(), DtlsCertificate.GenerateEcdsaP256(), NullLoggerFactory.Instance);
+
+        Assert.NotNull(session);
+        await using var lease = session;
+        Assert.True(session!.HasAdditionalAudio);
+        Assert.Equal(2, session.AdditionalAudioTrackCount);
+        Assert.Equal(new[] { "1", "2" }, session.AdditionalAudioMids); // "0" is the primary anchor, excluded
+    }
+
+    [Fact]
+    public async Task A_single_audio_exchange_builds_no_additional_audio_tracks()
+    {
+        // Byte-identity guard: a one-audio exchange (the pre-4.7.0 shape) yields the primary anchor only — no
+        // additional inbound audio tracks and an empty additional-audio MID list.
+        var (offer, answer) = Exchange(withVideo: false);
+
+        var session = WebRtcSessionFactory.TryCreate(
+            offer, answer, PeerOptions(), Handshaker(), DtlsCertificate.GenerateEcdsaP256(), NullLoggerFactory.Instance);
+
+        Assert.NotNull(session);
+        await using var lease = session;
+        Assert.False(session!.HasAdditionalAudio);
+        Assert.Equal(0, session.AdditionalAudioTrackCount);
+        Assert.Empty(session.AdditionalAudioMids);
+    }
+
+    [Fact]
     public void A_non_bundle_exchange_yields_no_session()
     {
         var negotiator = new SdpOfferAnswerNegotiator();
@@ -75,6 +112,30 @@ public sealed class WebRtcSessionFactoryTests
         var answer = negotiator.NegotiateAnswer(
             offer, new IPEndPoint(IPAddress.Loopback, 6000), Pcmu, SdpMediaDirection.SendRecv,
             new SdpMediaOptions { Bundle = true, RtcpMux = true, Dtls = AnswerDtls(), Ice = AnswerIce(), Video = video }).Answer!;
+
+        return (offer, answer);
+    }
+
+    // A multi-audio BUNDLE exchange (4.7.0): N send-recv audio m-lines with ascending numeric MIDs on offer and
+    // answer, one shared transport. Both sides send-recv, so every additional audio m-line is negotiated for
+    // receiving and the factory builds a sink for each beyond the primary.
+    private static (SdpSessionDescription Offer, SdpSessionDescription Answer) MultiAudioExchange(params string[] streamIds)
+    {
+        var negotiator = new SdpOfferAnswerNegotiator();
+        var tracks = streamIds
+            .Select(sid => new SdpTrackOptions
+            {
+                Kind = "audio", Codecs = Pcmu, Msid = new SdpMsid { StreamId = sid, TrackId = sid + "-a" },
+            })
+            .ToArray();
+
+        var offer = negotiator.CreateOffer(
+            new IPEndPoint(IPAddress.Loopback, 5000), Pcmu, SdpMediaDirection.SendRecv,
+            new SdpMediaOptions { Bundle = true, RtcpMux = true, Dtls = OfferDtls(), Ice = OfferIce(), Tracks = tracks });
+
+        var answer = negotiator.NegotiateAnswer(
+            offer, new IPEndPoint(IPAddress.Loopback, 6000), Pcmu, SdpMediaDirection.SendRecv,
+            new SdpMediaOptions { Bundle = true, RtcpMux = true, Dtls = AnswerDtls(), Ice = AnswerIce() }).Answer!;
 
         return (offer, answer);
     }

@@ -69,6 +69,8 @@ public sealed class WebRtcTrickleSignalingTests
         public string CreateOffer() => "OFFER";
         public IVideoTrack AddVideoTrack() => throw new NotSupportedException();
         public IVideoTrack AddVideoTrack(VideoTrackOptions options) => throw new NotSupportedException();
+        public IAudioTrack AddAudioTrack() => throw new NotSupportedException();
+        public IAudioTrack AddAudioTrack(AudioTrackOptions options) => throw new NotSupportedException();
 
         public Task<string> SetRemoteDescriptionAsync(string remoteSdp, CancellationToken cancellationToken = default)
         {

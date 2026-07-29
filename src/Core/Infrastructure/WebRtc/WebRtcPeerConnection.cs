@@ -18,13 +18,9 @@ namespace CalloraVoipSdk.Core.Infrastructure.WebRtc;
 /// A signalling-neutral WebRTC peer (the entry point of <c>CalloraVoipSdk.WebRtc</c>, ADR-010/founder
 /// architecture): it consumes and produces SDP, mirroring the W3C <c>RTCPeerConnection</c>, so any
 /// signalling transport (SIP-over-WebSocket, a custom channel, …) can carry the descriptions. It does
-/// not touch the SIP call path.
-///
-/// This slice covers the signalling surface: applying a remote offer and producing a WebRTC answer
-/// (BUNDLE per RFC 8843, DTLS-SRTP per RFC 5763, rtcp-mux per RFC 8834, and the MID SDES extension per
-/// RFC 9143) via the existing SDP negotiator, plus the <see cref="WebRtcConnectionState"/> machine. The
-/// media transport (the <c>BundledMediaSession</c> built from the negotiated description) and track
-/// events attach in a later slice.
+/// not touch the SIP call path. It negotiates BUNDLE (RFC 8843), DTLS-SRTP (RFC 5763), rtcp-mux (RFC 8834),
+/// and the MID SDES extension (RFC 9143) via the SDP negotiator, runs the <see cref="WebRtcConnectionState"/>
+/// machine, and builds/attaches the <c>BundledMediaSession</c> media transport and its inbound-track events.
 /// <para>
 /// Threading contract (HARD-C6, interim): the signalling handshake — <see cref="CreateOffer"/>,
 /// <see cref="SetRemoteDescriptionAsync"/>, <see cref="StartAsync"/> — is a single ordered sequence
@@ -53,8 +49,8 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     private readonly CancellationTokenSource _mdnsLifetime = new();
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<WebRtcPeerConnection> _logger;
-    // Applies a second offer/answer cycle to the live session as a video-track diff (RFC 8829 renegotiation,
-    // P3b-3) — no transport/DTLS/ICE/SRTP rebuild. Stateless; used only once a session exists.
+    // Applies a second offer/answer cycle to the live session as a track-set diff (video + additional-audio,
+    // RFC 8829 renegotiation, 4.7.0) — no transport/DTLS/ICE/SRTP rebuild. Stateless; used only once a session exists.
     private readonly WebRtcRenegotiator _renegotiator;
     private readonly object _sync = new();
 
@@ -64,11 +60,13 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     private readonly string _audioTrackId = Guid.NewGuid().ToString("N");
     private readonly string _videoTrackId = Guid.NewGuid().ToString("N");
 
-    // Video tracks the consumer added via the public AddVideoTrack surface (P2c). Each carries a stable per-track
-    // a=msid track id. Guarded by _sync. A track added mid-call (after the first offer/answer) is pending until the
-    // next CreateOffer/SetRemoteDescription cycle applies it to the live session (RFC 8829 renegotiation, P3b-3).
-    // Adding one entry switches MediaOptions to the numeric-MID multi-track path (RFC 8843).
-    private readonly List<(WebRtcAddedVideoTrack Track, string TrackId)> _addedVideoTracks = [];
+    // The audio/video tracks the consumer added at runtime via the public AddAudioTrack/AddVideoTrack surface
+    // (4.7.0 N-audio / P2c N-video). Owns both lists, the stable per-track a=msid track ids, and the numeric-MID
+    // arithmetic; extracted (WebRtcAddedTrackSet) to keep this file under the size limit. Adding any track switches
+    // MediaOptions to the numeric-MID multi-track path (RFC 8843): primary audio 0, added-audio, primary video,
+    // added-video. A track added mid-call is pending until the next offer/answer cycle applies the diff to the live
+    // session (RFC 8829 renegotiation). The set is self-locking, so the peer no longer holds _sync across these calls.
+    private readonly WebRtcAddedTrackSet _addedTracks;
 
     private WebRtcConnectionState _state = WebRtcConnectionState.New;
     // The RFC 8829 §4.1.3 signalling state (offer/answer half of the lifecycle), separate from the ICE/DTLS
@@ -82,10 +80,18 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     // Every remote video m-line the peer will send on (P2c: N tracks), in remote m-line order, each with its
     // MID and a=msid. Empty until a remote description is applied. Guarded by _sync.
     private IReadOnlyList<RemoteVideoTrackInfo> _remoteVideoTracks = [];
+    // Every ADDITIONAL remote audio m-line the peer will send on (4.7.0: N audio tracks beyond the primary anchor),
+    // each with its MID and a=msid. Empty until a remote description is applied (and for a single-audio remote);
+    // the primary audio is surfaced via the mid-less audio path. Guarded by _sync.
+    private IReadOnlyList<RemoteAudioTrackInfo> _remoteAudioTracks = [];
     private string? _localDescription;
     private SdpSessionDescription? _localOfferModel;
     private BundledMediaSession? _session;
     private readonly SendDrainGate _sendGate = new();
+    // Runs each media send / key-frame request under the drain lease (HARD-C6). Lock-free: it reads the live
+    // session behind a snapshot delegate that takes _sync here, so the peer keeps sole ownership of its guarded
+    // state (extracted to keep this file under the size limit).
+    private readonly WebRtcSendLease _sendLease;
     private UdpClient? _mediaSocket;
     private bool _socketHandedOver;
     private bool _started;
@@ -116,8 +122,18 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     /// </summary>
     public event Action<WebRtcSignalingState>? SignalingStateChanged;
 
-    /// <summary>Raised with each inbound audio RTP payload (the app owns the codec — transport-only).</summary>
+    /// <summary>
+    /// Raised with each inbound audio RTP payload on the <em>primary</em> audio track (the app owns the codec —
+    /// transport-only). Never fires for an additional audio m-line — use <see cref="AudioTrackFrameReceived"/> for those.
+    /// </summary>
     public event Action<byte[]>? AudioReceived;
+
+    /// <summary>
+    /// Raised with each inbound audio RTP payload tagged with its track MID (4.7.0: N remote audio tracks — the SFU
+    /// pattern of one audio stream per remote participant). Fires only for the additional tracks, never for the
+    /// primary (which stays on the mid-less <see cref="AudioReceived"/>).
+    /// </summary>
+    public event Action<string, byte[]>? AudioTrackFrameReceived;
 
     /// <summary>Raised with each reassembled inbound video frame (frame, RTP timestamp, is-key-frame).</summary>
     public event Action<byte[], uint, bool>? VideoFrameReceived;
@@ -179,11 +195,16 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
         _logger = loggerFactory.CreateLogger<WebRtcPeerConnection>();
         _renegotiator = new WebRtcRenegotiator(_loggerFactory);
+        // The config primary video count (0 or 1) is fixed for the peer's lifetime, so the added-track set can do
+        // the numeric-MID arithmetic without re-reading _options; it captures it once here.
+        _addedTracks = new WebRtcAddedTrackSet(_options.VideoTracks.Count);
         _trickleIce = new WebRtcTrickleIceReceiver(_mdnsResolver, _mdnsLifetime.Token, _logger);
         // Snapshot the public event on each emission so a late subscriber is honoured and the current handler
         // is captured atomically (the event field may be reassigned between candidates).
         _candidateEmitter = new WebRtcLocalCandidateEmitter(() => LocalIceCandidateDiscovered, _logger);
         _sessionEvents = new WebRtcSessionEventBridge(_logger);
+        // The send-lease runner reads the live session under _sync via this snapshot delegate; the lock stays here.
+        _sendLease = new WebRtcSendLease(_sendGate, () => { lock (_sync) { return _session; } });
     }
 
     /// <summary>The current connection state.</summary>
@@ -212,9 +233,8 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
 
     /// <summary>
     /// The bound local media endpoint. Early-bind binds the media socket at <see cref="CreateOffer"/> /
-    /// <see cref="SetRemoteDescriptionAsync"/> — before the session exists — so this exposes the bound
-    /// socket's endpoint in that window and the transport's endpoint once the session is built. Null only
-    /// before the socket is bound.
+    /// <see cref="SetRemoteDescriptionAsync"/> — before the session exists — so this exposes the bound socket's
+    /// endpoint in that window and the transport's endpoint once the session is built. Null only before the bind.
     /// </summary>
     public IPEndPoint? LocalMediaEndPoint
     {
@@ -228,11 +248,10 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     }
 
     /// <summary>
-    /// The TURN relay allocation gathered on the media socket during <see cref="GatherCandidatesAsync"/>
-    /// (its TURN server endpoint and the allocation — relayed endpoint, lifetime, effective realm/nonce
-    /// credentials), or null when no relay was gathered. Retained so the relay coordinator can adopt the
-    /// allocation post-Start without re-allocating: it is keyed to the media socket's 5-tuple, which is
-    /// preserved across the hand-over to the transport. The full relay data path is wired in a later slice.
+    /// The TURN relay allocation gathered on the media socket during <see cref="GatherCandidatesAsync"/> (its TURN
+    /// server endpoint and the allocation — relayed endpoint, lifetime, effective realm/nonce credentials), or null
+    /// when none was gathered. Retained so the relay coordinator can adopt it post-Start without re-allocating: it
+    /// is keyed to the media socket's 5-tuple, preserved across the hand-over to the transport.
     /// </summary>
     internal (IPEndPoint ServerEndPoint, TurnAllocateResult Allocation)? GatheredRelayAllocation
     {
@@ -240,9 +259,9 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     }
 
     /// <summary>
-    /// The remote peer's audio-track identity (a=msid, RFC 8830) from the applied remote description, or
-    /// null before one is applied or when the remote advertised no audio msid. This is the remote stream's
-    /// identity — what the W3C track model surfaces on the receiver, not this peer's own local msid.
+    /// The remote peer's (primary) audio-track identity (a=msid, RFC 8830) from the applied remote description, or
+    /// null before one is applied or when the remote advertised no audio msid. This is the remote stream's identity
+    /// (what the W3C track model surfaces on the receiver), not this peer's own local msid.
     /// </summary>
     public SdpMsid? RemoteAudioMsid
     {
@@ -256,9 +275,9 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     }
 
     /// <summary>
-    /// Every remote video m-line that will send to us (P2c: N tracks), in remote m-line order, each with its
-    /// MID and a=msid. Empty before a remote description is applied or for an audio-only remote. Lets the
-    /// receiver materialise one <see cref="WebRtc.RemoteTrack"/> per remote video m-line — not just the first.
+    /// Every remote video m-line that will send to us (P2c: N tracks), in remote m-line order, each with its MID
+    /// and a=msid. Empty before a remote description is applied or for an audio-only remote. Lets the receiver
+    /// materialise one <see cref="WebRtc.RemoteTrack"/> per remote video m-line — not just the first.
     /// </summary>
     public IReadOnlyList<RemoteVideoTrackInfo> RemoteVideoTracks
     {
@@ -266,9 +285,18 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     }
 
     /// <summary>
-    /// Whether the applied remote description contains an audio media line — i.e. the remote will send an
-    /// audio track (independent of whether it carries an a=msid). Lets the receiver materialise the track
-    /// from the description rather than waiting for the first frame.
+    /// Every <em>additional</em> remote audio m-line that will send to us (4.7.0: N audio tracks beyond the primary
+    /// anchor — the SFU pattern), each with its MID and a=msid; empty for a single-audio remote. The receiver
+    /// materialises one <see cref="WebRtc.RemoteTrack"/> per entry; the primary comes from the mid-less audio path.
+    /// </summary>
+    public IReadOnlyList<RemoteAudioTrackInfo> RemoteAudioTracks
+    {
+        get { lock (_sync) { return _remoteAudioTracks; } }
+    }
+
+    /// <summary>
+    /// Whether the applied remote description contains a sending audio media line (independent of a=msid), so the
+    /// receiver can materialise the primary audio track from the description rather than waiting for the first frame.
     /// </summary>
     public bool HasRemoteAudio
     {
@@ -308,10 +336,41 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     }
 
     /// <summary>
+    /// Adds an audio track to offer as its own <c>m=audio</c> line on the shared BUNDLE transport (4.7.0),
+    /// before the first offer/answer, and returns the track's numeric MID. Adding a track switches the peer
+    /// onto the numeric-MID multi-track offer path (RFC 8843): the primary audio m-line becomes MID <c>0</c>,
+    /// then each added audio m-line follows (MID <c>1</c>, <c>2</c>, …) BEFORE any video m-line. The primary
+    /// audio anchor (MID <c>0</c>, the ICE/DTLS transport carrier) is never an added track.
+    /// </summary>
+    /// <param name="track">The track's codecs, direction, and MediaStream id.</param>
+    /// <returns>The numeric MID assigned to the track (stable for its lifetime).</returns>
+    /// <remarks>
+    /// Mid-call add (RFC 8829 renegotiation, Slice 3 DiffAudio): a track added after the first offer/answer is
+    /// pending — the track is recorded but the session is not mutated here (W3C: no track flows until the next
+    /// <see cref="CreateOffer"/> → <see cref="SetRemoteDescriptionAsync"/> cycle applies the diff to the live
+    /// session). MIDs are stable: an added track keeps its index-derived numeric MID across re-offers. Because
+    /// added-audio m-lines precede the video m-lines, adding one shifts every video track's numeric MID up by one.
+    /// </remarks>
+    public string AddAudioTrack(WebRtcAddedAudioTrack track)
+    {
+        ArgumentNullException.ThrowIfNull(track);
+        // The closed guard reads the _sync-guarded signalling state; the added-track set is self-locking, so the
+        // record itself happens outside _sync (the set interacts with no other peer state — see WebRtcAddedTrackSet).
+        lock (_sync)
+        {
+            if (_signalingState == WebRtcSignalingState.Closed)
+                throw new InvalidOperationException("Cannot add an audio track after the peer is closed.");
+        }
+
+        return _addedTracks.AddAudio(track);
+    }
+
+    /// <summary>
     /// Adds a video track to offer as its own <c>m=video</c> line on the shared BUNDLE transport (P2c),
     /// before the first offer/answer, and returns the track's numeric MID. Adding a track switches the peer
-    /// onto the numeric-MID multi-track offer path (RFC 8843): the audio m-line becomes MID <c>0</c>, the
-    /// config-time <c>EnableVideo</c> primary video (if any) MID <c>1</c>, then each added track in order.
+    /// onto the numeric-MID multi-track offer path (RFC 8843): the audio m-line becomes MID <c>0</c>, any
+    /// added-audio m-lines follow, the config-time <c>EnableVideo</c> primary video (if any) comes next, then
+    /// each added video track in order.
     /// </summary>
     /// <param name="track">The track's codecs, direction, simulcast layers, and MediaStream id.</param>
     /// <returns>The numeric MID assigned to the track (stable for its lifetime).</returns>
@@ -328,13 +387,9 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         {
             if (_signalingState == WebRtcSignalingState.Closed)
                 throw new InvalidOperationException("Cannot add a video track after the peer is closed.");
-
-            _addedVideoTracks.Add((track, Guid.NewGuid().ToString("N")));
-            // Numeric MID by m-line index (RFC 8843 / SdpTrackOptions): audio is 0, the config primary video
-            // (if EnableVideo) is 1, so this track's index is 1 (audio) + primary-video-count + its position.
-            var index = 1 + _options.VideoTracks.Count + (_addedVideoTracks.Count - 1);
-            return index.ToString(System.Globalization.CultureInfo.InvariantCulture);
         }
+
+        return _addedTracks.AddVideo(track);
     }
 
     /// <summary>
@@ -379,11 +434,10 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     }
 
     /// <summary>
-    /// Applies the peer's remote description and returns this peer's local description. As the answerer
-    /// (no local offer created) the remote description is an offer: this negotiates and returns the
-    /// WebRTC answer (RFC 8829 setRemoteDescription → createAnswer). As the offerer (after
-    /// <see cref="CreateOffer"/>) the remote description is the answer: it is applied and the existing
-    /// offer is returned. Either way the shared BUNDLE media transport is built from the two
+    /// Applies the peer's remote description and returns this peer's local description. As the answerer (no local
+    /// offer) the remote description is an offer: this negotiates and returns the WebRTC answer (RFC 8829
+    /// setRemoteDescription → createAnswer). As the offerer (after <see cref="CreateOffer"/>) it is the answer:
+    /// applied, and the existing offer returned. Either way the shared BUNDLE media transport is built from the two
     /// descriptions and the peer moves to <see cref="WebRtcConnectionState.Connecting"/>.
     /// </summary>
     /// <exception cref="ArgumentException">The remote description is missing or not valid SDP.</exception>
@@ -642,40 +696,50 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     }
 
     /// <summary>
-    /// Sends one audio RTP payload on the peer's audio track (suppressed until the handshake keys the
-    /// transport). The payload is an already-encoded RTP payload — the app owns the codec.
+    /// Sends one already-encoded audio RTP payload on the peer's (primary) audio track — the app owns the codec —
+    /// suppressed until the handshake keys the transport.
     /// </summary>
     /// <exception cref="InvalidOperationException">No BUNDLE media session was built.</exception>
     /// <exception cref="ObjectDisposedException">The peer is disposing or disposed.</exception>
     public ValueTask SendAudioAsync(ReadOnlyMemory<byte> payload, CancellationToken cancellationToken = default)
-        => new(SendViaLeaseAsync(s => s.SendAudioAsync(payload, cancellationToken: cancellationToken).AsTask()));
+        => new(_sendLease.SendViaLeaseAsync(s => s.SendAudioAsync(payload, cancellationToken: cancellationToken).AsTask()));
 
     /// <summary>
-    /// Packetises and sends one encoded video frame on the peer's video track.
+    /// Sends one already-encoded audio RTP payload on the additional audio track identified by
+    /// <paramref name="mid"/> (4.7.0 N-audio), stamping the explicit <paramref name="rtpTimestamp"/> on the outbound
+    /// packets (RFC 3550 §5.1) rather than a cursor value — so an SFU forwarding this stream preserves the source's
+    /// timestamp for A/V-sync (unlike the frameless primary <see cref="SendAudioAsync"/>, which stays cursor-based).
+    /// Backs the public <see cref="WebRtc.IAudioTrack"/> handle; suppressed until the handshake keys the transport.
     /// </summary>
+    /// <exception cref="InvalidOperationException">No BUNDLE media session, or the bundle has no additional audio track with that MID.</exception>
+    /// <exception cref="ObjectDisposedException">The peer is disposing or disposed.</exception>
+    public Task SendAudioTrackFrameAsync(string mid, ReadOnlyMemory<byte> payload, uint rtpTimestamp, CancellationToken cancellationToken = default)
+        => _sendLease.SendViaLeaseAsync(s => s.SendAudioTrackFrameAsync(mid, payload, rtpTimestamp, cancellationToken: cancellationToken).AsTask());
+
+    /// <summary>Packetises and sends one encoded video frame on the peer's (primary) video track.</summary>
     /// <exception cref="InvalidOperationException">No BUNDLE media session, or the bundle has no video track.</exception>
     /// <exception cref="ObjectDisposedException">The peer is disposing or disposed.</exception>
     public Task SendVideoFrameAsync(ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default)
-        => SendViaLeaseAsync(s => s.SendVideoFrameAsync(encodedFrame, rtpTimestamp, cancellationToken));
+        => _sendLease.SendViaLeaseAsync(s => s.SendVideoFrameAsync(encodedFrame, rtpTimestamp, cancellationToken));
 
     /// <summary>
-    /// Packetises and sends one encoded video frame on a simulcast <paramref name="rid"/> layer (RFC 8853).
-    /// The layer must have been offered via the peer's configured simulcast rids.
+    /// Packetises and sends one encoded video frame on a simulcast <paramref name="rid"/> layer (RFC 8853); the
+    /// layer must have been offered via the peer's configured simulcast rids.
     /// </summary>
     /// <exception cref="InvalidOperationException">No BUNDLE media session, or the bundle has no video track.</exception>
     /// <exception cref="ArgumentException">No encoding is configured for <paramref name="rid"/>.</exception>
     /// <exception cref="ObjectDisposedException">The peer is disposing or disposed.</exception>
     public Task SendVideoFrameAsync(string rid, ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default)
-        => SendViaLeaseAsync(s => s.SendVideoFrameAsync(rid, encodedFrame, rtpTimestamp, cancellationToken));
+        => _sendLease.SendViaLeaseAsync(s => s.SendVideoFrameAsync(rid, encodedFrame, rtpTimestamp, cancellationToken));
 
     /// <summary>
-    /// Packetises and sends one encoded video frame on the video track identified by <paramref name="mid"/>
-    /// (P2c multi-track: a specific added track). Backs the public <see cref="WebRtc.IVideoTrack"/> handle.
+    /// Packetises and sends one encoded video frame on the video track identified by <paramref name="mid"/> (P2c
+    /// multi-track: a specific added track); backs the public <see cref="WebRtc.IVideoTrack"/> handle.
     /// </summary>
     /// <exception cref="InvalidOperationException">No BUNDLE media session, or the bundle has no video track with that MID.</exception>
     /// <exception cref="ObjectDisposedException">The peer is disposing or disposed.</exception>
     public Task SendVideoTrackFrameAsync(string mid, ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default)
-        => SendViaLeaseAsync(s => s.SendVideoTrackFrameAsync(mid, encodedFrame, rtpTimestamp, cancellationToken));
+        => _sendLease.SendViaLeaseAsync(s => s.SendVideoTrackFrameAsync(mid, encodedFrame, rtpTimestamp, cancellationToken));
 
     /// <summary>
     /// Packetises and sends one encoded video frame on the <paramref name="mid"/> video track's simulcast
@@ -685,72 +749,31 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     /// <exception cref="ArgumentException">No encoding is configured for <paramref name="rid"/>.</exception>
     /// <exception cref="ObjectDisposedException">The peer is disposing or disposed.</exception>
     public Task SendVideoTrackFrameAsync(string mid, string rid, ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default)
-        => SendViaLeaseAsync(s => s.SendVideoTrackFrameAsync(mid, rid, encodedFrame, rtpTimestamp, cancellationToken));
-
-    // Runs one send under a drain lease: the lease keeps DisposeAsync from tearing down the session mid-send
-    // (HARD-C6), and a send begun after dispose is refused (AcquireSendLease throws ObjectDisposedException).
-    private async Task SendViaLeaseAsync(Func<BundledMediaSession, Task> send)
-    {
-        var session = AcquireSendLease();
-        try
-        {
-            await send(session).ConfigureAwait(false);
-        }
-        finally
-        {
-            _sendGate.Exit();
-        }
-    }
+        => _sendLease.SendViaLeaseAsync(s => s.SendVideoTrackFrameAsync(mid, rid, encodedFrame, rtpTimestamp, cancellationToken));
 
     /// <summary>
-    /// Asks the peer for a fresh video key frame on the app's demand (RFC 4585 §6.3.1) — the receiving side
-    /// requests an intra frame when a new renderer or a decoder reset needs one, independent of detected loss.
-    /// Tolerant by design: a no-op returning <see langword="false"/> when the peer is disposing, no BUNDLE
-    /// session has been negotiated yet, the bundle has no video track, the peer did not advertise PLI, or the
-    /// 500 ms throttle still holds; returns <see langword="true"/> when a PLI was sent. Takes a drain lease so
-    /// the RTCP send never races session teardown.
+    /// Asks the peer for a fresh video key frame on the app's demand (RFC 4585 §6.3.1) — an intra frame when a new
+    /// renderer or a decoder reset needs one, independent of detected loss. Tolerant: a no-op returning
+    /// <see langword="false"/> when the peer is disposing, no session/video track exists, the peer did not advertise
+    /// PLI, or the 500 ms throttle holds; <see langword="true"/> when a PLI was sent. Takes a drain lease so the
+    /// RTCP send never races session teardown.
     /// </summary>
     public ValueTask<bool> RequestVideoKeyFrameAsync(CancellationToken cancellationToken = default)
-        => RequestKeyFrameCoreAsync(
+        => _sendLease.RequestKeyFrameCoreAsync(
             static (session, ct) => session.RequestVideoKeyFrameAsync(ct), cancellationToken);
 
     /// <summary>
     /// Asks the peer for a fresh video key frame on the video track identified by <paramref name="mid"/>
     /// (RFC 4585 §6.3.1) — the multi-track overload of <see cref="RequestVideoKeyFrameAsync(CancellationToken)"/>,
-    /// letting the app target one specific track when several video m-lines share the bundle. Tolerant by
-    /// design: a no-op returning <see langword="false"/> when the peer is disposing, no BUNDLE session has been
-    /// negotiated yet, no track carries that MID, the peer did not advertise PLI, or the throttle still holds;
-    /// returns <see langword="true"/> when a PLI was sent. Takes a drain lease so the RTCP send never races
-    /// session teardown.
+    /// targeting one specific track when several video m-lines share the bundle. Same tolerant no-op/false and
+    /// drain-lease semantics as the mid-less overload; returns <see langword="true"/> only when a PLI was sent.
     /// </summary>
     /// <exception cref="ArgumentException"><paramref name="mid"/> is null or empty.</exception>
     public ValueTask<bool> RequestVideoKeyFrameAsync(string mid, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrEmpty(mid);
-        return RequestKeyFrameCoreAsync(
+        return _sendLease.RequestKeyFrameCoreAsync(
             (session, ct) => session.RequestVideoTrackKeyFrameAsync(mid, ct), cancellationToken);
-    }
-
-    // Shared gate/snapshot boilerplate for the key-frame overloads: takes a drain lease so the RTCP send never
-    // races session teardown, snapshots the live session under _sync, and delegates the actual PLI to the
-    // caller's request. A no-op returning false when the peer is draining/disposed or no session exists yet —
-    // byte-identical gate/snapshot/Exit semantics to the pre-extraction inline bodies.
-    private async ValueTask<bool> RequestKeyFrameCoreAsync(
-        Func<BundledMediaSession, CancellationToken, ValueTask<bool>> request, CancellationToken cancellationToken)
-    {
-        if (!_sendGate.TryEnter())
-            return false;
-        try
-        {
-            BundledMediaSession? session;
-            lock (_sync) { session = _session; }
-            return session is not null
-                && await request(session, cancellationToken).ConfigureAwait(false);
-        }
-        finally
-        {
-            _sendGate.Exit();
-        }
     }
 
     /// <summary>
@@ -761,15 +784,14 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     /// <exception cref="InvalidOperationException">No BUNDLE media session, or telephone-event was not negotiated.</exception>
     /// <exception cref="ObjectDisposedException">The peer is disposing or disposed.</exception>
     public Task SendDtmfAsync(byte toneCode, int durationMs = 160, CancellationToken cancellationToken = default)
-        => SendViaLeaseAsync(s => s.SendDtmfAsync(toneCode, durationMs, cancellationToken));
+        => _sendLease.SendViaLeaseAsync(s => s.SendDtmfAsync(toneCode, durationMs, cancellationToken));
 
     /// <summary>
-    /// Adds a remote ICE candidate that trickled in out-of-band (RFC 8838), given as an RFC 8829
-    /// <c>candidate:</c> line, to the connectivity-check list. The controlling agent runs a real RFC 8445
-    /// §7.2.2 check against it and nominates it only if it answers and beats the current pair — candidates
-    /// are never trusted by raw priority. Buffered until the session is built, then fed live. A malformed or
-    /// unusable candidate is ignored. On a controlled agent (answerer) this is a no-op: it adopts the pair
-    /// the controlling peer nominates via its USE-CANDIDATE check.
+    /// Adds a remote ICE candidate that trickled in out-of-band (RFC 8838), given as an RFC 8829 <c>candidate:</c>
+    /// line, to the connectivity-check list. The controlling agent runs a real RFC 8445 §7.2.2 check and nominates
+    /// it only if it answers and beats the current pair — never trusted by raw priority. Buffered until the session
+    /// is built, then fed live; a malformed/unusable candidate is ignored. On a controlled agent (answerer) this is
+    /// a no-op — it adopts the pair the controlling peer nominates via its USE-CANDIDATE check.
     /// </summary>
     public Task AddIceCandidateAsync(string candidate, CancellationToken cancellationToken = default)
     {
@@ -782,14 +804,12 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     }
 
     /// <summary>
-    /// Gathers server-reflexive (RFC 8445 §5.1.1) and relay (RFC 8656) ICE candidates through the pre-bound
-    /// media socket, emitting every discovered candidate on <see cref="LocalIceCandidateDiscovered"/> (RFC
-    /// 8838 trickle). STUN servers yield srflx candidates (needs a STUN probe); UDP TURN servers yield a
-    /// relay candidate when the allocation on the media socket succeeds (needs a TURN probe), and the
-    /// allocation is retained for later coordinator adoption (<see cref="GatheredRelayAllocation"/>). No-op
-    /// without matching probes or servers. Call after the offer/answer is produced and BEFORE
-    /// <see cref="StartAsync"/> — the queries share the media socket, which the transport's receive loop
-    /// takes over once started.
+    /// Gathers server-reflexive (RFC 8445 §5.1.1) and relay (RFC 8656) ICE candidates through the pre-bound media
+    /// socket, emitting each on <see cref="LocalIceCandidateDiscovered"/> (RFC 8838 trickle). STUN servers yield
+    /// srflx candidates; UDP TURN servers yield a relay candidate when the allocation on the media socket succeeds,
+    /// retained for later coordinator adoption (<see cref="GatheredRelayAllocation"/>). No-op without matching
+    /// probes or servers. Call after the offer/answer is produced and BEFORE <see cref="StartAsync"/> — the queries
+    /// share the media socket, which the transport's receive loop takes over once started.
     /// </summary>
     public async Task GatherCandidatesAsync(CancellationToken cancellationToken = default)
     {
@@ -841,25 +861,6 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         return allocation.MappedEndPoint ?? local;
     }
 
-    // Takes a drain lease for one send and returns the live session. The lease keeps DisposeAsync from
-    // disposing the session until the send's Exit; a send begun after dispose is refused. Callers MUST
-    // Exit the gate (the send methods do so in a finally) once the returned session is no longer used.
-    private BundledMediaSession AcquireSendLease()
-    {
-        if (!_sendGate.TryEnter())
-            throw new ObjectDisposedException(nameof(WebRtcPeerConnection));
-
-        BundledMediaSession? session;
-        lock (_sync) { session = _session; }
-        if (session is null)
-        {
-            _sendGate.Exit();
-            throw new InvalidOperationException("Apply a BUNDLE remote description before exchanging media.");
-        }
-
-        return session;
-    }
-
     // Wires the built session's transport-lifecycle and inbound-media events onto this peer via the event
     // bridge. The peer supplies the raise delegates so each event still invokes THIS peer's public events with
     // the exact null-conditional snapshot-and-invoke semantics; TransitionTo (which owns the _sync-guarded
@@ -869,6 +870,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             session,
             TransitionTo,
             payload => AudioReceived?.Invoke(payload),
+            (mid, payload) => AudioTrackFrameReceived?.Invoke(mid, payload),
             (frame, timestamp, isKeyFrame) => VideoFrameReceived?.Invoke(frame, timestamp, isKeyFrame),
             (mid, frame, timestamp, isKeyFrame) => VideoTrackFrameReceived?.Invoke(mid, frame, timestamp, isKeyFrame),
             () => VideoKeyFrameRequested?.Invoke(),
@@ -876,13 +878,17 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
 
     // The SDP media options for the offer/answer, assembled by WebRtcSdpOptionsBuilder (extracted to keep this
     // file under the size limit): the 1+1 semantic-MID path when no track was added (byte-identical to pre-P2c),
-    // else the numeric-MID multi-track path (P2c). The added-track list is snapshotted under _sync.
+    // else the numeric-MID multi-track path (added-audio and/or added-video). The added tracks are snapshotted
+    // by the self-locking WebRtcAddedTrackSet, in the m-line order the numeric MIDs were assigned in.
     private SdpMediaOptions MediaOptions(IPEndPoint local)
-    {
-        (WebRtcAddedVideoTrack Track, string TrackId)[] added;
-        lock (_sync) { added = _addedVideoTracks.ToArray(); }
-        return WebRtcSdpOptionsBuilder.Build(local, _options, added, _mediaStreamId, _audioTrackId, _videoTrackId);
-    }
+        => WebRtcSdpOptionsBuilder.Build(
+            local,
+            _options,
+            _addedTracks.SnapshotAudio(),
+            _addedTracks.SnapshotVideo(),
+            _mediaStreamId,
+            _audioTrackId,
+            _videoTrackId);
 
     // Binds the shared media socket up front (Trickle-ICE early-bind) so the offer/answer advertise the real
     // ephemeral port and a host candidate before the session (transport) exists — fixing the zero-port
@@ -919,6 +925,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         _hasRemoteVideo = inventory.HasRemoteVideo;
         _remoteAudioMsid = inventory.AudioMsid;
         _remoteVideoMsid = inventory.VideoMsid;
+        _remoteAudioTracks = inventory.AudioTracks;
         _remoteVideoTracks = inventory.VideoTracks;
     }
 

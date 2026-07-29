@@ -47,8 +47,30 @@ internal sealed record BundledMediaSessionOptions
     /// </summary>
     public byte? TransportWideCcExtensionId { get; init; }
 
-    /// <summary>The audio m-line configuration.</summary>
+    /// <summary>
+    /// The <em>primary</em> audio m-line configuration — the anchor of the whole BUNDLE. The ICE ufrag/pwd, the
+    /// DTLS fingerprint, and the DTLS role are all taken from this m-line (RFC 8843), so it is fixed for the
+    /// lifetime of the session and never one of the additional receive-only audio tracks. It is addressed by the
+    /// session's mid-less <c>AudioReceived</c> event and the send/DTMF facade (backward compatibility with the
+    /// pre-4.7.0 single-audio path). The SIP path always has exactly this one audio m-line.
+    /// </summary>
     public required BundledTrackConfig Audio { get; init; }
+
+    /// <summary>
+    /// The <em>additional</em> inbound audio m-line configurations (4.7.0: N audio m-lines, RFC 8843 §9 — the
+    /// SFU pattern where a client receives one audio stream per remote participant). Empty for a single-audio
+    /// bundle, in which case the session is byte-identical to the pre-4.7.0 1-audio path (the SIP path leaves it
+    /// so). Each entry is keyed by its own <see cref="BundledTrackConfig.Mid"/> and carried on its own
+    /// bundle-wide-distinct SSRC (RFC 3550 §8.1); inbound packets are demultiplexed to the right track by MID
+    /// header extension (RFC 9143) when they share a payload type, so two same-codec audio streams never
+    /// cross-talk.
+    /// <para>
+    /// These are pure <em>receive</em> sinks in this slice: the primary above stays the anchor and the only
+    /// track a public send/DTMF call addresses. The additional entries carry no outbound send API — outbound
+    /// N-audio is a later slice — so a null/empty list keeps the single-audio send path unchanged.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<BundledTrackConfig> AdditionalAudioTracks { get; init; } = [];
 
     /// <summary>
     /// Whether outbound audio is sent. The audio m-line always anchors the bundle transport (ICE/DTLS ride
