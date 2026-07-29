@@ -134,6 +134,68 @@ internal static class BundledMediaSessionComposition
             options.InitialSequenceNumber, options.InitialTimestamp,
             clockRate: track.VideoCodecName is null ? (uint)Math.Max(0, track.ClockRate) : VideoRtpClockRate);
 
+    /// <summary>
+    /// Folds the per-SSRC outbound quality (RTT + the loss the peer reports on our media, per <em>our sending</em>
+    /// SSRC) and the per-SSRC inbound interarrival jitter (per <em>remote</em> SSRC) into one per-stream list
+    /// (CF-004f). Streams with a known MID are keyed by MID so both directions of a track land in one entry (a
+    /// simulcast MID folds its encodings' SSRCs into one video entry, taking the worst RTT/loss); an inbound
+    /// source whose payload type was not negotiated has no MID and is surfaced on its own SSRC with a null MID —
+    /// the honest limit of inbound remote-SSRC attribution. The two directions do not share an SSRC, so an entry
+    /// carries RTT/loss (outbound) or jitter (inbound); a MID active in both folds them together. Pure — no
+    /// session state beyond the three snapshots the session passes in.
+    /// </summary>
+    public static IReadOnlyList<BundledStreamQuality> FoldStreamQuality(
+        IReadOnlyList<BundledOutboundSsrcQuality> outboundPerSsrc,
+        IReadOnlyList<BundledInboundSsrcJitter> inboundJitterPerSsrc,
+        IReadOnlyDictionary<uint, BundledOutboundStreamIdentity> outboundStreamIdentity)
+    {
+        var byMid = new Dictionary<string, BundledStreamQualityAccumulator>(StringComparer.Ordinal);
+        var unkeyed = new List<BundledStreamQuality>();
+
+        foreach (var outbound in outboundPerSsrc)
+        {
+            if (!outboundStreamIdentity.TryGetValue(outbound.Ssrc, out var identity))
+                continue; // a report about an SSRC we do not send (should not happen) — do not fabricate a stream.
+
+            var acc = GetOrAddMid(byMid, identity.Mid, identity.Kind, outbound.Ssrc);
+            acc.MergeOutbound(outbound.RoundTripTimeMs, outbound.RemotePacketLossFraction);
+        }
+
+        foreach (var inbound in inboundJitterPerSsrc)
+        {
+            if (inbound.Mid is { } mid)
+            {
+                var acc = GetOrAddMid(byMid, mid, inbound.Kind, inbound.Ssrc);
+                acc.MergeInboundJitter(inbound.JitterMs);
+            }
+            else
+            {
+                // No MID resolvable (unmapped payload type / SR-only source): surface it on its own SSRC with the
+                // kind we could derive — the honest limit of inbound remote-SSRC attribution.
+                unkeyed.Add(new BundledStreamQuality(
+                    Mid: null, inbound.Ssrc, inbound.Kind, PacketLoss: null, JitterMs: inbound.JitterMs, RoundTripTimeMs: null));
+            }
+        }
+
+        var result = new List<BundledStreamQuality>(byMid.Count + unkeyed.Count);
+        foreach (var acc in byMid.Values)
+            result.Add(acc.ToStreamQuality());
+        result.AddRange(unkeyed);
+        return result;
+    }
+
+    private static BundledStreamQualityAccumulator GetOrAddMid(
+        Dictionary<string, BundledStreamQualityAccumulator> byMid, string mid, BundledStreamKind kind, uint ssrc)
+    {
+        if (!byMid.TryGetValue(mid, out var acc))
+        {
+            acc = new BundledStreamQualityAccumulator(mid, ssrc, kind);
+            byMid[mid] = acc;
+        }
+
+        return acc;
+    }
+
     // One simulcast encoding's outbound stream: its own SSRC, the shared video payload type, and a stamper
     // that marks every packet with the MID and this encoding's RID (RFC 8852). Video packets carry an
     // explicit frame timestamp, so the timestamp cursor never advances (samplesPerPacket: 0).

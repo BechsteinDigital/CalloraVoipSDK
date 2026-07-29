@@ -250,6 +250,217 @@ public sealed class BundledMediaSessionTests
         Assert.True(recommendedBitrate > 0, $"expected a positive recommended bitrate, got {recommendedBitrate}");
     }
 
+    [Fact]
+    public async Task Live_added_video_track_flows_while_the_first_video_track_keeps_flowing_uninterrupted()
+    {
+        // P3b-2: a running BundledMediaSession (1 audio + 1 video, media already flowing) gets a SECOND video
+        // track added LIVE — after construction, while the receive loop runs. The shared transport/DTLS/ICE/SRTP
+        // is untouched: the first video track keeps delivering frames without a gap across and after the add, and
+        // the newly added track then delivers its own frames on its own MID/SSRC. Proves live add over the wire.
+        var certA = DtlsCertificate.GenerateEcdsaP256();
+        var certB = DtlsCertificate.GenerateEcdsaP256();
+
+        var (client, server) = CreatePair(certA, certB); // default single video track: MID "video"
+        await using var clientLease = client;
+        await using var serverLease = server;
+
+        var video1Frames = 0;
+        var video2Frames = 0;
+        server.VideoTrackFrameReceived += (mid, _, _, _) =>
+        {
+            if (mid == "video") Interlocked.Increment(ref video1Frames);
+            else if (mid == "vid2") Interlocked.Increment(ref video2Frames);
+        };
+
+        await server.StartAsync();
+        await client.StartAsync();
+
+        var frame1 = AnnexB((Nal(0x67, 20), false), (Nal(0x68, 6), false), (Nal(0x65, 3000), false));
+        var frame2 = AnnexB((Nal(0x67, 24), false), (Nal(0x68, 8), false), (Nal(0x65, 4000), false));
+
+        using var overall = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        var timestamp = 90000u;
+
+        // Phase 1: get the first (ctor-time) video track flowing on the live, DTLS-keyed bundle.
+        while (Volatile.Read(ref video1Frames) < 3)
+        {
+            overall.Token.ThrowIfCancellationRequested();
+            await client.SendVideoTrackFrameAsync("video", frame1, timestamp);
+            timestamp += 3000;
+            await Task.Delay(15, overall.Token);
+        }
+
+        // LIVE ADD (the unit under test): a second video track on both peers — the sender so it can send, the
+        // receiver so it routes the new MID (at the session level both sides adopt the mid; wiring it to an SDP
+        // renegotiation is P3b-3). Its SSRC is bundle-wide-distinct (RFC 3550 §8.1). No transport/DTLS restart.
+        var vid2 = new BundledTrackConfig { Mid = "vid2", Ssrc = 0x0D0D0D0D, PayloadType = VideoPayloadType, VideoCodecName = "H264" };
+        server.AddVideoTrack(vid2);
+        client.AddVideoTrack(vid2);
+
+        Assert.Equal(2, client.VideoTrackCount);
+        Assert.Equal(new[] { "video", "vid2" }, client.VideoMids); // primary stays first; live add appended.
+
+        // Record the first-video count at the moment of the add: it must keep RISING afterwards (no interruption).
+        var video1AtAdd = Volatile.Read(ref video1Frames);
+
+        // Phase 2: send on BOTH tracks. Success = the new track delivers AND the first track advanced past its
+        // count at the add (proving the shared transport/first track was never torn down by the live add).
+        while (Volatile.Read(ref video2Frames) < 3 || Volatile.Read(ref video1Frames) <= video1AtAdd + 2)
+        {
+            overall.Token.ThrowIfCancellationRequested();
+            await client.SendVideoTrackFrameAsync("video", frame1, timestamp);
+            await client.SendVideoTrackFrameAsync("vid2", frame2, timestamp);
+            timestamp += 3000;
+            await Task.Delay(15, overall.Token);
+        }
+
+        Assert.True(Volatile.Read(ref video2Frames) >= 3, "the live-added track should deliver its own frames");
+        Assert.True(Volatile.Read(ref video1Frames) > video1AtAdd + 2,
+            "the first video track must keep flowing uninterrupted across and after the live add");
+        // The transport was never re-keyed / restarted: no datagram was dropped as undecryptable across the add.
+        Assert.Equal(0L, server.SnapshotStats().DroppedDatagrams);
+    }
+
+    [Fact]
+    public async Task SetVideoTrackInactive_stops_that_track_while_the_transport_and_other_tracks_live_on()
+    {
+        // P3b-2: deactivating one video track LIVE stops its inbound dispatch and outbound sending without
+        // touching the shared transport/DTLS or the OTHER tracks. Start with two video tracks flowing, deactivate
+        // one, and prove: (a) the deactivated track stops delivering new frames, (b) the other keeps flowing.
+        var certA = DtlsCertificate.GenerateEcdsaP256();
+        var certB = DtlsCertificate.GenerateEcdsaP256();
+
+        IReadOnlyList<BundledTrackConfig> twoVideos =
+        [
+            new BundledTrackConfig { Mid = "cam", Ssrc = 0x0B0B0B0B, PayloadType = VideoPayloadType, VideoCodecName = "H264" },
+            new BundledTrackConfig { Mid = "scr", Ssrc = 0x0C0C0C0C, PayloadType = VideoPayloadType, VideoCodecName = "H264" },
+        ];
+
+        var (client, server) = CreatePair(certA, certB, videoTracks: twoVideos);
+        await using var clientLease = client;
+        await using var serverLease = server;
+
+        var camFrames = 0;
+        var scrFrames = 0;
+        server.VideoTrackFrameReceived += (mid, _, _, _) =>
+        {
+            if (mid == "cam") Interlocked.Increment(ref camFrames);
+            else if (mid == "scr") Interlocked.Increment(ref scrFrames);
+        };
+
+        await server.StartAsync();
+        await client.StartAsync();
+
+        var frame = AnnexB((Nal(0x67, 20), false), (Nal(0x68, 6), false), (Nal(0x65, 1500), false));
+
+        using var overall = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        var timestamp = 90000u;
+
+        // Phase 1: both tracks flowing.
+        while (Volatile.Read(ref camFrames) < 3 || Volatile.Read(ref scrFrames) < 3)
+        {
+            overall.Token.ThrowIfCancellationRequested();
+            await client.SendVideoTrackFrameAsync("cam", frame, timestamp);
+            await client.SendVideoTrackFrameAsync("scr", frame, timestamp);
+            timestamp += 3000;
+            await Task.Delay(15, overall.Token);
+        }
+
+        // LIVE DEACTIVATE "cam" on both peers: sender stops sending it, receiver stops routing it.
+        client.SetVideoTrackInactive("cam");
+        server.SetVideoTrackInactive("cam");
+        Assert.Equal(1, client.VideoTrackCount);
+        Assert.Equal(new[] { "scr" }, client.VideoMids);
+
+        // Idempotent: a second deactivate (and an unknown MID) is a harmless no-op.
+        client.SetVideoTrackInactive("cam");
+        client.SetVideoTrackInactive("never-existed");
+
+        var camAtDeactivate = Volatile.Read(ref camFrames);
+
+        // Phase 2: keep sending on "scr" only (a send on the now-inactive "cam" throws — it has no outbound
+        // track — so we do not send it). "scr" must keep advancing; "cam" must not gain new frames.
+        var scrAtDeactivate = Volatile.Read(ref scrFrames);
+        while (Volatile.Read(ref scrFrames) <= scrAtDeactivate + 3)
+        {
+            overall.Token.ThrowIfCancellationRequested();
+            await client.SendVideoTrackFrameAsync("scr", frame, timestamp);
+            timestamp += 3000;
+            await Task.Delay(15, overall.Token);
+        }
+
+        // Give any in-flight "cam" datagram time to arrive, then assert it did not advance.
+        await Task.Delay(200, overall.Token);
+        Assert.True(Volatile.Read(ref scrFrames) > scrAtDeactivate + 3, "the surviving track must keep flowing");
+        Assert.True(Volatile.Read(ref camFrames) <= camAtDeactivate + 1,
+            "the deactivated track must stop delivering new frames (a single in-flight packet is tolerated)");
+        // Sending on the deactivated track now throws — its outbound sender was removed.
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            async () => await client.SendVideoTrackFrameAsync("cam", frame, timestamp));
+    }
+
+    [Fact]
+    public async Task Deactivating_a_track_under_active_traffic_keeps_the_bundle_receive_loop_alive()
+    {
+        // P3b-2 B1 regression: SetVideoTrackInactive must NOT dispose the track live — the single receive loop
+        // may be inside that track's OnRtpPacket (a loss-triggered feedback send reads its lifetime token), so a
+        // live dispose would throw ObjectDisposedException on the receive loop and tear the WHOLE bundle down. The
+        // dispose is deferred to session teardown. Here we deactivate one track WITHOUT quiescing its peer (the
+        // surviving track keeps flowing across the deactivation) and prove the shared receive loop stays alive; the
+        // await-using teardown then disposes the deferred track with no use-after-dispose crash.
+        var certA = DtlsCertificate.GenerateEcdsaP256();
+        var certB = DtlsCertificate.GenerateEcdsaP256();
+
+        IReadOnlyList<BundledTrackConfig> twoVideos =
+        [
+            new BundledTrackConfig { Mid = "cam", Ssrc = 0x0B0B0B0B, PayloadType = VideoPayloadType, VideoCodecName = "H264" },
+            new BundledTrackConfig { Mid = "scr", Ssrc = 0x0C0C0C0C, PayloadType = VideoPayloadType, VideoCodecName = "H264" },
+        ];
+
+        var (client, server) = CreatePair(certA, certB, videoTracks: twoVideos);
+        await using var clientLease = client;
+        await using var serverLease = server;
+
+        var camFrames = 0;
+        server.VideoTrackFrameReceived += (mid, _, _, _) =>
+        {
+            if (mid == "cam") Interlocked.Increment(ref camFrames);
+        };
+
+        await server.StartAsync();
+        await client.StartAsync();
+
+        var frame = AnnexB((Nal(0x67, 20), false), (Nal(0x68, 6), false), (Nal(0x65, 1500), false));
+        using var overall = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        var timestamp = 90000u;
+
+        // Warm both tracks so the receive loop is actively dispatching, then deactivate "scr" mid-stream.
+        for (var i = 0; i < 3; i++)
+        {
+            await client.SendVideoTrackFrameAsync("cam", frame, timestamp);
+            await client.SendVideoTrackFrameAsync("scr", frame, timestamp);
+            timestamp += 3000;
+            await Task.Delay(10, overall.Token);
+        }
+
+        client.SetVideoTrackInactive("scr");
+        server.SetVideoTrackInactive("scr");
+
+        // "cam" must keep advancing across and after the deactivation → the shared receive loop survived.
+        var camAtDeactivate = Volatile.Read(ref camFrames);
+        while (Volatile.Read(ref camFrames) <= camAtDeactivate + 3)
+        {
+            overall.Token.ThrowIfCancellationRequested();
+            await client.SendVideoTrackFrameAsync("cam", frame, timestamp);
+            timestamp += 3000;
+            await Task.Delay(10, overall.Token);
+        }
+
+        Assert.True(Volatile.Read(ref camFrames) > camAtDeactivate + 3,
+            "the surviving track must keep flowing after a live deactivation (receive loop alive)");
+        // The await-using teardown disposes the deferred "scr" track here — it must not crash (no live dispose).
+    }
+
     // ── harness ──────────────────────────────────────────────────────────────────
 
     private const string ClientPwd = "clienticepassword1234567890";

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using CalloraVoipSdk.Core.Application.Media.Rtcp.Packets;
 using Microsoft.Extensions.Logging;
 
@@ -11,21 +12,35 @@ namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
 /// send/receive facade addresses for backward compatibility with the pre-P2b 1-audio-1-video path.
 /// </summary>
 /// <remarks>
-/// Insertion order is preserved (the underlying dictionary keeps it) so the primary is stable across
-/// snapshots. The tracks share the one receive loop: their <see cref="BundledVideoTrack.OnRtpPacket"/>
-/// sinks are registered per MID on the router, and <see cref="OnRtcpPackets"/> fans a single already-decoded
-/// compound to every track on that same receive-loop thread, preserving each track's single-consumer
-/// confinement. This type performs no locking — it is written once at construction and only read afterwards.
+/// The tracks share the one receive loop: their <see cref="BundledVideoTrack.OnRtpPacket"/> sinks are
+/// registered per MID on the router, and <see cref="OnRtcpPackets"/> fans a single already-decoded compound
+/// to every track on that same receive-loop thread, preserving each track's single-consumer confinement.
+/// Thread-safe and live-extensible (P3b): the MID→track map is a
+/// <see cref="ConcurrentDictionary{TKey,TValue}"/>, so <see cref="TryAdd"/>/<see cref="Remove"/> can add or
+/// deactivate a track mid-call while the receive loop reads the map lock-free (<see cref="Find"/>,
+/// <see cref="OnRtcpPackets"/>, <see cref="SnapshotStats"/>) — its enumeration is a snapshot, so a concurrent
+/// add/remove never tears a fan-out. A small side list keeps the MIDs in insertion order (primary first) so
+/// <see cref="Tracks"/>/<see cref="Mids"/> stay stably ordered across live add/remove; it is guarded by its
+/// own lock and touched only on structural change and diagnostics reads, never on the media hot path. The
+/// <see cref="Primary"/> is fixed at construction (the first track built) and a live add never changes it, so
+/// the mid-less facade stays pinned to the original track.
 /// </remarks>
 internal sealed class BundledVideoTrackSet
 {
-    private readonly Dictionary<string, BundledVideoTrack> _byMid;
+    private readonly ConcurrentDictionary<string, BundledVideoTrack> _byMid;
     private readonly BundledVideoTrack? _primary;
+
+    // The MIDs in insertion order (primary first), so Tracks/Mids stay stably ordered across live add/remove
+    // (a ConcurrentDictionary does not guarantee insertion-order enumeration). Structural mutations (ctor,
+    // TryAdd, Remove) take this lock; the receive-loop reads — Find, OnRtcpPackets, SnapshotStats — stay
+    // lock-free on _byMid. Mids/Tracks snapshot this list under the lock (diagnostics, not the media hot path).
+    private readonly object _orderGate = new();
+    private readonly List<string> _midOrder = [];
 
     /// <summary>Creates an empty set (an audio-only bundle).</summary>
     public BundledVideoTrackSet()
     {
-        _byMid = new Dictionary<string, BundledVideoTrack>(StringComparer.Ordinal);
+        _byMid = new ConcurrentDictionary<string, BundledVideoTrack>(StringComparer.Ordinal);
         _primary = null;
     }
 
@@ -35,17 +50,55 @@ internal sealed class BundledVideoTrackSet
     public BundledVideoTrackSet(IReadOnlyList<(string Mid, BundledVideoTrack Track)> tracks)
     {
         ArgumentNullException.ThrowIfNull(tracks);
-        _byMid = new Dictionary<string, BundledVideoTrack>(tracks.Count, StringComparer.Ordinal);
+        _byMid = new ConcurrentDictionary<string, BundledVideoTrack>(StringComparer.Ordinal);
         foreach (var (mid, track) in tracks)
         {
             if (!_byMid.TryAdd(mid, track))
                 throw new ArgumentException($"Duplicate video MID '{mid}' in the bundle.", nameof(tracks));
+            _midOrder.Add(mid);
             _primary ??= track;
         }
     }
 
+    /// <summary>
+    /// Registers a video track added mid-call (P3b) under its MID. Live and lock-free against the receive
+    /// loop; the <see cref="Primary"/> is unchanged (a live add never becomes the primary). Returns
+    /// <see langword="false"/> when a track is already registered for <paramref name="mid"/>.
+    /// </summary>
+    /// <param name="mid">The MID of the newly added video track.</param>
+    /// <param name="track">The built track to register as the router sink / feedback target for that MID.</param>
+    public bool TryAdd(string mid, BundledVideoTrack track)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(mid);
+        ArgumentNullException.ThrowIfNull(track);
+        // Publish to the lock-free receive-path map first; only then record the order (so a reader that sees
+        // the MID in the order list can always resolve it). A losing TryAdd leaves the order list untouched.
+        if (!_byMid.TryAdd(mid, track))
+            return false;
+        lock (_orderGate)
+            _midOrder.Add(mid);
+        return true;
+    }
+
+    /// <summary>
+    /// Deactivates the video track for <paramref name="mid"/> (P3b), removing it from the set so it no longer
+    /// receives inbound frames or RTCP feedback. Live and lock-free against the receive loop; the removed
+    /// track is returned so the caller can dispose it (releasing its send lock and in-flight feedback), or
+    /// <see langword="null"/> when no track was registered for that MID. Removing the primary is possible but
+    /// leaves <see cref="Primary"/> pointing at the (now-removed) original track — the caller controls that.
+    /// </summary>
+    public BundledVideoTrack? Remove(string mid)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(mid);
+        if (!_byMid.TryRemove(mid, out var track))
+            return null;
+        lock (_orderGate)
+            _midOrder.Remove(mid);
+        return track;
+    }
+
     /// <summary>Whether the bundle carries at least one video track.</summary>
-    public bool Any => _byMid.Count > 0;
+    public bool Any => !_byMid.IsEmpty;
 
     /// <summary>The number of video tracks on the bundle.</summary>
     public int Count => _byMid.Count;
@@ -57,11 +110,25 @@ internal sealed class BundledVideoTrackSet
     /// </summary>
     public BundledVideoTrack? Primary => _primary;
 
-    /// <summary>The video tracks in build order (primary first).</summary>
-    public IEnumerable<BundledVideoTrack> Tracks => _byMid.Values;
+    /// <summary>
+    /// The video tracks as a point-in-time snapshot in insertion order (primary first), skipping any MID
+    /// removed by <see cref="Remove"/> concurrently. Diagnostics/enumeration, not the media hot path.
+    /// </summary>
+    public IEnumerable<BundledVideoTrack> Tracks
+    {
+        get
+        {
+            foreach (var mid in Mids)
+                if (_byMid.TryGetValue(mid, out var track))
+                    yield return track;
+        }
+    }
 
-    /// <summary>The video track MIDs in build order (primary first).</summary>
-    public IReadOnlyList<string> Mids => _byMid.Keys.ToArray();
+    /// <summary>The video track MIDs as a point-in-time snapshot in insertion order (primary first).</summary>
+    public IReadOnlyList<string> Mids
+    {
+        get { lock (_orderGate) return _midOrder.ToArray(); }
+    }
 
     /// <summary>Resolves the track for a MID, or <see langword="null"/> when the bundle has no such video track.</summary>
     public BundledVideoTrack? Find(string mid)
@@ -87,7 +154,7 @@ internal sealed class BundledVideoTrackSet
     /// </summary>
     public BundledVideoAggregateStats SnapshotStats()
     {
-        if (_byMid.Count == 0)
+        if (_byMid.IsEmpty)
             return default;
 
         long framesReceived = 0, keyFrames = 0, framesDropped = 0, nacksSent = 0, plisSent = 0;
