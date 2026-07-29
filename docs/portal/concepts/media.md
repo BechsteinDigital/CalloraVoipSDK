@@ -34,6 +34,12 @@ IVideoSender   videoOut = client.Media.CreateVideoSender();   // outbound encode
 requests so you can drive your encoder. Bring your own codec (VP8, H.264, …). Full walkthrough:
 [Video calls](../guides/video-calls.md).
 
+On the WebRTC facade, inbound frames arrive as `EncodedFrame`. In **4.7.0-preview** each frame also
+carries `EncodedFrame.Rid` (`string?`) — the `a=rid` simulcast layer it arrived on, `null` when the
+sender is not using simulcast — so a forwarder can tell one peer's video layers apart. Transport-only
+and forwarding-only: the SDK tags the layer, it does not select or transcode. See
+[WebRTC → Receive-side simulcast demux](../guides/webrtc.md#receive-side-simulcast-demux-preview).
+
 ## Default audio device
 
 For a plain softphone you usually skip the primitives and let the SDK wire the OS

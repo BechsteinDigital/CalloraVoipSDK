@@ -38,6 +38,29 @@ accumulate the consumer-visible changes for 4.7.0.
   overwriting negotiation state. **Observation + guards only, additive:** the SDP/wire/session behaviour of the
   existing single offer/answer exchange is byte-identical; re-offer / renegotiation apply remains a later
   package (a second `SetRemoteDescriptionAsync` still fails loudly).
+- **Multiple audio tracks (N-audio) over one BUNDLE** — `IPeerConnection.AddAudioTrack()` (and the
+  `AddAudioTrack(AudioTrackOptions)` overload) adds a further audio track — its own `m=audio` line on the
+  shared BUNDLE transport — returning an `IAudioTrack` to send frames on. Each track carries its own SSRC and
+  per-participant `a=msid`, so an SFU can forward several participants' audio streams separately, and inbound
+  audio is surfaced per track (mid-tagged, `RemoteTrack.Mid`). The added-audio send path forwards the frame's
+  RTP timestamp to the wire, so a forwarding SFU keeps A/V sync against the same participant's video. Tracks can
+  be added/removed mid-call over the renegotiation path. New public types: `IAudioTrack`, `AudioTrackOptions`.
+  **Additive / preview-grade:** the primary audio m-line anchors ICE/DTLS and is never deactivated; a peer that
+  uses only the single audio track emits byte-identical SDP as before; DTMF stays on the primary track.
+- **Receive-side simulcast demultiplexing** (RFC 8853 / RFC 8852) — inbound frames now carry their `a=rid`
+  layer id on `EncodedFrame.Rid`. When a peer sends several encodings of one video m-line, the SDK
+  demultiplexes them into independent per-RID reassembly (each layer its own reorder + depacketise state) and
+  tags every frame with its RID on `RemoteTrack.FrameReceived` — one `RemoteTrack` per m-line, layers told
+  apart by `frame.Rid`. This completes simulcast (the send side was already present): an SFU receives every
+  layer addressably. **Forwarding-only:** the SDK never drops or transcodes a layer — which layer to forward is
+  the SFU application's decision. Non-simulcast receive is byte-identical (`Rid` is null).
+- **Per-peer send-bitrate recommendation** (transport-cc, RFC 8888) — `IPeerConnection.RecommendedOutgoingBitrateBps`
+  and the `RecommendedBitrateChanged` event surface a *finished* recommended send bitrate (plus a coarse
+  `NetworkQuality`) toward the connected peer, derived from the transport-wide congestion feedback that peer
+  returns. New public type `BitrateRecommendation` (`BitrateBps`, `Quality`). For an SFU this is the
+  per-receiver signal for choosing which simulcast layer to forward. **A recommendation, not raw metrics, and
+  reactive** (fires per feedback interval, not polled). Property and event are null/silent when transport-cc was
+  not negotiated; the SDK does not throttle the event (the app owns its cadence) and makes no layer decision.
 
 ### Changed
 
@@ -66,11 +89,12 @@ implementation-detail status (the public seam is the corresponding interface):
 - `SipDomainCertificateValidator` (an internal RFC 5922 helper of the TLS transport).
 
 ### Internal / in progress (not yet consumer-visible)
-- **Multi-track: mid-call add / renegotiation is still missing.** SDP (offer + answer), the media runtime, and
-  the public `AddVideoTrack` API now work together for tracks declared **before** the first offer (see *Added*).
-  What remains before multi-track leaves preview reifung: adding/removing a track **after** the offer
-  (renegotiation, RFC 8829), *N* audio tracks, and receive-side simulcast demux. Per the claim-gating policy
-  (ADR-006 §5), multi-track is described honestly as "multiple video tracks before connect", not "done".
+- **Multi-track: mid-call video add / renegotiation is still tracked separately.** SDP (offer + answer), the
+  media runtime, and the public `AddVideoTrack` API work together for tracks declared **before** the first
+  offer (see *Added*); *N* audio tracks and receive-side simulcast demux now ship additively (see *Added*).
+  What remains before multi-track leaves preview reifung: adding/removing a **video** track **after** the offer
+  (renegotiation, RFC 8829). Per the claim-gating policy (ADR-006 §5), multi-track is described honestly as
+  "multiple video tracks before connect", not "done".
 
 ## [4.6.0] - 2026-07-28
 

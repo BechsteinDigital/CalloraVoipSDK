@@ -5,6 +5,36 @@ The authoritative changelog lives in the repository:
 
 ## Release highlights
 
+### 4.7.0-preview — 2026-07-29
+
+Three **additive, transport-only** WebRTC primitives that enable an external SFU / conference host to
+run multi-party video on top of the peer surface. All three are **preview-grade** and additive: a peer
+that uses none of them negotiates byte-identical SDP and behaves exactly as in 4.6. The SDK stays a
+peer — it **forwards, it does not mix or transcode**. See [WebRTC](guides/webrtc.md).
+
+**WebRTC (preview)**
+
+- **Multiple audio tracks over one BUNDLE.** `IPeerConnection.AddAudioTrack()` (and an
+  `AddAudioTrack(AudioTrackOptions)` overload) returns an `IAudioTrack` (`Mid`, `Direction`,
+  `SendFrameAsync(frame, rtpTimestamp)`) — each track its own `m=audio` line, SSRC and per-participant
+  `a=msid` on the shared transport, received per track (`RemoteTrack.Mid`), added/removed mid-call via
+  renegotiation. The **primary** audio m-line anchors ICE/DTLS and is never deactivated (single-track
+  SDP is byte-identical); DTMF stays on the primary track. The send path threads the RTP timestamp
+  through so A/V sync holds against forwarded video. Forwarding building block for conference audio —
+  the SDK does not mix.
+- **Receive-side simulcast demux (RFC 8853/8852).** A peer's multiple encodings of one video m-line are
+  separated receive-side into independent per-RID reassembly and tagged on the new `EncodedFrame.Rid`
+  (`string?`); one `RemoteTrack` per m-line, layers told apart by `frame.Rid`. Completes simulcast
+  (send side already shipped). **Forwarding-only** — no layer is dropped or transcoded; that is SFU
+  logic. Non-simulcast receive is byte-identical (`Rid` is `null`).
+- **Per-peer bitrate recommendation (transport-cc, RFC 8888).**
+  `IPeerConnection.RecommendedOutgoingBitrateBps` (`long?`) plus a `RecommendedBitrateChanged` event
+  carrying a `BitrateRecommendation` (`BitrateBps`, `Quality` `NetworkQuality`) — a finished
+  recommended send bitrate toward the peer, derived from the peer's returned congestion feedback; for an
+  SFU, the per-receiver signal of which layer to forward. A recommendation, not raw metrics, and
+  **reactive** (fires per feedback interval, no poll); `null`/silent when transport-cc is not
+  negotiated. No SDK throttling, no layer decision in the SDK.
+
 ### 4.6.0 — 2026-07-28
 
 The 4.6 line adds a **WebRTC facade** and a **self-hostable STUN/TURN server** on top of the SIP + RTP
