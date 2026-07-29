@@ -11764,6 +11764,15 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.WebRtc.IPeerConnection.LocalMediaEndPoint
   nameWithType: IPeerConnection.LocalMediaEndPoint
+- uid: CalloraVoipSdk.WebRtc.IPeerConnection.RequestVideoKeyFrameAsync(System.String,System.Threading.CancellationToken)
+  name: RequestVideoKeyFrameAsync(string, CancellationToken)
+  href: _api/CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_RequestVideoKeyFrameAsync_System_String_System_Threading_CancellationToken_
+  commentId: M:CalloraVoipSdk.WebRtc.IPeerConnection.RequestVideoKeyFrameAsync(System.String,System.Threading.CancellationToken)
+  name.vb: RequestVideoKeyFrameAsync(String, CancellationToken)
+  fullName: CalloraVoipSdk.WebRtc.IPeerConnection.RequestVideoKeyFrameAsync(string, System.Threading.CancellationToken)
+  fullName.vb: CalloraVoipSdk.WebRtc.IPeerConnection.RequestVideoKeyFrameAsync(String, System.Threading.CancellationToken)
+  nameWithType: IPeerConnection.RequestVideoKeyFrameAsync(string, CancellationToken)
+  nameWithType.vb: IPeerConnection.RequestVideoKeyFrameAsync(String, CancellationToken)
 - uid: CalloraVoipSdk.WebRtc.IPeerConnection.RequestVideoKeyFrameAsync(System.Threading.CancellationToken)
   name: RequestVideoKeyFrameAsync(CancellationToken)
   href: _api/CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_RequestVideoKeyFrameAsync_System_Threading_CancellationToken_
