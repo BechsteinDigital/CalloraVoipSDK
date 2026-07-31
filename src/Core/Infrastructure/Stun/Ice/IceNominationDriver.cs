@@ -6,8 +6,9 @@ namespace CalloraVoipSdk.Core.Infrastructure.Stun.Ice;
 /// <summary>
 /// Drives the controlling agent's ICE candidate-pair connectivity checks and nomination over the shared
 /// media socket (RFC 8445 §7.2.2 checks, §8.1.1 regular nomination) as a long-lived, dynamic check list.
-/// It always works on the highest-priority candidate pair still worth checking, sends an ordinary
-/// connectivity check over that pair's <em>local</em> candidate send path (<see cref="IceLocalCandidate.Check"/>,
+/// It checks candidate pairs in fair rounds, highest pair priority first within each round, and sends
+/// an ordinary connectivity check over each pair's <em>local</em> candidate send path
+/// (<see cref="IceLocalCandidate.Check"/>,
 /// backed by the receive-loop-matched <see cref="IceMediaConsentSession.SendCheckAsync"/> for a direct
 /// candidate, or a relay-framed path for a relay candidate), and — when a pair answers — sends a nominating
 /// check carrying USE-CANDIDATE and, once that nominating check is itself confirmed by a success response,
@@ -16,8 +17,9 @@ namespace CalloraVoipSdk.Core.Infrastructure.Stun.Ice;
 /// raw priority, and never on the ordinary check alone (a lost USE-CANDIDATE is retried, not adopted).
 /// <para>
 /// Pairs are formed over local × remote candidates (RFC 8445 §6.1.2) and ordered by pair priority (§6.1.2.3):
-/// a lower-preference local candidate such as a relay is therefore only nominated when no higher-preference
-/// (host/srflx) pair works, matching direct-preferred ICE. Remote candidates that arrive after start
+/// a lower-preference local candidate such as a relay is therefore checked after the higher-preference
+/// (host/srflx) pair in the same round, but before an unreachable direct pair consumes its retry budget.
+/// Remote candidates that arrive after start
 /// (RFC 8838 trickle) are fed in via <see cref="AddCandidate"/> and paired against every local candidate. If
 /// a higher-priority pair than the current nominee later answers, the driver re-nominates onto it (§8): the
 /// selection is always the highest-priority <em>working</em> pair, not the highest-priority advertised one. A
@@ -261,9 +263,11 @@ internal sealed class IceNominationDriver : IAsyncDisposable
         }
     }
 
-    // The highest-priority pair still worth a check: not finished, attempts remaining, and strictly higher
-    // pair priority than the currently nominated pair (a working higher-priority pair upgrades the selection;
-    // nothing at or below the nominated priority is worth checking).
+    // The next pair still worth a check: the least-attempted pair first, then highest pair priority within
+    // that fair checklist round. This prevents one unreachable host candidate from consuming its entire
+    // timeout budget before an already-known relay pair gets its first check. A later working direct pair
+    // still upgrades an earlier relay nomination because only pairs at/below the nominated priority are
+    // excluded.
     private IceNominationPairState? SelectBestActionable()
     {
         lock (_gate)
@@ -273,7 +277,9 @@ internal sealed class IceNominationDriver : IAsyncDisposable
             {
                 if (state.Done || state.Attempts >= _maxAttempts || state.PairPriority <= _nominatedPriority)
                     continue;
-                if (best is null || state.PairPriority > best.PairPriority)
+                if (best is null ||
+                    state.Attempts < best.Attempts ||
+                    (state.Attempts == best.Attempts && state.PairPriority > best.PairPriority))
                     best = state;
             }
 

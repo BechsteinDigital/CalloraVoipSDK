@@ -87,10 +87,10 @@ internal sealed class WebRtcRenegotiator
     /// offer/answer pair. <paramref name="newLocalDescription"/> is this peer's new description (the re-offer if
     /// offering, the new answer if answering) and <paramref name="newRemoteDescription"/> is the peer's new
     /// description; a video track is added only when both sides negotiate a video MID for sending (from the local
-    /// sections), an additional-audio track only when the remote will send and we will receive (from the remote
-    /// sections), and either is deactivated when a live MID is no longer negotiated. The primary audio anchor is
-    /// never diffed. SSRCs for added tracks are allocated distinct from <paramref name="session"/>'s live outbound
-    /// SSRCs and from each other (RFC 3550 §8.1).
+    /// sections), and an additional-audio track when either local-send/remote-receive or
+    /// remote-send/local-receive is negotiated (from the local sections). Either is deactivated when a live MID is
+    /// no longer negotiated. The primary audio anchor is never diffed. SSRCs for added tracks are allocated
+    /// distinct from <paramref name="session"/>'s live outbound SSRCs and from each other (RFC 3550 §8.1).
     /// </summary>
     /// <param name="session">The running media session whose live MIDs and SSRCs anchor the diff.</param>
     /// <param name="newLocalDescription">This peer's new (re-negotiated) description.</param>
@@ -175,10 +175,10 @@ internal sealed class WebRtcRenegotiator
     }
 
     // The additional-audio half of the track-set diff (4.7.0: N audio m-lines — the SFU pattern), symmetric to the
-    // video half but iterating the new REMOTE audio sections: the remote is the sender for an inbound audio track,
-    // so a receive sink is built from the remote m-line paired to our matching local m-line by MID (mirrors
-    // TryBuildAudioTrack's arguments). The PRIMARY audio m-line — the transport anchor — is NEVER diffed: it is
-    // skipped by its MID (session.PrimaryAudioMid), so a renegotiation can never add, drop, or re-key the anchor.
+    // video half and iterating the new LOCAL audio sections. TryBuildAudioTrack pairs each section to the remote
+    // description and materialises it for either negotiated direction. The PRIMARY audio m-line — the transport
+    // anchor — is NEVER diffed: it is skipped by its MID (session.PrimaryAudioMid), so a renegotiation can never
+    // add, drop, or re-key the anchor.
     private (IReadOnlyList<BundledTrackConfig> Add, IReadOnlyList<string> Deactivate) DiffAudio(
         BundledMediaSession session,
         SdpSessionDescription newLocalDescription,
@@ -187,34 +187,34 @@ internal sealed class WebRtcRenegotiator
     {
         var anchorMid = session.PrimaryAudioMid;
         var liveMids = new HashSet<string>(session.AudioMids, StringComparer.Ordinal);
-        var newReceivingMids = new HashSet<string>(StringComparer.Ordinal);
+        var newNegotiatedMids = new HashSet<string>(StringComparer.Ordinal);
         var audioTracksToAdd = new List<BundledTrackConfig>();
-        foreach (var remoteAudio in newRemoteDescription.Media.Where(m => m.MediaType.Equals("audio", Ci)))
+        foreach (var localAudio in newLocalDescription.Media.Where(m => m.MediaType.Equals("audio", Ci)))
         {
-            if (string.IsNullOrEmpty(remoteAudio.Mid))
+            if (string.IsNullOrEmpty(localAudio.Mid))
                 continue;
             // Anchor protection: never diff the primary audio m-line — it anchors ICE/DTLS and rides the mid-less
             // audio path, and the session refuses to add/deactivate it anyway (belt-and-suspenders here).
-            if (string.Equals(remoteAudio.Mid, anchorMid, StringComparison.Ordinal))
+            if (string.Equals(localAudio.Mid, anchorMid, StringComparison.Ordinal))
                 continue;
 
-            // TryBuildAudioTrack returns null unless the remote will send this MID AND we will receive it, so it is
-            // the authority for "is this an inbound additional audio track after the re-offer". It allocates the
-            // added track's SSRC distinct from usedSsrcs (seeded from the live session, shared with the video adds)
-            // and grows the pool, so an added audio track never collides an added video track or a running SSRC.
+            // TryBuildAudioTrack returns null unless at least one flow direction is negotiated on this MID, so it
+            // is the authority for "is this an additional audio track after the re-offer". It allocates the added
+            // track's SSRC distinct from usedSsrcs (seeded from the live session, shared with the video adds) and
+            // grows the pool, so an added audio track never collides an added video track or a running SSRC.
             var config = WebRtcSessionFactory.TryBuildAudioTrack(
-                remoteAudio, newLocalDescription, usedSsrcs, _loggerFactory);
+                localAudio, newRemoteDescription, usedSsrcs, _loggerFactory);
             if (config is null)
                 continue;
 
-            newReceivingMids.Add(config.Mid);
+            newNegotiatedMids.Add(config.Mid);
             if (!liveMids.Contains(config.Mid))
                 audioTracksToAdd.Add(config);
         }
 
-        // A live additional-audio MID the re-offer no longer negotiates for receiving is deactivated. The anchor is
-        // not in liveMids (session.AudioMids excludes it), so it can never appear here.
-        var audioMidsToDeactivate = liveMids.Where(mid => !newReceivingMids.Contains(mid)).ToArray();
+        // A live additional-audio MID the re-offer no longer negotiates in either direction is deactivated. The
+        // anchor is not in liveMids (session.AudioMids excludes it), so it can never appear here.
+        var audioMidsToDeactivate = liveMids.Where(mid => !newNegotiatedMids.Contains(mid)).ToArray();
         return (audioTracksToAdd, audioMidsToDeactivate);
     }
 

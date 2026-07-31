@@ -63,10 +63,9 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
 
     // The audio/video tracks the consumer added at runtime via the public AddAudioTrack/AddVideoTrack surface
     // (4.7.0 N-audio / P2c N-video). Owns both lists, the stable per-track a=msid track ids, and the numeric-MID
-    // arithmetic; extracted (WebRtcAddedTrackSet) to keep this file under the size limit. Adding any track switches
-    // MediaOptions to the numeric-MID multi-track path (RFC 8843): primary audio 0, added-audio, primary video,
-    // added-video. A track added mid-call is pending until the next offer/answer cycle applies the diff to the live
-    // session (RFC 8829 renegotiation). The set is self-locking, so the peer no longer holds _sync across these calls.
+    // arithmetic; extracted (WebRtcAddedTrackSet) to keep this file under the size limit. Compatibility mode
+    // switches to numeric MIDs on the first added track; stable mode starts numeric and appends in API call order.
+    // A mid-call track remains pending until the next offer/answer cycle applies the live diff (RFC 8829).
     private readonly WebRtcAddedTrackSet _addedTracks;
 
     private WebRtcConnectionState _state = WebRtcConnectionState.New;
@@ -209,7 +208,9 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         _relayAllocation = new WebRtcRelayAllocationStore(_loggerFactory);
         // The config primary video count (0 or 1) is fixed for the peer's lifetime, so the added-track set can do
         // the numeric-MID arithmetic without re-reading _options; it captures it once here.
-        _addedTracks = new WebRtcAddedTrackSet(_options.VideoTracks.Count);
+        _addedTracks = new WebRtcAddedTrackSet(
+            _options.VideoTracks.Count,
+            _options.UseStableNumericMediaIds);
         _trickleIce = new WebRtcTrickleIceReceiver(_mdnsResolver, _mdnsLifetime.Token, _logger);
         // Snapshot the public event on each emission so a late subscriber is honoured and the current handler
         // is captured atomically (the event field may be reassigned between candidates).
@@ -363,10 +364,10 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
 
     /// <summary>
     /// Adds an audio track to offer as its own <c>m=audio</c> line on the shared BUNDLE transport (4.7.0),
-    /// before the first offer/answer, and returns the track's numeric MID. Adding a track switches the peer
-    /// onto the numeric-MID multi-track offer path (RFC 8843): the primary audio m-line becomes MID <c>0</c>,
-    /// then each added audio m-line follows (MID <c>1</c>, <c>2</c>, …) BEFORE any video m-line. The primary
-    /// audio anchor (MID <c>0</c>, the ICE/DTLS transport carrier) is never an added track.
+    /// before the first offer/answer, and returns the track's numeric MID. Compatibility mode groups added audio
+    /// immediately after primary audio. Stable mode appends it after every primary m-line and earlier runtime
+    /// track so existing m-line identities cannot move during renegotiation. The primary audio anchor is never
+    /// an added track.
     /// </summary>
     /// <param name="track">The track's codecs, direction, and MediaStream id.</param>
     /// <returns>The numeric MID assigned to the track (stable for its lifetime).</returns>
@@ -374,8 +375,9 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     /// Mid-call add (RFC 8829 renegotiation, Slice 3 DiffAudio): a track added after the first offer/answer is
     /// pending — the track is recorded but the session is not mutated here (W3C: no track flows until the next
     /// <see cref="CreateOffer"/> → <see cref="SetRemoteDescriptionAsync"/> cycle applies the diff to the live
-    /// session). MIDs are stable: an added track keeps its index-derived numeric MID across re-offers. Because
-    /// added-audio m-lines precede the video m-lines, adding one shifts every video track's numeric MID up by one.
+    /// session). An added track keeps its assigned numeric MID across re-offers. In compatibility mode, adding
+    /// audio after video was already offered can still shift existing video MIDs; enable stable numeric MIDs on
+    /// SFU-style peers that add tracks during a session.
     /// </remarks>
     public string AddAudioTrack(WebRtcAddedAudioTrack track)
     {
@@ -393,10 +395,9 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
 
     /// <summary>
     /// Adds a video track to offer as its own <c>m=video</c> line on the shared BUNDLE transport (P2c),
-    /// before the first offer/answer, and returns the track's numeric MID. Adding a track switches the peer
-    /// onto the numeric-MID multi-track offer path (RFC 8843): the audio m-line becomes MID <c>0</c>, any
-    /// added-audio m-lines follow, the config-time <c>EnableVideo</c> primary video (if any) comes next, then
-    /// each added video track in order.
+    /// before the first offer/answer, and returns the track's numeric MID. Compatibility mode groups added video
+    /// after primary audio, added audio, and primary video. Stable mode appends it after every primary m-line and
+    /// earlier runtime track so existing m-line identities cannot move during renegotiation.
     /// </summary>
     /// <param name="track">The track's codecs, direction, simulcast layers, and MediaStream id.</param>
     /// <returns>The numeric MID assigned to the track (stable for its lifetime).</returns>
@@ -878,9 +879,9 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     }
 
     // The SDP media options for the offer/answer, assembled by WebRtcSdpOptionsBuilder (extracted to keep this
-    // file under the size limit): the 1+1 semantic-MID path when no track was added (byte-identical to pre-P2c),
-    // else the numeric-MID multi-track path (added-audio and/or added-video). The added tracks are snapshotted
-    // by the self-locking WebRtcAddedTrackSet, in the m-line order the numeric MIDs were assigned in.
+    // file under the size limit): stable mode always uses numeric MIDs and append-only runtime order;
+    // compatibility mode keeps the 1+1 semantic path until an added track selects its historic grouped numeric
+    // path. The self-locking WebRtcAddedTrackSet snapshots both track kinds and their insertion order.
     private SdpMediaOptions MediaOptions(IPEndPoint local)
         => WebRtcSdpOptionsBuilder.Build(
             local,

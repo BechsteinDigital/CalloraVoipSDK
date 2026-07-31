@@ -65,6 +65,26 @@ public sealed class WebRtcSessionFactoryTests
     }
 
     [Fact]
+    public async Task It_builds_an_additional_outbound_audio_track_for_a_sendonly_offer()
+    {
+        // SFU offerer shape: primary audio stays send-recv while the per-participant additional audio m-line
+        // sends from the server only. The browser answers recv-only, so the offerer's bundle must still
+        // materialise MID "1" as an outbound sender.
+        var (offer, answer) = MultiAudioExchange(
+            SdpMediaDirection.SendOnly,
+            "0",
+            "1");
+
+        // TryCreate takes (remoteDescription, localDescription): from the offerer's view the answer is remote.
+        var session = WebRtcSessionFactory.TryCreate(
+            answer, offer, PeerOptions(), Handshaker(), DtlsCertificate.GenerateEcdsaP256(), NullLoggerFactory.Instance);
+
+        Assert.NotNull(session);
+        await using var lease = session;
+        Assert.Equal(["1"], session!.AdditionalAudioMids);
+    }
+
+    [Fact]
     public async Task A_single_audio_exchange_builds_no_additional_audio_tracks()
     {
         // Byte-identity guard: a one-audio exchange (the pre-4.7.0 shape) yields the primary anchor only — no
@@ -119,13 +139,21 @@ public sealed class WebRtcSessionFactoryTests
     // A multi-audio BUNDLE exchange (4.7.0): N send-recv audio m-lines with ascending numeric MIDs on offer and
     // answer, one shared transport. Both sides send-recv, so every additional audio m-line is negotiated for
     // receiving and the factory builds a sink for each beyond the primary.
-    private static (SdpSessionDescription Offer, SdpSessionDescription Answer) MultiAudioExchange(params string[] streamIds)
+    private static (SdpSessionDescription Offer, SdpSessionDescription Answer) MultiAudioExchange(params string[] streamIds) =>
+        MultiAudioExchange(SdpMediaDirection.SendRecv, streamIds);
+
+    private static (SdpSessionDescription Offer, SdpSessionDescription Answer) MultiAudioExchange(
+        SdpMediaDirection additionalDirection,
+        params string[] streamIds)
     {
         var negotiator = new SdpOfferAnswerNegotiator();
         var tracks = streamIds
-            .Select(sid => new SdpTrackOptions
+            .Select((sid, index) => new SdpTrackOptions
             {
-                Kind = "audio", Codecs = Pcmu, Msid = new SdpMsid { StreamId = sid, TrackId = sid + "-a" },
+                Kind = "audio",
+                Codecs = Pcmu,
+                Direction = index == 0 ? SdpMediaDirection.SendRecv : additionalDirection,
+                Msid = new SdpMsid { StreamId = sid, TrackId = sid + "-a" },
             })
             .ToArray();
 

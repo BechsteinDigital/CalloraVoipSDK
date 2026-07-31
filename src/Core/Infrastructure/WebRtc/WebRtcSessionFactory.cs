@@ -64,10 +64,15 @@ internal static class WebRtcSessionFactory
 
         // One canonical selection of the primary (transport-anchor) audio m-line and the additional ones (below),
         // so the anchor and the additional-skip agree even when a leading audio m-line is port-0/rejected.
-        var (remoteAudio, additionalRemoteAudio) = SelectAudioLines(remoteDescription.Media);
+        var (remoteAudio, _) = SelectAudioLines(remoteDescription.Media);
         // The local m-line's port is a placeholder under ICE (the real address comes via candidates), so
         // the local side is gated by its MID below, not by a zero port.
-        var localAudio = localDescription.Media.FirstOrDefault(m => m.MediaType.Equals("audio", Ci));
+        var localAudio = remoteAudio is null
+            ? null
+            : localDescription.Media.FirstOrDefault(
+                m => m.MediaType.Equals("audio", Ci)
+                     && string.Equals(m.Mid, remoteAudio.Mid, StringComparison.Ordinal))
+              ?? localDescription.Media.FirstOrDefault(m => m.MediaType.Equals("audio", Ci));
         if (remoteAudio is null || localAudio is null)
             return null;
 
@@ -143,16 +148,18 @@ internal static class WebRtcSessionFactory
         // collide the per-SSRC SRTP context (ROC/replay keyed by SSRC) and cross-talk two streams.
         var usedSsrcs = new HashSet<uint> { audioSsrc };
 
-        // Build one ADDITIONAL inbound audio track per remote audio m-line beyond the primary (4.7.0: N audio
-        // m-lines — the SFU pattern of one audio stream per remote participant). The primary (the bundle/transport
-        // anchor selected above by SelectAudioLines) is excluded from additionalRemoteAudio; each further remote
-        // audio m-line the remote will send becomes a receive-only sink keyed by its own MID on its own
-        // bundle-wide-distinct SSRC. Demux is by MID header extension (RFC 9143) when they share a payload type, so
-        // two same-codec audio streams never cross-talk. Paired to the local m-line by MID so each sees its own peer.
+        // Build one ADDITIONAL audio track per local audio m-line beyond the primary (4.7.0: N audio m-lines —
+        // the SFU pattern of one stream per participant). A track is materialised when either direction is
+        // negotiated: local send/remote receive or remote send/local receive. The primary bundle/transport anchor
+        // is excluded by MID. Each additional track is keyed by its own MID and gets a bundle-wide-distinct local
+        // SSRC. Demux is by MID header extension (RFC 9143) when tracks share a payload type.
         var additionalAudioTracks = new List<BundledTrackConfig>();
-        foreach (var remoteAudioSection in additionalRemoteAudio)
+        foreach (var localAudioSection in localDescription.Media.Where(
+                     m => m.MediaType.Equals("audio", Ci)
+                          && !string.Equals(m.Mid, localAudio.Mid, StringComparison.Ordinal)))
         {
-            var audioTrackConfig = TryBuildAudioTrack(remoteAudioSection, localDescription, usedSsrcs, loggerFactory);
+            var audioTrackConfig = TryBuildAudioTrack(
+                localAudioSection, remoteDescription, usedSsrcs, loggerFactory);
             if (audioTrackConfig is not null)
                 additionalAudioTracks.Add(audioTrackConfig);
         }
@@ -380,16 +387,16 @@ internal static class WebRtcSessionFactory
     }
 
     /// <summary>
-    /// Builds one ADDITIONAL inbound audio track config from a remote audio m-line beyond the primary (4.7.0: N
-    /// audio m-lines — the SFU pattern). This is the slim audio pendant to <see cref="TryBuildVideoTrack"/>: audio
-    /// has no RTX, NACK/PLI feedback, or simulcast, so it only names the MID, the negotiated audio codec's payload
-    /// type and clock, and a bundle-wide-distinct SSRC allocated from (and added back to)
-    /// <paramref name="usedSsrcs"/>. Returns <see langword="null"/> when the remote will not send on this m-line,
-    /// when the local side will not receive it, or when it carries no non-telephone-event audio codec.
+    /// Builds one ADDITIONAL negotiated audio track config from a local audio m-line beyond the primary (4.7.0:
+    /// N audio m-lines — the SFU pattern). This is the slim audio pendant to
+    /// <see cref="TryBuildVideoTrack"/>: audio has no RTX, NACK/PLI feedback, or simulcast, so it only names the
+    /// MID, the negotiated audio codec's payload type and clock, and a bundle-wide-distinct SSRC allocated from
+    /// (and added back to) <paramref name="usedSsrcs"/>. Returns <see langword="null"/> when neither direction is
+    /// negotiated or when the m-line carries no mutually negotiated non-telephone-event audio codec.
     /// <para>
-    /// <paramref name="remoteAudio"/> is the peer's sending m-line (the remote is the sender for an inbound track);
-    /// it is paired to our matching local m-line by MID (RFC 9143) to gate on our recv direction. Unlike the
-    /// primary, an additional audio track has no telephone-event/DTMF wiring — DTMF stays on the primary.
+    /// <paramref name="localAudio"/> is paired to the peer's matching m-line by MID (RFC 9143). The track is built
+    /// for local-send/remote-receive, remote-send/local-receive, or both. Unlike the primary, an additional audio
+    /// track has no telephone-event/DTMF wiring — DTMF stays on the primary.
     /// </para>
     /// <para>
     /// Exposed to the renegotiator (4.7.0 Slice 3): a mid-call re-offer seeds <paramref name="usedSsrcs"/> from the
@@ -398,36 +405,43 @@ internal static class WebRtcSessionFactory
     /// </para>
     /// </summary>
     internal static BundledTrackConfig? TryBuildAudioTrack(
-        SdpMediaDescription remoteAudio,
-        SdpSessionDescription localDescription,
+        SdpMediaDescription localAudio,
+        SdpSessionDescription remoteDescription,
         ISet<uint> usedSsrcs,
         ILoggerFactory loggerFactory)
     {
         // Gated by the MID (grouped into the bundle, RFC 8843), not the placeholder port under ICE.
-        if (string.IsNullOrEmpty(remoteAudio.Mid))
+        if (string.IsNullOrEmpty(localAudio.Mid))
             return null;
 
-        // Our local m-line for this MID: the local side must be present and willing to receive (send-recv or
-        // recv-only). Paired by MID so, with several audio m-lines, each track sees its own local section.
-        var localAudio = localDescription.Media.FirstOrDefault(
-            m => m.MediaType.Equals("audio", Ci) && string.Equals(m.Mid, remoteAudio.Mid, StringComparison.Ordinal));
-
-        // Build an inbound track only when the remote will send AND we will receive (RFC 8829/3264). A remote that
-        // rejected this m-line (port 0), made it inactive, or is recv-only sends us nothing, and a local recv-off
-        // side wants nothing — either way no receive sink is built. LocalReceives mirrors the primary recv gate.
-        if (!RemoteSends(remoteAudio) || !LocalReceives(localAudio))
+        // Pair by MID so, with several audio m-lines, each track sees its own peer section. An additional track is
+        // needed for either negotiated flow direction because BundledAudioTrackSet owns both the MID-keyed inbound
+        // sink and outbound sender. This is what lets a send-only SFU track exist locally when the peer answers
+        // recv-only, while preserving the existing inbound-track path.
+        var remoteAudio = remoteDescription.Media.FirstOrDefault(
+            m => m.MediaType.Equals("audio", Ci)
+                 && string.Equals(m.Mid, localAudio.Mid, StringComparison.Ordinal));
+        var localSends = LocalSends(localAudio) && RemoteReceives(remoteAudio);
+        var localReceives = RemoteSends(remoteAudio) && LocalReceives(localAudio);
+        if (!localSends && !localReceives)
         {
             loggerFactory.CreateLogger(typeof(WebRtcSessionFactory)).LogInformation(
-                "An additional audio m-line (MID {Mid}) is present but not negotiated for receiving (remote {RemoteState}; " +
-                "local {LocalState}); no inbound audio track is built.",
-                remoteAudio.Mid,
-                remoteAudio.Disabled ? "disabled" : remoteAudio.Direction.ToString(),
-                localAudio is null ? "absent" : localAudio.Direction.ToString());
+                "An additional audio m-line (MID {Mid}) is present but has no negotiated media direction " +
+                "(local {LocalState}; remote {RemoteState}); no audio track is built.",
+                localAudio.Mid,
+                localAudio.Direction,
+                remoteAudio is null ? "absent" : remoteAudio.Disabled ? "disabled" : remoteAudio.Direction.ToString());
             return null;
         }
 
-        // The audio codec (skip the RFC 4733 telephone-event format — DTMF is a primary-track concern here).
-        var codec = remoteAudio.Codecs.FirstOrDefault(c => !c.Name.Equals("telephone-event", Ci));
+        // Select a codec present on both paired descriptions (skip RFC 4733 telephone-event — DTMF is a
+        // primary-track concern here). The payload type is the negotiated RTP identity and is retained by an
+        // answer, so it is the stable intersection for both offerer and answerer roles.
+        var codec = localAudio.Codecs.FirstOrDefault(
+            c => !c.Name.Equals("telephone-event", Ci)
+                 && remoteAudio!.Codecs.Any(
+                     remoteCodec => remoteCodec.PayloadType == c.PayloadType
+                                    && remoteCodec.Name.Equals(c.Name, Ci)));
         if (codec is null)
             return null;
         var clockRate = codec.ClockRate > 0 ? codec.ClockRate : 8000;
@@ -440,7 +454,7 @@ internal static class WebRtcSessionFactory
 
         return new BundledTrackConfig
         {
-            Mid = remoteAudio.Mid,
+            Mid = localAudio.Mid,
             Ssrc = ssrc,
             PayloadType = (byte)codec.PayloadType,
             SamplesPerPacket = clockRate * 20 / 1000, // 20 ms frames

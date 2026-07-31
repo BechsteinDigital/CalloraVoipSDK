@@ -1104,6 +1104,7 @@
   CalloraVoipSdk.WebRtc.WebRtcConfiguration.LocalEndPoint : System.Net.IPEndPoint { get, init }
   CalloraVoipSdk.WebRtc.WebRtcConfiguration.LoggerFactory : Microsoft.Extensions.Logging.ILoggerFactory { get, init }
   CalloraVoipSdk.WebRtc.WebRtcConfiguration.SimulcastLayers : System.Collections.Generic.IReadOnlyList<System.String> { get, init }
+  CalloraVoipSdk.WebRtc.WebRtcConfiguration.UseStableNumericMediaIds : System.Boolean { get, init }
   CalloraVoipSdk.WebRtc.WebRtcConfiguration.VideoCodecs : System.Collections.Generic.IReadOnlyList<System.String> { get, init }
   CalloraVoipSdk.WebRtc.WebRtcConnectException..ctor(System.String message)
   CalloraVoipSdk.WebRtc.WebRtcConnectException..ctor(System.String message, System.Exception innerException)
@@ -1122,6 +1123,7 @@
   CalloraVoipSdk.WebRtc.WebRtcOptions.LocalEndPoint : System.Net.IPEndPoint { get, set }
   CalloraVoipSdk.WebRtc.WebRtcOptions.LoggerFactory : Microsoft.Extensions.Logging.ILoggerFactory { get, set }
   CalloraVoipSdk.WebRtc.WebRtcOptions.SimulcastLayers : System.Collections.Generic.IReadOnlyList<System.String> { get, set }
+  CalloraVoipSdk.WebRtc.WebRtcOptions.UseStableNumericMediaIds : System.Boolean { get, set }
   CalloraVoipSdk.WebRtc.WebRtcOptions.VideoCodecs : System.Collections.Generic.IReadOnlyList<System.String> { get, set }
   CalloraVoipSdk.WebRtc.WebRtcPeerConnectionExtensions.ConnectAsync(CalloraVoipSdk.WebRtc.IPeerConnection peer, CalloraVoipSdk.WebRtc.IWebRtcSignaling signalling, CalloraVoipSdk.WebRtc.WebRtcRole role, System.Threading.CancellationToken cancellationToken = default) : System.Threading.Tasks.Task
   CalloraVoipSdk.WebRtc.WebRtcRecorder..ctor()

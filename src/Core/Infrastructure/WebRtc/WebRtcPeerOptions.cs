@@ -28,6 +28,12 @@ internal sealed record WebRtcPeerOptions
     /// </summary>
     public IReadOnlyList<SdpVideoMediaOptions> VideoTracks { get; init; } = [];
 
+    /// <summary>
+    /// Whether the first offer starts on the stable numeric-MID path and later runtime tracks append without
+    /// changing any existing m-line identity/order (RFC 8829).
+    /// </summary>
+    public bool UseStableNumericMediaIds { get; init; }
+
     /// <summary>Local DTLS-SRTP identity (fingerprint + setup role) signalled in the answer (RFC 5763).</summary>
     public required SdpDtlsParameters Dtls { get; init; }
 

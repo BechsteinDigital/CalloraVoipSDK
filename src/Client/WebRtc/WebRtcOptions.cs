@@ -26,6 +26,12 @@ public sealed class WebRtcOptions
     /// <summary>Whether to offer a video m-line. See <see cref="WebRtcConfiguration.EnableVideo"/>.</summary>
     public bool EnableVideo { get; set; }
 
+    /// <summary>
+    /// Whether to use stable numeric MIDs for runtime track renegotiation.
+    /// See <see cref="WebRtcConfiguration.UseStableNumericMediaIds"/>.
+    /// </summary>
+    public bool UseStableNumericMediaIds { get; set; }
+
     /// <summary>Video codecs to offer when <see cref="EnableVideo"/> is set. See <see cref="WebRtcConfiguration.VideoCodecs"/>. Default: H264.</summary>
     public IReadOnlyList<string> VideoCodecs { get; set; } = ["H264"];
 

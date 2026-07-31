@@ -128,6 +128,29 @@ public sealed class WebRtcRenegotiatorTests
     }
 
     [Fact]
+    public async Task Diff_adds_a_new_outbound_audio_track_when_the_remote_answer_is_recvonly()
+    {
+        // The server starts with the primary audio anchor only.
+        var (offer, answer) = AudioExchange(audioMids: ["0"]);
+        await using var session = BuildOffererSession(offer, answer);
+        Assert.Empty(session.AudioMids);
+
+        // SFU re-offer: MID "1" sends from this peer only; the browser accepts it as recv-only.
+        var (reOffer, reAnswer) = AudioExchange(
+            audioMids: ["0", "1"],
+            additionalDirection: SdpMediaDirection.SendOnly);
+        var renegotiator = new WebRtcRenegotiator(NullLoggerFactory.Instance);
+
+        var diff = renegotiator.ComputeDiff(session, reOffer, reAnswer);
+
+        var added = Assert.Single(diff.AudioTracksToAdd);
+        Assert.Equal("1", added.Mid);
+
+        renegotiator.Apply(session, diff);
+        Assert.Equal(["1"], session.AudioMids);
+    }
+
+    [Fact]
     public async Task Diff_deactivates_an_additional_audio_track_the_re_offer_dropped()
     {
         // Start with two audio m-lines: the anchor "0" plus one additional "1".
@@ -192,6 +215,15 @@ public sealed class WebRtcRenegotiatorTests
         return session!;
     }
 
+    // Same exchange from the offerer's perspective: localDescription is the offer and remoteDescription the answer.
+    private static BundledMediaSession BuildOffererSession(SdpSessionDescription offer, SdpSessionDescription answer)
+    {
+        var session = WebRtcSessionFactory.TryCreate(
+            answer, offer, PeerOptions(), Handshaker(), DtlsCertificate.GenerateEcdsaP256(), NullLoggerFactory.Instance);
+        Assert.NotNull(session);
+        return session!;
+    }
+
     // A BUNDLE offer/answer with an audio track (MID "0") plus one video m-line per entry in videoMids, using the
     // numeric-MID multi-track path so several video sections carry stable numeric MIDs. Both sides send-recv, so
     // every video m-line negotiates for sending (an outbound track is built for each).
@@ -222,11 +254,18 @@ public sealed class WebRtcRenegotiatorTests
     // send-recv, so every audio m-line negotiates for receiving and TryBuildAudioTrack builds a sink for each
     // beyond the anchor. The answer mirrors the offer's audio tracks so each additional MID is present locally too.
     private static (SdpSessionDescription Offer, SdpSessionDescription Answer) AudioExchange(
-        IReadOnlyList<string> audioMids, string offerUfrag = "remoteU")
+        IReadOnlyList<string> audioMids,
+        string offerUfrag = "remoteU",
+        SdpMediaDirection additionalDirection = SdpMediaDirection.SendRecv)
     {
         var negotiator = new SdpOfferAnswerNegotiator();
         var audioTracks = audioMids
-            .Select(_ => new SdpTrackOptions { Kind = "audio", Codecs = Pcmu, Direction = SdpMediaDirection.SendRecv })
+            .Select((_, index) => new SdpTrackOptions
+            {
+                Kind = "audio",
+                Codecs = Pcmu,
+                Direction = index == 0 ? SdpMediaDirection.SendRecv : additionalDirection,
+            })
             .ToList();
         var offer = negotiator.CreateOffer(
             new IPEndPoint(IPAddress.Loopback, 5000), Pcmu, SdpMediaDirection.SendRecv,

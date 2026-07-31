@@ -84,6 +84,7 @@ public sealed class WebRtcClient : IWebRtcClient
                     }
                 ]
                 : [],
+            UseStableNumericMediaIds = _config.UseStableNumericMediaIds,
             Dtls = new SdpDtlsParameters
             {
                 Algorithm = certificate.Fingerprint.Algorithm,
