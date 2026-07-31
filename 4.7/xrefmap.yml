@@ -13037,6 +13037,19 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.WebRtc.WebRtcConfiguration.SimulcastLayers
   nameWithType: WebRtcConfiguration.SimulcastLayers
+- uid: CalloraVoipSdk.WebRtc.WebRtcConfiguration.UseStableNumericMediaIds
+  name: UseStableNumericMediaIds
+  href: _api/CalloraVoipSdk.WebRtc.WebRtcConfiguration.html#CalloraVoipSdk_WebRtc_WebRtcConfiguration_UseStableNumericMediaIds
+  commentId: P:CalloraVoipSdk.WebRtc.WebRtcConfiguration.UseStableNumericMediaIds
+  fullName: CalloraVoipSdk.WebRtc.WebRtcConfiguration.UseStableNumericMediaIds
+  nameWithType: WebRtcConfiguration.UseStableNumericMediaIds
+- uid: CalloraVoipSdk.WebRtc.WebRtcConfiguration.UseStableNumericMediaIds*
+  name: UseStableNumericMediaIds
+  href: _api/CalloraVoipSdk.WebRtc.WebRtcConfiguration.html#CalloraVoipSdk_WebRtc_WebRtcConfiguration_UseStableNumericMediaIds_
+  commentId: Overload:CalloraVoipSdk.WebRtc.WebRtcConfiguration.UseStableNumericMediaIds
+  isSpec: "True"
+  fullName: CalloraVoipSdk.WebRtc.WebRtcConfiguration.UseStableNumericMediaIds
+  nameWithType: WebRtcConfiguration.UseStableNumericMediaIds
 - uid: CalloraVoipSdk.WebRtc.WebRtcConfiguration.VideoCodecs
   name: VideoCodecs
   href: _api/CalloraVoipSdk.WebRtc.WebRtcConfiguration.html#CalloraVoipSdk_WebRtc_WebRtcConfiguration_VideoCodecs
@@ -13265,6 +13278,19 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.WebRtc.WebRtcOptions.SimulcastLayers
   nameWithType: WebRtcOptions.SimulcastLayers
+- uid: CalloraVoipSdk.WebRtc.WebRtcOptions.UseStableNumericMediaIds
+  name: UseStableNumericMediaIds
+  href: _api/CalloraVoipSdk.WebRtc.WebRtcOptions.html#CalloraVoipSdk_WebRtc_WebRtcOptions_UseStableNumericMediaIds
+  commentId: P:CalloraVoipSdk.WebRtc.WebRtcOptions.UseStableNumericMediaIds
+  fullName: CalloraVoipSdk.WebRtc.WebRtcOptions.UseStableNumericMediaIds
+  nameWithType: WebRtcOptions.UseStableNumericMediaIds
+- uid: CalloraVoipSdk.WebRtc.WebRtcOptions.UseStableNumericMediaIds*
+  name: UseStableNumericMediaIds
+  href: _api/CalloraVoipSdk.WebRtc.WebRtcOptions.html#CalloraVoipSdk_WebRtc_WebRtcOptions_UseStableNumericMediaIds_
+  commentId: Overload:CalloraVoipSdk.WebRtc.WebRtcOptions.UseStableNumericMediaIds
+  isSpec: "True"
+  fullName: CalloraVoipSdk.WebRtc.WebRtcOptions.UseStableNumericMediaIds
+  nameWithType: WebRtcOptions.UseStableNumericMediaIds
 - uid: CalloraVoipSdk.WebRtc.WebRtcOptions.VideoCodecs
   name: VideoCodecs
   href: _api/CalloraVoipSdk.WebRtc.WebRtcOptions.html#CalloraVoipSdk_WebRtc_WebRtcOptions_VideoCodecs

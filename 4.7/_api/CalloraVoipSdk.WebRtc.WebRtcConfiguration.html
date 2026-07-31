@@ -189,7 +189,7 @@ uses a fresh per-peer DTLS identity.</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_WebRtcConfiguration_DtlsCertificate" data-uid="CalloraVoipSdk.WebRtc.WebRtcConfiguration.DtlsCertificate">
   DtlsCertificate
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcConfiguration.cs/#L54"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcConfiguration.cs/#L62"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>DTLS-SRTP identity for the peer's certificate/fingerprint (must carry an exportable ECDSA P-256
@@ -255,7 +255,7 @@ privacy default.</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_WebRtcConfiguration_IceServers" data-uid="CalloraVoipSdk.WebRtc.WebRtcConfiguration.IceServers">
   IceServers
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcConfiguration.cs/#L47"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcConfiguration.cs/#L55"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>STUN/TURN servers for gathering server-reflexive ICE candidates (RFC 8445 §5.1.1). Empty (default)
@@ -324,7 +324,7 @@ ICE for remote reachability arrive in a later slice — see ADR-012.)</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_WebRtcConfiguration_LoggerFactory" data-uid="CalloraVoipSdk.WebRtc.WebRtcConfiguration.LoggerFactory">
   LoggerFactory
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcConfiguration.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcConfiguration.cs/#L65"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Logger factory for diagnostics; <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> disables logging.</p>
@@ -356,7 +356,7 @@ ICE for remote reachability arrive in a later slice — see ADR-012.)</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_WebRtcConfiguration_SimulcastLayers" data-uid="CalloraVoipSdk.WebRtc.WebRtcConfiguration.SimulcastLayers">
   SimulcastLayers
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcConfiguration.cs/#L39"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcConfiguration.cs/#L47"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Send-side simulcast layers to offer (RFC 8853), by <code>a=rid</code> id in send order, e.g.
@@ -388,11 +388,46 @@ each layer's encoded frames via <a class="xref" href="CalloraVoipSdk.WebRtc.IPee
 
 
 
+  <a id="CalloraVoipSdk_WebRtc_WebRtcConfiguration_UseStableNumericMediaIds_" data-uid="CalloraVoipSdk.WebRtc.WebRtcConfiguration.UseStableNumericMediaIds*"></a>
+
+  <h3 id="CalloraVoipSdk_WebRtc_WebRtcConfiguration_UseStableNumericMediaIds" data-uid="CalloraVoipSdk.WebRtc.WebRtcConfiguration.UseStableNumericMediaIds">
+  UseStableNumericMediaIds
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcConfiguration.cs/#L35"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Uses stable numeric MIDs from the first offer and appends runtime-added audio/video m-lines in call
+order. Enable this for SFU peers that add tracks during renegotiation: RFC 8829 requires existing
+m-line order and MIDs to remain unchanged. Default <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a> preserves the historic
+semantic <code>audio</code>/<code>video</code> MIDs for fixed 1+1 peers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseStableNumericMediaIds { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
   <a id="CalloraVoipSdk_WebRtc_WebRtcConfiguration_VideoCodecs_" data-uid="CalloraVoipSdk.WebRtc.WebRtcConfiguration.VideoCodecs*"></a>
 
   <h3 id="CalloraVoipSdk_WebRtc_WebRtcConfiguration_VideoCodecs" data-uid="CalloraVoipSdk.WebRtc.WebRtcConfiguration.VideoCodecs">
   VideoCodecs
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcConfiguration.cs/#L30"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcConfiguration.cs/#L38"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Video codecs to offer when <a class="xref" href="CalloraVoipSdk.WebRtc.WebRtcConfiguration.html#CalloraVoipSdk_WebRtc_WebRtcConfiguration_EnableVideo">EnableVideo</a> is set, by name (<code>H264</code>, <code>VP8</code>). Default: H264.</p>
