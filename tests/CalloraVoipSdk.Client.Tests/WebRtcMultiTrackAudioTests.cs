@@ -14,9 +14,12 @@ namespace CalloraVoipSdk.Client.Tests;
 /// </summary>
 public sealed class WebRtcMultiTrackAudioTests
 {
-    private static WebRtcClient AudioClient(bool enableVideo = false) => new(new WebRtcConfiguration
+    private static WebRtcClient AudioClient(
+        bool enableVideo = false,
+        bool useStableNumericMediaIds = false) => new(new WebRtcConfiguration
     {
         EnableVideo = enableVideo,
+        UseStableNumericMediaIds = useStableNumericMediaIds,
         // Ephemeral loopback: early-bind gives a live m-line and a fixed port would collide on CI.
         LocalEndPoint = new IPEndPoint(IPAddress.Loopback, 0),
     });
@@ -187,6 +190,29 @@ public sealed class WebRtcMultiTrackAudioTests
         Assert.Equal(1, CountMediaLines(offer, "audio"));
     }
 
+    [Fact]
+    public async Task Stable_numeric_mode_preserves_primary_mids_and_appends_interleaved_tracks()
+    {
+        var rtc = AudioClient(enableVideo: true, useStableNumericMediaIds: true);
+        await using var peer = rtc.CreatePeer();
+
+        var firstOffer = peer.CreateOffer();
+
+        Assert.Equal(["0", "1"], MidsInOrder(firstOffer));
+
+        // The conference router adds one source as video+audio. Both new m-lines must append after the
+        // already-negotiated primary pair; changing the primary video from MID 1 would make browsers reject
+        // the re-offer because RFC 8829 requires existing m-line order/MIDs to remain stable.
+        var extraVideo = peer.AddVideoTrack();
+        var extraAudio = peer.AddAudioTrack();
+        var reOffer = peer.CreateOffer();
+
+        Assert.Equal("2", extraVideo.Mid);
+        Assert.Equal("3", extraAudio.Mid);
+        Assert.Equal(["0", "1", "2", "3"], MidsInOrder(reOffer));
+        Assert.Equal(["audio", "video", "video", "audio"], MediaKindsInOrder(reOffer));
+    }
+
     // Records the outbound audio the facade fans out to attached taps, for the public-send routing assertion.
     private sealed class RecordingTap : IMediaTap
     {
@@ -206,5 +232,12 @@ public sealed class WebRtcMultiTrackAudioTests
             .Select(l => l.Trim())
             .Where(l => l.StartsWith("a=mid:", StringComparison.Ordinal))
             .Select(l => l["a=mid:".Length..])
+            .ToArray();
+
+    private static string[] MediaKindsInOrder(string sdp)
+        => sdp.Split('\n')
+            .Select(l => l.Trim())
+            .Where(l => l.StartsWith("m=", StringComparison.Ordinal))
+            .Select(l => l[2..].Split(' ', 2)[0])
             .ToArray();
 }

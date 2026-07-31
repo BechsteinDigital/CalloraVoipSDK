@@ -25,6 +25,7 @@ internal static class WebRtcOptionsMapping
             LocalEndPoint = options.LocalEndPoint,
             AudioCodecs = options.AudioCodecs,
             EnableVideo = options.EnableVideo,
+            UseStableNumericMediaIds = options.UseStableNumericMediaIds,
             VideoCodecs = options.VideoCodecs,
             SimulcastLayers = options.SimulcastLayers,
             IceServers = options.IceServers,

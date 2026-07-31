@@ -57,6 +57,41 @@ public sealed class IceNominationDriverTests
     }
 
     [Fact]
+    public async Task Checks_a_lower_priority_working_pair_before_retrying_an_unreachable_higher_pair()
+    {
+        var high = Ep(5051);
+        var low = Ep(5052);
+        var highChecks = 0;
+        var highChecksSeenByLow = 0;
+        var nominated = new TaskCompletionSource<IPEndPoint>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        Func<IPEndPoint, bool, CancellationToken, Task<bool>> check = (target, _, _) =>
+        {
+            if (target.Equals(high))
+            {
+                Interlocked.Increment(ref highChecks);
+                return Task.FromResult(false);
+            }
+
+            Volatile.Write(ref highChecksSeenByLow, Volatile.Read(ref highChecks));
+            return Task.FromResult(true);
+        };
+
+        await using var driver = new IceNominationDriver(
+            [Direct(check)],
+            [new IceRemoteCandidate(high, Priority: 200), new IceRemoteCandidate(low, Priority: 100)],
+            (_, ep) => nominated.TrySetResult(ep),
+            NullLoggerFactory.Instance,
+            maxAttempts: 5,
+            roundDelay: TimeSpan.FromMilliseconds(1));
+
+        driver.Start();
+
+        Assert.Equal(low, await nominated.Task.WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.Equal(1, Volatile.Read(ref highChecksSeenByLow));
+    }
+
+    [Fact]
     public async Task Prefers_the_higher_priority_local_candidate_for_the_same_remote()
     {
         var remote = Ep(5602);

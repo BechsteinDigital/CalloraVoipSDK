@@ -106,7 +106,11 @@ public sealed class WebRtcMultiTrackAudioPeerToPeerTests
                 answerer = BuildPeer(answererPort, answererCert, "answ");
 
                 // Offerer adds a SECOND audio track (4.7.0): primary audio=0, added audio=1 (before any video).
-                var addedMid = offerer.AddAudioTrack(new WebRtcAddedAudioTrack { Codecs = Pcmu });
+                var addedMid = offerer.AddAudioTrack(new WebRtcAddedAudioTrack
+                {
+                    Codecs = Pcmu,
+                    Direction = SdpMediaDirection.SendOnly,
+                });
                 Assert.Equal("1", addedMid);
 
                 var offer = offerer.CreateOffer();
