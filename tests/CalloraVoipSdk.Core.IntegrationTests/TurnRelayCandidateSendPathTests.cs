@@ -72,6 +72,45 @@ public sealed class TurnRelayCandidateSendPathTests
     }
 
     [Fact]
+    public async Task SendAsync_caps_distinct_permissioned_peer_ips_and_refuses_the_overflow()
+    {
+        // Review finding #155 P1: an authenticated peer can drive unlimited distinct remote-candidate IPs, each
+        // installing a permission + a periodic refresh. Above the cap (256) a new IP is refused with no
+        // CreatePermission transaction; an already-permissioned IP keeps working.
+        var codec = new StunMessageCodec();
+        var permissionRequests = 0;
+        TurnControlTransactor transactor = null!;
+        Task Send(ReadOnlyMemory<byte> bytes, CancellationToken ct)
+        {
+            var request = codec.Decode(bytes.ToArray())!;
+            if ((TurnMessageMethod)(ushort)request.MessageMethod == TurnMessageMethod.CreatePermission)
+                permissionRequests++;
+            transactor.OnControlDatagram(EmptySuccess(codec, request));
+            return Task.CompletedTask;
+        }
+        transactor = new TurnControlTransactor(codec, Send, NullLogger<TurnControlTransactor>.Instance, FastRto, maxAttempts: 3);
+        var control = new TurnRelayControlClient(new TurnTransactionEngine(codec), transactor);
+
+        var sendPath = new TurnRelayCandidateSendPath(
+            new TurnRelayIndicationChannel(codec, RelayServer), control, PrimedCredentials(),
+            (_, _, _) => ValueTask.CompletedTask, NullLogger<TurnRelayCandidateSendPath>.Instance);
+
+        var check = new byte[] { 0x01 };
+        for (var i = 0; i < 256; i++)
+            await sendPath.SendAsync(check, new IPEndPoint(new IPAddress(new byte[] { 10, 0, 0, (byte)i }), 50000), CancellationToken.None);
+        Assert.Equal(256, permissionRequests);   // one per distinct IP, cap reached
+
+        // The 257th distinct IP is refused: the send throws and no further CreatePermission is issued.
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            sendPath.SendAsync(check, new IPEndPoint(IPAddress.Parse("192.0.2.250"), 50000), CancellationToken.None).AsTask());
+        Assert.Equal(256, permissionRequests);
+
+        // An already-permissioned IP still resolves after the cap is reached (no new transaction).
+        await sendPath.SendAsync(check, new IPEndPoint(new IPAddress(new byte[] { 10, 0, 0, 0 }), 50000), CancellationToken.None);
+        Assert.Equal(256, permissionRequests);
+    }
+
+    [Fact]
     public async Task A_failed_permission_is_not_cached_and_is_retried_on_the_next_send()
     {
         var codec = new StunMessageCodec();

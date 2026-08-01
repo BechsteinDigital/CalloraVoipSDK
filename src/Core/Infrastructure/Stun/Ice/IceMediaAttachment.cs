@@ -199,6 +199,7 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
     }
 
     private const int MaxTriggeredSources = 256;
+    private const int MaxSeenRemoteAddresses = 256;
 
     /// <summary>True when either ICE responsibility is active and the attachment should receive STUN.</summary>
     public bool IsActive => _inbound is not null || _consent is not null;
@@ -225,7 +226,18 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
     public void AddRemoteCandidate(IceRemoteCandidate candidate)
     {
         var address = candidate.EndPoint.Address;
-        _seenRemoteAddresses.TryAdd(address, 0);
+        // DoS cap on distinct remote-candidate IPs (RFC 8838 trickle): a peer can trickle unlimited unique IPs,
+        // each otherwise growing _seenRemoteAddresses and driving a proactive CreatePermission on the relay — an
+        // unbounded wire-boundary state (ENGINEERING_RULES.md §132-133). A known IP always passes; a new IP only
+        // with room. Overflow IPs get no persistent entry, no driver pair, and no permission transaction.
+        var admitted = _seenRemoteAddresses.ContainsKey(address)
+            || (_seenRemoteAddresses.Count < MaxSeenRemoteAddresses && _seenRemoteAddresses.TryAdd(address, 0));
+        if (!admitted)
+        {
+            _logger.LogWarning(
+                "ICE seen-remote-address cap {Cap} reached; ignoring trickled candidate IP {Address}.", MaxSeenRemoteAddresses, address);
+            return;
+        }
 
         _nominationDriver?.AddCandidate(candidate);
 
