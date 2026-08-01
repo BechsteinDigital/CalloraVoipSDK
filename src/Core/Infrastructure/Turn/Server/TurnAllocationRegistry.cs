@@ -54,8 +54,14 @@ internal sealed class TurnAllocationRegistry : IDisposable
     /// </summary>
     public ConcurrentDictionary<string, TurnServerAllocation> Table => _table;
 
-    /// <summary>Registers (or replaces) the allocation for its client key and starts its relay task.</summary>
-    public async Task ReplaceAsync(TurnServerAllocation allocation, CancellationToken ct)
+    /// <summary>
+    /// Registers (or replaces) the allocation for its client key and starts its relay task. Admission and
+    /// insert are atomic under the mutation gate: a <em>new</em> key is refused (returns <see langword="false"/>)
+    /// when it would exceed <see cref="TurnServerOptions.MaxTotalAllocations"/>, so parallel Allocate requests
+    /// cannot each observe the same free capacity and overshoot the quota (#155 P1-2). Replacing an existing key
+    /// never grows the count and always succeeds; the caller disposes the provisional relay on a refused insert.
+    /// </summary>
+    public async Task<bool> ReplaceAsync(TurnServerAllocation allocation, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(allocation);
 
@@ -63,6 +69,12 @@ internal sealed class TurnAllocationRegistry : IDisposable
         await _mutationGate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
+            // Atomic admission: re-check the quota under the same gate that performs the insert. A new key that
+            // would exceed MaxTotalAllocations is refused here even if the optimistic HasCapacity pre-check passed.
+            var isReplacement = _table.ContainsKey(allocation.ClientKey);
+            if (!isReplacement && _options.MaxTotalAllocations > 0 && _table.Count >= _options.MaxTotalAllocations)
+                return false;
+
             _table.TryRemove(allocation.ClientKey, out previousAllocation);
             _relayTasks.TryRemove(allocation.ClientKey, out _);
 
@@ -78,6 +90,7 @@ internal sealed class TurnAllocationRegistry : IDisposable
 
         if (previousAllocation is not null)
             await DisposeAllocationResourcesAsync(previousAllocation).ConfigureAwait(false);
+        return true;
     }
 
     /// <summary>Removes the allocation for the client key and releases its relay resources.</summary>
