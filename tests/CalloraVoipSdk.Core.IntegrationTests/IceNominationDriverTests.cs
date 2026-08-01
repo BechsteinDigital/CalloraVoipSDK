@@ -70,6 +70,33 @@ public sealed class IceNominationDriverTests
     }
 
     [Fact]
+    public async Task At_the_pair_cap_a_higher_priority_candidate_evicts_the_lowest_pair()
+    {
+        // Review finding (4.7.2): at the _maxPairs DoS cap a later higher-priority candidate must evict the
+        // lowest-priority pair rather than be dropped, or remote-controlled SDP/trickle order could exclude the
+        // best pair. Added before Start(), the two initial pairs are Frozen (evictable), so the eviction is
+        // deterministic. `high` is the only reachable pair, so it is nominated only if it was retained by the
+        // eviction — the pre-fix FIFO cap dropped the newcomer, and this test would then time out.
+        var low = Ep(5111);    // prio 100 — lowest, unreachable, fills the cap
+        var mid = Ep(5112);    // prio 200 — unreachable, fills the cap
+        var high = Ep(5113);   // prio 300 — trickled after the cap is full, reachable
+        var nominated = new TaskCompletionSource<IPEndPoint>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        await using var driver = new IceNominationDriver(
+            [Direct(Reachable(new HashSet<IPEndPoint> { high }, new List<IPEndPoint>()))],
+            [new IceRemoteCandidate(low, Priority: 100), new IceRemoteCandidate(mid, Priority: 200)],
+            (_, ep) => nominated.TrySetResult(ep),
+            NullLoggerFactory.Instance,
+            roundDelay: TimeSpan.FromMilliseconds(1),
+            maxPairs: 2);
+
+        driver.AddCandidate(new IceRemoteCandidate(high, Priority: 300));   // cap full → evict `low`, keep {mid, high}
+        driver.Start();
+
+        Assert.Equal(high, await nominated.Task.WaitAsync(TimeSpan.FromSeconds(5)));
+    }
+
+    [Fact]
     public async Task Nominates_the_highest_priority_candidate_that_answers_a_check()
     {
         var reachable = Ep(5002);
