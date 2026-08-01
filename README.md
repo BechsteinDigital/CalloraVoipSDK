@@ -45,8 +45,9 @@ it negotiates byte-identical SDP to 4.6). Full detail in [`CHANGELOG.md`](CHANGE
 The 4.7 patch line also sharpens **ICE connection setup**: 4.7.1 fixed candidate-pair progression, and
 **4.7.2** reworks the connectivity-check scheduler into a globally paced, *overlapping* RFC 8445 checklist with
 transaction-level STUN retransmission — a call reaches a working candidate pair faster, especially when a
-higher-priority candidate is unreachable and used to stall the checklist behind its timeout. Internal to the
-ICE agent: no public API, SDP or wire change.
+higher-priority candidate is unreachable and used to stall the checklist behind its timeout. It also folds in a
+round of review fixes across ICE and the WebRTC track path; the public API is unchanged and a fixed 1+1 peer's
+SDP is byte-identical.
 
 - **Multiple video tracks + mid-call renegotiation (RFC 8829)** — `IPeerConnection.AddVideoTrack()` adds a
   video track (its own `m=video`, SSRC and `RemoteTrack.Mid`) before *or* after connect; a second

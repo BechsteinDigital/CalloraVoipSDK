@@ -148,6 +148,8 @@
       href: ADR-012-webrtc-public-facade.md
     - name: "ADR-060: WebRTC Facade Completion — Fluent ICE Config, Send-Side Simulcast, and the TURN/STUN Server-Hosting Facade"
       href: ADR-060-webrtc-facade-completion-and-server-hosting.md
+    - name: "ADR-063: JSEP-Conformant Append-Only MIDs for Runtime-Added WebRTC Tracks"
+      href: ADR-063-jsep-append-only-track-mids.md
 - name: "TURN Relay"
   items:
     - name: "ADR-054: TURN Relay as a First-Class ICE Candidate"

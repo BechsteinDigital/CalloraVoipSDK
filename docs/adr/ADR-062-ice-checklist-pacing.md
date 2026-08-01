@@ -76,3 +76,22 @@ the transactions themselves overlap.
   while keeping pair optimality. Revisit if field data shows the nomination floor dominates real setup time.
 - **Keep the serial loop, only add retransmission.** Fixes the loss case but not the head-of-line blocking of a
   reachable pair behind an unreachable higher-priority one. Insufficient.
+
+## Review-finding follow-ups (4.7.2)
+
+A pre-release review of the branch surfaced three ICE issues, all fixed within this design:
+
+- **Superseded nomination.** A trickled pair that outranks the one already queued for nomination now bumps that
+  pair's nomination generation (`CancelSupersededNominationLocked`), making the in-flight USE-CANDIDATE a no-op,
+  so the higher pair is checked and the driver still selects the highest-priority *validated* pair. Without it,
+  the pacer (which runs nomination ahead of ordinary checks) let the lower pair win the race and lock
+  `_nominated` before the better pair was ever checked.
+- **Priority-capped checklist.** At the `_maxPairs` DoS cap the checklist now evicts its lowest-priority
+  evictable pair (never a validated / in-flight / nominated one) when the newcomer outranks it, instead of
+  dropping newcomers first-come-first-served. SDP/trickle order is remote-controlled, so FIFO retention could
+  exclude a later top-priority candidate entirely. Mirrors SIPSorcery's sorted-checklist eviction.
+- **Type-scoped candidate foundations (RFC 8445 §5.1.1.3).** Host foundations are `h1`, `h2`, …, distinct from
+  the fixed srflx (`s1`) and relay (`r1`) foundations. The previous numeric scheme let a multi-homed second host
+  candidate collide with srflx's foundation, which can wrongly hold a peer's NAT/relay fallback in one frozen
+  group. Exposed by the new multi-homed `SystemWebRtcHostCandidateProvider` (a single host candidate never
+  collided).
