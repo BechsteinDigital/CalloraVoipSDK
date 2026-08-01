@@ -33,6 +33,43 @@ public sealed class IceNominationDriverTests
     }
 
     [Fact]
+    public async Task A_higher_priority_trickled_pair_supersedes_an_in_flight_lower_nomination()
+    {
+        // Review finding (4.7.2): a pair queued for nomination must yield to a higher-priority pair that
+        // trickles in during the pacing window, or the pacer (which runs nomination ahead of ordinary checks)
+        // locks the lower pair before the better one is ever checked (RFC 8445 §8.1.1).
+        var low = Ep(5091);    // prio 100, validates but its USE-CANDIDATE is held in flight
+        var high = Ep(5092);   // prio 300, trickled while low's nomination is pending, reachable
+        var lowNominationInFlight = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseLowNomination = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var nominated = new TaskCompletionSource<IPEndPoint>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        Task<bool> Check(IPEndPoint target, bool useCandidate, CancellationToken ct)
+        {
+            if (target.Equals(low) && useCandidate)
+            {
+                lowNominationInFlight.TrySetResult();
+                return releaseLowNomination.Task.WaitAsync(ct);   // hold low's USE-CANDIDATE
+            }
+            return Task.FromResult(true);                          // ordinary checks (low, high) validate
+        }
+
+        await using var driver = new IceNominationDriver(
+            [Direct(Check)],
+            [new IceRemoteCandidate(low, Priority: 100)],
+            (_, ep) => nominated.TrySetResult(ep),
+            NullLoggerFactory.Instance,
+            roundDelay: TimeSpan.FromMilliseconds(1));
+        driver.Start();
+
+        await lowNominationInFlight.Task.WaitAsync(TimeSpan.FromSeconds(5));   // low's USE-CANDIDATE is pending
+        driver.AddCandidate(new IceRemoteCandidate(high, Priority: 300));      // supersede it
+        releaseLowNomination.TrySetResult(false);                             // let low's held nomination fail
+
+        Assert.Equal(high, await nominated.Task.WaitAsync(TimeSpan.FromSeconds(5)));   // high wins, not low
+    }
+
+    [Fact]
     public async Task Nominates_the_highest_priority_candidate_that_answers_a_check()
     {
         var reachable = Ep(5002);

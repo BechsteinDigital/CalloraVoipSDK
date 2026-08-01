@@ -21,9 +21,12 @@ internal static class WebRtcIceCandidateFactory
 
     // A host ICE candidate for the bound local media endpoint (RFC 8445 §5.1.2.1 priority: host type-pref
     // 126, local-pref 65535, RTP component 1). rtcp-mux shares component 1, so no RTCP candidate is needed.
+    // Foundations are type-scoped (RFC 8445 §5.1.1.3 — same foundation only for same type+base+server+transport):
+    // host bases are "h1", "h2", …, distinct from the fixed srflx ("s1") and relay ("r1") foundations, so a
+    // multi-homed second host no longer collides with srflx and freeze the peer's NAT/relay fallback wrongly.
     public static SdpIceCandidate LocalHostCandidate(IPEndPoint local, int preferenceIndex = 0) => new()
     {
-        Foundation = (preferenceIndex + 1).ToString(CultureInfo.InvariantCulture),
+        Foundation = "h" + (preferenceIndex + 1).ToString(CultureInfo.InvariantCulture),
         Component = 1,
         Transport = "udp",
         Priority = (126L << 24) | ((65535L - Math.Min(preferenceIndex, 65535)) << 8) | 255L,
@@ -36,7 +39,7 @@ internal static class WebRtcIceCandidateFactory
     // srflx type-pref 100, local-pref 65535, RTP component 1). raddr/rport carry the local base (host).
     public static SdpIceCandidate ServerReflexiveCandidate(IPEndPoint reflexive, IPEndPoint? host) => new()
     {
-        Foundation = "2",
+        Foundation = "s1",
         Component = 1,
         Transport = "udp",
         Priority = (100L << 24) | (65535L << 8) | 255L,
@@ -52,7 +55,7 @@ internal static class WebRtcIceCandidateFactory
     // server-reflexive address from the Allocate response when present, else the local host base.
     public static SdpIceCandidate RelayCandidate(IPEndPoint relayed, IPEndPoint? relatedBase) => new()
     {
-        Foundation = "3",
+        Foundation = "r1",
         Component = 1,
         Transport = "udp",
         Priority = (0L << 24) | (65535L << 8) | 255L,

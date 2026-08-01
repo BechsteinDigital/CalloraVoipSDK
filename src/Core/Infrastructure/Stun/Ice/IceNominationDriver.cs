@@ -89,7 +89,10 @@ internal sealed class IceNominationDriver : IAsyncDisposable
                 return;
             AddRemoteLocked(candidate);
             if (_started)
+            {
+                CancelSupersededNominationLocked();
                 QueueOrdinaryChecksLocked();
+            }
         }
     }
 
@@ -105,7 +108,10 @@ internal sealed class IceNominationDriver : IAsyncDisposable
             foreach (var remote in _remotes)
                 AddPairLocked(candidate, remote);
             if (_started)
+            {
+                CancelSupersededNominationLocked();
                 QueueOrdinaryChecksLocked();
+            }
         }
     }
 
@@ -218,21 +224,43 @@ internal sealed class IceNominationDriver : IAsyncDisposable
 
     private void AddPairLocked(IceLocalCandidate local, IceRemoteCandidate remote)
     {
-        if (_pairs.Count >= _maxPairs)
-        {
-            _logger.LogWarning("ICE checklist pair cap {MaxPairs} reached; ignoring candidate pair for {Remote}.", _maxPairs, remote.EndPoint);
-            return;
-        }
         if (_pairs.Any(pair => ReferenceEquals(pair.Local, local) && pair.Remote.EndPoint.Equals(remote.EndPoint)))
+            return;
+
+        var pairPriority = ComputePairPriority(local.Priority, remote.Priority, _controlling);
+        if (_pairs.Count >= _maxPairs && !EvictLowestForLocked(pairPriority, remote.EndPoint))
             return;
 
         _pairs.Add(new IceNominationPairState
         {
             Local = local,
             Remote = remote,
-            PairPriority = ComputePairPriority(local.Priority, remote.Priority, _controlling),
+            PairPriority = pairPriority,
             Phase = _started ? IceNominationPairPhase.Waiting : IceNominationPairPhase.Frozen,
         });
+    }
+
+    // At the DoS pair cap (ENGINEERING_RULES.md §132-133 wire-boundary caps), retain the highest-priority pairs
+    // rather than the first-arrived ones: SDP and trickle order are remote-controlled, so a later top-priority
+    // candidate must not be excluded by earlier low-priority ones. Evicts the lowest-priority *evictable* pair
+    // (never a validated / in-flight / nominated one) when the newcomer outranks it — mirrors SIPSorcery, which
+    // sorts its checklist and drops the lowest. Returns false to drop the newcomer instead, keeping the cap.
+    private bool EvictLowestForLocked(long pairPriority, IPEndPoint remote)
+    {
+        var victim = _pairs
+            .Where(pair => pair.PendingChecks == 0
+                && !pair.Validated
+                && pair.Phase is IceNominationPairPhase.Frozen or IceNominationPairPhase.Waiting or IceNominationPairPhase.Failed)
+            .OrderBy(pair => pair.PairPriority)
+            .FirstOrDefault();
+        if (victim is null || victim.PairPriority >= pairPriority)
+        {
+            _logger.LogWarning("ICE checklist pair cap {MaxPairs} reached; dropping candidate pair for {Remote}.", _maxPairs, remote);
+            return false;
+        }
+
+        _pairs.Remove(victim);
+        return true;
     }
 
     private IceNominationPairState? SelectTriggeredPairLocked(IceRemoteCandidate remote, bool relayed)
@@ -417,6 +445,30 @@ internal sealed class IceNominationDriver : IAsyncDisposable
             pair.NominationGeneration++;
             pair.Phase = pair.Validated ? IceNominationPairPhase.Succeeded : IceNominationPairPhase.Waiting;
         }
+    }
+
+    // Invalidates an already-queued nomination when a newly added pair outranks the one being nominated. The
+    // pacer runs nomination ahead of ordinary checks, so without this a low-priority nomination queued just
+    // before a higher-priority pair trickled in would win and lock _nominated before the better pair is ever
+    // checked (RFC 8445 §8.1.1 — nominate the highest-priority *validated* pair). Bumping the generation makes
+    // the queued USE-CANDIDATE a no-op; the superseded pair falls back and is reconsidered once the higher pair
+    // resolves (or re-nominated by TryQueueNominationLocked if the higher pair fails).
+    private void CancelSupersededNominationLocked()
+    {
+        var nominating = _pairs.FirstOrDefault(pair => pair.Phase == IceNominationPairPhase.Nominating);
+        if (nominating is null)
+            return;
+
+        var higherPending = _pairs.Any(pair =>
+            pair.PairPriority > nominating.PairPriority
+            && pair.Phase is IceNominationPairPhase.Frozen
+                or IceNominationPairPhase.Waiting
+                or IceNominationPairPhase.InProgress);
+        if (!higherPending)
+            return;
+
+        nominating.NominationGeneration++;
+        nominating.Phase = nominating.Validated ? IceNominationPairPhase.Succeeded : IceNominationPairPhase.Waiting;
     }
 
     private void RaiseNominated(IceLocalCandidate local, IPEndPoint remote)
