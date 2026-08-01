@@ -193,6 +193,9 @@ public sealed class SrtpHardeningTests
     {
         var context = Context();
         var keys = context.SessionKeys;
+        // AuthKey is nullable (AEAD contexts carry none); this HMAC context must have one. Asserting it here
+        // also settles nullability for the two AuthKey reads below (CS8604 under net8/net9 -warnaserror).
+        Assert.NotNull(keys.AuthKey);
         Assert.Contains(keys.CipherKey, b => b != 0);
         Assert.Contains(keys.AuthKey, b => b != 0);
         Assert.Contains(keys.Salt, b => b != 0);
