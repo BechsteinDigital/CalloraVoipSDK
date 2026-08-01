@@ -31,10 +31,14 @@ internal sealed class WebRtcLocalCandidateEmitter
     }
 
     /// <summary>
-    /// Emits the local host candidate for <paramref name="local"/> (the early-bound media endpoint) as an
-    /// RFC 8829 candidate line on the trickle sink.
+    /// Emits the concrete host endpoints represented by the early-bound socket as RFC 8829 candidate lines.
     /// </summary>
-    public void EmitLocalHost(IPEndPoint local) => Emit(WebRtcIceCandidateFactory.LocalHostCandidate(local));
+    public void EmitLocalHosts(IReadOnlyList<IPEndPoint> hostEndPoints)
+    {
+        ArgumentNullException.ThrowIfNull(hostEndPoints);
+        for (var index = 0; index < hostEndPoints.Count; index++)
+            Emit(WebRtcIceCandidateFactory.LocalHostCandidate(hostEndPoints[index], index));
+    }
 
     /// <summary>
     /// Emits a gathered candidate as an RFC 8829 <c>candidate:</c> line on the trickle sink. A no-op when no

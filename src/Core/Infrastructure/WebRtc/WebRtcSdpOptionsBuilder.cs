@@ -33,6 +33,7 @@ internal static class WebRtcSdpOptionsBuilder
     /// <param name="videoTrackId">The peer's stable primary-video a=msid track id.</param>
     public static SdpMediaOptions Build(
         IPEndPoint local,
+        IReadOnlyList<IPEndPoint> hostEndPoints,
         WebRtcPeerOptions options,
         IReadOnlyList<(WebRtcAddedAudioTrack Track, string TrackId, int Order)> addedAudio,
         IReadOnlyList<(WebRtcAddedVideoTrack Track, string TrackId, int Order)> addedVideo,
@@ -40,15 +41,20 @@ internal static class WebRtcSdpOptionsBuilder
         string audioTrackId,
         string videoTrackId)
     {
+        ArgumentNullException.ThrowIfNull(hostEndPoints);
+        // Wildcard is a socket bind policy, not a candidate. The provider expands it into active-interface
+        // addresses that all share this socket's real port (RFC 8445 §5.1.1.1).
+        var candidates = new List<SdpIceCandidate>(options.Ice.Candidates.Count + hostEndPoints.Count);
+        for (var index = 0; index < hostEndPoints.Count; index++)
+            candidates.Add(WebRtcIceCandidateFactory.LocalHostCandidate(hostEndPoints[index], index));
+        candidates.AddRange(options.Ice.Candidates);
+
         var ice = new SdpIceParameters
         {
             Ufrag = options.Ice.Ufrag,
             Pwd = options.Ice.Pwd,
             Options = options.Ice.Options,
-            // Advertise our bound media address as a host candidate (RFC 8839) so the peer can reach us.
-            // Early-bind gives us the real ephemeral port before the session exists, so a host candidate is
-            // always emitted (no more zero-port disabled offer).
-            Candidates = [WebRtcIceCandidateFactory.LocalHostCandidate(local), .. options.Ice.Candidates],
+            Candidates = candidates,
         };
 
         if (options.UseStableNumericMediaIds)

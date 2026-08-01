@@ -29,9 +29,11 @@ internal sealed class IceMediaConsentSession : IAsyncDisposable
     private readonly string _remoteUfrag;
     private readonly string _remotePassword;
     private readonly uint _priority;
-    private readonly bool _controlling;
+    // Mutable after role-conflict resolution; int-backed for atomic cross-thread access.
+    private int _controlling;
     private readonly ulong _tieBreaker;
     private readonly TimeSpan _checkTimeout;
+    private readonly Func<TimeSpan, CancellationToken, Task> _transactionDelay;
     private readonly IceStunTransactionRegistry _registry = new();
     private readonly IceConsentMonitor _monitor;
     private readonly ILogger<IceMediaConsentSession> _logger;
@@ -76,9 +78,10 @@ internal sealed class IceMediaConsentSession : IAsyncDisposable
         _remoteUfrag = remoteUfrag;
         _remotePassword = remotePassword;
         _priority = priority;
-        _controlling = controlling;
+        _controlling = controlling ? 1 : 0;
         _tieBreaker = tieBreaker;
         _checkTimeout = checkTimeout ?? TimeSpan.FromSeconds(2);
+        _transactionDelay = delay ?? Task.Delay;
         _logger = loggerFactory.CreateLogger<IceMediaConsentSession>();
         _monitor = new IceConsentMonitor(
             policy ?? new IceConsentFreshnessPolicy(),
@@ -94,6 +97,9 @@ internal sealed class IceMediaConsentSession : IAsyncDisposable
 
     /// <summary>Starts the consent loop. Idempotent (see <see cref="IceConsentMonitor.Start"/>).</summary>
     public void Start() => _monitor.Start();
+
+    /// <summary>Updates the ICE role used on subsequent checks after role-conflict resolution.</summary>
+    public void SetRole(bool controlling) => Volatile.Write(ref _controlling, controlling ? 1 : 0);
 
     /// <summary>
     /// Redirects consent freshness onto a newly nominated ICE pair (RFC 8445 §8): subsequent consent
@@ -176,17 +182,40 @@ internal sealed class IceMediaConsentSession : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(send);
 
         var (datagram, transactionId) = IceConsentCheckBuilder.Build(
-            _codec, _localUfrag, _remoteUfrag, _remotePassword, _priority, _controlling, _tieBreaker, useCandidate);
+            _codec, _localUfrag, _remoteUfrag, _remotePassword, _priority,
+            Volatile.Read(ref _controlling) != 0, _tieBreaker, useCandidate);
 
         var pending = _registry.AwaitResponseAsync(transactionId, _checkTimeout, ct);
-        try
+        // RFC 8445 §14 / RFC 8489 §6.1: one STUN transaction is retransmitted with the same transaction
+        // id. The checklist scheduler never retries a pair in tight rounds; loss recovery belongs here.
+        var retransmitDelay = TimeSpan.FromMilliseconds(Math.Min(500, _checkTimeout.TotalMilliseconds));
+        for (var transmission = 0; transmission < 3; transmission++)
         {
-            await send(datagram, target, ct).ConfigureAwait(false);
-        }
-        catch (Exception ex) when (!ct.IsCancellationRequested)
-        {
-            _logger.LogDebug(ex, "Failed to send ICE check to {Target}.", target);
-            return false;
+            try
+            {
+                await send(datagram, target, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+                _logger.LogDebug(ex, "Failed to send ICE check transmission {Transmission} to {Target}.", transmission + 1, target);
+            }
+
+            if (pending.IsCompleted || transmission == 2)
+                break;
+
+            var delayTask = _transactionDelay(retransmitDelay, ct);
+            if (await Task.WhenAny(pending, delayTask).ConfigureAwait(false) == pending)
+                break;
+            try
+            {
+                await delayTask.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                return false;
+            }
+
+            retransmitDelay += retransmitDelay;
         }
 
         return await pending.ConfigureAwait(false);

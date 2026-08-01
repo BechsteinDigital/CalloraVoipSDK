@@ -1,4 +1,5 @@
 using System.Net;
+using System.Globalization;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Models;
 
 namespace CalloraVoipSdk.Core.Infrastructure.WebRtc;
@@ -10,14 +11,22 @@ namespace CalloraVoipSdk.Core.Infrastructure.WebRtc;
 /// </summary>
 internal static class WebRtcIceCandidateFactory
 {
+    /// <summary>
+    /// Returns whether a bound endpoint has an address that can be advertised as an ICE host candidate.
+    /// Wildcard bind addresses describe socket ownership, not a peer-reachable interface (RFC 8445 §5.1.1.1),
+    /// so <c>0.0.0.0</c> and <c>::</c> must not enter SDP or trickle signalling.
+    /// </summary>
+    public static bool CanAdvertiseLocalHost(IPEndPoint local) =>
+        !local.Address.Equals(IPAddress.Any) && !local.Address.Equals(IPAddress.IPv6Any);
+
     // A host ICE candidate for the bound local media endpoint (RFC 8445 §5.1.2.1 priority: host type-pref
     // 126, local-pref 65535, RTP component 1). rtcp-mux shares component 1, so no RTCP candidate is needed.
-    public static SdpIceCandidate LocalHostCandidate(IPEndPoint local) => new()
+    public static SdpIceCandidate LocalHostCandidate(IPEndPoint local, int preferenceIndex = 0) => new()
     {
-        Foundation = "1",
+        Foundation = (preferenceIndex + 1).ToString(CultureInfo.InvariantCulture),
         Component = 1,
         Transport = "udp",
-        Priority = (126L << 24) | (65535L << 8) | 255L,
+        Priority = (126L << 24) | ((65535L - Math.Min(preferenceIndex, 65535)) << 8) | 255L,
         Address = local.Address.ToString(),
         Port = local.Port,
         Type = "host",
@@ -25,7 +34,7 @@ internal static class WebRtcIceCandidateFactory
 
     // A server-reflexive candidate for the STUN-discovered public endpoint (RFC 8445 §5.1.2.1 priority:
     // srflx type-pref 100, local-pref 65535, RTP component 1). raddr/rport carry the local base (host).
-    public static SdpIceCandidate ServerReflexiveCandidate(IPEndPoint reflexive, IPEndPoint host) => new()
+    public static SdpIceCandidate ServerReflexiveCandidate(IPEndPoint reflexive, IPEndPoint? host) => new()
     {
         Foundation = "2",
         Component = 1,
@@ -34,14 +43,14 @@ internal static class WebRtcIceCandidateFactory
         Address = reflexive.Address.ToString(),
         Port = reflexive.Port,
         Type = "srflx",
-        RelatedAddress = host.Address.ToString(),
-        RelatedPort = host.Port,
+        RelatedAddress = host is not null && CanAdvertiseLocalHost(host) ? host.Address.ToString() : null,
+        RelatedPort = host is not null && CanAdvertiseLocalHost(host) ? host.Port : null,
     };
 
     // A relay candidate for the TURN-allocated relayed endpoint (RFC 8445 §5.1.2.1 priority: relay type-pref
     // 0, local-pref 65535, RTP component 1). raddr/rport carry the base the relay relates to (RFC 8839): the
     // server-reflexive address from the Allocate response when present, else the local host base.
-    public static SdpIceCandidate RelayCandidate(IPEndPoint relayed, IPEndPoint relatedBase) => new()
+    public static SdpIceCandidate RelayCandidate(IPEndPoint relayed, IPEndPoint? relatedBase) => new()
     {
         Foundation = "3",
         Component = 1,
@@ -50,8 +59,8 @@ internal static class WebRtcIceCandidateFactory
         Address = relayed.Address.ToString(),
         Port = relayed.Port,
         Type = "relay",
-        RelatedAddress = relatedBase.Address.ToString(),
-        RelatedPort = relatedBase.Port,
+        RelatedAddress = relatedBase is not null && CanAdvertiseLocalHost(relatedBase) ? relatedBase.Address.ToString() : null,
+        RelatedPort = relatedBase is not null && CanAdvertiseLocalHost(relatedBase) ? relatedBase.Port : null,
     };
 
     /// <summary>

@@ -8,9 +8,8 @@ namespace CalloraVoipSdk.Core.IntegrationTests;
 /// The controlling agent's dynamic ICE candidate-pair check/nomination driver (RFC 8445 §7.2.2/§8.1.1,
 /// RFC 8838 trickle): it pairs local × remote candidates, nominates the highest pair-priority pair that
 /// actually answers a connectivity check (never blind priority), carries USE-CANDIDATE on the nominating
-/// check, accepts candidates trickled in after start, re-nominates onto a higher-priority working pair, and
-/// never downgrades onto a lower-priority one. Empty sets and non-answering pairs are handled without
-/// nominating.
+/// check, accepts candidates trickled in before nomination, and nominates exactly one pair per ICE generation.
+/// Empty sets and non-answering pairs are handled without nominating.
 /// </summary>
 public sealed class IceNominationDriverTests
 {
@@ -89,6 +88,40 @@ public sealed class IceNominationDriverTests
 
         Assert.Equal(low, await nominated.Task.WaitAsync(TimeSpan.FromSeconds(5)));
         Assert.Equal(1, Volatile.Read(ref highChecksSeenByLow));
+    }
+
+    [Fact]
+    public async Task A_slow_higher_priority_pair_does_not_head_of_line_block_a_working_lower_pair()
+    {
+        var high = Ep(5061);
+        var low = Ep(5062);
+        var highCheck = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var lowCheckStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var nominated = new TaskCompletionSource<IPEndPoint>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        Task<bool> Check(IPEndPoint target, bool _, CancellationToken ct)
+        {
+            if (target.Equals(high))
+                return highCheck.Task.WaitAsync(ct);
+            lowCheckStarted.TrySetResult();
+            return Task.FromResult(true);
+        }
+
+        await using var driver = new IceNominationDriver(
+            [Direct(Check)],
+            [new IceRemoteCandidate(high, Priority: 200), new IceRemoteCandidate(low, Priority: 100)],
+            (_, ep) => nominated.TrySetResult(ep),
+            NullLoggerFactory.Instance,
+            roundDelay: TimeSpan.FromMilliseconds(1));
+
+        driver.Start();
+
+        // The low check starts while the high transaction is still outstanding. Regular nomination correctly
+        // waits for the higher pair to resolve (RFC 8445 §8.1.1), but scheduling has no transaction-level HoL.
+        await lowCheckStarted.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        Assert.False(nominated.Task.IsCompleted);
+        highCheck.TrySetResult(false);
+        Assert.Equal(low, await nominated.Task.WaitAsync(TimeSpan.FromSeconds(1)));
     }
 
     [Fact]
@@ -211,30 +244,27 @@ public sealed class IceNominationDriverTests
     }
 
     [Fact]
-    public async Task A_higher_priority_trickled_candidate_re_nominates()
+    public async Task A_higher_priority_candidate_trickled_after_nomination_requires_an_ice_restart()
     {
         var low = Ep(5202);
         var high = Ep(5201);
         var nominations = new List<IPEndPoint>();
-        var reNominated = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var firstNominated = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         await using var driver = new IceNominationDriver(
             [Direct(Reachable(new HashSet<IPEndPoint> { low, high }, []))],
             [new IceRemoteCandidate(low, Priority: 100)],
-            (_, ep) => { lock (nominations) { nominations.Add(ep); if (ep.Equals(high)) reNominated.TrySetResult(); } },
+            (_, ep) => { lock (nominations) nominations.Add(ep); firstNominated.TrySetResult(); },
             NullLoggerFactory.Instance,
             roundDelay: TimeSpan.FromMilliseconds(5));
 
         driver.Start();
-        // Let the low pair be nominated first, then trickle a higher-priority working pair.
-        await Task.Delay(50);
+        await firstNominated.Task.WaitAsync(TimeSpan.FromSeconds(5));
         driver.AddCandidate(new IceRemoteCandidate(high, Priority: 200));
-
-        await reNominated.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.Delay(100);
         lock (nominations)
         {
-            Assert.Equal(low, nominations[0]);      // highest-priority working pair known at the time
-            Assert.Equal(high, nominations[^1]);    // upgraded onto the higher-priority working pair (§8)
+            Assert.Equal(new[] { low }, nominations); // RFC 8445 §8.1.1: no second nomination in one generation
         }
     }
 
@@ -300,7 +330,7 @@ public sealed class IceNominationDriverTests
 
         Assert.Equal(target, await nominated.Task.WaitAsync(TimeSpan.FromSeconds(5)));
         Assert.True(Volatile.Read(ref useCandidateAttempts) >= 3); // it retried the nominating check until confirmed
-        Assert.True(Volatile.Read(ref ordinaryChecks) >= 3);       // and re-validated the pair before each retry
+        Assert.Equal(1, Volatile.Read(ref ordinaryChecks));        // pair validation is retained across nomination retries
         await Task.Delay(50);                                       // give any erroneous second nomination a chance to fire
         Assert.Equal(1, Volatile.Read(ref nominations));           // nominated exactly once, only after confirmation
     }
