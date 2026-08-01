@@ -205,9 +205,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         _relayAllocation = new WebRtcRelayAllocationStore(_loggerFactory);
         // The config primary video count (0 or 1) is fixed for the peer's lifetime, so the added-track set can do
         // the numeric-MID arithmetic without re-reading _options; it captures it once here.
-        _addedTracks = new WebRtcAddedTrackSet(
-            _options.VideoTracks.Count,
-            _options.UseStableNumericMediaIds);
+        _addedTracks = new WebRtcAddedTrackSet(_options.VideoTracks.Count);
         _trickleIce = new WebRtcTrickleIceReceiver(_mdnsResolver, _mdnsLifetime.Token, _logger);
         // Snapshot the public event on each emission so a late subscriber is honoured and the current handler
         // is captured atomically (the event field may be reassigned between candidates).

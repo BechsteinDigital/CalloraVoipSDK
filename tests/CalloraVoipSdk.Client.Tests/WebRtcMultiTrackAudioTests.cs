@@ -112,10 +112,12 @@ public sealed class WebRtcMultiTrackAudioTests
         Assert.Equal(["0", "1", "2"], MidsInOrder(offer));
     }
 
-    // 4.7.0: added-audio m-lines precede the video m-lines, so an added audio track SHIFTS the primary video's
-    // numeric MID up by one — proving the offer's m-line order is audio(0), added-audio(1), video(2).
+    // 4.7.2: runtime tracks take stable append-only numeric MIDs in global call order, independent of kind
+    // (RFC 8829 — an existing m-line never moves or changes MID). Primary audio (0) and primary video (1) keep
+    // their MIDs; an added audio then an added video get 2 and 3 in that order. Pre-4.7.2 the grouped layout put
+    // both audios first and both videos last, which drifted a track's MID when the other kind was added later.
     [Fact]
-    public async Task Added_audio_precedes_video_and_shifts_the_video_mid()
+    public async Task Added_tracks_take_stable_append_only_mids_in_call_order()
     {
         var rtc = AudioClient(enableVideo: true);   // EnableVideo primary video present
         await using var peer = rtc.CreatePeer();
@@ -124,8 +126,8 @@ public sealed class WebRtcMultiTrackAudioTests
         var extraVideo = peer.AddVideoTrack();
         var offer = peer.CreateOffer();
 
-        Assert.Equal("1", extraAudio.Mid);   // audio(0), added-audio(1)
-        Assert.Equal("3", extraVideo.Mid);   // primary video(2), added video(3)
+        Assert.Equal("2", extraAudio.Mid);   // primary audio(0), primary video(1), first added track=2
+        Assert.Equal("3", extraVideo.Mid);   // second added track=3
         Assert.Equal(2, CountMediaLines(offer, "audio"));
         Assert.Equal(2, CountMediaLines(offer, "video"));
         Assert.Equal(["0", "1", "2", "3"], MidsInOrder(offer));

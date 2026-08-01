@@ -418,6 +418,8 @@ internal sealed class BundledVideoTrack : IDisposable
         }
 
         var lane = LayerFor(rid);
+        if (lane is null)
+            return;
 
         // Primary arrival: remember the remote media SSRC so a recovered RTX packet can be stamped with it.
         // Single field track-wide — RTX is non-simulcast, so on a simulcast receive this is overwritten by the
@@ -438,16 +440,30 @@ internal sealed class BundledVideoTrack : IDisposable
     // Resolves the reassembly lane for a resolved RID: null → the default lane; a RID → its lane, built lazily
     // on first sighting (a browser stamps the RID extension only on the first packets of each encoding). Safe
     // as a plain dictionary because OnRtpPacket is single-consumer (see the class remarks).
-    private BundledVideoInboundLayer LayerFor(string? rid)
+    // DoS cap on distinct inbound RID lanes (ENGINEERING_RULES.md §132-133). With the RID extension negotiated
+    // an authenticated peer can stamp a fresh RID on every packet; each new RID here allocates a depacketiser
+    // and a reorder buffer, so an unbounded lane map exhausts process memory. Legitimate simulcast uses a
+    // handful of encodings, so cap the lanes generously and drop packets for further RIDs.
+    private const int MaxInboundRidLanes = 8;
+
+    // Resolves the reassembly lane for a resolved RID, or null when the RID is new and the lane cap is reached
+    // (caller drops the packet). A known RID or the default (null) lane always resolves.
+    private BundledVideoInboundLayer? LayerFor(string? rid)
     {
         if (rid is null)
             return _defaultLane;
-        if (!_ridLayers.TryGetValue(rid, out var lane))
+        if (_ridLayers.TryGetValue(rid, out var lane))
+            return lane;
+        if (_ridLayers.Count >= MaxInboundRidLanes)
         {
-            lane = new BundledVideoInboundLayer(
-                rid, VideoPayloadFormat.Create(_codecName).Depacketiser, new VideoReorderBuffer(_reorderWindowDepth));
-            _ridLayers[rid] = lane;
+            _logger.LogWarning(
+                "Bundled video RID lane cap {Cap} reached; dropping packet for rid '{Rid}' (RFC 8853 recv-side simulcast).",
+                MaxInboundRidLanes, rid);
+            return null;
         }
+        lane = new BundledVideoInboundLayer(
+            rid, VideoPayloadFormat.Create(_codecName).Depacketiser, new VideoReorderBuffer(_reorderWindowDepth));
+        _ridLayers[rid] = lane;
         return lane;
     }
 

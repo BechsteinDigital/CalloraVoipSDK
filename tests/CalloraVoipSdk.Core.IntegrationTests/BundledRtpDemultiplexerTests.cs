@@ -204,4 +204,32 @@ public sealed class BundledRtpDemultiplexerTests
         Assert.False(SimulcastDemuxer().TryResolveRid(RidPacket(ssrc: 300, pt: 96), out var rid));
         Assert.Equal(string.Empty, rid);
     }
+
+    // ---- DoS caps on the learned SSRC tables (4.7.2 review finding, ENGINEERING_RULES §132-133) ----
+
+    [Fact]
+    public void The_learned_ssrc_mid_table_is_dos_capped()
+    {
+        // An authenticated peer stamping a fresh SSRC on every packet must not grow the learned table without
+        // bound. Above the cap (256) a new SSRC resolves for its packet but is not latched.
+        var demux = Demuxer();
+        for (uint ssrc = 1; ssrc <= 256; ssrc++)
+            Assert.True(demux.TryResolveMid(Packet(ssrc, 96, "video"), out _));
+
+        Assert.True(demux.TryResolveMid(Packet(1000, 96, "video"), out var mid)); // resolves via the MID ext
+        Assert.Equal("video", mid);
+        Assert.False(demux.TryResolveBySsrc(1000, out _));                        // but was not latched
+    }
+
+    [Fact]
+    public void The_learned_ssrc_rid_table_is_dos_capped()
+    {
+        var demux = SimulcastDemuxer();
+        for (uint ssrc = 1; ssrc <= 256; ssrc++)
+            Assert.True(demux.TryResolveRid(RidPacket(ssrc, 96, "e"), out _));
+
+        Assert.True(demux.TryResolveRid(RidPacket(1000, 96, "overflow"), out var rid)); // resolves via the RID ext
+        Assert.Equal("overflow", rid);
+        Assert.False(demux.TryResolveRid(RidPacket(1000, 96), out _));                  // but was not latched
+    }
 }

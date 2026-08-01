@@ -36,6 +36,12 @@ internal sealed class BundledRtpDemultiplexer
     // the receive loop. Populated only by TryResolveRid, which no dispatch path calls yet (4.7.0 slice 1).
     private readonly ConcurrentDictionary<uint, string> _ssrcToRid = new();
 
+    // DoS cap on learned SSRC associations (ENGINEERING_RULES.md §132-133). An authenticated peer can stamp a
+    // fresh SSRC on every packet; without a bound both learned tables grow until memory is exhausted. Real
+    // sessions latch a small number of SSRCs (a few tracks × encodings), so the cap is generous. Checked only
+    // on the cold first-sighting path — an already-latched SSRC resolves earlier via TryGetValue.
+    private const int MaxLearnedSsrcs = 256;
+
     /// <summary>
     /// Creates the demultiplexer from the negotiated BUNDLE parameters.
     /// </summary>
@@ -138,14 +144,14 @@ internal sealed class BundledRtpDemultiplexer
                 return false;
             }
 
-            mid = _ssrcToMid.GetOrAdd(ssrc, readMid);
+            mid = LatchLearned(_ssrcToMid, ssrc, readMid);
             return true;
         }
 
         // 3. Payload type unambiguously owned by one m-line.
         if (_payloadTypeToMid.TryGetValue(payloadType, out var ptMid))
         {
-            mid = _ssrcToMid.GetOrAdd(ssrc, ptMid);
+            mid = LatchLearned(_ssrcToMid, ssrc, ptMid);
             return true;
         }
 
@@ -209,11 +215,21 @@ internal sealed class BundledRtpDemultiplexer
         if (_ridExtensionId is { } ridId
             && RtpRidHeaderExtension.TryRead(headerExtension, ridId, out var readRid))
         {
-            rid = _ssrcToRid.GetOrAdd(ssrc, readRid);
+            rid = LatchLearned(_ssrcToRid, ssrc, readRid);
             return true;
         }
 
         rid = string.Empty;
         return false;
+    }
+
+    // Latches an SSRC→token association, honouring the DoS cap (see MaxLearnedSsrcs). At the cap a new SSRC
+    // resolves for this packet without retaining an entry, so the table cannot grow without bound. Count is
+    // read only on the cold first-sighting path; an already-latched SSRC resolved earlier via TryGetValue.
+    private static string LatchLearned(ConcurrentDictionary<uint, string> table, uint ssrc, string value)
+    {
+        if (table.Count >= MaxLearnedSsrcs && !table.ContainsKey(ssrc))
+            return value;
+        return table.GetOrAdd(ssrc, value);
     }
 }

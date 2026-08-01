@@ -4,10 +4,11 @@ namespace CalloraVoipSdk.Core.Infrastructure.WebRtc;
 /// Owns the tracks a consumer adds to a <see cref="WebRtcPeerConnection"/> at runtime via the public
 /// <c>AddAudioTrack</c>/<c>AddVideoTrack</c> surface (4.7.0 N-audio / P2c N-video), extracted from the peer to
 /// keep it under the file-size limit. Each added track carries a stable per-track <c>a=msid</c> track id and a
-/// numeric MID derived from its m-line index (RFC 8843). Compatibility mode retains the historic grouped order
-/// (primary audio, added audio, primary video, added video). Stable mode reserves the primary audio/video MIDs
-/// from the first offer and appends every added track in API call order. The selected order is the single source
-/// of truth for both assigned MIDs and the <see cref="WebRtcSdpOptionsBuilder"/> offer, so the two never drift.
+/// stable, append-only numeric MID: the primary audio/video MIDs are reserved from the first offer and every
+/// runtime track is appended in API call order (RFC 8829 — an existing m-line never moves or changes MID). The
+/// MID is independent of the track's kind, so a video added before an audio can never collide with it. The call
+/// order is the single source of truth for both assigned MIDs and the <see cref="WebRtcSdpOptionsBuilder"/>
+/// offer, so the two never drift.
 /// </summary>
 /// <remarks>
 /// Thread-safe by its own lock: the peer no longer holds its <c>_sync</c> across these calls, because the added
@@ -19,25 +20,22 @@ internal sealed class WebRtcAddedTrackSet
 {
     private readonly object _gate = new();
     private readonly int _primaryVideoCount;
-    private readonly bool _useStableNumericMediaIds;
     private readonly List<(WebRtcAddedAudioTrack Track, string TrackId, int Order)> _audio = [];
     private readonly List<(WebRtcAddedVideoTrack Track, string TrackId, int Order)> _video = [];
     private int _nextOrder;
 
     /// <summary>
     /// Creates the set for a peer whose config offers <paramref name="primaryVideoCount"/> primary video
-    /// m-lines (0 or 1). Stable numeric mode appends every runtime track after those primary m-lines in the
-    /// exact API call order; compatibility mode retains the historic audio-before-video indexing.
+    /// m-lines (0 or 1). Every runtime track is appended after those primary m-lines in the exact API call
+    /// order and keeps its MID for the session's lifetime (RFC 8829).
     /// </summary>
-    public WebRtcAddedTrackSet(int primaryVideoCount, bool useStableNumericMediaIds = false)
+    public WebRtcAddedTrackSet(int primaryVideoCount)
     {
         _primaryVideoCount = primaryVideoCount;
-        _useStableNumericMediaIds = useStableNumericMediaIds;
     }
 
     /// <summary>
-    /// Records an added audio track and returns its numeric MID. Compatibility mode places added audio directly
-    /// after primary audio; stable mode appends it after every primary m-line and earlier runtime track.
+    /// Records an added audio track and returns its stable append-only numeric MID (see <see cref="AppendedMid"/>).
     /// </summary>
     public string AddAudio(WebRtcAddedAudioTrack track)
     {
@@ -45,17 +43,12 @@ internal sealed class WebRtcAddedTrackSet
         {
             var order = _nextOrder++;
             _audio.Add((track, Guid.NewGuid().ToString("N"), order));
-            var mid = _useStableNumericMediaIds
-                ? 1 + _primaryVideoCount + order
-                : _audio.Count;
-            return mid.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            return AppendedMid(order);
         }
     }
 
     /// <summary>
-    /// Records an added video track and returns its numeric MID. Compatibility mode groups it after primary
-    /// audio, added audio, and primary video; stable mode appends it after every primary m-line and earlier
-    /// runtime track.
+    /// Records an added video track and returns its stable append-only numeric MID (see <see cref="AppendedMid"/>).
     /// </summary>
     public string AddVideo(WebRtcAddedVideoTrack track)
     {
@@ -63,12 +56,16 @@ internal sealed class WebRtcAddedTrackSet
         {
             var order = _nextOrder++;
             _video.Add((track, Guid.NewGuid().ToString("N"), order));
-            var index = _useStableNumericMediaIds
-                ? 1 + _primaryVideoCount + order
-                : 1 + _audio.Count + _primaryVideoCount + (_video.Count - 1);
-            return index.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            return AppendedMid(order);
         }
     }
+
+    // The MID of the runtime track added at the given global call order: primary audio (MID 0), the primary
+    // video(s), then every appended track by call order (RFC 8829 append-only). Independent of the track kind,
+    // so mixing audio/video add order can never produce a duplicate or shifting MID (the pre-4.7.2 grouped
+    // layout could — a video added before an audio drifted onto the audio's MID).
+    private string AppendedMid(int order) =>
+        (1 + _primaryVideoCount + order).ToString(System.Globalization.CultureInfo.InvariantCulture);
 
     /// <summary>A point-in-time snapshot of the added audio tracks in insertion order (for the offer builder / diff).</summary>
     public (WebRtcAddedAudioTrack Track, string TrackId, int Order)[] SnapshotAudio()
