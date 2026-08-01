@@ -8,6 +8,50 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
 
 The next line. Entries here accumulate the consumer-visible changes not yet released.
 
+## [4.7.2] - 2026-08-01
+
+ICE connection-setup latency patch. The internal connectivity-check scheduler is reworked so a call reaches a
+working candidate pair faster, especially when a higher-priority candidate is unreachable. **Internal to the
+ICE agent — no public API, SDP or wire change** (`PublicApi.approved.txt` unchanged); a peer that connected in
+4.7.1 behaves identically, only sooner. See `RELEASE_NOTES_4.7.2.md` and ADR-062 for detail.
+
+### Fixed
+
+- **ICE connectivity checks are globally paced and overlapping instead of serial.** Checks previously ran one
+  pair at a time, each fully awaited before the next, so an unreachable high-priority pair blocked every other
+  pair behind its full timeout. Checks now start at most one per pacing interval (RFC 8445 §14 `Ta`) but run
+  concurrently — a dead pair no longer delays reachable ones.
+- **STUN checks retransmit at the transaction level (RFC 8489 §6.1).** A lost check recovers in hundreds of
+  milliseconds instead of waiting out the full 2 s check timeout before the pair is retried.
+- **Both ICE roles run ordinary connectivity checks (RFC 8445 §7.2);** only the controlling role nominates. The
+  controlled agent no longer waits passively for the peer's nomination before validating pairs.
+- **Peer-reflexive triggered checks (RFC 8445 §7.3.1.4) preempt ordinary work and dispatch reactively,** no
+  longer gated on the local checklist's own start; a check from the signalled remote is not re-triggered.
+- **Inbound ICE role conflicts (RFC 8445 §7.3.1.1) re-compute pair priorities and redirect nomination** to the
+  resolved role.
+- **Build under net8.0 / net9.0** — a nullable-reference warning in `SrtpHardeningTests` was an error under
+  `-warnaserror` on those target frameworks. Test-only, no runtime change.
+
+## [4.7.1] - 2026-07-31
+
+WebRTC/SFU correctness patch for the 4.7 line. Additive and transport-only — a peer that uses none of the 4.7
+features negotiates byte-identical SDP to 4.6. Full detail in `RELEASE_NOTES_4.7.1.md`.
+
+### Added
+
+- **`WebRtcConfiguration.UseStableNumericMediaIds`** — opt-in numeric media IDs that preserve already-negotiated
+  m-line identity across RFC 8829 renegotiation, flowing through configuration, options, mappings and the public
+  API baseline.
+
+### Fixed
+
+- **Stable browser-safe MIDs** during renegotiation — runtime audio/video tracks append in insertion order and
+  keep already-negotiated m-line identity.
+- **Outbound additional audio** — a local `sendonly` audio track accepted as `recvonly` by the browser now gets
+  a live bundle sender instead of failing with "no additional audio track with MID".
+- **ICE pair progression** — a lower-priority reachable candidate is checked before an unreachable
+  higher-priority candidate consumes another retry round (extended into a full checklist in 4.7.2).
+
 ## [4.7.0] - 2026-07-29
 
 The 4.7 line builds multi-party / SFU enablement onto the WebRTC facade: **multiple video tracks** with

@@ -104,6 +104,8 @@
       href: ADR-041-consent-freshness-and-ice-restart-primitives.md
     - name: "ADR-042: ICE Verification Discipline and Shared-Socket srflx Gathering"
       href: ADR-042-ice-verification-and-shared-socket-gathering.md
+    - name: "ADR-062: Globally Paced, Overlapping ICE Connectivity-Check Checklist"
+      href: ADR-062-ice-checklist-pacing.md
 - name: "Video Media Path"
   items:
     - name: "ADR-043: Video SDP Offer/Answer Negotiation (m=video, rtcp-fb, RTX/apt)"
