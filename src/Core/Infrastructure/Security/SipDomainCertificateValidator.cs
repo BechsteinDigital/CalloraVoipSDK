@@ -1,5 +1,6 @@
 using System.Formats.Asn1;
 using System.Globalization;
+using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Security;
@@ -51,6 +52,11 @@ internal static class SipDomainCertificateValidator
     /// </summary>
     private const string SubjectAlternativeNameOid = "2.5.29.17";
 
+    // Extended Key Usage OIDs relevant to SIP domain certificates (RFC 5924 §5): id-kp-sipDomain and
+    // anyExtendedKeyUsage (RFC 5280 §4.2.1.12).
+    private const string SipDomainEkuOid = "1.3.6.1.5.5.7.3.20";
+    private const string AnyExtendedKeyUsageOid = "2.5.29.37.0";
+
     // GeneralName CHOICE context-specific tags (RFC 5280 §4.2.1.6): dNSName [2] and
     // uniformResourceIdentifier [6], both IA5String with implicit tagging.
     private static readonly Asn1Tag DnsNameTag = new(TagClass.ContextSpecific, 2);
@@ -95,6 +101,11 @@ internal static class SipDomainCertificateValidator
 
         var normalizedDomain = NormalizeDomain(sipDomain);
         if (string.IsNullOrEmpty(normalizedDomain))
+            return false;
+
+        // RFC 5924 §5: a present EKU extension must authorize SIP domain use, otherwise the certificate
+        // is not a SIP domain certificate regardless of its SAN.
+        if (!SatisfiesSipExtendedKeyUsage(certificate))
             return false;
 
         var sanExtension = certificate.Extensions[SubjectAlternativeNameOid];
@@ -291,6 +302,46 @@ internal static class SipDomainCertificateValidator
     {
         var normalizedSan = NormalizeDomain(dnsName);
         return normalizedSan.Length > 0 && normalizedSan == normalizedDomain;
+    }
+
+    /// <summary>
+    /// Applies the RFC 5924 §5 Extended Key Usage policy for SIP domain certificates: an absent EKU
+    /// extension imposes no restriction (accepted per local policy); a present EKU authorizes SIP domain
+    /// use only if it contains <c>id-kp-sipDomain</c> or <c>anyExtendedKeyUsage</c>. Any other present-only
+    /// EKU set, or a malformed EKU, fails closed.
+    /// </summary>
+    private static bool SatisfiesSipExtendedKeyUsage(X509Certificate2 certificate)
+    {
+        X509EnhancedKeyUsageExtension? eku = null;
+        foreach (var extension in certificate.Extensions)
+        {
+            if (extension is X509EnhancedKeyUsageExtension typed)
+            {
+                eku = typed;
+                break;
+            }
+        }
+
+        // RFC 5280 §4.2.1.12: an absent EKU imposes no usage restriction.
+        if (eku is null)
+            return true;
+
+        try
+        {
+            foreach (var oid in eku.EnhancedKeyUsages)
+            {
+                if (oid.Value is SipDomainEkuOid or AnyExtendedKeyUsageOid)
+                    return true;
+            }
+        }
+        catch (CryptographicException)
+        {
+            // A malformed EKU extension cannot be shown to authorize SIP domain use — fail closed.
+            return false;
+        }
+
+        // EKU present but restricted to purposes other than SIP domain / anyExtendedKeyUsage.
+        return false;
     }
 
     /// <summary>
