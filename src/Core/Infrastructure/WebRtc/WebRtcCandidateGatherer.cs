@@ -28,7 +28,7 @@ internal sealed class WebRtcCandidateGatherer(
     /// <param name="serverEndPoint">The resolved TURN server transport address.</param>
     /// <param name="allocation">The TURN Allocate result (relayed endpoint, mapped base, credentials).</param>
     /// <param name="host">The bound local host endpoint (the relay's base fallback).</param>
-    public delegate IPEndPoint RelayGatheredCallback(
+    public delegate IPEndPoint? RelayGatheredCallback(
         IPEndPoint serverEndPoint, TurnAllocateResult allocation, IPEndPoint host);
 
     /// <summary>
@@ -137,6 +137,16 @@ internal sealed class WebRtcCandidateGatherer(
         // else the host base. Keeping that decision on the peer preserves the exact _gatheredRelay/_session
         // semantics; this gatherer only sequences the wire steps.
         var relatedBase = onRelayGathered(serverEndPoint, allocation, relatedHost);
+        if (relatedBase is null)
+        {
+            // First-wins: this later TURN server's allocation was not retained/bound. Advertising a relay
+            // candidate for it would let ICE nominate an unusable, unbound relay path (#155 P1-3). The surplus
+            // allocation is left to expire at its lifetime — an immediate Refresh(0) teardown needs a control
+            // client the one-shot TurnAllocationProbe does not hold; tracked as a follow-up.
+            logger.LogDebug(
+                "TURN server {Host}: allocation not retained (first-wins); no relay candidate advertised.", server.Host);
+            return;
+        }
         onCandidate(WebRtcIceCandidateFactory.RelayCandidate(allocation.RelayedEndPoint, relatedBase));
     }
 }

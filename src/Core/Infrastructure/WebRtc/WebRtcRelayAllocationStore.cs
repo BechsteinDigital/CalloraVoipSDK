@@ -66,8 +66,12 @@ internal sealed class WebRtcRelayAllocationStore
     /// <param name="allocation">The gathered allocation.</param>
     /// <param name="local">The host base to fall back to when the server reported no mapped address.</param>
     /// <param name="sessionSnapshot">Snapshots the peer's current media session (adopt target), or null.</param>
-    /// <returns>The raddr/rport base for the relay candidate: the mapped (server-reflexive) base, else the host base.</returns>
-    public IPEndPoint OnGathered(
+    /// <returns>
+    /// The raddr/rport base for the relay candidate (the mapped server-reflexive base, else the host base), or
+    /// <see langword="null"/> when this allocation is <em>not</em> retained (first-wins): the caller then drops
+    /// the surplus candidate rather than advertising an unbound, unusable relay path (#155 P1-3).
+    /// </returns>
+    public IPEndPoint? OnGathered(
         IPEndPoint serverEndPoint,
         TurnAllocateResult allocation,
         IPEndPoint local,
@@ -79,15 +83,23 @@ internal sealed class WebRtcRelayAllocationStore
         ArgumentNullException.ThrowIfNull(sessionSnapshot);
 
         BundledMediaSession? adoptInto = null;
+        bool adopted;
         lock (_sync)
         {
-            if (_gathered is null)
+            adopted = _gathered is null;
+            if (adopted)
             {
                 _gathered = (serverEndPoint, allocation);
                 // Read the adopt target inside the latch so a concurrent build cannot slip between latch and read.
                 adoptInto = sessionSnapshot();
             }
         }
+
+        // First-wins: a later TURN server's allocation is neither retained nor bound to a send path, so signal
+        // the caller (null) to drop its candidate — ICE must never be offered a relay candidate without a live
+        // relay binding, or it could nominate a dead path (#155 P1-3).
+        if (!adopted)
+            return null;
 
         // Adopt outside the lock: AdoptRelay builds the TURN control stack and takes the ICE driver's own gate.
         // AdoptRelay is idempotent, so a session that already wired a relay (it should not on the answerer, but
