@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-062: Globally Paced, Overlapping ICE Connectivity-Check Checklist | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-062: Globally Paced, Overlapping ICE Connectivity-Check Checklist | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-062-ice-checklist-pacing.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-062-globally-paced-overlapping-ice-connectivity-check-checklist">ADR-062: Globally Paced, Overlapping ICE Connectivity-Check Checklist</h1>
+
+<p>Status: Accepted
+Date: 2026-08-01</p>
+<h2 id="context">Context</h2>
+<p>The bundled WebRTC media leg runs ICE connectivity checks over the shared media socket after the transport's
+receive loop is up (<code>IceMediaAttachment</code> → <code>IceNominationDriver</code> → <code>IceMediaConsentSession</code>, RFC 8445 §7).
+Until 4.7.1 the controlling agent drove those checks as a single background loop:</p>
+<ul>
+<li>it selected one candidate pair, <code>await</code>ed its ordinary connectivity check to completion, and on success
+<code>await</code>ed a second USE-CANDIDATE check — strictly <strong>one pair at a time</strong>;</li>
+<li>between attempts it slept a fixed round delay (200 ms);</li>
+<li>the check primitive (<code>IceMediaConsentSession.SendCheckAsync</code>) sent the request <strong>once</strong> and waited out the
+full check timeout (2 s) on loss — there was no transaction-level retransmission;</li>
+<li>only the <strong>controlling</strong> agent checked; the controlled agent waited passively to adopt the peer's nomination.</li>
+</ul>
+<p>The consequence is a latency bug in exactly the case ICE exists for. When the highest-priority pair is
+unreachable (a host address on an unroutable interface, a server-reflexive candidate behind a symmetric NAT),
+the serial loop spends that pair's entire timeout budget before the next pair — often the one that actually
+works — gets its first check. A single lost packet compounds it: with no retransmission, the pair waits the
+2 s timeout, then retries a whole round later. Real setup times of several seconds were observed on networks
+where a reachable relay or srflx pair sat behind an unreachable host pair. 4.7.1 softened the ordering (check a
+lower-priority reachable pair before an unreachable higher-priority one burns another round) but kept the
+serial, non-retransmitting core.</p>
+<p>The crux: connectivity checks are independent STUN transactions that should progress <strong>in parallel</strong> under a
+global rate limit, and loss recovery belongs inside each transaction — not in a coarse per-pair retry loop.
+RFC 8445 already specifies exactly this shape (§6.1.4 pacing, §14 <code>Ta</code>, §7.2.5 validation, §8 nomination), and
+RFC 8489 §6.1 specifies the retransmission schedule.</p>
+<h2 id="decision">Decision</h2>
+<p>Replace the serial loop with a bounded, phase-driven checklist whose check <em>starts</em> are globally paced while
+the transactions themselves overlap.</p>
+<ol>
+<li><strong><code>IceConnectivityCheckPacer</code></strong> — one bounded scheduler per media attachment. It starts at most one check
+per pacing interval (<code>Ta</code>, default 50 ms) but tracks each started transaction as in-flight and does not
+await it before starting the next. Work is classified <code>Triggered</code> &gt; <code>Nomination</code> &gt; <code>Ordinary</code> (RFC 8445
+§6.1.4.2, §7.3.1.4): triggered checks are FIFO and preempt everything, nomination and ordinary work are
+ordered by pair priority. The queue is DoS-bounded (512 default) and the drain loop <strong>self-starts</strong> on first
+enqueue, so a reactive triggered check learned off the receive loop dispatches even before <code>Start()</code>.</li>
+<li><strong>Explicit checklist phases</strong> — <code>IceNominationPairPhase</code> (<code>Frozen → Waiting → InProgress → Succeeded / Failed → Nominating → Nominated</code>) on each <code>IceNominationPairState</code>, replacing the previous <code>Attempts</code> /
+<code>Done</code> counters. Selection and nomination are pure functions of phase + pair priority.</li>
+<li><strong>Transaction-level retransmission</strong> — <code>IceMediaConsentSession.SendCheckAsync</code> retransmits the request with
+the <strong>same</strong> transaction id on an RFC 8489 §6.1 schedule (bounded to 3 transmissions within the check
+timeout) instead of relying on a per-pair retry. The checklist scheduler no longer owns loss recovery.</li>
+<li><strong>Both roles check; only controlling nominates</strong> — every agent runs ordinary checks (RFC 8445 §7.2). The
+controlling role additionally performs regular nomination (§8.1.1). Role conflicts (§7.3.1.1) re-compute all
+pair priorities via <code>SetRole</code> and redirect an in-flight nomination.</li>
+<li><strong>Regular nomination, gated on a settled checklist</strong> — the highest-priority <em>validated</em> pair is nominated
+only once no higher-priority pair is still <code>Frozen</code>/<code>Waiting</code>/<code>InProgress</code>. First nomination wins for the
+ICE generation; a later path change requires an ICE restart, not a second unnegotiated USE-CANDIDATE.</li>
+</ol>
+<h2 id="consequences">Consequences</h2>
+<ul>
+<li><strong>Faster, loss-tolerant setup.</strong> Reachable pairs are no longer serialised behind an unreachable pair's
+timeout; ordinary loss recovers in hundreds of milliseconds. This is the intended fix.</li>
+<li><strong>No public surface change.</strong> The rework is entirely within <code>Infrastructure/Stun/Ice</code>; <code>PublicApi.approved.txt</code>
+is unchanged and negotiated SDP/wire behaviour is byte-identical. Existing ICE tests plus new pacer,
+triggered-check and late-candidate tests cover it; the full suite is green across net8/net9/net10.</li>
+<li><strong>A bounded nomination latency floor remains, by choice.</strong> Because nomination waits for higher-priority pairs
+to resolve, an unreachable high-priority pair still adds its (now bounded, ~2 s worst-case) transaction budget
+before a lower validated pair is nominated. This is marked <code>// DECISION</code> at the gate in <code>IceNominationDriver</code>.</li>
+<li><strong>Hot-path hardening.</strong> The pair's send path and target are snapshotted under the driver lock before each
+check, so a concurrent priority upgrade of a struct <code>IceRemoteCandidate</code> cannot tear the read.</li>
+</ul>
+<h2 id="alternatives-considered">Alternatives considered</h2>
+<ul>
+<li><strong>Aggressive nomination (RFC 8445 §8.1.1, last paragraph)</strong> — nominate the first validated pair immediately,
+carrying USE-CANDIDATE on the ordinary check. Lower setup latency, but it can lock onto a suboptimal pair
+(a working relay adopted before a better direct pair is even checked) and offers no clean re-selection under
+regular nomination semantics. Rejected for now; the paced overlap already removes most of the serial latency
+while keeping pair optimality. Revisit if field data shows the nomination floor dominates real setup time.</li>
+<li><strong>Keep the serial loop, only add retransmission.</strong> Fixes the loss case but not the head-of-line blocking of a
+reachable pair behind an unreachable higher-priority one. Insufficient.</li>
+</ul>
+<h2 id="review-finding-follow-ups-472">Review-finding follow-ups (4.7.2)</h2>
+<p>A pre-release review of the branch surfaced three ICE issues, all fixed within this design:</p>
+<ul>
+<li><strong>Superseded nomination.</strong> A trickled pair that outranks the one already queued for nomination now bumps that
+pair's nomination generation (<code>CancelSupersededNominationLocked</code>), making the in-flight USE-CANDIDATE a no-op,
+so the higher pair is checked and the driver still selects the highest-priority <em>validated</em> pair. Without it,
+the pacer (which runs nomination ahead of ordinary checks) let the lower pair win the race and lock
+<code>_nominated</code> before the better pair was ever checked.</li>
+<li><strong>Priority-capped checklist.</strong> At the <code>_maxPairs</code> DoS cap the checklist now evicts its lowest-priority
+evictable pair (never a validated / in-flight / nominated one) when the newcomer outranks it, instead of
+dropping newcomers first-come-first-served. SDP/trickle order is remote-controlled, so FIFO retention could
+exclude a later top-priority candidate entirely. Mirrors SIPSorcery's sorted-checklist eviction.</li>
+<li><strong>Type-scoped candidate foundations (RFC 8445 §5.1.1.3).</strong> Host foundations are <code>h1</code>, <code>h2</code>, …, distinct from
+the fixed srflx (<code>s1</code>) and relay (<code>r1</code>) foundations. The previous numeric scheme let a multi-homed second host
+candidate collide with srflx's foundation, which can wrongly hold a peer's NAT/relay fallback in one frozen
+group. Exposed by the new multi-homed <code>SystemWebRtcHostCandidateProvider</code> (a single host candidate never
+collided).</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-062-ice-checklist-pacing.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -622,6 +622,26 @@
     },
     {
       "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-062-ice-checklist-pacing.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-062-ice-checklist-pacing.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-063-jsep-append-only-track-mids.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-063-jsep-append-only-track-mids.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
       "source_relative_path": "docs/adr/README.md",
       "output": {
         ".html": {
