@@ -47,6 +47,20 @@ Review findings (correctness & hardening):
 - **Recv-side simulcast RID lanes and the learned SSRC→MID/RID tables are DoS-capped** (RFC 8853 /
   ENGINEERING_RULES §132-133): an authenticated peer stamping a fresh RID/SSRC on every packet can no longer
   exhaust process memory.
+TURN hardening (review #155):
+
+- **Distinct remote-candidate IPs and TURN permissions are hard-capped** (256): an authenticated peer can no
+  longer trickle unbounded unique IPs to grow the permission state and CreatePermission traffic without bound.
+- **`MaxTotalAllocations` is enforced atomically** under the registry mutation gate, so concurrent Allocate
+  requests cannot each observe the same free slot and overshoot the quota; a lost race disposes the provisional
+  relay socket and returns 486.
+- **Only the retained (bound) TURN relay candidate is advertised** — a later TURN server's allocation no longer
+  yields an unbound relay candidate ICE could nominate as a dead path (RFC 8656).
+- **ChannelData over TCP/TLS is 4-byte aligned** (RFC 8656 §12.5) on send and de-padded on read, so a payload
+  length not a multiple of 4 no longer desyncs the stream.
+- **Expired allocations are removed instance-exact** (compare-and-remove), so a stale sweep cannot delete a
+  replacement that reused the key; relay tasks are drained before their socket is disposed.
+
 - **Build under net8.0 / net9.0** — a nullable-reference warning in `SrtpHardeningTests` was an error under
   `-warnaserror` on those target frameworks. Test-only, no runtime change.
 
