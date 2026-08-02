@@ -114,6 +114,55 @@ public sealed class Issue159SipTlsTrustTests
     }
 
     [Fact]
+    public void Name_mismatch_is_rescued_by_a_matching_sip_domain_identity()
+    {
+        // RFC 5922 §7.3: a URI-only (or non-matching-dNSName) SIP identity trips the standard
+        // hostname check; a successful strict RFC 5922 match must rescue that pure name mismatch.
+        using var cert = SelfSigned();
+        var (accepted, _) = SipTlsServerTrustEvaluator.Evaluate(
+            SipTlsTrustMode.System, "example.com", cert,
+            SslPolicyErrors.RemoteCertificateNameMismatch, DomainMatches);
+
+        Assert.True(accepted);
+    }
+
+    [Fact]
+    public void Name_mismatch_without_a_matching_sip_domain_is_rejected()
+    {
+        using var cert = SelfSigned();
+        var (accepted, _) = SipTlsServerTrustEvaluator.Evaluate(
+            SipTlsTrustMode.System, "example.com", cert,
+            SslPolicyErrors.RemoteCertificateNameMismatch, DomainRejects);
+
+        Assert.False(accepted);
+    }
+
+    [Fact]
+    public void Name_mismatch_without_a_configured_sip_domain_stays_terminal()
+    {
+        // Nothing to rescue the mismatch against — it must stay terminal.
+        using var cert = SelfSigned();
+        var (accepted, _) = SipTlsServerTrustEvaluator.Evaluate(
+            SipTlsTrustMode.System, null, cert,
+            SslPolicyErrors.RemoteCertificateNameMismatch, null);
+
+        Assert.False(accepted);
+    }
+
+    [Fact]
+    public void Chain_error_stays_terminal_even_when_sip_domain_matches()
+    {
+        // Only a pure hostname mismatch may be rescued; chain/time/usage/revocation errors are
+        // terminal regardless of the RFC 5922 identity result.
+        using var cert = SelfSigned();
+        var (accepted, _) = SipTlsServerTrustEvaluator.Evaluate(
+            SipTlsTrustMode.System, "example.com", cert,
+            SslPolicyErrors.RemoteCertificateChainErrors | SslPolicyErrors.RemoteCertificateNameMismatch, DomainMatches);
+
+        Assert.False(accepted);
+    }
+
+    [Fact]
     public void Base_x509_certificate_is_upgraded_and_domain_checked()
     {
         // Exercises the exact branch that closed the old `certificate is X509Certificate2` fail-open:

@@ -42,14 +42,26 @@ internal static class SipTlsServerTrustEvaluator
         if (certificate is null)
             return (false, "no peer certificate presented");
 
-        // Standard chain/hostname failures are terminal unless the caller explicitly opted into the
-        // dangerous mode. That mode relaxes ONLY standard trust — the identity check below still runs.
-        if (sslPolicyErrors != SslPolicyErrors.None && trustMode != SipTlsTrustMode.DangerousAcceptAnyChain)
-            return (false, $"standard TLS validation failed: {sslPolicyErrors}");
+        var expectsSipDomain = !string.IsNullOrWhiteSpace(expectedSipDomain);
+
+        if (trustMode != SipTlsTrustMode.DangerousAcceptAnyChain)
+        {
+            // Chain, time, usage and revocation failures are terminal regardless of identity.
+            var nonNameErrors = sslPolicyErrors & ~SslPolicyErrors.RemoteCertificateNameMismatch;
+            if (nonNameErrors != SslPolicyErrors.None)
+                return (false, $"standard TLS validation failed: {sslPolicyErrors}");
+
+            // RFC 5922 §7.3: a pure hostname mismatch (e.g. a URI-only or non-matching-dNSName SIP
+            // identity) may be rescued ONLY by the successful strict RFC 5922 domain match below. With
+            // no configured domain to compare against, the mismatch stays terminal.
+            if ((sslPolicyErrors & SslPolicyErrors.RemoteCertificateNameMismatch) != SslPolicyErrors.None
+                && (!expectsSipDomain || sipDomainMatches is null))
+                return (false, $"standard TLS validation failed: {sslPolicyErrors}");
+        }
 
         // RFC 5922 §7.1 SIP-domain identity check — always fail-closed when configured, independent of
         // trust mode.
-        if (string.IsNullOrWhiteSpace(expectedSipDomain))
+        if (!expectsSipDomain)
             return (true, null);
 
         if (sipDomainMatches is null)
