@@ -32,9 +32,12 @@ internal static class TurnChannelDataCodec
     }
 
     /// <summary>
-    /// Encodes a ChannelData packet for UDP transport.
+    /// Encodes a ChannelData packet (RFC 8656 §11.6). Over a stream transport (TCP/TLS) pass
+    /// <paramref name="padToFourBytes"/> so the frame is padded to a 4-byte boundary with 0-3 bytes that are
+    /// <em>not</em> counted in the length field (RFC 8656 §12.5) — this keeps the next framed message aligned.
+    /// Over UDP no padding is added (each datagram is one frame).
     /// </summary>
-    public static byte[] Encode(ushort channelNumber, ReadOnlySpan<byte> data)
+    public static byte[] Encode(ushort channelNumber, ReadOnlySpan<byte> data, bool padToFourBytes = false)
     {
         if (channelNumber < 0x4000 || channelNumber > 0x7FFF)
             throw new ArgumentOutOfRangeException(nameof(channelNumber), "TURN channel number must be in range 0x4000..0x7FFF.");
@@ -42,10 +45,12 @@ internal static class TurnChannelDataCodec
         if (data.Length > ushort.MaxValue)
             throw new ArgumentOutOfRangeException(nameof(data), "TURN ChannelData payload exceeds 65535 bytes.");
 
-        var packet = new byte[4 + data.Length];
+        var padding = padToFourBytes ? (4 - (data.Length & 3)) & 3 : 0;
+        var packet = new byte[4 + data.Length + padding];
         BinaryPrimitives.WriteUInt16BigEndian(packet, channelNumber);
-        BinaryPrimitives.WriteUInt16BigEndian(packet.AsSpan(2), (ushort)data.Length);
+        BinaryPrimitives.WriteUInt16BigEndian(packet.AsSpan(2), (ushort)data.Length);   // length excludes padding
         data.CopyTo(packet.AsSpan(4));
+        // The trailing padding bytes stay zero.
         return packet;
     }
 }

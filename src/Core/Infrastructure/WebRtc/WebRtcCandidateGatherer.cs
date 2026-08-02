@@ -28,7 +28,7 @@ internal sealed class WebRtcCandidateGatherer(
     /// <param name="serverEndPoint">The resolved TURN server transport address.</param>
     /// <param name="allocation">The TURN Allocate result (relayed endpoint, mapped base, credentials).</param>
     /// <param name="host">The bound local host endpoint (the relay's base fallback).</param>
-    public delegate IPEndPoint RelayGatheredCallback(
+    public delegate IPEndPoint? RelayGatheredCallback(
         IPEndPoint serverEndPoint, TurnAllocateResult allocation, IPEndPoint host);
 
     /// <summary>
@@ -41,6 +41,7 @@ internal sealed class WebRtcCandidateGatherer(
     public async Task GatherAsync(
         IReadOnlyList<IceServerConfiguration> servers,
         IPEndPoint local,
+        IPEndPoint relatedHost,
         Socket socket,
         Action<SdpIceCandidate> onCandidate,
         RelayGatheredCallback onRelayGathered,
@@ -51,10 +52,10 @@ internal sealed class WebRtcCandidateGatherer(
             switch (server.Type)
             {
                 case IceServerType.Stun:
-                    await GatherServerReflexiveAsync(server, local, socket, onCandidate, ct).ConfigureAwait(false);
+                    await GatherServerReflexiveAsync(server, local, relatedHost, socket, onCandidate, ct).ConfigureAwait(false);
                     break;
                 case IceServerType.Turn:
-                    await GatherRelayAsync(server, local, socket, onCandidate, onRelayGathered, ct).ConfigureAwait(false);
+                    await GatherRelayAsync(server, local, relatedHost, socket, onCandidate, onRelayGathered, ct).ConfigureAwait(false);
                     break;
                 default:
                     logger.LogDebug("Skipping ICE server {Host} of unsupported type {Type}.", server.Host, server.Type);
@@ -66,7 +67,12 @@ internal sealed class WebRtcCandidateGatherer(
     // Queries one STUN server for the server-reflexive endpoint and emits an srflx candidate on success.
     // No-op without a STUN probe (a peer configured with STUN servers but no probe gathers host-only).
     private async Task GatherServerReflexiveAsync(
-        IceServerConfiguration server, IPEndPoint local, Socket socket, Action<SdpIceCandidate> onCandidate, CancellationToken ct)
+        IceServerConfiguration server,
+        IPEndPoint local,
+        IPEndPoint relatedHost,
+        Socket socket,
+        Action<SdpIceCandidate> onCandidate,
+        CancellationToken ct)
     {
         if (stunProbe is null)
             return;
@@ -75,7 +81,7 @@ internal sealed class WebRtcCandidateGatherer(
             .TryGetServerReflexiveEndPointAsync(local, server, socket, ct)
             .ConfigureAwait(false);
         if (reflexive is not null)
-            onCandidate(WebRtcIceCandidateFactory.ServerReflexiveCandidate(reflexive, local));
+            onCandidate(WebRtcIceCandidateFactory.ServerReflexiveCandidate(reflexive, relatedHost));
     }
 
     // Allocates a TURN relay on the media socket and emits a relay candidate on success, reporting the
@@ -85,6 +91,7 @@ internal sealed class WebRtcCandidateGatherer(
     private async Task GatherRelayAsync(
         IceServerConfiguration server,
         IPEndPoint local,
+        IPEndPoint relatedHost,
         Socket socket,
         Action<SdpIceCandidate> onCandidate,
         RelayGatheredCallback onRelayGathered,
@@ -129,7 +136,17 @@ internal sealed class WebRtcCandidateGatherer(
         // the base to advertise raddr/rport against — the mapped (server-reflexive) base the server reported,
         // else the host base. Keeping that decision on the peer preserves the exact _gatheredRelay/_session
         // semantics; this gatherer only sequences the wire steps.
-        var relatedBase = onRelayGathered(serverEndPoint, allocation, local);
+        var relatedBase = onRelayGathered(serverEndPoint, allocation, relatedHost);
+        if (relatedBase is null)
+        {
+            // First-wins: this later TURN server's allocation was not retained/bound. Advertising a relay
+            // candidate for it would let ICE nominate an unusable, unbound relay path (#155 P1-3). The surplus
+            // allocation is left to expire at its lifetime — an immediate Refresh(0) teardown needs a control
+            // client the one-shot TurnAllocationProbe does not hold; tracked as a follow-up.
+            logger.LogDebug(
+                "TURN server {Host}: allocation not retained (first-wins); no relay candidate advertised.", server.Host);
+            return;
+        }
         onCandidate(WebRtcIceCandidateFactory.RelayCandidate(allocation.RelayedEndPoint, relatedBase));
     }
 }

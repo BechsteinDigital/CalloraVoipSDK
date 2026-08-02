@@ -27,8 +27,8 @@ public sealed class WebRtcOptions
     public bool EnableVideo { get; set; }
 
     /// <summary>
-    /// Whether to use stable numeric MIDs for runtime track renegotiation.
-    /// See <see cref="WebRtcConfiguration.UseStableNumericMediaIds"/>.
+    /// Whether a fixed 1+1 peer offers numeric MIDs instead of semantic ones (runtime-added tracks are always
+    /// stable-numeric, independent of this flag). See <see cref="WebRtcConfiguration.UseStableNumericMediaIds"/>.
     /// </summary>
     public bool UseStableNumericMediaIds { get; set; }
 

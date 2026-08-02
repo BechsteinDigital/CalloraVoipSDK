@@ -13,6 +13,42 @@ public sealed class TurnStreamFramerBoundsTests
 {
     private static MemoryStream Stream(byte[] bytes) => new(bytes, writable: false);
 
+    // #155 P2-1: over a stream, ChannelData is padded to a 4-byte boundary (RFC 8656 §12.5) with 0-3 bytes not
+    // counted in the length field. The framer must consume that padding, or the next frame starts mid-stream and
+    // the relay desyncs. Covered for every payload length residue class (0-3 mod 4).
+    [Theory]
+    [InlineData(0)]  // payload 0 mod 4 → 0 pad
+    [InlineData(1)]  // 1 mod 4 → 3 pad
+    [InlineData(2)]  // 2 mod 4 → 2 pad
+    [InlineData(3)]  // 3 mod 4 → 1 pad
+    public async Task Padded_channel_data_keeps_the_next_stream_frame_aligned(int payloadLen)
+    {
+        var payload = new byte[payloadLen];
+        for (var i = 0; i < payloadLen; i++)
+            payload[i] = (byte)(i + 1);
+
+        var first = TurnChannelDataCodec.Encode(0x4001, payload, padToFourBytes: true);
+        var second = TurnChannelDataCodec.Encode(0x4002, [0xAA, 0xBB, 0xCC], padToFourBytes: true);
+        Assert.Equal(0, first.Length % 4);    // each frame is 4-byte aligned on the wire
+        Assert.Equal(0, second.Length % 4);
+
+        var wire = new byte[first.Length + second.Length];
+        first.CopyTo(wire, 0);
+        second.CopyTo(wire, first.Length);
+        using var stream = Stream(wire);
+
+        var f1 = await TurnStreamFramer.ReadFrameAsync(stream);
+        Assert.True(f1!.IsChannelData);
+        Assert.Equal(0x4001, f1.ChannelNumber);
+        Assert.Equal(payload, f1.Payload);    // the parsed payload excludes the padding
+
+        // The second frame parses correctly ONLY if the first frame's padding was consumed.
+        var f2 = await TurnStreamFramer.ReadFrameAsync(stream);
+        Assert.True(f2!.IsChannelData);
+        Assert.Equal(0x4002, f2.ChannelNumber);
+        Assert.Equal(new byte[] { 0xAA, 0xBB, 0xCC }, f2.Payload);
+    }
+
     [Fact]
     public async Task ReadFrame_rejects_oversized_stun_frame_before_allocating()
     {

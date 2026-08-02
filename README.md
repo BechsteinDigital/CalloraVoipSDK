@@ -42,6 +42,13 @@ It exposes a stable, developer-friendly API through `VoipClient` while keeping t
 Multi-party / SFU enablement on the WebRTC facade — additive and transport-only (a peer that uses none of
 it negotiates byte-identical SDP to 4.6). Full detail in [`CHANGELOG.md`](CHANGELOG.md).
 
+The 4.7 patch line also sharpens **ICE connection setup**: 4.7.1 fixed candidate-pair progression, and
+**4.7.2** reworks the connectivity-check scheduler into a globally paced, *overlapping* RFC 8445 checklist with
+transaction-level STUN retransmission — a call reaches a working candidate pair faster, especially when a
+higher-priority candidate is unreachable and used to stall the checklist behind its timeout. It also folds in a
+round of review fixes across ICE and the WebRTC track path; the public API is unchanged and a fixed 1+1 peer's
+SDP is byte-identical.
+
 - **Multiple video tracks + mid-call renegotiation (RFC 8829)** — `IPeerConnection.AddVideoTrack()` adds a
   video track (its own `m=video`, SSRC and `RemoteTrack.Mid`) before *or* after connect; a second
   offer/answer cycle applies the delta live with no transport / DTLS / ICE / SRTP rebuild. New public types

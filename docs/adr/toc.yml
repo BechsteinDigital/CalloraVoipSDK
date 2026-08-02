@@ -104,6 +104,8 @@
       href: ADR-041-consent-freshness-and-ice-restart-primitives.md
     - name: "ADR-042: ICE Verification Discipline and Shared-Socket srflx Gathering"
       href: ADR-042-ice-verification-and-shared-socket-gathering.md
+    - name: "ADR-062: Globally Paced, Overlapping ICE Connectivity-Check Checklist"
+      href: ADR-062-ice-checklist-pacing.md
 - name: "Video Media Path"
   items:
     - name: "ADR-043: Video SDP Offer/Answer Negotiation (m=video, rtcp-fb, RTX/apt)"
@@ -146,6 +148,8 @@
       href: ADR-012-webrtc-public-facade.md
     - name: "ADR-060: WebRTC Facade Completion — Fluent ICE Config, Send-Side Simulcast, and the TURN/STUN Server-Hosting Facade"
       href: ADR-060-webrtc-facade-completion-and-server-hosting.md
+    - name: "ADR-063: JSEP-Conformant Append-Only MIDs for Runtime-Added WebRTC Tracks"
+      href: ADR-063-jsep-append-only-track-mids.md
 - name: "TURN Relay"
   items:
     - name: "ADR-054: TURN Relay as a First-Class ICE Candidate"

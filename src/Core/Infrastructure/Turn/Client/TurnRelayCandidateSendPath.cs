@@ -154,7 +154,22 @@ internal sealed class TurnRelayCandidateSendPath
     /// the caller can retry — a failed permission is dropped from the cache rather than poisoning the peer.
     /// </summary>
     internal Task EnsurePermissionAsync(IPAddress peerAddress, CancellationToken ct)
-        => _permissions.GetOrAdd(peerAddress, ip => new Lazy<Task>(() => CreatePermissionAsync(ip))).Value.WaitAsync(ct);
+    {
+        // DoS cap on distinct permissioned peer IPs (RFC 8656 §9 / ENGINEERING_RULES.md §132-133): an
+        // authenticated peer can drive unlimited distinct remote-candidate IPs, each installing a permission and
+        // a periodic refresh. A known IP always resolves; a new IP above the cap is refused with no persistent
+        // entry and no CreatePermission transaction, so the relay send fails and the ICE check is retried. Count
+        // is a soft check — a small concurrent overshoot is bounded and harmless.
+        if (!_permissions.ContainsKey(peerAddress) && _permissions.Count >= MaxPermissions)
+        {
+            _logger.LogWarning("TURN relay permission cap {Cap} reached; refusing permission for {Peer}.", MaxPermissions, peerAddress);
+            return Task.FromException(new InvalidOperationException($"TURN permission cap {MaxPermissions} reached for {peerAddress}."));
+        }
+
+        return _permissions.GetOrAdd(peerAddress, ip => new Lazy<Task>(() => CreatePermissionAsync(ip))).Value.WaitAsync(ct);
+    }
+
+    private const int MaxPermissions = 256;
 
     private async Task CreatePermissionAsync(IPAddress peerAddress)
     {

@@ -18,7 +18,11 @@ public sealed class SipWebSocketSubprotocolTests
         using var runtime = new SipTransportRuntime(NullLoggerFactory.Instance);
         var wsPort = runtime.GetLocalEndPoint(SipTransportProtocol.Ws).Port;
         var uri = new Uri($"ws://localhost:{wsPort}/");
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        // Generous safety timeout, not a tight assertion window: the rejecting (no-"sip") connect must surface a
+        // WebSocketException, but under CI parallel load (net8, all TFMs at once) the connect handshake can take
+        // >15 s, and a fired token turns the expected WebSocketException into a TaskCanceledException. 60 s keeps
+        // the token from pre-empting the real reject.
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
 
         // A client that does NOT offer "sip" must be rejected (pre-fix it was accepted subprotocol-less).
         using (var plainClient = new ClientWebSocket())

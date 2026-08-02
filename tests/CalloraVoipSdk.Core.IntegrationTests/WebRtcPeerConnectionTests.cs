@@ -293,6 +293,26 @@ public sealed class WebRtcPeerConnectionTests
     }
 
     [Fact]
+    public async Task Wildcard_bind_advertises_concrete_interface_candidates_on_the_bound_port()
+    {
+        var interfaceAddress = IPAddress.Parse("192.0.2.44");
+        await using var peer = PeerAt(
+            new IPEndPoint(IPAddress.Any, 0),
+            new FixedHostCandidateProvider(interfaceAddress));
+        var emitted = new List<string>();
+        peer.LocalIceCandidateDiscovered += emitted.Add;
+
+        var offer = peer.CreateOffer();
+
+        var audio = new SdpSessionParser().Parse(offer).Media.Single(m => m.MediaType == "audio");
+        var host = Assert.Single(audio.Candidates.Where(candidate => candidate.Type == "host"));
+        Assert.Equal(interfaceAddress.ToString(), host.Address);
+        Assert.Equal(peer.LocalMediaEndPoint!.Port, host.Port);
+        Assert.DoesNotContain(audio.Candidates, candidate => candidate.Address is "0.0.0.0" or "::");
+        Assert.Contains(emitted, candidate => candidate.Contains(interfaceAddress.ToString(), StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task A_trickled_candidate_does_not_blindly_become_the_send_target()
     {
         await using var peer = Peer(Pcmu);
@@ -354,16 +374,28 @@ public sealed class WebRtcPeerConnectionTests
     }
 
     private static WebRtcPeerConnection PeerAt(int localPort) =>
+        PeerAt(new IPEndPoint(IPAddress.Loopback, localPort));
+
+    private static WebRtcPeerConnection PeerAt(
+        IPEndPoint localEndPoint,
+        IWebRtcHostCandidateProvider? hostCandidateProvider = null) =>
         new(new WebRtcPeerOptions
             {
-                LocalEndPoint = new IPEndPoint(IPAddress.Loopback, localPort),
+                LocalEndPoint = localEndPoint,
                 AudioCodecs = Pcmu,
                 Dtls = new SdpDtlsParameters { Algorithm = "sha-256", Fingerprint = "11:22:33" },
                 Ice = new SdpIceParameters { Ufrag = "localU", Pwd = "localpassword1234567890" },
             },
             new SdpOfferAnswerNegotiator(), new SdpSessionParser(), new SdpSessionSerializer(),
             new DtlsSrtpHandshaker(NullLogger<DtlsSrtpHandshaker>.Instance), DtlsCertificate.GenerateEcdsaP256(),
-            NullLoggerFactory.Instance);
+            NullLoggerFactory.Instance,
+            hostCandidateProvider: hostCandidateProvider);
+
+    private sealed class FixedHostCandidateProvider(IPAddress address) : IWebRtcHostCandidateProvider
+    {
+        public IReadOnlyList<IPEndPoint> GetHostEndPoints(IPEndPoint boundEndPoint) =>
+            [new IPEndPoint(address, boundEndPoint.Port)];
+    }
 
     private static WebRtcPeerConnection Peer(IReadOnlyList<SdpCodecDefinition> audioCodecs) =>
         new(new WebRtcPeerOptions

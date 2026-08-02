@@ -12,9 +12,7 @@ using CalloraVoipSdk.Core.Infrastructure.Sdp.OfferAnswer;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Parsing;
 using CalloraVoipSdk.Core.Infrastructure.Turn.Client;
 using Microsoft.Extensions.Logging;
-
 namespace CalloraVoipSdk.Core.Infrastructure.WebRtc;
-
 /// <summary>
 /// A signalling-neutral WebRTC peer (the entry point of <c>CalloraVoipSdk.WebRtc</c>, ADR-010/founder
 /// architecture): it consumes and produces SDP, mirroring the W3C <c>RTCPeerConnection</c>, so any
@@ -47,6 +45,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     private readonly IIceStunProbe? _stunProbe;
     private readonly TurnAllocationProbe? _turnProbe;
     private readonly IMdnsResolver _mdnsResolver;
+    private readonly IWebRtcHostCandidateProvider _hostCandidateProvider;
     private readonly CancellationTokenSource _mdnsLifetime = new();
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<WebRtcPeerConnection> _logger;
@@ -54,20 +53,17 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     // RFC 8829 renegotiation, 4.7.0) — no transport/DTLS/ICE/SRTP rebuild. Stateless; used only once a session exists.
     private readonly WebRtcRenegotiator _renegotiator;
     private readonly object _sync = new();
-
     // Stable WebRTC track identity (a=msid, RFC 8830): one MediaStream carrying one audio and one
     // video track. Generated once per peer so re-offers keep the same stream/track ids.
     private readonly string _mediaStreamId = Guid.NewGuid().ToString("N");
     private readonly string _audioTrackId = Guid.NewGuid().ToString("N");
     private readonly string _videoTrackId = Guid.NewGuid().ToString("N");
-
     // The audio/video tracks the consumer added at runtime via the public AddAudioTrack/AddVideoTrack surface
     // (4.7.0 N-audio / P2c N-video). Owns both lists, the stable per-track a=msid track ids, and the numeric-MID
     // arithmetic; extracted (WebRtcAddedTrackSet) to keep this file under the size limit. Compatibility mode
     // switches to numeric MIDs on the first added track; stable mode starts numeric and appends in API call order.
     // A mid-call track remains pending until the next offer/answer cycle applies the live diff (RFC 8829).
     private readonly WebRtcAddedTrackSet _addedTracks;
-
     private WebRtcConnectionState _state = WebRtcConnectionState.New;
     // The RFC 8829 §4.1.3 signalling state (offer/answer half of the lifecycle), separate from the ICE/DTLS
     // transport _state. Guarded by _sync; transitioned via TransitionSignalingTo (event fired outside the lock).
@@ -176,7 +172,6 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     /// to act (the SDK does not throttle). Projected from the media session by <see cref="WebRtcCongestionRelay"/>.
     /// </summary>
     public event Action<long, NetworkQuality>? RecommendedBitrateChanged;
-
     public WebRtcPeerConnection(
         WebRtcPeerOptions options,
         ISdpOfferAnswerNegotiator negotiator,
@@ -187,7 +182,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         ILoggerFactory loggerFactory,
         IIceStunProbe? stunProbe = null,
         TurnAllocationProbe? turnProbe = null,
-        IMdnsResolver? mdnsResolver = null)
+        IMdnsResolver? mdnsResolver = null, IWebRtcHostCandidateProvider? hostCandidateProvider = null)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
         ArgumentNullException.ThrowIfNull(options.LocalEndPoint);
@@ -204,13 +199,13 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         _mdnsResolver = mdnsResolver ?? new SystemMdnsResolver();
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
         _logger = loggerFactory.CreateLogger<WebRtcPeerConnection>();
+        _hostCandidateProvider = hostCandidateProvider ?? new SystemWebRtcHostCandidateProvider(
+            loggerFactory.CreateLogger<SystemWebRtcHostCandidateProvider>());
         _renegotiator = new WebRtcRenegotiator(_loggerFactory);
         _relayAllocation = new WebRtcRelayAllocationStore(_loggerFactory);
         // The config primary video count (0 or 1) is fixed for the peer's lifetime, so the added-track set can do
         // the numeric-MID arithmetic without re-reading _options; it captures it once here.
-        _addedTracks = new WebRtcAddedTrackSet(
-            _options.VideoTracks.Count,
-            _options.UseStableNumericMediaIds);
+        _addedTracks = new WebRtcAddedTrackSet(_options.VideoTracks.Count);
         _trickleIce = new WebRtcTrickleIceReceiver(_mdnsResolver, _mdnsLifetime.Token, _logger);
         // Snapshot the public event on each emission so a late subscriber is honoured and the current handler
         // is captured atomically (the event field may be reassigned between candidates).
@@ -456,7 +451,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         // Only the Stable → HaveLocalOffer edge is a transition; a re-offer within HaveLocalOffer fires no event.
         if (enteredHaveLocalOffer)
             RaiseSignalingState(WebRtcSignalingState.HaveLocalOffer);
-        _candidateEmitter.EmitLocalHost(local);
+        _candidateEmitter.EmitLocalHosts(_hostCandidateProvider.GetHostEndPoints(local));
         return offerSdp;
     }
 
@@ -607,7 +602,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         TransitionTo(WebRtcConnectionState.Connecting);
         RaiseSignalingState(WebRtcSignalingState.Stable);
         if (answererLocal is not null)
-            _candidateEmitter.EmitLocalHost(answererLocal);
+            _candidateEmitter.EmitLocalHosts(_hostCandidateProvider.GetHostEndPoints(answererLocal));
         return Task.FromResult(localSdp);
     }
 
@@ -689,7 +684,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
 
         RaiseSignalingState(WebRtcSignalingState.Stable);
         if (answererLocal is not null)
-            _candidateEmitter.EmitLocalHost(answererLocal);
+            _candidateEmitter.EmitLocalHosts(_hostCandidateProvider.GetHostEndPoints(answererLocal));
         return Task.FromResult(newLocalSdp);
     }
 
@@ -850,10 +845,12 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         // the wire steps (each temporarily runs its own receive loop on the shared media socket, so they must
         // not overlap the transport's post-Start loop).
         var gatherer = new WebRtcCandidateGatherer(_stunProbe, _turnProbe, _logger);
+        var hostEndPoints = _hostCandidateProvider.GetHostEndPoints(local);
+        var relatedHost = hostEndPoints.Count > 0 ? hostEndPoints[0] : local;
         // The relay store latches first-wins and adopts into an already-built (answerer) session; it reads the
         // adopt target through this _sync-guarded session snapshot, so the peer keeps sole ownership of _session.
         await gatherer.GatherAsync(
-            _options.IceServers, local, socket, _candidateEmitter.Emit,
+            _options.IceServers, local, relatedHost, socket, _candidateEmitter.Emit,
             (serverEndPoint, allocation, gatheredLocal) => _relayAllocation.OnGathered(
                 serverEndPoint, allocation, gatheredLocal, () => { lock (_sync) { return _session; } }),
             cancellationToken).ConfigureAwait(false);
@@ -885,6 +882,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     private SdpMediaOptions MediaOptions(IPEndPoint local)
         => WebRtcSdpOptionsBuilder.Build(
             local,
+            _hostCandidateProvider.GetHostEndPoints(local),
             _options,
             _addedTracks.SnapshotAudio(),
             _addedTracks.SnapshotVideo(),

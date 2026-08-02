@@ -26,12 +26,14 @@ namespace CalloraVoipSdk.Core.Infrastructure.Stun.Ice;
 /// was produced). The transport layer triggers a connectivity check back to the sender to confirm
 /// the pair in both directions (RFC 8445 §7.3.1.4).
 /// </param>
+/// <param name="PeerPriority">The peer's PRIORITY value used when learning a peer-reflexive candidate.</param>
 internal readonly record struct IceInboundProcessingResult(
     bool IsIceCheck,
     byte[]? ResponseBytes,
     IceRole RoleAfter,
     bool NominatePair,
-    bool Accepted);
+    bool Accepted,
+    uint PeerPriority);
 
 /// <summary>
 /// Ties the inbound ICE check pieces together (RFC 8445 §7.3): decodes and authenticates a received
@@ -81,14 +83,16 @@ internal sealed class IceInboundCheckProcessor
 
         var parsed = _responder.TryParse(data);
         if (parsed is null)
-            return new IceInboundProcessingResult(IsIceCheck: false, ResponseBytes: null, currentRole, NominatePair: false, Accepted: false);
+            return new IceInboundProcessingResult(
+                IsIceCheck: false, ResponseBytes: null, currentRole, NominatePair: false, Accepted: false, PeerPriority: 0);
 
         var request = parsed.Value;
 
         // RFC 8445 §7.3: authenticate the check with short-term credentials before acting on it.
         // A failed integrity check is discarded rather than answered, to avoid amplification.
         if (!_responder.VerifyIntegrity(data, localPassword))
-            return new IceInboundProcessingResult(IsIceCheck: true, ResponseBytes: null, currentRole, NominatePair: false, Accepted: false);
+            return new IceInboundProcessingResult(
+                IsIceCheck: true, ResponseBytes: null, currentRole, NominatePair: false, Accepted: false, request.Priority);
 
         var decision = IceInboundCheckEvaluator.Evaluate(
             localUfrag,
@@ -106,18 +110,22 @@ internal sealed class IceInboundCheckProcessor
                 ResponseBytes: _responder.BuildRoleConflictResponse(request.Message, localPassword),
                 decision.RoleAfter,
                 NominatePair: false,
-                Accepted: false);
+                Accepted: false,
+                request.Priority);
         }
 
         // USERNAME does not target us (or was absent): discard silently (RFC 8445 §7.3).
         if (!decision.Accepted)
-            return new IceInboundProcessingResult(IsIceCheck: true, ResponseBytes: null, decision.RoleAfter, NominatePair: false, Accepted: false);
+            return new IceInboundProcessingResult(
+                IsIceCheck: true, ResponseBytes: null, decision.RoleAfter,
+                NominatePair: false, Accepted: false, request.Priority);
 
         return new IceInboundProcessingResult(
             IsIceCheck: true,
             ResponseBytes: _responder.BuildSuccessResponse(request.Message, sender, localPassword),
             decision.RoleAfter,
             decision.NominatePair,
-            Accepted: true);
+            Accepted: true,
+            request.Priority);
     }
 }

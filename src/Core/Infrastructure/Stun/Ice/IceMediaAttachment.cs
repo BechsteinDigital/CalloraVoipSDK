@@ -18,7 +18,6 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
     private readonly IceInboundStunHandler? _inbound;
     private readonly IceMediaConsentSession? _consent;
     private readonly IceNominationDriver? _nominationDriver;
-    private IPEndPoint _nominatedRemote;
     private readonly ConcurrentDictionary<IPEndPoint, byte> _triggeredSources = new();
     private readonly Action? _onConsentLost;
     private readonly Action? _onConnectivityDegraded;
@@ -28,12 +27,12 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
     // framed), so the caller can switch the transport onto the relay data path (RFC 8656 ChannelBind). Direct
     // pairs never fire it.
     private readonly Action<IPEndPoint>? _onRelayPairNominated;
-    // The last pair actually nominated (null until the first nomination), used to skip redundant
-    // re-nominations. Keyed on the remote endpoint AND its send path, so a switch between the direct and the
-    // relay send path to the same remote still redirects consent rather than being skipped as a no-op.
-    // Distinct from _nominatedRemote, which starts at the initial resolved remote for triggered-check
-    // deduplication — so the first nomination fires even when it lands on that same remote.
+    // First nomination wins for this ICE generation (RFC 8445 §8.1.1). A later path change requires restart.
     private IceNominatedTarget? _lastNominated;
+    // The signalled remote endpoint. It already has its own checklist pair, so an inbound check from it is the
+    // expected bidirectional confirmation, not a peer-reflexive discovery (RFC 8445 §7.3.1.3) — never triggered.
+    private readonly IPEndPoint _initialRemote;
+    private int _controlling;
     // The relay local candidate's send path (TURN-framed), or null when no TURN allocation was gathered.
     // Held so a relay nomination can redirect consent freshness through it (RFC 7675 over the allocation).
     // Set at construction (offerer, whose allocation is gathered before the session) or post-construction via
@@ -102,7 +101,8 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
         _onPairNominated = onPairNominated;
         _onRelayPairNominated = onRelayPairNominated;
         _relaySend = relaySend;
-        _nominatedRemote = parameters.RemoteEndPoint;
+        _controlling = parameters.IceControlling ? 1 : 0;
+        _initialRemote = parameters.RemoteEndPoint;
         _inbound = parameters.IceEnabled
             ? IceInboundStunHandlerFactory.Create(
                 parameters.LocalIceUfrag, parameters.LocalIcePwd, parameters.IceControlling, sendRaw, loggerFactory)
@@ -110,10 +110,8 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
         _consent = IceMediaConsentSessionFactory.TryCreate(
             parameters, sendRaw, OnConsentLost, loggerFactory, _onConnectivityDegraded, _onConnectivityRecovered);
 
-        // The controlling agent drives candidate-pair checks and regular nomination (RFC 8445 §7.2.2/§8.1.1);
-        // it needs the consent session's shared-socket check primitive. Built even with an empty seed so
-        // candidates that only arrive via trickle (RFC 8838, AddRemoteCandidate) are still checked.
-        if (_consent is not null && parameters.IceControlling)
+        // Both roles run connectivity checks; only the controlling role nominates (RFC 8445 §7.2/§8).
+        if (_consent is not null)
         {
             // The direct local candidate: host and server-reflexive share the media socket's direct send path
             // (srflx is only the mapped view of the same socket).
@@ -142,66 +140,76 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
                 });
             }
 
+            var remotes = parameters.RemoteCandidates.Count > 0
+                ? parameters.RemoteCandidates
+                : [new IceRemoteCandidate(parameters.RemoteEndPoint, HostLocalCandidatePriority)];
             _nominationDriver = new IceNominationDriver(
                 localCandidates,
-                parameters.RemoteCandidates,
+                remotes,
                 OnDriverNominated,
-                loggerFactory);
+                loggerFactory,
+                controlling: parameters.IceControlling);
         }
 
         if (_inbound is not null)
         {
             _inbound.CheckAccepted += OnInboundCheckAccepted;
+            _inbound.RoleChanged += OnRoleChanged;
             // The controlled agent adopts the pair the controlling peer nominates (RFC 8445 §7.3.1.5).
             _inbound.PairNominated += Nominate;
         }
     }
 
-    // RFC 8445 §7.3.1.4: a valid inbound check from a source other than the nominated remote reveals
-    // a peer-reflexive path; trigger one confirming connectivity check back to it (learn-once per
-    // source). The nominated remote is already validated continuously by consent freshness.
+    // RFC 8445 §7.3.1.4: learn the peer-reflexive source and queue its check ahead of ordinary work.
     private void OnInboundCheckAccepted(
         IPEndPoint source,
+        uint priority,
         Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>? replyVia)
     {
-        if (_consent is null || source.Equals(Volatile.Read(ref _nominatedRemote)))
+        if (_consent is null
+            || source.Equals(_initialRemote)
+            || (_lastNominated is { } nominated && source.Equals(nominated.Remote)))
             return;
+        if (_triggeredSources.Count >= MaxTriggeredSources)
+        {
+            _logger.LogWarning("ICE triggered-source cap {MaxSources} reached; ignoring {Source}.", MaxTriggeredSources, source);
+            return;
+        }
         if (!_triggeredSources.TryAdd(source, 0))
             return;
 
         _logger.LogDebug("ICE triggered check to peer-reflexive source {Source} (RFC 8445 §7.3.1.4).", source);
-        _ = SendTriggeredCheckAsync(source, replyVia);
+        var queued = _nominationDriver?.EnqueueTriggered(
+            source,
+            priority,
+            relayed: replyVia is not null,
+            ct => replyVia is not null
+                ? _consent.SendCheckVia(replyVia, source, useCandidate: false, ct)
+                : _consent.SendCheckAsync(source, useCandidate: false, ct)) == true;
+        if (!queued)
+            _triggeredSources.TryRemove(source, out _);
     }
 
-    private async Task SendTriggeredCheckAsync(
-        IPEndPoint source,
-        Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>? replyVia)
+    private void OnRoleChanged(CalloraVoipSdk.Core.Application.Media.Ice.IceRole role)
     {
-        try
-        {
-            // Confirm over the path the check arrived on: relay-framed when it came through our relay, else direct.
-            var confirmed = replyVia is not null
-                ? await _consent!.SendCheckVia(replyVia, source, useCandidate: false, CancellationToken.None).ConfigureAwait(false)
-                : await _consent!.SendCheckAsync(source, useCandidate: false, CancellationToken.None).ConfigureAwait(false);
-            _logger.LogDebug("ICE triggered check to {Source} {Result}.", source, confirmed ? "confirmed" : "unanswered");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "ICE triggered check to {Source} failed.", source);
-        }
+        var controlling = role == CalloraVoipSdk.Core.Application.Media.Ice.IceRole.Controlling;
+        Volatile.Write(ref _controlling, controlling ? 1 : 0);
+        _consent?.SetRole(controlling);
+        _nominationDriver?.SetRole(controlling);
     }
+
+    private const int MaxTriggeredSources = 256;
+    private const int MaxSeenRemoteAddresses = 256;
 
     /// <summary>True when either ICE responsibility is active and the attachment should receive STUN.</summary>
     public bool IsActive => _inbound is not null || _consent is not null;
 
     /// <summary>
-    /// Starts the consent-freshness loop and, on a controlling agent with candidates, the connectivity-check
-    /// nomination driver (no-op when the respective responsibility is inactive). Call after the transport's
+    /// Starts connectivity checking. Consent freshness starts only after a pair is nominated. Call after the transport's
     /// receive loop is running so the driver's checks are answered and matched over the shared socket.
     /// </summary>
     public void Start()
     {
-        _consent?.Start();
         _nominationDriver?.Start();
     }
 
@@ -218,7 +226,18 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
     public void AddRemoteCandidate(IceRemoteCandidate candidate)
     {
         var address = candidate.EndPoint.Address;
-        _seenRemoteAddresses.TryAdd(address, 0);
+        // DoS cap on distinct remote-candidate IPs (RFC 8838 trickle): a peer can trickle unlimited unique IPs,
+        // each otherwise growing _seenRemoteAddresses and driving a proactive CreatePermission on the relay — an
+        // unbounded wire-boundary state (ENGINEERING_RULES.md §132-133). A known IP always passes; a new IP only
+        // with room. Overflow IPs get no persistent entry, no driver pair, and no permission transaction.
+        var admitted = _seenRemoteAddresses.ContainsKey(address)
+            || (_seenRemoteAddresses.Count < MaxSeenRemoteAddresses && _seenRemoteAddresses.TryAdd(address, 0));
+        if (!admitted)
+        {
+            _logger.LogWarning(
+                "ICE seen-remote-address cap {Cap} reached; ignoring trickled candidate IP {Address}.", MaxSeenRemoteAddresses, address);
+            return;
+        }
 
         _nominationDriver?.AddCandidate(candidate);
 
@@ -226,7 +245,7 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
         // the controlled (answerer) agent, which never sends a relay check itself and must open the inbound path
         // proactively. When the relay candidate is adopted after this candidate is seen, AddRelayLocalCandidate
         // back-fills the permission instead (it reads _seenRemoteAddresses).
-        if (_nominationDriver is null && Volatile.Read(ref _ensurePermission) is { } ensure)
+        if (Volatile.Read(ref _controlling) == 0 && Volatile.Read(ref _ensurePermission) is { } ensure)
             _ = InstallRemotePermissionAsync(ensure, address);
     }
 
@@ -294,20 +313,13 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
         Volatile.Write(ref _relaySend, relaySend);
         Volatile.Write(ref _ensurePermission, ensurePermission);
 
-        if (_nominationDriver is null)
+        if (Volatile.Read(ref _controlling) == 0 && ensurePermission is not null)
         {
-            // Controlled agent: no driver candidate to add. Back-fill permissions for remote candidates already
-            // seen before the allocation finished gathering (the offer's SDP candidates + early trickle), so the
-            // offerer's inbound relay checks reach us. Later candidates permission themselves in AddRemoteCandidate.
-            if (ensurePermission is not null)
-            {
-                foreach (var address in _seenRemoteAddresses.Keys)
-                    _ = InstallRemotePermissionAsync(ensurePermission, address);
-            }
-            return;
+            foreach (var address in _seenRemoteAddresses.Keys)
+                _ = InstallRemotePermissionAsync(ensurePermission, address);
         }
 
-        _nominationDriver.AddLocalCandidate(new IceLocalCandidate
+        _nominationDriver?.AddLocalCandidate(new IceLocalCandidate
         {
             Type = RelayCandidateType,
             Priority = RelayLocalCandidatePriority,
@@ -346,27 +358,18 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
         Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>? replyVia)
         => NominateInternal(remoteEndPoint, sendVia: replyVia);
 
-    // Nominates a checked/adopted remote pair (RFC 8445 §8): redirects consent freshness onto it (over the
-    // given send path — relay-framed or direct) and reports it so the transport send target and DTLS follow.
-    // Funnelled from both the controlling driver (which can re-nominate onto a higher-priority working pair)
-    // and the controlled agent's inbound USE-CANDIDATE. A no-op re-nomination to the pair already in effect is
-    // skipped (redundant redirect / log spam).
+    // First nomination wins for this ICE generation. Consent starts only after this selection.
     private void NominateInternal(
         IPEndPoint remoteEndPoint,
         Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>? sendVia)
     {
-        var previous = Interlocked.Exchange(ref _lastNominated, new IceNominatedTarget(remoteEndPoint, sendVia));
-        // Skip only a genuine no-op: same remote AND same send path. A relay↔direct switch to the same remote
-        // (same endpoint, different path) must still redirect consent, so it is not treated as redundant.
-        if (previous is not null
-            && previous.Remote.Equals(remoteEndPoint)
-            && ReferenceEquals(previous.Send, sendVia))
-        {
+        var nominated = new IceNominatedTarget(remoteEndPoint, sendVia);
+        if (Interlocked.CompareExchange(ref _lastNominated, nominated, null) is not null)
             return;
-        }
 
-        Volatile.Write(ref _nominatedRemote, remoteEndPoint);
+        _nominationDriver?.AcceptRemoteNomination(remoteEndPoint);
         _consent?.Nominate(remoteEndPoint, sendVia);
+        _consent?.Start();
         try
         {
             _onPairNominated?.Invoke(remoteEndPoint);

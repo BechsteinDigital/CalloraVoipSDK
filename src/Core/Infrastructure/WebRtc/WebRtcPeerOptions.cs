@@ -29,8 +29,8 @@ internal sealed record WebRtcPeerOptions
     public IReadOnlyList<SdpVideoMediaOptions> VideoTracks { get; init; } = [];
 
     /// <summary>
-    /// Whether the first offer starts on the stable numeric-MID path and later runtime tracks append without
-    /// changing any existing m-line identity/order (RFC 8829).
+    /// Whether a fixed 1+1 peer's first offer uses numeric MIDs. Runtime-added tracks always append with stable
+    /// numeric MIDs and never change an existing m-line's identity/order (RFC 8829), independent of this flag.
     /// </summary>
     public bool UseStableNumericMediaIds { get; init; }
 

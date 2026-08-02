@@ -4,294 +4,478 @@ using Microsoft.Extensions.Logging;
 namespace CalloraVoipSdk.Core.Infrastructure.Stun.Ice;
 
 /// <summary>
-/// Drives the controlling agent's ICE candidate-pair connectivity checks and nomination over the shared
-/// media socket (RFC 8445 §7.2.2 checks, §8.1.1 regular nomination) as a long-lived, dynamic check list.
-/// It checks candidate pairs in fair rounds, highest pair priority first within each round, and sends
-/// an ordinary connectivity check over each pair's <em>local</em> candidate send path
-/// (<see cref="IceLocalCandidate.Check"/>,
-/// backed by the receive-loop-matched <see cref="IceMediaConsentSession.SendCheckAsync"/> for a direct
-/// candidate, or a relay-framed path for a relay candidate), and — when a pair answers — sends a nominating
-/// check carrying USE-CANDIDATE and, once that nominating check is itself confirmed by a success response,
-/// reports the pair through <c>onNominated</c> so the caller redirects the media send target and consent
-/// freshness to it. Nomination is gated on a confirmed USE-CANDIDATE response (RFC 8445 §8.1.1) — never on
-/// raw priority, and never on the ordinary check alone (a lost USE-CANDIDATE is retried, not adopted).
+/// Owns the live ICE checklist for one media component. Ordinary, triggered and nominating checks are submitted
+/// to a shared <see cref="IceConnectivityCheckPacer"/> instead of being awaited in batches: transactions overlap,
+/// but their start times remain globally paced (RFC 8445 §6.1.4.2, §7.3.1.4 and §14).
 /// <para>
-/// Pairs are formed over local × remote candidates (RFC 8445 §6.1.2) and ordered by pair priority (§6.1.2.3):
-/// a lower-preference local candidate such as a relay is therefore checked after the higher-preference
-/// (host/srflx) pair in the same round, but before an unreachable direct pair consumes its retry budget.
-/// Remote candidates that arrive after start
-/// (RFC 8838 trickle) are fed in via <see cref="AddCandidate"/> and paired against every local candidate. If
-/// a higher-priority pair than the current nominee later answers, the driver re-nominates onto it (§8): the
-/// selection is always the highest-priority <em>working</em> pair, not the highest-priority advertised one. A
-/// pair that does not answer is retried a bounded number of times before being abandoned.
-/// </para>
-/// <para>
-/// Receive-loop integration is what makes this non-facade: checks and their responses share the one media
-/// socket the transport owns after start, matched by transaction id, while the peer's inbound handler
-/// answers our checks — so it works while both agents are up (no pre-start bootstrapping deadlock). Only the
-/// controlling agent runs a driver; the controlled agent adopts the nominated pair from the peer's
-/// USE-CANDIDATE check (RFC 8445 §7.3.1.5).
+/// Both ICE roles run ordinary checks. Only the controlling role performs regular nomination, and it does so
+/// exactly once after the highest-priority validated pair has no higher Waiting/In-Progress competitor
+/// (RFC 8445 §8.1.1). A later candidate is still checked before nomination; after nomination, changing pairs
+/// requires an ICE restart rather than an unnegotiated second USE-CANDIDATE.
 /// </para>
 /// </summary>
 internal sealed class IceNominationDriver : IAsyncDisposable
 {
-    // Local candidates and the remotes seen so far are both mutable (guarded by _gate): a local candidate can
-    // be added after construction (AddLocalCandidate — the answerer's late relay path), and each must pair
-    // against every remote known then plus every remote that trickles in later, so both sides of the cross
-    // product are retained rather than only the formed pairs.
+    private const int DefaultMaxPairs = 256;
+
     private readonly List<IceLocalCandidate> _localCandidates;
     private readonly List<IceRemoteCandidate> _remotes = [];
-    private readonly Action<IceLocalCandidate, IPEndPoint> _onNominated;
-    private readonly int _maxAttempts;
-    private readonly TimeSpan _roundDelay;
-    private readonly Func<TimeSpan, CancellationToken, Task> _delay;
-    private readonly ILogger<IceNominationDriver> _logger;
-    private readonly CancellationTokenSource _cts = new();
-    private readonly object _gate = new();
     private readonly List<IceNominationPairState> _pairs = [];
-    private readonly SemaphoreSlim _signal = new(0);
-    private long _nominatedPriority = long.MinValue; // guarded by _gate
-    private Task? _loop;
+    private readonly Action<IceLocalCandidate, IPEndPoint> _onNominated;
+    private readonly IceConnectivityCheckPacer _pacer;
+    private readonly bool _ownsPacer;
+    private readonly int _maxNominationAttempts;
+    private readonly int _maxPairs;
+    private readonly ILogger<IceNominationDriver> _logger;
+    private readonly object _gate = new();
+    private bool _controlling;
+    private bool _started;
+    private bool _nominated;
     private bool _disposed;
 
-    /// <summary>
-    /// Creates the nomination driver: it pairs the local candidates against the initial remote candidates
-    /// (from the SDP) and checks the pairs highest-priority first.
-    /// </summary>
-    /// <param name="localCandidates">
-    /// The local candidates (send paths) to pair against every remote candidate. Typically the direct
-    /// host/srflx path, plus a relay path when a TURN allocation exists.
-    /// </param>
-    /// <param name="remoteCandidates">The initial remote candidates to check.</param>
-    /// <param name="onNominated">
-    /// Invoked with the nominated pair's local candidate and remote endpoint whenever a pair is selected or
-    /// upgraded, so the caller can redirect media/consent to that pair (and, for a relay local candidate,
-    /// switch the transport to the relay data path).
-    /// </param>
-    /// <param name="loggerFactory">Logger factory.</param>
-    /// <param name="maxAttempts">How many checks a single pair is given before it is abandoned.</param>
-    /// <param name="roundDelay">Delay between check attempts; also the idle poll interval; injectable for tests.</param>
-    /// <param name="delay">The delay primitive; injectable for deterministic tests.</param>
+    /// <summary>Creates a dynamic, bounded checklist over local × remote candidates.</summary>
     public IceNominationDriver(
         IReadOnlyList<IceLocalCandidate> localCandidates,
         IReadOnlyList<IceRemoteCandidate> remoteCandidates,
         Action<IceLocalCandidate, IPEndPoint> onNominated,
         ILoggerFactory loggerFactory,
-        int maxAttempts = 5,
+        int maxAttempts = 3,
         TimeSpan? roundDelay = null,
-        Func<TimeSpan, CancellationToken, Task>? delay = null)
+        Func<TimeSpan, CancellationToken, Task>? delay = null,
+        IceConnectivityCheckPacer? pacer = null,
+        bool controlling = true,
+        int maxPairs = DefaultMaxPairs)
     {
         ArgumentNullException.ThrowIfNull(localCandidates);
-        _localCandidates = [.. localCandidates];
         ArgumentNullException.ThrowIfNull(remoteCandidates);
-        _onNominated = onNominated ?? throw new ArgumentNullException(nameof(onNominated));
         ArgumentNullException.ThrowIfNull(loggerFactory);
-        _maxAttempts = maxAttempts > 0 ? maxAttempts : throw new ArgumentOutOfRangeException(nameof(maxAttempts));
-        _roundDelay = roundDelay ?? TimeSpan.FromMilliseconds(200);
-        _delay = delay ?? Task.Delay;
+        _localCandidates = [.. localCandidates];
+        _onNominated = onNominated ?? throw new ArgumentNullException(nameof(onNominated));
+        _maxNominationAttempts = maxAttempts > 0
+            ? maxAttempts
+            : throw new ArgumentOutOfRangeException(nameof(maxAttempts));
+        _maxPairs = maxPairs > 0 ? maxPairs : throw new ArgumentOutOfRangeException(nameof(maxPairs));
+        _controlling = controlling;
         _logger = loggerFactory.CreateLogger<IceNominationDriver>();
+        _pacer = pacer ?? new IceConnectivityCheckPacer(loggerFactory, roundDelay, delay);
+        _ownsPacer = pacer is null;
+
         foreach (var remote in remoteCandidates)
-            AddPairsForRemote(remote);
+            AddRemoteLocked(remote);
     }
 
-    /// <summary>
-    /// Starts the check/nomination worker on a background task. Idempotent and thread-safe; a second call
-    /// or a call after disposal is a no-op. Safe to call after seeding or adding candidates.
-    /// </summary>
+    /// <summary>Starts the pacer and submits every initial Waiting pair. Idempotent and thread-safe.</summary>
     public void Start()
     {
         lock (_gate)
         {
-            if (_loop is not null || _disposed)
+            if (_started || _disposed)
                 return;
-            _loop = Task.Run(() => RunAsync(_cts.Token));
+            _started = true;
+            foreach (var pair in _pairs)
+                pair.Phase = IceNominationPairPhase.Waiting;
+            QueueOrdinaryChecksLocked();
         }
+
+        _pacer.Start();
     }
 
-    /// <summary>
-    /// Adds a remote candidate discovered after construction (RFC 8838 trickle). It is paired against every
-    /// local candidate and connectivity-checked like any other pair, and can re-nominate if a resulting pair
-    /// is higher priority than the current nominee and answers. No-op after disposal. Safe to call before or
-    /// after <see cref="Start"/>.
-    /// </summary>
-    /// <param name="candidate">The trickled remote candidate.</param>
+    /// <summary>Adds and schedules a trickled remote candidate, bounded by the checklist pair cap.</summary>
     public void AddCandidate(IceRemoteCandidate candidate)
     {
         lock (_gate)
         {
-            if (_disposed)
+            if (_disposed || _nominated)
                 return;
-            AddPairsForRemote(candidate);
-            // Release inside the gate so the disposed-check and the release are atomic: DisposeAsync disposes
-            // the semaphore only after setting _disposed under this same gate, so a release can never race a
-            // disposed semaphore. Release does not block, so holding the lock is safe.
-            _signal.Release();
+            AddRemoteLocked(candidate);
+            if (_started)
+            {
+                CancelSupersededNominationLocked();
+                QueueOrdinaryChecksLocked();
+            }
         }
     }
 
-    /// <summary>
-    /// Adds a local candidate discovered after construction — the answerer's relay send path, whose TURN
-    /// allocation only finished gathering once the session (and this driver) already existed, so it could not
-    /// be seeded like the offerer's relay candidate. It is paired against every remote seen so far and against
-    /// every remote that trickles in later, and connectivity-checked like any other pair (ordered by pair
-    /// priority, so a lower-preference relay is only nominated when no direct pair works). No-op after disposal.
-    /// Safe to call before or after <see cref="Start"/>.
-    /// </summary>
-    /// <param name="candidate">The local candidate (send path) to pair in.</param>
+    /// <summary>Adds a late local candidate (for example a TURN allocation) and pairs it with known remotes.</summary>
     public void AddLocalCandidate(IceLocalCandidate candidate)
     {
         ArgumentNullException.ThrowIfNull(candidate);
         lock (_gate)
         {
-            if (_disposed)
+            if (_disposed || _nominated)
                 return;
             _localCandidates.Add(candidate);
             foreach (var remote in _remotes)
-                AddPair(candidate, remote);
-            // Release inside the gate for the same disposed-vs-release atomicity as AddCandidate.
-            _signal.Release();
+                AddPairLocked(candidate, remote);
+            if (_started)
+            {
+                CancelSupersededNominationLocked();
+                QueueOrdinaryChecksLocked();
+            }
         }
     }
 
-    // Records the remote and forms a pair between it and every local candidate. Caller holds _gate (or is the
-    // constructor, before the instance is published).
-    private void AddPairsForRemote(IceRemoteCandidate remote)
+    /// <summary>
+    /// Learns a peer-reflexive remote candidate and queues its confirming check ahead of ordinary work
+    /// (RFC 8445 §7.3.1.3–4). The supplied delegate preserves the exact direct/relay path the request used.
+    /// </summary>
+    public bool EnqueueTriggered(
+        IPEndPoint source,
+        long remotePriority,
+        bool relayed,
+        Func<CancellationToken, Task<bool>> check)
     {
-        _remotes.Add(remote);
-        foreach (var local in _localCandidates)
-            AddPair(local, remote);
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(check);
+
+        lock (_gate)
+        {
+            if (_disposed)
+                return false;
+
+            var remote = AddRemoteLocked(new IceRemoteCandidate(source, remotePriority));
+            var pair = SelectTriggeredPairLocked(remote, relayed);
+            if (pair is null)
+                return false;
+
+            pair.PendingChecks++;
+            if (!pair.Validated)
+                pair.Phase = IceNominationPairPhase.InProgress;
+
+            var queued = _pacer.TryEnqueue(new IceConnectivityCheckWork
+            {
+                Kind = IceConnectivityCheckKind.Triggered,
+                Priority = pair.PairPriority,
+                Execute = check,
+                Complete = succeeded => OnConnectivityCheckCompleted(pair, succeeded),
+            });
+            if (!queued)
+            {
+                pair.PendingChecks--;
+                if (!pair.Validated && pair.PendingChecks == 0)
+                    pair.Phase = IceNominationPairPhase.Waiting;
+                _logger.LogWarning("Dropping triggered ICE check for {Source}: the bounded pacer queue is full.", source);
+            }
+            return queued;
+        }
     }
 
-    // Forms one candidate pair (RFC 8445 §6.1.2) at its computed pair priority (§6.1.2.3). Caller holds _gate
-    // (or is the constructor).
-    private void AddPair(IceLocalCandidate local, IceRemoteCandidate remote) =>
+    /// <summary>Updates the role after RFC 8445 role-conflict resolution.</summary>
+    public void SetRole(bool controlling)
+    {
+        lock (_gate)
+        {
+            if (_disposed || _controlling == controlling)
+                return;
+
+            _controlling = controlling;
+            foreach (var pair in _pairs)
+                pair.PairPriority = ComputePairPriority(pair.Local.Priority, pair.Remote.Priority, controlling);
+
+            if (!controlling)
+                CancelQueuedNominationLocked();
+            else
+                TryQueueNominationLocked();
+        }
+    }
+
+    /// <summary>Stops checklist selection after the controlled role accepts the peer's nomination.</summary>
+    public void AcceptRemoteNomination(IPEndPoint remote)
+    {
+        ArgumentNullException.ThrowIfNull(remote);
+        lock (_gate)
+        {
+            if (_disposed || _nominated)
+                return;
+            _nominated = true;
+            CancelQueuedNominationLocked();
+            var selected = _pairs
+                .Where(pair => pair.Remote.EndPoint.Equals(remote))
+                .OrderByDescending(pair => pair.PairPriority)
+                .FirstOrDefault();
+            if (selected is not null)
+                selected.Phase = IceNominationPairPhase.Nominated;
+        }
+    }
+
+    private IceRemoteCandidate AddRemoteLocked(IceRemoteCandidate candidate)
+    {
+        var existingIndex = _remotes.FindIndex(remote => remote.EndPoint.Equals(candidate.EndPoint));
+        if (existingIndex >= 0)
+        {
+            var existing = _remotes[existingIndex];
+            if (candidate.Priority <= existing.Priority)
+                return existing;
+
+            _remotes[existingIndex] = candidate;
+            foreach (var pair in _pairs.Where(pair => pair.Remote.EndPoint.Equals(candidate.EndPoint)))
+            {
+                pair.Remote = candidate;
+                pair.PairPriority = ComputePairPriority(pair.Local.Priority, candidate.Priority, _controlling);
+            }
+            return candidate;
+        }
+
+        _remotes.Add(candidate);
+        foreach (var local in _localCandidates)
+            AddPairLocked(local, candidate);
+        return candidate;
+    }
+
+    private void AddPairLocked(IceLocalCandidate local, IceRemoteCandidate remote)
+    {
+        if (_pairs.Any(pair => ReferenceEquals(pair.Local, local) && pair.Remote.EndPoint.Equals(remote.EndPoint)))
+            return;
+
+        var pairPriority = ComputePairPriority(local.Priority, remote.Priority, _controlling);
+        if (_pairs.Count >= _maxPairs && !EvictLowestForLocked(pairPriority, remote.EndPoint))
+            return;
+
         _pairs.Add(new IceNominationPairState
         {
             Local = local,
             Remote = remote,
-            PairPriority = ComputePairPriority(local.Priority, remote.Priority),
+            PairPriority = pairPriority,
+            Phase = _started ? IceNominationPairPhase.Waiting : IceNominationPairPhase.Frozen,
         });
+    }
 
-    private async Task RunAsync(CancellationToken ct)
+    // At the DoS pair cap (ENGINEERING_RULES.md §132-133 wire-boundary caps), retain the highest-priority pairs
+    // rather than the first-arrived ones: SDP and trickle order are remote-controlled, so a later top-priority
+    // candidate must not be excluded by earlier low-priority ones. Evicts the lowest-priority *evictable* pair
+    // (never a validated / in-flight / nominated one) when the newcomer outranks it — mirrors SIPSorcery, which
+    // sorts its checklist and drops the lowest. Returns false to drop the newcomer instead, keeping the cap.
+    private bool EvictLowestForLocked(long pairPriority, IPEndPoint remote)
     {
-        try
+        var victim = _pairs
+            .Where(pair => pair.PendingChecks == 0
+                && !pair.Validated
+                && pair.Phase is IceNominationPairPhase.Frozen or IceNominationPairPhase.Waiting or IceNominationPairPhase.Failed)
+            .OrderBy(pair => pair.PairPriority)
+            .FirstOrDefault();
+        if (victim is null || victim.PairPriority >= pairPriority)
         {
-            while (!ct.IsCancellationRequested)
+            _logger.LogWarning("ICE checklist pair cap {MaxPairs} reached; dropping candidate pair for {Remote}.", _maxPairs, remote);
+            return false;
+        }
+
+        _pairs.Remove(victim);
+        return true;
+    }
+
+    private IceNominationPairState? SelectTriggeredPairLocked(IceRemoteCandidate remote, bool relayed)
+    {
+        var desiredType = relayed ? "relay" : "host";
+        return _pairs
+            .Where(pair => pair.Remote.EndPoint.Equals(remote.EndPoint))
+            .OrderByDescending(pair => string.Equals(pair.Local.Type, desiredType, StringComparison.OrdinalIgnoreCase))
+            .ThenByDescending(pair => pair.PairPriority)
+            .FirstOrDefault();
+    }
+
+    private void QueueOrdinaryChecksLocked()
+    {
+        if (!_started || _nominated)
+            return;
+
+        foreach (var pair in _pairs.OrderByDescending(pair => pair.PairPriority))
+        {
+            if (pair.OrdinaryScheduled || pair.Phase is IceNominationPairPhase.Failed or IceNominationPairPhase.Nominated)
+                continue;
+
+            var queued = _pacer.TryEnqueue(new IceConnectivityCheckWork
             {
-                var next = SelectBestActionable();
-                if (next is null)
-                {
-                    // Nothing worth checking right now — wait for a trickled candidate (signal) or poll after
-                    // the round delay so a pair still within its retry budget is revisited.
-                    await WaitForWorkAsync(ct).ConfigureAwait(false);
-                    continue;
-                }
+                Kind = IceConnectivityCheckKind.Ordinary,
+                Priority = pair.PairPriority,
+                Execute = ct => ExecuteOrdinaryCheckAsync(pair, ct),
+                Complete = succeeded => OnConnectivityCheckCompleted(pair, succeeded),
+            });
+            if (!queued)
+                break;
 
-                if (await next.Local.Check(next.Remote.EndPoint, false, ct).ConfigureAwait(false))
-                {
-                    // Validated pair (RFC 8445 §7.2.5). Nominate with a USE-CANDIDATE check (§8.1.1) and adopt
-                    // the pair only once THAT check gets its own success response: the ordinary check proves the
-                    // path works, but only the nominating check's response proves the controlled peer received
-                    // the USE-CANDIDATE and marked the pair nominated. Adopting on a lost USE-CANDIDATE would let
-                    // the controlling side switch its media/consent target locally while the peer still has no
-                    // nominated pair — so a missed nomination is retried, not adopted.
-                    if (await next.Local.Check(next.Remote.EndPoint, true, ct).ConfigureAwait(false))
-                    {
-                        lock (_gate)
-                        {
-                            _nominatedPriority = next.PairPriority;
-                            next.Done = true;
-                        }
-
-                        _logger.LogDebug(
-                            "ICE nominated pair local={LocalType} remote={EndPoint} (pair priority {Priority}) after a " +
-                            "confirmed USE-CANDIDATE check (RFC 8445 §7.2.2/§8.1.1).",
-                            next.Local.Type, next.Remote.EndPoint, next.PairPriority);
-                        RaiseNominated(next.Local, next.Remote.EndPoint);
-                    }
-                    else
-                    {
-                        // The path validated but the nominating check was not confirmed (a lost USE-CANDIDATE
-                        // request or its response). Count the attempt and retry the pair (a fresh ordinary check
-                        // then USE-CANDIDATE on the next round) rather than adopting it.
-                        bool exhausted;
-                        lock (_gate)
-                        {
-                            next.Attempts++;
-                            exhausted = next.Attempts >= _maxAttempts;
-                            if (exhausted)
-                                next.Done = true;
-                        }
-
-                        if (exhausted)
-                            _logger.LogDebug(
-                                "ICE nominating (USE-CANDIDATE) check for local={LocalType} remote={EndPoint} was not " +
-                                "confirmed after {Attempts} attempts; abandoning nomination of it.",
-                                next.Local.Type, next.Remote.EndPoint, _maxAttempts);
-
-                        await _delay(_roundDelay, ct).ConfigureAwait(false);
-                    }
-                }
-                else
-                {
-                    bool exhausted;
-                    lock (_gate)
-                    {
-                        next.Attempts++;
-                        exhausted = next.Attempts >= _maxAttempts;
-                        if (exhausted)
-                            next.Done = true;
-                    }
-
-                    if (exhausted)
-                        _logger.LogDebug(
-                            "ICE pair local={LocalType} remote={EndPoint} did not answer after {Attempts} checks; abandoning it.",
-                            next.Local.Type, next.Remote.EndPoint, _maxAttempts);
-
-                    // Pace retries and give lower-priority pairs a turn between attempts.
-                    await _delay(_roundDelay, ct).ConfigureAwait(false);
-                }
-            }
-        }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
-        {
-            // Disposed / cancelled — stop quietly.
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "ICE nomination driver loop failed unexpectedly; keeping the current remote.");
+            pair.OrdinaryScheduled = true;
+            pair.PendingChecks++;
+            pair.Phase = IceNominationPairPhase.InProgress;
         }
     }
 
-    // The next pair still worth a check: the least-attempted pair first, then highest pair priority within
-    // that fair checklist round. This prevents one unreachable host candidate from consuming its entire
-    // timeout budget before an already-known relay pair gets its first check. A later working direct pair
-    // still upgrades an earlier relay nomination because only pairs at/below the nominated priority are
-    // excluded.
-    private IceNominationPairState? SelectBestActionable()
+    private Task<bool> ExecuteOrdinaryCheckAsync(IceNominationPairState pair, CancellationToken ct)
+    {
+        IceLocalCandidate local;
+        IPEndPoint remote;
+        lock (_gate)
+        {
+            if (_disposed || _nominated)
+                return Task.FromResult(false);
+            // Snapshot the send path and target under the gate: AddRemoteLocked can swap the (struct) Remote
+            // to upgrade its priority while this check runs, so reading it lock-free could tear (RFC 8445 §7.3.1.4).
+            local = pair.Local;
+            remote = pair.Remote.EndPoint;
+        }
+        return local.Check(remote, false, ct);
+    }
+
+    private void OnConnectivityCheckCompleted(IceNominationPairState pair, bool succeeded)
     {
         lock (_gate)
         {
-            IceNominationPairState? best = null;
-            foreach (var state in _pairs)
+            if (_disposed)
+                return;
+
+            if (pair.PendingChecks > 0)
+                pair.PendingChecks--;
+            if (succeeded)
             {
-                if (state.Done || state.Attempts >= _maxAttempts || state.PairPriority <= _nominatedPriority)
-                    continue;
-                if (best is null ||
-                    state.Attempts < best.Attempts ||
-                    (state.Attempts == best.Attempts && state.PairPriority > best.PairPriority))
-                    best = state;
+                pair.Validated = true;
+                if (pair.Phase != IceNominationPairPhase.Nominated)
+                    pair.Phase = IceNominationPairPhase.Succeeded;
+            }
+            else if (!pair.Validated && pair.PendingChecks == 0)
+            {
+                pair.Phase = IceNominationPairPhase.Failed;
             }
 
-            return best;
+            QueueOrdinaryChecksLocked();
+            TryQueueNominationLocked();
         }
     }
 
-    private void RaiseNominated(IceLocalCandidate local, IPEndPoint endPoint)
+    private void TryQueueNominationLocked()
+    {
+        if (!_started || !_controlling || _nominated || _disposed
+            || _pairs.Any(pair => pair.Phase == IceNominationPairPhase.Nominating))
+        {
+            return;
+        }
+
+        var candidate = _pairs
+            .Where(pair => pair.Validated && pair.Phase == IceNominationPairPhase.Succeeded)
+            .OrderByDescending(pair => pair.PairPriority)
+            .FirstOrDefault();
+        if (candidate is null)
+            return;
+
+        // DECISION: regular nomination (RFC 8445 §8.1.1), not aggressive. We nominate the highest-priority
+        // validated pair only once no higher-priority pair is still in flight, so an unresolved high-priority
+        // pair delays nomination by its transaction budget (~2 s worst case, bounded by the consent-check
+        // retransmit schedule). This trades a bounded setup delay for always selecting the best working pair;
+        // an aggressive policy would nominate the first validated pair sooner but risk locking onto a
+        // suboptimal path. Revisit if setup latency on lossy high-priority pairs outweighs pair optimality.
+        var higherPending = _pairs.Any(pair =>
+            pair.PairPriority > candidate.PairPriority
+            && pair.Phase is IceNominationPairPhase.Frozen
+                or IceNominationPairPhase.Waiting
+                or IceNominationPairPhase.InProgress);
+        if (higherPending)
+            return;
+
+        candidate.Phase = IceNominationPairPhase.Nominating;
+        var generation = ++candidate.NominationGeneration;
+        if (!_pacer.TryEnqueue(new IceConnectivityCheckWork
+        {
+            Kind = IceConnectivityCheckKind.Nomination,
+            Priority = candidate.PairPriority,
+            Execute = ct => ExecuteNominationAsync(candidate, generation, ct),
+            Complete = succeeded => OnNominationCompleted(candidate, generation, succeeded),
+        }))
+        {
+            candidate.Phase = IceNominationPairPhase.Succeeded;
+        }
+    }
+
+    private Task<bool> ExecuteNominationAsync(IceNominationPairState pair, int generation, CancellationToken ct)
+    {
+        IceLocalCandidate local;
+        IPEndPoint remote;
+        lock (_gate)
+        {
+            if (_disposed || _nominated || !_controlling
+                || pair.Phase != IceNominationPairPhase.Nominating
+                || pair.NominationGeneration != generation)
+            {
+                return Task.FromResult(false);
+            }
+            // Snapshot under the gate for the same reason as ExecuteOrdinaryCheckAsync (RFC 8445 §7.3.1.4).
+            local = pair.Local;
+            remote = pair.Remote.EndPoint;
+        }
+        return local.Check(remote, true, ct);
+    }
+
+    private void OnNominationCompleted(IceNominationPairState pair, int generation, bool succeeded)
+    {
+        bool raise = false;
+        lock (_gate)
+        {
+            if (_disposed || _nominated || pair.Phase != IceNominationPairPhase.Nominating
+                || pair.NominationGeneration != generation)
+            {
+                return;
+            }
+
+            if (succeeded)
+            {
+                pair.Phase = IceNominationPairPhase.Nominated;
+                _nominated = true;
+                raise = true;
+            }
+            else
+            {
+                pair.NominationAttempts++;
+                pair.Phase = pair.NominationAttempts >= _maxNominationAttempts
+                    ? IceNominationPairPhase.Failed
+                    : IceNominationPairPhase.Succeeded;
+                TryQueueNominationLocked();
+            }
+        }
+
+        if (!raise)
+            return;
+
+        _logger.LogDebug(
+            "ICE nominated pair local={LocalType} remote={Remote} priority={Priority} after confirmed USE-CANDIDATE.",
+            pair.Local.Type, pair.Remote.EndPoint, pair.PairPriority);
+        RaiseNominated(pair.Local, pair.Remote.EndPoint);
+    }
+
+    private void CancelQueuedNominationLocked()
+    {
+        foreach (var pair in _pairs.Where(pair => pair.Phase == IceNominationPairPhase.Nominating))
+        {
+            pair.NominationGeneration++;
+            pair.Phase = pair.Validated ? IceNominationPairPhase.Succeeded : IceNominationPairPhase.Waiting;
+        }
+    }
+
+    // Invalidates an already-queued nomination when a newly added pair outranks the one being nominated. The
+    // pacer runs nomination ahead of ordinary checks, so without this a low-priority nomination queued just
+    // before a higher-priority pair trickled in would win and lock _nominated before the better pair is ever
+    // checked (RFC 8445 §8.1.1 — nominate the highest-priority *validated* pair). Bumping the generation makes
+    // the queued USE-CANDIDATE a no-op; the superseded pair falls back and is reconsidered once the higher pair
+    // resolves (or re-nominated by TryQueueNominationLocked if the higher pair fails).
+    private void CancelSupersededNominationLocked()
+    {
+        var nominating = _pairs.FirstOrDefault(pair => pair.Phase == IceNominationPairPhase.Nominating);
+        if (nominating is null)
+            return;
+
+        var higherPending = _pairs.Any(pair =>
+            pair.PairPriority > nominating.PairPriority
+            && pair.Phase is IceNominationPairPhase.Frozen
+                or IceNominationPairPhase.Waiting
+                or IceNominationPairPhase.InProgress);
+        if (!higherPending)
+            return;
+
+        nominating.NominationGeneration++;
+        nominating.Phase = nominating.Validated ? IceNominationPairPhase.Succeeded : IceNominationPairPhase.Waiting;
+    }
+
+    private void RaiseNominated(IceLocalCandidate local, IPEndPoint remote)
     {
         try
         {
-            _onNominated(local, endPoint);
+            _onNominated(local, remote);
         }
         catch (Exception ex)
         {
@@ -299,47 +483,26 @@ internal sealed class IceNominationDriver : IAsyncDisposable
         }
     }
 
-    private async Task WaitForWorkAsync(CancellationToken ct)
+    private static long ComputePairPriority(long localPriority, long remotePriority, bool controlling)
     {
-        // Wake on a newly added candidate (signal) or after the round delay to re-check retriable pairs.
-        try
-        {
-            await _signal.WaitAsync(_roundDelay, ct).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
-        {
-            // stopping
-        }
+        var g = controlling ? localPriority : remotePriority;
+        var d = controlling ? remotePriority : localPriority;
+        var min = Math.Min(g, d);
+        var max = Math.Max(g, d);
+        return (min << 32) + (max << 1) + (g > d ? 1 : 0);
     }
 
-    // RFC 8445 §6.1.2.3 pair priority. The driver is the controlling agent (only controlling runs a driver),
-    // so G is the local candidate priority and D the remote's. Realistic ICE candidate priorities are below
-    // 2^31, so min<<32 stays within Int64 range.
-    private static long ComputePairPriority(long controllingPriority, long controlledPriority)
-    {
-        var min = Math.Min(controllingPriority, controlledPriority);
-        var max = Math.Max(controllingPriority, controlledPriority);
-        return (min << 32) + (max << 1) + (controllingPriority > controlledPriority ? 1 : 0);
-    }
-
-    /// <summary>Cancels the loop and awaits its completion. Idempotent.</summary>
+    /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
-        Task? loop;
         lock (_gate)
         {
             if (_disposed)
                 return;
             _disposed = true;
-            loop = _loop;
         }
 
-        await _cts.CancelAsync().ConfigureAwait(false);
-        // The loop observes cancellation internally (every await returns on it), so awaiting it here does
-        // not throw — mirrors IceConsentMonitor.DisposeAsync.
-        if (loop is not null)
-            await loop.ConfigureAwait(false);
-        _cts.Dispose();
-        _signal.Dispose();
+        if (_ownsPacer)
+            await _pacer.DisposeAsync().ConfigureAwait(false);
     }
 }

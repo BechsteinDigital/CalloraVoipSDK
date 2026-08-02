@@ -77,12 +77,15 @@ internal sealed class IceInboundStunHandler
     /// </summary>
     public event Action<IPEndPoint, Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>?>? PairNominated;
 
+    /// <summary>Raised when role-conflict handling changes this agent's ICE role.</summary>
+    public event Action<IceRole>? RoleChanged;
+
     /// <summary>
     /// Raised with the sender's address (and the reply path the check arrived on) when an inbound check is
     /// authenticated and accepted, so the transport can trigger a connectivity check back to confirm the pair
     /// bidirectionally (RFC 8445 §7.3.1.4) over the same path. Fires on the transport receive-loop thread.
     /// </summary>
-    public event Action<IPEndPoint, Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>?>? CheckAccepted;
+    public event Action<IPEndPoint, uint, Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>?>? CheckAccepted;
 
     /// <summary>
     /// Handles one STUN datagram demuxed off the media transport. Matches the transport's
@@ -112,6 +115,8 @@ internal sealed class IceInboundStunHandler
         {
             _logger.LogDebug("ICE role changed to {Role} after inbound role conflict from {Source}.", result.RoleAfter, source);
             Volatile.Write(ref _role, (int)result.RoleAfter);
+            try { RoleChanged?.Invoke(result.RoleAfter); }
+            catch (Exception ex) { _logger.LogError(ex, "Unhandled exception in ICE RoleChanged handler."); }
         }
 
         if (result.NominatePair)
@@ -122,7 +127,7 @@ internal sealed class IceInboundStunHandler
 
         if (result.Accepted)
         {
-            try { CheckAccepted?.Invoke(source, replyVia); }
+            try { CheckAccepted?.Invoke(source, result.PeerPriority, replyVia); }
             catch (Exception ex) { _logger.LogError(ex, "Unhandled exception in ICE CheckAccepted handler."); }
         }
 

@@ -27,10 +27,11 @@ public sealed class WebRtcConfiguration
     public bool EnableVideo { get; init; }
 
     /// <summary>
-    /// Uses stable numeric MIDs from the first offer and appends runtime-added audio/video m-lines in call
-    /// order. Enable this for SFU peers that add tracks during renegotiation: RFC 8829 requires existing
-    /// m-line order and MIDs to remain unchanged. Default <see langword="false"/> preserves the historic
-    /// semantic <c>audio</c>/<c>video</c> MIDs for fixed 1+1 peers.
+    /// Makes a fixed 1+1 peer offer numeric MIDs from the first offer instead of the historic semantic
+    /// <c>audio</c>/<c>video</c> MIDs. Runtime-added tracks (<c>AddAudioTrack</c>/<c>AddVideoTrack</c>) always
+    /// use stable, append-only numeric MIDs regardless of this flag (RFC 8829 — existing m-lines never move or
+    /// change MID), so it only affects the fixed 1+1 case. Default <see langword="false"/> keeps the
+    /// byte-identical historic 1+1 SDP.
     /// </summary>
     public bool UseStableNumericMediaIds { get; init; }
 

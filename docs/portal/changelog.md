@@ -5,6 +5,27 @@ The authoritative changelog lives in the repository:
 
 ## Release highlights
 
+### 4.7.2 — 2026-08-01
+
+**ICE connection-setup latency patch.** The internal ICE connectivity-check scheduler is reworked into a
+globally paced, *overlapping* RFC 8445 checklist: checks start at most one per pacing interval (§14 `Ta`) but
+run concurrently, so an unreachable higher-priority candidate no longer stalls every other pair behind its
+timeout. STUN checks now retransmit at the transaction level (RFC 8489 §6.1), both ICE roles check actively
+(§7.2), and peer-reflexive triggered checks (§7.3.1.4) dispatch reactively. It also folds in a round of
+review-finding fixes: superseded-nomination cancellation, a priority-capped ICE checklist, type-scoped ICE
+foundations, **stable append-only MIDs for runtime-added tracks** (RFC 8829), and recv-track DoS caps.
+**`PublicApi.approved.txt` is unchanged** and a fixed 1+1 peer's SDP is byte-identical; the review fixes adjust
+a few on-wire details for correctness. Full ICE stays opt-in and not yet browser-interop-proven. See
+[ADR-062](../adr/ADR-062-ice-checklist-pacing.md) and [ADR-063](../adr/ADR-063-jsep-append-only-track-mids.md).
+
+### 4.7.1 — 2026-07-31
+
+**WebRTC/SFU correctness patch.** Stable browser-safe MIDs across RFC 8829 renegotiation
+(`UseStableNumericMediaIds`), a live bundle sender for an outbound `sendonly` audio track the browser accepts
+as `recvonly`, and a first ICE pair-progression fix (a lower-priority reachable candidate is checked before an
+unreachable higher-priority one consumes another round — extended into a full checklist in 4.7.2). Additive and
+transport-only.
+
 ### 4.7.0 — 2026-07-29
 
 The 4.7 line builds **multi-party / SFU enablement** onto the WebRTC facade. Everything is **additive and

@@ -15,10 +15,10 @@ namespace CalloraVoipSdk.Core.Infrastructure.WebRtc;
 ///   <item>1+1 (no AddAudioTrack/AddVideoTrack, at most the EnableVideo primary): the historic single-Video path
 ///   with the semantic mids <c>"audio"</c>/<c>"video"</c> — BYTE-IDENTICAL to the pre-P2c SDP, so existing 1+1
 ///   offers/answers and the SIP path are unchanged.</item>
-///   <item>N (stable-numeric mode or ≥1 AddAudioTrack/AddVideoTrack): the numeric-MID multi-track path
-///   (<see cref="SdpMediaOptions.Tracks"/>, RFC 8843). Compatibility mode retains the historic grouped order;
-///   stable mode starts numeric and appends runtime tracks in API call order so renegotiation never changes an
-///   existing m-line's index/MID (RFC 8829).</item>
+///   <item>N (stable-numeric mode or ≥1 AddAudioTrack/AddVideoTrack): the stable numeric-MID multi-track path
+///   (<see cref="SdpMediaOptions.Tracks"/>, RFC 8843). Primary audio/video keep their MIDs from the first offer
+///   and runtime tracks append in API call order, so renegotiation never changes an existing m-line's index/MID
+///   (RFC 8829). Independent of track kind — mixed add order never collides (the pre-4.7.2 grouped layout could).</item>
 /// </list>
 /// </summary>
 internal static class WebRtcSdpOptionsBuilder
@@ -33,6 +33,7 @@ internal static class WebRtcSdpOptionsBuilder
     /// <param name="videoTrackId">The peer's stable primary-video a=msid track id.</param>
     public static SdpMediaOptions Build(
         IPEndPoint local,
+        IReadOnlyList<IPEndPoint> hostEndPoints,
         WebRtcPeerOptions options,
         IReadOnlyList<(WebRtcAddedAudioTrack Track, string TrackId, int Order)> addedAudio,
         IReadOnlyList<(WebRtcAddedVideoTrack Track, string TrackId, int Order)> addedVideo,
@@ -40,25 +41,28 @@ internal static class WebRtcSdpOptionsBuilder
         string audioTrackId,
         string videoTrackId)
     {
+        ArgumentNullException.ThrowIfNull(hostEndPoints);
+        // Wildcard is a socket bind policy, not a candidate. The provider expands it into active-interface
+        // addresses that all share this socket's real port (RFC 8445 §5.1.1.1).
+        var candidates = new List<SdpIceCandidate>(options.Ice.Candidates.Count + hostEndPoints.Count);
+        for (var index = 0; index < hostEndPoints.Count; index++)
+            candidates.Add(WebRtcIceCandidateFactory.LocalHostCandidate(hostEndPoints[index], index));
+        candidates.AddRange(options.Ice.Candidates);
+
         var ice = new SdpIceParameters
         {
             Ufrag = options.Ice.Ufrag,
             Pwd = options.Ice.Pwd,
             Options = options.Ice.Options,
-            // Advertise our bound media address as a host candidate (RFC 8839) so the peer can reach us.
-            // Early-bind gives us the real ephemeral port before the session exists, so a host candidate is
-            // always emitted (no more zero-port disabled offer).
-            Candidates = [WebRtcIceCandidateFactory.LocalHostCandidate(local), .. options.Ice.Candidates],
+            Candidates = candidates,
         };
 
-        if (options.UseStableNumericMediaIds)
+        // Any runtime-added track uses the stable append-only numeric-MID layout regardless of the flag: the
+        // grouped legacy layout was not JSEP-conformant and drifted a track's MID when a track of the other
+        // kind was added later (fixed in 4.7.2). The flag now only governs whether a *fixed 1+1* peer keeps its
+        // historic semantic audio/video MIDs (default) or opts into numeric MIDs.
+        if (options.UseStableNumericMediaIds || addedAudio.Count > 0 || addedVideo.Count > 0)
             return StableMultiTrack(local, ice, options, addedAudio, addedVideo, mediaStreamId, audioTrackId, videoTrackId);
-
-        // Compatibility N-path: any track was added → numeric-MID multi-track offer. The added-audio m-lines follow the primary
-        // audio and precede the videos, and the config primary video (if any) is the first video m-line, so the MIDs
-        // match the AddAudioTrack/AddVideoTrack index arithmetic (audio 0, added-audio 1…A, primary video A+1, …).
-        if (addedAudio.Count > 0 || addedVideo.Count > 0)
-            return LegacyMultiTrack(local, ice, options, addedAudio, addedVideo, mediaStreamId, audioTrackId, videoTrackId);
 
         var primaryVideo = options.VideoTracks.Count > 0 ? options.VideoTracks[0] : null;
         return new SdpMediaOptions
@@ -81,78 +85,6 @@ internal static class WebRtcSdpOptionsBuilder
             VideoMsid = primaryVideo is not null
                 ? new SdpMsid { StreamId = mediaStreamId, TrackId = videoTrackId }
                 : null,
-            Bundle = true,
-            RtcpMux = true,
-        };
-    }
-
-    // Builds the numeric-MID multi-track options (N-path): the primary audio track (MID 0), then each runtime-added
-    // audio track in order, then the config-time EnableVideo primary video (if any), then each runtime-added video
-    // track in order. The negotiator assigns numeric a=mid by list index, so this order MUST match the
-    // AddAudioTrack/AddVideoTrack index arithmetic (audio 0, added-audio 1…A, primary video A+1, added video …).
-    private static SdpMediaOptions LegacyMultiTrack(
-        IPEndPoint local,
-        SdpIceParameters ice,
-        WebRtcPeerOptions options,
-        IReadOnlyList<(WebRtcAddedAudioTrack Track, string TrackId, int Order)> addedAudio,
-        IReadOnlyList<(WebRtcAddedVideoTrack Track, string TrackId, int Order)> addedVideo,
-        string mediaStreamId,
-        string audioTrackId,
-        string videoTrackId)
-    {
-        var tracks = new List<SdpTrackOptions>(1 + addedAudio.Count + options.VideoTracks.Count + addedVideo.Count)
-        {
-            new()
-            {
-                Kind = "audio",
-                Codecs = options.AudioCodecs,
-                Direction = SdpMediaDirection.SendRecv,
-                Msid = new SdpMsid { StreamId = mediaStreamId, TrackId = audioTrackId },
-            },
-        };
-
-        // Each runtime-added AUDIO track sits immediately after the primary audio and before any video (RFC 8843):
-        // its own direction, stable msid track id, and optional stream id (else the peer's default MediaStream), so a
-        // receiver can group or separate the tracks (RFC 8830). Audio has no simulcast/header-extension/crypto seam here.
-        foreach (var (track, trackId, _) in addedAudio)
-            tracks.Add(new SdpTrackOptions
-            {
-                Kind = "audio",
-                Codecs = track.Codecs,
-                Direction = track.Direction,
-                Msid = new SdpMsid { StreamId = track.StreamId ?? mediaStreamId, TrackId = trackId },
-            });
-
-        // The config-time primary video (EnableVideo) keeps its stable msid track id and shares the default stream.
-        foreach (var video in options.VideoTracks)
-            tracks.Add(new SdpTrackOptions
-            {
-                Kind = "video",
-                Codecs = video.Codecs,
-                Direction = SdpMediaDirection.SendRecv,
-                Msid = new SdpMsid { StreamId = mediaStreamId, TrackId = videoTrackId },
-                Crypto = video.Crypto,
-                HeaderExtensionUris = video.HeaderExtensionUris,
-                SimulcastSendRids = video.SimulcastSendRids,
-            });
-
-        // Each runtime-added VIDEO track: its own direction, stable msid track id, and optional stream id (else the
-        // peer's default MediaStream), so a receiver can group or separate the tracks (RFC 8830).
-        foreach (var (track, trackId, _) in addedVideo)
-            tracks.Add(new SdpTrackOptions
-            {
-                Kind = "video",
-                Codecs = track.Codecs,
-                Direction = track.Direction,
-                Msid = new SdpMsid { StreamId = track.StreamId ?? mediaStreamId, TrackId = trackId },
-                SimulcastSendRids = track.SimulcastSendRids,
-            });
-
-        return new SdpMediaOptions
-        {
-            Dtls = options.Dtls,
-            Ice = ice,
-            Tracks = tracks,
             Bundle = true,
             RtcpMux = true,
         };

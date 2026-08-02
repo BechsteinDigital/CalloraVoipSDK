@@ -18,7 +18,7 @@ internal sealed class TurnAllocateRequestHandler
     private readonly TurnServerOptions _options;
     private readonly TurnServerResponseFactory _responseFactory;
     private readonly TurnMobilityService _mobilityService;
-    private readonly Func<TurnServerAllocation, CancellationToken, Task> _replaceAllocationAsync;
+    private readonly Func<TurnServerAllocation, CancellationToken, Task<bool>> _replaceAllocationAsync;
     private readonly Func<string, bool> _hasAllocationCapacity;
     private readonly TurnPortReservationStore _reservationStore;
     private readonly ILogger<TurnServer> _logger;
@@ -34,7 +34,7 @@ internal sealed class TurnAllocateRequestHandler
         TurnServerOptions options,
         TurnServerResponseFactory responseFactory,
         TurnMobilityService mobilityService,
-        Func<TurnServerAllocation, CancellationToken, Task> replaceAllocationAsync,
+        Func<TurnServerAllocation, CancellationToken, Task<bool>> replaceAllocationAsync,
         Func<string, bool> hasAllocationCapacity,
         TurnPortReservationStore reservationStore,
         ILogger<TurnServer> logger)
@@ -197,7 +197,16 @@ internal sealed class TurnAllocateRequestHandler
             Realm = authenticatedCredentials?.Realm
         };
 
-        await _replaceAllocationAsync(allocation, ct).ConfigureAwait(false);
+        if (!await _replaceAllocationAsync(allocation, ct).ConfigureAwait(false))
+        {
+            // Lost the admission race: the quota filled between the optimistic HasCapacity check and the atomic
+            // insert (#155 P1-2). Dispose the provisional relay socket(s) and refuse, so the table never exceeds
+            // MaxTotalAllocations under concurrent Allocate requests.
+            await allocation.DisposeAsync().ConfigureAwait(false);
+            _logger.LogWarning(
+                "TURN allocation quota reached under contention; refusing Allocate from {Client}", context.RemoteEndPoint);
+            return _responseFactory.BuildErrorResponse(request, 486, "Allocation Quota Reached", includeAuthAttributes: false);
+        }
 
         var responseAttributes = new List<StunAttribute>
         {

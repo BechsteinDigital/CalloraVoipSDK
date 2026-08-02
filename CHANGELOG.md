@@ -8,6 +8,82 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
 
 The next line. Entries here accumulate the consumer-visible changes not yet released.
 
+## [4.7.2] - 2026-08-01
+
+ICE connection-setup latency patch plus a round of review-finding fixes. The internal connectivity-check
+scheduler is reworked so a call reaches a working candidate pair faster, especially when a higher-priority
+candidate is unreachable. **`PublicApi.approved.txt` is unchanged** (no API break); the ICE latency rework is
+transparent, and the review fixes change a few on-wire details for correctness — type-scoped ICE foundations,
+and stable append-only MIDs / call-order m-lines for runtime-added tracks (a fixed 1+1 peer stays
+byte-identical). See `RELEASE_NOTES_4.7.2.md`, ADR-062 (ICE checklist) and ADR-063 (track MIDs) for detail.
+
+### Fixed
+
+- **ICE connectivity checks are globally paced and overlapping instead of serial.** Checks previously ran one
+  pair at a time, each fully awaited before the next, so an unreachable high-priority pair blocked every other
+  pair behind its full timeout. Checks now start at most one per pacing interval (RFC 8445 §14 `Ta`) but run
+  concurrently — a dead pair no longer delays reachable ones.
+- **STUN checks retransmit at the transaction level (RFC 8489 §6.1).** A lost check recovers in hundreds of
+  milliseconds instead of waiting out the full 2 s check timeout before the pair is retried.
+- **Both ICE roles run ordinary connectivity checks (RFC 8445 §7.2);** only the controlling role nominates. The
+  controlled agent no longer waits passively for the peer's nomination before validating pairs.
+- **Peer-reflexive triggered checks (RFC 8445 §7.3.1.4) preempt ordinary work and dispatch reactively,** no
+  longer gated on the local checklist's own start; a check from the signalled remote is not re-triggered.
+- **Inbound ICE role conflicts (RFC 8445 §7.3.1.1) re-compute pair priorities and redirect nomination** to the
+  resolved role.
+
+Review findings (correctness & hardening):
+
+- **A superseding higher-priority pair cancels an in-flight nomination (RFC 8445 §8.1.1).** A trickled pair that
+  outranks the one being nominated no longer loses the race to the lower validated pair.
+- **The ICE checklist pair cap evicts the lowest-priority pair instead of dropping newcomers,** so a late
+  top-priority candidate is retained under the DoS cap (matches SIPSorcery).
+- **ICE candidate foundations are type-scoped (RFC 8445 §5.1.1.3).** A multi-homed second host candidate no
+  longer shares a foundation with the srflx/relay candidate, which could freeze a peer's NAT/relay fallback
+  wrongly (exposed by the new multi-homed host gathering).
+- **Runtime-added track MIDs are always stable and append-only (RFC 8829), independent of track kind.** The
+  grouped legacy layout could hand a video added before an audio the audio's MID; it is removed. A fixed 1+1
+  peer's SDP is unchanged. See ADR-063.
+- **Recv-side simulcast RID lanes and the learned SSRC→MID/RID tables are DoS-capped** (RFC 8853 /
+  ENGINEERING_RULES §132-133): an authenticated peer stamping a fresh RID/SSRC on every packet can no longer
+  exhaust process memory.
+TURN hardening (review #155):
+
+- **Distinct remote-candidate IPs and TURN permissions are hard-capped** (256): an authenticated peer can no
+  longer trickle unbounded unique IPs to grow the permission state and CreatePermission traffic without bound.
+- **`MaxTotalAllocations` is enforced atomically** under the registry mutation gate, so concurrent Allocate
+  requests cannot each observe the same free slot and overshoot the quota; a lost race disposes the provisional
+  relay socket and returns 486.
+- **Only the retained (bound) TURN relay candidate is advertised** — a later TURN server's allocation no longer
+  yields an unbound relay candidate ICE could nominate as a dead path (RFC 8656).
+- **ChannelData over TCP/TLS is 4-byte aligned** (RFC 8656 §12.5) on send and de-padded on read, so a payload
+  length not a multiple of 4 no longer desyncs the stream.
+- **Expired allocations are removed instance-exact** (compare-and-remove), so a stale sweep cannot delete a
+  replacement that reused the key; relay tasks are drained before their socket is disposed.
+
+- **Build under net8.0 / net9.0** — a nullable-reference warning in `SrtpHardeningTests` was an error under
+  `-warnaserror` on those target frameworks. Test-only, no runtime change.
+
+## [4.7.1] - 2026-07-31
+
+WebRTC/SFU correctness patch for the 4.7 line. Additive and transport-only — a peer that uses none of the 4.7
+features negotiates byte-identical SDP to 4.6. Full detail in `RELEASE_NOTES_4.7.1.md`.
+
+### Added
+
+- **`WebRtcConfiguration.UseStableNumericMediaIds`** — opt-in numeric media IDs that preserve already-negotiated
+  m-line identity across RFC 8829 renegotiation, flowing through configuration, options, mappings and the public
+  API baseline.
+
+### Fixed
+
+- **Stable browser-safe MIDs** during renegotiation — runtime audio/video tracks append in insertion order and
+  keep already-negotiated m-line identity.
+- **Outbound additional audio** — a local `sendonly` audio track accepted as `recvonly` by the browser now gets
+  a live bundle sender instead of failing with "no additional audio track with MID".
+- **ICE pair progression** — a lower-priority reachable candidate is checked before an unreachable
+  higher-priority candidate consumes another retry round (extended into a full checklist in 4.7.2).
+
 ## [4.7.0] - 2026-07-29
 
 The 4.7 line builds multi-party / SFU enablement onto the WebRTC facade: **multiple video tracks** with
