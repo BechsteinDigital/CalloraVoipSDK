@@ -691,7 +691,9 @@ internal sealed class TurnServer : IAsyncDisposable
 
             if (allocation.TryResolveChannelByPeer(received.RemoteEndPoint, now, out var channelNumber))
             {
-                var channelData = TurnChannelDataCodec.Encode(channelNumber, received.Buffer);
+                // Pad ChannelData to a 4-byte boundary over a stream transport (RFC 8656 §12.5); UDP is unpadded.
+                var channelData = TurnChannelDataCodec.Encode(
+                    channelNumber, received.Buffer, padToFourBytes: allocation.ClientTransport != TurnServerTransport.Udp);
                 await SendToClientAsync(allocation, channelData, ct).ConfigureAwait(false);
                 continue;
             }

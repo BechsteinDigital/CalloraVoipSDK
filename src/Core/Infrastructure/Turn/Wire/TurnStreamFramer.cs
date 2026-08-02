@@ -42,6 +42,18 @@ internal static class TurnStreamFramer
             if (payloadRead < channelLength)
                 throw new InvalidDataException($"TURN stream closed after {payloadRead} channel bytes; expected {channelLength}.");
 
+            // RFC 8656 §12.5: over a stream, ChannelData is padded to a 4-byte boundary with 0-3 bytes that are
+            // not counted in the length field. Consume them so the next framed message starts aligned (STUN
+            // frames are already 4-byte aligned by RFC 8489 §5, so only ChannelData needs this).
+            int padding = (4 - (channelLength & 3)) & 3;
+            if (padding > 0)
+            {
+                var pad = new byte[padding];
+                int padRead = await ReadExactAsync(stream, pad, ct).ConfigureAwait(false);
+                if (padRead < padding)
+                    throw new InvalidDataException($"TURN stream closed after {padRead} channel pad bytes; expected {padding}.");
+            }
+
             return new TurnStreamFrame
             {
                 IsChannelData = true,
