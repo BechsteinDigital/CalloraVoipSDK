@@ -93,15 +93,16 @@ internal sealed class TurnAllocationRegistry : IDisposable
         return true;
     }
 
-    /// <summary>Removes the allocation for the client key and releases its relay resources.</summary>
+    /// <summary>Removes the allocation for the client key and releases/drains its relay resources.</summary>
     public async Task RemoveAsync(string clientKey)
     {
         TurnServerAllocation? allocation;
+        Task? relayTask = null;
         await _mutationGate.WaitAsync().ConfigureAwait(false);
         try
         {
             _table.TryRemove(clientKey, out allocation);
-            _relayTasks.TryRemove(clientKey, out _);
+            _relayTasks.TryRemove(clientKey, out relayTask);
         }
         finally
         {
@@ -109,7 +110,53 @@ internal sealed class TurnAllocationRegistry : IDisposable
         }
 
         if (allocation is not null)
-            await DisposeAllocationResourcesAsync(allocation).ConfigureAwait(false);
+            await DisposeAndDrainAsync(allocation, relayTask).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Removes the allocation only if <paramref name="allocation"/> is still the live instance for its key
+    /// (atomic compare-and-remove), so a stale expiry sweep or <see cref="TryGetLive"/> cannot delete a newer
+    /// allocation that replaced the key meanwhile (#155 P2-2). A no-op when the instance was already replaced.
+    /// </summary>
+    internal async Task RemoveInstanceAsync(TurnServerAllocation allocation)
+    {
+        Task? relayTask = null;
+        await _mutationGate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            // Compare-and-remove: only the exact instance is removed, never a replacement under the same key.
+            if (!_table.TryRemove(new KeyValuePair<string, TurnServerAllocation>(allocation.ClientKey, allocation)))
+                return;
+            _relayTasks.TryRemove(allocation.ClientKey, out relayTask);
+        }
+        finally
+        {
+            _mutationGate.Release();
+        }
+
+        await DisposeAndDrainAsync(allocation, relayTask).ConfigureAwait(false);
+    }
+
+    // Disposes the allocation's relay resources (which cancels its relay pump and closes its socket), then awaits
+    // the relay task so it is fully drained before returning — no relay pump outlives its allocation and its
+    // fault is never left unobserved (#155 P2-2).
+    private async Task DisposeAndDrainAsync(TurnServerAllocation allocation, Task? relayTask)
+    {
+        await DisposeAllocationResourcesAsync(allocation).ConfigureAwait(false);
+        if (relayTask is null)
+            return;
+        try
+        {
+            await relayTask.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogTrace("TURN relay task for {ClientKey} cancelled on teardown (expected).", allocation.ClientKey);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "TURN relay task for {ClientKey} completed with an error during removal.", allocation.ClientKey);
+        }
     }
 
     /// <summary>
@@ -129,7 +176,14 @@ internal sealed class TurnAllocationRegistry : IDisposable
             return true;
         }
 
-        _ = RemoveAsync(clientKey);
+        // Remove exactly this expired instance in the background (the sweep is the primary reaper). Compare-and-
+        // remove so a concurrent replacement is not deleted, and observe the fault so a failed removal is logged
+        // rather than swallowed (#155 P2-2).
+        _ = RemoveInstanceAsync(existing).ContinueWith(
+            t => _logger.LogDebug(t.Exception, "Background removal of an expired TURN allocation faulted."),
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted,
+            TaskScheduler.Default);
         return false;
     }
 
@@ -159,7 +213,9 @@ internal sealed class TurnAllocationRegistry : IDisposable
                 {
                     if (now > entry.Value.ExpiresAtUtc)
                     {
-                        await RemoveAsync(entry.Value.ClientKey).ConfigureAwait(false);
+                        // Instance-exact removal so a replacement that landed on this key since the snapshot is
+                        // not swept away (#155 P2-2).
+                        await RemoveInstanceAsync(entry.Value).ConfigureAwait(false);
                         continue;
                     }
 

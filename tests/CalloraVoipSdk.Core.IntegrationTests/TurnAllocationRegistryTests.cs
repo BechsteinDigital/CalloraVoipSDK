@@ -27,6 +27,7 @@ public sealed class TurnAllocationRegistryTests
         RelayedTransport = TurnRequestedTransportProtocol.Udp,
         RelayedEndPoint = new IPEndPoint(IPAddress.Loopback, 50000),
         MappedEndPoint = new IPEndPoint(IPAddress.Loopback, 60000),
+        ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(5),
     };
 
     [Fact]
@@ -59,5 +60,24 @@ public sealed class TurnAllocationRegistryTests
         for (var i = 0; i < 100; i++)
             Assert.True(await registry.ReplaceAsync(Allocation($"client-{i}"), CancellationToken.None));
         Assert.Equal(100, registry.Table.Count);
+    }
+
+    [Fact]
+    public async Task RemoveInstance_is_a_no_op_when_the_key_was_replaced()
+    {
+        // #155 P2-2: a stale expiry sweep / TryGetLive holding an already-replaced instance must not delete the
+        // newer allocation that reused the same key. RemoveInstanceAsync is reference-exact compare-and-remove.
+        using var registry = NewRegistry(maxTotalAllocations: 0);
+        var first = Allocation("client-1");
+        Assert.True(await registry.ReplaceAsync(first, CancellationToken.None));
+
+        var second = Allocation("client-1");   // same key, distinct instance — replaces `first`
+        Assert.True(await registry.ReplaceAsync(second, CancellationToken.None));
+
+        // Removing the stale `first` instance must leave `second` untouched.
+        await registry.RemoveInstanceAsync(first);
+
+        Assert.True(registry.TryGetLive("client-1", out var live));
+        Assert.Same(second, live);
     }
 }
