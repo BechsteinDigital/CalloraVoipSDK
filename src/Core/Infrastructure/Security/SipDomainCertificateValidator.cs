@@ -62,6 +62,12 @@ internal static class SipDomainCertificateValidator
     // concurrent callback contexts this validator runs in.
     private static readonly IdnMapping DomainIdn = new() { AllowUnassigned = false, UseStd3AsciiRules = true };
 
+    // Hard caps bounding the peer-controlled work of SAN decoding (issue #159 P2; ENGINEERING_RULES K4
+    // wire-DoS bounds). Generous for legitimate SIP domain certificates, closed against abuse.
+    private const int MaxSanEntries = 100;
+    private const int MaxSanValueBytes = 1024;
+    private const int MaxTotalSanBytes = 16 * 1024;
+
     /// <summary>
     /// Validates that the provided certificate is appropriate for the given SIP domain
     /// per RFC 5922 §7.1/§7.2.
@@ -95,31 +101,43 @@ internal static class SipDomainCertificateValidator
         if (sanExtension is null)
             return false;
 
-        var (dnsNames, uris) = DecodeSubjectAlternativeNames(sanExtension.RawData);
-
-        // RFC 5922 §7.2: examine sip: URI identities first. Their presence — matching or not —
-        // suppresses the dNSName fallback.
+        // Stream the SAN entries (no full lists) with only O(1) match state. RFC 5922 §7.2: a valid
+        // sip: URI identity — matching or not — suppresses the dNSName fallback, so a dNSName match is
+        // held pending until the scan confirms no URI identity exists.
         var hasSipUriIdentity = false;
-        foreach (var uri in uris)
+        var dnsMatched = false;
+        var uriMatched = false;
+
+        var scannedWithinBounds = TryScanSubjectAlternativeNames(sanExtension.RawData, (isUri, value) =>
         {
-            if (!TryExtractSipUriDomainIdentity(uri, out var uriHost))
-                continue;
+            if (isUri)
+            {
+                if (TryExtractSipUriDomainIdentity(value, out var uriHost))
+                {
+                    hasSipUriIdentity = true;
+                    if (uriHost == normalizedDomain)
+                    {
+                        uriMatched = true;
+                        return true; // decisive: a matching URI identity ends the scan
+                    }
+                }
+            }
+            else if (!hasSipUriIdentity && !dnsMatched && MatchesDnsName(value, normalizedDomain))
+            {
+                dnsMatched = true; // keep scanning: a later URI identity would suppress this (§7.2)
+            }
 
-            hasSipUriIdentity = true;
-            if (uriHost == normalizedDomain)
-                return true;
-        }
+            return false;
+        });
 
-        if (hasSipUriIdentity)
+        // Malformed, trailing-data or over-cap SAN work fails closed — never a partial-parse match.
+        if (!scannedWithinBounds)
             return false;
 
-        foreach (var dnsName in dnsNames)
-        {
-            if (MatchesDnsName(dnsName, normalizedDomain))
-                return true;
-        }
+        if (uriMatched)
+            return true;
 
-        return false;
+        return !hasSipUriIdentity && dnsMatched;
     }
 
     /// <summary>
@@ -130,8 +148,8 @@ internal static class SipDomainCertificateValidator
     /// </summary>
     /// <param name="certificate">The certificate to inspect.</param>
     /// <returns>
-    /// A read-only list of SAN string values (DNS names followed by URIs); empty if
-    /// the extension is absent or malformed.
+    /// A read-only list of SAN string values in certificate order (bounded by the SAN caps); empty if
+    /// the extension is absent, malformed or exceeds the caps.
     /// </returns>
     public static IReadOnlyList<string> GetSubjectAlternativeNames(X509Certificate2 certificate)
     {
@@ -139,11 +157,14 @@ internal static class SipDomainCertificateValidator
         if (sanExtension is null)
             return [];
 
-        var (dnsNames, uris) = DecodeSubjectAlternativeNames(sanExtension.RawData);
-        var all = new List<string>(dnsNames.Count + uris.Count);
-        all.AddRange(dnsNames);
-        all.AddRange(uris);
-        return all;
+        var all = new List<string>();
+        var scannedWithinBounds = TryScanSubjectAlternativeNames(sanExtension.RawData, (_, value) =>
+        {
+            all.Add(value);
+            return false;
+        });
+
+        return scannedWithinBounds ? all : [];
     }
 
     // ──────────────────────────────────────────────────────────────
@@ -151,38 +172,70 @@ internal static class SipDomainCertificateValidator
     // ──────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Decodes the SAN extension value (<c>GeneralNames ::= SEQUENCE OF GeneralName</c>, RFC 5280
-    /// §4.2.1.6) from its DER bytes and returns the <c>dNSName</c> and
-    /// <c>uniformResourceIdentifier</c> entries. Uses ASN.1 decoding rather than the
-    /// locale-/platform-dependent <see cref="X509Extension.Format"/> text. A malformed extension
-    /// yields no names (validation then fails closed).
+    /// Streams the <c>dNSName</c> and <c>uniformResourceIdentifier</c> SAN values
+    /// (<c>GeneralNames ::= SEQUENCE OF GeneralName</c>, RFC 5280 §4.2.1.6) from the extension DER,
+    /// applying hard caps on entry count, per-value size and aggregate size (issue #159 P2, K4 wire-DoS
+    /// bounds). <paramref name="onEntry"/> is invoked per accepted value as <c>(isUri, value)</c> and may
+    /// return <see langword="true"/> to stop early (a decisive match). Uses ASN.1 decoding rather than the
+    /// locale-/platform-dependent <see cref="X509Extension.Format"/> text.
     /// </summary>
-    private static (List<string> DnsNames, List<string> Uris) DecodeSubjectAlternativeNames(byte[] rawExtension)
+    /// <returns>
+    /// <see langword="true"/> when the extension was scanned within bounds (whether or not a match was
+    /// found); <see langword="false"/> when it was malformed, carried trailing data after the SEQUENCE, or
+    /// exceeded a cap — the caller then fails closed.
+    /// </returns>
+    private static bool TryScanSubjectAlternativeNames(byte[] rawExtension, Func<bool, string, bool> onEntry)
     {
-        var dnsNames = new List<string>();
-        var uris = new List<string>();
+        var entries = 0;
+        var totalBytes = 0;
 
         try
         {
-            var generalNames = new AsnReader(rawExtension, AsnEncodingRules.DER).ReadSequence();
+            var outer = new AsnReader(rawExtension, AsnEncodingRules.DER);
+            var generalNames = outer.ReadSequence();
+
+            // RFC 5280 §4.2.1.6: nothing may follow the GeneralNames SEQUENCE.
+            if (outer.HasData)
+                return false;
+
             while (generalNames.HasData)
             {
+                if (++entries > MaxSanEntries)
+                    return false;
+
                 var tag = generalNames.PeekTag();
-                if (tag.HasSameClassAndValue(DnsNameTag))
-                    dnsNames.Add(generalNames.ReadCharacterString(UniversalTagNumber.IA5String, DnsNameTag));
-                else if (tag.HasSameClassAndValue(UriNameTag))
-                    uris.Add(generalNames.ReadCharacterString(UniversalTagNumber.IA5String, UriNameTag));
-                else
+                var isDns = tag.HasSameClassAndValue(DnsNameTag);
+                var isUri = tag.HasSameClassAndValue(UriNameTag);
+                if (!isDns && !isUri)
+                {
                     generalNames.ReadEncodedValue(); // skip otherName/rfc822Name/iPAddress/directoryName/…
+                    continue;
+                }
+
+                var valueBytes = generalNames.PeekContentBytes().Length;
+                totalBytes += valueBytes;
+                if (totalBytes > MaxTotalSanBytes)
+                    return false;
+
+                if (valueBytes > MaxSanValueBytes)
+                {
+                    // A single value too large to be a legitimate domain identity — skip it without
+                    // allocating a managed string for it.
+                    generalNames.ReadEncodedValue();
+                    continue;
+                }
+
+                if (onEntry(isUri, generalNames.ReadCharacterString(UniversalTagNumber.IA5String, tag)))
+                    return true;
             }
 
-            return (dnsNames, uris);
+            return true;
         }
         catch (AsnContentException)
         {
-            // A malformed SAN extension carries no trustworthy names — fail closed with an empty result
-            // rather than a partial parse that a matcher could act on.
-            return ([], []);
+            // A malformed SAN extension carries no trustworthy names — fail closed rather than acting on
+            // a partial parse.
+            return false;
         }
     }
 
