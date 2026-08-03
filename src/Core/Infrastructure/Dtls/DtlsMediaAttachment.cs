@@ -239,9 +239,16 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
         {
             try
             {
+                // Bind the server-role DTLS cookie to the current nominated remote endpoint
+                // (RFC 6347 §4.2.1); ignored for the client role. Snapshotted at handshake start:
+                // an ICE re-nomination inside the brief cookie-exchange window would bind to the
+                // stale address and time the handshake out (not a bind failure) — acceptable, the
+                // SIP path never re-nominates and the WebRTC cookie window is sub-RTT.
+                var cookieClientId = BuildCookieClientId(Volatile.Read(ref _remoteEndPoint));
                 var result = await _handshaker.HandshakeAsync(
                         _isClient ? DtlsRole.Client : DtlsRole.Server,
-                        _transport, _certificate, _expectedRemoteFingerprint, linkedCts.Token)
+                        _transport, _certificate, _expectedRemoteFingerprint, linkedCts.Token,
+                        cookieClientId)
                     .ConfigureAwait(false);
 
                 Volatile.Write(ref _result, result);
@@ -279,6 +286,24 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
                 _onHandshakeFailed();
             }
         }
+    }
+
+    private static byte[] BuildCookieClientId(IPEndPoint endpoint)
+    {
+        // Binds the stateless DTLS cookie to the peer's transport address (RFC 6347 §4.2.1): the
+        // IP bytes (4 or 16) followed by the port. A source that spoofs a different address cannot
+        // echo a cookie the server will accept, so it never reaches the certificate flight.
+        // Canonicalise an IPv4-mapped-IPv6 address (dual-stack sockets) to its 4-byte form so the
+        // client id is one stable value per peer, matching the RelayEndPoint normalisation.
+        var address = endpoint.Address.IsIPv4MappedToIPv6
+            ? endpoint.Address.MapToIPv4()
+            : endpoint.Address;
+        var addressBytes = address.GetAddressBytes();
+        var clientId = new byte[addressBytes.Length + 2];
+        addressBytes.CopyTo(clientId, 0);
+        clientId[addressBytes.Length] = (byte)(endpoint.Port >> 8);
+        clientId[addressBytes.Length + 1] = (byte)endpoint.Port;
+        return clientId;
     }
 
     private void DispatchOutbound(byte[] datagram)

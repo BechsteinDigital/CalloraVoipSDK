@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using CalloraVoipSdk.Core.Infrastructure.Dtls;
 using CalloraVoipSdk.Core.Infrastructure.Srtp.Context;
 using CalloraVoipSdk.Core.Infrastructure.Srtp.Crypto;
@@ -13,6 +14,10 @@ namespace CalloraVoipSdk.Core.IntegrationTests;
 public sealed class DtlsSrtpHandshakeTests
 {
     private static readonly TimeSpan HandshakeTimeout = TimeSpan.FromSeconds(30);
+
+    // Loopback peer identity for server-role handshakes that have no real transport address
+    // (the server role requires a non-empty cookie client id, RFC 6347 §4.2.1).
+    private static readonly byte[] LoopbackServerCookieClientId = { 127, 0, 0, 1, 0, 0 };
 
     [Fact]
     public async Task Handshake_ExportsMirroredKeysOnBothSides()
@@ -67,7 +72,8 @@ public sealed class DtlsSrtpHandshakeTests
         var clientTask = handshaker.HandshakeAsync(
             DtlsRole.Client, clientTransport, clientCertificate, wrongFingerprint, timeout.Token);
         var serverTask = handshaker.HandshakeAsync(
-            DtlsRole.Server, serverTransport, serverCertificate, clientCertificate.Fingerprint, timeout.Token);
+            DtlsRole.Server, serverTransport, serverCertificate, clientCertificate.Fingerprint, timeout.Token,
+            LoopbackServerCookieClientId);
 
         await Assert.ThrowsAsync<DtlsSrtpHandshakeException>(() => clientTask);
         await Assert.ThrowsAsync<DtlsSrtpHandshakeException>(() => serverTask);
@@ -88,7 +94,8 @@ public sealed class DtlsSrtpHandshakeTests
         var clientTask = handshaker.HandshakeAsync(
             DtlsRole.Client, clientTransport, clientCertificate, serverCertificate.Fingerprint, timeout.Token);
         var serverTask = handshaker.HandshakeAsync(
-            DtlsRole.Server, serverTransport, serverCertificate, wrongFingerprint, timeout.Token);
+            DtlsRole.Server, serverTransport, serverCertificate, wrongFingerprint, timeout.Token,
+            LoopbackServerCookieClientId);
 
         await Assert.ThrowsAsync<DtlsSrtpHandshakeException>(() => serverTask);
         await Assert.ThrowsAsync<DtlsSrtpHandshakeException>(() => clientTask);
@@ -127,6 +134,103 @@ public sealed class DtlsSrtpHandshakeTests
         // one of the later attempts failing to complete within the watchdog window.
         for (var i = 0; i < 5; i++)
             await AssertHandshakeTimesOutAsync(DtlsRole.Client);
+    }
+
+    [Fact]
+    public async Task ServerHandshake_SendsHelloVerifyRequestBeforeCertificateFlight()
+    {
+        // #163 P1-2: a spoofed source must not reach the amplified certificate flight. RFC 6347
+        // §4.2.1 stateless cookie: the server answers the first ClientHello with a
+        // hello_verify_request (msg_type 3) and only proceeds to the ServerHello / certificate
+        // flight (msg_type 2) once the peer echoes a valid cookie.
+        var clientCertificate = DtlsCertificate.GenerateEcdsaP256();
+        var serverCertificate = DtlsCertificate.GenerateEcdsaP256();
+        var clientId = new byte[] { 203, 0, 113, 7, 0x1F, 0x40 }; // 203.0.113.7:8000
+
+        var serverFlights = new ConcurrentQueue<byte>();
+        QueueDatagramTransport client = null!;
+        QueueDatagramTransport server = null!;
+        client = new QueueDatagramTransport(datagram => server.Enqueue(datagram));
+        server = new QueueDatagramTransport(datagram =>
+        {
+            if (FirstHandshakeType(datagram) is { } type)
+                serverFlights.Enqueue(type);
+            client.Enqueue(datagram);
+        });
+
+        var handshaker = CreateHandshaker();
+        using var timeout = new CancellationTokenSource(HandshakeTimeout);
+        var clientTask = handshaker.HandshakeAsync(
+            DtlsRole.Client, client, clientCertificate, serverCertificate.Fingerprint, timeout.Token);
+        var serverTask = handshaker.HandshakeAsync(
+            DtlsRole.Server, server, serverCertificate, clientCertificate.Fingerprint, timeout.Token, clientId);
+        await Task.WhenAll(clientTask, serverTask);
+        using var clientResult = clientTask.Result;
+        using var serverResult = serverTask.Result;
+
+        var flights = serverFlights.ToArray();
+        Assert.NotEmpty(flights);
+        Assert.Equal(3, flights[0]); // hello_verify_request first
+        Assert.Contains((byte)2, flights); // ServerHello eventually sent → cookie accepted
+        Assert.True(Array.IndexOf(flights, (byte)3) < Array.IndexOf(flights, (byte)2));
+    }
+
+    [Fact]
+    public async Task ServerHandshake_RejectsCookieBoundToADifferentClientId()
+    {
+        // #163 P1-2: the cookie is MAC-bound to the peer address (clientId). A cookie minted for
+        // one address must not let a spoofed source proceed on another — the server keeps replying
+        // with hello_verify_request (3) and never reaches the ServerHello / certificate flight (2).
+        var clientCertificate = DtlsCertificate.GenerateEcdsaP256();
+        var serverCertificate = DtlsCertificate.GenerateEcdsaP256();
+        var idA = new byte[] { 198, 51, 100, 1, 0x1F, 0x40 };
+        var idB = new byte[] { 203, 0, 113, 9, 0x1F, 0x41 }; // different address + port
+
+        // Round 1: full handshake against a server bound to idA; capture the client's ClientHello
+        // flights. The last one carries the cookie MAC-bound to idA.
+        var clientHellos = new ConcurrentQueue<byte[]>();
+        QueueDatagramTransport client = null!;
+        QueueDatagramTransport serverA = null!;
+        client = new QueueDatagramTransport(datagram =>
+        {
+            if (FirstHandshakeType(datagram) == 1)
+                clientHellos.Enqueue(datagram);
+            serverA.Enqueue(datagram);
+        });
+        serverA = new QueueDatagramTransport(datagram => client.Enqueue(datagram));
+
+        var handshaker = CreateHandshaker();
+        using var timeout = new CancellationTokenSource(HandshakeTimeout);
+        var clientTask = handshaker.HandshakeAsync(
+            DtlsRole.Client, client, clientCertificate, serverCertificate.Fingerprint, timeout.Token);
+        var serverTask = handshaker.HandshakeAsync(
+            DtlsRole.Server, serverA, serverCertificate, clientCertificate.Fingerprint, timeout.Token, idA);
+        await Task.WhenAll(clientTask, serverTask);
+        clientTask.Result.Dispose();
+        serverTask.Result.Dispose();
+
+        var hellos = clientHellos.ToArray();
+        Assert.True(hellos.Length >= 2, "expected a second, cookie'd ClientHello");
+        var cookiedHelloForA = hellos[^1];
+
+        // Round 2: replay that idA-bound ClientHello to a server expecting idB. The cookie is
+        // invalid for idB, so the server re-issues hello_verify_request and never advances.
+        var serverBFlights = new ConcurrentQueue<byte>();
+        var serverB = new QueueDatagramTransport(datagram =>
+        {
+            if (FirstHandshakeType(datagram) is { } t)
+                serverBFlights.Enqueue(t);
+        });
+        serverB.Enqueue(cookiedHelloForA);
+
+        using var shortTimeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
+        var serverBTask = handshaker.HandshakeAsync(
+            DtlsRole.Server, serverB, serverCertificate, clientCertificate.Fingerprint, shortTimeout.Token, idB);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => serverBTask);
+
+        var flights = serverBFlights.ToArray();
+        Assert.Contains((byte)3, flights); // re-issued hello_verify_request bound to idB
+        Assert.DoesNotContain((byte)2, flights); // never advanced to ServerHello
     }
 
     [Fact]
@@ -172,6 +276,16 @@ public sealed class DtlsSrtpHandshakeTests
     private static DtlsSrtpHandshaker CreateHandshaker() =>
         new(NullLogger<DtlsSrtpHandshaker>.Instance);
 
+    private static byte? FirstHandshakeType(byte[] datagram)
+    {
+        // DTLS 1.2 record (RFC 6347 §4.1): 13-byte header; content_type 22 = handshake, and the
+        // handshake msg_type is the first byte of the fragment at offset 13
+        // (hello_verify_request = 3, server_hello = 2).
+        if (datagram.Length < 14 || datagram[0] != 22)
+            return null;
+        return datagram[13];
+    }
+
     private static async Task AssertHandshakeTimesOutAsync(DtlsRole role)
     {
         var certificate = DtlsCertificate.GenerateEcdsaP256();
@@ -185,7 +299,8 @@ public sealed class DtlsSrtpHandshakeTests
 
         // No external cancellation token: only the product deadline can end this handshake.
         var handshakeTask = handshaker.HandshakeAsync(
-            role, transport, certificate, peerFingerprint, CancellationToken.None);
+            role, transport, certificate, peerFingerprint, CancellationToken.None,
+            LoopbackServerCookieClientId);
 
         // Watchdog: a regression that fails to enforce the deadline hangs forever — fail loudly
         // instead of stalling the test run.
@@ -220,7 +335,7 @@ public sealed class DtlsSrtpHandshakeTests
             serverCertificate.Fingerprint, timeout.Token);
         var serverTask = handshaker.HandshakeAsync(
             DtlsRole.Server, serverTransport, serverCertificate,
-            clientCertificate.Fingerprint, timeout.Token);
+            clientCertificate.Fingerprint, timeout.Token, LoopbackServerCookieClientId);
 
         // Await the server first on failure so its exception (the usual root cause)
         // surfaces instead of the client's derived alert.

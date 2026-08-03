@@ -13,6 +13,11 @@ namespace CalloraVoipSdk.Core.Infrastructure.Dtls;
 /// </summary>
 internal sealed class DtlsSrtpHandshaker : IDtlsSrtpHandshaker
 {
+    // Upper bound on a single blocking receive while awaiting the cookie'd ClientHello. Closing
+    // the transport (the handshake deadline) wakes a blocked receive immediately, so this only
+    // caps idle polling; it never governs the overall handshake timeout (see HandshakeAsync).
+    private const int CookieReceivePollMillis = 1000;
+
     private readonly ILogger<DtlsSrtpHandshaker> _logger;
     private readonly DtlsHandshakeOptions _options;
 
@@ -31,11 +36,22 @@ internal sealed class DtlsSrtpHandshaker : IDtlsSrtpHandshaker
         DatagramTransport transport,
         DtlsCertificate localCertificate,
         DtlsFingerprint expectedRemoteFingerprint,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        ReadOnlyMemory<byte> serverCookieClientId = default)
     {
         ArgumentNullException.ThrowIfNull(transport);
         ArgumentNullException.ThrowIfNull(localCertificate);
         ArgumentNullException.ThrowIfNull(expectedRemoteFingerprint);
+
+        // The server role must bind the stateless cookie to the peer address, so an empty client
+        // id (which would key the cookie MAC on nothing) is a wiring error, not a degraded mode
+        // (#163 P1-2). Fail loudly at the call site rather than silently losing source binding.
+        if (role == DtlsRole.Server && serverCookieClientId.IsEmpty)
+            throw new ArgumentException(
+                "A server-role DTLS handshake requires a non-empty cookie client id so the "
+                + "stateless cookie binds to the peer address (RFC 6347 §4.2.1).",
+                nameof(serverCookieClientId));
+
         cancellationToken.ThrowIfCancellationRequested();
 
         _logger.LogDebug("Starting DTLS-SRTP handshake as {Role}.", role);
@@ -63,7 +79,8 @@ internal sealed class DtlsSrtpHandshaker : IDtlsSrtpHandshaker
                     .ConfigureAwait(false)
                 : await Task.Run(
                         () => AcceptAsServer(
-                            transport, localCertificate, expectedRemoteFingerprint, engineTimeoutMillis),
+                            transport, localCertificate, expectedRemoteFingerprint, engineTimeoutMillis,
+                            serverCookieClientId),
                         CancellationToken.None)
                     .ConfigureAwait(false);
 
@@ -136,13 +153,48 @@ internal sealed class DtlsSrtpHandshaker : IDtlsSrtpHandshaker
         DatagramTransport transport,
         DtlsCertificate localCertificate,
         DtlsFingerprint expectedRemoteFingerprint,
-        int handshakeTimeoutMillis)
+        int handshakeTimeoutMillis,
+        ReadOnlyMemory<byte> cookieClientId)
     {
+        var crypto = new BcTlsCrypto(new SecureRandom());
         var server = new DtlsSrtpServer(
-            new BcTlsCrypto(new SecureRandom()), localCertificate, expectedRemoteFingerprint,
-            handshakeTimeoutMillis);
-        var dtlsTransport = new DtlsServerProtocol().Accept(server, transport);
+            crypto, localCertificate, expectedRemoteFingerprint, handshakeTimeoutMillis);
+
+        // RFC 6347 §4.2.1: complete the stateless cookie exchange before the certificate flight,
+        // so a spoofed source is never handed the amplified server flight. Only a peer that echoes
+        // a cookie MAC-bound to its own address (cookieClientId) reaches the real handshake.
+        var request = VerifyClientCookie(transport, crypto, cookieClientId.ToArray());
+
+        var dtlsTransport = new DtlsServerProtocol().Accept(server, transport, request);
         return BuildResult(server.NegotiatedKeys, dtlsTransport);
+    }
+
+    /// <summary>
+    /// Runs the stateless DTLS cookie exchange (RFC 6347 §4.2.1) until the peer presents a valid
+    /// cookie, then returns the verified <see cref="DtlsRequest"/> for the certificate handshake.
+    /// A ClientHello without a valid cookie is answered with a HelloVerifyRequest (sent by
+    /// <see cref="DtlsVerifier.VerifyRequest"/> over the transport) and creates no per-client state
+    /// — a spoofed-source flood stays cheap. The loop is bounded by the handshake deadline: when it
+    /// elapses the transport is closed, which makes the next receive throw and aborts the handshake.
+    /// </summary>
+    private static DtlsRequest VerifyClientCookie(
+        DatagramTransport transport, BcTlsCrypto crypto, byte[] clientId)
+    {
+        var verifier = new DtlsVerifier(crypto);
+        var buffer = new byte[transport.GetReceiveLimit()];
+        while (true)
+        {
+            var received = transport.Receive(buffer, 0, buffer.Length, CookieReceivePollMillis);
+            if (received < 0)
+                continue; // Retransmit-timer tick; the handshake deadline closes the transport.
+
+            var request = verifier.VerifyRequest(clientId, buffer, 0, received, (DatagramSender)transport);
+            if (request is not null)
+                return request;
+
+            // null: a HelloVerifyRequest was sent (or a non-ClientHello record ignored). Keep
+            // waiting for the cookie'd ClientHello — deliberately no per-packet log (flood safety).
+        }
     }
 
     /// <summary>
