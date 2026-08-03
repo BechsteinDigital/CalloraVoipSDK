@@ -15,9 +15,12 @@ public sealed class SrtpContextMultiSsrcTests
     private const int AuthTagLength = 10;
     private const uint SsrcA = 0x0A0A0A0A;
     private const uint SsrcB = 0x0B0B0B0B;
+    private const uint SsrcC = 0x0C0C0C0C;
 
     private static readonly byte[] MasterKey = Convert.FromHexString("E1F97A0D3E018BE0D64FA32C06DE4139");
     private static readonly byte[] MasterSalt = Convert.FromHexString("0EC675AD498AFEEBB6960B3AABE6");
+    // AEAD-GCM (RFC 7714) takes a 96-bit (12-byte) master salt, unlike AES-CM's 112-bit salt.
+    private static readonly byte[] GcmSalt = Convert.FromHexString("0EC675AD498AFEEBB6960B3A");
 
     [Fact]
     public void Each_ssrc_advances_its_rollover_counter_independently()
@@ -100,8 +103,78 @@ public sealed class SrtpContextMultiSsrcTests
         Assert.Equal(2, receiver.TrackedSourceCount); // two SSRCs, not four packets
     }
 
+    // -------------------------------------------------------------------------
+    // Per-SSRC state cap (#157 P1-2, RFC 3711 §3.2.1 state, K4 wire-DoS): a peer holding the
+    // session key can spray arbitrarily many authenticated SSRCs; auth-before-admission stops a
+    // forged flood but not a keyed one, so the per-SSRC state map must be hard-bounded. At the cap a
+    // NEW source is discarded (never evicts an active replay window — that would let old replays back
+    // in), while every already-admitted SSRC keeps flowing.
+    // -------------------------------------------------------------------------
+
+    [Theory]
+    [InlineData(false)] // AES-CM + HMAC-SHA1-80
+    [InlineData(true)]  // AEAD-AES-128-GCM
+    public void A_new_ssrc_beyond_the_tracked_source_cap_is_rejected_without_growing_or_evicting(
+        bool aead)
+    {
+        var sender = new SrtpContext(Material(aead));
+        using var receiver = new SrtpContext(Material(aead), maxTrackedSsrcs: 2);
+
+        // Fill the cap with two authenticated SSRCs.
+        receiver.Unprotect(sender.Protect(Packet(SsrcA, seq: 0, payloadLength: 16)));
+        receiver.Unprotect(sender.Protect(Packet(SsrcB, seq: 0, payloadLength: 16)));
+        Assert.Equal(2, receiver.TrackedSourceCount);
+
+        // A third authenticated SSRC at the full map is a controlled discard, not an eviction.
+        var third = sender.Protect(Packet(SsrcC, seq: 0, payloadLength: 16));
+        Assert.Throws<SrtpSourceLimitException>(() => receiver.Unprotect(third));
+        Assert.Equal(2, receiver.TrackedSourceCount);   // map did not grow
+        Assert.Equal(1L, receiver.DiscardedSourceCount); // cap hit counted for telemetry
+
+        // The already-admitted SSRCs keep flowing — A's replay window was not evicted.
+        var aNext = sender.Protect(Packet(SsrcA, seq: 1, payloadLength: 16));
+        Assert.Equal(Packet(SsrcA, seq: 1, payloadLength: 16), receiver.Unprotect(aNext));
+    }
+
+    [Theory]
+    [InlineData(false)] // AES-CM + HMAC-SHA1-80
+    [InlineData(true)]  // AEAD-AES-128-GCM
+    public void An_authenticated_ssrc_flood_holds_the_tracked_state_at_the_cap(bool aead)
+    {
+        const int cap = 4;
+        var sender = new SrtpContext(Material(aead));
+        using var receiver = new SrtpContext(Material(aead), maxTrackedSsrcs: cap);
+
+        var admitted = 0;
+        for (uint i = 0; i < 16; i++)
+        {
+            var packet = sender.Protect(Packet(0x1000_0000 + i, seq: 0, payloadLength: 12));
+            try { receiver.Unprotect(packet); admitted++; }
+            catch (SrtpSourceLimitException) { /* over-cap: controlled discard */ }
+        }
+
+        Assert.Equal(cap, admitted);
+        Assert.Equal(cap, receiver.TrackedSourceCount);       // constant upper bound on state (K4)
+        Assert.Equal(16L - cap, receiver.DiscardedSourceCount);
+    }
+
+    [Fact]
+    public void The_outbound_protect_path_is_not_capped_because_a_sender_controls_its_own_ssrcs()
+    {
+        // The cap is a receive-side defense against a keyed peer (#157 P1-2); a sender's own SSRCs are
+        // self-bounded, so Protect must never throw SrtpSourceLimitException and break a multi-stream send.
+        using var sender = new SrtpContext(Material(aead: false), maxTrackedSsrcs: 2);
+        for (uint i = 0; i < 8; i++)
+            _ = sender.Protect(Packet(0x3000_0000 + i, seq: 0, payloadLength: 8));
+        Assert.Equal(8, sender.TrackedSourceCount); // all outbound SSRCs tracked; the cap did not apply
+    }
+
     private static SrtpKeyMaterial Material() =>
         new(MasterKey, MasterSalt, SrtpCryptoSuite.AesCm128HmacSha1_80);
+
+    private static SrtpKeyMaterial Material(bool aead) => aead
+        ? new(MasterKey, GcmSalt, SrtpCryptoSuite.AeadAes128Gcm)
+        : new(MasterKey, MasterSalt, SrtpCryptoSuite.AesCm128HmacSha1_80);
 
     private static byte[] Packet(uint ssrc, ushort seq, int payloadLength)
     {
