@@ -29,8 +29,8 @@ public sealed class WebRtcSessionEventBridgeTests
         var ex = Record.Exception(() => bridge.WireSession(
             session,
             _ => { },
-            _ => { },
             (_, _) => { },
+            (_, _, _) => { },
             (_, _, _) => { },
             (_, _, _, _) => { },
             (mid, rid, frame, ts, key) => layer.Add((mid, rid, frame, ts, key)),
@@ -50,8 +50,8 @@ public sealed class WebRtcSessionEventBridgeTests
         Assert.Throws<ArgumentNullException>(() => bridge.WireSession(
             session,
             _ => { },
-            _ => { },
             (_, _) => { },
+            (_, _, _) => { },
             (_, _, _) => { },
             (_, _, _, _) => { },
             raiseVideoLayerFrameReceived: null!,

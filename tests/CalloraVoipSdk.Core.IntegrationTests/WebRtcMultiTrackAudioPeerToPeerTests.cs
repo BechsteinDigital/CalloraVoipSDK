@@ -37,11 +37,11 @@ public sealed class WebRtcMultiTrackAudioPeerToPeerTests
         var sync = new object();
         byte[]? primaryPayload = null;
         byte[]? addedPayload = null;
-        answerer.AudioReceived += payload =>
+        answerer.AudioReceived += (payload, _) =>
         {
             lock (sync) primaryPayload ??= payload;
         };
-        answerer.AudioTrackFrameReceived += (mid, payload) =>
+        answerer.AudioTrackFrameReceived += (mid, payload, _) =>
         {
             if (mid == "1") lock (sync) addedPayload ??= payload;
         };
@@ -78,6 +78,47 @@ public sealed class WebRtcMultiTrackAudioPeerToPeerTests
         Assert.Equal(Convert.ToBase64String(primary), Convert.ToBase64String(gotPrimary));
         Assert.Equal(Convert.ToBase64String(added), Convert.ToBase64String(gotAdded));
         Assert.NotEqual(Convert.ToBase64String(gotPrimary), Convert.ToBase64String(gotAdded));
+    }
+
+    [Fact]
+    public async Task Inbound_added_audio_surfaces_the_senders_rtp_timestamp_not_zero()
+    {
+        // ADR-012 follow-up: inbound audio must surface the sender's RTP timestamp all the way to the
+        // receive event, not drop it to 0/null. An SFU forwards that timestamp downstream; a stream whose
+        // every timestamp is 0 is unplayable — the browser jitter buffer / Opus decoder needs a monotonic
+        // clock. Deterministic on the added track, whose send stamps an explicit timestamp on the wire.
+        var (offerer, answerer) = await ConnectPeersAsync();
+        await using var offererLease = offerer;
+        await using var answererLease = answerer;
+
+        var offererConnected = Connected(offerer);
+        var answererConnected = Connected(answerer);
+
+        var sync = new object();
+        uint? gotTimestamp = null;
+        answerer.AudioTrackFrameReceived += (mid, _, rtpTimestamp) =>
+        {
+            if (mid == "1") lock (sync) gotTimestamp ??= rtpTimestamp;
+        };
+
+        await offerer.StartAsync();
+        await answerer.StartAsync();
+        await Task.WhenAll(offererConnected, answererConnected).WaitAsync(TimeSpan.FromSeconds(20));
+
+        const uint sentTimestamp = 424_242u;
+        var added = Payload(0x77, 160);
+        using var overall = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        while (true)
+        {
+            lock (sync)
+                if (gotTimestamp is not null) break;
+            overall.Token.ThrowIfCancellationRequested();
+            await offerer.SendAudioTrackFrameAsync("1", added, sentTimestamp);
+            await Task.Delay(20, overall.Token);
+        }
+
+        // The exact RTP timestamp the sender stamped reaches the receive event — no longer dropped to 0.
+        Assert.Equal(sentTimestamp, gotTimestamp);
     }
 
     // ── harness (mirrors WebRtcMultiTrackPeerToPeerTests) ──────────────────────

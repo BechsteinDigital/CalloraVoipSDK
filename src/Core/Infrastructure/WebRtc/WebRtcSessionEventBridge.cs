@@ -35,8 +35,8 @@ internal sealed class WebRtcSessionEventBridge
     /// </summary>
     /// <param name="session">The freshly built media session whose events are wired.</param>
     /// <param name="transitionTo">The peer's connection-state transition (owns the <c>_sync</c>-guarded state).</param>
-    /// <param name="raiseAudioReceived">Raises the peer's primary inbound-audio event.</param>
-    /// <param name="raiseAudioTrackFrameReceived">Raises the peer's mid-tagged additional inbound-audio event (4.7.0).</param>
+    /// <param name="raiseAudioReceived">Raises the peer's primary inbound-audio event with the payload and its RTP timestamp (RFC 3550 §5.1).</param>
+    /// <param name="raiseAudioTrackFrameReceived">Raises the peer's mid-tagged additional inbound-audio event (4.7.0) with the payload and its RTP timestamp.</param>
     /// <param name="raiseVideoFrameReceived">Raises the peer's inbound-video-frame event.</param>
     /// <param name="raiseVideoTrackFrameReceived">Raises the peer's mid-tagged inbound-video-frame event.</param>
     /// <param name="raiseVideoLayerFrameReceived">Raises the peer's per-layer (mid, rid) inbound-video-frame event for recv-side simulcast/SFU forwarding (4.7.0).</param>
@@ -45,8 +45,8 @@ internal sealed class WebRtcSessionEventBridge
     public void WireSession(
         BundledMediaSession session,
         Action<WebRtcConnectionState> transitionTo,
-        Action<byte[]> raiseAudioReceived,
-        Action<string, byte[]> raiseAudioTrackFrameReceived,
+        Action<byte[], uint> raiseAudioReceived,
+        Action<string, byte[], uint> raiseAudioTrackFrameReceived,
         Action<byte[], uint, bool> raiseVideoFrameReceived,
         Action<string, byte[], uint, bool> raiseVideoTrackFrameReceived,
         Action<string, string, byte[], uint, bool> raiseVideoLayerFrameReceived,
@@ -61,9 +61,12 @@ internal sealed class WebRtcSessionEventBridge
         session.MediaConsentLost += () => transitionTo(WebRtcConnectionState.Failed);
         session.MediaConnectivityDegraded += () => transitionTo(WebRtcConnectionState.Disconnected);
         session.MediaConnectivityRecovered += () => transitionTo(WebRtcConnectionState.Connected);
-        session.AudioReceived += packet => raiseAudioReceived(packet.Payload.ToArray());
+        // Surface the payload AND the packet's RTP timestamp (RFC 3550 §5.1), so a receiver/SFU can forward
+        // audio with a monotonic clock — parity with the video path (ADR-012 follow-up). Audio is one packet
+        // per frame (no reassembly), so the packet timestamp IS the frame timestamp.
+        session.AudioReceived += packet => raiseAudioReceived(packet.Payload.ToArray(), packet.Timestamp);
         // Mid-tagged inbound audio (4.7.0) → the receiver routes each frame to its remote audio track.
-        session.AudioTrackFrameReceived += (mid, packet) => raiseAudioTrackFrameReceived(mid, packet.Payload.ToArray());
+        session.AudioTrackFrameReceived += (mid, packet) => raiseAudioTrackFrameReceived(mid, packet.Payload.ToArray(), packet.Timestamp);
         session.VideoFrameReceived += (frame, timestamp, isKeyFrame) => raiseVideoFrameReceived(frame, timestamp, isKeyFrame);
         // Mid-tagged inbound video (P2b) → the receiver routes each frame to its remote track (P2c).
         session.VideoTrackFrameReceived += (mid, frame, timestamp, isKeyFrame) => raiseVideoTrackFrameReceived(mid, frame, timestamp, isKeyFrame);
