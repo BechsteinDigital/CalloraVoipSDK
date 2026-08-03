@@ -24,12 +24,18 @@ internal sealed class SrtpContext : ISrtpContext
     // legitimate senders stay well under it while a keyed flood is capped (#157 P1-2, K4).
     internal const int DefaultMaxTrackedSsrcs = 64;
 
+    // Maximum extended SRTP packet index usable under one key (RFC 3711 §9.2): at most 2^48 packets
+    // before the index would wrap and reuse the AES-CM keystream / GCM nonce. The key must be retired
+    // first; the sender fails closed at this limit rather than reusing keystream (#157 P1-1).
+    internal const ulong SrtpMaxSendPacketIndex = 1UL << 48;
+
     // Per-SSRC ROC + replay state (RFC 3711 §3.2.1). One entry per synchronisation source seen on
     // this direction; a single-stream context simply holds one. Inbound state is created only once a
     // packet from an SSRC authenticates, so an unauthenticated SSRC spray cannot grow the map — but an
     // authenticated (keyed) peer still could, so the map is hard-capped at _maxTrackedSsrcs (#157 P1-2).
     private readonly Dictionary<uint, SrtpSsrcState> _ssrcState = [];
     private readonly int _maxTrackedSsrcs;
+    private readonly ulong _maxSendPacketIndex;
     private long _discardedSourceCount;
 
     // Serializes all mutable state (per-SSRC indices, replay windows) and key usage so the context
@@ -38,14 +44,20 @@ internal sealed class SrtpContext : ISrtpContext
     private readonly object _sync = new();
     private bool _disposed;
 
-    public SrtpContext(SrtpKeyMaterial material, int maxTrackedSsrcs = DefaultMaxTrackedSsrcs)
+    public SrtpContext(
+        SrtpKeyMaterial material,
+        int maxTrackedSsrcs = DefaultMaxTrackedSsrcs,
+        ulong maxSendPacketIndex = SrtpMaxSendPacketIndex)
     {
         ArgumentNullException.ThrowIfNull(material);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxTrackedSsrcs);
-        _keys            = SrtpKeyDerivation.Derive(material);
-        _cipher          = CreateCipher(material.Suite, _keys);
-        _authTagLength   = _cipher.TagLength;
-        _maxTrackedSsrcs = maxTrackedSsrcs;
+        ArgumentOutOfRangeException.ThrowIfZero(maxSendPacketIndex);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(maxSendPacketIndex, SrtpMaxSendPacketIndex);
+        _keys               = SrtpKeyDerivation.Derive(material);
+        _cipher             = CreateCipher(material.Suite, _keys);
+        _authTagLength      = _cipher.TagLength;
+        _maxTrackedSsrcs    = maxTrackedSsrcs;
+        _maxSendPacketIndex = maxSendPacketIndex;
     }
 
     // Picks the packet cipher for the negotiated suite: AEAD-GCM (RFC 7714, 16-byte tag) or the classic
@@ -106,6 +118,7 @@ internal sealed class SrtpContext : ISrtpContext
         var seq         = BinaryPrimitives.ReadUInt16BigEndian(rtpPacket[2..]);
         var state       = GetOrAddState(ssrc);
         var packetIndex = state.ComputeSenderIndex(seq);
+        EnsureSendIndexWithinLifetime(packetIndex);
 
         // Copy into the final SRTP buffer, then encrypt the payload in place and append the tag.
         var result = GC.AllocateUninitializedArray<byte>(rtpPacket.Length + _authTagLength);
@@ -183,6 +196,16 @@ internal sealed class SrtpContext : ISrtpContext
         if (!_ssrcState.TryGetValue(ssrc, out var state))
             _ssrcState[ssrc] = state = new SrtpSsrcState();
         return state;
+    }
+
+    // Fails closed before encrypting once the extended SRTP packet index reaches its per-key lifetime
+    // limit (RFC 3711 §9.2, 2^48 packets): protecting past it would wrap the index and reuse the AES-CM
+    // keystream / GCM nonce under the same key (#157 P1-1). Caller holds _sync.
+    private void EnsureSendIndexWithinLifetime(ulong packetIndex)
+    {
+        if (packetIndex >= _maxSendPacketIndex)
+            throw new SrtpKeyLifetimeExceededException(
+                $"SRTP send index reached its per-key lifetime limit ({_maxSendPacketIndex}); refusing to reuse keystream (RFC 3711 §9.2).");
     }
 
     // Enforces the per-SSRC state cap on the RECEIVE path only (#157 P1-2, K4 wire-DoS): a keyed peer

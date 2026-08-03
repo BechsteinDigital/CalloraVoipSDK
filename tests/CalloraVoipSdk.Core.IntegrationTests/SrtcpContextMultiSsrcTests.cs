@@ -102,6 +102,28 @@ public sealed class SrtcpContextMultiSsrcTests
         Assert.Equal(8, sender.TrackedSourceCount); // all outbound SSRCs tracked; the cap did not apply
     }
 
+    // -------------------------------------------------------------------------
+    // Send-index / key-use lifetime (#157 P1-1, RFC 3711 §9.2): the 31-bit SRTCP index must never wrap
+    // under one key — a wrap reuses the AES-CM keystream / GCM nonce. Before exhaustion the sender fails
+    // closed with a typed exception. A tiny injected limit stands in for 2^31 in the test.
+    // -------------------------------------------------------------------------
+
+    [Theory]
+    [InlineData(false)] // AES-CM + HMAC-SHA1-80
+    [InlineData(true)]  // AEAD-AES-128-GCM
+    public void The_last_allowed_srtcp_send_index_works_and_the_next_fails_closed_without_wrapping(bool aead)
+    {
+        const uint maxIndex = 4;
+        using var sender = new SrtcpContext(Material(aead), maxSendIndex: maxIndex);
+
+        // NextSendIndex pre-increments: indices 1..4 are within the key's lifetime and protect a packet.
+        for (var i = 0; i < maxIndex; i++)
+            _ = sender.ProtectRtcp(Rtcp(AudioSsrc));
+
+        // The next index (5) would exceed the limit → fail closed: no packet, no wrap, no reuse.
+        Assert.Throws<SrtpKeyLifetimeExceededException>(() => sender.ProtectRtcp(Rtcp(AudioSsrc)));
+    }
+
     private static SrtpKeyMaterial Material() =>
         new(MasterKey, MasterSalt, SrtpCryptoSuite.AesCm128HmacSha1_80);
 

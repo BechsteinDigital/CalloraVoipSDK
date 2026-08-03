@@ -169,6 +169,30 @@ public sealed class SrtpContextMultiSsrcTests
         Assert.Equal(8, sender.TrackedSourceCount); // all outbound SSRCs tracked; the cap did not apply
     }
 
+    // -------------------------------------------------------------------------
+    // Send-index / key-use lifetime (#157 P1-1, RFC 3711 §9.2): at most 2^48 SRTP packets may be
+    // protected under one key — the extended packet index must never wrap (that reuses the AES-CM
+    // keystream / GCM nonce). Before exhaustion the sender fails closed with a typed exception rather
+    // than emitting a reused-keystream packet. A tiny injected limit stands in for 2^48 in the test.
+    // -------------------------------------------------------------------------
+
+    [Theory]
+    [InlineData(false)] // AES-CM + HMAC-SHA1-80
+    [InlineData(true)]  // AEAD-AES-128-GCM
+    public void The_last_allowed_srtp_send_index_works_and_the_next_fails_closed_without_wrapping(bool aead)
+    {
+        const ulong maxIndex = 4;
+        using var sender = new SrtpContext(Material(aead), maxSendPacketIndex: maxIndex);
+
+        // Indices 0..3 (seq 0..3) are within the key's lifetime and still protect a packet.
+        for (ushort seq = 0; seq < maxIndex; seq++)
+            _ = sender.Protect(Packet(SsrcA, seq, payloadLength: 8));
+
+        // seq 4 → index 4 == the limit → fail closed: no packet, no wrap, no keystream reuse.
+        Assert.Throws<SrtpKeyLifetimeExceededException>(
+            () => sender.Protect(Packet(SsrcA, (ushort)maxIndex, payloadLength: 8)));
+    }
+
     private static SrtpKeyMaterial Material() =>
         new(MasterKey, MasterSalt, SrtpCryptoSuite.AesCm128HmacSha1_80);
 

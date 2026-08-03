@@ -24,6 +24,7 @@ internal sealed class SrtcpContext : ISrtcpContext
     // still could, so the map is hard-capped at _maxTrackedSsrcs (#157 P1-2, K4 wire-DoS).
     private readonly Dictionary<uint, SrtcpSsrcState> _ssrcState = [];
     private readonly int _maxTrackedSsrcs;
+    private readonly uint _maxSendIndex;
     private long _discardedSourceCount;
 
     // Serializes mutable state (per-SSRC index/replay windows) and key usage so the context is
@@ -31,15 +32,21 @@ internal sealed class SrtcpContext : ISrtcpContext
     private readonly object _sync = new();
     private bool _disposed;
 
-    public SrtcpContext(SrtpKeyMaterial material, int maxTrackedSsrcs = SrtpContext.DefaultMaxTrackedSsrcs)
+    public SrtcpContext(
+        SrtpKeyMaterial material,
+        int maxTrackedSsrcs = SrtpContext.DefaultMaxTrackedSsrcs,
+        uint maxSendIndex = SrtcpSsrcState.MaxSendIndexLimit)
     {
         ArgumentNullException.ThrowIfNull(material);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxTrackedSsrcs);
+        ArgumentOutOfRangeException.ThrowIfZero(maxSendIndex);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(maxSendIndex, SrtcpSsrcState.MaxSendIndexLimit);
         _keys = SrtpKeyDerivation.DeriveRtcp(material);
         _cipher = SrtpCryptoSuiteNames.IsAead(material.Suite)
             ? new AesGcmSrtcpCipher(_keys)
             : new AesCmSha1SrtcpCipher(_keys);
         _maxTrackedSsrcs = maxTrackedSsrcs;
+        _maxSendIndex = maxSendIndex;
     }
 
     /// <summary>Derived SRTCP session keys — internal test seam for dispose/zeroing evidence.</summary>
@@ -111,7 +118,7 @@ internal sealed class SrtcpContext : ISrtcpContext
     private SrtcpSsrcState GetOrAddState(uint ssrc)
     {
         if (!_ssrcState.TryGetValue(ssrc, out var state))
-            _ssrcState[ssrc] = state = new SrtcpSsrcState();
+            _ssrcState[ssrc] = state = new SrtcpSsrcState(_maxSendIndex);
         return state;
     }
 
@@ -128,7 +135,7 @@ internal sealed class SrtcpContext : ISrtcpContext
             throw new SrtpSourceLimitException(
                 $"SRTCP tracked-source cap ({_maxTrackedSsrcs}) reached; refusing a new SSRC (RFC 3711 §3.2.3 state).");
         }
-        _ssrcState[ssrc] = state = new SrtcpSsrcState();
+        _ssrcState[ssrc] = state = new SrtcpSsrcState(_maxSendIndex);
         return state;
     }
 
