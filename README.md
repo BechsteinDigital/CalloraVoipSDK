@@ -19,7 +19,7 @@ It exposes a stable, developer-friendly API through `VoipClient` while keeping t
 🧪 **Examples:** [`examples/`](examples) — runnable samples (BasicCalling, Dialer, Transfer, CustomAudio, VideoCalling, WebRtcPeer, WebRtcRecording, WebRtcDependencyInjection, and a browser video-call website `WebRtcVideoCall.Web`)
 🛠️ **Maintainers:** [`MAINTAINING.md`](MAINTAINING.md) — architecture map, invariants, workflows; rules in [`ENGINEERING_RULES.md`](ENGINEERING_RULES.md)
 
-> **Project status — 4.7.0.** The **SIP + RTP core** is the mature, production-oriented surface:
+> **Project status — 4.7.** The **SIP + RTP core** is the mature, production-oriented surface:
 > registration, in/outbound call control, transfer, DTMF, SRTP (SDES) and measured RTCP quality
 > metrics — with symmetric RTP (comedia) as the production-proven NAT path. It is exercised in CI
 > by an **automated interop suite against a real Asterisk (PJSIP) container** — registration,
@@ -30,9 +30,12 @@ It exposes a stable, developer-friendly API through `VoipClient` while keeping t
 > validated in CI against **real browsers** (Chromium and Firefox, headless via Playwright: audio
 > and VP8 video, SDK as offerer *and* as answerer), and the **self-hostable STUN/TURN server** is
 > exercised end-to-end against a real **coturn** relay. Deliberate limits in this line: no data
-> channels (SCTP), TURN relay is **UDP-only**, and **full ICE**
-> (RFC 8445/7675) is opt-in and not yet production-proven — validate it for your trunk before
-> enabling it. Known gaps and interop defects are tracked openly in the
+> channels (SCTP), TURN relay is **UDP-only**, no **ICE restart on a connected peer** (dispose and
+> re-create it), and **full ICE** (RFC 8445/7675) is opt-in and not yet production-proven — validate
+> it for your trunk before enabling it. The 4.7 multi-party primitives (multi-track, renegotiation,
+> receive-side simulcast) are stable and transport-only, but the browser-interop matrix exercises the
+> **1 audio + 1 video** path only — validate a multi-track topology against your own clients. Known
+> gaps and interop defects are tracked openly in the
 > [issue tracker](../../issues) — bug reports and interop feedback are especially welcome.
 
 **Contents:** [Why](#why-calloravoipsdk) · [Progressive API](#progressive-api-simple-first-deeper-when-needed) · [Features](#current-feature-set) · [Install](#installation) · [Quickstart](#quickstart) · [Architecture](#architecture) · [Contributing](#contributing) · [Security](#security) · [License](#license)
@@ -99,9 +102,9 @@ SDP is byte-identical.
   finding; CI grew **chaos/fault-injection** and **performance** gates alongside the existing
   interop, soak and browser suites. See [`CHANGELOG.md`](CHANGELOG.md) for the complete list.
 
-**Known limits in this line:** no data channels (SCTP), TURN relay is UDP-only (no TCP/TLS relay),
-simulcast is send-side only (receive-side RID demux is a later slice), Safari/WebKit is not yet
-verified, and ICE-TCP candidates (RFC 6544) are a deliberate omission — real trunk calls run over
+**Known limits of the 4.6 line** (receive-side simulcast landed later, in 4.7): no data channels
+(SCTP), TURN relay is UDP-only (no TCP/TLS relay), simulcast was send-side only, Safari/WebKit is not
+yet verified, and ICE-TCP candidates (RFC 6544) are a deliberate omission — real trunk calls run over
 symmetric RTP (comedia), which needs no ICE or STUN.
 
 > **Breaking change in 4.6** — the SIP-facade configuration types were renamed so each facade owns a
