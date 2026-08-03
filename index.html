@@ -87,11 +87,13 @@ and intelligent decision logic.</p>
 <li>Fraud, spam and scam detection systems</li>
 </ul>
 <h2 id="current-status">Current Status</h2>
-<p>Latest release: <strong>v4.7.0</strong> on <a href="https://www.nuget.org/packages/CalloraVoipSdk">nuget.org</a> (this
-documentation). It builds multi-party / SFU enablement onto the WebRTC facade — multiple video and audio
-tracks over one BUNDLE with mid-call renegotiation, receive-side simulcast demux, and a per-peer
+<p>Latest release: <strong>v4.7.2</strong> on <a href="https://www.nuget.org/packages/CalloraVoipSdk">nuget.org</a> (this
+documentation). The 4.7 line builds multi-party / SFU enablement onto the WebRTC facade — multiple video
+and audio tracks over one BUNDLE with mid-call renegotiation, receive-side simulcast demux, and a per-peer
 send-bitrate recommendation — all additive and transport-only on top of the 4.6 WebRTC facade,
-DTLS-SRTP with AEAD-AES-GCM, self-hostable STUN/TURN server, and the stable SIP + RTP core.</p>
+DTLS-SRTP with AEAD-AES-GCM, self-hostable STUN/TURN server, and the stable SIP + RTP core. The 4.7 patch
+releases sharpen ICE connection setup (4.7.1, 4.7.2) and fold in a round of review hardening across ICE,
+the WebRTC track path and TURN.</p>
 <blockquote>
 <p><strong>How to read the status column.</strong> <em>Stable</em> = mature, covered by the RFC-oriented test suite and
 by automated interop, and the intended production surface. <em>Opt-in</em> = shipped and tested, but off
@@ -214,7 +216,7 @@ tracked openly in the <a href="https://github.com/BechsteinDigital/callora-voip-
 </tr>
 <tr>
 <td>Send-side simulcast (RFC 8853 / 8852)</td>
-<td>✅ Stable (send-side only — receive-side RID demux not included)</td>
+<td>✅ Stable</td>
 </tr>
 <tr>
 <td>Data channels (SCTP)</td>
@@ -235,6 +237,55 @@ tracked openly in the <a href="https://github.com/BechsteinDigital/callora-voip-
 <tr>
 <td>Backend/API for signed plugin marketplace + tenant entitlements</td>
 <td>📋 Roadmap</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Multi-party / SFU enablement (4.7, <a href="guides/webrtc.html">WebRTC guide</a>):</strong></p>
+<p>All of these are <strong>additive and transport-only</strong> — a peer that uses none of them negotiates
+byte-identical SDP to 4.6. The SDK stays a peer: it <strong>forwards, it does not mix or transcode</strong>.</p>
+<table>
+<thead>
+<tr>
+<th>Capability</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Multiple video tracks over one BUNDLE (<code>AddVideoTrack</code>, own <code>m=video</code> + SSRC per track, <code>RemoteTrack.Mid</code>)</td>
+<td>✅ Stable</td>
+</tr>
+<tr>
+<td>Multiple audio tracks over one BUNDLE (<code>AddAudioTrack</code>, per-participant <code>a=msid</code>)</td>
+<td>✅ Stable</td>
+</tr>
+<tr>
+<td>Mid-call renegotiation (RFC 8829): apply the track delta live, no transport / DTLS / ICE / SRTP rebuild</td>
+<td>✅ Stable</td>
+</tr>
+<tr>
+<td>Signalling state observation (<code>SignalingState</code>, <code>SignalingStateChanged</code> — W3C <code>RTCSignalingState</code>)</td>
+<td>✅ Stable</td>
+</tr>
+<tr>
+<td>Receive-side simulcast demux (RFC 8853 / 8852): per-RID reassembly, layer id on <code>EncodedFrame.Rid</code></td>
+<td>✅ Stable (forwarding-only — layer choice is the app's)</td>
+</tr>
+<tr>
+<td>Per-peer send-bitrate recommendation from transport-cc (<code>RecommendedOutgoingBitrateBps</code>, <code>RecommendedBitrateChanged</code>)</td>
+<td>✅ Stable</td>
+</tr>
+<tr>
+<td>On-demand key-frame request per track (<code>RequestVideoKeyFrameAsync(mid)</code>, RFC 4585 §6.3.1 PLI)</td>
+<td>✅ Stable</td>
+</tr>
+<tr>
+<td>ICE restart on a connected peer (re-offer rotating the ICE ufrag)</td>
+<td>🚫 Not supported — dispose and re-create the peer</td>
+</tr>
+<tr>
+<td>Audio mixing / transcoding (a real conference server)</td>
+<td>🚫 Not included — out of scope by design</td>
 </tr>
 </tbody>
 </table>

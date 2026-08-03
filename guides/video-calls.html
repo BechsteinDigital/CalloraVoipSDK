@@ -203,10 +203,12 @@ point-to-point calls).</p>
 <code>AttachDefaultAudioAsync</code>. The difference is that the SDK bundles audio codecs and OS audio
 devices, while video is transport-only — the codec lives in your <code>IVideoDevice</code>.</p>
 <h2 id="receiving-simulcast-layers-webrtc">Receiving simulcast layers (WebRTC)</h2>
-<p>This page covers the <code>ICall</code> / <code>IVideoSender</code> video contract. <strong>Receiving</strong> a remote peer's
-simulcast layers — demultiplexed and RID-tagged (<code>EncodedFrame.Rid</code>) — is a WebRTC-facade primitive
-that ships in <strong>4.7.0-preview</strong>; see
-<a href="webrtc.html#receive-side-simulcast-demux-preview">WebRTC → Receive-side simulcast demux</a>.</p>
+<p>This page covers the <code>ICall</code> / <code>IVideoSender</code> video contract, which negotiates <strong>one</strong> video stream
+per SIP call. <strong>Receiving</strong> a remote peer's simulcast layers — demultiplexed and RID-tagged
+(<code>EncodedFrame.Rid</code>) — and running <strong>several</strong> video tracks over one transport are WebRTC-facade
+primitives, stable since <strong>4.7</strong>; see
+<a href="webrtc.html#receive-side-simulcast-demux">WebRTC → Receive-side simulcast demux</a> and
+<a href="webrtc.html#multiple-video-tracks-and-mid-call-renegotiation">Multiple video tracks</a>.</p>
 
 </article>
 

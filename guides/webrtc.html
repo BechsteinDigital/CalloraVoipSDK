@@ -88,7 +88,7 @@
 <h1 id="webrtc">WebRTC</h1>
 
 <blockquote>
-<p><strong>Status (v4.6.0).</strong> The WebRTC facade is <strong>validated in CI against real browsers</strong> — Chromium and
+<p><strong>Status (4.7).</strong> The WebRTC facade is <strong>validated in CI against real browsers</strong> — Chromium and
 Firefox, headless via Playwright, audio and VP8 video, in both roles (SDK as offerer and as
 answerer), over DTLS-SRTP including AES-GCM. Known scope limits: data channels (SCTP) are <strong>not
 included</strong>; TURN relay is <strong>UDP-only</strong> (no TCP/TLS relay); and Safari/WebKit is not yet
@@ -99,12 +99,15 @@ m-line, though a fixed, reachable port remains the recommendation for NAT reacha
 TURN.</p>
 </blockquote>
 <blockquote>
-<p><strong>Preview (v4.7.0-preview).</strong> Three additive, transport-only SFU-enablement primitives ship in
-preview: <strong>multiple audio tracks</strong> over one BUNDLE, <strong>receive-side simulcast demux</strong> (the RID a
-layer arrived on is surfaced per frame), and a <strong>per-peer recommended outgoing bitrate</strong> derived
-from transport-cc feedback. They are additive — a peer that uses none of them negotiates
-byte-identical SDP and behaves exactly as before. The SDK stays a peer, not a conference server:
-it forwards, it does not mix or transcode. See the sections below.</p>
+<p><strong>Multi-party / SFU enablement (4.7, stable).</strong> Additive, transport-only primitives on top of the
+4.6 facade: <strong>multiple video and audio tracks</strong> over one BUNDLE, <strong>mid-call renegotiation</strong>
+(RFC 8829), <strong>receive-side simulcast demux</strong> (the RID a layer arrived on is surfaced per frame),
+and a <strong>per-peer recommended outgoing bitrate</strong> derived from transport-cc feedback. All additive —
+a peer that uses none of them negotiates byte-identical SDP and behaves exactly as before. The SDK
+stays a peer, not a conference server: it <strong>forwards, it does not mix or transcode</strong>. Two limits
+worth knowing up front: <strong>ICE restart on a connected peer is not supported</strong> (dispose and re-create
+the peer), and these primitives are <strong>not yet covered by the browser-interop CI matrix</strong> — the
+browser suite exercises the 1 audio + 1 video path. See the sections below.</p>
 </blockquote>
 <p>The <code>CalloraVoipSdk.WebRtc</code> namespace is a signalling-neutral WebRTC peer surface that mirrors the
 four-level design of <code>VoipClient</code>. It is <strong>transport-only</strong>: the SDK runs ICE, DTLS-SRTP, BUNDLE and
@@ -162,10 +165,16 @@ peer's video track exactly like camera frames:</p>
 await peer.SendVideoFrameAsync(encodedScreenFrame, rtpTimestamp);
 </code></pre>
 <p>Screen content differs from camera content (higher resolution, lower frame rate, &quot;detail&quot; over
-&quot;motion&quot;) — size your encoder accordingly; the SDK moves the bytes unchanged. Sharing the screen
-<em>alongside</em> the camera (two simultaneous video tracks) needs multi-video-track support, which is a
-later slice — today one video track is negotiated per peer. A future <code>a=content</code> (RFC 4796) hint to
-flag the track as screen content is optional and not yet emitted.</p>
+&quot;motion&quot;) — size your encoder accordingly; the SDK moves the bytes unchanged.</p>
+<p>Sharing the screen <em>alongside</em> the camera is supported since 4.7 — add a second video track and send
+each on its own handle, so the two stay separable on the wire with distinct SSRCs:</p>
+<pre><code class="lang-csharp">IVideoTrack screen = peer.AddVideoTrack();
+await peer.SendVideoFrameAsync(cameraFrame, ts);        // primary track
+await screen.SendFrameAsync(screenFrame, ts);           // the added track
+</code></pre>
+<p>See <a href="#multiple-video-tracks-and-mid-call-renegotiation">Multiple video tracks</a>. A future <code>a=content</code>
+(RFC 4796) hint to flag the track as screen content is optional and not yet emitted, so the receiver
+tells them apart by MID / <code>a=msid</code>, not by a content tag.</p>
 <h2 id="simulcast-send-side">Simulcast (send-side)</h2>
 <p>Send the same video at several resolutions/bitrates so an SFU can forward the layer each viewer can
 afford (RFC 8853). Configure the layer rids on the client, encode each layer yourself (transport-only),
@@ -177,10 +186,35 @@ await peer.SendVideoFrameAsync(&quot;lo&quot;, encodedLoRes, rtpTimestamp);
 <p>The offer advertises the rids; the SDK confirms them against the answer and falls back to a single
 stream when the answerer does not confirm them. The active <code>rid</code> is surfaced to <code>IMediaTap.OnVideo</code> and
 to recording (RFC 8852). Receiving a remote peer's simulcast layers is covered by
-<a href="#receive-side-simulcast-demux-preview">Receive-side simulcast demux</a> below.</p>
-<h2 id="multiple-audio-tracks-preview">Multiple audio tracks (preview)</h2>
+<a href="#receive-side-simulcast-demux">Receive-side simulcast demux</a> below.</p>
+<h2 id="multiple-video-tracks-and-mid-call-renegotiation">Multiple video tracks and mid-call renegotiation</h2>
 <blockquote>
-<p><strong>Preview (v4.7.0-preview), additive, transport-only.</strong></p>
+<p><strong>4.7, additive, transport-only.</strong></p>
+</blockquote>
+<p><code>AddVideoTrack()</code> adds a further video track — its own <code>m=video</code> line and SSRC on the shared BUNDLE
+transport — and returns an <code>IVideoTrack</code> to send on. Call it <strong>before or after</strong> connect:</p>
+<pre><code class="lang-csharp">IVideoTrack camera = peer.AddVideoTrack();
+IVideoTrack screen = peer.AddVideoTrack(new VideoTrackOptions { /* direction, codecs, simulcast, stream id */ });
+await camera.SendFrameAsync(frame, rtpTimestamp);
+
+// Inbound video tracks are told apart by mid:
+peer.TrackReceived += (_, track) =&gt; { var mid = track.Mid; };
+
+// Refresh exactly one track's decoder (RFC 4585 §6.3.1 PLI):
+await peer.RequestVideoKeyFrameAsync(mid);
+</code></pre>
+<p>Adding a track on a <strong>connected</strong> peer applies live: a second <code>CreateOffer</code> /
+<code>SetRemoteDescriptionAsync</code> cycle applies the delta with <strong>no transport, DTLS, ICE or SRTP rebuild</strong>,
+and the tracks already running keep flowing. A new track's SSRCs are allocated distinct from every live
+one, so it never collides a running stream's per-SSRC SRTP context (RFC 3550 §8.1). Observe where you
+are in the exchange via <code>SignalingState</code> / <code>SignalingStateChanged</code> (W3C <code>RTCSignalingState</code>).</p>
+<p><strong>Honest limits.</strong> <strong>ICE restart is not supported</strong> — a re-offer that rotates the ICE ufrag on the
+shared transport is rejected; dispose and re-create the peer to restart ICE. A peer that uses only
+<code>WebRtcConfiguration.EnableVideo</code> and never calls <code>AddVideoTrack</code> emits the byte-identical 1+1 SDP as
+before, and <code>SendVideoFrameAsync</code> still addresses the primary track.</p>
+<h2 id="multiple-audio-tracks">Multiple audio tracks</h2>
+<blockquote>
+<p><strong>4.7, additive, transport-only.</strong></p>
 </blockquote>
 <p>Add more than one audio track on the shared BUNDLE transport — one <code>m=audio</code> line, SSRC and
 per-participant <code>a=msid</code> per track — so an SFU can forward several participants' audio to a peer
@@ -198,9 +232,9 @@ timestamp through unchanged, so A/V sync holds against the same participant's fo
 that uses only the one audio track produces byte-identical SDP to before. DTMF (RFC 4733) stays on
 the primary track, not per-MID. This is the forwarding building block for multi-party audio; the SDK
 <strong>forwards, it does not mix</strong> the conference.</p>
-<h2 id="receive-side-simulcast-demux-preview">Receive-side simulcast demux (preview)</h2>
+<h2 id="receive-side-simulcast-demux">Receive-side simulcast demux</h2>
 <blockquote>
-<p><strong>Preview (v4.7.0-preview), additive, forwarding-only.</strong></p>
+<p><strong>4.7, additive, forwarding-only.</strong></p>
 </blockquote>
 <p>When a remote peer sends several encodings of <strong>one</strong> video m-line, the SDK separates them
 receive-side into independent per-RID reassembly (each layer keeps its own reorder + depacketise
@@ -216,9 +250,9 @@ m-line; distinguish the layers by <code>frame.Rid</code>:</p>
 <p>This completes simulcast (the send side was already there): an SFU receives each layer addressably.
 <strong>Forwarding-only</strong> — the SDK never drops or transcodes a layer; which layer is forwarded is your
 SFU/app logic. Non-simulcast receive is byte-identical (<code>Rid</code> is <code>null</code>).</p>
-<h2 id="per-peer-bitrate-recommendation-preview">Per-peer bitrate recommendation (preview)</h2>
+<h2 id="per-peer-bitrate-recommendation">Per-peer bitrate recommendation</h2>
 <blockquote>
-<p><strong>Preview (v4.7.0-preview), additive.</strong></p>
+<p><strong>4.7, additive.</strong></p>
 </blockquote>
 <p>A finished recommended send bitrate toward the connected peer — plus a coarse <code>NetworkQuality</code> —
 derived from the transport-wide congestion feedback the peer returns (transport-cc, RFC 8888). For an
@@ -234,12 +268,16 @@ long? bps = peer.RecommendedOutgoingBitrateBps;   // null until transport-cc is 
 <p><strong>A recommendation, not raw metrics, and reactive</strong> — it fires per feedback interval, no polling. The
 property and event stay <code>null</code>/silent when transport-cc was not negotiated. The SDK does <strong>no</strong>
 throttling (your app owns the cadence) and makes <strong>no</strong> layer decision.</p>
-<h2 id="sfu-enablement--how-the-three-fit-together">SFU enablement — how the three fit together</h2>
-<p>These three preview primitives are the peer-side building blocks for multi-party video conferencing:
-multiple audio tracks carry several participants' audio, receive-side simulcast makes each video layer
+<h2 id="sfu-enablement--how-these-fit-together">SFU enablement — how these fit together</h2>
+<p>These primitives are the peer-side building blocks for multi-party conferencing: multiple video and
+audio tracks carry several participants over one transport, mid-call renegotiation lets participants
+join and leave without rebuilding the connection, receive-side simulcast makes each video layer
 addressable, and the per-peer bitrate recommendation tells the forwarder which layer each receiver can
 afford. The SDK supplies the peer primitives; the <strong>SFU / selection logic lives in your app or
-conference host</strong> — the SDK is not itself an SFU.</p>
+conference host</strong> — the SDK is not itself an SFU, and it never mixes or transcodes.</p>
+<p>They are also <strong>not yet covered by the browser-interop CI matrix</strong>, which exercises the 1 audio +
+1 video path against Chromium and Firefox. Validate a multi-track topology against your own clients
+before relying on it — see the <a href="../interop/browsers.html">browsers page</a>.</p>
 <h2 id="samples">Samples</h2>
 <ul>
 <li><code>examples/CalloraVoipSdk.Sample.WebRtcPeer</code> — two peers connect over an in-memory channel, tracks + tap.</li>
