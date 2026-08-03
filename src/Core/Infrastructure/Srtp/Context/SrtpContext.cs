@@ -19,10 +19,24 @@ internal sealed class SrtpContext : ISrtpContext
     private readonly ISrtpPacketCipher _cipher;
     private readonly int _authTagLength;
 
+    // Default upper bound on distinct SSRCs tracked in one direction. Sized for the busiest single
+    // media leg — a primary stream plus its RTX and a few simulcast layers — with generous reserve;
+    // legitimate senders stay well under it while a keyed flood is capped (#157 P1-2, K4).
+    internal const int DefaultMaxTrackedSsrcs = 64;
+
+    // Maximum extended SRTP packet index usable under one key (RFC 3711 §9.2): at most 2^48 packets
+    // before the index would wrap and reuse the AES-CM keystream / GCM nonce. The key must be retired
+    // first; the sender fails closed at this limit rather than reusing keystream (#157 P1-1).
+    internal const ulong SrtpMaxSendPacketIndex = 1UL << 48;
+
     // Per-SSRC ROC + replay state (RFC 3711 §3.2.1). One entry per synchronisation source seen on
     // this direction; a single-stream context simply holds one. Inbound state is created only once a
-    // packet from an SSRC authenticates, so an unauthenticated SSRC spray cannot grow the map.
+    // packet from an SSRC authenticates, so an unauthenticated SSRC spray cannot grow the map — but an
+    // authenticated (keyed) peer still could, so the map is hard-capped at _maxTrackedSsrcs (#157 P1-2).
     private readonly Dictionary<uint, SrtpSsrcState> _ssrcState = [];
+    private readonly int _maxTrackedSsrcs;
+    private readonly ulong _maxSendPacketIndex;
+    private long _discardedSourceCount;
 
     // Serializes all mutable state (per-SSRC indices, replay windows) and key usage so the context
     // is thread-safe on its own — concurrent Protect calls would otherwise race a stream's ROC
@@ -30,12 +44,20 @@ internal sealed class SrtpContext : ISrtpContext
     private readonly object _sync = new();
     private bool _disposed;
 
-    public SrtpContext(SrtpKeyMaterial material)
+    public SrtpContext(
+        SrtpKeyMaterial material,
+        int maxTrackedSsrcs = DefaultMaxTrackedSsrcs,
+        ulong maxSendPacketIndex = SrtpMaxSendPacketIndex)
     {
         ArgumentNullException.ThrowIfNull(material);
-        _keys          = SrtpKeyDerivation.Derive(material);
-        _cipher        = CreateCipher(material.Suite, _keys);
-        _authTagLength = _cipher.TagLength;
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxTrackedSsrcs);
+        ArgumentOutOfRangeException.ThrowIfZero(maxSendPacketIndex);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(maxSendPacketIndex, SrtpMaxSendPacketIndex);
+        _keys               = SrtpKeyDerivation.Derive(material);
+        _cipher             = CreateCipher(material.Suite, _keys);
+        _authTagLength      = _cipher.TagLength;
+        _maxTrackedSsrcs    = maxTrackedSsrcs;
+        _maxSendPacketIndex = maxSendPacketIndex;
     }
 
     // Picks the packet cipher for the negotiated suite: AEAD-GCM (RFC 7714, 16-byte tag) or the classic
@@ -62,6 +84,16 @@ internal sealed class SrtpContext : ISrtpContext
         get { lock (_sync) { return _ssrcState.Count; } }
     }
 
+    /// <summary>
+    /// Number of authenticated packets discarded because admitting their new SSRC would exceed the
+    /// tracked-source cap — internal telemetry/test seam proving the cap rejects rather than evicts
+    /// (#157 P1-2). Monotonic for the context's lifetime.
+    /// </summary>
+    internal long DiscardedSourceCount
+    {
+        get { lock (_sync) { return _discardedSourceCount; } }
+    }
+
     // -------------------------------------------------------------------------
     // Protect (encrypt outbound)
     // -------------------------------------------------------------------------
@@ -86,6 +118,7 @@ internal sealed class SrtpContext : ISrtpContext
         var seq         = BinaryPrimitives.ReadUInt16BigEndian(rtpPacket[2..]);
         var state       = GetOrAddState(ssrc);
         var packetIndex = state.ComputeSenderIndex(seq);
+        EnsureSendIndexWithinLifetime(packetIndex);
 
         // Copy into the final SRTP buffer, then encrypt the payload in place and append the tag.
         var result = GC.AllocateUninitializedArray<byte>(rtpPacket.Length + _authTagLength);
@@ -139,9 +172,14 @@ internal sealed class SrtpContext : ISrtpContext
         rtpSpan.CopyTo(output);
         _cipher.Unprotect(ssrc, packetIndex, output, headerLen, receivedTag);
 
-        // Authenticated: commit the state for this SSRC so its ROC/replay window persists.
+        // Authenticated: admit this SSRC — subject to the tracked-source cap — so its ROC/replay
+        // window persists. An over-cap new source is discarded here, after auth and before any state
+        // is kept, so a keyed SSRC flood cannot grow the map (#157 P1-2). Known SSRCs skip the cap.
         if (existing is null)
+        {
+            EnsureRoomForNewSource();
             _ssrcState[ssrc] = state;
+        }
 
         // Replay check + window update (RFC 3711 §3.3.2).
         state.CheckReplay(packetIndex);
@@ -150,11 +188,37 @@ internal sealed class SrtpContext : ISrtpContext
         return output;
     }
 
+    // Send-side state (Protect). A sender controls its own SSRCs, so this path is deliberately NOT
+    // capped — the tracked-source cap is a receive-side defense (see EnsureRoomForNewSource) and must
+    // never make a legitimate multi-stream Protect throw. Caller holds _sync.
     private SrtpSsrcState GetOrAddState(uint ssrc)
     {
         if (!_ssrcState.TryGetValue(ssrc, out var state))
             _ssrcState[ssrc] = state = new SrtpSsrcState();
         return state;
+    }
+
+    // Fails closed before encrypting once the extended SRTP packet index reaches its per-key lifetime
+    // limit (RFC 3711 §9.2, 2^48 packets): protecting past it would wrap the index and reuse the AES-CM
+    // keystream / GCM nonce under the same key (#157 P1-1). Caller holds _sync.
+    private void EnsureSendIndexWithinLifetime(ulong packetIndex)
+    {
+        if (packetIndex >= _maxSendPacketIndex)
+            throw new SrtpKeyLifetimeExceededException(
+                $"SRTP send index reached its per-key lifetime limit ({_maxSendPacketIndex}); refusing to reuse keystream (RFC 3711 §9.2).");
+    }
+
+    // Enforces the per-SSRC state cap on the RECEIVE path only (#157 P1-2, K4 wire-DoS): a keyed peer
+    // can spray authenticated SSRCs to exhaust memory. A known SSRC never reaches here; a new one at
+    // the cap is refused with a typed, fail-closed discard rather than evicting an already-admitted
+    // SSRC's replay window — eviction would let that source's earlier indices be replayed. Caller holds _sync.
+    private void EnsureRoomForNewSource()
+    {
+        if (_ssrcState.Count < _maxTrackedSsrcs)
+            return;
+        _discardedSourceCount++;
+        throw new SrtpSourceLimitException(
+            $"SRTP tracked-source cap ({_maxTrackedSsrcs}) reached; refusing a new SSRC (RFC 3711 §3.2.1 state).");
     }
 
     // -------------------------------------------------------------------------

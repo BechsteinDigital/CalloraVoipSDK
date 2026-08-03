@@ -350,6 +350,13 @@ internal sealed class RtpSession : IRtpSession
                 _logger.LogDebug("Suppressing outbound RTCP: SRTCP context disposed during teardown.");
                 return;
             }
+            catch (SrtpKeyLifetimeExceededException ex)
+            {
+                // Per-key SRTCP index budget exhausted (RFC 3711 §9.2, #157 P1-1): fail closed — no
+                // reused keystream, no plain-RTCP send. RTCP goes silent until rekey.
+                _logger.LogError(ex, "Suppressing outbound RTCP: SRTCP key lifetime exhausted; media requires rekey.");
+                return;
+            }
         }
         else if (_options.RequireEncryptedMedia)
         {
@@ -454,6 +461,13 @@ internal sealed class RtpSession : IRtpSession
             catch (ObjectDisposedException)
             {
                 _logger.LogDebug("Suppressing secondary RTP: context disposed during teardown.");
+                return;
+            }
+            catch (SrtpKeyLifetimeExceededException ex)
+            {
+                // Per-key packet budget exhausted (RFC 3711 §9.2, #157 P1-1): fail closed — no reused
+                // keystream, no plaintext. The secondary (RTX) leg goes silent until rekey.
+                _logger.LogError(ex, "Suppressing secondary RTP: SRTP key lifetime exhausted; media requires rekey.");
                 return;
             }
         }
@@ -717,6 +731,14 @@ internal sealed class RtpSession : IRtpSession
                 // A send racing session teardown after the context owner zeroed the keys —
                 // suppress the packet; never fall through to an unprotected send.
                 _logger.LogDebug("Suppressing outbound RTP: SRTP context disposed during teardown.");
+                return;
+            }
+            catch (SrtpKeyLifetimeExceededException ex)
+            {
+                // The key's packet budget is exhausted (RFC 3711 §9.2, #157 P1-1). Fail closed: never
+                // emit a reused-keystream packet and never fall back to plaintext. The leg goes silent
+                // until the session rekeys.
+                _logger.LogError(ex, "Suppressing outbound RTP: SRTP key lifetime exhausted; media requires rekey.");
                 return;
             }
         }

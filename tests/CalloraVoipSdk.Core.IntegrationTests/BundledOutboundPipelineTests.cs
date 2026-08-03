@@ -201,6 +201,24 @@ public sealed class BundledOutboundPipelineTests
             InitialTimestamp + (2 * eventDuration), Decode(Assert.Single(sender.Datagrams), receiver).Timestamp);
     }
 
+    [Fact]
+    public async Task An_exhausted_srtp_key_suppresses_outbound_media_instead_of_reusing_keystream()
+    {
+        // #157 P1-1: once the per-key send-index budget is spent (RFC 3711 §9.2) the pipeline must fail
+        // closed — suppress the packet, never throw into the send path, never reuse the keystream.
+        var (outbound, sender) = Outbound();
+        outbound.InstallOutboundKey(new SrtpContext(Material(), maxSendPacketIndex: (ulong)(InitialSeq + 2)));
+
+        // Two sends (indices 1000, 1001) are within the key's lifetime and leave the socket.
+        await outbound.SendAsync("audio", new byte[] { 1 });
+        await outbound.SendAsync("audio", new byte[] { 2 });
+        Assert.Equal(2, sender.Datagrams.Count);
+
+        // The third would need index 1002 == the limit: suppressed — no throw, no datagram, no reuse.
+        await outbound.SendAsync("audio", new byte[] { 3 });
+        Assert.Equal(2, sender.Datagrams.Count);
+    }
+
     // ── harness ──────────────────────────────────────────────────────────────────
 
     private static (BundledOutboundPipeline pipeline, CapturingSender sender) Outbound()

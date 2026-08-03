@@ -162,6 +162,14 @@ internal sealed class BundledOutboundPipeline
             _logger.LogDebug("Suppressing outbound RTCP: SRTCP context disposed during teardown.");
             return;
         }
+        catch (SrtpKeyLifetimeExceededException ex)
+        {
+            // Per-key SRTCP index budget exhausted (RFC 3711 §9.2, #157 P1-1): fail closed — no reused
+            // keystream, no plaintext RTCP. RTCP goes silent until rekey.
+            Interlocked.Increment(ref _rtcpSuppressedSends);
+            _logger.LogError(ex, "Suppressing outbound RTCP: SRTCP key lifetime exhausted; media requires rekey.");
+            return;
+        }
         // Any other ProtectRtcp fault (a cryptographic/argument error) is deliberately NOT caught here: it
         // propagates to the periodic reporter's catch-all, which logs and retries next interval. The invariant
         // that matters is met either way — the send only ever happens on a successfully protected datagram, so
@@ -286,6 +294,14 @@ internal sealed class BundledOutboundPipeline
             _logger.LogDebug("Suppressing outbound RTX: SRTP context disposed during teardown.");
             return;
         }
+        catch (SrtpKeyLifetimeExceededException ex)
+        {
+            // Per-key packet budget exhausted (RFC 3711 §9.2, #157 P1-1): fail closed — no reused
+            // keystream, no plaintext. The RTX repair leg goes silent until rekey.
+            Interlocked.Increment(ref _suppressedSends);
+            _logger.LogError(ex, "Suppressing outbound RTX: SRTP key lifetime exhausted; media requires rekey.");
+            return;
+        }
 
         await _sender.SendAsync(datagram, cancellationToken).ConfigureAwait(false);
         Interlocked.Increment(ref _packetsSent);
@@ -342,6 +358,14 @@ internal sealed class BundledOutboundPipeline
             // packet; never fall through to an unprotected send.
             Interlocked.Increment(ref _suppressedSends);
             _logger.LogDebug("Suppressing outbound RTP: SRTP context disposed during teardown.");
+            return;
+        }
+        catch (SrtpKeyLifetimeExceededException ex)
+        {
+            // Per-key packet budget exhausted (RFC 3711 §9.2, #157 P1-1): fail closed — no reused
+            // keystream, no plaintext. The media leg goes silent until rekey.
+            Interlocked.Increment(ref _suppressedSends);
+            _logger.LogError(ex, "Suppressing outbound RTP: SRTP key lifetime exhausted; media requires rekey.");
             return;
         }
 

@@ -183,6 +183,13 @@ internal sealed class RtpInboundProcessor
                     _logger.LogDebug("Dropping replayed SRTCP packet from {Source}.", source);
                     return;
                 }
+                catch (SrtpSourceLimitException)
+                {
+                    // Authenticated but a new SSRC beyond the per-context cap (#157 P1-2): clean drop,
+                    // never a receive-loop kill; Debug-level so a keyed flood cannot flood the log.
+                    _logger.LogDebug("Dropping SRTCP packet from {Source}: tracked-source cap reached.", source);
+                    return;
+                }
                 catch (Exception ex) when (ex is ArgumentException or CryptographicException or ObjectDisposedException)
                 {
                     // A too-short or otherwise malformed RTCP-looking datagram (it passed the
@@ -262,6 +269,13 @@ internal sealed class RtpInboundProcessor
             catch (SrtpReplayException)
             {
                 _logger.LogDebug("Dropping replayed SRTP packet from {Source}.", source);
+                return;
+            }
+            catch (SrtpSourceLimitException)
+            {
+                // Authenticated but a new SSRC beyond the per-context cap (#157 P1-2): clean drop,
+                // never a receive-loop kill; Debug-level so a keyed flood cannot flood the log.
+                _logger.LogDebug("Dropping SRTP packet from {Source}: tracked-source cap reached.", source);
                 return;
             }
             catch (Exception ex) when (ex is ArgumentException or CryptographicException or ObjectDisposedException)
@@ -361,6 +375,13 @@ internal sealed class RtpInboundProcessor
             catch (SrtpReplayException)
             {
                 _logger.LogDebug("Dropping replayed secondary SRTP packet from {Source}.", source);
+                return;
+            }
+            catch (SrtpSourceLimitException)
+            {
+                // Authenticated but a new SSRC beyond the per-context cap (#157 P1-2): clean drop,
+                // never a receive-loop kill; Debug-level so a keyed flood cannot flood the log.
+                _logger.LogDebug("Dropping secondary SRTP packet from {Source}: tracked-source cap reached.", source);
                 return;
             }
             catch (Exception ex) when (ex is ArgumentException or CryptographicException or ObjectDisposedException)
