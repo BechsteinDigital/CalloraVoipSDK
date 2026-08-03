@@ -35,11 +35,27 @@ public sealed class IceConnectivityCheckPacerTests
     {
         var order = new List<string>();
         var completed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        // Enqueuing self-starts the drain, whose FIRST dequeue is not gated by the pacing delay (the delay runs
+        // AFTER a dispatch). So a plain "enqueue ordinary, enqueue triggered" races: the drain can dispatch the
+        // first-enqueued ordinary before triggered is even enqueued. To test preemption deterministically we park
+        // the drain in the pacing gate with a primer check, THEN enqueue both real checks while it is parked, so
+        // the decisive dequeue provably sees both — and must still pick the triggered one first (RFC 8445 §7.3.1.4).
+        var primerDispatched = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releasePace = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         await using var pacer = new IceConnectivityCheckPacer(
             NullLoggerFactory.Instance,
             TimeSpan.Zero,
-            (_, _) => Task.CompletedTask);
+            (_, ct) => releasePace.Task.WaitAsync(ct));
+
+        // Primer: consumes the first (ungated) dequeue, after which the drain parks in the pacing gate below.
+        Assert.True(pacer.TryEnqueue(Work(
+            IceConnectivityCheckKind.Ordinary,
+            500,
+            _ => { primerDispatched.TrySetResult(); return Task.FromResult(true); })));
+        await primerDispatched.Task.WaitAsync(TimeSpan.FromSeconds(1));
+
+        // Drain is now parked awaiting releasePace. Enqueue both real checks before it can dequeue again.
         Assert.True(pacer.TryEnqueue(Work(
             IceConnectivityCheckKind.Ordinary,
             999,
@@ -49,7 +65,7 @@ public sealed class IceConnectivityCheckPacerTests
             1,
             _ => { lock (order) order.Add("triggered"); return Task.FromResult(true); })));
 
-        pacer.Start();
+        releasePace.TrySetResult(); // resume the drain: its next dequeue sees both queued → triggered wins
         await completed.Task.WaitAsync(TimeSpan.FromSeconds(1));
         lock (order)
             Assert.Equal(new[] { "triggered", "ordinary" }, order);
