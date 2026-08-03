@@ -85,4 +85,44 @@ public sealed class RtcpCompoundDecodeTests
 
         Assert.Throws<ArgumentException>(() => { _ = new RtcpPacketCodec().Decode(truncated); });
     }
+
+    [Fact]
+    public void Compound_exceeding_the_packet_budget_is_rejected()
+    {
+        // #162 P1 (rule K4): a datagram full of minimal 8-byte sub-packets must not force
+        // unbounded object allocation — the codec caps the compound at MaxPacketsPerCompound.
+        var compound = MinimalRrCompound(RtcpPacketCodec.MaxPacketsPerCompound + 1);
+
+        Assert.Throws<ArgumentException>(() => { _ = new RtcpPacketCodec().Decode(compound); });
+    }
+
+    [Fact]
+    public void Compound_at_the_packet_budget_is_accepted()
+    {
+        var compound = MinimalRrCompound(RtcpPacketCodec.MaxPacketsPerCompound);
+
+        var packets = new RtcpPacketCodec().Decode(compound);
+
+        Assert.Equal(RtcpPacketCodec.MaxPacketsPerCompound, packets.Count);
+    }
+
+    [Fact]
+    public void Compound_exceeding_the_datagram_byte_budget_is_rejected()
+    {
+        // #162 P1 (rule K4): an oversized compound is rejected before decode at the shared codec
+        // boundary, so the dedicated RTCP socket, BUNDLE and SIP paths all inherit the byte cap.
+        var oversized = new byte[RtcpPacketCodec.MaxRtcpDatagramBytes + 4];
+        oversized[0] = 0x80;
+        oversized[1] = 201; // RR
+
+        Assert.Throws<ArgumentException>(() => { _ = new RtcpPacketCodec().Decode(oversized); });
+    }
+
+    private static byte[] MinimalRrCompound(int count)
+    {
+        var compound = new byte[count * 8];
+        for (var i = 0; i < count; i++)
+            MinimalReceiverReport((uint)(0x1000 + i)).CopyTo(compound, i * 8);
+        return compound;
+    }
 }

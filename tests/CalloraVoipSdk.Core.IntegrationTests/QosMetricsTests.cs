@@ -211,6 +211,35 @@ public sealed class QosMetricsTests
         Assert.Null(snapshot.RemoteMosConversationalQuality);
     }
 
+    // Single oversized APP sub-packet: valid on the wire, one sub-packet (so the per-compound
+    // packet cap does not catch it), inflated past the datagram-size budget.
+    private static byte[] OversizedAppPacket(int totalBytes)
+    {
+        var packet = new byte[totalBytes];
+        packet[0] = 0x80; // V=2
+        packet[1] = 204;  // APP (a type the codec skips)
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16BigEndian(
+            packet.AsSpan(2), (ushort)(totalBytes / 4 - 1));
+        return packet;
+    }
+
+    [Fact]
+    public void Oversized_rtcp_datagram_is_dropped_before_decode()
+    {
+        // #162 P1 (rule K4): a datagram past the RTCP byte budget is rejected at the shared codec
+        // boundary and discarded by the receive path, so a peer cannot force decode work with an
+        // oversized datagram. A single oversized sub-packet slips past the per-compound cap.
+        var session = new RecordingMediaSession(localSsrc: 0xAA55);
+        var monitor = new CallRtcpQualityMonitor(
+            session, Parameters(), NullLoggerFactory.Instance, new RtcpPacketCodec());
+
+        var oversized = OversizedAppPacket(RtcpPacketCodec.MaxRtcpDatagramBytes + 4);
+
+        monitor.ProcessInboundDatagramForTest(oversized, T0);
+
+        Assert.Equal(0, monitor.GetLatestSnapshot().RtcpPacketsReceived);
+    }
+
     // --- RTCP port-ownership race (the reservation fix) ---
 
     [Fact]

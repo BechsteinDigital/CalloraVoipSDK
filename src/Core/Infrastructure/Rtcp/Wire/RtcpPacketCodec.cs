@@ -19,6 +19,19 @@ namespace CalloraVoipSdk.Core.Infrastructure.Rtcp.Wire;
 /// </summary>
 internal sealed class RtcpPacketCodec : IRtcpPacketCodec
 {
+    // RFC 3550 §6.1 wire-DoS budget (rule K4): a legitimate compound is a handful of
+    // sub-packets (SR/RR + SDES + a little feedback + BYE), far below this. Bounding the
+    // sub-packet count before decode denies a peer the ability to force unbounded objects
+    // and work with a datagram full of minimal 8-byte sub-packets.
+    internal const int MaxPacketsPerCompound = 32;
+
+    // Wire-DoS byte budget (rule K4): a compliant RTCP compound stays within the path MTU
+    // (RFC 3550 §6.2), so an oversized datagram is rejected before any sub-packet is touched.
+    // 1500 bytes (Ethernet MTU) leaves ample headroom for legitimate reports. Enforced here at
+    // the shared decode boundary so every caller — the dedicated RTCP socket, BUNDLE, and the
+    // SIP path — inherits the same cap without duplicating the check.
+    internal const int MaxRtcpDatagramBytes = 1500;
+
     // -------------------------------------------------------------------------
     // Decode
     // -------------------------------------------------------------------------
@@ -28,11 +41,25 @@ internal sealed class RtcpPacketCodec : IRtcpPacketCodec
         if (data.Length == 0)
             throw new ArgumentException("RTCP compound packet is empty.", nameof(data));
 
+        // Wire-DoS byte budget (rule K4): reject an oversized compound before decoding any
+        // sub-packet, so a peer cannot force decode work with a jumbo datagram (MaxRtcpDatagramBytes).
+        if (data.Length > MaxRtcpDatagramBytes)
+            throw new ArgumentException(
+                $"RTCP compound of {data.Length} bytes exceeds the {MaxRtcpDatagramBytes}-byte budget.",
+                nameof(data));
+
         var packets = new List<RtcpPacket>();
         var offset  = 0;
+        var packetCount = 0;
 
         while (offset < data.Length)
         {
+            // Wire-DoS budget (rule K4): reject before touching a sub-packet beyond the cap, so
+            // the object/work count stays bounded no matter the datagram size (MaxPacketsPerCompound).
+            if (++packetCount > MaxPacketsPerCompound)
+                throw new ArgumentException(
+                    $"RTCP compound exceeds the {MaxPacketsPerCompound}-sub-packet budget.");
+
             if (data.Length - offset < 4)
                 throw new ArgumentException("Truncated RTCP header.");
 
