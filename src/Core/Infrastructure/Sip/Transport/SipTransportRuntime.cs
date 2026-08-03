@@ -765,29 +765,17 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
         X509Chain? chain,
         SslPolicyErrors sslPolicyErrors)
     {
-        if (_tlsConfiguration?.AcceptUntrustedCertificates == true)
-            return true;
+        var (accepted, reason) = SipTlsServerTrustEvaluator.Evaluate(
+            _tlsConfiguration?.TrustMode ?? SipTlsTrustMode.System,
+            _tlsConfiguration?.ExpectedSipDomain,
+            certificate,
+            sslPolicyErrors,
+            _tlsCertificateProvider is not null ? _tlsCertificateProvider.ValidatePeerCertificateSipDomain : null);
 
-        if (sslPolicyErrors != SslPolicyErrors.None)
+        if (!accepted)
         {
-            _logger.LogWarning(
-                "SIP TLS certificate validation failed: {Errors}.",
-                sslPolicyErrors);
+            _logger.LogWarning("SIP TLS server certificate rejected: {Reason}.", reason);
             return false;
-        }
-
-        // RFC 5922 §7.1: additional SIP domain SAN check when configured.
-        if (_tlsConfiguration?.ExpectedSipDomain is not null
-            && _tlsCertificateProvider is not null
-            && certificate is X509Certificate2 cert2)
-        {
-            if (!_tlsCertificateProvider.ValidatePeerCertificateSipDomain(cert2))
-            {
-                _logger.LogWarning(
-                    "RFC 5922 SIP domain SAN validation failed for domain '{SipDomain}'.",
-                    _tlsConfiguration.ExpectedSipDomain);
-                return false;
-            }
         }
 
         return true;
