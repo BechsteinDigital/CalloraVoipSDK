@@ -282,11 +282,14 @@
   CalloraVoipSdk.Core.Application.Ports.Sdp.SdpVideoNegotiationOptions.OfferSrtpKeyParams : System.String { get, init }
   CalloraVoipSdk.Core.Application.Ports.Sdp.SdpVideoNegotiationOptions.Port : System.Int32 { get, init }
   CalloraVoipSdk.Core.Application.Ports.Sdp.SdpVideoNegotiationOptions.PreferredCodecNames : System.Collections.Generic.IReadOnlyList<System.String> { get, init }
+  CalloraVoipSdk.Core.Application.Ports.Security.SipTlsTrustMode.DangerousAcceptAnyChain = enum-value
+  CalloraVoipSdk.Core.Application.Ports.Security.SipTlsTrustMode.System = enum-value
   CalloraVoipSdk.Core.Application.Ports.Security.TlsConfiguration..ctor()
   CalloraVoipSdk.Core.Application.Ports.Security.TlsConfiguration.AcceptUntrustedCertificates : System.Boolean { get, init }
   CalloraVoipSdk.Core.Application.Ports.Security.TlsConfiguration.CertificatePassword : System.String { get, init }
   CalloraVoipSdk.Core.Application.Ports.Security.TlsConfiguration.CertificatePath : System.String { get, init }
   CalloraVoipSdk.Core.Application.Ports.Security.TlsConfiguration.ExpectedSipDomain : System.String { get, init }
+  CalloraVoipSdk.Core.Application.Ports.Security.TlsConfiguration.TrustMode : CalloraVoipSdk.Core.Application.Ports.Security.SipTlsTrustMode { get, init }
   CalloraVoipSdk.Core.Application.Ports.Video.IVideoDevice.Connect(CalloraVoipSdk.Core.Application.Media.IVideoReceiver receiver, CalloraVoipSdk.Core.Application.Media.IVideoSender sender, CalloraVoipSdk.Core.Application.Ports.Video.VideoConnectionParameters parameters) : System.Void
   CalloraVoipSdk.Core.Application.Ports.Video.IVideoDevice.Disconnect() : System.Void
   CalloraVoipSdk.Core.Application.Ports.Video.IVideoDevice.Name : System.String { get }
@@ -1258,6 +1261,7 @@ TYPE enum CalloraVoipSdk.BridgeAudioFormat
 TYPE enum CalloraVoipSdk.ConnectStatus
 TYPE enum CalloraVoipSdk.Core.Application.Media.AudioFileFormat
 TYPE enum CalloraVoipSdk.Core.Application.Media.MediaSessionState
+TYPE enum CalloraVoipSdk.Core.Application.Ports.Security.SipTlsTrustMode
 TYPE enum CalloraVoipSdk.Core.Domain.Calls.CallActionStatus
 TYPE enum CalloraVoipSdk.Core.Domain.Calls.CallDirection
 TYPE enum CalloraVoipSdk.Core.Domain.Calls.CallIceState

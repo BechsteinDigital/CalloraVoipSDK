@@ -121,7 +121,9 @@ devices, while video is transport-only — the codec lives in your `IVideoDevice
 
 ## Receiving simulcast layers (WebRTC)
 
-This page covers the `ICall` / `IVideoSender` video contract. **Receiving** a remote peer's
-simulcast layers — demultiplexed and RID-tagged (`EncodedFrame.Rid`) — is a WebRTC-facade primitive
-that ships in **4.7.0-preview**; see
-[WebRTC → Receive-side simulcast demux](webrtc.md#receive-side-simulcast-demux-preview).
+This page covers the `ICall` / `IVideoSender` video contract, which negotiates **one** video stream
+per SIP call. **Receiving** a remote peer's simulcast layers — demultiplexed and RID-tagged
+(`EncodedFrame.Rid`) — and running **several** video tracks over one transport are WebRTC-facade
+primitives, stable since **4.7**; see
+[WebRTC → Receive-side simulcast demux](webrtc.md#receive-side-simulcast-demux) and
+[Multiple video tracks](webrtc.md#multiple-video-tracks-and-mid-call-renegotiation).

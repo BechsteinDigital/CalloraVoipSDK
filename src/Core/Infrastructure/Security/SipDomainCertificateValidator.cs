@@ -1,4 +1,6 @@
 using System.Formats.Asn1;
+using System.Globalization;
+using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Security;
@@ -9,22 +11,31 @@ namespace CalloraVoipSdk.Core.Infrastructure.Security;
 /// <para>
 /// RFC 5922 §7.1 requires that when a SIP entity establishes a TLS connection,
 /// it MUST verify the server certificate contains a subjectAltName (SAN) extension
-/// with a value that matches the expected SIP domain. Two SAN entry types are valid:
+/// with a value that matches the expected SIP domain. Identity extraction and comparison
+/// follow RFC 5922 §7.2 strictly:
 /// </para>
 /// <list type="number">
 ///   <item>
 ///     <description>
-///       <c>uniformResourceIdentifier</c> — a <c>sip:</c> or <c>sips:</c> URI whose
-///       host component matches the SIP domain (case-insensitive DNS comparison).
+///       <c>uniformResourceIdentifier</c> — only a <c>sip:</c> URI <b>without</b> userinfo is a
+///       SIP domain identity; its host is compared to the expected domain. <c>sips:</c>, other
+///       schemes and any URI carrying userinfo (which identifies a user, not a domain) are
+///       rejected in full and never salvaged.
 ///     </description>
 ///   </item>
 ///   <item>
 ///     <description>
-///       <c>dNSName</c> — a DNS hostname that matches the SIP domain, with wildcard
-///       support for the leftmost label (e.g. <c>*.example.com</c>).
+///       <c>dNSName</c> — compared by exact DNS name only. RFC 5922 §7.2 forbids wildcard/suffix
+///       expansion, so a <c>*.example.com</c> label matches no concrete host.
 ///     </description>
 ///   </item>
 /// </list>
+/// <para>
+/// When at least one valid <c>sip:</c> URI domain identity is present, <c>dNSName</c> entries are
+/// NOT consulted as a fallback (RFC 5922 §7.2 URI precedence). All names are canonicalized to
+/// lowercase ASCII A-labels (RFC 5280 / IDNA with STD3 rules) before comparison, so a Unicode
+/// U-label configured domain matches an A-label SAN and vice versa.
+/// </para>
 /// <para>
 /// The SAN extension is decoded from its ASN.1 (DER) bytes rather than from the
 /// locale- and platform-dependent text of <see cref="X509Extension.Format"/>, so the
@@ -41,14 +52,31 @@ internal static class SipDomainCertificateValidator
     /// </summary>
     private const string SubjectAlternativeNameOid = "2.5.29.17";
 
+    // Extended Key Usage OIDs relevant to SIP domain certificates (RFC 5924 §5): id-kp-sipDomain and
+    // anyExtendedKeyUsage (RFC 5280 §4.2.1.12).
+    private const string SipDomainEkuOid = "1.3.6.1.5.5.7.3.20";
+    private const string AnyExtendedKeyUsageOid = "2.5.29.37.0";
+
     // GeneralName CHOICE context-specific tags (RFC 5280 §4.2.1.6): dNSName [2] and
     // uniformResourceIdentifier [6], both IA5String with implicit tagging.
     private static readonly Asn1Tag DnsNameTag = new(TagClass.ContextSpecific, 2);
     private static readonly Asn1Tag UriNameTag = new(TagClass.ContextSpecific, 6);
 
+    // IDNA canonicalization for domain comparison (RFC 5280 §7 / RFC 5922 §7.2). STD3 rules reject
+    // non-host characters (e.g. wildcards, underscores) so they cannot produce a spurious match.
+    // IdnMapping.GetAscii does not mutate instance state, so a shared instance is safe for the
+    // concurrent callback contexts this validator runs in.
+    private static readonly IdnMapping DomainIdn = new() { AllowUnassigned = false, UseStd3AsciiRules = true };
+
+    // Hard caps bounding the peer-controlled work of SAN decoding (issue #159 P2; ENGINEERING_RULES K4
+    // wire-DoS bounds). Generous for legitimate SIP domain certificates, closed against abuse.
+    private const int MaxSanEntries = 100;
+    private const int MaxSanValueBytes = 1024;
+    private const int MaxTotalSanBytes = 16 * 1024;
+
     /// <summary>
     /// Validates that the provided certificate is appropriate for the given SIP domain
-    /// per RFC 5922 §7.1.
+    /// per RFC 5922 §7.1/§7.2.
     /// </summary>
     /// <param name="certificate">
     /// The X.509 certificate to validate. Must not be <see langword="null"/>.
@@ -62,9 +90,9 @@ internal static class SipDomainCertificateValidator
     /// <paramref name="sipDomain"/>; <see langword="false"/> otherwise.
     /// </returns>
     /// <remarks>
-    /// Per RFC 5922 §7.1: "A SIP implementation MUST check the subjectAltName
-    /// extension first; if the extension is present and contains the appropriate
-    /// SIP domain identity, the check succeeds."
+    /// Per RFC 5922 §7.2: valid <c>sip:</c> URI domain identities take precedence over
+    /// <c>dNSName</c> entries — if any such URI identity is present, DNS names are not used as a
+    /// fallback, even when none of the URI identities matches.
     /// </remarks>
     public static bool ValidateSipDomain(X509Certificate2 certificate, string sipDomain)
     {
@@ -75,35 +103,64 @@ internal static class SipDomainCertificateValidator
         if (string.IsNullOrEmpty(normalizedDomain))
             return false;
 
+        // RFC 5924 §5: a present EKU extension must authorize SIP domain use, otherwise the certificate
+        // is not a SIP domain certificate regardless of its SAN.
+        if (!SatisfiesSipExtendedKeyUsage(certificate))
+            return false;
+
         var sanExtension = certificate.Extensions[SubjectAlternativeNameOid];
         if (sanExtension is null)
             return false;
 
-        var (dnsNames, uris) = DecodeSubjectAlternativeNames(sanExtension.RawData);
+        // Stream the SAN entries (no full lists) with only O(1) match state. RFC 5922 §7.2: a valid
+        // sip: URI identity — matching or not — suppresses the dNSName fallback, so a dNSName match is
+        // held pending until the scan confirms no URI identity exists.
+        var hasSipUriIdentity = false;
+        var dnsMatched = false;
+        var uriMatched = false;
 
-        foreach (var uri in uris)
+        var scannedWithinBounds = TryScanSubjectAlternativeNames(sanExtension.RawData, (isUri, value) =>
         {
-            if (MatchesSipUri(uri, normalizedDomain))
-                return true;
-        }
+            if (isUri)
+            {
+                if (TryExtractSipUriDomainIdentity(value, out var uriHost))
+                {
+                    hasSipUriIdentity = true;
+                    if (uriHost == normalizedDomain)
+                    {
+                        uriMatched = true;
+                        return true; // decisive: a matching URI identity ends the scan
+                    }
+                }
+            }
+            else if (!hasSipUriIdentity && !dnsMatched && MatchesDnsName(value, normalizedDomain))
+            {
+                dnsMatched = true; // keep scanning: a later URI identity would suppress this (§7.2)
+            }
 
-        foreach (var dnsName in dnsNames)
-        {
-            if (MatchesDnsName(dnsName, normalizedDomain))
-                return true;
-        }
+            return false;
+        });
 
-        return false;
+        // Malformed, trailing-data or over-cap SAN work fails closed — never a partial-parse match.
+        if (!scannedWithinBounds)
+            return false;
+
+        if (uriMatched)
+            return true;
+
+        return !hasSipUriIdentity && dnsMatched;
     }
 
     /// <summary>
     /// Extracts the RFC 5922-relevant SAN entries (<c>dNSName</c> and
-    /// <c>uniformResourceIdentifier</c> values) from the certificate.
+    /// <c>uniformResourceIdentifier</c> values) from the certificate as their raw string values.
+    /// This is a diagnostic accessor; it applies no identity filtering and must not be used to
+    /// make a trust decision (use <see cref="ValidateSipDomain"/> for that).
     /// </summary>
     /// <param name="certificate">The certificate to inspect.</param>
     /// <returns>
-    /// A read-only list of SAN string values (DNS names followed by URIs); empty if
-    /// the extension is absent or malformed.
+    /// A read-only list of SAN string values in certificate order (bounded by the SAN caps); empty if
+    /// the extension is absent, malformed or exceeds the caps.
     /// </returns>
     public static IReadOnlyList<string> GetSubjectAlternativeNames(X509Certificate2 certificate)
     {
@@ -111,11 +168,14 @@ internal static class SipDomainCertificateValidator
         if (sanExtension is null)
             return [];
 
-        var (dnsNames, uris) = DecodeSubjectAlternativeNames(sanExtension.RawData);
-        var all = new List<string>(dnsNames.Count + uris.Count);
-        all.AddRange(dnsNames);
-        all.AddRange(uris);
-        return all;
+        var all = new List<string>();
+        var scannedWithinBounds = TryScanSubjectAlternativeNames(sanExtension.RawData, (_, value) =>
+        {
+            all.Add(value);
+            return false;
+        });
+
+        return scannedWithinBounds ? all : [];
     }
 
     // ──────────────────────────────────────────────────────────────
@@ -123,103 +183,189 @@ internal static class SipDomainCertificateValidator
     // ──────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Decodes the SAN extension value (<c>GeneralNames ::= SEQUENCE OF GeneralName</c>, RFC 5280
-    /// §4.2.1.6) from its DER bytes and returns the <c>dNSName</c> and
-    /// <c>uniformResourceIdentifier</c> entries. Uses ASN.1 decoding rather than the
-    /// locale-/platform-dependent <see cref="X509Extension.Format"/> text. A malformed extension
-    /// yields no names (validation then fails closed).
+    /// Streams the <c>dNSName</c> and <c>uniformResourceIdentifier</c> SAN values
+    /// (<c>GeneralNames ::= SEQUENCE OF GeneralName</c>, RFC 5280 §4.2.1.6) from the extension DER,
+    /// applying hard caps on entry count, per-value size and aggregate size (issue #159 P2, K4 wire-DoS
+    /// bounds). <paramref name="onEntry"/> is invoked per accepted value as <c>(isUri, value)</c> and may
+    /// return <see langword="true"/> to stop early (a decisive match). Uses ASN.1 decoding rather than the
+    /// locale-/platform-dependent <see cref="X509Extension.Format"/> text.
     /// </summary>
-    private static (List<string> DnsNames, List<string> Uris) DecodeSubjectAlternativeNames(byte[] rawExtension)
+    /// <returns>
+    /// <see langword="true"/> when the extension was scanned within bounds (whether or not a match was
+    /// found); <see langword="false"/> when it was malformed, carried trailing data after the SEQUENCE, or
+    /// exceeded a cap — the caller then fails closed.
+    /// </returns>
+    private static bool TryScanSubjectAlternativeNames(byte[] rawExtension, Func<bool, string, bool> onEntry)
     {
-        var dnsNames = new List<string>();
-        var uris = new List<string>();
+        var entries = 0;
+        var totalBytes = 0;
 
         try
         {
-            var generalNames = new AsnReader(rawExtension, AsnEncodingRules.DER).ReadSequence();
+            var outer = new AsnReader(rawExtension, AsnEncodingRules.DER);
+            var generalNames = outer.ReadSequence();
+
+            // RFC 5280 §4.2.1.6: nothing may follow the GeneralNames SEQUENCE.
+            if (outer.HasData)
+                return false;
+
             while (generalNames.HasData)
             {
+                if (++entries > MaxSanEntries)
+                    return false;
+
                 var tag = generalNames.PeekTag();
-                if (tag.HasSameClassAndValue(DnsNameTag))
-                    dnsNames.Add(generalNames.ReadCharacterString(UniversalTagNumber.IA5String, DnsNameTag));
-                else if (tag.HasSameClassAndValue(UriNameTag))
-                    uris.Add(generalNames.ReadCharacterString(UniversalTagNumber.IA5String, UriNameTag));
-                else
+                var isDns = tag.HasSameClassAndValue(DnsNameTag);
+                var isUri = tag.HasSameClassAndValue(UriNameTag);
+                if (!isDns && !isUri)
+                {
                     generalNames.ReadEncodedValue(); // skip otherName/rfc822Name/iPAddress/directoryName/…
+                    continue;
+                }
+
+                var valueBytes = generalNames.PeekContentBytes().Length;
+                totalBytes += valueBytes;
+                if (totalBytes > MaxTotalSanBytes)
+                    return false;
+
+                if (valueBytes > MaxSanValueBytes)
+                {
+                    // A single value too large to be a legitimate domain identity — skip it without
+                    // allocating a managed string for it.
+                    generalNames.ReadEncodedValue();
+                    continue;
+                }
+
+                if (onEntry(isUri, generalNames.ReadCharacterString(UniversalTagNumber.IA5String, tag)))
+                    return true;
             }
 
-            return (dnsNames, uris);
+            return true;
         }
         catch (AsnContentException)
         {
-            // A malformed SAN extension carries no trustworthy names — fail closed with an empty result
-            // rather than a partial parse that a matcher could act on.
-            return ([], []);
+            // A malformed SAN extension carries no trustworthy names — fail closed rather than acting on
+            // a partial parse.
+            return false;
         }
     }
 
     /// <summary>
-    /// Returns <see langword="true"/> if <paramref name="uri"/> is a <c>sip:</c>/<c>sips:</c> URI
-    /// whose host component matches <paramref name="normalizedDomain"/> (RFC 5922 §7.1).
+    /// Attempts to extract the SIP domain identity from a <c>uniformResourceIdentifier</c> SAN
+    /// value per RFC 5922 §7.2. Succeeds only for a <c>sip:</c> URI that carries no userinfo,
+    /// returning its normalized host in <paramref name="host"/>. <c>sips:</c>, other schemes and
+    /// any URI with userinfo are rejected (returns <see langword="false"/>).
     /// </summary>
-    private static bool MatchesSipUri(string uri, string normalizedDomain)
+    private static bool TryExtractSipUriDomainIdentity(string uri, out string host)
     {
-        // uri is the raw uniformResourceIdentifier value, e.g. "sip:proxy@example.com".
-        if (!uri.StartsWith("sip:", StringComparison.OrdinalIgnoreCase) &&
-            !uri.StartsWith("sips:", StringComparison.OrdinalIgnoreCase))
+        host = string.Empty;
+
+        // RFC 5922 §7.2: only the "sip" scheme identifies a SIP domain. Reject "sips:" explicitly
+        // before the "sip:" prefix test would otherwise accept it.
+        if (uri.StartsWith("sips:", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (!uri.StartsWith("sip:", StringComparison.OrdinalIgnoreCase))
             return false;
 
-        var hostStart = uri.IndexOf(':', StringComparison.Ordinal) + 1;
-        var hostPart = uri[hostStart..];
+        var rest = uri["sip:".Length..];
 
-        // Strip userinfo (user@host → host), port (host:port → host) and parameters (host;transport → host).
-        var atIndex = hostPart.IndexOf('@', StringComparison.Ordinal);
-        if (atIndex >= 0)
-            hostPart = hostPart[(atIndex + 1)..];
+        // A SIP URI with userinfo (user@host) identifies a user, not a domain — reject in full.
+        if (rest.IndexOf('@', StringComparison.Ordinal) >= 0)
+            return false;
 
-        var portIndex = hostPart.IndexOf(':', StringComparison.Ordinal);
-        if (portIndex >= 0)
-            hostPart = hostPart[..portIndex];
+        // Isolate the host from any port/parameters/headers.
+        string hostPart;
+        if (rest.StartsWith('['))
+        {
+            // Bracketed IPv6 literal — not a domain identity, but parse the bracket cleanly.
+            var close = rest.IndexOf(']', StringComparison.Ordinal);
+            if (close < 0)
+                return false;
+            hostPart = rest[1..close];
+        }
+        else
+        {
+            var cut = rest.IndexOfAny([':', ';', '?']);
+            hostPart = cut >= 0 ? rest[..cut] : rest;
+        }
 
-        var paramIndex = hostPart.IndexOf(';', StringComparison.Ordinal);
-        if (paramIndex >= 0)
-            hostPart = hostPart[..paramIndex];
-
-        return NormalizeDomain(hostPart) == normalizedDomain;
+        host = NormalizeDomain(hostPart);
+        return host.Length > 0;
     }
 
     /// <summary>
-    /// Returns <see langword="true"/> if <paramref name="dnsName"/> matches
-    /// <paramref name="normalizedDomain"/>, including leftmost-label wildcards per RFC 2818 §3.1.
+    /// Returns <see langword="true"/> if <paramref name="dnsName"/> is an exact match for
+    /// <paramref name="normalizedDomain"/> after IDNA canonicalization. RFC 5922 §7.2 forbids
+    /// wildcard/suffix expansion, so no <c>*.</c> handling is performed.
     /// </summary>
     private static bool MatchesDnsName(string dnsName, string normalizedDomain)
     {
         var normalizedSan = NormalizeDomain(dnsName);
-        if (string.IsNullOrEmpty(normalizedSan))
-            return false;
+        return normalizedSan.Length > 0 && normalizedSan == normalizedDomain;
+    }
 
-        // Exact match.
-        if (normalizedSan == normalizedDomain)
-            return true;
-
-        // Wildcard match: *.example.com matches sub.example.com but NOT example.com itself.
-        if (normalizedSan.StartsWith("*.", StringComparison.Ordinal))
+    /// <summary>
+    /// Applies the RFC 5924 §5 Extended Key Usage policy for SIP domain certificates: an absent EKU
+    /// extension imposes no restriction (accepted per local policy); a present EKU authorizes SIP domain
+    /// use only if it contains <c>id-kp-sipDomain</c> or <c>anyExtendedKeyUsage</c>. Any other present-only
+    /// EKU set, or a malformed EKU, fails closed.
+    /// </summary>
+    private static bool SatisfiesSipExtendedKeyUsage(X509Certificate2 certificate)
+    {
+        X509EnhancedKeyUsageExtension? eku = null;
+        foreach (var extension in certificate.Extensions)
         {
-            var wildBase = normalizedSan[2..]; // strip leading "*."
-            var dotIndex = normalizedDomain.IndexOf('.', StringComparison.Ordinal);
-            if (dotIndex > 0)
+            if (extension is X509EnhancedKeyUsageExtension typed)
             {
-                var domainBase = normalizedDomain[(dotIndex + 1)..];
-                return domainBase == wildBase;
+                eku = typed;
+                break;
             }
         }
 
+        // RFC 5280 §4.2.1.12: an absent EKU imposes no usage restriction.
+        if (eku is null)
+            return true;
+
+        try
+        {
+            foreach (var oid in eku.EnhancedKeyUsages)
+            {
+                if (oid.Value is SipDomainEkuOid or AnyExtendedKeyUsageOid)
+                    return true;
+            }
+        }
+        catch (CryptographicException)
+        {
+            // A malformed EKU extension cannot be shown to authorize SIP domain use — fail closed.
+            return false;
+        }
+
+        // EKU present but restricted to purposes other than SIP domain / anyExtendedKeyUsage.
         return false;
     }
 
     /// <summary>
-    /// Normalizes a domain string to lowercase and strips trailing dots.
+    /// Canonicalizes a domain to its lowercase ASCII A-label form for comparison
+    /// (RFC 5280 §7 / IDNA with STD3 rules). Returns <see cref="string.Empty"/> for input that is
+    /// not a valid host label so the caller fails closed.
     /// </summary>
-    private static string NormalizeDomain(string domain) =>
-        domain.Trim().TrimEnd('.').ToLowerInvariant();
+    private static string NormalizeDomain(string domain)
+    {
+        var trimmed = domain.Trim().TrimEnd('.');
+        if (trimmed.Length == 0)
+            return string.Empty;
+
+        try
+        {
+            // GetAscii applies IDNA ToASCII (case-folding + punycode); the ASCII result is then
+            // lower-cased so plain-ASCII labels compare case-insensitively too.
+            return DomainIdn.GetAscii(trimmed).ToLowerInvariant();
+        }
+        catch (ArgumentException)
+        {
+            // Not a valid host under STD3 rules (e.g. wildcard, illegal characters, empty label) —
+            // fail closed with an empty identity rather than acting on a partial value (RFC 5922 §7.2).
+            return string.Empty;
+        }
+    }
 }

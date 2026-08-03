@@ -107,11 +107,14 @@ public sealed class Issue16SecurityHardeningTests
         san.AddUri(new Uri("sip:proxy@uri.example.com"));
         using var cert = CreateSelfSigned("CN=san-test", san);
 
-        Assert.True(SipDomainCertificateValidator.ValidateSipDomain(cert, "sip.example.com"));      // dNSName exact
-        Assert.True(SipDomainCertificateValidator.ValidateSipDomain(cert, "sub.wild.example.com")); // dNSName wildcard
-        Assert.True(SipDomainCertificateValidator.ValidateSipDomain(cert, "uri.example.com"));      // sip: URI host
+        Assert.True(SipDomainCertificateValidator.ValidateSipDomain(cert, "sip.example.com"));       // dNSName exact
+        // RFC 5922 §7.2 forbids wildcard expansion — "*.wild.example.com" matches no concrete host.
+        Assert.False(SipDomainCertificateValidator.ValidateSipDomain(cert, "sub.wild.example.com"));
+        // The "sip:proxy@uri.example.com" SAN carries userinfo and is rejected in full (RFC 5922 §7.2),
+        // so its host must not be salvaged as a domain identity.
+        Assert.False(SipDomainCertificateValidator.ValidateSipDomain(cert, "uri.example.com"));
         Assert.False(SipDomainCertificateValidator.ValidateSipDomain(cert, "other.example.com"));
-        Assert.False(SipDomainCertificateValidator.ValidateSipDomain(cert, "wild.example.com"));    // *.wild != wild base
+        Assert.False(SipDomainCertificateValidator.ValidateSipDomain(cert, "wild.example.com"));
 
         var names = SipDomainCertificateValidator.GetSubjectAlternativeNames(cert);
         Assert.Contains("sip.example.com", names);

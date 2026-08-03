@@ -21,11 +21,13 @@ and intelligent decision logic.
 
 ## Current Status
 
-Latest release: **v4.7.0** on [nuget.org](https://www.nuget.org/packages/CalloraVoipSdk) (this
-documentation). It builds multi-party / SFU enablement onto the WebRTC facade — multiple video and audio
-tracks over one BUNDLE with mid-call renegotiation, receive-side simulcast demux, and a per-peer
+Latest release: **v4.7.2** on [nuget.org](https://www.nuget.org/packages/CalloraVoipSdk) (this
+documentation). The 4.7 line builds multi-party / SFU enablement onto the WebRTC facade — multiple video
+and audio tracks over one BUNDLE with mid-call renegotiation, receive-side simulcast demux, and a per-peer
 send-bitrate recommendation — all additive and transport-only on top of the 4.6 WebRTC facade,
-DTLS-SRTP with AEAD-AES-GCM, self-hostable STUN/TURN server, and the stable SIP + RTP core.
+DTLS-SRTP with AEAD-AES-GCM, self-hostable STUN/TURN server, and the stable SIP + RTP core. The 4.7 patch
+releases sharpen ICE connection setup (4.7.1, 4.7.2) and fold in a round of review hardening across ICE,
+the WebRTC track path and TURN.
 
 > **How to read the status column.** *Stable* = mature, covered by the RFC-oriented test suite and
 > by automated interop, and the intended production surface. *Opt-in* = shipped and tested, but off
@@ -69,12 +71,29 @@ DTLS-SRTP with AEAD-AES-GCM, self-hostable STUN/TURN server, and the stable SIP 
 |-----------|--------|
 | WebRTC facade: peer connections, SDK-driven signalling, W3C tracks, media taps ([transport-only](guides/webrtc.md)) | ✅ Stable — browser-validated (Chromium + Firefox, both roles) |
 | WebRTC video repair & congestion control: NACK/PLI/FIR, RTX, transport-cc, `getStats` | ✅ Stable |
-| Send-side simulcast (RFC 8853 / 8852) | ✅ Stable (send-side only — receive-side RID demux not included) |
+| Send-side simulcast (RFC 8853 / 8852) | ✅ Stable |
 | Data channels (SCTP) | 🚫 Not included |
 | Self-hostable STUN / TURN server (RFC 5389 / 5766 / 8656) | ✅ Stable — verified against coturn (UDP relay only) |
 | ICE for NAT traversal (RFC 8445/7675: role + tie-breaker, check-list FSM, nomination, inbound/triggered checks, consent freshness, restart incl. `RestartIceAsync`) | ⚙️ Opt-in — off by default, unproven in production trunks |
 | ICE-TCP candidates (RFC 6544) | 🚫 Not included (deliberate — trunk calls use symmetric RTP) |
 | Backend/API for signed plugin marketplace + tenant entitlements | 📋 Roadmap |
+
+**Multi-party / SFU enablement (4.7, [WebRTC guide](guides/webrtc.md)):**
+
+All of these are **additive and transport-only** — a peer that uses none of them negotiates
+byte-identical SDP to 4.6. The SDK stays a peer: it **forwards, it does not mix or transcode**.
+
+| Capability | Status |
+|-----------|--------|
+| Multiple video tracks over one BUNDLE (`AddVideoTrack`, own `m=video` + SSRC per track, `RemoteTrack.Mid`) | ✅ Stable |
+| Multiple audio tracks over one BUNDLE (`AddAudioTrack`, per-participant `a=msid`) | ✅ Stable |
+| Mid-call renegotiation (RFC 8829): apply the track delta live, no transport / DTLS / ICE / SRTP rebuild | ✅ Stable |
+| Signalling state observation (`SignalingState`, `SignalingStateChanged` — W3C `RTCSignalingState`) | ✅ Stable |
+| Receive-side simulcast demux (RFC 8853 / 8852): per-RID reassembly, layer id on `EncodedFrame.Rid` | ✅ Stable (forwarding-only — layer choice is the app's) |
+| Per-peer send-bitrate recommendation from transport-cc (`RecommendedOutgoingBitrateBps`, `RecommendedBitrateChanged`) | ✅ Stable |
+| On-demand key-frame request per track (`RequestVideoKeyFrameAsync(mid)`, RFC 4585 §6.3.1 PLI) | ✅ Stable |
+| ICE restart on a connected peer (re-offer rotating the ICE ufrag) | 🚫 Not supported — dispose and re-create the peer |
+| Audio mixing / transcoding (a real conference server) | 🚫 Not included — out of scope by design |
 
 ## Choose your integration depth
 

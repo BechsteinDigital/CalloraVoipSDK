@@ -12,7 +12,8 @@ namespace CalloraVoipSdk.InteropTests.Transport;
 
 /// <summary>
 /// SIP über TLS-Transport gegen echten Asterisk (Fixture hat [transport-tls] auf 5061 mit self-signed
-/// Zertifikat; der SDK vertraut ihm über <see cref="TlsConfiguration.AcceptUntrustedCertificates"/>).
+/// Zertifikat; der SDK vertraut ihm über <see cref="TlsConfiguration.TrustMode"/> =
+/// <see cref="SipTlsTrustMode.DangerousAcceptAnyChain"/>).
 ///
 /// F010 (GEFIXT): Der NAT-korrektive Re-Register ist auf UDP beschränkt; über TLS übernimmt die
 /// persistente Verbindung das Routing (RFC 5626), sodass die Registration nach dem Handshake stabil
@@ -30,7 +31,7 @@ public sealed class AsteriskTlsTransportInteropTests
         {
             UserAgent = "CalloraInteropTest/1.0",
             SrtpPolicy = SrtpPolicy.Disabled,
-            Tls = new TlsConfiguration { AcceptUntrustedCertificates = true },
+            Tls = new TlsConfiguration { TrustMode = SipTlsTrustMode.DangerousAcceptAnyChain },
         });
 
         var reg = await client.ConnectAsync(
