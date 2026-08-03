@@ -20,8 +20,9 @@ public readonly struct EncodedFrame
     public ReadOnlyMemory<byte> Payload { get; }
 
     /// <summary>
-    /// The frame's RTP timestamp when known. Present for video frames; <see langword="null"/> for audio,
-    /// whose inbound path does not yet surface a timestamp (ADR-012 follow-up).
+    /// The frame's RTP timestamp (RFC 3550 §5.1) when known — surfaced for both audio and video inbound frames,
+    /// so an SFU can forward the stream with a monotonic clock. <see langword="null"/> only when the producer
+    /// did not stamp one.
     /// </summary>
     public uint? RtpTimestamp { get; }
 

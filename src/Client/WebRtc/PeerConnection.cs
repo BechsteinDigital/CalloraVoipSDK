@@ -470,23 +470,26 @@ internal sealed class PeerConnection : IPeerConnection
 
     // Inbound media is projected onto the W3C track model via the RemoteTrackSet: the remote a=msid names
     // the track, and the set raises TrackReceived once per kind before the first frame flows.
-    private void OnAudioReceived(byte[] payload)
+    private void OnAudioReceived(byte[] payload, uint rtpTimestamp)
     {
         _taps.Audio(MediaDirection.Inbound, payload);
         var msid = _peer.RemoteAudioMsid;
-        // The primary audio anchor is the mid-less track (keyed under the empty string).
-        _tracks.DeliverAudioFrame(mid: null, StreamId(msid), msid?.TrackId, new EncodedFrame(payload, rtpTimestamp: null, isKeyFrame: false, presentationTimeUsec: null));
+        // The primary audio anchor is the mid-less track (keyed under the empty string). The RTP timestamp
+        // (RFC 3550 §5.1) is surfaced so an SFU can forward audio with a monotonic clock (ADR-012 follow-up).
+        _tracks.DeliverAudioFrame(mid: null, StreamId(msid), msid?.TrackId, new EncodedFrame(payload, rtpTimestamp, isKeyFrame: false, presentationTimeUsec: null));
     }
 
     // Mid-tagged inbound audio (4.7.0: N remote audio tracks — the SFU pattern): route each frame to its own
     // RemoteTrack by MID. The peer fires this only for the additional tracks (never the primary), so a single
     // subscription alongside OnAudioReceived covers 1-audio and N-audio without double-delivering the primary.
-    private void OnAudioTrackReceived(string mid, byte[] payload)
+    private void OnAudioTrackReceived(string mid, byte[] payload, uint rtpTimestamp)
     {
         _taps.Audio(MediaDirection.Inbound, payload);
         // The remote m-line's msid for this MID (for stream grouping); null when the remote advertised none.
         var msid = _peer.RemoteAudioTracks.FirstOrDefault(t => string.Equals(t.Mid, mid, StringComparison.Ordinal))?.Msid;
-        _tracks.DeliverAudioFrame(mid, StreamId(msid), msid?.TrackId, new EncodedFrame(payload, rtpTimestamp: null, isKeyFrame: false, presentationTimeUsec: null));
+        // The RTP timestamp (RFC 3550 §5.1) reaches the frame so an SFU can forward this stream with a
+        // monotonic clock — the added-audio pendant to the video path (ADR-012 follow-up).
+        _tracks.DeliverAudioFrame(mid, StreamId(msid), msid?.TrackId, new EncodedFrame(payload, rtpTimestamp, isKeyFrame: false, presentationTimeUsec: null));
     }
 
     // Mid-tagged inbound video (P2c): route each frame to its own RemoteTrack (by MID). The peer fires this
