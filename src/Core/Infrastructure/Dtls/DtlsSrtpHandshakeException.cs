@@ -5,7 +5,11 @@ namespace CalloraVoipSdk.Core.Infrastructure.Dtls;
 /// a missing <c>use_srtp</c> extension, or a certificate fingerprint mismatch
 /// (RFC 5763 §6.7.1). The media session must be torn down; keys are never usable.
 /// </summary>
-internal sealed class DtlsSrtpHandshakeException : Exception
+/// <remarks>
+/// Not <c>sealed</c>: <see cref="DtlsSrtpHandshakeTimeoutException"/> specialises it for the
+/// handshake-deadline case (#163 P1-1) while sharing the fail-closed handling of the base type.
+/// </remarks>
+internal class DtlsSrtpHandshakeException : Exception
 {
     public DtlsSrtpHandshakeException(string message)
         : base(message)

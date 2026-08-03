@@ -26,12 +26,14 @@ internal sealed class DtlsSrtpServer : DefaultTlsServer
     private readonly TlsCrypto _crypto;
     private readonly DtlsCertificate _localCertificate;
     private readonly DtlsFingerprint _expectedRemoteFingerprint;
+    private readonly int _handshakeTimeoutMillis;
     private int _selectedProfile;
 
     public DtlsSrtpServer(
         TlsCrypto crypto,
         DtlsCertificate localCertificate,
-        DtlsFingerprint expectedRemoteFingerprint)
+        DtlsFingerprint expectedRemoteFingerprint,
+        int handshakeTimeoutMillis)
         : base(crypto)
     {
         ArgumentNullException.ThrowIfNull(localCertificate);
@@ -39,6 +41,7 @@ internal sealed class DtlsSrtpServer : DefaultTlsServer
         _crypto = crypto;
         _localCertificate = localCertificate;
         _expectedRemoteFingerprint = expectedRemoteFingerprint;
+        _handshakeTimeoutMillis = handshakeTimeoutMillis;
     }
 
     /// <summary>SRTP keys exported after <see cref="NotifyHandshakeComplete"/>.</summary>
@@ -46,6 +49,19 @@ internal sealed class DtlsSrtpServer : DefaultTlsServer
 
     /// <inheritdoc />
     protected override ProtocolVersion[] GetSupportedVersions() => ProtocolVersion.DTLSv12.Only();
+
+    /// <summary>
+    /// Overrides the BouncyCastle default (no overall handshake deadline) with a finite ceiling
+    /// so the engine aborts a stalled handshake on its own — defence-in-depth below the
+    /// transport-close failsafe in <see cref="DtlsSrtpHandshaker"/> (#163 P1-1).
+    /// </summary>
+    public override int GetHandshakeTimeoutMillis() => _handshakeTimeoutMillis;
+
+    /// <summary>Bounds per-handshake reassembly memory (rule K4). See <see cref="DtlsHandshakeLimits"/>.</summary>
+    public override int GetMaxHandshakeMessageSize() => DtlsHandshakeLimits.MaxHandshakeMessageSize;
+
+    /// <summary>Bounds the accepted client certificate chain (rule K4). See <see cref="DtlsHandshakeLimits"/>.</summary>
+    public override int GetMaxCertificateChainLength() => DtlsHandshakeLimits.MaxCertificateChainLength;
 
     /// <inheritdoc />
     protected override int[] GetSupportedCipherSuites() =>
