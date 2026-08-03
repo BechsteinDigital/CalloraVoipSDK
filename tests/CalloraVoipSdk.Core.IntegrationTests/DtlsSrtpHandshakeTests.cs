@@ -112,6 +112,24 @@ public sealed class DtlsSrtpHandshakeTests
     }
 
     [Fact]
+    public Task Handshake_SilentPeer_TimesOutAsClient_WithoutExternalCancellation()
+        => AssertHandshakeTimesOutAsync(DtlsRole.Client);
+
+    [Fact]
+    public Task Handshake_SilentPeer_TimesOutAsServer_WithoutExternalCancellation()
+        => AssertHandshakeTimesOutAsync(DtlsRole.Server);
+
+    [Fact]
+    public async Task Handshake_SilentPeer_TimesOutRepeatedly_WithoutAccumulatingHangs()
+    {
+        // #163 P1-1: five sequential silent handshakes must each terminate on their own
+        // deadline. A leaked worker thread or an unbounded transport queue would surface as
+        // one of the later attempts failing to complete within the watchdog window.
+        for (var i = 0; i < 5; i++)
+            await AssertHandshakeTimesOutAsync(DtlsRole.Client);
+    }
+
+    [Fact]
     public void Fingerprint_FormatsAsRfc8122UppercaseHex()
     {
         var fingerprint = DtlsCertificate.GenerateEcdsaP256().Fingerprint;
@@ -153,6 +171,31 @@ public sealed class DtlsSrtpHandshakeTests
 
     private static DtlsSrtpHandshaker CreateHandshaker() =>
         new(NullLogger<DtlsSrtpHandshaker>.Instance);
+
+    private static async Task AssertHandshakeTimesOutAsync(DtlsRole role)
+    {
+        var certificate = DtlsCertificate.GenerateEcdsaP256();
+        var peerFingerprint = DtlsCertificate.GenerateEcdsaP256().Fingerprint;
+
+        // Transport that never yields a peer flight — the handshake can only end on its deadline.
+        var transport = new QueueDatagramTransport(_ => { });
+        var handshaker = new DtlsSrtpHandshaker(
+            NullLogger<DtlsSrtpHandshaker>.Instance,
+            new DtlsHandshakeOptions { HandshakeTimeout = TimeSpan.FromMilliseconds(250) });
+
+        // No external cancellation token: only the product deadline can end this handshake.
+        var handshakeTask = handshaker.HandshakeAsync(
+            role, transport, certificate, peerFingerprint, CancellationToken.None);
+
+        // Watchdog: a regression that fails to enforce the deadline hangs forever — fail loudly
+        // instead of stalling the test run.
+        var finished = await Task.WhenAny(handshakeTask, Task.Delay(TimeSpan.FromSeconds(5)));
+        Assert.True(
+            ReferenceEquals(finished, handshakeTask),
+            $"DTLS handshake as {role} did not honour its product deadline and hung.");
+
+        await Assert.ThrowsAsync<DtlsSrtpHandshakeTimeoutException>(() => handshakeTask);
+    }
 
     private static (QueueDatagramTransport Client, QueueDatagramTransport Server) CreateTransportPair()
     {
