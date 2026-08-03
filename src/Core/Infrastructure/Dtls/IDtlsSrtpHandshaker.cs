@@ -20,16 +20,14 @@ internal interface IDtlsSrtpHandshaker
     /// <param name="expectedRemoteFingerprint">Peer fingerprint from the peer's SDP.</param>
     /// <param name="cancellationToken">Aborts the handshake (e.g. session teardown or timeout).</param>
     /// <param name="serverCookieClientId">
-    /// Server role only: opaque identity of the remote peer (e.g. its media IP/port) that the
-    /// stateless DTLS cookie is bound to (RFC 6347 §4.2.1). A spoofed source cannot echo a valid
-    /// cookie, so it never reaches the amplified certificate flight. <b>Required (non-empty) for
-    /// the server role</b> — an empty value throws, since a cookie without source binding is a
-    /// wiring error. Ignored for the client role.
+    /// Server role only: opt-in stateless DTLS cookie (RFC 6347 §4.2.1). When non-empty, it is the
+    /// opaque identity of the remote peer (e.g. its media IP/port) the cookie MAC binds to, so a
+    /// spoofed source cannot reach the amplified certificate flight — for legs without ICE source
+    /// validation (SIP). When empty (the default), no cookie exchange runs and the first ClientHello
+    /// is answered directly: WebRTC legs are already source-validated by ICE, and a browser DTLS
+    /// client never expects a server-initiated HelloVerifyRequest. Ignored for the client role.
     /// </param>
     /// <exception cref="DtlsSrtpHandshakeException">The handshake failed or was aborted.</exception>
-    /// <exception cref="ArgumentException">
-    /// Server role with an empty <paramref name="serverCookieClientId"/>.
-    /// </exception>
     Task<DtlsSrtpHandshakeResult> HandshakeAsync(
         DtlsRole role,
         DatagramTransport transport,

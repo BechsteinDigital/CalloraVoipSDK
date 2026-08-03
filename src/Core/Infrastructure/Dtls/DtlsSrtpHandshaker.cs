@@ -42,16 +42,6 @@ internal sealed class DtlsSrtpHandshaker : IDtlsSrtpHandshaker
         ArgumentNullException.ThrowIfNull(transport);
         ArgumentNullException.ThrowIfNull(localCertificate);
         ArgumentNullException.ThrowIfNull(expectedRemoteFingerprint);
-
-        // The server role must bind the stateless cookie to the peer address, so an empty client
-        // id (which would key the cookie MAC on nothing) is a wiring error, not a degraded mode
-        // (#163 P1-2). Fail loudly at the call site rather than silently losing source binding.
-        if (role == DtlsRole.Server && serverCookieClientId.IsEmpty)
-            throw new ArgumentException(
-                "A server-role DTLS handshake requires a non-empty cookie client id so the "
-                + "stateless cookie binds to the peer address (RFC 6347 §4.2.1).",
-                nameof(serverCookieClientId));
-
         cancellationToken.ThrowIfCancellationRequested();
 
         _logger.LogDebug("Starting DTLS-SRTP handshake as {Role}.", role);
@@ -160,12 +150,22 @@ internal sealed class DtlsSrtpHandshaker : IDtlsSrtpHandshaker
         var server = new DtlsSrtpServer(
             crypto, localCertificate, expectedRemoteFingerprint, handshakeTimeoutMillis);
 
-        // RFC 6347 §4.2.1: complete the stateless cookie exchange before the certificate flight,
-        // so a spoofed source is never handed the amplified server flight. Only a peer that echoes
-        // a cookie MAC-bound to its own address (cookieClientId) reaches the real handshake.
-        var request = VerifyClientCookie(transport, crypto, cookieClientId.ToArray());
+        // RFC 6347 §4.2.1 stateless cookie is opt-in per leg (non-empty cookieClientId). It guards
+        // legs whose source is NOT otherwise validated (SIP without ICE) against the amplified
+        // certificate flight. A WebRTC leg passes an empty id: ICE connectivity checks already
+        // validate the source, and a browser DTLS client never expects a server-initiated
+        // HelloVerifyRequest — sending one stalls the handshake. Empty id → answer directly.
+        DtlsTransport dtlsTransport;
+        if (cookieClientId.IsEmpty)
+        {
+            dtlsTransport = new DtlsServerProtocol().Accept(server, transport);
+        }
+        else
+        {
+            var request = VerifyClientCookie(transport, crypto, cookieClientId.ToArray());
+            dtlsTransport = new DtlsServerProtocol().Accept(server, transport, request);
+        }
 
-        var dtlsTransport = new DtlsServerProtocol().Accept(server, transport, request);
         return BuildResult(server.NegotiatedKeys, dtlsTransport);
     }
 

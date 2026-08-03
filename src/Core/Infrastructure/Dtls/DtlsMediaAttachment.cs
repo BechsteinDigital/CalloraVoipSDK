@@ -16,6 +16,10 @@ namespace CalloraVoipSdk.Core.Infrastructure.Dtls;
 internal sealed class DtlsMediaAttachment : IAsyncDisposable
 {
     private readonly bool _isClient;
+    // Opt-in RFC 6347 §4.2.1 stateless cookie on the server role: true for SIP legs without ICE
+    // source validation, false for WebRTC legs (ICE already validates the source, and a browser
+    // DTLS client stalls on a server-sent HelloVerifyRequest).
+    private readonly bool _useServerCookie;
     // The peer media endpoint DTLS records are exchanged with and the source inbound records are accepted
     // from. Mutable: a bundled transport whose ICE agent nominates (or re-nominates) a different candidate
     // pair updates it via UpdateRemoteEndPoint so the strict inbound source filter follows the nominated
@@ -57,9 +61,11 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
         Action<ISrtpContext, ISrtpContext, ISrtcpContext, ISrtcpContext> onContextsReady,
         Action<ISrtpContext, ISrtpContext>? onSecondaryContextsReady,
         Action onHandshakeFailed,
-        ILoggerFactory loggerFactory)
+        ILoggerFactory loggerFactory,
+        bool useServerCookie)
     {
         _isClient = isClient;
+        _useServerCookie = useServerCookie;
         _remoteEndPoint = remoteEndPoint;
         _expectedRemoteFingerprint = expectedRemoteFingerprint;
         _handshaker = handshaker;
@@ -128,7 +134,8 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
         Action onHandshakeFailed,
         ILoggerFactory loggerFactory,
         IPEndPoint? remoteEndPointOverride = null,
-        Action<ISrtpContext, ISrtpContext>? onSecondaryContextsReady = null)
+        Action<ISrtpContext, ISrtpContext>? onSecondaryContextsReady = null,
+        bool useServerCookie = true)
     {
         ArgumentNullException.ThrowIfNull(parameters);
         ArgumentNullException.ThrowIfNull(sendRaw);
@@ -148,10 +155,12 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
             Value = parameters.DtlsRemoteFingerprintValue!,
         };
 
+        // SIP entry point: legs here have no ICE source validation, so the stateless cookie is on
+        // by default (RFC 6347 §4.2.1); the WebRTC bundle uses Create directly with it off.
         return Create(
             parameters.DtlsIsClient, remoteEndPointOverride ?? parameters.RemoteEndPoint, expected,
             handshaker!, certificate!, sendRaw, onContextsReady, onHandshakeFailed, loggerFactory,
-            onSecondaryContextsReady);
+            onSecondaryContextsReady, useServerCookie);
     }
 
     /// <summary>
@@ -176,7 +185,8 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
         Action<ISrtpContext, ISrtpContext, ISrtcpContext, ISrtcpContext> onContextsReady,
         Action onHandshakeFailed,
         ILoggerFactory loggerFactory,
-        Action<ISrtpContext, ISrtpContext>? onSecondaryContextsReady = null)
+        Action<ISrtpContext, ISrtpContext>? onSecondaryContextsReady = null,
+        bool useServerCookie = false)
     {
         ArgumentNullException.ThrowIfNull(remoteEndPoint);
         ArgumentNullException.ThrowIfNull(expectedRemoteFingerprint);
@@ -189,7 +199,8 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
 
         return new DtlsMediaAttachment(
             isClient, remoteEndPoint, expectedRemoteFingerprint, handshaker, certificate,
-            sendRaw, onContextsReady, onSecondaryContextsReady, onHandshakeFailed, loggerFactory);
+            sendRaw, onContextsReady, onSecondaryContextsReady, onHandshakeFailed, loggerFactory,
+            useServerCookie);
     }
 
     /// <summary>
@@ -239,12 +250,15 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
         {
             try
             {
-                // Bind the server-role DTLS cookie to the current nominated remote endpoint
-                // (RFC 6347 §4.2.1); ignored for the client role. Snapshotted at handshake start:
-                // an ICE re-nomination inside the brief cookie-exchange window would bind to the
-                // stale address and time the handshake out (not a bind failure) — acceptable, the
-                // SIP path never re-nominates and the WebRTC cookie window is sub-RTT.
-                var cookieClientId = BuildCookieClientId(Volatile.Read(ref _remoteEndPoint));
+                // Bind the server-role DTLS cookie to the current nominated remote endpoint on legs
+                // that opted in (SIP without ICE, RFC 6347 §4.2.1); WebRTC legs pass an empty id so
+                // no HelloVerifyRequest is sent (ICE already validated the source, and a browser
+                // DTLS client stalls on one). Ignored for the client role. Snapshotted at handshake
+                // start: an ICE re-nomination inside the brief cookie window would bind to the stale
+                // address and time out — acceptable, and only the opt-in SIP path uses the cookie.
+                var cookieClientId = _useServerCookie
+                    ? BuildCookieClientId(Volatile.Read(ref _remoteEndPoint))
+                    : ReadOnlyMemory<byte>.Empty;
                 var result = await _handshaker.HandshakeAsync(
                         _isClient ? DtlsRole.Client : DtlsRole.Server,
                         _transport, _certificate, _expectedRemoteFingerprint, linkedCts.Token,

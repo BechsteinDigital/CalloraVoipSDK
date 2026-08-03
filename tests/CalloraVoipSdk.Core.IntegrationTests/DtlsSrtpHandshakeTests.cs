@@ -176,6 +176,44 @@ public sealed class DtlsSrtpHandshakeTests
     }
 
     [Fact]
+    public async Task ServerHandshake_WithoutClientId_SkipsCookieAndAnswersClientHelloDirectly()
+    {
+        // #163 P1-2 follow-up (Firefox interop regression): an ICE-validated leg (WebRTC) opts out
+        // of the stateless cookie by passing an empty clientId — the server must NOT send a
+        // hello_verify_request (which stalls a browser DTLS client that never expects one) and must
+        // answer the ClientHello directly with the ServerHello / certificate flight (msg_type 2).
+        var clientCertificate = DtlsCertificate.GenerateEcdsaP256();
+        var serverCertificate = DtlsCertificate.GenerateEcdsaP256();
+
+        var serverFlights = new ConcurrentQueue<byte>();
+        QueueDatagramTransport client = null!;
+        QueueDatagramTransport server = null!;
+        client = new QueueDatagramTransport(datagram => server.Enqueue(datagram));
+        server = new QueueDatagramTransport(datagram =>
+        {
+            if (FirstHandshakeType(datagram) is { } type)
+                serverFlights.Enqueue(type);
+            client.Enqueue(datagram);
+        });
+
+        var handshaker = CreateHandshaker();
+        using var timeout = new CancellationTokenSource(HandshakeTimeout);
+        var clientTask = handshaker.HandshakeAsync(
+            DtlsRole.Client, client, clientCertificate, serverCertificate.Fingerprint, timeout.Token);
+        // Empty serverCookieClientId (default) → no cookie exchange.
+        var serverTask = handshaker.HandshakeAsync(
+            DtlsRole.Server, server, serverCertificate, clientCertificate.Fingerprint, timeout.Token);
+        await Task.WhenAll(clientTask, serverTask);
+        using var clientResult = clientTask.Result;
+        using var serverResult = serverTask.Result;
+
+        var flights = serverFlights.ToArray();
+        Assert.NotEmpty(flights);
+        Assert.Equal(2, flights[0]); // ServerHello directly — no hello_verify_request
+        Assert.DoesNotContain((byte)3, flights);
+    }
+
+    [Fact]
     public async Task ServerHandshake_RejectsCookieBoundToADifferentClientId()
     {
         // #163 P1-2: the cookie is MAC-bound to the peer address (clientId). A cookie minted for
