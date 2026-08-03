@@ -192,7 +192,7 @@ is the raw depacketised codec bitstream — the app owns decoding.</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_EncodedFrame_IsKeyFrame" data-uid="CalloraVoipSdk.WebRtc.EncodedFrame.IsKeyFrame">
   IsKeyFrame
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/EncodedFrame.cs/#L29"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/EncodedFrame.cs/#L30"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Whether this is a key/intra frame. Always <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a> for audio.</p>
@@ -256,7 +256,7 @@ is the raw depacketised codec bitstream — the app owns decoding.</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_EncodedFrame_PresentationTimeUsec" data-uid="CalloraVoipSdk.WebRtc.EncodedFrame.PresentationTimeUsec">
   PresentationTimeUsec
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/EncodedFrame.cs/#L35"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/EncodedFrame.cs/#L36"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>The wall-clock presentation time in microseconds for lip-sync across tracks, when known;
@@ -289,7 +289,7 @@ is the raw depacketised codec bitstream — the app owns decoding.</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_EncodedFrame_Rid" data-uid="CalloraVoipSdk.WebRtc.EncodedFrame.Rid">
   Rid
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/EncodedFrame.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/EncodedFrame.cs/#L43"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>The frame's <code>a=rid</code> simulcast encoding id (RFC 8852) for receive-side simulcast-layer
@@ -323,11 +323,12 @@ stream and for audio.</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_EncodedFrame_RtpTimestamp" data-uid="CalloraVoipSdk.WebRtc.EncodedFrame.RtpTimestamp">
   RtpTimestamp
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/EncodedFrame.cs/#L26"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/EncodedFrame.cs/#L27"><i class="bi bi-code-slash"></i></a>
   </h3>
 
-  <div class="markdown level1 summary"><p>The frame's RTP timestamp when known. Present for video frames; <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> for audio,
-whose inbound path does not yet surface a timestamp (ADR-012 follow-up).</p>
+  <div class="markdown level1 summary"><p>The frame's RTP timestamp (RFC 3550 §5.1) when known — surfaced for both audio and video inbound frames,
+so an SFU can forward the stream with a monotonic clock. <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> only when the producer
+did not stamp one.</p>
 </div>
   <div class="markdown level1 conceptual"></div>
 
