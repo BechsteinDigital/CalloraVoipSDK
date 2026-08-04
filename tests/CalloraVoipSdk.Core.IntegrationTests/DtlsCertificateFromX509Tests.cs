@@ -62,7 +62,8 @@ public sealed class DtlsCertificateFromX509Tests
         var clientTask = handshaker.HandshakeAsync(
             DtlsRole.Client, clientTransport, client, server.Fingerprint, timeout.Token);
         var serverTask = handshaker.HandshakeAsync(
-            DtlsRole.Server, serverTransport, server, client.Fingerprint, timeout.Token);
+            DtlsRole.Server, serverTransport, server, client.Fingerprint, timeout.Token,
+            new byte[] { 127, 0, 0, 1, 0, 0 });
 
         try
         {

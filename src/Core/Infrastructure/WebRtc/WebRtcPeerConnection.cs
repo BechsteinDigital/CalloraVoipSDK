@@ -118,15 +118,17 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
 
     /// <summary>
     /// Raised per inbound audio RTP payload on the <em>primary</em> audio track (transport-only; the app owns the
-    /// codec). Never fires for an additional audio m-line — use <see cref="AudioTrackFrameReceived"/> for those.
+    /// codec), with the packet's RTP timestamp (RFC 3550 §5.1) so a receiver/SFU can forward it with a monotonic
+    /// clock. Never fires for an additional audio m-line — use <see cref="AudioTrackFrameReceived"/> for those.
     /// </summary>
-    public event Action<byte[]>? AudioReceived;
+    public event Action<byte[], uint>? AudioReceived;
 
     /// <summary>
-    /// Raised per inbound audio RTP payload tagged with its track MID (4.7.0: N remote audio tracks). Fires only
-    /// for the additional tracks, never the primary (which stays on the mid-less <see cref="AudioReceived"/>).
+    /// Raised per inbound audio RTP payload tagged with its track MID (4.7.0: N remote audio tracks), with the
+    /// packet's RTP timestamp (RFC 3550 §5.1). Fires only for the additional tracks, never the primary (which
+    /// stays on the mid-less <see cref="AudioReceived"/>).
     /// </summary>
-    public event Action<string, byte[]>? AudioTrackFrameReceived;
+    public event Action<string, byte[], uint>? AudioTrackFrameReceived;
 
     /// <summary>Raised with each reassembled inbound video frame (frame, RTP timestamp, is-key-frame).</summary>
     public event Action<byte[], uint, bool>? VideoFrameReceived;
@@ -864,8 +866,8 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         _sessionEvents.WireSession(
             session,
             TransitionTo,
-            payload => AudioReceived?.Invoke(payload),
-            (mid, payload) => AudioTrackFrameReceived?.Invoke(mid, payload),
+            (payload, rtpTimestamp) => AudioReceived?.Invoke(payload, rtpTimestamp),
+            (mid, payload, rtpTimestamp) => AudioTrackFrameReceived?.Invoke(mid, payload, rtpTimestamp),
             (frame, timestamp, isKeyFrame) => VideoFrameReceived?.Invoke(frame, timestamp, isKeyFrame),
             (mid, frame, timestamp, isKeyFrame) => VideoTrackFrameReceived?.Invoke(mid, frame, timestamp, isKeyFrame),
             (mid, rid, frame, timestamp, isKeyFrame) => VideoLayerFrameReceived?.Invoke(mid, rid, frame, timestamp, isKeyFrame),

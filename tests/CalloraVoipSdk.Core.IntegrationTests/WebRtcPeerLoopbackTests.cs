@@ -39,7 +39,7 @@ public sealed class WebRtcPeerLoopbackTests
         var peerGotAudio = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
         var counterpartGotAudio = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
         var connected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        peer.AudioReceived += payload => peerGotAudio.TrySetResult(payload);
+        peer.AudioReceived += (payload, _) => peerGotAudio.TrySetResult(payload);
         counterpart.AudioReceived += packet => counterpartGotAudio.TrySetResult(packet.Payload.ToArray());
         peer.ConnectionStateChanged += state => { if (state == WebRtcConnectionState.Connected) connected.TrySetResult(); };
 

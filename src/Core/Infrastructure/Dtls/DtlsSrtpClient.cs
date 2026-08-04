@@ -13,18 +13,21 @@ internal sealed class DtlsSrtpClient : DefaultTlsClient
 {
     private readonly DtlsCertificate _localCertificate;
     private readonly DtlsFingerprint _expectedRemoteFingerprint;
+    private readonly int _handshakeTimeoutMillis;
     private int _selectedProfile;
 
     public DtlsSrtpClient(
         TlsCrypto crypto,
         DtlsCertificate localCertificate,
-        DtlsFingerprint expectedRemoteFingerprint)
+        DtlsFingerprint expectedRemoteFingerprint,
+        int handshakeTimeoutMillis)
         : base(crypto)
     {
         ArgumentNullException.ThrowIfNull(localCertificate);
         ArgumentNullException.ThrowIfNull(expectedRemoteFingerprint);
         _localCertificate = localCertificate;
         _expectedRemoteFingerprint = expectedRemoteFingerprint;
+        _handshakeTimeoutMillis = handshakeTimeoutMillis;
     }
 
     /// <summary>SRTP keys exported after <see cref="NotifyHandshakeComplete"/>.</summary>
@@ -32,6 +35,19 @@ internal sealed class DtlsSrtpClient : DefaultTlsClient
 
     /// <inheritdoc />
     protected override ProtocolVersion[] GetSupportedVersions() => ProtocolVersion.DTLSv12.Only();
+
+    /// <summary>
+    /// Overrides the BouncyCastle default (no overall handshake deadline) with a finite ceiling
+    /// so the engine aborts a stalled handshake on its own — defence-in-depth below the
+    /// transport-close failsafe in <see cref="DtlsSrtpHandshaker"/> (#163 P1-1).
+    /// </summary>
+    public override int GetHandshakeTimeoutMillis() => _handshakeTimeoutMillis;
+
+    /// <summary>Bounds per-handshake reassembly memory (rule K4). See <see cref="DtlsHandshakeLimits"/>.</summary>
+    public override int GetMaxHandshakeMessageSize() => DtlsHandshakeLimits.MaxHandshakeMessageSize;
+
+    /// <summary>Bounds the accepted server certificate chain (rule K4). See <see cref="DtlsHandshakeLimits"/>.</summary>
+    public override int GetMaxCertificateChainLength() => DtlsHandshakeLimits.MaxCertificateChainLength;
 
     /// <summary>
     /// Requires <c>extended_master_secret</c>: RFC 5764 keying-material export must bind

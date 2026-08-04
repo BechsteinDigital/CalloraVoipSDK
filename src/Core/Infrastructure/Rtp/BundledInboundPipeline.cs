@@ -180,6 +180,14 @@ internal sealed class BundledInboundPipeline
             _logger.LogDebug("Dropping replayed SRTCP packet from {Source}.", source);
             return;
         }
+        catch (SrtpSourceLimitException)
+        {
+            // Authenticated but from a new SSRC beyond the per-context cap (#157 P1-2): a clean drop,
+            // never a receive-loop kill. Debug-level keeps a keyed SSRC flood from flooding the log.
+            Interlocked.Increment(ref _droppedDatagrams);
+            _logger.LogDebug("Dropping SRTCP packet from {Source}: tracked-source cap reached.", source);
+            return;
+        }
         catch (Exception ex) when (ex is ArgumentException or CryptographicException or ObjectDisposedException)
         {
             // A too-short or otherwise malformed RTCP-looking datagram must be a clean drop — an
@@ -224,6 +232,14 @@ internal sealed class BundledInboundPipeline
         {
             Interlocked.Increment(ref _droppedDatagrams);
             _logger.LogDebug("Dropping replayed SRTP packet from {Source}.", source);
+            return;
+        }
+        catch (SrtpSourceLimitException)
+        {
+            // Authenticated but from a new SSRC beyond the per-context cap (#157 P1-2): a clean drop,
+            // never a receive-loop kill. Debug-level keeps a keyed SSRC flood from flooding the log.
+            Interlocked.Increment(ref _droppedDatagrams);
+            _logger.LogDebug("Dropping SRTP packet from {Source}: tracked-source cap reached.", source);
             return;
         }
         catch (Exception ex) when (ex is ArgumentException or CryptographicException or ObjectDisposedException)

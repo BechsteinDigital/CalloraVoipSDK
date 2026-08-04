@@ -15,7 +15,13 @@ namespace CalloraVoipSdk.Core.Infrastructure.Srtp.Context;
 /// </remarks>
 internal sealed class SrtcpSsrcState
 {
-    private const uint SrtcpIndexMask = 0x7FFF_FFFF;
+    /// <summary>
+    /// Highest sender SRTCP index usable under one key (RFC 3711 §9.2). The 31-bit index must never wrap
+    /// — a wrap reuses the AES-CM keystream / GCM nonce — so this is the full 31-bit space (2^31 - 1).
+    /// </summary>
+    internal const uint MaxSendIndexLimit = 0x7FFF_FFFF;
+
+    private readonly uint _maxSendIndex;
 
     // Sender-side SRTCP index (31-bit), pre-incremented per packet (RFC 3711 §3.4).
     private uint _sendIndex;
@@ -24,11 +30,23 @@ internal sealed class SrtcpSsrcState
     // with SRTP via SlidingReplayWindow. The 31-bit index widens losslessly into the ulong window.
     private readonly SlidingReplayWindow _replay = new("SRTCP index");
 
-    /// <summary>Pre-increments and returns the next 31-bit sender SRTCP index (RFC 3711 §3.4).</summary>
+    /// <param name="maxSendIndex">
+    /// Highest sender index allowed before the key is exhausted (RFC 3711 §9.2). Defaults to the full
+    /// 31-bit space; a lower value is an injectable test seam for the near-exhaustion boundary.
+    /// </param>
+    public SrtcpSsrcState(uint maxSendIndex = MaxSendIndexLimit) => _maxSendIndex = maxSendIndex;
+
+    /// <summary>
+    /// Pre-increments and returns the next 31-bit sender SRTCP index (RFC 3711 §3.4). Fails closed with
+    /// <see cref="SrtpKeyLifetimeExceededException"/> once the index would exceed its per-key lifetime,
+    /// rather than wrapping and reusing the keystream/nonce under the same key (RFC 3711 §9.2).
+    /// </summary>
     public uint NextSendIndex()
     {
-        _sendIndex = (_sendIndex + 1) & SrtcpIndexMask;
-        return _sendIndex;
+        if (_sendIndex >= _maxSendIndex)
+            throw new SrtpKeyLifetimeExceededException(
+                $"SRTCP send index reached its per-key lifetime limit ({_maxSendIndex}); refusing to wrap (RFC 3711 §9.2).");
+        return ++_sendIndex;
     }
 
     /// <summary>

@@ -68,13 +68,17 @@ public sealed class IceMediaAttachmentTriggeredCheckTests
     {
         var newSource = new IPEndPoint(IPAddress.Loopback, 55555);
         var triggered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var triggeredCount = 0;
+        // Count DISTINCT STUN transaction ids, not raw datagrams: one confirming check is a single STUN
+        // transaction that retransmits with the SAME transaction id (RFC 8489 §6.1) — and since the test
+        // never answers it, a retransmit lands within the wall-clock window and would double a datagram count.
+        var sync = new object();
+        var checkTransactions = new HashSet<string>();
 
         ValueTask Capture(ReadOnlyMemory<byte> datagram, IPEndPoint destination, CancellationToken ct)
         {
             if (IsBindingRequestTo(datagram, destination, newSource))
             {
-                Interlocked.Increment(ref triggeredCount);
+                lock (sync) checkTransactions.Add(TransactionId(datagram));
                 triggered.TrySetResult();
             }
             return ValueTask.CompletedTask;
@@ -84,13 +88,16 @@ public sealed class IceMediaAttachmentTriggeredCheckTests
 
         attachment.OnStunPacketReceived(InboundCheckFromPeer(), newSource);
         await triggered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        Assert.Equal(1, Volatile.Read(ref triggeredCount));
+        lock (sync) Assert.Single(checkTransactions); // exactly one confirming check (retransmits share its id)
 
-        // Learn-once: a second accepted check from the same source does not trigger another.
+        // Learn-once: a second accepted check from the same source does not trigger another (distinct) check.
         attachment.OnStunPacketReceived(InboundCheckFromPeer(), newSource);
         await Task.Delay(150);
-        Assert.Equal(1, Volatile.Read(ref triggeredCount));
+        lock (sync) Assert.Single(checkTransactions);
     }
+
+    // The 12-byte STUN transaction id (RFC 8489 §5: header bytes 8..19), hex-encoded for set membership.
+    private static string TransactionId(ReadOnlyMemory<byte> stun) => Convert.ToHexString(stun.Span.Slice(8, 12));
 
     [Fact]
     public async Task Accepted_check_from_the_nominated_remote_is_not_re_triggered()
