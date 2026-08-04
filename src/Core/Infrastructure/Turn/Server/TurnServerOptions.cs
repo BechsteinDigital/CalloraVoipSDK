@@ -102,4 +102,25 @@ internal sealed class TurnServerOptions
     /// RESERVATION-TOKEN allocation before it is released (RFC 8656 §7). Default 30 s.
     /// </summary>
     public uint PortReservationLifetimeSeconds { get; init; } = 30;
+
+    /// <summary>
+    /// Maximum time a single TCP/TLS client may take to complete the TLS handshake before its connection
+    /// is dropped. Without this bound a peer that dribbles or stalls the TLS ClientHello holds a
+    /// connection slot indefinitely; the slot cap alone does not stop a slowloris, it only caps how many
+    /// slots the attacker must hold to exhaust the server (K4). Applies to TLS transport only. Set to
+    /// <see cref="System.Threading.Timeout.InfiniteTimeSpan"/> or zero to disable. Default 10 s.
+    /// </summary>
+    public TimeSpan StreamHandshakeTimeout { get; init; } = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// Maximum time a single stream control-message read may take before the connection is dropped,
+    /// bounding a slowloris that opens a connection and never delivers (or dribbles) a request (K4). The
+    /// deadline is applied per frame and reset by every frame, so it must comfortably exceed a legitimate
+    /// client's control cadence — chiefly the allocation refresh interval (≈ allocation lifetime / 2,
+    /// RFC 8656 §3.9). The default matches <see cref="DefaultAllocationLifetimeSeconds"/> so a client
+    /// refreshing on schedule never trips it; raise it if you grant much longer allocation lifetimes.
+    /// Does not apply once a channel-bound relay takes over the connection. Set to
+    /// <see cref="System.Threading.Timeout.InfiniteTimeSpan"/> or zero to disable.
+    /// </summary>
+    public TimeSpan StreamReadTimeout { get; init; } = TimeSpan.FromSeconds(600);
 }

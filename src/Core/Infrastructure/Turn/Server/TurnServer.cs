@@ -93,6 +93,29 @@ internal sealed class TurnServer : IAsyncDisposable
             throw new ArgumentOutOfRangeException(nameof(options), "MaxTotalAllocations must be >= 0.");
         if (_options.RequireAuthentication && authOptions is null)
             throw new ArgumentNullException(nameof(authOptions), "TURN authentication is required but auth options are missing.");
+        // A positive stream timeout must fit CancellationTokenSource.CancelAfter's timer limit (~49.7 days);
+        // fail fast here rather than throwing per connection. InfiniteTimeSpan and non-positive disable it.
+        if (StreamTimeoutOverflows(_options.StreamHandshakeTimeout))
+            throw new ArgumentOutOfRangeException(nameof(options), "StreamHandshakeTimeout exceeds the maximum supported deadline (~49.7 days).");
+        if (StreamTimeoutOverflows(_options.StreamReadTimeout))
+            throw new ArgumentOutOfRangeException(nameof(options), "StreamReadTimeout exceeds the maximum supported deadline (~49.7 days).");
+        // Surface the read-timeout / allocation-lifetime coupling at startup: a client refreshes at
+        // ≈ lifetime/2, so a read deadline shorter than the granted lifetime can drop a legitimate,
+        // on-schedule control connection mid-allocation. Individually valid, so warn — do not throw.
+        if (_options.StreamReadTimeout > TimeSpan.Zero
+            && _options.StreamReadTimeout != Timeout.InfiniteTimeSpan
+            && _options.StreamReadTimeout < TimeSpan.FromSeconds(_options.DefaultAllocationLifetimeSeconds))
+        {
+            logger.LogWarning(
+                "TURN StreamReadTimeout ({ReadTimeout}s) is shorter than DefaultAllocationLifetimeSeconds ({Lifetime}s): " +
+                "a client refreshing near lifetime/2 (~{Half}s) may be dropped mid-allocation. Raise StreamReadTimeout to at least the allocation lifetime.",
+                (int)_options.StreamReadTimeout.TotalSeconds,
+                _options.DefaultAllocationLifetimeSeconds,
+                _options.DefaultAllocationLifetimeSeconds / 2);
+        }
+
+        static bool StreamTimeoutOverflows(TimeSpan t)
+            => t != Timeout.InfiniteTimeSpan && t > TimeSpan.Zero && t.TotalMilliseconds > uint.MaxValue - 1;
 
         _transport = transport;
         _codec = codec;
@@ -415,6 +438,9 @@ internal sealed class TurnServer : IAsyncDisposable
                 if (_transport == TurnServerTransport.Tls)
                 {
                     var tlsStream = new SslStream(networkStream, leaveInnerStreamOpen: true);
+                    // Bound the handshake: a peer that dribbles or stalls the TLS ClientHello must not hold
+                    // a connection slot indefinitely (K4 slowloris).
+                    using var handshakeDeadline = CreateDeadline(ct, _options.StreamHandshakeTimeout);
                     try
                     {
                         await tlsStream.AuthenticateAsServerAsync(
@@ -423,11 +449,19 @@ internal sealed class TurnServer : IAsyncDisposable
                                     ServerCertificate = _tlsServerCertificate!,
                                     EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13
                                 },
-                                ct)
+                                handshakeDeadline?.Token ?? ct)
                             .ConfigureAwait(false);
                     }
                     catch (OperationCanceledException) when (ct.IsCancellationRequested)
                     {
+                        return;
+                    }
+                    catch (OperationCanceledException) when (handshakeDeadline?.IsCancellationRequested == true)
+                    {
+                        _logger.LogWarning(
+                            "TURN TLS handshake deadline ({Timeout}) exceeded for {Sender}; dropping connection (slowloris).",
+                            _options.StreamHandshakeTimeout,
+                            remote);
                         return;
                     }
                     catch (Exception ex)
@@ -475,12 +509,25 @@ internal sealed class TurnServer : IAsyncDisposable
             }
 
             TurnStreamFrame? frame;
+            // A per-frame read deadline: a slowloris that opens a connection and never delivers (or
+            // dribbles) a control message is dropped instead of holding a slot forever (K4). The deadline
+            // resets each frame, so a client refreshing on schedule (≈ lifetime/2) never trips it, and a
+            // channel-bound relay leaves this loop above before reaching here.
+            using var readDeadline = CreateDeadline(ct, _options.StreamReadTimeout);
             try
             {
-                frame = await TurnStreamFramer.ReadFrameAsync(context.StreamConnection!.Stream, ct).ConfigureAwait(false);
+                frame = await TurnStreamFramer.ReadFrameAsync(context.StreamConnection!.Stream, readDeadline?.Token ?? ct).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
+                break;
+            }
+            catch (OperationCanceledException) when (readDeadline?.IsCancellationRequested == true)
+            {
+                _logger.LogWarning(
+                    "TURN stream read deadline ({Timeout}) exceeded from {Sender}; closing connection (slowloris/idle).",
+                    _options.StreamReadTimeout,
+                    context.RemoteEndPoint);
                 break;
             }
             catch (IOException ex)
@@ -800,6 +847,21 @@ internal sealed class TurnServer : IAsyncDisposable
         {
             _logger.LogError(ex, "TURN failed to send response to {Sender}", context.RemoteEndPoint);
         }
+    }
+
+    /// <summary>
+    /// Builds a linked token source that also cancels after <paramref name="timeout"/>, or null when no
+    /// deadline is configured (timeout ≤ 0 or <see cref="System.Threading.Timeout.InfiniteTimeSpan"/>).
+    /// Callers own the returned source (dispose via <c>using</c>) and pass its token to the timed operation.
+    /// </summary>
+    private static CancellationTokenSource? CreateDeadline(CancellationToken ct, TimeSpan timeout)
+    {
+        if (timeout <= TimeSpan.Zero)
+            return null;
+
+        var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        cts.CancelAfter(timeout);
+        return cts;
     }
 
     private void TrackConnectionTask(Task task)
