@@ -76,7 +76,12 @@ public sealed class IceMediaConsentSessionTests
             policy: new IceConsentFreshnessPolicy(TimeSpan.FromSeconds(5)),
             checkTimeout: TimeSpan.FromMilliseconds(30),
             utcNow: () => clock.Now,
-            delay: (_, ct) => { clock.Advance(TimeSpan.FromSeconds(11)); return Task.Delay(1, ct); },
+            // Advance the virtual clock without a real timed delay. A real Task.Delay(1) rounds up to
+            // the platform timer granularity (~15 ms on Windows) and then races the real 30 ms check
+            // timeout: two retransmit delays reach ~30 ms and the pending check can time out before the
+            // third transmission, leaving checks == 2. Completing instantly keeps all three retransmissions
+            // (RFC 8445 §14) ahead of the timeout, so the assertion is deterministic on every platform.
+            delay: (_, _) => { clock.Advance(TimeSpan.FromSeconds(11)); return Task.CompletedTask; },
             nextRandom: () => 0.5);
 
         session.Start();
