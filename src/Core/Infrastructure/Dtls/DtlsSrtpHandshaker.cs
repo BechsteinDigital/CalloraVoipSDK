@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Org.BouncyCastle.Security;
 using Org.BouncyCastle.Tls;
@@ -58,6 +59,12 @@ internal sealed class DtlsSrtpHandshaker : IDtlsSrtpHandshaker
         var abortRegistration = linkedToken.Register(static state =>
             ((DatagramTransport)state!).Close(), transport);
 
+        // Measure the handshake wall-time directly. The timeout classification below must not depend on
+        // the CancelAfter deadline timer having fired: that thread-pool timer can be delayed under load
+        // past the engine's own failsafe timeout, which would otherwise misclassify a silent peer as a
+        // generic protocol failure instead of a timeout (#163 P1-1).
+        var stopwatch = Stopwatch.StartNew();
+
         try
         {
             var engineTimeoutMillis = ResolveEngineTimeoutMillis(_options.HandshakeTimeout);
@@ -99,7 +106,7 @@ internal sealed class DtlsSrtpHandshaker : IDtlsSrtpHandshaker
         {
             // A closed transport surfaces from the engine as an IO/TLS error: classify it as
             // caller cancellation, a deadline abort, or a genuine protocol failure.
-            ThrowIfAborted(cancellationToken, linkedToken, role);
+            ThrowIfAborted(cancellationToken, linkedToken, stopwatch.Elapsed, role);
             _logger.LogWarning(ex, "DTLS-SRTP handshake as {Role} failed.", role);
             throw new DtlsSrtpHandshakeException($"DTLS-SRTP handshake as {role} failed.", ex);
         }
@@ -110,18 +117,21 @@ internal sealed class DtlsSrtpHandshaker : IDtlsSrtpHandshaker
     }
 
     /// <summary>
-    /// Distinguishes the two abort channels after the transport was closed. Caller cancellation
-    /// (session teardown) rethrows the original <see cref="OperationCanceledException"/>; the
-    /// product deadline firing on its own — the linked token is cancelled but the caller's is
-    /// not — raises a typed <see cref="DtlsSrtpHandshakeTimeoutException"/> so the owner fails
-    /// closed exactly once and can tell a dead peer apart from a torn-down session. Returns
-    /// without throwing when neither fired, i.e. the handshake failed for a real protocol reason.
+    /// Distinguishes the abort channels after the transport was closed. Caller cancellation (session
+    /// teardown) rethrows the original <see cref="OperationCanceledException"/>. Otherwise the handshake
+    /// is a timeout — a typed <see cref="DtlsSrtpHandshakeTimeoutException"/> so the owner can tell a
+    /// dead peer apart from a torn-down session — when either the product deadline token fired OR the
+    /// handshake ran at least as long as the configured deadline before failing. The elapsed check keeps
+    /// the classification robust when the CancelAfter timer is delayed under load and the engine's own
+    /// failsafe timeout (2x the deadline) ends the handshake first: a silent peer is a timeout either
+    /// way. Returns without throwing when neither holds, i.e. the handshake failed fast for a real
+    /// protocol reason.
     /// </summary>
-    private static void ThrowIfAborted(
-        CancellationToken caller, CancellationToken linked, DtlsRole role)
+    private void ThrowIfAborted(
+        CancellationToken caller, CancellationToken linked, TimeSpan elapsed, DtlsRole role)
     {
         caller.ThrowIfCancellationRequested();
-        if (linked.IsCancellationRequested)
+        if (linked.IsCancellationRequested || elapsed >= _options.HandshakeTimeout)
             throw new DtlsSrtpHandshakeTimeoutException(
                 $"DTLS-SRTP handshake as {role} exceeded the configured handshake timeout.");
     }
