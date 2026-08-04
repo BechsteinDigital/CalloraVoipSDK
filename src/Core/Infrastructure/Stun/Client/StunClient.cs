@@ -229,6 +229,8 @@ internal sealed class StunClient : IStunClient
                 : new UdpClient(localEndPoint);
         udp?.Connect(server);
 
+        var responseIntegrityKey = credentialsToSend?.DeriveHmacKey();
+
         int rto = InitialRtoMs;
         for (int attempt = 1; attempt <= MaxAttempts; attempt++)
         {
@@ -246,9 +248,9 @@ internal sealed class StunClient : IStunClient
             }
 
             var response = sharedUdpSocket is not null
-                ? await ReceiveMatchingSharedUdpAsync(sharedUdpSocket, request.TransactionId, rto, ct)
+                ? await ReceiveMatchingSharedUdpAsync(sharedUdpSocket, request.TransactionId, responseIntegrityKey, server, rto, ct)
                     .ConfigureAwait(false)
-                : await ReceiveMatchingUdpAsync(udp!, request.TransactionId, rto, ct)
+                : await ReceiveMatchingUdpAsync(udp!, request.TransactionId, responseIntegrityKey, server, rto, ct)
                     .ConfigureAwait(false);
 
             if (response is null)
@@ -355,7 +357,8 @@ internal sealed class StunClient : IStunClient
             throw new StunException($"STUN {transport} send failed: {ex.Message}", ex);
         }
 
-        var response = await ReceiveMatchingStreamAsync(stream, request.TransactionId, ReliableResponseTimeoutMs, ct)
+        var responseIntegrityKey = credentialsToSend?.DeriveHmacKey();
+        var response = await ReceiveMatchingStreamAsync(stream, request.TransactionId, responseIntegrityKey, server, ReliableResponseTimeoutMs, ct)
             .ConfigureAwait(false);
         if (response is null)
             throw new StunException($"STUN server {server} did not respond on {transport}.");
@@ -436,6 +439,8 @@ internal sealed class StunClient : IStunClient
     private async Task<StunMessage?> ReceiveMatchingUdpAsync(
         UdpClient udp,
         byte[] transactionId,
+        byte[]? responseIntegrityKey,
+        IPEndPoint server,
         int timeoutMs,
         CancellationToken ct)
     {
@@ -459,7 +464,8 @@ internal sealed class StunClient : IStunClient
             }
 
             var msg = _codec.Decode(received.Buffer);
-            if (msg is not null && msg.TransactionId.SequenceEqual(transactionId))
+            if (msg is not null
+                && IsAcceptableResponse(msg, received.Buffer, transactionId, responseIntegrityKey, server, received.RemoteEndPoint))
                 return msg;
 
             _logger.LogTrace("STUN discarded non-matching packet ({Bytes} bytes)", received.Buffer.Length);
@@ -475,6 +481,8 @@ internal sealed class StunClient : IStunClient
     private async Task<StunMessage?> ReceiveMatchingSharedUdpAsync(
         Socket sharedSocket,
         byte[] transactionId,
+        byte[]? responseIntegrityKey,
+        IPEndPoint server,
         int timeoutMs,
         CancellationToken ct)
     {
@@ -502,8 +510,11 @@ internal sealed class StunClient : IStunClient
                 return null; // RTO expired.
             }
 
-            var msg = _codec.Decode(buffer.AsSpan(0, received.ReceivedBytes).ToArray());
-            if (msg is not null && msg.TransactionId.SequenceEqual(transactionId))
+            var datagram = buffer.AsSpan(0, received.ReceivedBytes).ToArray();
+            var msg = _codec.Decode(datagram);
+            if (msg is not null
+                && IsAcceptableResponse(
+                    msg, datagram, transactionId, responseIntegrityKey, server, (IPEndPoint)received.RemoteEndPoint))
                 return msg;
 
             _logger.LogTrace(
@@ -522,6 +533,8 @@ internal sealed class StunClient : IStunClient
     private async Task<StunMessage?> ReceiveMatchingStreamAsync(
         Stream stream,
         byte[] transactionId,
+        byte[]? responseIntegrityKey,
+        IPEndPoint server,
         int timeoutMs,
         CancellationToken ct)
     {
@@ -553,7 +566,9 @@ internal sealed class StunClient : IStunClient
                 return null;
 
             var msg = _codec.Decode(raw);
-            if (msg is not null && msg.TransactionId.SequenceEqual(transactionId))
+            // The stream is connected to the server, so the source is inherently bound (actualSource: null).
+            if (msg is not null
+                && IsAcceptableResponse(msg, raw, transactionId, responseIntegrityKey, server, actualSource: null))
                 return msg;
 
             _logger.LogTrace("STUN discarded non-matching stream message ({Bytes} bytes)", raw.Length);
@@ -561,6 +576,95 @@ internal sealed class StunClient : IStunClient
 
         return null;
     }
+
+    /// <summary>
+    /// Decides whether a received datagram is a legitimate response to the outstanding request,
+    /// beyond the transaction-id demux key. A datagram that fails any check is discarded and the
+    /// receive loop keeps waiting for the real response (RFC 5389 §7.3.3 / §10.1.2), so a spoofed
+    /// or corrupted packet cannot masquerade as the answer:
+    /// <list type="number">
+    /// <item>transaction id matches the request;</item>
+    /// <item>the message is a Success or Error <em>response</em> (not a reflected request/indication);</item>
+    /// <item>the method is Binding (the only method this client sends);</item>
+    /// <item>the source transport address matches the queried server, when the caller supplies it
+    /// (connected sockets are already OS-filtered; the shared UDP socket is not);</item>
+    /// <item>FINGERPRINT, when present, is valid (RFC 5389 §15.5);</item>
+    /// <item>when the request carried credentials, a Success response carries a valid
+    /// MESSAGE-INTEGRITY over the same key (RFC 5389 §10.1.2 / §10.2.2). Error responses
+    /// (401/438 challenges) are pre-auth and pass through for the long-term flow to interpret.</item>
+    /// </list>
+    /// </summary>
+    internal bool IsAcceptableResponse(
+        StunMessage message,
+        ReadOnlySpan<byte> raw,
+        byte[] transactionId,
+        byte[]? responseIntegrityKey,
+        IPEndPoint expectedServer,
+        IPEndPoint? actualSource)
+    {
+        if (!message.TransactionId.AsSpan().SequenceEqual(transactionId))
+            return false;
+
+        if (message.MessageClass is not (StunMessageClass.SuccessResponse or StunMessageClass.ErrorResponse))
+        {
+            _logger.LogTrace("STUN discarded response: unexpected class {Class}", message.MessageClass);
+            return false;
+        }
+
+        if (message.MessageMethod != StunMessageMethod.Binding)
+        {
+            _logger.LogTrace("STUN discarded response: unexpected method {Method}", message.MessageMethod);
+            return false;
+        }
+
+        // A response arrives from the address the request was sent to; a mismatch on the shared
+        // media socket is another flow's traffic or an off-path injection (RFC 5389 §7.3.3).
+        if (actualSource is not null && !EndPointsEquivalent(actualSource, expectedServer))
+        {
+            _logger.LogTrace("STUN discarded response from unexpected source {Source}", actualSource);
+            return false;
+        }
+
+        // FINGERPRINT is optional, but present-and-invalid means the datagram is corrupted or not
+        // really STUN (e.g. demultiplexed non-STUN traffic on the shared socket) — discard it.
+        if (message.Attributes.Any(a => a.AttributeType == StunAttributeType.Fingerprint)
+            && !_codec.VerifyFingerprint(raw))
+        {
+            _logger.LogTrace("STUN discarded response: FINGERPRINT mismatch");
+            return false;
+        }
+
+        // Authenticated transaction: a spoofed Success response without a valid MESSAGE-INTEGRITY
+        // must never be accepted as our mapped address. Distinguish a missing attribute (a server
+        // that does not honour the credentials) from an invalid one (corruption or an injection
+        // attempt) so the two are separable in operational logs.
+        if (responseIntegrityKey is not null && message.MessageClass == StunMessageClass.SuccessResponse)
+        {
+            if (!message.Attributes.Any(a => a.AttributeType == StunAttributeType.MessageIntegrity))
+            {
+                _logger.LogTrace("STUN discarded Success response: MESSAGE-INTEGRITY missing");
+                return false;
+            }
+
+            if (!_codec.VerifyIntegrity(raw, responseIntegrityKey))
+            {
+                _logger.LogTrace("STUN discarded Success response: MESSAGE-INTEGRITY invalid");
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Compares two transport addresses for equivalence, canonicalising IPv4-mapped IPv6 addresses
+    /// so a dual-stack socket's mapped source compares equal to the IPv4 server it was sent to.
+    /// </summary>
+    private static bool EndPointsEquivalent(IPEndPoint actual, IPEndPoint expected)
+        => actual.Port == expected.Port && Canonicalise(actual.Address).Equals(Canonicalise(expected.Address));
+
+    private static IPAddress Canonicalise(IPAddress address)
+        => address.IsIPv4MappedToIPv6 ? address.MapToIPv4() : address;
 
     /// <summary>
     /// Interprets a matched response: extracts the mapped address, follows one redirect,
