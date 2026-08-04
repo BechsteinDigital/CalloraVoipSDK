@@ -574,8 +574,40 @@ internal sealed class StunMessageCodec : IStunMessageCodec
         byte[]             transactionId,
         bool               xor)
     {
-        if (value.Length < 4)
+        var endPoint = TryDecodeAddressValue(value, transactionId, xor);
+        if (endPoint is null)
             return new UnknownRawAttribute(typeCode) { Value = value.ToArray() };
+
+        return xor
+            ? new XorMappedAddressAttribute  { EndPoint = endPoint }
+            : (StunAttribute)new MappedAddressAttribute { EndPoint = endPoint };
+    }
+
+    /// <summary>Decodes an ALTERNATE-SERVER attribute (same wire format as MAPPED-ADDRESS, non-XOR).</summary>
+    private static StunAttribute DecodeAlternateServer(ReadOnlySpan<byte> value)
+    {
+        // ALTERNATE-SERVER shares MAPPED-ADDRESS's wire format, so it MUST use the same length/family
+        // gates: an unknown family or a truncated value yields an UnknownRawAttribute — never a throw,
+        // never a wildcard 0.0.0.0 redirect (#156 P1-4, RFC 8489 §14.4). Non-XOR, so no transaction id.
+        var endPoint = TryDecodeAddressValue(value, [], xor: false);
+        return endPoint is null
+            ? new UnknownRawAttribute((ushort)StunAttributeType.AlternateServer) { Value = value.ToArray() }
+            : new AlternateServerAttribute { EndPoint = endPoint };
+    }
+
+    /// <summary>
+    /// Parses a MAPPED-ADDRESS-family address value (RFC 8489 §14.1/§14.2) under strict length and family
+    /// gates, shared by MAPPED-ADDRESS, XOR-MAPPED-ADDRESS and ALTERNATE-SERVER so they cannot diverge.
+    /// Returns <see langword="null"/> — never throws — for a value shorter than the fixed header, a
+    /// truncated IPv4/IPv6 body, or an unknown address family, so callers yield an UnknownRawAttribute
+    /// rather than slicing out of bounds or guessing a wildcard address. <paramref name="xor"/>
+    /// de-obfuscates the port and address (§14.2); the IPv6 path needs <paramref name="transactionId"/>.
+    /// </summary>
+    private static IPEndPoint? TryDecodeAddressValue(
+        ReadOnlySpan<byte> value, byte[] transactionId, bool xor)
+    {
+        if (value.Length < 4)
+            return null;
 
         byte   family = value[1];
         ushort port   = BinaryPrimitives.ReadUInt16BigEndian(value[2..]);
@@ -585,7 +617,7 @@ internal sealed class StunMessageCodec : IStunMessageCodec
         if (family == 0x01) // IPv4: 4-byte address at value[4..8]
         {
             if (value.Length < 8)
-                return new UnknownRawAttribute(typeCode) { Value = value.ToArray() };
+                return null;
 
             var addrBytes = value[4..8].ToArray();
             if (xor)
@@ -598,10 +630,9 @@ internal sealed class StunMessageCodec : IStunMessageCodec
         }
         else if (family == 0x02) // IPv6: 16-byte address at value[4..20]
         {
-            // Guard the slice: a truncated IPv6 attribute (family=0x02 but < 20 bytes) must not
-            // throw out of the decoder — a malformed attribute becomes an UnknownRawAttribute.
+            // A truncated IPv6 attribute (family=0x02 but < 20 bytes) must not slice out of bounds.
             if (value.Length < 20)
-                return new UnknownRawAttribute(typeCode) { Value = value.ToArray() };
+                return null;
 
             var addrBytes = value[4..20].ToArray();
             if (xor)
@@ -615,35 +646,10 @@ internal sealed class StunMessageCodec : IStunMessageCodec
         }
         else // unknown address family: do not guess the layout
         {
-            return new UnknownRawAttribute(typeCode) { Value = value.ToArray() };
+            return null;
         }
 
-        var endPoint = new IPEndPoint(address, port);
-        return xor
-            ? new XorMappedAddressAttribute  { EndPoint = endPoint }
-            : (StunAttribute)new MappedAddressAttribute { EndPoint = endPoint };
-    }
-
-    /// <summary>Decodes an ALTERNATE-SERVER attribute (same wire format as MAPPED-ADDRESS, non-XOR).</summary>
-    private static StunAttribute DecodeAlternateServer(ReadOnlySpan<byte> value)
-    {
-        if (value.Length < 4)
-            return new UnknownRawAttribute((ushort)StunAttributeType.AlternateServer) { Value = value.ToArray() };
-
-        byte   family = value[1];
-        ushort port   = BinaryPrimitives.ReadUInt16BigEndian(value[2..]);
-
-        IPAddress address;
-        if (family == 0x01)
-        {
-            address = new IPAddress(value[4..8].ToArray());
-        }
-        else
-        {
-            address = value.Length >= 20 ? new IPAddress(value[4..20].ToArray()) : IPAddress.Any;
-        }
-
-        return new AlternateServerAttribute { EndPoint = new IPEndPoint(address, port) };
+        return new IPEndPoint(address, port);
     }
 
     /// <summary>Decodes an ERROR-CODE attribute (RFC 5389 §15.6).</summary>

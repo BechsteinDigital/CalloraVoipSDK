@@ -242,6 +242,10 @@ internal sealed class StunBindingRequestHandler : IStunRequestHandler
         }
 
         // Validate MESSAGE-INTEGRITY when credentials are configured.
+        // On success the response itself must carry MESSAGE-INTEGRITY computed with the same key
+        // (RFC 5389 §10.1.2 short-term / §10.2.2 long-term), so the client can authenticate the
+        // response and reject a spoofed one. This key is threaded into the success BuildResult below.
+        byte[]? firstPartyResponseIntegrityKey = null;
         if ((_credentialProvider is not null || _fallbackCredentials is not null)
             && _thirdPartyAuthorization is null)
         {
@@ -301,6 +305,9 @@ internal sealed class StunBindingRequestHandler : IStunRequestHandler
                         BuildUnauthenticatedChallenge(request, realmOverride: resolvedCredentials.Realm ?? _defaultRealm),
                         thirdPartyResponseIntegrityKey);
                 }
+
+                // Request authenticated: protect the success response with the same key (see above).
+                firstPartyResponseIntegrityKey = key;
             }
             catch (Exception ex)
             {
@@ -310,12 +317,14 @@ internal sealed class StunBindingRequestHandler : IStunRequestHandler
         }
 
         // Success: include XOR-MAPPED-ADDRESS of the sender.
+        // The two integrity keys are mutually exclusive: the credential block above is skipped in
+        // third-party mode (the `_thirdPartyAuthorization is null` guard), so at most one is set.
         _logger.LogDebug("STUN Binding Response → {Sender}", sender);
         return BuildResult(
             StunMessage.CreateBindingResponse(
                 request.TransactionId,
                 [new XorMappedAddressAttribute { EndPoint = sender }]),
-            thirdPartyResponseIntegrityKey);
+            thirdPartyResponseIntegrityKey ?? firstPartyResponseIntegrityKey);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

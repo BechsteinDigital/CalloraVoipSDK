@@ -490,7 +490,20 @@ internal sealed class StunServer : IAsyncDisposable
         if (!_codec.IsStunPacket(rawRequest))
             return false; // Silently discard non-STUN (e.g. RTP multiplexed on same port).
 
-        var request = _codec.Decode(rawRequest);
+        StunMessage? request;
+        try
+        {
+            request = _codec.Decode(rawRequest);
+        }
+        catch (Exception ex)
+        {
+            // Defense in depth (#156 P1-4): the codec is contracted to never throw on malformed wire
+            // input (it returns null), but a decode fault must still be a controlled drop here, never an
+            // unobserved fault escaping into the fire-and-forget UDP/stream receive task.
+            _logger.LogWarning(ex, "STUN decode threw for {Sender}; dropping the datagram.", remoteEndPoint);
+            return false;
+        }
+
         if (request is null)
         {
             _logger.LogWarning("Received malformed STUN packet from {Sender}", remoteEndPoint);
@@ -532,9 +545,13 @@ internal sealed class StunServer : IAsyncDisposable
         _connectionTasks[taskId] = task;
 
         _ = task.ContinueWith(
-            _ =>
+            completed =>
             {
                 _connectionTasks.TryRemove(taskId, out Task? _);
+                // Observe and log a faulted connection task (#156 P1-4): a fire-and-forget task must never
+                // leave an unobserved exception — surface it instead of dropping it silently.
+                if (completed.IsFaulted)
+                    _logger.LogError(completed.Exception, "STUN server connection task faulted.");
             },
             CancellationToken.None,
             TaskContinuationOptions.ExecuteSynchronously,

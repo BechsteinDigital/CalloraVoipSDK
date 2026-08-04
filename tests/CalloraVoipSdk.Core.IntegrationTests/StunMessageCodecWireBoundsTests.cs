@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Net;
 using System.Security.Cryptography;
 using CalloraVoipSdk.Core.Infrastructure.Stun.Attributes;
 using CalloraVoipSdk.Core.Infrastructure.Stun.Wire;
@@ -71,6 +72,65 @@ public sealed class StunMessageCodecWireBoundsTests
         var message = BuildSingleAttributeMessage((ushort)StunAttributeType.XorMappedAddress, value);
 
         Assert.IsType<XorMappedAddressAttribute>(Assert.Single(Decode(message)!.Attributes));
+    }
+
+    // ── #156 P1-4: ALTERNATE-SERVER must use the SAME length/family gates as MAPPED-ADDRESS ──
+
+    [Fact]
+    public void Decode_truncated_ipv4_alternate_server_does_not_throw()
+    {
+        // family=0x01 (IPv4) but only 4 value bytes present (needs 8): the decoder must fall back to an
+        // UnknownRawAttribute, not slice value[4..8] out of bounds and throw (#156 P1-4).
+        var value = new byte[] { 0x00, 0x01, 0x12, 0x34 };
+        var message = BuildSingleAttributeMessage((ushort)StunAttributeType.AlternateServer, value);
+
+        Assert.IsType<UnknownRawAttribute>(Assert.Single(Decode(message)!.Attributes));
+    }
+
+    [Fact]
+    public void Decode_unknown_family_alternate_server_never_yields_a_wildcard_endpoint()
+    {
+        // An unknown address family must become an UnknownRawAttribute — never an ALTERNATE-SERVER
+        // redirect to IPAddress.Any (0.0.0.0), which would silently point the client at the wildcard.
+        var value = new byte[] { 0x00, 0x03, 0x12, 0x34, 0xAA, 0xBB, 0xCC, 0xDD };
+        var message = BuildSingleAttributeMessage((ushort)StunAttributeType.AlternateServer, value);
+
+        Assert.IsType<UnknownRawAttribute>(Assert.Single(Decode(message)!.Attributes));
+    }
+
+    [Fact]
+    public void Decode_valid_ipv4_alternate_server_still_decodes()
+    {
+        var value = new byte[] { 0x00, 0x01, 0x12, 0x34, 0xC0, 0xA8, 0x01, 0x01 }; // 192.168.1.1 : 0x1234
+        var message = BuildSingleAttributeMessage((ushort)StunAttributeType.AlternateServer, value);
+
+        var attr = Assert.IsType<AlternateServerAttribute>(Assert.Single(Decode(message)!.Attributes));
+        Assert.Equal(new IPEndPoint(IPAddress.Parse("192.168.1.1"), 0x1234), attr.EndPoint);
+    }
+
+    [Theory]
+    [InlineData(0x01)] // IPv4
+    [InlineData(0x02)] // IPv6
+    [InlineData(0x03)] // unknown family — must never be interpreted as an address
+    public void Decode_alternate_server_over_all_value_lengths_never_throws_or_wildcards(byte family)
+    {
+        // Table/fuzz over every value length 0..20: the decoder must never throw and never redirect to
+        // the wildcard address (the typed/Try* contract for untrusted STUN wire input, #156 P1-4).
+        for (var len = 0; len <= 20; len++)
+        {
+            // Non-zero bytes so a legitimately decoded address is never itself 0.0.0.0 — the assertion
+            // below then only catches a wildcard *fallback*, not an all-zero address from the wire.
+            var value = new byte[len];
+            for (var i = 0; i < len; i++) value[i] = (byte)(i + 1);
+            if (len >= 2) value[1] = family;
+            var message = BuildSingleAttributeMessage((ushort)StunAttributeType.AlternateServer, value);
+
+            var attr = Assert.Single(Decode(message)!.Attributes); // never throws
+            if (family == 0x03)
+                Assert.IsType<UnknownRawAttribute>(attr); // an unknown family is never guessed as an address
+            else if (attr is AlternateServerAttribute alt)
+                Assert.NotEqual(IPAddress.Any, alt.EndPoint.Address); // never a 0.0.0.0 redirect fallback
+        }
     }
 
     // ── HARD-A4: verifier honours the declared length, not the buffer size ─────
