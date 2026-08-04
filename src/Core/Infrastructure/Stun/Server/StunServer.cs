@@ -113,6 +113,15 @@ internal sealed class StunServer : IAsyncDisposable
             throw new ArgumentOutOfRangeException(nameof(options), "MaxConcurrentStreamConnections must be >= 0.");
         if (_options.MaxConcurrentUdpPacketHandlers < 0)
             throw new ArgumentOutOfRangeException(nameof(options), "MaxConcurrentUdpPacketHandlers must be >= 0.");
+        // A positive stream timeout must fit CancellationTokenSource.CancelAfter's timer limit (~49.7 days);
+        // fail fast here rather than throwing per connection. InfiniteTimeSpan and non-positive disable it.
+        if (StreamTimeoutOverflows(_options.StreamHandshakeTimeout))
+            throw new ArgumentOutOfRangeException(nameof(options), "StreamHandshakeTimeout exceeds the maximum supported deadline (~49.7 days).");
+        if (StreamTimeoutOverflows(_options.StreamReadTimeout))
+            throw new ArgumentOutOfRangeException(nameof(options), "StreamReadTimeout exceeds the maximum supported deadline (~49.7 days).");
+
+        static bool StreamTimeoutOverflows(TimeSpan t)
+            => t != Timeout.InfiniteTimeSpan && t > TimeSpan.Zero && t.TotalMilliseconds > uint.MaxValue - 1;
 
         _transport = transport;
         _codec = codec;
@@ -386,6 +395,9 @@ internal sealed class StunServer : IAsyncDisposable
                 if (_transport == StunServerTransport.Tls)
                 {
                     await using var tlsStream = new SslStream(networkStream, leaveInnerStreamOpen: true);
+                    // Bound the handshake: a peer that dribbles or stalls the TLS ClientHello must not hold
+                    // a connection slot indefinitely (K4 slowloris).
+                    using var handshakeDeadline = CreateDeadline(ct, _options.StreamHandshakeTimeout);
                     try
                     {
                         await tlsStream.AuthenticateAsServerAsync(
@@ -394,11 +406,19 @@ internal sealed class StunServer : IAsyncDisposable
                                     ServerCertificate = _tlsServerCertificate!,
                                     EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13
                                 },
-                                ct)
+                                handshakeDeadline?.Token ?? ct)
                             .ConfigureAwait(false);
                     }
                     catch (OperationCanceledException) when (ct.IsCancellationRequested)
                     {
+                        return;
+                    }
+                    catch (OperationCanceledException) when (handshakeDeadline?.IsCancellationRequested == true)
+                    {
+                        _logger.LogWarning(
+                            "STUN TLS handshake deadline ({Timeout}) exceeded for {Sender}; dropping connection (slowloris).",
+                            _options.StreamHandshakeTimeout,
+                            remote);
                         return;
                     }
                     catch (Exception ex)
@@ -430,12 +450,24 @@ internal sealed class StunServer : IAsyncDisposable
         while (!ct.IsCancellationRequested)
         {
             byte[]? raw;
+            // A per-message read deadline: a slowloris that dribbles a partial STUN message, or an idle
+            // connection that never sends one, is dropped instead of holding a slot forever (K4). The
+            // deadline resets each message, so a client that sends complete requests promptly is unaffected.
+            using var readDeadline = CreateDeadline(ct, _options.StreamReadTimeout);
             try
             {
-                raw = await StunTcpFramer.ReadMessageAsync(stream, ct).ConfigureAwait(false);
+                raw = await StunTcpFramer.ReadMessageAsync(stream, readDeadline?.Token ?? ct).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
+                break;
+            }
+            catch (OperationCanceledException) when (readDeadline?.IsCancellationRequested == true)
+            {
+                _logger.LogWarning(
+                    "STUN stream read deadline ({Timeout}) exceeded from {Sender}; closing connection (slowloris/idle).",
+                    _options.StreamReadTimeout,
+                    remoteEndPoint);
                 break;
             }
             catch (InvalidDataException ex)
@@ -537,6 +569,21 @@ internal sealed class StunServer : IAsyncDisposable
             _logger.LogError(ex, "STUN server failed to encode response for {Sender}", remoteEndPoint);
             return false;
         }
+    }
+
+    /// <summary>
+    /// Builds a linked token source that also cancels after <paramref name="timeout"/>, or null when no
+    /// deadline is configured (timeout ≤ 0 or <see cref="System.Threading.Timeout.InfiniteTimeSpan"/>).
+    /// Callers own the returned source (dispose via <c>using</c>) and pass its token to the timed operation.
+    /// </summary>
+    private static CancellationTokenSource? CreateDeadline(CancellationToken ct, TimeSpan timeout)
+    {
+        if (timeout <= TimeSpan.Zero)
+            return null;
+
+        var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        cts.CancelAfter(timeout);
+        return cts;
     }
 
     private void TrackConnectionTask(Task task)
