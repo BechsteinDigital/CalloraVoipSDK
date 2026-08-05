@@ -154,7 +154,6 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
         var effectiveRequireHeader = request.RequireHeader;
         var effectiveProxyRequireHeader = request.ProxyRequireHeader;
         var reducedBodyRetryUsed = false;
-        var schemeDowngradeRetryUsed = false;
         Exception? lastFailure = null;
 
         while (pendingTargets.Count > 0)
@@ -286,21 +285,9 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
                         }
                     }
 
-                    if (response.StatusCode == 416)
-                    {
-                        if (!schemeDowngradeRetryUsed
-                            && SipOutboundInviteRetryPolicy.TryDowngradeSipsToSip(target.RequestUri, out var downgradedUri)
-                            && visitedRequestUris.Add(downgradedUri))
-                        {
-                            schemeDowngradeRetryUsed = true;
-                            pendingTargets.Enqueue(new SipOutboundInviteTarget(
-                                RequestUri: downgradedUri,
-                                LogicalRemoteUri: downgradedUri,
-                                RouteSet: [],
-                                NextHopUri: downgradedUri));
-                            break;
-                        }
-                    }
+                    // A 416 (Unsupported URI Scheme) on a sips: target is NOT auto-downgraded to sip: (#158 P1-1):
+                    // downgrading would let a peer or proxy strip the caller's end-to-end SIPS security intent down
+                    // to a cleartext hop. The 416 propagates as a final failure instead.
 
                     if (response.StatusCode == 420)
                     {

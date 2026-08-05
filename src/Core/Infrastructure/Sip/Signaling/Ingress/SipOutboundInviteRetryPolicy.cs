@@ -75,19 +75,6 @@ internal static class SipOutboundInviteRetryPolicy
     }
 
     /// <summary>
-    /// Converts a SIPS URI to SIP for 416 retry handling.
-    /// </summary>
-    public static bool TryDowngradeSipsToSip(string requestUri, out string sipUri)
-    {
-        sipUri = string.Empty;
-        if (!requestUri.StartsWith("sips:", StringComparison.OrdinalIgnoreCase))
-            return false;
-
-        sipUri = $"sip:{requestUri[5..]}";
-        return SipProtocol.TryParseSipUri(sipUri, out _, out _, out _);
-    }
-
-    /// <summary>
     /// Removes Unsupported option tags from Require and Proxy-Require headers for 420 retries.
     /// </summary>
     public static bool TryRemoveUnsupportedOptions(
