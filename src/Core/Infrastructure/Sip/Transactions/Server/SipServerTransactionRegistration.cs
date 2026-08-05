@@ -16,8 +16,14 @@ internal readonly record struct SipServerTransactionRegistration
     public bool IsAck { get; init; }
 
     /// <summary>
+    /// True when the request was dropped because the server-transaction table is at capacity (#158 P1-7).
+    /// The upper layer must not process it — a new transaction was deliberately not created under overload.
+    /// </summary>
+    public bool IsOverCapacity { get; init; }
+
+    /// <summary>
     /// True when upper signaling layer should continue processing request.
     /// </summary>
-    public bool ShouldProcess => !IsRetransmission && !IsAck;
+    public bool ShouldProcess => !IsRetransmission && !IsAck && !IsOverCapacity;
 }
 

@@ -17,6 +17,7 @@ internal sealed class SipServerTransactionState : IDisposable
     private IDisposable? _inviteFailureRetransmitTimer;
     private IDisposable? _inviteSuccessRetransmitTimer;
     private IDisposable? _cleanupTimer;
+    private IDisposable? _absoluteExpiryTimer;
 
     /// <summary>
     /// Creates state container for one server transaction key.
@@ -87,6 +88,13 @@ internal sealed class SipServerTransactionState : IDisposable
     /// Flag set when cleanup timer has started.
     /// </summary>
     public int CleanupStarted;
+
+    /// <summary>
+    /// Flag set when the absolute-expiry safety-net timer has started (#158 P1-7). Armed once at transaction
+    /// creation so a transaction that never reaches a final response (e.g. an INVITE answered only with a 100
+    /// Trying) is still reaped, since the RFC cleanup timers are armed only on a final response.
+    /// </summary>
+    public int AbsoluteExpiryStarted;
 
     /// <summary>
     /// Cancellation token for ACK-driven completion of INVITE error retransmissions.
@@ -184,6 +192,38 @@ internal sealed class SipServerTransactionState : IDisposable
     }
 
     /// <summary>
+    /// Replaces current absolute-expiry safety-net timer handle (#158 P1-7).
+    /// Any previously registered handle is disposed first.
+    /// </summary>
+    public void ReplaceAbsoluteExpiryTimer(IDisposable timerHandle)
+    {
+        ArgumentNullException.ThrowIfNull(timerHandle);
+        IDisposable? previous;
+        lock (_timerSync)
+        {
+            previous = _absoluteExpiryTimer;
+            _absoluteExpiryTimer = timerHandle;
+        }
+
+        DisposeTimerHandleSafe(previous, "absolute expiry");
+    }
+
+    /// <summary>
+    /// Cancels and clears the absolute-expiry safety-net timer.
+    /// </summary>
+    public void CancelAbsoluteExpiryTimer()
+    {
+        IDisposable? handle;
+        lock (_timerSync)
+        {
+            handle = _absoluteExpiryTimer;
+            _absoluteExpiryTimer = null;
+        }
+
+        DisposeTimerHandleSafe(handle, "absolute expiry");
+    }
+
+    /// <summary>
     /// Adopts the accepted inbound connection for this transaction: the real receive transport, its packet
     /// source and (for connection-oriented transports) its connection id, applied atomically. Called on
     /// registration and on every request retransmission so a retransmit arriving on a fresh connection
@@ -234,6 +274,7 @@ internal sealed class SipServerTransactionState : IDisposable
     {
         CancelInviteRetransmissionTimers();
         CancelCleanupTimer();
+        CancelAbsoluteExpiryTimer();
 
         try
         {
