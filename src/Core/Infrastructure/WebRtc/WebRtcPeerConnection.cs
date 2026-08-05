@@ -471,15 +471,10 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         ArgumentException.ThrowIfNullOrWhiteSpace(remoteSdp);
         cancellationToken.ThrowIfCancellationRequested();
 
-        SdpSessionDescription remote;
-        try
-        {
-            remote = _parser.Parse(remoteSdp);
-        }
-        catch (FormatException ex)
-        {
-            throw new ArgumentException("The remote description is not valid SDP.", nameof(remoteSdp), ex);
-        }
+        // Untrusted remote SDP over the public SetRemoteDescription path (no SIP transport body cap):
+        // the capped, non-throwing parser rejects an over-limit or malformed body as a controlled failure.
+        if (!_parser.TryParse(remoteSdp, out var remote))
+            throw new ArgumentException("The remote description is not valid SDP.", nameof(remoteSdp));
 
         SdpSessionDescription pendingOffer;
         string? pendingLocalDescription;

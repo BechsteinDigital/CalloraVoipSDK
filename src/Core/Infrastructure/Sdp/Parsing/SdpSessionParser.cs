@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Models;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Sdp.Parsing;
@@ -9,15 +10,54 @@ namespace CalloraVoipSdk.Core.Infrastructure.Sdp.Parsing;
 /// </summary>
 internal sealed class SdpSessionParser : ISdpSessionParser
 {
+    private readonly SdpParserLimits _limits;
+
+    /// <summary>Creates a parser with the given wire limits (defaults when omitted).</summary>
+    public SdpSessionParser(SdpParserLimits? limits = null)
+        => _limits = limits ?? SdpParserLimits.Default;
+
+    /// <inheritdoc />
+    public bool TryParse(string? sdp, [NotNullWhen(true)] out SdpSessionDescription? result)
+    {
+        // Handle the empty-input case here so the catch below need not swallow ArgumentException —
+        // that way a genuine argument bug inside Parse still surfaces instead of looking like a parse
+        // failure. Only the wire-shaped failures below are treated as a controlled drop.
+        if (string.IsNullOrWhiteSpace(sdp))
+        {
+            result = null;
+            return false;
+        }
+
+        try
+        {
+            result = Parse(sdp);
+            return true;
+        }
+        catch (Exception ex) when (ex is FormatException or OverflowException)
+        {
+            // Untrusted remote input: a malformed or over-limit body is a controlled drop, never a
+            // throw out of the parse contract (K4). Call sites treat null as an observable parse failure.
+            result = null;
+            return false;
+        }
+    }
+
     /// <inheritdoc />
     public SdpSessionDescription Parse(string sdp)
     {
         if (string.IsNullOrWhiteSpace(sdp))
             throw new ArgumentException("SDP cannot be empty.", nameof(sdp));
 
+        // Bound the whole body before splitting/allocating from attacker-controlled input (K4).
+        if (sdp.Length > _limits.MaxSdpBytes)
+            throw new FormatException($"SDP exceeds the maximum size of {_limits.MaxSdpBytes} bytes.");
+
         var lines = sdp.Split(
             ["\r\n", "\n"],
             StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        if (lines.Length > _limits.MaxLines)
+            throw new FormatException($"SDP exceeds the maximum of {_limits.MaxLines} lines.");
 
         string originAddress = "127.0.0.1";
         // No silent loopback default: a session with neither a session-level nor a media-level
@@ -41,6 +81,9 @@ internal sealed class SdpSessionParser : ISdpSessionParser
 
         foreach (var line in lines)
         {
+            if (line.Length > _limits.MaxLineBytes)
+                throw new FormatException($"SDP line exceeds the maximum of {_limits.MaxLineBytes} bytes.");
+
             if (line.Length < 2 || line[1] != '=')
                 continue;
 
@@ -84,6 +127,8 @@ internal sealed class SdpSessionParser : ISdpSessionParser
                 case 'm':
                     if (current is not null)
                         media.Add(current.Build(sessionDirection));
+                    if (media.Count >= _limits.MaxMediaSections)
+                        throw new FormatException($"SDP exceeds the maximum of {_limits.MaxMediaSections} media sections.");
                     current = ParseMediaLine(value);
                     break;
 
@@ -340,9 +385,15 @@ internal sealed class SdpSessionParser : ISdpSessionParser
             .Where(v => v >= 0)
             .ToArray();
 
-        var codecs = payloadTypes.ToDictionary(
-            pt => pt,
-            pt => new SdpCodecDefinition { PayloadType = pt, Name = $"PT{pt}", ClockRate = 8000 });
+        // Build the payload-type map with TryAdd rather than ToDictionary: a duplicate PT on the
+        // m-line (e.g. "RTP/AVP 0 0") would make ToDictionary throw ArgumentException, escaping the
+        // FormatException/null Try* contract. Reject it as a controlled parse failure instead (K4).
+        var codecs = new Dictionary<int, SdpCodecDefinition>(payloadTypes.Length);
+        foreach (var pt in payloadTypes)
+        {
+            if (!codecs.TryAdd(pt, new SdpCodecDefinition { PayloadType = pt, Name = $"PT{pt}", ClockRate = 8000 }))
+                throw new FormatException($"Duplicate payload type {pt} on SDP media line: m={value}");
+        }
 
         return new MediaBuilder(parts[0], port, parts[2], codecs, payloadTypes);
     }
