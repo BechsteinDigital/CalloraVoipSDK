@@ -1,0 +1,82 @@
+# Labels as code. Edit here, not in the web UI — the sync workflow applies this file on push
+# to main and can be run manually via workflow_dispatch.
+#
+# Rationale: labels created implicitly (by applying an unknown one via the API) come out grey and
+# undescribed. Half the point of a label is that a newcomer can tell what it means without asking,
+# so they get a colour and one line of prose here.
+#
+# Deleting a label from this file does NOT delete it from the repo — removal stays manual, so a
+# careless edit cannot strip labels off hundreds of issues.
+
+# ─── Triage: what kind of thing is this? ────────────────────────────────────────────────────────
+- name: review-finding
+  color: "5319E7"
+  description: One concrete defect from a code review, with acceptance criteria
+
+- name: bug
+  color: "D73A4A"
+  description: Something is broken
+
+- name: enhancement
+  color: "A2EEEF"
+  description: New capability or improvement
+
+- name: documentation
+  color: "0075CA"
+  description: Docs, guides, portal, changelog
+
+- name: tracking
+  color: "BFD4F2"
+  description: Umbrella issue that links others; not worked on directly
+
+# ─── Severity ───────────────────────────────────────────────────────────────────────────────────
+- name: P1
+  color: "B60205"
+  description: Interop or stability critical — fix before the next release
+
+- name: P2
+  color: "D93F0B"
+  description: Correctness or robustness — schedule it
+
+- name: P3
+  color: "FBCA04"
+  description: Hygiene, scope gap, deliberate follow-up
+
+# ─── Area ───────────────────────────────────────────────────────────────────────────────────────
+- name: "area: sip"
+  color: "1D76DB"
+  description: SIP signalling, transactions, dialogs, registration
+- name: "area: sdp"
+  color: "1D76DB"
+  description: SDP parsing, offer/answer, negotiation
+- name: "area: media"
+  color: "1D76DB"
+  description: RTP/RTCP, SRTP, DTLS, codecs, jitter buffer
+- name: "area: connectivity"
+  color: "1D76DB"
+  description: ICE, STUN, TURN, NAT traversal
+- name: "area: webrtc"
+  color: "1D76DB"
+  description: WebRTC facade, BUNDLE, browser interop
+- name: "area: client-audio"
+  color: "1D76DB"
+  description: Audio devices, playback, recording
+- name: "area: core"
+  color: "1D76DB"
+  description: Domain, application layer, client facade
+- name: "area: ci-test"
+  color: "1D76DB"
+  description: CI, test infrastructure, gates, coverage
+
+# ─── Contributor signals ────────────────────────────────────────────────────────────────────────
+- name: good first issue
+  color: "7057FF"
+  description: Small, self-contained, no deep protocol context needed
+
+- name: help wanted
+  color: "008672"
+  description: Well-scoped and genuinely unclaimed — go ahead
+
+- name: no-issue
+  color: "EDEDED"
+  description: Chore PR with no issue behind it; exempts it from the issue-link check

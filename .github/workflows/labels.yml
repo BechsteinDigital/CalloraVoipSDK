@@ -1,0 +1,80 @@
+name: Sync labels
+
+# Applies .github/labels.yml to the repository: creates what is missing, updates colour and
+# description where they drift. Deliberately never deletes — a careless edit to the file must not
+# strip labels off existing issues.
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/labels.yml', '.github/workflows/labels.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: sync-labels
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          sparse-checkout: .github/labels.yml
+          sparse-checkout-cone-mode: false
+
+      - name: Apply labels.yml
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const src = fs.readFileSync('.github/labels.yml', 'utf8');
+
+            // Minimal parse of the flat "- name/color/description" list this file uses, so the
+            // workflow needs no dependency install. Values may be quoted or bare.
+            const unquote = s => s.trim().replace(/^["'](.*)["']$/, '$1');
+            const wanted = [];
+            for (const raw of src.split('\n')) {
+              const line = raw.trim();
+              if (!line || line.startsWith('#')) continue;
+              let m;
+              if ((m = line.match(/^-\s*name:\s*(.+)$/))) wanted.push({ name: unquote(m[1]) });
+              else if ((m = line.match(/^color:\s*(.+)$/)) && wanted.length)
+                wanted.at(-1).color = unquote(m[1]).replace(/^#/, '');
+              else if ((m = line.match(/^description:\s*(.+)$/)) && wanted.length)
+                wanted.at(-1).description = unquote(m[1]);
+            }
+            if (wanted.length === 0) core.setFailed('Parsed no labels — refusing to run.');
+
+            const existing = new Map(
+              (await github.paginate(github.rest.issues.listLabelsForRepo, { ...context.repo, per_page: 100 }))
+                .map(l => [l.name, l]));
+
+            let created = 0, updated = 0;
+            for (const label of wanted) {
+              const have = existing.get(label.name);
+              if (!have) {
+                await github.rest.issues.createLabel({ ...context.repo, ...label });
+                core.info(`created  ${label.name}`);
+                created++;
+              } else if (have.color !== label.color || (have.description || '') !== (label.description || '')) {
+                await github.rest.issues.updateLabel(
+                  { ...context.repo, name: label.name, new_name: label.name, ...label });
+                core.info(`updated  ${label.name}`);
+                updated++;
+              }
+            }
+
+            const extra = [...existing.keys()].filter(n => !wanted.some(w => w.name === n));
+            core.summary
+              .addHeading('Label sync', 3)
+              .addRaw(`${created} created, ${updated} updated, ${wanted.length} declared.`)
+              .addRaw(extra.length
+                ? `\n\nNot in \`labels.yml\` (left untouched): ${extra.map(n => `\`${n}\``).join(', ')}`
+                : '')
+              .write();
