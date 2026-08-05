@@ -295,7 +295,10 @@ public sealed class QosMetricsTests
     private static CallMediaParameters ParametersFor(int rtpPort) => new()
     {
         LocalEndPoint = new IPEndPoint(IPAddress.Loopback, rtpPort),
-        RemoteEndPoint = new IPEndPoint(IPAddress.Loopback, rtpPort + 100),
+        // Pick a distinct, in-range remote port. A reserved ephemeral RTP port can sit near the top of
+        // the range (Windows hands out ports up to 65535), so rtpPort + 100 would overflow 65535 and
+        // throw ArgumentOutOfRangeException from the IPEndPoint ctor; offset downward in that case.
+        RemoteEndPoint = new IPEndPoint(IPAddress.Loopback, rtpPort > 65435 ? rtpPort - 100 : rtpPort + 100),
         PayloadType = 0,
         ClockRate = 8000,
         SamplesPerPacket = 160,
