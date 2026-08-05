@@ -48,9 +48,9 @@ internal sealed class AckTestSipCallSessionContext : ISipCallSessionContext
 
     public IReadOnlyList<string> DialogRouteSet { get; init; } = Array.Empty<string>();
 
-    public bool IsInbound => false;
+    public bool IsInbound { get; init; }
 
-    public SipDialogState State { get; private set; } = SipDialogState.Established;
+    public SipDialogState State { get; set; } = SipDialogState.Established;
 
     public string LocalDisplayName { get; } = "Alice";
 
@@ -76,7 +76,7 @@ internal sealed class AckTestSipCallSessionContext : ISipCallSessionContext
 
     public TimeSpan Timeout { get; } = TimeSpan.FromSeconds(1);
 
-    public SipRequest? InitialInvite => null;
+    public SipRequest? InitialInvite { get; init; }
 
     public IPEndPoint RemoteEndPoint { get; set; } = new(IPAddress.Parse("192.0.2.10"), 5060);
 

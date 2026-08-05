@@ -45,6 +45,32 @@ internal sealed class SipCallSessionInboundService
         if (!string.Equals(request.Header("Call-ID"), _context.CallId, StringComparison.Ordinal))
             return;
 
+        // RFC 3261 §9.2 / §17.2.3: a CANCEL is matched to the INVITE server transaction it cancels by the
+        // transaction identifier — the top Via branch and sent-by of the original INVITE — NOT merely by Call-ID.
+        // Without this a foreign or forked CANCEL that only shares (guesses or observes) the Call-ID could
+        // terminate a ringing call and, via the RemoteEndPoint repoint below, steer this dialog's responses at the
+        // spoofed source. A CANCEL that does not match the original INVITE transaction is answered 481 and mutates
+        // no dialog state (#158 P1-6).
+        if (string.Equals(request.Method, "CANCEL", StringComparison.Ordinal)
+            && !CancelMatchesInitialInvite(request))
+        {
+            var responseTag = _context.LocalTag ?? SipProtocol.NewTag();
+            _context.LocalTag = responseTag;
+            var mismatchHeaders = _headers.CreateResponseHeadersFromRequest(
+                request, responseTag, includeContentType: false);
+            await _context.ServerTransactions.SendResponseAsync(
+                    request,
+                    remoteEndPoint,
+                    _context.SignalingTransport,
+                    statusCode: 481,
+                    reasonPhrase: "Call/Transaction Does Not Exist",
+                    mismatchHeaders,
+                    body: null,
+                    ct)
+                .ConfigureAwait(false);
+            return;
+        }
+
         // RFC 3261 §12.2.2 (CF-013): a mid-dialog request must match this dialog's full identity — Call-ID
         // (matched above) plus our local tag (To-tag) and the remote tag (From-tag); a mismatch is a foreign/forked
         // request and is rejected with 481 rather than mutating this dialog. The requirement is method-dependent
@@ -74,7 +100,10 @@ internal sealed class SipCallSessionInboundService
             return;
         }
 
-        _context.RemoteEndPoint = remoteEndPoint;
+        // A CANCEL is transaction-scoped (RFC 3261 §9.2) and was transaction-matched above; it must not repoint
+        // this dialog's remote target — only the INVITE / 2xx Contact does.
+        if (!string.Equals(request.Method, "CANCEL", StringComparison.Ordinal))
+            _context.RemoteEndPoint = remoteEndPoint;
         _context.TryApplyRemoteAssertedIdentity(
             request.Header("P-Asserted-Identity"),
             remoteEndPoint);
@@ -910,6 +939,28 @@ internal sealed class SipCallSessionInboundService
             _ => byte.MaxValue
         };
         return toneCode != byte.MaxValue;
+    }
+
+    /// <summary>
+    /// RFC 3261 §17.2.3 transaction matching for an inbound CANCEL against the original INVITE server
+    /// transaction: the top Via branch and sent-by must be identical (a well-behaved UAC copies the INVITE's
+    /// branch verbatim into the CANCEL, RFC 3261 §9.1). No stored INVITE means there is no transaction to cancel.
+    /// </summary>
+    private bool CancelMatchesInitialInvite(SipRequest cancel)
+    {
+        if (_context.InitialInvite is not { } invite)
+            return false;
+
+        var inviteVia = invite.Header("Via");
+        var inviteBranch = SipProtocol.ExtractViaBranch(inviteVia);
+        if (string.IsNullOrEmpty(inviteBranch)
+            || !string.Equals(inviteBranch, SipProtocol.ExtractViaBranch(cancel.Header("Via")), StringComparison.Ordinal))
+            return false;
+
+        return string.Equals(
+            SipProtocol.ExtractViaSentBy(inviteVia),
+            SipProtocol.ExtractViaSentBy(cancel.Header("Via")),
+            StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
