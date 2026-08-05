@@ -180,7 +180,7 @@ internal sealed class SdpSessionParser : ISdpSessionParser
     // Attribute dispatcher
     // -------------------------------------------------------------------------
 
-    private static void ParseAttribute(
+    private void ParseAttribute(
         string value,
         MediaBuilder? current,
         ref SdpMediaDirection sessionDirection,
@@ -220,7 +220,16 @@ internal sealed class SdpSessionParser : ISdpSessionParser
             {
                 var codec = ParseRtpMap(attrValue);
                 if (codec is not null)
+                {
+                    if (!current.Codecs.ContainsKey(codec.PayloadType)
+                        && current.Codecs.Count >= _limits.MaxPayloadTypesPerMedia)
+                    {
+                        throw new FormatException(
+                            $"SDP media section exceeds the maximum of {_limits.MaxPayloadTypesPerMedia} payload types.");
+                    }
+
                     current.Codecs[codec.PayloadType] = codec;
+                }
                 break;
             }
 
@@ -229,7 +238,11 @@ internal sealed class SdpSessionParser : ISdpSessionParser
             {
                 var fmtp = SdpFmtpAttribute.TryParse(attrValue);
                 if (fmtp is not null)
+                {
+                    if (current.Fmtp.Count >= _limits.MaxFmtpPerMedia)
+                        throw new FormatException($"SDP media section exceeds the maximum of {_limits.MaxFmtpPerMedia} fmtp attributes.");
                     current.Fmtp.Add(fmtp);
+                }
                 break;
             }
 
@@ -238,7 +251,11 @@ internal sealed class SdpSessionParser : ISdpSessionParser
             {
                 var feedback = SdpRtcpFeedback.TryParse(attrValue);
                 if (feedback is not null)
+                {
+                    if (current.RtcpFeedback.Count >= _limits.MaxRtcpFeedbackPerMedia)
+                        throw new FormatException($"SDP media section exceeds the maximum of {_limits.MaxRtcpFeedbackPerMedia} rtcp-fb attributes.");
                     current.RtcpFeedback.Add(feedback);
+                }
                 break;
             }
 
@@ -247,7 +264,11 @@ internal sealed class SdpSessionParser : ISdpSessionParser
             {
                 var extmap = SdpExtmap.TryParse(attrValue);
                 if (extmap is not null)
+                {
+                    if (current.Extensions.Count >= _limits.MaxHeaderExtensionsPerMedia)
+                        throw new FormatException($"SDP media section exceeds the maximum of {_limits.MaxHeaderExtensionsPerMedia} extmap attributes.");
                     current.Extensions.Add(extmap);
+                }
                 break;
             }
 
@@ -284,7 +305,11 @@ internal sealed class SdpSessionParser : ISdpSessionParser
             {
                 var rid = SdpRid.TryParse(attrValue);
                 if (rid is not null)
+                {
+                    if (current.Rids.Count >= _limits.MaxRidsPerMedia)
+                        throw new FormatException($"SDP media section exceeds the maximum of {_limits.MaxRidsPerMedia} rid attributes.");
                     current.Rids.Add(rid);
+                }
                 break;
             }
 
@@ -324,7 +349,11 @@ internal sealed class SdpSessionParser : ISdpSessionParser
             {
                 var candidate = SdpIceCandidate.TryParse(attrValue);
                 if (candidate is not null)
+                {
+                    if (current.Candidates.Count >= _limits.MaxIceCandidatesPerMedia)
+                        throw new FormatException($"SDP media section exceeds the maximum of {_limits.MaxIceCandidatesPerMedia} candidate attributes.");
                     current.Candidates.Add(candidate);
+                }
                 break;
             }
 
@@ -338,7 +367,11 @@ internal sealed class SdpSessionParser : ISdpSessionParser
             {
                 var crypto = SdpCryptoAttribute.TryParse(attrValue);
                 if (crypto is not null)
+                {
+                    if (current.Crypto.Count >= _limits.MaxCryptoPerMedia)
+                        throw new FormatException($"SDP media section exceeds the maximum of {_limits.MaxCryptoPerMedia} crypto attributes.");
                     current.Crypto.Add(crypto);
+                }
                 break;
             }
 
@@ -370,7 +403,7 @@ internal sealed class SdpSessionParser : ISdpSessionParser
     // Media line
     // -------------------------------------------------------------------------
 
-    private static MediaBuilder ParseMediaLine(string value)
+    private MediaBuilder ParseMediaLine(string value)
     {
         var parts = value.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length < 4)
@@ -384,6 +417,10 @@ internal sealed class SdpSessionParser : ISdpSessionParser
             .Select(v => int.TryParse(v, out var pt) ? pt : -1)
             .Where(v => v >= 0)
             .ToArray();
+
+        // #160 P1-1 (part 2): bound the payload-type list a single m= line can declare (K4).
+        if (payloadTypes.Length > _limits.MaxPayloadTypesPerMedia)
+            throw new FormatException($"SDP media line exceeds the maximum of {_limits.MaxPayloadTypesPerMedia} payload types: m={value}");
 
         // Build the payload-type map with TryAdd rather than ToDictionary: a duplicate PT on the
         // m-line (e.g. "RTP/AVP 0 0") would make ToDictionary throw ArgumentException, escaping the

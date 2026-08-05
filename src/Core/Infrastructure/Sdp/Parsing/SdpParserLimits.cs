@@ -30,4 +30,30 @@ internal sealed class SdpParserLimits
 
     /// <summary>Maximum number of <c>m=</c> media sections.</summary>
     public int MaxMediaSections { get; init; } = 128;
+
+    // Per-media-section collection caps (#160 P1-1, part 2). Each attribute below appends to a per-section
+    // list/map; without a typed cap a single m= section could hold as many entries as the whole body's line
+    // budget allows. The defaults span the full valid RTP payload-type range and far exceed any real offer, so
+    // legitimate signalling is unaffected; an over-limit section is a controlled parse failure (K4).
+
+    /// <summary>Maximum payload types on one <c>m=</c> line (and rtpmap entries) — the full 0–127 range.</summary>
+    public int MaxPayloadTypesPerMedia { get; init; } = 128;
+
+    /// <summary>Maximum <c>a=fmtp</c> attributes per media section.</summary>
+    public int MaxFmtpPerMedia { get; init; } = 128;
+
+    /// <summary>Maximum <c>a=rtcp-fb</c> attributes per media section.</summary>
+    public int MaxRtcpFeedbackPerMedia { get; init; } = 256;
+
+    /// <summary>Maximum <c>a=extmap</c> header-extension mappings per media section.</summary>
+    public int MaxHeaderExtensionsPerMedia { get; init; } = 64;
+
+    /// <summary>Maximum <c>a=rid</c> attributes per media section.</summary>
+    public int MaxRidsPerMedia { get; init; } = 64;
+
+    /// <summary>Maximum embedded <c>a=candidate</c> attributes per media section.</summary>
+    public int MaxIceCandidatesPerMedia { get; init; } = 256;
+
+    /// <summary>Maximum <c>a=crypto</c> (SDES) attributes per media section.</summary>
+    public int MaxCryptoPerMedia { get; init; } = 64;
 }
