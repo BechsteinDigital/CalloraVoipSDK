@@ -57,6 +57,7 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
     private readonly IDisposable _requestSubscription;
     private readonly IDisposable _responseSubscription;
     private readonly int _maxConcurrentInboundSessions;
+    private readonly SipInboundRingDeadlineMonitor _ringDeadline;
     private int _disposed;
 
     /// <summary>
@@ -71,7 +72,8 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
         ISipIdentityTrustPolicy? identityTrustPolicy = null,
         ISipUasUserIdentityPolicy? userIdentityPolicy = null,
         string? inboundUserAgent = null,
-        int? maxConcurrentInboundSessions = null)
+        int? maxConcurrentInboundSessions = null,
+        TimeSpan? inboundRingDeadline = null)
     {
         var resolvedDigestAuthenticator = digestAuthenticator
             ?? throw new ArgumentNullException(nameof(digestAuthenticator));
@@ -97,6 +99,7 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
             SendIngressResponseAsync);
         _messageService = new SipCallSignalingMessages(_transport, _digestAuthenticator, _subscribeExecutor, _logger);
         _publicationService = new SipCallSignalingPublications(_transport, _digestAuthenticator, _subscribeExecutor, _logger);
+        _ringDeadline = new SipInboundRingDeadlineMonitor(_logger, inboundRingDeadline);
 
         var resolvedSdpProvider = sdpProvider ?? BuildDefaultSdpProvider();
         _sessionDependencies = new SipCallSessionDependencies
@@ -708,6 +711,10 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
         HookSessionLifecycle(session);
         _sessionStartTimes[callId] = DateTimeOffset.UtcNow;
         _sessionTraceIds[callId] = traceId;
+        // #158 P1-5 (ring deadline): bound how long this session may sit in Ringing without an answer. Started
+        // before IncomingInvite so a consumer that answers/rejects synchronously cancels it via the lifecycle
+        // hook below; on expiry the monitor rejects 480, which drives the session to Terminated and cleanup.
+        _ringDeadline.Track(session);
         var inboundAttributes = new Dictionary<string, string>
         {
             ["remote_uri"] = remoteUri,
@@ -748,6 +755,12 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
     {
         session.StateChanged += (_, e) =>
         {
+            // #158 P1-5 (ring deadline): once the session leaves Ringing (answered, rejected, or terminated)
+            // it is no longer stale — cancel any pending ring-deadline timer. No-op for outbound sessions,
+            // which are never tracked.
+            if (e.NewState != SipDialogState.Ringing)
+                _ringDeadline.Cancel(session.CallId);
+
             var traceId = _sessionTraceIds.TryGetValue(session.CallId, out var activeTraceId)
                 ? activeTraceId
                 : ResolveTraceId(session.CallId);
@@ -894,6 +907,7 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
 
         _requestSubscription.Dispose();
         _responseSubscription.Dispose();
+        _ringDeadline.Dispose();
         _serverTransactions.Dispose();
         foreach (var session in _sessions.Values)
             session.Dispose();
