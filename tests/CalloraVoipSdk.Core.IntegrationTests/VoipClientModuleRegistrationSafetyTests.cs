@@ -110,7 +110,7 @@ internal sealed class RecordingTransportRuntime(ISipTransportRuntime inner) : IS
 
     public IPEndPoint LocalEndPoint => inner.LocalEndPoint;
 
-    public IDisposable SubscribeRequests(Action<IPEndPoint, SipRequest> handler) => inner.SubscribeRequests(handler);
+    public IDisposable SubscribeRequests(Action<SipInboundRequestContext, SipRequest> handler) => inner.SubscribeRequests(handler);
 
     public IDisposable SubscribeResponses(Action<IPEndPoint, SipResponse> handler) => inner.SubscribeResponses(handler);
 
@@ -149,8 +149,9 @@ internal sealed class RecordingTransportRuntime(ISipTransportRuntime inner) : IS
         string? body,
         IPEndPoint remoteEndPoint,
         SipTransportProtocol transport,
+        int? inboundConnectionId = null,
         CancellationToken ct = default) =>
-        inner.SendResponseAsync(statusCode, reasonPhrase, headers, body, remoteEndPoint, transport, ct);
+        inner.SendResponseAsync(statusCode, reasonPhrase, headers, body, remoteEndPoint, transport, inboundConnectionId, ct);
 
     public Task<IPEndPoint> ResolveRemoteEndPointAsync(string host, int port, CancellationToken ct = default) =>
         inner.ResolveRemoteEndPointAsync(host, port, ct);

@@ -26,11 +26,13 @@ internal sealed class SipServerTransactionState : IDisposable
         IPEndPoint remoteEndPoint,
         SipTransportProtocol transport,
         string method,
-        ILogger logger)
+        ILogger logger,
+        int? inboundConnectionId = null)
     {
         Key = key;
         RemoteEndPoint = remoteEndPoint;
         Transport = transport;
+        InboundConnectionId = inboundConnectionId;
         Method = method;
         _logger = logger;
     }
@@ -49,6 +51,12 @@ internal sealed class SipServerTransactionState : IDisposable
     /// Current transport associated with this transaction.
     /// </summary>
     public SipTransportProtocol Transport { get; private set; }
+
+    /// <summary>
+    /// Identifier of the accepted inbound connection this transaction's request arrived on, or <c>null</c>
+    /// for connectionless (UDP) receipt. Responses are routed back over this exact connection (#158 P1-2).
+    /// </summary>
+    public int? InboundConnectionId { get; private set; }
 
     /// <summary>
     /// Request method this transaction belongs to.
@@ -176,15 +184,31 @@ internal sealed class SipServerTransactionState : IDisposable
     }
 
     /// <summary>
-    /// Updates endpoint and transport for subsequent response retransmissions.
+    /// Adopts the accepted inbound connection for this transaction: the real receive transport, its packet
+    /// source and (for connection-oriented transports) its connection id, applied atomically. Called on
+    /// registration and on every request retransmission so a retransmit arriving on a fresh connection
+    /// re-points subsequent responses at that connection (#158 P1-2).
     /// </summary>
-    public void UpdateRemote(IPEndPoint remoteEndPoint, SipTransportProtocol transport)
+    public void AdoptInboundConnection(IPEndPoint remoteEndPoint, SipTransportProtocol transport, int? inboundConnectionId)
     {
         lock (_sync)
         {
             RemoteEndPoint = remoteEndPoint;
             Transport = transport;
+            InboundConnectionId = inboundConnectionId;
         }
+    }
+
+    /// <summary>
+    /// Updates only the remote endpoint for subsequent response retransmissions (e.g. a UDP §18.2.2
+    /// rport-resolved destination), leaving the authoritative transport and inbound connection id — set from
+    /// the accepted connection at registration — unchanged so a Via-derived caller transport can never
+    /// override the real one (#158 P1-2).
+    /// </summary>
+    public void UpdateRemoteEndPoint(IPEndPoint remoteEndPoint)
+    {
+        lock (_sync)
+            RemoteEndPoint = remoteEndPoint;
     }
 
     /// <summary>

@@ -40,8 +40,7 @@ internal sealed class SipServerTransactionEngine : ISipServerTransactionEngine
 
     /// <inheritdoc />
     public SipServerTransactionRegistration RegisterInboundRequest(
-        IPEndPoint remoteEndPoint,
-        SipTransportProtocol transport,
+        SipInboundRequestContext context,
         SipRequest request)
     {
         if (Volatile.Read(ref _disposed) != 0)
@@ -59,11 +58,14 @@ internal sealed class SipServerTransactionEngine : ISipServerTransactionEngine
 
         var state = _transactions.GetOrAdd(key, _ => new SipServerTransactionState(
             key,
-            remoteEndPoint,
-            transport,
+            context.RemoteEndPoint,
+            context.Transport,
             method,
-            _logger));
-        state.UpdateRemote(remoteEndPoint, transport);
+            _logger,
+            context.ConnectionId));
+        // Adopt the accepted inbound connection (real transport + connection id) so every response for this
+        // transaction goes back over it; a retransmission on a fresh connection re-points it (#158 P1-2).
+        state.AdoptInboundConnection(context.RemoteEndPoint, context.Transport, context.ConnectionId);
 
         var isRetransmission = Interlocked.CompareExchange(ref state.HasSeenRequest, 1, 0) == 1;
         if (isRetransmission)
@@ -91,6 +93,15 @@ internal sealed class SipServerTransactionEngine : ISipServerTransactionEngine
         if (Volatile.Read(ref _disposed) != 0)
             throw new ObjectDisposedException(nameof(SipServerTransactionEngine));
 
+        // #158 P1-2: prefer the real transport + accepted inbound connection recorded on the transaction at
+        // registration over the caller-supplied transport. Upper layers reconstruct that transport from the
+        // peer-controlled Via, so it must never be able to steer a response onto the wrong transport, nor
+        // bypass the accepted inbound connection.
+        var hasKey = SipServerTransactionKey.TryFromRequest(request, out var key);
+        var existingState = hasKey && _transactions.TryGetValue(key, out var tracked) ? tracked : null;
+        var effectiveTransport = existingState?.Transport ?? transport;
+        var inboundConnectionId = existingState?.InboundConnectionId;
+
         // RFC 3261 §18.2.1 / RFC 3581 §4 (CF-040): reflect received=/rport= into the outgoing response's top Via
         // against the actual packet source FIRST — critically, this fills a bare ";rport" (what a UAC sends to
         // request rport processing) with the real source port. The §18.2.2 destination below is then derived from
@@ -111,14 +122,15 @@ internal sealed class SipServerTransactionEngine : ISipServerTransactionEngine
         }
 
         // RFC 3261 §18.2.2: for UDP, route the response via the (now reflected) Via header parameters
-        // (received/rport), not simply the raw packet-source endpoint.
-        if (transport == SipTransportProtocol.Udp
+        // (received/rport), not simply the raw packet-source endpoint. Keyed off the *real* transport, so a
+        // request received over TCP with a forged "UDP" Via is not UDP-rerouted (#158 P1-2).
+        if (effectiveTransport == SipTransportProtocol.Udp
             && headers.TryGetValue("Via", out var responseVia))
         {
             remoteEndPoint = SipProtocol.ResolveUdpResponseDestination(responseVia, remoteEndPoint);
         }
 
-        if (!SipServerTransactionKey.TryFromRequest(request, out var key))
+        if (!hasKey)
         {
             await _transport.SendResponseAsync(
                     statusCode,
@@ -126,20 +138,23 @@ internal sealed class SipServerTransactionEngine : ISipServerTransactionEngine
                     headers,
                     body,
                     remoteEndPoint,
-                    transport,
+                    effectiveTransport,
+                    inboundConnectionId: null,
                     ct)
                 .ConfigureAwait(false);
             return;
         }
 
         var method = request.Method.ToUpperInvariant();
-        var state = _transactions.GetOrAdd(key, _ => new SipServerTransactionState(
+        var state = existingState ?? _transactions.GetOrAdd(key, _ => new SipServerTransactionState(
             key,
             remoteEndPoint,
             transport,
             method,
             _logger));
-        state.UpdateRemote(remoteEndPoint, transport);
+        // Only the destination endpoint may move here (UDP rport); the authoritative transport and inbound
+        // connection id stay as adopted at registration (#158 P1-2).
+        state.UpdateRemoteEndPoint(remoteEndPoint);
 
         if (ShouldDiscardAdditionalFinalResponse(
                 state,
@@ -231,6 +246,7 @@ internal sealed class SipServerTransactionEngine : ISipServerTransactionEngine
             snapshot.Body,
             state.RemoteEndPoint,
             state.Transport,
+            state.InboundConnectionId,
             ct);
 
     /// <summary>

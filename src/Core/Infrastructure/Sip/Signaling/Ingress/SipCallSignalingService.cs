@@ -376,10 +376,15 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
     /// <summary>
     /// Handles inbound SIP request dispatch.
     /// </summary>
-    private void HandleInboundRequest(IPEndPoint remoteEndPoint, SipRequest request)
+    private void HandleInboundRequest(SipInboundRequestContext context, SipRequest request)
     {
         if (request is null) return;
-        var inboundTransport = SipIngressRequestPolicy.DetectTransportFromVia(request.Header("Via"));
+
+        // #158 P1-2: the transport comes from the accepted connection the request actually arrived on — never
+        // reconstructed from the peer-controlled Via — and the connection id lets responses go back over that
+        // exact connection. Both flow into the server transaction via RegisterInboundRequest below.
+        var remoteEndPoint = context.RemoteEndPoint;
+        var inboundTransport = context.Transport;
         if (!SipIngressRequestPolicy.TryValidateIngressRequest(request, out var ingressRejectionCode, out var ingressRejectionReasonPhrase))
         {
             if (!string.Equals(request.Method, "ACK", StringComparison.Ordinal))
@@ -397,7 +402,7 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
 
         var callId = request.Header("Call-ID");
         if (string.IsNullOrWhiteSpace(callId)) return;
-        var registration = _serverTransactions.RegisterInboundRequest(remoteEndPoint, inboundTransport, request);
+        var registration = _serverTransactions.RegisterInboundRequest(context, request);
         if (!registration.ShouldProcess)
             return;
 

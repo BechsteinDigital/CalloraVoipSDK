@@ -1,5 +1,6 @@
 using System.Net;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Signaling;
+using CalloraVoipSdk.Core.Infrastructure.Sip.Transport;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Wire;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -34,7 +35,7 @@ public sealed class SipMessageIngressTests
     private static SipCallSignalingService Build(CapturingSipTransportRuntime transport) =>
         new(transport, new NoopSipDigestAuthenticator(), NullLoggerFactory.Instance);
 
-    private static async Task<IReadOnlyList<(int StatusCode, IReadOnlyDictionary<string, string> Headers, IPEndPoint RemoteEndPoint)>>
+    private static async Task<IReadOnlyList<(int StatusCode, IReadOnlyDictionary<string, string> Headers, IPEndPoint RemoteEndPoint, SipTransportProtocol Transport, int? InboundConnectionId)>>
         WaitForResponsesAsync(CapturingSipTransportRuntime transport)
     {
         // The ingress entry is fire-and-forget (void); the response is sent on a background task.

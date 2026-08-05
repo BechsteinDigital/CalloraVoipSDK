@@ -20,8 +20,7 @@ internal sealed class CapturingSipServerTransactionEngine : ISipServerTransactio
     }
 
     public SipServerTransactionRegistration RegisterInboundRequest(
-        IPEndPoint remoteEndPoint,
-        SipTransportProtocol transport,
+        SipInboundRequestContext context,
         SipRequest request) =>
         new();
 

@@ -87,7 +87,7 @@ public sealed class SipCancelTransactionMatchTests
         public void Dispose() { }
 
         public SipServerTransactionRegistration RegisterInboundRequest(
-            IPEndPoint remoteEndPoint, SipTransportProtocol transport, SipRequest request) => new();
+            SipInboundRequestContext context, SipRequest request) => new();
 
         public Task SendResponseAsync(
             SipRequest request, IPEndPoint remoteEndPoint, SipTransportProtocol transport,
