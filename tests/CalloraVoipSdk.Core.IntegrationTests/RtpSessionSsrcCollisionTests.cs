@@ -116,6 +116,63 @@ public sealed class RtpSessionSsrcCollisionTests
     }
 
     [Fact]
+    public async Task A_collision_from_the_latched_media_source_still_reseeds()
+    {
+        await using var session = CreateSession(FreeUdpPort(), FreeUdpPort());
+        var collisionRaised = 0;
+        session.SsrcCollisionDetected += (_, _) => Interlocked.Increment(ref collisionRaised);
+
+        var mediaSource = new IPEndPoint(IPAddress.Loopback, 42001);
+
+        // Latch the media source with a normal validated packet; a colliding packet from that SAME source is a
+        // genuine RFC 3550 §8.2 collision and still reseeds.
+        session.InjectInboundDatagramForTest(Packet(seq: 1, ssrc: 0x0BAD_F00D, payload: [0xAA]), mediaSource);
+        session.InjectInboundDatagramForTest(Packet(seq: 2, ssrc: LocalSsrc, payload: [0xAA]), mediaSource);
+
+        Assert.NotEqual(LocalSsrc, session.LocalSsrc);
+        Assert.Equal(1, Volatile.Read(ref collisionRaised));
+    }
+
+    [Fact]
+    public async Task A_collision_from_a_foreign_plaintext_source_does_not_reseed()
+    {
+        await using var session = CreateSession(FreeUdpPort(), FreeUdpPort());
+        var collisionRaised = 0;
+        session.SsrcCollisionDetected += (_, _) => Interlocked.Increment(ref collisionRaised);
+
+        var mediaSource = new IPEndPoint(IPAddress.Loopback, 42001);
+        var attacker = new IPEndPoint(IPAddress.Loopback, 42002);
+
+        // The real media source latches; a packet spoofing our SSRC from a DIFFERENT plaintext source must not
+        // make us abandon our SSRC or emit a BYE (#161 P1-4 C).
+        session.InjectInboundDatagramForTest(Packet(seq: 1, ssrc: 0x0BAD_F00D, payload: [0xAA]), mediaSource);
+        session.InjectInboundDatagramForTest(Packet(seq: 2, ssrc: LocalSsrc, payload: [0xAA]), attacker);
+
+        Assert.Equal(LocalSsrc, session.LocalSsrc);        // unchanged — no reseed
+        Assert.Equal(0, Volatile.Read(ref collisionRaised));
+    }
+
+    [Fact]
+    public async Task A_collision_from_an_unauthenticated_source_before_any_latch_does_not_reseed()
+    {
+        await using var session = CreateSession(FreeUdpPort(), FreeUdpPort());
+        var collisionRaised = 0;
+        var delivered = 0;
+        session.SsrcCollisionDetected += (_, _) => Interlocked.Increment(ref collisionRaised);
+        session.PacketReceived += (_, _) => Interlocked.Increment(ref delivered);
+
+        var attacker = new IPEndPoint(IPAddress.Loopback, 42002);
+
+        // Nothing has latched yet: an unauthenticated packet spoofing our SSRC must not open a pre-latch reseed DoS,
+        // and must not be delivered.
+        session.InjectInboundDatagramForTest(Packet(seq: 1, ssrc: LocalSsrc, payload: [0xAA]), attacker);
+
+        Assert.Equal(LocalSsrc, session.LocalSsrc);
+        Assert.Equal(0, Volatile.Read(ref collisionRaised));
+        Assert.Equal(0, Volatile.Read(ref delivered));
+    }
+
+    [Fact]
     public async Task Plain_rtcp_from_a_foreign_source_is_dropped_once_media_has_latched()
     {
         await using var session = CreateSession(FreeUdpPort(), FreeUdpPort());
