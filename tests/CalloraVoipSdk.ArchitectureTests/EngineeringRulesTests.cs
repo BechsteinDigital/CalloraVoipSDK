@@ -165,7 +165,6 @@ public sealed class EngineeringRulesTests
         "src/Core/Infrastructure/Sip/Transactions/Server/SipServerTransactionEngine.cs",
         "src/Core/Infrastructure/Sip/Transactions/SipClientTransactionExecutor.cs",
         "src/Core/Infrastructure/Sip/Transport/SipStreamConnection.cs",
-        "src/Core/Infrastructure/Sip/Transport/SipTransportRuntime.cs",
         "src/Core/Infrastructure/Sip/Transport/SipWebSocketConnection.cs",
         "src/Core/Infrastructure/Stun/Client/DnsSrvQuery.cs",
         "src/Core/Infrastructure/Stun/Server/StunServer.cs",

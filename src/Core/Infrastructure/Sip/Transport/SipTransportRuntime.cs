@@ -35,6 +35,7 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
     private readonly ISipWireCodec _wireCodec;
     private readonly ISipRouteResolver _routeResolver;
     private readonly SipTransportProtocol _defaultTransport;
+    private readonly SipInboundConnectionAcceptor _acceptor;
     private readonly CancellationTokenSource _stop = new();
     private readonly ConcurrentDictionary<int, Action<SipInboundRequestContext, SipRequest>> _requestHandlers = new();
     private readonly ConcurrentDictionary<int, Action<IPEndPoint, SipResponse>> _responseHandlers = new();
@@ -42,8 +43,6 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
     // Maps a resolved endpoint (transport+addr:port key) to the SIP domain it was resolved from, so
     // outbound TLS uses the domain for SNI and certificate name validation, not the literal IP.
     private readonly ConcurrentDictionary<string, string> _endpointTlsHosts = new();
-    private readonly ConcurrentDictionary<int, SipStreamConnection> _inboundStreamConnections = new();
-    private readonly ConcurrentDictionary<int, SipWebSocketConnection> _inboundWebSocketConnections = new();
     private readonly SipOutboundConnectionPool _outboundPool;
     private readonly Task _udpReceiveLoop;
     private readonly Task _tcpAcceptLoop;
@@ -52,8 +51,6 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
     private readonly Task _wssAcceptLoop;
 
     private int _handlerIdSequence;
-    private int _inboundConnectionId;
-    private int _inboundWebSocketConnectionId;
     private int _disposed;
 
     /// <summary>
@@ -82,7 +79,8 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
         ISipWireCodec wireCodec,
         TlsConfiguration? tlsConfiguration,
         SipTransportProtocol defaultTransport,
-        ISipRouteResolver? routeResolver)
+        ISipRouteResolver? routeResolver,
+        SipTransportOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(loggerFactory);
 
@@ -93,6 +91,11 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
         _tlsCertificateProvider = tlsConfiguration is null ? null : new SipTlsCertificateProvider(tlsConfiguration);
         _tlsCertificate = _tlsCertificateProvider?.GetCertificate();
         _defaultTransport = defaultTransport;
+        _acceptor = new SipInboundConnectionAcceptor(
+            options ?? SipTransportOptions.Default,
+            _tlsCertificate,
+            _logger,
+            HandleInboundPayloadAsync);
         // Frames received on an outbound (pooled) connection carry no accepted inbound connection id — a
         // response to them can only ever go back out through the pool, so the id is null here (#158 P1-2).
         _outboundPool = new SipOutboundConnectionPool(
@@ -283,14 +286,14 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
         {
             case SipTransportProtocol.Tcp:
             case SipTransportProtocol.Tls:
-                if (!_inboundStreamConnections.TryGetValue(connectionId, out var streamConnection))
+                if (!_acceptor.TryGetStreamConnection(connectionId, out var streamConnection) || streamConnection is null)
                     return false;
                 await streamConnection.SendAsync(payload, ct).ConfigureAwait(false);
                 return true;
 
             case SipTransportProtocol.Ws:
             case SipTransportProtocol.Wss:
-                if (!_inboundWebSocketConnections.TryGetValue(connectionId, out var webSocketConnection))
+                if (!_acceptor.TryGetWebSocketConnection(connectionId, out var webSocketConnection) || webSocketConnection is null)
                     return false;
                 await webSocketConnection.SendAsync(payload, ct).ConfigureAwait(false);
                 return true;
@@ -499,7 +502,7 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
                 continue;
             }
 
-            _ = RegisterInboundStreamConnectionAsync(client, protocol, ct);
+            _ = _acceptor.AcceptStreamConnectionAsync(client, protocol, ct);
         }
     }
 
@@ -539,127 +542,7 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
                 continue;
             }
 
-            _ = RegisterInboundWebSocketConnectionAsync(context, protocol, ct);
-        }
-    }
-
-    /// <summary>
-    /// Registers one accepted inbound WS/WSS connection.
-    /// </summary>
-    private async Task RegisterInboundWebSocketConnectionAsync(
-        HttpListenerContext context,
-        SipTransportProtocol protocol,
-        CancellationToken ct)
-    {
-        try
-        {
-            if (!context.Request.IsWebSocketRequest)
-            {
-                context.Response.StatusCode = (int)HttpStatusCode.BadRequest;
-                context.Response.Close();
-                return;
-            }
-
-            // RFC 7118 §5: a SIP-over-WebSocket client must offer the "sip" subprotocol. Reject the
-            // upgrade when it does not, rather than accepting a WebSocket with no negotiated
-            // subprotocol that could not carry SIP framing (HARD-E6).
-            var sipSubProtocol = SipTransportRuntimeUtilities.SelectOfferedSipSubProtocol(context.Request);
-            if (sipSubProtocol is null)
-            {
-                context.Response.StatusCode = (int)HttpStatusCode.BadRequest;
-                context.Response.Close();
-                return;
-            }
-
-            var wsContext = await context.AcceptWebSocketAsync(sipSubProtocol).WaitAsync(ct).ConfigureAwait(false);
-            var remoteEndPoint = context.Request.RemoteEndPoint ?? new IPEndPoint(IPAddress.Loopback, 0);
-            var id = Interlocked.Increment(ref _inboundWebSocketConnectionId);
-            // Tag every frame from this connection with its id so a response can be routed straight back over
-            // it (#158 P1-2). The id is captured before the receive loop starts inside the ctor.
-            var connection = new SipWebSocketConnection(
-                protocol,
-                wsContext.WebSocket,
-                remoteEndPoint,
-                _logger,
-                (remote, transport, payload) => HandleInboundPayloadAsync(remote, transport, payload, id),
-                onClosed: () => _inboundWebSocketConnections.TryRemove(id, out _));
-            _inboundWebSocketConnections[id] = connection;
-            _logger.LogDebug("Accepted SIP {Transport} WebSocket from {Remote}.", protocol, remoteEndPoint);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "Failed to accept SIP {Transport} WebSocket connection.", protocol);
-            try
-            {
-                context.Response.Abort();
-            }
-            catch (Exception abortEx)
-            {
-                _logger.LogDebug(abortEx, "Failed aborting failed SIP {Transport} WebSocket context.", protocol);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Registers one accepted inbound TCP/TLS connection.
-    /// </summary>
-    private async Task RegisterInboundStreamConnectionAsync(
-        TcpClient client,
-        SipTransportProtocol protocol,
-        CancellationToken ct)
-    {
-        Stream? stream = null;
-        try
-        {
-            stream = client.GetStream();
-            if (protocol == SipTransportProtocol.Tls)
-            {
-                if (_tlsCertificate is null)
-                    throw new InvalidOperationException("TLS listener has no certificate.");
-
-                var sslStream = new SslStream(stream, leaveInnerStreamOpen: false);
-                await sslStream.AuthenticateAsServerAsync(
-                        _tlsCertificate,
-                        clientCertificateRequired: false,
-                        enabledSslProtocols: SslProtocols.Tls12 | SslProtocols.Tls13,
-                        checkCertificateRevocation: false)
-                    .ConfigureAwait(false);
-                stream = sslStream;
-            }
-
-            var id = Interlocked.Increment(ref _inboundConnectionId);
-            // Tag every frame from this connection with its id so a response can be routed straight back over
-            // it (#158 P1-2). The id is captured before the receive loop starts inside the ctor.
-            var connection = new SipStreamConnection(
-                protocol,
-                client,
-                stream,
-                _logger,
-                (remote, transport, payload) => HandleInboundPayloadAsync(remote, transport, payload, id),
-                onClosed: () => _inboundStreamConnections.TryRemove(id, out _));
-            _inboundStreamConnections[id] = connection;
-            _logger.LogDebug("Accepted SIP {Transport} stream from {Remote}.", protocol, connection.RemoteEndPoint);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "Failed to register inbound SIP {Transport} stream connection.", protocol);
-            try
-            {
-                stream?.Dispose();
-            }
-            catch
-            {
-                // best effort cleanup
-            }
-
-            try
-            {
-                client.Dispose();
-            }
-            catch
-            {
-                // best effort cleanup
-            }
+            _ = _acceptor.AcceptWebSocketConnectionAsync(context, protocol, ct);
         }
     }
 
@@ -919,14 +802,7 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
         }
 
         _outboundPool.Dispose();
-
-        foreach (var connection in _inboundStreamConnections.Values)
-            connection.Dispose();
-        foreach (var connection in _inboundWebSocketConnections.Values)
-            connection.Dispose();
-
-        _inboundStreamConnections.Clear();
-        _inboundWebSocketConnections.Clear();
+        _acceptor.DisposeConnections();
         _endpointTransportHints.Clear();
         _endpointTlsHosts.Clear();
         _requestHandlers.Clear();
