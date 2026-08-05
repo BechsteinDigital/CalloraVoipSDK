@@ -8,6 +8,7 @@ internal sealed class PeerConnectionManager : IPeerConnectionManager
 {
     private readonly object _sync = new();
     private readonly List<IPeerConnection> _peers = [];
+    private bool _disposed;
 
     /// <inheritdoc />
     public IReadOnlyList<IPeerConnection> Active
@@ -21,13 +22,37 @@ internal sealed class PeerConnectionManager : IPeerConnectionManager
         get { lock (_sync) { return _peers.Count; } }
     }
 
-    internal void Track(IPeerConnection peer)
+    /// <summary>
+    /// Tracks a peer, or returns <see langword="false"/> when the owning client has begun disposal — so a peer
+    /// created concurrently with (or after) <see cref="DrainForDispose"/> is never left registered in a dead
+    /// owner (#166 P1-1). Atomic against <see cref="DrainForDispose"/> under the same lock.
+    /// </summary>
+    internal bool TryTrack(IPeerConnection peer)
     {
-        lock (_sync) { _peers.Add(peer); }
+        lock (_sync)
+        {
+            if (_disposed)
+                return false;
+            _peers.Add(peer);
+            return true;
+        }
     }
 
     internal void Untrack(IPeerConnection peer)
     {
         lock (_sync) { _peers.Remove(peer); }
+    }
+
+    /// <summary>
+    /// Marks the manager disposed (no further <see cref="TryTrack"/> succeeds) and returns the live set to tear
+    /// down, atomically, so the dispose snapshot and the tracking gate cannot race (#166 P1-1).
+    /// </summary>
+    internal IReadOnlyList<IPeerConnection> DrainForDispose()
+    {
+        lock (_sync)
+        {
+            _disposed = true;
+            return _peers.ToArray();
+        }
     }
 }
