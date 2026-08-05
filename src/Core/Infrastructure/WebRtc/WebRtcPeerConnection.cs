@@ -481,11 +481,9 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         bool renegotiate;
         lock (_sync)
         {
-            // A second offer/answer cycle on a running session is renegotiation (RFC 8829, P3b-3): the shared
-            // transport/DTLS/ICE/SRTP is kept and only the video-track diff is applied. Take the renegotiation path
-            // instead of rebuilding (an ICE restart, i.e. a rotated ICE ufrag, is still rejected there — dispose
-            // and re-create the peer for that). Decided under the lock; dispatched below, outside it, so the diff
-            // apply (which takes the session's own gate) never runs under the peer lock (K3 / session-build pattern).
+            // A second offer/answer cycle on a running session is renegotiation (RFC 8829 P3b-3): keep the
+            // shared transport/DTLS/ICE/SRTP and apply only the video-track diff (an ICE restart is rejected
+            // there). Decided under the lock; the diff apply is dispatched below, outside it (K3).
             renegotiate = _session is not null;
 
             // A session that was already started but never built (StartAsync on a non-bundle exchange) has no
@@ -501,24 +499,19 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
 
         lock (_sync)
         {
-            // RFC 8829 §4.1.3: setRemoteDescription is valid as the offerer applying the peer's answer (from
-            // HaveLocalOffer) or as the answerer applying the peer's offer (from Stable). HaveRemoteOffer means
-            // an answer is already being produced, and Closed means the peer is torn down — both are invalid
-            // transitions and fail loudly rather than corrupt the signalling state.
+            // RFC 8829 §4.1.3: setRemoteDescription is valid from HaveLocalOffer (offerer applies the answer)
+            // or Stable (answerer applies the offer); HaveRemoteOffer/Closed are invalid transitions.
             if (_signalingState is not (WebRtcSignalingState.Stable or WebRtcSignalingState.HaveLocalOffer))
                 throw new InvalidOperationException(
                     $"Cannot apply a remote description in signalling state '{_signalingState}' (RFC 8829 §4.1.3).");
 
-            // Capture the offerer state as one snapshot: the local description belongs to _localOfferModel
-            // and must be read under the same gate, not unsynchronised afterwards (HARD-C6). The offerer/answerer
-            // role is the same discriminator the session build uses (a local offer was created), so the
-            // signalling state stays consistent with the transport path actually taken.
+            // Capture the offerer state as one snapshot under the gate (HARD-C6): the local offer model is the
+            // offerer/answerer discriminator the session build uses, kept consistent with the transport path.
             pendingOffer = _localOfferModel!;
             pendingLocalDescription = _localDescription;
 
-            // Answerer (no local offer): the remote description is an offer. Enter HaveRemoteOffer now so the
-            // W3C two-transition answerer path (Stable → HaveRemoteOffer → Stable) is observable; the event is
-            // fired below, outside the lock. The offerer stays in HaveLocalOffer until the answer is applied.
+            // Answerer (no local offer): enter HaveRemoteOffer now so the two-transition path is observable
+            // (the event fires below, outside the lock); the offerer stays in HaveLocalOffer until applied.
             if (pendingOffer is null)
                 _signalingState = WebRtcSignalingState.HaveRemoteOffer;
         }
@@ -533,7 +526,14 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         IPEndPoint? answererLocal = null;
         if (pendingOffer is not null)
         {
-            // Offerer: the remote description is the answer; our offer is the local description.
+            // Offerer: the remote description is the answer. Fail closed unless it is a valid RFC 3264 §6
+            // response to our offer, before building any transport or track (P1-b).
+            if (SdpAnswerValidator.Validate(pendingOffer, remote) is { } answerViolation)
+            {
+                TransitionTo(WebRtcConnectionState.Failed);
+                throw new InvalidOperationException($"Remote answer is not a valid response to the local offer: {answerViolation}");
+            }
+
             localModel = pendingOffer;
             localSdp = pendingLocalDescription!;
         }
@@ -554,14 +554,10 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             localSdp = _serializer.Serialize(result.Answer);
         }
 
-        // Build the shared media transport from the two descriptions (WebRTC is DTLS-SRTP over one
-        // BUNDLE group). A non-bundle exchange yields no session — the local description is still
-        // returned, but the peer has no transport (logged), which StartAsync then surfaces. The offerer
-        // (a local offer was created) holds the ICE controlling role (RFC 8445 §6.1.1).
-        // A relay ICE local candidate is offered only when a TURN allocation was already gathered on this socket
-        // (the offerer gathers between CreateOffer and applying the answer; the answerer binds its socket here
-        // and gathers afterwards, so its allocation is adopted later — a follow-up). The allocation lives on the
-        // same socket the session's transport takes over, so the relay data path rides it.
+        // Build the shared DTLS-SRTP/BUNDLE media transport from both descriptions; a non-bundle exchange
+        // yields no session (logged; StartAsync surfaces it). The offerer holds the ICE controlling role
+        // (RFC 8445 §6.1.1); a relay ICE local candidate rides the socket only when a TURN allocation was
+        // already gathered on it (the answerer adopts its allocation later — a follow-up).
         var session = WebRtcSessionFactory.TryCreate(
             remote, localModel, _options, _handshaker, _certificate, _loggerFactory, _mediaSocket,
             iceControlling: pendingOffer is not null,
@@ -651,11 +647,9 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             }
             catch
             {
-                // A failed re-answer (no answer negotiable, or an ICE restart) throws before any track mutation, so
-                // the running session is intact — but leaving the peer in HaveRemoteOffer would strand it there: both
-                // the renegotiation entry guard and CreateOffer reject that state, so it could never renegotiate again.
-                // Roll signalling back to Stable (the live tracks are still valid) so a later attempt is possible, then
-                // surface the failure (not swallowed — re-thrown).
+                // A failed re-answer throws before any track mutation (running session intact), but would strand
+                // the peer in HaveRemoteOffer (both the entry guard and CreateOffer reject that). Roll signalling
+                // back to Stable so a later attempt is possible, then re-throw (not swallowed).
                 lock (_sync)
                     _signalingState = WebRtcSignalingState.Stable;
                 RaiseSignalingState(WebRtcSignalingState.Stable);
@@ -665,6 +659,15 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         }
         else
         {
+            // P1-b: a re-answer gets the same RFC 3264 §6 validation; a bad one rolls signalling back to
+            // Stable (the live session stays intact) and throws, mirroring the answerer failure path.
+            if (SdpAnswerValidator.Validate(newLocalModel, remote) is { } reViolation)
+            {
+                lock (_sync) _signalingState = WebRtcSignalingState.Stable;
+                RaiseSignalingState(WebRtcSignalingState.Stable);
+                throw new InvalidOperationException($"Remote re-answer is not a valid response to the local re-offer: {reViolation}");
+            }
+
             _renegotiator.Apply(session, _renegotiator.ComputeDiff(session, newLocalModel, remote));
         }
 
