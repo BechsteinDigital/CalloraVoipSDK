@@ -100,9 +100,19 @@ internal static class WebRtcSessionFactory
             return null;
         var dtlsIsClient = ResolveIsClient(localAudio.DtlsSetup, remoteAudio.DtlsSetup);
 
-        var audioCodec = localAudio.Codecs.FirstOrDefault(c => !c.Name.Equals("telephone-event", Ci));
+        // The codec we actually send: the first local audio codec the remote section also lists (by payload
+        // type), not merely our first offered one. On the offerer path localAudio is our offer and remoteAudio
+        // is the answer, so this narrows to the codec the answerer accepted (RFC 3264 §6.1); on the answerer
+        // path our local answer is already the intersection, so nothing is removed (P1-b: answer ⊆ offer).
+        var audioCodec = FirstSendableCodec(localAudio.Codecs, remoteAudio, c => !c.Name.Equals("telephone-event", Ci));
         if (audioCodec is null)
+        {
+            // Critical-path diagnosis (K7): the local and remote audio share no non-DTMF codec, so no
+            // media can be sent — surface it rather than dropping the session silently.
+            loggerFactory.CreateLogger(typeof(WebRtcSessionFactory)).LogWarning(
+                "No audio codec is common to the local and remote descriptions; no media session is built.");
             return null;
+        }
         var clockRate = audioCodec.ClockRate > 0 ? audioCodec.ClockRate : 8000;
 
         // RFC 4733 telephone-event (DTMF): capture the negotiated event payload type instead of discarding it,
@@ -235,6 +245,18 @@ internal static class WebRtcSessionFactory
         return new BundledMediaSession(sessionOptions, handshaker, certificate, loggerFactory);
     }
 
+    // The first local codec (in local preference order) that the paired remote section also lists, matched by
+    // payload type — the effective send format under RFC 3264 §6.1. Returns null when the local list and the
+    // remote share no format (an accepted m-line always shares at least one; P1-b guarantees answer ⊆ offer).
+    internal static SdpCodecDefinition? FirstSendableCodec(
+        IReadOnlyList<SdpCodecDefinition> localCodecs,
+        SdpMediaDescription? remote,
+        Func<SdpCodecDefinition, bool> keep)
+    {
+        var remotePts = remote?.Codecs.Select(c => c.PayloadType).ToHashSet() ?? [];
+        return localCodecs.FirstOrDefault(c => keep(c) && remotePts.Contains(c.PayloadType));
+    }
+
     // The negotiated RFC 4733 telephone-event line from the audio codec list, preferring the one whose clock
     // matches the primary audio codec (RFC 4733 §2.1: the event stream shares the audio stream's timestamp
     // clock; offers may list one line per clock), else the first offered event line. Null when none is present.
@@ -298,8 +320,11 @@ internal static class WebRtcSessionFactory
             return null;
         }
 
-        // The primary video codec (skip the RTX repair codec, RFC 4588).
-        var codec = video.Codecs.FirstOrDefault(c => !c.Name.Equals("rtx", Ci));
+        // The primary video codec we actually send: the first local video codec (skipping the RTX repair
+        // codec, RFC 4588) that the paired remote section also lists — the codec the peer accepted, not merely
+        // our first offered one (RFC 3264 §6.1). No-op on the answerer path where the local answer is already
+        // the intersection (P1-b: answer ⊆ offer).
+        var codec = FirstSendableCodec(video.Codecs, remoteVideo, c => !c.Name.Equals("rtx", Ci));
         if (codec is null)
             return null;
 
