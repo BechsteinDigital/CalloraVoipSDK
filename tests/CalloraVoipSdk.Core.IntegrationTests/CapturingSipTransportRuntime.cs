@@ -242,6 +242,17 @@ internal sealed class CapturingSipTransportRuntime : ISipTransportRuntime
             DispatchResponse(request.RemoteEndPoint, response);
     }
 
+    /// <summary>
+    /// Simulates an inbound SIP response by delivering it to every subscribed response handler (as the real
+    /// transport would on receiving a response). Lets a test drive a client transaction's response path.
+    /// </summary>
+    public void DeliverInboundResponse(IPEndPoint remoteEndPoint, SipResponse response)
+    {
+        ArgumentNullException.ThrowIfNull(remoteEndPoint);
+        ArgumentNullException.ThrowIfNull(response);
+        DispatchResponse(remoteEndPoint, response);
+    }
+
     private void DispatchResponse(IPEndPoint remoteEndPoint, SipResponse response)
     {
         Action<IPEndPoint, SipResponse>[] handlers;
