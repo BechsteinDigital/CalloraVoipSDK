@@ -23,7 +23,7 @@ public sealed class SipDialogManagerEarlyDialogTests
             ["CSeq"] = "1 INVITE",
             ["Contact"] = "<sip:bob@203.0.113.9>",
         };
-        return new SipResponse(statusCode, statusCode == 200 ? "OK" : "Ringing", headers, body: null);
+        return new SipResponse(statusCode, statusCode == 200 ? "OK" : "Ringing", headers, body: string.Empty);
     }
 
     [Fact]

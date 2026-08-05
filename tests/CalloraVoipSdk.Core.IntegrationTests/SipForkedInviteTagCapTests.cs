@@ -25,7 +25,7 @@ public sealed class SipForkedInviteTagCapTests
             ["CSeq"] = "1 INVITE",
             ["Contact"] = "<sip:bob@203.0.113.9>",
         };
-        return new SipResponse(200, "OK", headers, body: null);
+        return new SipResponse(200, "OK", headers, body: string.Empty);
     }
 
     private static int TrackedTagCount(SipForkedInviteHandler handler)

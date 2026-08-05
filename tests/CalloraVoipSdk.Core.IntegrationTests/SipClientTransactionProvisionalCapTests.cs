@@ -46,7 +46,7 @@ public sealed class SipClientTransactionProvisionalCapTests
             ["Call-ID"] = CallId,
             ["CSeq"] = "1 INVITE",
         };
-        return new SipResponse(statusCode, statusCode == 486 ? "Busy Here" : "Ringing", headers, body: null);
+        return new SipResponse(statusCode, statusCode == 486 ? "Busy Here" : "Ringing", headers, body: string.Empty);
     }
 
     [Fact]
