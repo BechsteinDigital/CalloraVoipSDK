@@ -12,8 +12,7 @@ internal sealed class NoopSipServerTransactionEngine : ISipServerTransactionEngi
     }
 
     public SipServerTransactionRegistration RegisterInboundRequest(
-        IPEndPoint remoteEndPoint,
-        SipTransportProtocol transport,
+        SipInboundRequestContext context,
         SipRequest request) =>
         new();
 

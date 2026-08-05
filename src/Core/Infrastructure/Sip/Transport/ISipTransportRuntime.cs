@@ -16,9 +16,11 @@ internal interface ISipTransportRuntime : IDisposable
     IPEndPoint LocalEndPoint { get; }
 
     /// <summary>
-    /// Subscribes to parsed SIP request messages.
+    /// Subscribes to parsed SIP request messages. The <see cref="SipInboundRequestContext"/> carries the
+    /// real receive transport and, for connection-oriented transports, the accepted inbound connection id
+    /// so a response can be routed back over that exact connection (#158 P1-2).
     /// </summary>
-    IDisposable SubscribeRequests(Action<IPEndPoint, SipRequest> handler);
+    IDisposable SubscribeRequests(Action<SipInboundRequestContext, SipRequest> handler);
 
     /// <summary>
     /// Subscribes to parsed SIP response messages.
@@ -60,7 +62,9 @@ internal interface ISipTransportRuntime : IDisposable
         CancellationToken ct = default);
 
     /// <summary>
-    /// Sends a SIP response over an explicit transport protocol.
+    /// Sends a SIP response over an explicit transport protocol. When <paramref name="inboundConnectionId"/>
+    /// identifies a live accepted inbound connection and the transport is connection-oriented, the response
+    /// is sent back over that exact connection rather than a fresh outbound connection (#158 P1-2).
     /// </summary>
     Task SendResponseAsync(
         int statusCode,
@@ -69,6 +73,7 @@ internal interface ISipTransportRuntime : IDisposable
         string? body,
         IPEndPoint remoteEndPoint,
         SipTransportProtocol transport,
+        int? inboundConnectionId = null,
         CancellationToken ct = default);
 
     /// <summary>

@@ -15,6 +15,15 @@ internal sealed class SipClientTransactionExecutor : ISipClientTransactionExecut
     private static readonly TimeSpan DefaultInviteFailureCompletedRetention = TimeSpan.FromSeconds(32);
     private static readonly TimeSpan DefaultNonInviteCompletedRetention = TimeSpan.FromSeconds(5);
 
+    /// <summary>
+    /// Upper bound on provisional (1xx) responses retained for one transaction (#158 P1-8). The provisional
+    /// history is neither de-duplicated nor count-capped otherwise, so a peer or forking proxy emitting an
+    /// unbounded stream of 1xx within the transaction window would grow it without limit. Excess provisionals
+    /// are still dispatched to the per-response callback (so early media / early dialogs keep working, bounded
+    /// downstream), only the retained snapshot is capped.
+    /// </summary>
+    private const int MaxProvisionalResponses = 64;
+
     private readonly ISipTransportRuntime _transport;
     private readonly ILogger _logger;
 
@@ -48,6 +57,7 @@ internal sealed class SipClientTransactionExecutor : ISipClientTransactionExecut
         var provisionalSync = new object();
         var finalSync = new object();
         var provisionalReceived = false;
+        var provisionalCapLogged = false;
         SipResponseEnvelope? firstFinalResponse = null;
 
         // §17.1.1.3: ACK headers for INVITE 3xx-6xx, built once and re-sent on retransmits
@@ -85,7 +95,21 @@ internal sealed class SipClientTransactionExecutor : ISipClientTransactionExecut
 
                 lock (provisionalSync)
                 {
-                    provisionalResponses.Add(envelope);
+                    // #158 P1-8: retain at most MaxProvisionalResponses so an unbounded 1xx stream cannot grow
+                    // the history without limit. Excess ones are still dispatched to the callback below.
+                    if (provisionalResponses.Count < MaxProvisionalResponses)
+                    {
+                        provisionalResponses.Add(envelope);
+                    }
+                    else if (!provisionalCapLogged)
+                    {
+                        provisionalCapLogged = true;
+                        _logger.LogDebug(
+                            "SIP provisional-response history capped at {Cap} for {CallId}; excess 1xx not retained.",
+                            MaxProvisionalResponses,
+                            callId);
+                    }
+
                     provisionalReceived = true;
                     provisionalReceivedSignal.TrySetResult(true);
                 }

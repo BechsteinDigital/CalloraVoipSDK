@@ -9,6 +9,7 @@ using CalloraVoipSdk.Core.Infrastructure.Sip.Transport;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Transactions;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Transactions.Server;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Wire;
+using static CalloraVoipSdk.Core.Infrastructure.Sip.Signaling.SipCallSignalingHelpers;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Sip.Signaling;
 
@@ -23,6 +24,13 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
 
     private const string DefaultInboundUserAgent = "CalloraVoipSdk/1.0";
     private static readonly TimeSpan DefaultInboundSessionTimeout = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// Default cap on concurrent inbound dialog sessions (#158 P1-5). A UAS creates dialog state for every
+    /// served-user INVITE before any line/trunk takes ownership; without a cap a flood of INVITEs with
+    /// distinct Call-IDs pins unbounded session state.
+    /// </summary>
+    private const int DefaultMaxConcurrentInboundSessions = 256;
     // Upper bound on distinct outbound-INVITE targets (initial + all 3xx redirects) so a 3xx carrying many
     // Contacts cannot fan out into an unbounded chain of INVITE transactions (RFC 3261 §8.1.3.4 hardening).
     private const int MaxRedirectTargets = 8;
@@ -48,6 +56,9 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
     private readonly SipMergedInviteTracker _mergedInviteTracker = new();
     private readonly IDisposable _requestSubscription;
     private readonly IDisposable _responseSubscription;
+    private readonly int _maxConcurrentInboundSessions;
+    private readonly SipInboundRingDeadlineMonitor _ringDeadline;
+    private readonly SipPerRemoteInboundSessionLimiter _perRemoteSessions;
     private int _disposed;
 
     /// <summary>
@@ -61,10 +72,18 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
         ISipTelemetrySink? telemetry = null,
         ISipIdentityTrustPolicy? identityTrustPolicy = null,
         ISipUasUserIdentityPolicy? userIdentityPolicy = null,
-        string? inboundUserAgent = null)
+        string? inboundUserAgent = null,
+        int? maxConcurrentInboundSessions = null,
+        TimeSpan? inboundRingDeadline = null,
+        int? maxInboundSessionsPerRemote = null,
+        int? maxServerTransactions = null,
+        TimeSpan? absoluteServerTransactionLifetime = null)
     {
         var resolvedDigestAuthenticator = digestAuthenticator
             ?? throw new ArgumentNullException(nameof(digestAuthenticator));
+        _maxConcurrentInboundSessions = maxConcurrentInboundSessions is { } cap && cap > 0
+            ? cap
+            : DefaultMaxConcurrentInboundSessions;
         _inboundUserAgent = string.IsNullOrWhiteSpace(inboundUserAgent) ? DefaultInboundUserAgent : inboundUserAgent;
         _transport = transport ?? throw new ArgumentNullException(nameof(transport));
         _digestAuthenticator = resolvedDigestAuthenticator;
@@ -73,7 +92,8 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
         _telemetry = telemetry ?? NullSipTelemetrySink.Instance;
         _identityTrustPolicy = identityTrustPolicy ?? DenyAllSipIdentityTrustPolicy.Instance;
         _userIdentityPolicy = userIdentityPolicy ?? AcceptAllSipUasUserIdentityPolicy.Instance;
-        _serverTransactions = new SipServerTransactionEngine(_transport, _logger);
+        _serverTransactions = new SipServerTransactionEngine(
+            _transport, _logger, maxServerTransactions, absoluteServerTransactionLifetime);
         _subscribeExecutor = new SipClientTransactionExecutor(_transport, _logger);
         _subscriptionService = new SipCallSignalingSubscriptions(
             _transport,
@@ -84,6 +104,8 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
             SendIngressResponseAsync);
         _messageService = new SipCallSignalingMessages(_transport, _digestAuthenticator, _subscribeExecutor, _logger);
         _publicationService = new SipCallSignalingPublications(_transport, _digestAuthenticator, _subscribeExecutor, _logger);
+        _ringDeadline = new SipInboundRingDeadlineMonitor(_logger, inboundRingDeadline);
+        _perRemoteSessions = new SipPerRemoteInboundSessionLimiter(maxInboundSessionsPerRemote);
 
         var resolvedSdpProvider = sdpProvider ?? BuildDefaultSdpProvider();
         _sessionDependencies = new SipCallSessionDependencies
@@ -154,7 +176,6 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
         var effectiveRequireHeader = request.RequireHeader;
         var effectiveProxyRequireHeader = request.ProxyRequireHeader;
         var reducedBodyRetryUsed = false;
-        var schemeDowngradeRetryUsed = false;
         Exception? lastFailure = null;
 
         while (pendingTargets.Count > 0)
@@ -286,21 +307,9 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
                         }
                     }
 
-                    if (response.StatusCode == 416)
-                    {
-                        if (!schemeDowngradeRetryUsed
-                            && SipOutboundInviteRetryPolicy.TryDowngradeSipsToSip(target.RequestUri, out var downgradedUri)
-                            && visitedRequestUris.Add(downgradedUri))
-                        {
-                            schemeDowngradeRetryUsed = true;
-                            pendingTargets.Enqueue(new SipOutboundInviteTarget(
-                                RequestUri: downgradedUri,
-                                LogicalRemoteUri: downgradedUri,
-                                RouteSet: [],
-                                NextHopUri: downgradedUri));
-                            break;
-                        }
-                    }
+                    // A 416 (Unsupported URI Scheme) on a sips: target is NOT auto-downgraded to sip: (#158 P1-1):
+                    // downgrading would let a peer or proxy strip the caller's end-to-end SIPS security intent down
+                    // to a cleartext hop. The 416 propagates as a final failure instead.
 
                     if (response.StatusCode == 420)
                     {
@@ -371,9 +380,6 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
     /// <summary>
     /// Returns true when a thrown invalid operation represents a transport-layer transaction failure.
     /// </summary>
-    private static bool IsTransportFailure(InvalidOperationException exception) =>
-        SipOutboundInviteRetryPolicy.IsTransportFailure(exception);
-
     /// <summary>
     /// Removes and disposes one failed outbound session attempt.
     /// </summary>
@@ -389,10 +395,15 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
     /// <summary>
     /// Handles inbound SIP request dispatch.
     /// </summary>
-    private void HandleInboundRequest(IPEndPoint remoteEndPoint, SipRequest request)
+    private void HandleInboundRequest(SipInboundRequestContext context, SipRequest request)
     {
         if (request is null) return;
-        var inboundTransport = SipIngressRequestPolicy.DetectTransportFromVia(request.Header("Via"));
+
+        // #158 P1-2: the transport comes from the accepted connection the request actually arrived on — never
+        // reconstructed from the peer-controlled Via — and the connection id lets responses go back over that
+        // exact connection. Both flow into the server transaction via RegisterInboundRequest below.
+        var remoteEndPoint = context.RemoteEndPoint;
+        var inboundTransport = context.Transport;
         if (!SipIngressRequestPolicy.TryValidateIngressRequest(request, out var ingressRejectionCode, out var ingressRejectionReasonPhrase))
         {
             if (!string.Equals(request.Method, "ACK", StringComparison.Ordinal))
@@ -410,7 +421,7 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
 
         var callId = request.Header("Call-ID");
         if (string.IsNullOrWhiteSpace(callId)) return;
-        var registration = _serverTransactions.RegisterInboundRequest(remoteEndPoint, inboundTransport, request);
+        var registration = _serverTransactions.RegisterInboundRequest(context, request);
         if (!registration.ShouldProcess)
             return;
 
@@ -650,6 +661,42 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
             return;
         }
 
+        // #158 P1-5: bound the number of concurrent inbound sessions before creating dialog state. A UAS
+        // creates a session (and fires IncomingInvite) for every served-user INVITE, before any line/trunk
+        // takes ownership — a flood of INVITEs with distinct Call-IDs would otherwise pin unbounded state.
+        // At the cap, answer 486 Busy Here (RFC 3261 §21.4.24) and create no session. Best-effort count check:
+        // a small overshoot under concurrent creation is acceptable for a memory-bound ceiling (see the engine).
+        if (_sessions.Count >= _maxConcurrentInboundSessions)
+        {
+            _logger.LogWarning(
+                "Inbound INVITE from {Remote} rejected: max concurrent inbound sessions ({Cap}) reached.",
+                remoteEndPoint, _maxConcurrentInboundSessions);
+            _ = SendIngressResponseAsync(
+                normalizedRequest,
+                remoteEndPoint,
+                inboundTransport,
+                statusCode: 486,
+                reasonPhrase: "Busy Here");
+            return;
+        }
+
+        // #158 P1-5 (per-remote cap): fair-share the global inbound-session budget across source IPs so one
+        // remote cannot occupy every slot. Reserves a slot keyed by Call-ID; released on termination or a
+        // failed insert below. At the per-remote ceiling, answer 486 Busy Here and create no session.
+        if (!_perRemoteSessions.TryAdmit(callId, remoteEndPoint.Address))
+        {
+            _logger.LogWarning(
+                "Inbound INVITE from {Remote} rejected: max concurrent inbound sessions per remote reached.",
+                remoteEndPoint);
+            _ = SendIngressResponseAsync(
+                normalizedRequest,
+                remoteEndPoint,
+                inboundTransport,
+                statusCode: 486,
+                reasonPhrase: "Busy Here");
+            return;
+        }
+
         var localTag = SipProtocol.NewTag();
         var traceId = ResolveTraceId(callId);
         var configuration = new SipCallSessionConfiguration
@@ -679,6 +726,7 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
 
         if (!_sessions.TryAdd(callId, session))
         {
+            _perRemoteSessions.Release(callId);
             session.Dispose();
             return;
         }
@@ -688,6 +736,10 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
         HookSessionLifecycle(session);
         _sessionStartTimes[callId] = DateTimeOffset.UtcNow;
         _sessionTraceIds[callId] = traceId;
+        // #158 P1-5 (ring deadline): bound how long this session may sit in Ringing without an answer. Started
+        // before IncomingInvite so a consumer that answers/rejects synchronously cancels it via the lifecycle
+        // hook below; on expiry the monitor rejects 480, which drives the session to Terminated and cleanup.
+        _ringDeadline.Track(session);
         var inboundAttributes = new Dictionary<string, string>
         {
             ["remote_uri"] = remoteUri,
@@ -728,6 +780,12 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
     {
         session.StateChanged += (_, e) =>
         {
+            // #158 P1-5 (ring deadline): once the session leaves Ringing (answered, rejected, or terminated)
+            // it is no longer stale — cancel any pending ring-deadline timer. No-op for outbound sessions,
+            // which are never tracked.
+            if (e.NewState != SipDialogState.Ringing)
+                _ringDeadline.Cancel(session.CallId);
+
             var traceId = _sessionTraceIds.TryGetValue(session.CallId, out var activeTraceId)
                 ? activeTraceId
                 : ResolveTraceId(session.CallId);
@@ -763,6 +821,9 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
 
             if (e.NewState != SipDialogState.Terminated) return;
             _sessions.TryRemove(session.CallId, out var _);
+            // #158 P1-5 (per-remote cap): release the per-remote slot reserved at admission. No-op for outbound
+            // sessions, which are never admitted through the limiter.
+            _perRemoteSessions.Release(session.CallId);
             if (_sessionStartTimes.TryRemove(session.CallId, out var startedAt))
             {
                 _telemetry.PublishCdr(new SipCdrRecord
@@ -874,49 +935,18 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
 
         _requestSubscription.Dispose();
         _responseSubscription.Dispose();
+        _ringDeadline.Dispose();
         _serverTransactions.Dispose();
         foreach (var session in _sessions.Values)
             session.Dispose();
         _sessions.Clear();
+        _perRemoteSessions.Clear();
         _sessionStartTimes.Clear();
         _sessionTraceIds.Clear();
         _replacementTargets.Clear();
         foreach (var sub in _subscriptions.Values)
             sub.RefreshCts.Cancel();
         _subscriptions.Clear();
-    }
-
-    /// <summary>
-    /// Validates outbound INVITE request input.
-    /// </summary>
-    private static void ValidateInviteRequest(SipInviteRequest request)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-        if (string.IsNullOrWhiteSpace(request.LocalUsername))
-            throw new ArgumentException("LocalUsername is required.", nameof(request));
-        if (string.IsNullOrWhiteSpace(request.LocalDomain))
-            throw new ArgumentException("LocalDomain is required.", nameof(request));
-        if (string.IsNullOrWhiteSpace(request.RemoteUri))
-            throw new ArgumentException("RemoteUri is required.", nameof(request));
-        if (!string.IsNullOrWhiteSpace(request.PreferredIdentityUri))
-        {
-            var preferredIdentityUri = SipProtocol.ExtractUriFromNameAddr(request.PreferredIdentityUri)
-                ?? request.PreferredIdentityUri;
-            if (!SipProtocol.TryParseSipUri(
-                    preferredIdentityUri,
-                    out _,
-                    out _,
-                    out _))
-            {
-                throw new ArgumentException(
-                    $"PreferredIdentityUri must be a valid SIP URI, got '{request.PreferredIdentityUri}'.",
-                    nameof(request));
-            }
-        }
-        if (request.RemotePort is < 1 or > 65535)
-            throw new ArgumentOutOfRangeException(nameof(request), "RemotePort must be between 1 and 65535.");
-        if (request.Timeout <= TimeSpan.Zero)
-            throw new ArgumentOutOfRangeException(nameof(request), "Timeout must be positive.");
     }
 
     /// <summary>
@@ -927,14 +957,6 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
         if (Volatile.Read(ref _disposed) != 0)
             throw new ObjectDisposedException(nameof(SipCallSignalingService));
     }
-
-    /// <summary>
-    /// Builds lightweight trace correlation key for SIP events.
-    /// </summary>
-    private static string BuildCorrelationId(string callId, string operation, string? tag) =>
-        string.IsNullOrWhiteSpace(tag)
-            ? $"{callId}:{operation}"
-            : $"{callId}:{operation}:{tag}";
 
     /// <summary>
     /// Sends one ingress-level SIP response for early validation and provisional handling.
@@ -973,28 +995,4 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
         }
     }
 
-    /// <summary>
-    /// Returns true when method semantically requires an existing SIP dialog.
-    /// </summary>
-    private static bool IsDialogScopedMethod(string method)
-    {
-        var normalized = method.Trim().ToUpperInvariant();
-        return normalized is "BYE" or "INFO" or "UPDATE" or "PRACK" or "REFER" or "NOTIFY" or "SUBSCRIBE";
-    }
-
-    /// <summary>
-    /// Resolves effective remote port with SIPS default handling.
-    /// </summary>
-    private static int ResolveDefaultRemotePort(int configuredPort, bool secureTarget)
-    {
-        if (secureTarget && configuredPort == 5060)
-            return 5061;
-        return configuredPort;
-    }
-
-    /// <summary>
-    /// Resolves a deterministic trace identifier for SIP dialog observability.
-    /// </summary>
-    private static string ResolveTraceId(string fallback) =>
-        Activity.Current?.TraceId.ToString() ?? fallback;
 }

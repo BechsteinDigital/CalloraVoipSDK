@@ -892,11 +892,22 @@
   CalloraVoipSdk.SessionManager.ActiveCalls : System.Collections.Generic.IReadOnlyCollection<CalloraVoipSdk.Core.Domain.Calls.ICall> { get }
   CalloraVoipSdk.SessionManager.ActivePlaybacks : System.Collections.Generic.IReadOnlyCollection<CalloraVoipSdk.Core.Application.Media.IPlaybackSession> { get }
   CalloraVoipSdk.SessionManager.ActiveRecordings : System.Collections.Generic.IReadOnlyCollection<CalloraVoipSdk.Core.Application.Media.IRecordingSession> { get }
+  CalloraVoipSdk.SipSignalingHardeningConfiguration..ctor()
+  CalloraVoipSdk.SipSignalingHardeningConfiguration.AbsoluteServerTransactionLifetime : System.TimeSpan { get, init }
+  CalloraVoipSdk.SipSignalingHardeningConfiguration.InboundRingDeadline : System.TimeSpan { get, init }
+  CalloraVoipSdk.SipSignalingHardeningConfiguration.MaxConcurrentInboundSessions : System.Int32 { get, init }
+  CalloraVoipSdk.SipSignalingHardeningConfiguration.MaxInboundSessionsPerRemote : System.Int32 { get, init }
+  CalloraVoipSdk.SipSignalingHardeningConfiguration.MaxServerTransactions : System.Int32 { get, init }
   CalloraVoipSdk.SipTransport.Tcp = enum-value
   CalloraVoipSdk.SipTransport.Tls = enum-value
   CalloraVoipSdk.SipTransport.Udp = enum-value
   CalloraVoipSdk.SipTransport.Ws = enum-value
   CalloraVoipSdk.SipTransport.Wss = enum-value
+  CalloraVoipSdk.SipTransportHardeningConfiguration..ctor()
+  CalloraVoipSdk.SipTransportHardeningConfiguration.HandshakeTimeout : System.TimeSpan { get, init }
+  CalloraVoipSdk.SipTransportHardeningConfiguration.MaxConcurrentInboundConnections : System.Int32 { get, init }
+  CalloraVoipSdk.SipTransportHardeningConfiguration.MaxEndpointHintEntries : System.Int32 { get, init }
+  CalloraVoipSdk.SipTransportHardeningConfiguration.MaxInboundConnectionsPerRemote : System.Int32 { get, init }
   CalloraVoipSdk.TelemetryManager.CdrPublished : event System.EventHandler<CalloraVoipSdk.Core.Application.Observability.SipCdrRecord>
   CalloraVoipSdk.TelemetryManager.EventPublished : event System.EventHandler<CalloraVoipSdk.Core.Application.Observability.SipEventRecord>
   CalloraVoipSdk.TelemetryManager.MetricPublished : event System.EventHandler<CalloraVoipSdk.Core.Application.Observability.SipMetricRecord>
@@ -958,6 +969,8 @@
   CalloraVoipSdk.VoipConfiguration.PreferredVideoCodecs : System.Collections.Generic.IReadOnlyList<System.String> { get, init }
   CalloraVoipSdk.VoipConfiguration.RequireSecureSignalingForSdes : System.Boolean { get, init }
   CalloraVoipSdk.VoipConfiguration.Services : System.IServiceProvider { get, init }
+  CalloraVoipSdk.VoipConfiguration.SipSignalingHardening : CalloraVoipSdk.SipSignalingHardeningConfiguration { get, init }
+  CalloraVoipSdk.VoipConfiguration.SipTransportHardening : CalloraVoipSdk.SipTransportHardeningConfiguration { get, init }
   CalloraVoipSdk.VoipConfiguration.SrtpPolicy : CalloraVoipSdk.Core.Domain.Security.SrtpPolicy { get, init }
   CalloraVoipSdk.VoipConfiguration.Tls : CalloraVoipSdk.Core.Application.Ports.Security.TlsConfiguration { get, init }
   CalloraVoipSdk.VoipConfiguration.UserAgent : System.String { get, init }
@@ -1241,6 +1254,8 @@ TYPE class CalloraVoipSdk.Modules.ModuleFeatureUnavailableException
 TYPE class CalloraVoipSdk.PolicyManager
 TYPE class CalloraVoipSdk.QualityManager
 TYPE class CalloraVoipSdk.SessionManager
+TYPE class CalloraVoipSdk.SipSignalingHardeningConfiguration
+TYPE class CalloraVoipSdk.SipTransportHardeningConfiguration
 TYPE class CalloraVoipSdk.TelemetryManager
 TYPE class CalloraVoipSdk.VoipClient
 TYPE class CalloraVoipSdk.VoipClientInitializationException

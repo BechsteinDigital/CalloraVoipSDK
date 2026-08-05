@@ -10,7 +10,7 @@ internal sealed class CapturingSipTransportRuntime : ISipTransportRuntime
 {
     private readonly List<CapturedSipRequest> _requests = new();
     private readonly Dictionary<int, Action<IPEndPoint, SipResponse>> _responseHandlers = new();
-    private readonly Dictionary<int, Action<IPEndPoint, SipRequest>> _requestHandlers = new();
+    private readonly Dictionary<int, Action<SipInboundRequestContext, SipRequest>> _requestHandlers = new();
     private readonly object _sync = new();
     private TaskCompletionSource<CapturedSipRequest> _nextRequest =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -46,7 +46,7 @@ internal sealed class CapturingSipTransportRuntime : ISipTransportRuntime
     {
     }
 
-    public IDisposable SubscribeRequests(Action<IPEndPoint, SipRequest> handler)
+    public IDisposable SubscribeRequests(Action<SipInboundRequestContext, SipRequest> handler)
     {
         ArgumentNullException.ThrowIfNull(handler);
         lock (_sync)
@@ -59,20 +59,28 @@ internal sealed class CapturingSipTransportRuntime : ISipTransportRuntime
 
     /// <summary>
     /// Simulates an inbound datagram by delivering <paramref name="request"/> to every subscribed request
-    /// handler (as the real transport would on receiving a request). Responses the handler emits are captured
-    /// via <see cref="SnapshotResponses"/>.
+    /// handler (as the real transport would on receiving a request). <paramref name="transport"/> is the real
+    /// receive transport (defaulting to UDP) and <paramref name="connectionId"/> the accepted inbound
+    /// connection id, so a test can exercise the transport/connection a response is routed onto — including a
+    /// request whose Via forges a different transport than it arrived on (#158 P1-2). Responses the handler
+    /// emits are captured via <see cref="SnapshotResponses"/>.
     /// </summary>
-    public void DeliverInboundRequest(IPEndPoint remoteEndPoint, SipRequest request)
+    public void DeliverInboundRequest(
+        IPEndPoint remoteEndPoint,
+        SipRequest request,
+        SipTransportProtocol transport = SipTransportProtocol.Udp,
+        int? connectionId = null)
     {
         ArgumentNullException.ThrowIfNull(remoteEndPoint);
         ArgumentNullException.ThrowIfNull(request);
 
-        Action<IPEndPoint, SipRequest>[] handlers;
+        Action<SipInboundRequestContext, SipRequest>[] handlers;
         lock (_sync)
             handlers = _requestHandlers.Values.ToArray();
 
+        var context = new SipInboundRequestContext(remoteEndPoint, transport, connectionId);
         foreach (var handler in handlers)
-            handler(remoteEndPoint, request);
+            handler(context, request);
     }
 
     private void RemoveRequestHandler(int id)
@@ -130,10 +138,10 @@ internal sealed class CapturingSipTransportRuntime : ISipTransportRuntime
             throw new IOException($"Simulated transport send failure for {request.Method}.");
     }
 
-    private readonly List<(int StatusCode, IReadOnlyDictionary<string, string> Headers, IPEndPoint RemoteEndPoint)> _responses = new();
+    private readonly List<(int StatusCode, IReadOnlyDictionary<string, string> Headers, IPEndPoint RemoteEndPoint, SipTransportProtocol Transport, int? InboundConnectionId)> _responses = new();
 
-    /// <summary>Snapshot of the responses sent through this transport (status, headers, destination).</summary>
-    public IReadOnlyList<(int StatusCode, IReadOnlyDictionary<string, string> Headers, IPEndPoint RemoteEndPoint)> SnapshotResponses()
+    /// <summary>Snapshot of the responses sent through this transport (status, headers, destination, transport, inbound connection id).</summary>
+    public IReadOnlyList<(int StatusCode, IReadOnlyDictionary<string, string> Headers, IPEndPoint RemoteEndPoint, SipTransportProtocol Transport, int? InboundConnectionId)> SnapshotResponses()
     {
         lock (_sync)
             return _responses.ToArray();
@@ -148,7 +156,7 @@ internal sealed class CapturingSipTransportRuntime : ISipTransportRuntime
         CancellationToken ct = default)
     {
         lock (_sync)
-            _responses.Add((statusCode, headers, remoteEndPoint));
+            _responses.Add((statusCode, headers, remoteEndPoint, SipTransportProtocol.Udp, null));
         return Task.CompletedTask;
     }
 
@@ -159,8 +167,13 @@ internal sealed class CapturingSipTransportRuntime : ISipTransportRuntime
         string? body,
         IPEndPoint remoteEndPoint,
         SipTransportProtocol transport,
-        CancellationToken ct = default) =>
-        SendResponseAsync(statusCode, reasonPhrase, headers, body, remoteEndPoint, ct);
+        int? inboundConnectionId = null,
+        CancellationToken ct = default)
+    {
+        lock (_sync)
+            _responses.Add((statusCode, headers, remoteEndPoint, transport, inboundConnectionId));
+        return Task.CompletedTask;
+    }
 
     public Task<IPEndPoint> ResolveRemoteEndPointAsync(
         string host,
@@ -227,6 +240,17 @@ internal sealed class CapturingSipTransportRuntime : ISipTransportRuntime
         var response = ResponseFactory?.Invoke(request);
         if (response is not null)
             DispatchResponse(request.RemoteEndPoint, response);
+    }
+
+    /// <summary>
+    /// Simulates an inbound SIP response by delivering it to every subscribed response handler (as the real
+    /// transport would on receiving a response). Lets a test drive a client transaction's response path.
+    /// </summary>
+    public void DeliverInboundResponse(IPEndPoint remoteEndPoint, SipResponse response)
+    {
+        ArgumentNullException.ThrowIfNull(remoteEndPoint);
+        ArgumentNullException.ThrowIfNull(response);
+        DispatchResponse(remoteEndPoint, response);
     }
 
     private void DispatchResponse(IPEndPoint remoteEndPoint, SipResponse response)

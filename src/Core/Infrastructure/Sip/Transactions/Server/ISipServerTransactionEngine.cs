@@ -10,11 +10,12 @@ namespace CalloraVoipSdk.Core.Infrastructure.Sip.Transactions.Server;
 internal interface ISipServerTransactionEngine : IDisposable
 {
     /// <summary>
-    /// Registers one inbound request and returns processing guidance.
+    /// Registers one inbound request and returns processing guidance. The <see cref="SipInboundRequestContext"/>
+    /// carries the real receive transport and accepted inbound connection id, which the transaction retains so
+    /// every response — initial, retransmit, or resend — is routed back over that connection (#158 P1-2).
     /// </summary>
     SipServerTransactionRegistration RegisterInboundRequest(
-        IPEndPoint remoteEndPoint,
-        SipTransportProtocol transport,
+        SipInboundRequestContext context,
         SipRequest request);
 
     /// <summary>

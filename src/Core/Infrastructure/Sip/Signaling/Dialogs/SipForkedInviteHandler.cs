@@ -12,6 +12,12 @@ namespace CalloraVoipSdk.Core.Infrastructure.Sip.Signaling;
 /// </summary>
 internal sealed class SipForkedInviteHandler
 {
+    /// <summary>
+    /// Upper bound on non-selected fork tags tracked for BYE de-duplication (#158 P1-8). A 2xx-fork flood with
+    /// many distinct To-tags would otherwise grow this set without limit.
+    /// </summary>
+    private const int MaxTrackedForkTags = 64;
+
     private readonly ISipCallSessionContext _context;
     private readonly object _sync = new();
     private readonly HashSet<string> _terminatedForkedInviteTags = new(StringComparer.Ordinal);
@@ -49,8 +55,16 @@ internal sealed class SipForkedInviteHandler
         {
             lock (_sync)
             {
-                if (_terminatedForkedInviteTags.Add(remoteTag))
+                if (_terminatedForkedInviteTags.Count >= MaxTrackedForkTags)
+                {
+                    // #158 P1-8: at the tracking ceiling, still send the BYE but do not grow the set. A rare
+                    // duplicate BYE under a 2xx-fork flood is acceptable; unbounded per-tag tracking is not.
                     shouldSendBye = true;
+                }
+                else if (_terminatedForkedInviteTags.Add(remoteTag))
+                {
+                    shouldSendBye = true;
+                }
             }
         }
 

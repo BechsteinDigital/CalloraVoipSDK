@@ -109,6 +109,20 @@ public sealed class VoipConfiguration
     public IceConfiguration Ice { get; init; } = new();
 
     /// <summary>
+    /// Admission and slowloris limits for the inbound SIP listener (connection-oriented transports). Bounds
+    /// how many inbound connections a peer can pin and how long a handshake may stall (#158 P1-3/P1-4). The
+    /// defaults match the SDK's built-in limits.
+    /// </summary>
+    public SipTransportHardeningConfiguration SipTransportHardening { get; init; } = new();
+
+    /// <summary>
+    /// Resource limits for the SIP signaling layer: concurrent inbound session caps (global and per-remote),
+    /// the un-answered ring deadline, and the inbound server-transaction table bounds (#158 P1-5/P1-7). The
+    /// defaults match the SDK's built-in limits.
+    /// </summary>
+    public SipSignalingHardeningConfiguration SipSignalingHardening { get; init; } = new();
+
+    /// <summary>
     /// Maximum simultaneous calls per phone line. 0 = unlimited.
     /// </summary>
     public int MaxConcurrentCallsPerLine { get; init; } = 10;

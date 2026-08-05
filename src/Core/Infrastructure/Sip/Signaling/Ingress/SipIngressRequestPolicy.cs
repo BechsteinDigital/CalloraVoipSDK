@@ -1,4 +1,3 @@
-using CalloraVoipSdk.Core.Infrastructure.Sip.Transport;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Wire;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Sip.Signaling;
@@ -8,32 +7,6 @@ namespace CalloraVoipSdk.Core.Infrastructure.Sip.Signaling;
 /// </summary>
 internal static class SipIngressRequestPolicy
 {
-    /// <summary>
-    /// Detects signaling transport from the top Via header.
-    /// </summary>
-    public static SipTransportProtocol DetectTransportFromVia(string? viaHeader)
-    {
-        if (string.IsNullOrWhiteSpace(viaHeader))
-            return SipTransportProtocol.Udp;
-
-        var marker = "SIP/2.0/";
-        var start = viaHeader.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
-        if (start < 0)
-            return SipTransportProtocol.Udp;
-
-        var tail = viaHeader[(start + marker.Length)..];
-        var tokenEnd = tail.IndexOfAny([' ', ';']);
-        var token = (tokenEnd >= 0 ? tail[..tokenEnd] : tail).Trim();
-        return token.ToUpperInvariant() switch
-        {
-            "TCP" => SipTransportProtocol.Tcp,
-            "TLS" => SipTransportProtocol.Tls,
-            "WS" => SipTransportProtocol.Ws,
-            "WSS" => SipTransportProtocol.Wss,
-            _ => SipTransportProtocol.Udp
-        };
-    }
-
     /// <summary>
     /// Validates ingress request framing semantics required before dialog or transaction dispatch.
     /// </summary>

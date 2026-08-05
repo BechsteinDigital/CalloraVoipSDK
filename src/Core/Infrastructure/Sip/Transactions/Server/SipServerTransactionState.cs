@@ -17,6 +17,8 @@ internal sealed class SipServerTransactionState : IDisposable
     private IDisposable? _inviteFailureRetransmitTimer;
     private IDisposable? _inviteSuccessRetransmitTimer;
     private IDisposable? _cleanupTimer;
+    private IDisposable? _absoluteExpiryTimer;
+    private int _disposed;
 
     /// <summary>
     /// Creates state container for one server transaction key.
@@ -26,11 +28,13 @@ internal sealed class SipServerTransactionState : IDisposable
         IPEndPoint remoteEndPoint,
         SipTransportProtocol transport,
         string method,
-        ILogger logger)
+        ILogger logger,
+        int? inboundConnectionId = null)
     {
         Key = key;
         RemoteEndPoint = remoteEndPoint;
         Transport = transport;
+        InboundConnectionId = inboundConnectionId;
         Method = method;
         _logger = logger;
     }
@@ -51,6 +55,12 @@ internal sealed class SipServerTransactionState : IDisposable
     public SipTransportProtocol Transport { get; private set; }
 
     /// <summary>
+    /// Identifier of the accepted inbound connection this transaction's request arrived on, or <c>null</c>
+    /// for connectionless (UDP) receipt. Responses are routed back over this exact connection (#158 P1-2).
+    /// </summary>
+    public int? InboundConnectionId { get; private set; }
+
+    /// <summary>
     /// Request method this transaction belongs to.
     /// </summary>
     public string Method { get; }
@@ -59,6 +69,12 @@ internal sealed class SipServerTransactionState : IDisposable
     /// Returns true when this state belongs to an INVITE server transaction.
     /// </summary>
     public bool IsInvite => string.Equals(Method, "INVITE", StringComparison.Ordinal);
+
+    /// <summary>
+    /// Returns true once this transaction state has been disposed (removed from the engine). Lets the engine
+    /// skip arming the absolute-expiry timer on a state that a concurrent cleanup already reaped (#158 P1-7).
+    /// </summary>
+    public bool IsDisposed => Volatile.Read(ref _disposed) != 0;
 
     /// <summary>
     /// Flag set when first request for this transaction has been observed.
@@ -79,6 +95,13 @@ internal sealed class SipServerTransactionState : IDisposable
     /// Flag set when cleanup timer has started.
     /// </summary>
     public int CleanupStarted;
+
+    /// <summary>
+    /// Flag set when the absolute-expiry safety-net timer has started (#158 P1-7). Armed once at transaction
+    /// creation so a transaction that never reaches a final response (e.g. an INVITE answered only with a 100
+    /// Trying) is still reaped, since the RFC cleanup timers are armed only on a final response.
+    /// </summary>
+    public int AbsoluteExpiryStarted;
 
     /// <summary>
     /// Cancellation token for ACK-driven completion of INVITE error retransmissions.
@@ -176,15 +199,63 @@ internal sealed class SipServerTransactionState : IDisposable
     }
 
     /// <summary>
-    /// Updates endpoint and transport for subsequent response retransmissions.
+    /// Replaces current absolute-expiry safety-net timer handle (#158 P1-7).
+    /// Any previously registered handle is disposed first.
     /// </summary>
-    public void UpdateRemote(IPEndPoint remoteEndPoint, SipTransportProtocol transport)
+    public void ReplaceAbsoluteExpiryTimer(IDisposable timerHandle)
+    {
+        ArgumentNullException.ThrowIfNull(timerHandle);
+        IDisposable? previous;
+        lock (_timerSync)
+        {
+            previous = _absoluteExpiryTimer;
+            _absoluteExpiryTimer = timerHandle;
+        }
+
+        DisposeTimerHandleSafe(previous, "absolute expiry");
+    }
+
+    /// <summary>
+    /// Cancels and clears the absolute-expiry safety-net timer.
+    /// </summary>
+    public void CancelAbsoluteExpiryTimer()
+    {
+        IDisposable? handle;
+        lock (_timerSync)
+        {
+            handle = _absoluteExpiryTimer;
+            _absoluteExpiryTimer = null;
+        }
+
+        DisposeTimerHandleSafe(handle, "absolute expiry");
+    }
+
+    /// <summary>
+    /// Adopts the accepted inbound connection for this transaction: the real receive transport, its packet
+    /// source and (for connection-oriented transports) its connection id, applied atomically. Called on
+    /// registration and on every request retransmission so a retransmit arriving on a fresh connection
+    /// re-points subsequent responses at that connection (#158 P1-2).
+    /// </summary>
+    public void AdoptInboundConnection(IPEndPoint remoteEndPoint, SipTransportProtocol transport, int? inboundConnectionId)
     {
         lock (_sync)
         {
             RemoteEndPoint = remoteEndPoint;
             Transport = transport;
+            InboundConnectionId = inboundConnectionId;
         }
+    }
+
+    /// <summary>
+    /// Updates only the remote endpoint for subsequent response retransmissions (e.g. a UDP §18.2.2
+    /// rport-resolved destination), leaving the authoritative transport and inbound connection id — set from
+    /// the accepted connection at registration — unchanged so a Via-derived caller transport can never
+    /// override the real one (#158 P1-2).
+    /// </summary>
+    public void UpdateRemoteEndPoint(IPEndPoint remoteEndPoint)
+    {
+        lock (_sync)
+            RemoteEndPoint = remoteEndPoint;
     }
 
     /// <summary>
@@ -208,8 +279,12 @@ internal sealed class SipServerTransactionState : IDisposable
     /// <inheritdoc />
     public void Dispose()
     {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            return;
+
         CancelInviteRetransmissionTimers();
         CancelCleanupTimer();
+        CancelAbsoluteExpiryTimer();
 
         try
         {

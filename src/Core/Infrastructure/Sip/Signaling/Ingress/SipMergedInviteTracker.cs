@@ -14,12 +14,30 @@ internal sealed class SipMergedInviteTracker
 {
     private static readonly TimeSpan EntryTtl = TimeSpan.FromMinutes(2);
 
+    /// <summary>
+    /// Default ceiling on tracked identity tuples (#158 P1-7). Expired entries are only pruned every 64
+    /// registrations, so a flood of distinct fresh identities could otherwise grow the map unbounded between
+    /// prunes; this bounds it hard.
+    /// </summary>
+    private const int DefaultMaxEntries = 4096;
+
     // Identity tuple (Call-ID|From-tag|CSeq|INVITE) -> topmost Via branch first seen for it,
     // plus when. The branch separates a merge (different branch) from a retransmission
     // (same branch).
     private readonly ConcurrentDictionary<string, (string? Branch, DateTimeOffset SeenAt)> _seen =
         new(StringComparer.Ordinal);
+    private readonly int _maxEntries;
     private int _registrations;
+
+    /// <summary>
+    /// Creates a merged-INVITE tracker.
+    /// </summary>
+    /// <param name="maxEntries">Ceiling on tracked identity tuples; non-positive falls back to the 4096
+    /// default (#158 P1-7).</param>
+    public SipMergedInviteTracker(int maxEntries = DefaultMaxEntries)
+    {
+        _maxEntries = maxEntries > 0 ? maxEntries : DefaultMaxEntries;
+    }
 
     /// <summary>
     /// Registers one candidate INVITE. Returns true only when the request is a merged
@@ -54,6 +72,16 @@ internal sealed class SipMergedInviteTracker
             // Retransmission: keep the original branch, refresh the window.
             _seen[key] = (existing.Branch, now);
             return false;
+        }
+
+        // New identity tuple. Enforce the hard cap before inserting: prune expired first, and if a burst of
+        // still-fresh distinct identities keeps the map at the ceiling, leave this one untracked rather than
+        // grow unbounded. A missed future merge-detection under flood is acceptable; unbounded memory is not.
+        if (_seen.Count >= _maxEntries)
+        {
+            PruneExpired(now);
+            if (_seen.Count >= _maxEntries)
+                return false;
         }
 
         _seen[key] = (branch, now);

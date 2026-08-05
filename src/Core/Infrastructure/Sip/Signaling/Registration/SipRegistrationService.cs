@@ -135,7 +135,6 @@ internal sealed class SipRegistrationService : ISipRegistrationService
             ? Math.Max(1, request.ExpiresSeconds)
             : 0;
         var reducedBodyRetryUsed = false;
-        var schemeDowngradeRetryUsed = false;
         // Bound stale-nonce retries: one fresh nonce should suffice; a registrar that keeps
         // answering stale=true must not spin this into an unbounded REGISTER loop.
         var staleRetries = 0;
@@ -424,17 +423,9 @@ internal sealed class SipRegistrationService : ISipRegistrationService
                     }
                 }
 
-                if (response.StatusCode == 416
-                    && !schemeDowngradeRetryUsed
-                    && TryDowngradeSipsToSip(requestUri, out var downgradedUri)
-                    && visitedTargets.Add(downgradedUri))
-                {
-                    schemeDowngradeRetryUsed = true;
-                    pendingTargets.Enqueue(downgradedUri);
-                    cseq++;
-                    targetRetried = true;
-                    break;
-                }
+                // A 416 (Unsupported URI Scheme) on a sips: registrar target is NOT auto-downgraded to sip:
+                // (#158 P1-1): downgrading would strip the caller's end-to-end SIPS security intent to a cleartext
+                // hop. The 416 propagates as a REGISTER failure instead.
 
                 _telemetry.PublishMetric(new SipMetricRecord
                 {
@@ -661,19 +652,6 @@ internal sealed class SipRegistrationService : ISipRegistrationService
         }
 
         return enqueuedAny;
-    }
-
-    /// <summary>
-    /// Converts a SIPS URI to SIP for 416 retry handling.
-    /// </summary>
-    private static bool TryDowngradeSipsToSip(string requestUri, out string sipUri)
-    {
-        sipUri = string.Empty;
-        if (!requestUri.StartsWith("sips:", StringComparison.OrdinalIgnoreCase))
-            return false;
-
-        sipUri = $"sip:{requestUri[5..]}";
-        return SipProtocol.TryParseSipUri(sipUri, out _, out _, out _);
     }
 
     /// <summary>

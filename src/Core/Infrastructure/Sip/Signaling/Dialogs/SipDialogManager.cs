@@ -8,6 +8,13 @@ namespace CalloraVoipSdk.Core.Infrastructure.Sip.Signaling;
 /// </summary>
 internal sealed class SipDialogManager
 {
+    /// <summary>
+    /// Upper bound on concurrently tracked early dialogs (#158 P1-8). A forking proxy or a malicious peer can
+    /// emit provisional responses carrying many distinct To-tags, each creating a new early dialog; this caps
+    /// the fan-out. Non-selected early dialogs are additionally released as soon as a dialog is confirmed.
+    /// </summary>
+    private const int MaxEarlyDialogs = 32;
+
     private readonly object _sync = new();
     private readonly Dictionary<string, SipDialogPath> _earlyDialogs = new(StringComparer.Ordinal);
     private readonly Dictionary<string, SipDialogPath> _confirmedDialogs = new(StringComparer.Ordinal);
@@ -71,6 +78,18 @@ internal sealed class SipDialogManager
     }
 
     /// <summary>
+    /// Number of currently tracked early dialogs (#158 P1-8). Used by hardening tests and diagnostics.
+    /// </summary>
+    internal int EarlyDialogCount
+    {
+        get
+        {
+            lock (_sync)
+                return _earlyDialogs.Count;
+        }
+    }
+
+    /// <summary>
     /// Updates early/confirmed dialog state from an INVITE transaction response.
     /// </summary>
     public void ApplyInviteResponse(
@@ -94,6 +113,11 @@ internal sealed class SipDialogManager
         {
             if (SipProtocol.IsProvisional(response.StatusCode))
             {
+                // #158 P1-8: cap early-dialog fan-out. An already-tracked tag is always refreshed; a new tag is
+                // dropped once the ceiling is reached so a flood of distinct-tag provisionals stays bounded.
+                if (!_earlyDialogs.ContainsKey(toTag) && _earlyDialogs.Count >= MaxEarlyDialogs)
+                    return;
+
                 _earlyDialogs[toTag] = path;
                 _latestEarlyDialogTag = toTag;
                 return;
@@ -113,9 +137,11 @@ internal sealed class SipDialogManager
                 _confirmedDialogs[toTag] = confirmedPath;
                 _latestConfirmedDialogTag = toTag;
                 _activeConfirmedDialogTag ??= toTag;
-                _earlyDialogs.Remove(toTag);
-                if (string.Equals(_latestEarlyDialogTag, toTag, StringComparison.Ordinal))
-                    _latestEarlyDialogTag = _earlyDialogs.Count > 0 ? _earlyDialogs.Keys.Last() : null;
+                // #158 P1-8: the dialog is confirmed — release every early dialog (RFC 3261 §12/§13.2). The
+                // selected branch is now a confirmed dialog and the non-selected early dialogs from other forks
+                // can no longer be chosen, so none of them need to be retained.
+                _earlyDialogs.Clear();
+                _latestEarlyDialogTag = null;
                 return;
             }
 

@@ -35,15 +35,15 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
     private readonly ISipWireCodec _wireCodec;
     private readonly ISipRouteResolver _routeResolver;
     private readonly SipTransportProtocol _defaultTransport;
+    private readonly SipInboundConnectionAcceptor _acceptor;
+    private readonly int _maxEndpointHintEntries;
     private readonly CancellationTokenSource _stop = new();
-    private readonly ConcurrentDictionary<int, Action<IPEndPoint, SipRequest>> _requestHandlers = new();
+    private readonly ConcurrentDictionary<int, Action<SipInboundRequestContext, SipRequest>> _requestHandlers = new();
     private readonly ConcurrentDictionary<int, Action<IPEndPoint, SipResponse>> _responseHandlers = new();
     private readonly ConcurrentDictionary<string, SipTransportProtocol> _endpointTransportHints = new();
     // Maps a resolved endpoint (transport+addr:port key) to the SIP domain it was resolved from, so
     // outbound TLS uses the domain for SNI and certificate name validation, not the literal IP.
     private readonly ConcurrentDictionary<string, string> _endpointTlsHosts = new();
-    private readonly ConcurrentDictionary<int, SipStreamConnection> _inboundStreamConnections = new();
-    private readonly ConcurrentDictionary<int, SipWebSocketConnection> _inboundWebSocketConnections = new();
     private readonly SipOutboundConnectionPool _outboundPool;
     private readonly Task _udpReceiveLoop;
     private readonly Task _tcpAcceptLoop;
@@ -52,8 +52,6 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
     private readonly Task _wssAcceptLoop;
 
     private int _handlerIdSequence;
-    private int _inboundConnectionId;
-    private int _inboundWebSocketConnectionId;
     private int _disposed;
 
     /// <summary>
@@ -82,7 +80,8 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
         ISipWireCodec wireCodec,
         TlsConfiguration? tlsConfiguration,
         SipTransportProtocol defaultTransport,
-        ISipRouteResolver? routeResolver)
+        ISipRouteResolver? routeResolver,
+        SipTransportOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(loggerFactory);
 
@@ -93,8 +92,20 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
         _tlsCertificateProvider = tlsConfiguration is null ? null : new SipTlsCertificateProvider(tlsConfiguration);
         _tlsCertificate = _tlsCertificateProvider?.GetCertificate();
         _defaultTransport = defaultTransport;
+        var effectiveOptions = options ?? SipTransportOptions.Default;
+        _maxEndpointHintEntries = effectiveOptions.MaxEndpointHintEntries;
+        _acceptor = new SipInboundConnectionAcceptor(
+            effectiveOptions,
+            _tlsCertificate,
+            _logger,
+            HandleInboundPayloadAsync);
+        // Frames received on an outbound (pooled) connection carry no accepted inbound connection id — a
+        // response to them can only ever go back out through the pool, so the id is null here (#158 P1-2).
         _outboundPool = new SipOutboundConnectionPool(
-            _logger, _endpointTlsHosts, ValidateTlsServerCertificate, HandleInboundPayloadAsync);
+            _logger,
+            _endpointTlsHosts,
+            ValidateTlsServerCertificate,
+            (remote, transport, payload) => HandleInboundPayloadAsync(remote, transport, payload, inboundConnectionId: null));
 
         _udp = new UdpClient(new IPEndPoint(IPAddress.Any, 0));
 
@@ -146,7 +157,7 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
     /// <summary>
     /// Registers a SIP request handler and returns a disposal token for unsubscription.
     /// </summary>
-    public IDisposable SubscribeRequests(Action<IPEndPoint, SipRequest> handler)
+    public IDisposable SubscribeRequests(Action<SipInboundRequestContext, SipRequest> handler)
     {
         ArgumentNullException.ThrowIfNull(handler);
         var id = Interlocked.Increment(ref _handlerIdSequence);
@@ -230,11 +241,15 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
         CancellationToken ct = default)
     {
         var transport = InferTransport(requestUri: null, remoteEndPoint);
-        return SendResponseAsync(statusCode, reasonPhrase, headers, body, remoteEndPoint, transport, ct);
+        return SendResponseAsync(statusCode, reasonPhrase, headers, body, remoteEndPoint, transport, inboundConnectionId: null, ct);
     }
 
     /// <summary>
-    /// Sends a SIP response over an explicit transport.
+    /// Sends a SIP response over an explicit transport. For a connection-oriented transport the response is
+    /// sent back over the accepted inbound connection identified by <paramref name="inboundConnectionId"/>
+    /// when that connection is still live; otherwise it falls back to the outbound connection pool (or the
+    /// UDP socket for connectionless transport). This keeps a TCP/TLS/WS/WSS response on the connection the
+    /// request actually arrived on instead of dialling the peer's ephemeral source port (#158 P1-2).
     /// </summary>
     public async Task SendResponseAsync(
         int statusCode,
@@ -243,11 +258,52 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
         string? body,
         IPEndPoint remoteEndPoint,
         SipTransportProtocol transport,
+        int? inboundConnectionId = null,
         CancellationToken ct = default)
     {
         SipWireTraceLogger.ResponseSent(_logger, statusCode, reasonPhrase, headers, body, remoteEndPoint, transport);
         var bytes = _wireCodec.SerializeResponse(statusCode, reasonPhrase, headers, body);
+
+        if (inboundConnectionId is { } connectionId
+            && await TrySendOverInboundConnectionAsync(connectionId, transport, bytes, ct).ConfigureAwait(false))
+        {
+            return;
+        }
+
         await SendPayloadAsync(remoteEndPoint, bytes, transport, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Attempts to send one payload back over the accepted inbound connection identified by
+    /// <paramref name="connectionId"/>. Returns false — so the caller falls back to the outbound path — when
+    /// the transport is connectionless, no such connection is tracked, or the connection was already closed.
+    /// A send failure over a live connection is propagated (the caller's transaction handles it per §17.2.4).
+    /// </summary>
+    private async Task<bool> TrySendOverInboundConnectionAsync(
+        int connectionId,
+        SipTransportProtocol transport,
+        ReadOnlyMemory<byte> payload,
+        CancellationToken ct)
+    {
+        switch (transport)
+        {
+            case SipTransportProtocol.Tcp:
+            case SipTransportProtocol.Tls:
+                if (!_acceptor.TryGetStreamConnection(connectionId, out var streamConnection) || streamConnection is null)
+                    return false;
+                await streamConnection.SendAsync(payload, ct).ConfigureAwait(false);
+                return true;
+
+            case SipTransportProtocol.Ws:
+            case SipTransportProtocol.Wss:
+                if (!_acceptor.TryGetWebSocketConnection(connectionId, out var webSocketConnection) || webSocketConnection is null)
+                    return false;
+                await webSocketConnection.SendAsync(payload, ct).ConfigureAwait(false);
+                return true;
+
+            default:
+                return false;
+        }
     }
 
     /// <summary>
@@ -284,9 +340,9 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
             {
                 var endpointKey = SipTransportRuntimeUtilities.BuildEndpointKey(null, candidate.EndPoint);
                 var transportEndpointKey = SipTransportRuntimeUtilities.BuildEndpointKey(candidate.Transport, candidate.EndPoint);
-                _endpointTransportHints[endpointKey] = candidate.Transport;
-                _endpointTransportHints[transportEndpointKey] = candidate.Transport;
-                _endpointTlsHosts[transportEndpointKey] = host;
+                PutBounded(_endpointTransportHints, endpointKey, candidate.Transport);
+                PutBounded(_endpointTransportHints, transportEndpointKey, candidate.Transport);
+                PutBounded(_endpointTlsHosts, transportEndpointKey, host);
             }
 
             return resolution.Candidates;
@@ -307,7 +363,7 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
                     _ => 5060
                 };
             var endpoint = await RemoteEndPointResolver.ResolveAsync(host, effectivePort, ct).ConfigureAwait(false);
-            _endpointTlsHosts[SipTransportRuntimeUtilities.BuildEndpointKey(transport, endpoint)] = host;
+            PutBounded(_endpointTlsHosts, SipTransportRuntimeUtilities.BuildEndpointKey(transport, endpoint), host);
             return
             [
                 new SipRouteCandidate
@@ -416,7 +472,7 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
                 continue;
             }
 
-            await HandleInboundPayloadAsync(packet.RemoteEndPoint, SipTransportProtocol.Udp, packet.Buffer)
+            await HandleInboundPayloadAsync(packet.RemoteEndPoint, SipTransportProtocol.Udp, packet.Buffer, inboundConnectionId: null)
                 .ConfigureAwait(false);
         }
     }
@@ -449,7 +505,7 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
                 continue;
             }
 
-            _ = RegisterInboundStreamConnectionAsync(client, protocol, ct);
+            _ = _acceptor.AcceptStreamConnectionAsync(client, protocol, ct);
         }
     }
 
@@ -489,123 +545,7 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
                 continue;
             }
 
-            _ = RegisterInboundWebSocketConnectionAsync(context, protocol, ct);
-        }
-    }
-
-    /// <summary>
-    /// Registers one accepted inbound WS/WSS connection.
-    /// </summary>
-    private async Task RegisterInboundWebSocketConnectionAsync(
-        HttpListenerContext context,
-        SipTransportProtocol protocol,
-        CancellationToken ct)
-    {
-        try
-        {
-            if (!context.Request.IsWebSocketRequest)
-            {
-                context.Response.StatusCode = (int)HttpStatusCode.BadRequest;
-                context.Response.Close();
-                return;
-            }
-
-            // RFC 7118 §5: a SIP-over-WebSocket client must offer the "sip" subprotocol. Reject the
-            // upgrade when it does not, rather than accepting a WebSocket with no negotiated
-            // subprotocol that could not carry SIP framing (HARD-E6).
-            var sipSubProtocol = SipTransportRuntimeUtilities.SelectOfferedSipSubProtocol(context.Request);
-            if (sipSubProtocol is null)
-            {
-                context.Response.StatusCode = (int)HttpStatusCode.BadRequest;
-                context.Response.Close();
-                return;
-            }
-
-            var wsContext = await context.AcceptWebSocketAsync(sipSubProtocol).WaitAsync(ct).ConfigureAwait(false);
-            var remoteEndPoint = context.Request.RemoteEndPoint ?? new IPEndPoint(IPAddress.Loopback, 0);
-            var id = Interlocked.Increment(ref _inboundWebSocketConnectionId);
-            var connection = new SipWebSocketConnection(
-                protocol,
-                wsContext.WebSocket,
-                remoteEndPoint,
-                _logger,
-                HandleInboundPayloadAsync,
-                onClosed: () => _inboundWebSocketConnections.TryRemove(id, out _));
-            _inboundWebSocketConnections[id] = connection;
-            _logger.LogDebug("Accepted SIP {Transport} WebSocket from {Remote}.", protocol, remoteEndPoint);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "Failed to accept SIP {Transport} WebSocket connection.", protocol);
-            try
-            {
-                context.Response.Abort();
-            }
-            catch (Exception abortEx)
-            {
-                _logger.LogDebug(abortEx, "Failed aborting failed SIP {Transport} WebSocket context.", protocol);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Registers one accepted inbound TCP/TLS connection.
-    /// </summary>
-    private async Task RegisterInboundStreamConnectionAsync(
-        TcpClient client,
-        SipTransportProtocol protocol,
-        CancellationToken ct)
-    {
-        Stream? stream = null;
-        try
-        {
-            stream = client.GetStream();
-            if (protocol == SipTransportProtocol.Tls)
-            {
-                if (_tlsCertificate is null)
-                    throw new InvalidOperationException("TLS listener has no certificate.");
-
-                var sslStream = new SslStream(stream, leaveInnerStreamOpen: false);
-                await sslStream.AuthenticateAsServerAsync(
-                        _tlsCertificate,
-                        clientCertificateRequired: false,
-                        enabledSslProtocols: SslProtocols.Tls12 | SslProtocols.Tls13,
-                        checkCertificateRevocation: false)
-                    .ConfigureAwait(false);
-                stream = sslStream;
-            }
-
-            var id = Interlocked.Increment(ref _inboundConnectionId);
-            var connection = new SipStreamConnection(
-                protocol,
-                client,
-                stream,
-                _logger,
-                HandleInboundPayloadAsync,
-                onClosed: () => _inboundStreamConnections.TryRemove(id, out _));
-            _inboundStreamConnections[id] = connection;
-            _logger.LogDebug("Accepted SIP {Transport} stream from {Remote}.", protocol, connection.RemoteEndPoint);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "Failed to register inbound SIP {Transport} stream connection.", protocol);
-            try
-            {
-                stream?.Dispose();
-            }
-            catch
-            {
-                // best effort cleanup
-            }
-
-            try
-            {
-                client.Dispose();
-            }
-            catch
-            {
-                // best effort cleanup
-            }
+            _ = _acceptor.AcceptWebSocketConnectionAsync(context, protocol, ct);
         }
     }
 
@@ -649,22 +589,26 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
     private Task HandleInboundPayloadAsync(
         IPEndPoint remoteEndPoint,
         SipTransportProtocol transport,
-        ReadOnlyMemory<byte> payload)
+        ReadOnlyMemory<byte> payload,
+        int? inboundConnectionId)
     {
-        _endpointTransportHints[SipTransportRuntimeUtilities.BuildEndpointKey(transport, remoteEndPoint)] = transport;
-        _endpointTransportHints[SipTransportRuntimeUtilities.BuildEndpointKey(null, remoteEndPoint)] = transport;
-
         try
         {
             if (_wireCodec.TryParseRequest(payload.Span, out var request) && request is not null)
             {
+                // #158 P1-4: learn the transport hint only after the payload parses as a real SIP message.
+                // Writing it up-front (as before) let a spoofed/garbage datagram plant hint state for any
+                // source address it forged, growing the map without bound and skewing outbound transport
+                // selection for that address.
+                RememberTransportHint(remoteEndPoint, transport);
                 SipWireTraceLogger.RequestReceived(_logger, request, remoteEndPoint, transport);
-                DispatchRequest(remoteEndPoint, request);
+                DispatchRequest(new SipInboundRequestContext(remoteEndPoint, transport, inboundConnectionId), request);
                 return Task.CompletedTask;
             }
 
             if (_wireCodec.TryParseResponse(payload.Span, out var response) && response is not null)
             {
+                RememberTransportHint(remoteEndPoint, transport);
                 SipWireTraceLogger.ResponseReceived(_logger, response, remoteEndPoint, transport);
                 DispatchResponse(remoteEndPoint, response);
                 return Task.CompletedTask;
@@ -681,17 +625,47 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
     }
 
     /// <summary>
+    /// Records the transport a validated inbound SIP message arrived on, keyed by remote endpoint, so a later
+    /// outbound message to that endpoint reuses the same transport. Bounded (#158 P1-4).
+    /// </summary>
+    private void RememberTransportHint(IPEndPoint remoteEndPoint, SipTransportProtocol transport)
+    {
+        PutBounded(_endpointTransportHints, SipTransportRuntimeUtilities.BuildEndpointKey(transport, remoteEndPoint), transport);
+        PutBounded(_endpointTransportHints, SipTransportRuntimeUtilities.BuildEndpointKey(null, remoteEndPoint), transport);
+    }
+
+    /// <summary>
+    /// Writes one hint-map entry and evicts arbitrary entries when the map exceeds
+    /// <see cref="_maxEndpointHintEntries"/>. The maps are optimisation caches — a missing entry falls back to
+    /// the default transport / literal-IP TLS host — so an approximate, best-effort bound is sufficient to
+    /// deny a source-spoofing peer unbounded growth (#158 P1-4).
+    /// </summary>
+    private void PutBounded<TValue>(ConcurrentDictionary<string, TValue> map, string key, TValue value)
+    {
+        map[key] = value;
+        if (_maxEndpointHintEntries <= 0 || map.Count <= _maxEndpointHintEntries)
+            return;
+
+        foreach (var evictKey in map.Keys)
+        {
+            if (map.Count <= _maxEndpointHintEntries)
+                break;
+            map.TryRemove(evictKey, out _);
+        }
+    }
+
+    /// <summary>
     /// Dispatches parsed SIP requests to subscribed handlers.
     /// Uses a snapshot of the handler collection via <c>.ToArray()</c> to guard against
     /// concurrent handler removal during iteration (e.g., a handler unsubscribing itself).
     /// </summary>
-    private void DispatchRequest(IPEndPoint remoteEndPoint, SipRequest request)
+    private void DispatchRequest(SipInboundRequestContext context, SipRequest request)
     {
         foreach (var handler in _requestHandlers.Values.ToArray()) // snapshot before iterating
         {
             try
             {
-                handler(remoteEndPoint, request);
+                handler(context, request);
             }
             catch (Exception ex)
             {
@@ -864,14 +838,7 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
         }
 
         _outboundPool.Dispose();
-
-        foreach (var connection in _inboundStreamConnections.Values)
-            connection.Dispose();
-        foreach (var connection in _inboundWebSocketConnections.Values)
-            connection.Dispose();
-
-        _inboundStreamConnections.Clear();
-        _inboundWebSocketConnections.Clear();
+        _acceptor.DisposeConnections();
         _endpointTransportHints.Clear();
         _endpointTlsHosts.Clear();
         _requestHandlers.Clear();

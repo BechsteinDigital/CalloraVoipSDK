@@ -31,6 +31,7 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("CalloraVoipSdk.Performance")]
 [assembly: InternalsVisibleTo("CalloraVoipSdk.Core.Performance")]
 [assembly: InternalsVisibleTo("CalloraVoipSdk.InteropHarness")]
+[assembly: InternalsVisibleTo("CalloraVoipSdk.Client.Tests")]
 
 // ── Shipped first-party assemblies (facade composition + shared Opus codec) ──────────────────────
 [assembly: InternalsVisibleTo("CalloraVoipSdk.Client")]

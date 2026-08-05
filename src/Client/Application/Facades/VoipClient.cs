@@ -183,7 +183,10 @@ public sealed class VoipClient : IVoipClient
             try
             {
                 _transportRuntime = transportFactory.Create(
-                    config.Tls, logFactory, MapTransport(config.DefaultTransport));
+                    config.Tls,
+                    logFactory,
+                    MapTransport(config.DefaultTransport),
+                    config.SipTransportHardening.ToTransportOptions());
             }
             catch (Exception ex) when (IsTransportInitializationFailure(ex))
             {
@@ -260,7 +263,12 @@ public sealed class VoipClient : IVoipClient
                     logFactory,
                     sdpProvider,
                     telemetry,
-                    inboundUserAgent: config.UserAgent);
+                    inboundUserAgent: config.UserAgent,
+                    maxConcurrentInboundSessions: config.SipSignalingHardening.MaxConcurrentInboundSessions,
+                    inboundRingDeadline: config.SipSignalingHardening.InboundRingDeadline,
+                    maxInboundSessionsPerRemote: config.SipSignalingHardening.MaxInboundSessionsPerRemote,
+                    maxServerTransactions: config.SipSignalingHardening.MaxServerTransactions,
+                    absoluteServerTransactionLifetime: config.SipSignalingHardening.AbsoluteServerTransactionLifetime);
                 _ownsCallSignalingService = true;
             }
             else

@@ -19,29 +19,58 @@ internal sealed class SipServerTransactionEngine : ISipServerTransactionEngine
     private static readonly TimeSpan TimerJ = TimeSpan.FromSeconds(32);
     private static readonly TimeSpan TimerL = TimeSpan.FromSeconds(32);
 
+    /// <summary>
+    /// Default ceiling on concurrently tracked server transactions (#158 P1-7). Generous headroom over any
+    /// realistic UAS concurrency; it exists only to bound memory under a flood of distinct requests.
+    /// </summary>
+    private const int DefaultMaxServerTransactions = 8192;
+
+    /// <summary>
+    /// Default absolute lifetime after which a transaction is reaped regardless of state (#158 P1-7). Chosen
+    /// well above the longest legitimate transaction lifetime (a UAS may leave an INVITE at 100 Trying while
+    /// alerting for up to the inbound ring deadline, ~180 s, before a final response) so it never cuts short
+    /// a live transaction and only reaps abandoned 100-Trying-only zombies.
+    /// </summary>
+    private static readonly TimeSpan DefaultAbsoluteTransactionLifetime = TimeSpan.FromSeconds(300);
+
     private readonly ISipTransportRuntime _transport;
     private readonly ILogger _logger;
     private readonly IScheduledActionScheduler _timerScheduler;
     private readonly ConcurrentDictionary<SipServerTransactionKey, SipServerTransactionState> _transactions = new();
+    private readonly int _maxServerTransactions;
+    private readonly TimeSpan _absoluteTransactionLifetime;
     private volatile Action<SipServerTransactionKey, Exception>? _transportErrorHandler;
     private int _disposed;
 
     /// <summary>
     /// Creates a server transaction engine bound to one transport runtime.
     /// </summary>
+    /// <param name="transport">Transport runtime used to send responses.</param>
+    /// <param name="logger">Logger for transaction diagnostics.</param>
+    /// <param name="maxServerTransactions">Ceiling on concurrently tracked transactions; non-positive or null
+    /// falls back to the 8192 default (#158 P1-7).</param>
+    /// <param name="absoluteTransactionLifetime">Absolute lifetime after which any transaction is reaped;
+    /// non-positive or null falls back to the 300 s default (#158 P1-7).</param>
     public SipServerTransactionEngine(
         ISipTransportRuntime transport,
-        ILogger logger)
+        ILogger logger,
+        int? maxServerTransactions = null,
+        TimeSpan? absoluteTransactionLifetime = null)
     {
         _transport = transport ?? throw new ArgumentNullException(nameof(transport));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _maxServerTransactions = maxServerTransactions is { } cap && cap > 0
+            ? cap
+            : DefaultMaxServerTransactions;
+        _absoluteTransactionLifetime = absoluteTransactionLifetime is { } lifetime && lifetime > TimeSpan.Zero
+            ? lifetime
+            : DefaultAbsoluteTransactionLifetime;
         _timerScheduler = new ScheduledActionScheduler(_logger);
     }
 
     /// <inheritdoc />
     public SipServerTransactionRegistration RegisterInboundRequest(
-        IPEndPoint remoteEndPoint,
-        SipTransportProtocol transport,
+        SipInboundRequestContext context,
         SipRequest request)
     {
         if (Volatile.Read(ref _disposed) != 0)
@@ -57,13 +86,23 @@ internal sealed class SipServerTransactionEngine : ISipServerTransactionEngine
         if (!SipServerTransactionKey.TryFromRequest(request, out var key))
             return default;
 
-        var state = _transactions.GetOrAdd(key, _ => new SipServerTransactionState(
+        var state = GetOrCreateTransaction(key, () => new SipServerTransactionState(
             key,
-            remoteEndPoint,
-            transport,
+            context.RemoteEndPoint,
+            context.Transport,
             method,
-            _logger));
-        state.UpdateRemote(remoteEndPoint, transport);
+            _logger,
+            context.ConnectionId));
+        if (state is null)
+        {
+            // #158 P1-7: the transaction table is at capacity. Drop this new request rather than grow the
+            // table unbounded; the upper layer must not process it (ShouldProcess is false for IsOverCapacity).
+            return new SipServerTransactionRegistration { IsOverCapacity = true };
+        }
+
+        // Adopt the accepted inbound connection (real transport + connection id) so every response for this
+        // transaction goes back over it; a retransmission on a fresh connection re-points it (#158 P1-2).
+        state.AdoptInboundConnection(context.RemoteEndPoint, context.Transport, context.ConnectionId);
 
         var isRetransmission = Interlocked.CompareExchange(ref state.HasSeenRequest, 1, 0) == 1;
         if (isRetransmission)
@@ -91,6 +130,15 @@ internal sealed class SipServerTransactionEngine : ISipServerTransactionEngine
         if (Volatile.Read(ref _disposed) != 0)
             throw new ObjectDisposedException(nameof(SipServerTransactionEngine));
 
+        // #158 P1-2: prefer the real transport + accepted inbound connection recorded on the transaction at
+        // registration over the caller-supplied transport. Upper layers reconstruct that transport from the
+        // peer-controlled Via, so it must never be able to steer a response onto the wrong transport, nor
+        // bypass the accepted inbound connection.
+        var hasKey = SipServerTransactionKey.TryFromRequest(request, out var key);
+        var existingState = hasKey && _transactions.TryGetValue(key, out var tracked) ? tracked : null;
+        var effectiveTransport = existingState?.Transport ?? transport;
+        var inboundConnectionId = existingState?.InboundConnectionId;
+
         // RFC 3261 §18.2.1 / RFC 3581 §4 (CF-040): reflect received=/rport= into the outgoing response's top Via
         // against the actual packet source FIRST — critically, this fills a bare ";rport" (what a UAC sends to
         // request rport processing) with the real source port. The §18.2.2 destination below is then derived from
@@ -111,14 +159,15 @@ internal sealed class SipServerTransactionEngine : ISipServerTransactionEngine
         }
 
         // RFC 3261 §18.2.2: for UDP, route the response via the (now reflected) Via header parameters
-        // (received/rport), not simply the raw packet-source endpoint.
-        if (transport == SipTransportProtocol.Udp
+        // (received/rport), not simply the raw packet-source endpoint. Keyed off the *real* transport, so a
+        // request received over TCP with a forged "UDP" Via is not UDP-rerouted (#158 P1-2).
+        if (effectiveTransport == SipTransportProtocol.Udp
             && headers.TryGetValue("Via", out var responseVia))
         {
             remoteEndPoint = SipProtocol.ResolveUdpResponseDestination(responseVia, remoteEndPoint);
         }
 
-        if (!SipServerTransactionKey.TryFromRequest(request, out var key))
+        if (!hasKey)
         {
             await _transport.SendResponseAsync(
                     statusCode,
@@ -126,20 +175,40 @@ internal sealed class SipServerTransactionEngine : ISipServerTransactionEngine
                     headers,
                     body,
                     remoteEndPoint,
-                    transport,
+                    effectiveTransport,
+                    inboundConnectionId: null,
                     ct)
                 .ConfigureAwait(false);
             return;
         }
 
         var method = request.Method.ToUpperInvariant();
-        var state = _transactions.GetOrAdd(key, _ => new SipServerTransactionState(
+        var state = existingState ?? GetOrCreateTransaction(key, () => new SipServerTransactionState(
             key,
             remoteEndPoint,
             transport,
             method,
             _logger));
-        state.UpdateRemote(remoteEndPoint, transport);
+        if (state is null)
+        {
+            // #158 P1-7: no tracked transaction and the table is at capacity — send this response statelessly
+            // rather than grow the table. Retransmission handling is forgone for this response under overload.
+            await _transport.SendResponseAsync(
+                    statusCode,
+                    reasonPhrase,
+                    headers,
+                    body,
+                    remoteEndPoint,
+                    effectiveTransport,
+                    inboundConnectionId: null,
+                    ct)
+                .ConfigureAwait(false);
+            return;
+        }
+
+        // Only the destination endpoint may move here (UDP rport); the authoritative transport and inbound
+        // connection id stay as adopted at registration (#158 P1-2).
+        state.UpdateRemoteEndPoint(remoteEndPoint);
 
         if (ShouldDiscardAdditionalFinalResponse(
                 state,
@@ -231,6 +300,7 @@ internal sealed class SipServerTransactionEngine : ISipServerTransactionEngine
             snapshot.Body,
             state.RemoteEndPoint,
             state.Transport,
+            state.InboundConnectionId,
             ct);
 
     /// <summary>
@@ -532,6 +602,74 @@ internal sealed class SipServerTransactionEngine : ISipServerTransactionEngine
 
         if (_transactions.TryRemove(state.Key, out var removed))
             removed.Dispose();
+    }
+
+    /// <summary>
+    /// Returns the transaction for <paramref name="key"/>, creating it via <paramref name="factory"/> when
+    /// absent, or <c>null</c> when a new transaction would exceed the table capacity (#158 P1-7). An existing
+    /// key is never refused, so retransmissions and responses to in-flight transactions always proceed; only
+    /// brand-new keys are subject to the cap. Every freshly created transaction is armed with the
+    /// absolute-expiry safety net exactly once.
+    /// </summary>
+    private SipServerTransactionState? GetOrCreateTransaction(
+        SipServerTransactionKey key,
+        Func<SipServerTransactionState> factory)
+    {
+        if (_transactions.TryGetValue(key, out var existing))
+            return existing;
+
+        // Best-effort count check: a small overshoot under concurrent creation is acceptable for a DoS ceiling.
+        if (_transactions.Count >= _maxServerTransactions)
+        {
+            _logger.LogWarning(
+                "SIP server-transaction table at capacity ({Cap}); dropping new transaction for {CallId}.",
+                _maxServerTransactions,
+                key.CallId);
+            return null;
+        }
+
+        var state = _transactions.GetOrAdd(key, _ => factory());
+        ArmAbsoluteExpiry(state);
+        return state;
+    }
+
+    /// <summary>
+    /// Arms the absolute-expiry safety-net timer for one transaction exactly once (#158 P1-7).
+    /// </summary>
+    private void ArmAbsoluteExpiry(SipServerTransactionState state)
+    {
+        if (Interlocked.Exchange(ref state.AbsoluteExpiryStarted, 1) != 0)
+            return;
+        if (Volatile.Read(ref _disposed) != 0)
+            return;
+        // A concurrent cleanup/transport-error may have removed and disposed this state between GetOrAdd and
+        // here; don't schedule a timer against a reaped transaction (#158 P1-7, review F2).
+        if (state.IsDisposed)
+            return;
+
+        var timerHandle = _timerScheduler.Schedule(
+            _absoluteTransactionLifetime,
+            () => OnAbsoluteExpiryDue(state));
+        state.ReplaceAbsoluteExpiryTimer(timerHandle);
+    }
+
+    /// <summary>
+    /// Reaps one transaction when its absolute lifetime elapses regardless of state (#158 P1-7). A transaction
+    /// the normal RFC timers already removed makes this a no-op.
+    /// </summary>
+    private void OnAbsoluteExpiryDue(SipServerTransactionState state)
+    {
+        if (Volatile.Read(ref _disposed) != 0)
+            return;
+
+        if (_transactions.TryRemove(state.Key, out var removed))
+        {
+            _logger.LogDebug(
+                "SIP server transaction {CallId} reaped by the absolute-expiry safety net after {Lifetime}.",
+                state.Key.CallId,
+                _absoluteTransactionLifetime);
+            removed.Dispose();
+        }
     }
 
     /// <inheritdoc />
