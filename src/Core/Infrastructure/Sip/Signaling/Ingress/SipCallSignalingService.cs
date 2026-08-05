@@ -58,6 +58,7 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
     private readonly IDisposable _responseSubscription;
     private readonly int _maxConcurrentInboundSessions;
     private readonly SipInboundRingDeadlineMonitor _ringDeadline;
+    private readonly SipPerRemoteInboundSessionLimiter _perRemoteSessions;
     private int _disposed;
 
     /// <summary>
@@ -73,7 +74,8 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
         ISipUasUserIdentityPolicy? userIdentityPolicy = null,
         string? inboundUserAgent = null,
         int? maxConcurrentInboundSessions = null,
-        TimeSpan? inboundRingDeadline = null)
+        TimeSpan? inboundRingDeadline = null,
+        int? maxInboundSessionsPerRemote = null)
     {
         var resolvedDigestAuthenticator = digestAuthenticator
             ?? throw new ArgumentNullException(nameof(digestAuthenticator));
@@ -100,6 +102,7 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
         _messageService = new SipCallSignalingMessages(_transport, _digestAuthenticator, _subscribeExecutor, _logger);
         _publicationService = new SipCallSignalingPublications(_transport, _digestAuthenticator, _subscribeExecutor, _logger);
         _ringDeadline = new SipInboundRingDeadlineMonitor(_logger, inboundRingDeadline);
+        _perRemoteSessions = new SipPerRemoteInboundSessionLimiter(maxInboundSessionsPerRemote);
 
         var resolvedSdpProvider = sdpProvider ?? BuildDefaultSdpProvider();
         _sessionDependencies = new SipCallSessionDependencies
@@ -673,6 +676,23 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
             return;
         }
 
+        // #158 P1-5 (per-remote cap): fair-share the global inbound-session budget across source IPs so one
+        // remote cannot occupy every slot. Reserves a slot keyed by Call-ID; released on termination or a
+        // failed insert below. At the per-remote ceiling, answer 486 Busy Here and create no session.
+        if (!_perRemoteSessions.TryAdmit(callId, remoteEndPoint.Address))
+        {
+            _logger.LogWarning(
+                "Inbound INVITE from {Remote} rejected: max concurrent inbound sessions per remote reached.",
+                remoteEndPoint);
+            _ = SendIngressResponseAsync(
+                normalizedRequest,
+                remoteEndPoint,
+                inboundTransport,
+                statusCode: 486,
+                reasonPhrase: "Busy Here");
+            return;
+        }
+
         var localTag = SipProtocol.NewTag();
         var traceId = ResolveTraceId(callId);
         var configuration = new SipCallSessionConfiguration
@@ -702,6 +722,7 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
 
         if (!_sessions.TryAdd(callId, session))
         {
+            _perRemoteSessions.Release(callId);
             session.Dispose();
             return;
         }
@@ -796,6 +817,9 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
 
             if (e.NewState != SipDialogState.Terminated) return;
             _sessions.TryRemove(session.CallId, out var _);
+            // #158 P1-5 (per-remote cap): release the per-remote slot reserved at admission. No-op for outbound
+            // sessions, which are never admitted through the limiter.
+            _perRemoteSessions.Release(session.CallId);
             if (_sessionStartTimes.TryRemove(session.CallId, out var startedAt))
             {
                 _telemetry.PublishCdr(new SipCdrRecord
@@ -912,6 +936,7 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
         foreach (var session in _sessions.Values)
             session.Dispose();
         _sessions.Clear();
+        _perRemoteSessions.Clear();
         _sessionStartTimes.Clear();
         _sessionTraceIds.Clear();
         _replacementTargets.Clear();
