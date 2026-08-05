@@ -46,22 +46,17 @@ internal static class SdpUtilities
         if (string.IsNullOrWhiteSpace(sdp))
             return (null, null);
 
-        try
-        {
-            var parsed = Parser.Parse(sdp);
-            var audio = parsed.Media.FirstOrDefault(
-                m => m.MediaType.Equals("audio", StringComparison.OrdinalIgnoreCase)
-                     && !m.Disabled
-                     && m.Port > 0);
-            if (audio is null)
-                return (null, null);
-
-            return (audio.Fingerprint ?? parsed.Fingerprint, audio.DtlsSetup ?? parsed.DtlsSetup);
-        }
-        catch (FormatException)
-        {
+        if (!Parser.TryParse(sdp, out var parsed))
             return (null, null);
-        }
+
+        var audio = parsed.Media.FirstOrDefault(
+            m => m.MediaType.Equals("audio", StringComparison.OrdinalIgnoreCase)
+                 && !m.Disabled
+                 && m.Port > 0);
+        if (audio is null)
+            return (null, null);
+
+        return (audio.Fingerprint ?? parsed.Fingerprint, audio.DtlsSetup ?? parsed.DtlsSetup);
     }
 
     /// <summary>
@@ -76,24 +71,19 @@ internal static class SdpUtilities
         if (string.IsNullOrWhiteSpace(sdp))
             return null;
 
-        try
-        {
-            var parsed = Parser.Parse(sdp);
-            var audio = parsed.Media.FirstOrDefault(
-                m => m.MediaType.Equals("audio", StringComparison.OrdinalIgnoreCase)
-                     && !m.Disabled
-                     && m.Port > 0);
-            if (audio is null)
-                return null;
-
-            return audio.Crypto.FirstOrDefault(
-                c => SdesCryptoSelector.TryMapSuite(c.CryptoSuite) is not null
-                     && c.KeyParams.StartsWith("inline:", StringComparison.OrdinalIgnoreCase));
-        }
-        catch (FormatException)
-        {
+        if (!Parser.TryParse(sdp, out var parsed))
             return null;
-        }
+
+        var audio = parsed.Media.FirstOrDefault(
+            m => m.MediaType.Equals("audio", StringComparison.OrdinalIgnoreCase)
+                 && !m.Disabled
+                 && m.Port > 0);
+        if (audio is null)
+            return null;
+
+        return audio.Crypto.FirstOrDefault(
+            c => SdesCryptoSelector.TryMapSuite(c.CryptoSuite) is not null
+                 && c.KeyParams.StartsWith("inline:", StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
@@ -107,24 +97,19 @@ internal static class SdpUtilities
         if (string.IsNullOrWhiteSpace(sdp))
             return null;
 
-        try
-        {
-            var parsed = Parser.Parse(sdp);
-            var video = parsed.Media.FirstOrDefault(
-                m => m.MediaType.Equals("video", StringComparison.OrdinalIgnoreCase)
-                     && !m.Disabled
-                     && m.Port > 0);
-            if (video is null)
-                return null;
-
-            return video.Crypto.FirstOrDefault(
-                c => SdesCryptoSelector.TryMapSuite(c.CryptoSuite) is not null
-                     && c.KeyParams.StartsWith("inline:", StringComparison.OrdinalIgnoreCase));
-        }
-        catch (FormatException)
-        {
+        if (!Parser.TryParse(sdp, out var parsed))
             return null;
-        }
+
+        var video = parsed.Media.FirstOrDefault(
+            m => m.MediaType.Equals("video", StringComparison.OrdinalIgnoreCase)
+                 && !m.Disabled
+                 && m.Port > 0);
+        if (video is null)
+            return null;
+
+        return video.Crypto.FirstOrDefault(
+            c => SdesCryptoSelector.TryMapSuite(c.CryptoSuite) is not null
+                 && c.KeyParams.StartsWith("inline:", StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
@@ -136,27 +121,22 @@ internal static class SdpUtilities
     public static SdpBundleMidInfo? TryExtractBundleMid(string? sdp)
     {
         if (string.IsNullOrWhiteSpace(sdp)) return null;
-        try
-        {
-            var parsed = Parser.Parse(sdp);
-            byte? midExtensionId = null;
-            string? audioMid = null;
-            string? videoMid = null;
-            foreach (var media in parsed.Media)
-            {
-                midExtensionId ??= ResolveMidExtensionId(media.Extensions);
-                if (media.MediaType.Equals("audio", StringComparison.OrdinalIgnoreCase))
-                    audioMid = media.Mid;
-                else if (media.MediaType.Equals("video", StringComparison.OrdinalIgnoreCase))
-                    videoMid = media.Mid;
-            }
-
-            return midExtensionId is { } id ? new SdpBundleMidInfo(id, audioMid, videoMid) : null;
-        }
-        catch (FormatException)
-        {
+        if (!Parser.TryParse(sdp, out var parsed))
             return null;
+
+        byte? midExtensionId = null;
+        string? audioMid = null;
+        string? videoMid = null;
+        foreach (var media in parsed.Media)
+        {
+            midExtensionId ??= ResolveMidExtensionId(media.Extensions);
+            if (media.MediaType.Equals("audio", StringComparison.OrdinalIgnoreCase))
+                audioMid = media.Mid;
+            else if (media.MediaType.Equals("video", StringComparison.OrdinalIgnoreCase))
+                videoMid = media.Mid;
         }
+
+        return midExtensionId is { } id ? new SdpBundleMidInfo(id, audioMid, videoMid) : null;
     }
 
     /// <summary>
@@ -186,9 +166,14 @@ internal static class SdpUtilities
         SdpMediaNegotiationOptions? localOptions = null,
         ILogger? logger = null)
     {
+        if (!Parser.TryParse(remoteOffer, out var parsedOffer))
+        {
+            logger?.LogDebug("Discarding unparseable or over-limit remote SDP offer during answer negotiation.");
+            return null;
+        }
+
         try
         {
-            var parsedOffer = Parser.Parse(remoteOffer);
             var localDirection = hold ? SdpMediaDirection.SendOnly : SdpMediaDirection.SendRecv;
             var result = Negotiator.NegotiateAnswer(
                 parsedOffer,
@@ -202,10 +187,10 @@ internal static class SdpUtilities
         }
         catch (Exception ex)
         {
-            // Untrusted remote SDP: any parse/negotiate/serialize failure means "no answerable
-            // offer". Broad by design (a malformed INVITE must never crash the signaling path),
-            // but no longer silent — logged so failures are observable (HARD-G3).
-            logger?.LogDebug(ex, "Discarding unparseable remote SDP offer during answer negotiation.");
+            // Negotiate/serialize over untrusted-derived data: any failure means "no answerable offer".
+            // Broad by design (a malformed INVITE must never crash the signaling path), but no longer
+            // silent — logged so failures are observable (HARD-G3).
+            logger?.LogDebug(ex, "Discarding remote SDP offer: answer negotiation or serialization failed.");
             return null;
         }
     }
@@ -222,9 +207,14 @@ internal static class SdpUtilities
         ILogger? logger = null)
     {
         if (string.IsNullOrWhiteSpace(remoteSdp)) return null;
+        if (!Parser.TryParse(remoteSdp, out var parsed))
+        {
+            logger?.LogDebug("Discarding unparseable or over-limit remote SDP body.");
+            return null;
+        }
+
         try
         {
-            var parsed = Parser.Parse(remoteSdp);
             var audio = parsed.Media.FirstOrDefault(
                 m => m.MediaType.Equals("audio", StringComparison.OrdinalIgnoreCase));
             if (audio is null || audio.Disabled || audio.Port <= 0) return null;
@@ -300,7 +290,7 @@ internal static class SdpUtilities
         }
         catch (Exception ex)
         {
-            // Untrusted remote SDP: treat any parse/extraction failure as "no usable media".
+            // Untrusted remote SDP: treat any media-extraction failure as "no usable media".
             // Broad by design (must not crash inbound-INVITE handling) but logged (HARD-G3).
             logger?.LogDebug(ex, "Discarding unparseable remote SDP during media-parameter parsing.");
             return null;
@@ -314,21 +304,18 @@ internal static class SdpUtilities
     {
         if (string.IsNullOrWhiteSpace(sdp)) return false;
 
-        try
+        if (!Parser.TryParse(sdp, out var parsed))
         {
-            var parsed = Parser.Parse(sdp);
-            var audio = parsed.Media.FirstOrDefault(m => m.MediaType.Equals("audio", StringComparison.OrdinalIgnoreCase));
-            var direction = audio?.Direction ?? parsed.SessionDirection;
-            return direction is SdpMediaDirection.SendOnly or SdpMediaDirection.Inactive;
-        }
-        catch (Exception ex)
-        {
-            // Unparseable remote SDP: fall back to a direction-attribute substring probe rather than
-            // crash the hold check. Logged so the fallback path is observable (HARD-G3).
-            logger?.LogDebug(ex, "Falling back to substring hold detection for unparseable remote SDP.");
+            // Unparseable/over-limit remote SDP: fall back to a direction-attribute substring probe
+            // rather than crash the hold check. Logged so the fallback path is observable (HARD-G3).
+            logger?.LogDebug("Falling back to substring hold detection for unparseable remote SDP.");
             return sdp.Contains("a=sendonly", StringComparison.OrdinalIgnoreCase)
                    || sdp.Contains("a=inactive", StringComparison.OrdinalIgnoreCase);
         }
+
+        var audio = parsed.Media.FirstOrDefault(m => m.MediaType.Equals("audio", StringComparison.OrdinalIgnoreCase));
+        var direction = audio?.Direction ?? parsed.SessionDirection;
+        return direction is SdpMediaDirection.SendOnly or SdpMediaDirection.Inactive;
     }
 
     private static IReadOnlyDictionary<int, string> BuildCodecMap(
