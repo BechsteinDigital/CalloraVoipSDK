@@ -28,6 +28,14 @@ internal sealed class SipTransportOptions
     public int MaxInboundConnectionsPerRemote { get; init; } = 32;
 
     /// <summary>
+    /// Maximum number of entries the runtime keeps in each learned endpoint hint map (remote endpoint →
+    /// transport, and resolved endpoint → TLS SNI host). These are optimisation caches — a missing entry
+    /// falls back to the default transport / the literal IP for TLS — so they are bounded to stop a peer that
+    /// spoofs many source addresses from growing them without limit (#158 P1-4). Set to 0 for unlimited.
+    /// </summary>
+    public int MaxEndpointHintEntries { get; init; } = 4096;
+
+    /// <summary>
     /// Maximum time an accepted connection may take to complete its TLS handshake (TLS/WSS) or WebSocket
     /// upgrade (WS/WSS) before it is dropped and its admission slot released. Without this bound a peer that
     /// dribbles or stalls the handshake holds a slot indefinitely — the slot cap alone does not stop a

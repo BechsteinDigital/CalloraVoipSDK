@@ -36,6 +36,7 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
     private readonly ISipRouteResolver _routeResolver;
     private readonly SipTransportProtocol _defaultTransport;
     private readonly SipInboundConnectionAcceptor _acceptor;
+    private readonly int _maxEndpointHintEntries;
     private readonly CancellationTokenSource _stop = new();
     private readonly ConcurrentDictionary<int, Action<SipInboundRequestContext, SipRequest>> _requestHandlers = new();
     private readonly ConcurrentDictionary<int, Action<IPEndPoint, SipResponse>> _responseHandlers = new();
@@ -91,8 +92,10 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
         _tlsCertificateProvider = tlsConfiguration is null ? null : new SipTlsCertificateProvider(tlsConfiguration);
         _tlsCertificate = _tlsCertificateProvider?.GetCertificate();
         _defaultTransport = defaultTransport;
+        var effectiveOptions = options ?? SipTransportOptions.Default;
+        _maxEndpointHintEntries = effectiveOptions.MaxEndpointHintEntries;
         _acceptor = new SipInboundConnectionAcceptor(
-            options ?? SipTransportOptions.Default,
+            effectiveOptions,
             _tlsCertificate,
             _logger,
             HandleInboundPayloadAsync);
@@ -337,9 +340,9 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
             {
                 var endpointKey = SipTransportRuntimeUtilities.BuildEndpointKey(null, candidate.EndPoint);
                 var transportEndpointKey = SipTransportRuntimeUtilities.BuildEndpointKey(candidate.Transport, candidate.EndPoint);
-                _endpointTransportHints[endpointKey] = candidate.Transport;
-                _endpointTransportHints[transportEndpointKey] = candidate.Transport;
-                _endpointTlsHosts[transportEndpointKey] = host;
+                PutBounded(_endpointTransportHints, endpointKey, candidate.Transport);
+                PutBounded(_endpointTransportHints, transportEndpointKey, candidate.Transport);
+                PutBounded(_endpointTlsHosts, transportEndpointKey, host);
             }
 
             return resolution.Candidates;
@@ -360,7 +363,7 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
                     _ => 5060
                 };
             var endpoint = await RemoteEndPointResolver.ResolveAsync(host, effectivePort, ct).ConfigureAwait(false);
-            _endpointTlsHosts[SipTransportRuntimeUtilities.BuildEndpointKey(transport, endpoint)] = host;
+            PutBounded(_endpointTlsHosts, SipTransportRuntimeUtilities.BuildEndpointKey(transport, endpoint), host);
             return
             [
                 new SipRouteCandidate
@@ -589,13 +592,15 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
         ReadOnlyMemory<byte> payload,
         int? inboundConnectionId)
     {
-        _endpointTransportHints[SipTransportRuntimeUtilities.BuildEndpointKey(transport, remoteEndPoint)] = transport;
-        _endpointTransportHints[SipTransportRuntimeUtilities.BuildEndpointKey(null, remoteEndPoint)] = transport;
-
         try
         {
             if (_wireCodec.TryParseRequest(payload.Span, out var request) && request is not null)
             {
+                // #158 P1-4: learn the transport hint only after the payload parses as a real SIP message.
+                // Writing it up-front (as before) let a spoofed/garbage datagram plant hint state for any
+                // source address it forged, growing the map without bound and skewing outbound transport
+                // selection for that address.
+                RememberTransportHint(remoteEndPoint, transport);
                 SipWireTraceLogger.RequestReceived(_logger, request, remoteEndPoint, transport);
                 DispatchRequest(new SipInboundRequestContext(remoteEndPoint, transport, inboundConnectionId), request);
                 return Task.CompletedTask;
@@ -603,6 +608,7 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
 
             if (_wireCodec.TryParseResponse(payload.Span, out var response) && response is not null)
             {
+                RememberTransportHint(remoteEndPoint, transport);
                 SipWireTraceLogger.ResponseReceived(_logger, response, remoteEndPoint, transport);
                 DispatchResponse(remoteEndPoint, response);
                 return Task.CompletedTask;
@@ -616,6 +622,36 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
         }
 
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Records the transport a validated inbound SIP message arrived on, keyed by remote endpoint, so a later
+    /// outbound message to that endpoint reuses the same transport. Bounded (#158 P1-4).
+    /// </summary>
+    private void RememberTransportHint(IPEndPoint remoteEndPoint, SipTransportProtocol transport)
+    {
+        PutBounded(_endpointTransportHints, SipTransportRuntimeUtilities.BuildEndpointKey(transport, remoteEndPoint), transport);
+        PutBounded(_endpointTransportHints, SipTransportRuntimeUtilities.BuildEndpointKey(null, remoteEndPoint), transport);
+    }
+
+    /// <summary>
+    /// Writes one hint-map entry and evicts arbitrary entries when the map exceeds
+    /// <see cref="_maxEndpointHintEntries"/>. The maps are optimisation caches — a missing entry falls back to
+    /// the default transport / literal-IP TLS host — so an approximate, best-effort bound is sufficient to
+    /// deny a source-spoofing peer unbounded growth (#158 P1-4).
+    /// </summary>
+    private void PutBounded<TValue>(ConcurrentDictionary<string, TValue> map, string key, TValue value)
+    {
+        map[key] = value;
+        if (_maxEndpointHintEntries <= 0 || map.Count <= _maxEndpointHintEntries)
+            return;
+
+        foreach (var evictKey in map.Keys)
+        {
+            if (map.Count <= _maxEndpointHintEntries)
+                break;
+            map.TryRemove(evictKey, out _);
+        }
     }
 
     /// <summary>
