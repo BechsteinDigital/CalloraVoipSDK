@@ -28,6 +28,13 @@ internal static class RtcpTransportFeedbackCodec
     private const int ReceivedSmallDelta = 1;
     private const int ReceivedLargeDelta = 2;
 
+    // Hard cap on the peer-controlled packet-status count. The 16-bit count is trusted to size two
+    // allocations (the symbol list and the status array) before the chunks are even read, and run-length
+    // chunks pack up to 8191 symbols into 2 bytes — so a ~40-byte packet can otherwise claim 65 535 statuses
+    // and force ~800 KB of allocation, an amplification the 8 KiB datagram cap does not stop (K4). A single
+    // transport-cc feedback covers one feedback window; 4096 packets is far above any real window.
+    private const int MaxStatusCount = 4096;
+
     private const int MaxReferenceTime = 0x7FFFFF;   // signed 24-bit
     private const int MinReferenceTime = -0x800000;
     private const int SmallDeltaMax = 0xFF;          // one unsigned byte (250 µs ticks)
@@ -151,6 +158,10 @@ internal static class RtcpTransportFeedbackCodec
         var statusCount = BinaryPrimitives.ReadUInt16BigEndian(fci[2..]);
         if (statusCount == 0)
             throw new ArgumentException("Transport-cc feedback reports zero packets.");
+        // Bound the count before it sizes any allocation (K4) — see MaxStatusCount.
+        if (statusCount > MaxStatusCount)
+            throw new ArgumentException(
+                $"Transport-cc feedback reports {statusCount} packets, over the {MaxStatusCount} cap.");
 
         var referenceTime = (fci[4] << 16) | (fci[5] << 8) | fci[6];
         if ((referenceTime & 0x800000) != 0)
