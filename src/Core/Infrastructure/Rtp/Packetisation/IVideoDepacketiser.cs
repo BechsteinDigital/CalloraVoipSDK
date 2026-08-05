@@ -45,4 +45,11 @@ internal interface IVideoDepacketiser
     /// by the normal markerless frame-boundary reset.
     /// </summary>
     long DiscardedPacketCount { get; }
+
+    /// <summary>
+    /// Number of frames dropped because reassembly would exceed the configured hard cap (K4): a
+    /// same-timestamp run with no marker, or a never-terminated H.264 FU-A. A bounded counter surfaced for
+    /// telemetry so the drop is observable without logging per packet on the media hot path.
+    /// </summary>
+    long OversizedFrameDiscardCount { get; }
 }
