@@ -203,6 +203,12 @@ internal sealed class RtpInboundProcessor
             }
             else
             {
+                // Plain RTCP carries no origin proof (#161 P1-4 B). Bind it to the admitted media source: once RTP
+                // has latched, only that source may inject control (RR/SR/NACK/PLI/TWCC). Keyed SRTCP above needs no
+                // such check — its auth tag already proves the origin. The null-source test path is unaffected.
+                if (source is not null && !_latch.AdmitsControl(source))
+                    return;
+
                 rtcpDatagram = datagram.ToArray();
             }
 

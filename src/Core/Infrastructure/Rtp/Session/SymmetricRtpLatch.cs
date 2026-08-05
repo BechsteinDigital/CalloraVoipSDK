@@ -21,9 +21,10 @@ internal sealed class SymmetricRtpLatch
 {
     private readonly ILogger _logger;
 
-    // Published to the send thread via Volatile; the refused-source note is receive-loop-thread only.
+    // Published to the send thread via Volatile; the refused-source notes are receive-loop-thread only.
     private IPEndPoint? _latched;
     private IPEndPoint? _lastRefused;
+    private IPEndPoint? _lastRefusedControl;
 
     /// <summary>Creates an unlatched latch logging to <paramref name="logger"/>.</summary>
     public SymmetricRtpLatch(ILogger logger) => _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -64,6 +65,33 @@ internal sealed class SymmetricRtpLatch
             _logger.LogWarning(
                 "Dropping RTP from a new source {Source}: media stays latched to {Latched} (plaintext lock — " +
                 "possible spoof or an un-renegotiated NAT rebind).", source, current);
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Whether an inbound <b>plain</b> (unauthenticated) RTCP datagram from <paramref name="source"/> should be
+    /// admitted. Plain RTCP carries no origin proof, so — like plaintext RTP — it must be bound to the established
+    /// media source: once a source has latched, only that source may inject control (RR/SR/NACK/PLI/TWCC).
+    /// Before any source has latched there is nothing to bind against, so RTCP is admitted; RTCP never establishes
+    /// the latch itself — only validated RTP does. Keyed (SRTCP-authenticated) RTCP does not use this check, since
+    /// its auth tag already proves the origin. Runs on the single receive-loop thread.
+    /// </summary>
+    /// <returns><see langword="true"/> to process the RTCP; <see langword="false"/> to drop it (foreign source).</returns>
+    public bool AdmitsControl(IPEndPoint source)
+    {
+        var current = Volatile.Read(ref _latched);
+        if (current is null || source.Equals(current))
+            return true;
+
+        // Foreign control on a plaintext leg: drop it. Log once per distinct source so a flood cannot spam the log.
+        if (!source.Equals(_lastRefusedControl))
+        {
+            _lastRefusedControl = source;
+            _logger.LogWarning(
+                "Dropping RTCP from a new source {Source}: control stays bound to the latched media source " +
+                "{Latched} (plaintext lock — possible spoofed feedback).", source, current);
         }
 
         return false;

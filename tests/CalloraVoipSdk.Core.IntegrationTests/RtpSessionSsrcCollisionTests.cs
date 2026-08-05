@@ -115,6 +115,34 @@ public sealed class RtpSessionSsrcCollisionTests
         Assert.Equal([0x0000_AAAAu], delivered);
     }
 
+    [Fact]
+    public async Task Plain_rtcp_from_a_foreign_source_is_dropped_once_media_has_latched()
+    {
+        await using var session = CreateSession(FreeUdpPort(), FreeUdpPort());
+        var control = new List<uint>();
+        session.RtcpCompoundReceived += packets =>
+        {
+            foreach (var pli in packets.OfType<RtcpPictureLossIndication>())
+                control.Add(pli.SenderSsrc); // inject is synchronous on this thread
+        };
+
+        var mediaSource = new IPEndPoint(IPAddress.Loopback, 41001);
+        var attacker = new IPEndPoint(IPAddress.Loopback, 41002);
+
+        // A validated RTP packet latches the media source. Plain RTCP feedback from a foreign source is then not
+        // bound to it and is dropped; the same feedback from the latched media source is processed (#161 P1-4 B).
+        session.InjectInboundDatagramForTest(Packet(seq: 1, ssrc: 0x0000_AAAA, payload: [0x01]), mediaSource);
+        session.InjectInboundDatagramForTest(Pli(senderSsrc: 0x0000_1111), attacker);
+        session.InjectInboundDatagramForTest(Pli(senderSsrc: 0x0000_2222), mediaSource);
+
+        Assert.Equal([0x0000_2222u], control);
+    }
+
+    private static byte[] Pli(uint senderSsrc) => RtcpCodec.Encode(new RtcpPacket[]
+    {
+        new RtcpPictureLossIndication { SenderSsrc = senderSsrc, MediaSsrc = LocalSsrc },
+    });
+
     private static RtpSession CreateSession(int localPort, int remotePort) =>
         new(new RtpSessionOptions
         {

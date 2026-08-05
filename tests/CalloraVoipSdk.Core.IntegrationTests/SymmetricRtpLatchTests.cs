@@ -99,6 +99,54 @@ public sealed class SymmetricRtpLatchTests
         Assert.Equal(AttackerB, latch.Target(Fallback));
     }
 
+    // ── plain-RTCP source binding (#161 P1-4 B): control is bound to the latched media source ──
+
+    [Fact]
+    public void Control_is_admitted_before_any_source_has_latched()
+        => Assert.True(new SymmetricRtpLatch(NullLogger.Instance).AdmitsControl(PeerA));
+
+    [Fact]
+    public void Control_from_the_latched_source_is_admitted()
+    {
+        var latch = new SymmetricRtpLatch(NullLogger.Instance);
+        latch.Consider(PeerA, authenticated: false);
+
+        Assert.True(latch.AdmitsControl(PeerA));
+    }
+
+    [Fact]
+    public void Control_from_a_foreign_source_is_refused()
+    {
+        var latch = new SymmetricRtpLatch(NullLogger.Instance);
+        latch.Consider(PeerA, authenticated: false);
+
+        Assert.False(latch.AdmitsControl(AttackerB)); // spoofed feedback from a third party is not honoured
+    }
+
+    [Fact]
+    public void Observing_control_does_not_establish_the_latch()
+    {
+        var latch = new SymmetricRtpLatch(NullLogger.Instance);
+
+        latch.AdmitsControl(PeerA); // only validated RTP may latch — RTCP must never set the media source
+
+        Assert.Equal(Fallback, latch.Target(Fallback)); // still unlatched
+        Assert.True(latch.AdmitsControl(AttackerB));     // so a different control source is still admitted
+    }
+
+    [Fact]
+    public void A_refused_control_source_is_logged_as_a_warning_once_per_source()
+    {
+        var logger = new CapturingLogger();
+        var latch = new SymmetricRtpLatch(logger);
+        latch.Consider(PeerA, authenticated: false);
+
+        latch.AdmitsControl(AttackerB);
+        latch.AdmitsControl(AttackerB); // same foreign source again → not logged twice
+
+        Assert.Equal(1, logger.Warnings);
+    }
+
     [Fact]
     public void A_refused_re_latch_is_logged_as_a_warning_once_per_source()
     {
