@@ -270,19 +270,22 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
         var host = LocalEndPointHostResolver.ResolveHost(localEndPoint);
         var answerDirection = primaryAudio.Media.Direction;
 
-        // --- BUNDLE/MID (RFC 5888): the answer group is carried only for a BUNDLE offer whose audio has a mid ---
-        string? group = null;
-        if (offeredAudio.Mid is not null && remoteOffer.Group is not null
-            && remoteOffer.Group.StartsWith("BUNDLE", StringComparison.OrdinalIgnoreCase))
+        // --- BUNDLE/MID (RFC 5888 / RFC 8843): honour a BUNDLE offer only when the group is a real BUNDLE
+        // group (exact semantics token, not a "BUNDLEX" prefix) and the primary audio's mid is a member of
+        // it. "Any audio with a mid" is not enough — the mid must actually be in the offered group. ---
+        IReadOnlyList<string> offeredBundleMids = [];
+        if (offeredAudio.Mid is not null
+            && SdpBundleGroup.TryParse(remoteOffer.Group, out var parsedBundleMids)
+            && parsedBundleMids.Contains(offeredAudio.Mid, StringComparer.Ordinal))
         {
-            group = remoteOffer.Group;
+            offeredBundleMids = parsedBundleMids;
         }
 
         // RFC 3264 §6: one answer m-line per offered m-line, in offer order (mid preserved 1:1, RFC 8829
         // §5.3.1). Multi-track (RFC 8843): under BUNDLE every audio and video m-line is answered — they all
         // share the one local port. Without BUNDLE only the first of each media type is answered; a second
         // same-type m-line would need its own local port, so it is declined with a zero-port mirror.
-        var isBundle = group is not null;
+        var isBundle = offeredBundleMids.Count > 0;
         var answerLines = new List<SdpMediaDescription>(remoteOffer.Media.Count);
         var videoAnswered = false;
         foreach (var offered in remoteOffer.Media)
@@ -312,15 +315,19 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             answerLines.Add(videoAnswer ?? BuildDisabledMirror(offered));
         }
 
-        // BUNDLE (RFC 9143 §7.3.3): the answer group lists only accepted mids —
-        // rejected m-lines must leave the group.
-        if (group is not null)
+        // BUNDLE (RFC 9143 §7.3.3): the answer group is an ordered SUBSET of the offered group — each
+        // offered member mid whose m-line we accepted (port > 0), in the offer's order. It never adds a
+        // mid that was not in the offered BUNDLE, so a hostile offer cannot pull an un-grouped m-line
+        // (e.g. "a=group:BUNDLE video" with a=mid:audio) onto the shared transport.
+        string? group = null;
+        if (isBundle)
         {
             var acceptedMids = answerLines
                 .Where(m => m.Port > 0 && m.Mid is not null)
-                .Select(m => m.Mid)
-                .ToArray();
-            group = acceptedMids.Length > 0 ? "BUNDLE " + string.Join(' ', acceptedMids) : null;
+                .Select(m => m.Mid!)
+                .ToHashSet(StringComparer.Ordinal);
+            var answerMids = offeredBundleMids.Where(acceptedMids.Contains).ToArray();
+            group = answerMids.Length > 0 ? "BUNDLE " + string.Join(' ', answerMids) : null;
         }
 
         var answer = new SdpSessionDescription
