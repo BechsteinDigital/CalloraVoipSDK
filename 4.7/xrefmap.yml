@@ -10353,6 +10353,77 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.SessionManager.ActiveRecordings
   nameWithType: SessionManager.ActiveRecordings
+- uid: CalloraVoipSdk.SipSignalingHardeningConfiguration
+  name: SipSignalingHardeningConfiguration
+  href: _api/CalloraVoipSdk.SipSignalingHardeningConfiguration.html
+  commentId: T:CalloraVoipSdk.SipSignalingHardeningConfiguration
+  fullName: CalloraVoipSdk.SipSignalingHardeningConfiguration
+  nameWithType: SipSignalingHardeningConfiguration
+- uid: CalloraVoipSdk.SipSignalingHardeningConfiguration.AbsoluteServerTransactionLifetime
+  name: AbsoluteServerTransactionLifetime
+  href: _api/CalloraVoipSdk.SipSignalingHardeningConfiguration.html#CalloraVoipSdk_SipSignalingHardeningConfiguration_AbsoluteServerTransactionLifetime
+  commentId: P:CalloraVoipSdk.SipSignalingHardeningConfiguration.AbsoluteServerTransactionLifetime
+  fullName: CalloraVoipSdk.SipSignalingHardeningConfiguration.AbsoluteServerTransactionLifetime
+  nameWithType: SipSignalingHardeningConfiguration.AbsoluteServerTransactionLifetime
+- uid: CalloraVoipSdk.SipSignalingHardeningConfiguration.AbsoluteServerTransactionLifetime*
+  name: AbsoluteServerTransactionLifetime
+  href: _api/CalloraVoipSdk.SipSignalingHardeningConfiguration.html#CalloraVoipSdk_SipSignalingHardeningConfiguration_AbsoluteServerTransactionLifetime_
+  commentId: Overload:CalloraVoipSdk.SipSignalingHardeningConfiguration.AbsoluteServerTransactionLifetime
+  isSpec: "True"
+  fullName: CalloraVoipSdk.SipSignalingHardeningConfiguration.AbsoluteServerTransactionLifetime
+  nameWithType: SipSignalingHardeningConfiguration.AbsoluteServerTransactionLifetime
+- uid: CalloraVoipSdk.SipSignalingHardeningConfiguration.InboundRingDeadline
+  name: InboundRingDeadline
+  href: _api/CalloraVoipSdk.SipSignalingHardeningConfiguration.html#CalloraVoipSdk_SipSignalingHardeningConfiguration_InboundRingDeadline
+  commentId: P:CalloraVoipSdk.SipSignalingHardeningConfiguration.InboundRingDeadline
+  fullName: CalloraVoipSdk.SipSignalingHardeningConfiguration.InboundRingDeadline
+  nameWithType: SipSignalingHardeningConfiguration.InboundRingDeadline
+- uid: CalloraVoipSdk.SipSignalingHardeningConfiguration.InboundRingDeadline*
+  name: InboundRingDeadline
+  href: _api/CalloraVoipSdk.SipSignalingHardeningConfiguration.html#CalloraVoipSdk_SipSignalingHardeningConfiguration_InboundRingDeadline_
+  commentId: Overload:CalloraVoipSdk.SipSignalingHardeningConfiguration.InboundRingDeadline
+  isSpec: "True"
+  fullName: CalloraVoipSdk.SipSignalingHardeningConfiguration.InboundRingDeadline
+  nameWithType: SipSignalingHardeningConfiguration.InboundRingDeadline
+- uid: CalloraVoipSdk.SipSignalingHardeningConfiguration.MaxConcurrentInboundSessions
+  name: MaxConcurrentInboundSessions
+  href: _api/CalloraVoipSdk.SipSignalingHardeningConfiguration.html#CalloraVoipSdk_SipSignalingHardeningConfiguration_MaxConcurrentInboundSessions
+  commentId: P:CalloraVoipSdk.SipSignalingHardeningConfiguration.MaxConcurrentInboundSessions
+  fullName: CalloraVoipSdk.SipSignalingHardeningConfiguration.MaxConcurrentInboundSessions
+  nameWithType: SipSignalingHardeningConfiguration.MaxConcurrentInboundSessions
+- uid: CalloraVoipSdk.SipSignalingHardeningConfiguration.MaxConcurrentInboundSessions*
+  name: MaxConcurrentInboundSessions
+  href: _api/CalloraVoipSdk.SipSignalingHardeningConfiguration.html#CalloraVoipSdk_SipSignalingHardeningConfiguration_MaxConcurrentInboundSessions_
+  commentId: Overload:CalloraVoipSdk.SipSignalingHardeningConfiguration.MaxConcurrentInboundSessions
+  isSpec: "True"
+  fullName: CalloraVoipSdk.SipSignalingHardeningConfiguration.MaxConcurrentInboundSessions
+  nameWithType: SipSignalingHardeningConfiguration.MaxConcurrentInboundSessions
+- uid: CalloraVoipSdk.SipSignalingHardeningConfiguration.MaxInboundSessionsPerRemote
+  name: MaxInboundSessionsPerRemote
+  href: _api/CalloraVoipSdk.SipSignalingHardeningConfiguration.html#CalloraVoipSdk_SipSignalingHardeningConfiguration_MaxInboundSessionsPerRemote
+  commentId: P:CalloraVoipSdk.SipSignalingHardeningConfiguration.MaxInboundSessionsPerRemote
+  fullName: CalloraVoipSdk.SipSignalingHardeningConfiguration.MaxInboundSessionsPerRemote
+  nameWithType: SipSignalingHardeningConfiguration.MaxInboundSessionsPerRemote
+- uid: CalloraVoipSdk.SipSignalingHardeningConfiguration.MaxInboundSessionsPerRemote*
+  name: MaxInboundSessionsPerRemote
+  href: _api/CalloraVoipSdk.SipSignalingHardeningConfiguration.html#CalloraVoipSdk_SipSignalingHardeningConfiguration_MaxInboundSessionsPerRemote_
+  commentId: Overload:CalloraVoipSdk.SipSignalingHardeningConfiguration.MaxInboundSessionsPerRemote
+  isSpec: "True"
+  fullName: CalloraVoipSdk.SipSignalingHardeningConfiguration.MaxInboundSessionsPerRemote
+  nameWithType: SipSignalingHardeningConfiguration.MaxInboundSessionsPerRemote
+- uid: CalloraVoipSdk.SipSignalingHardeningConfiguration.MaxServerTransactions
+  name: MaxServerTransactions
+  href: _api/CalloraVoipSdk.SipSignalingHardeningConfiguration.html#CalloraVoipSdk_SipSignalingHardeningConfiguration_MaxServerTransactions
+  commentId: P:CalloraVoipSdk.SipSignalingHardeningConfiguration.MaxServerTransactions
+  fullName: CalloraVoipSdk.SipSignalingHardeningConfiguration.MaxServerTransactions
+  nameWithType: SipSignalingHardeningConfiguration.MaxServerTransactions
+- uid: CalloraVoipSdk.SipSignalingHardeningConfiguration.MaxServerTransactions*
+  name: MaxServerTransactions
+  href: _api/CalloraVoipSdk.SipSignalingHardeningConfiguration.html#CalloraVoipSdk_SipSignalingHardeningConfiguration_MaxServerTransactions_
+  commentId: Overload:CalloraVoipSdk.SipSignalingHardeningConfiguration.MaxServerTransactions
+  isSpec: "True"
+  fullName: CalloraVoipSdk.SipSignalingHardeningConfiguration.MaxServerTransactions
+  nameWithType: SipSignalingHardeningConfiguration.MaxServerTransactions
 - uid: CalloraVoipSdk.SipTransport
   name: SipTransport
   href: _api/CalloraVoipSdk.SipTransport.html
@@ -10389,6 +10460,64 @@ references:
   commentId: F:CalloraVoipSdk.SipTransport.Wss
   fullName: CalloraVoipSdk.SipTransport.Wss
   nameWithType: SipTransport.Wss
+- uid: CalloraVoipSdk.SipTransportHardeningConfiguration
+  name: SipTransportHardeningConfiguration
+  href: _api/CalloraVoipSdk.SipTransportHardeningConfiguration.html
+  commentId: T:CalloraVoipSdk.SipTransportHardeningConfiguration
+  fullName: CalloraVoipSdk.SipTransportHardeningConfiguration
+  nameWithType: SipTransportHardeningConfiguration
+- uid: CalloraVoipSdk.SipTransportHardeningConfiguration.HandshakeTimeout
+  name: HandshakeTimeout
+  href: _api/CalloraVoipSdk.SipTransportHardeningConfiguration.html#CalloraVoipSdk_SipTransportHardeningConfiguration_HandshakeTimeout
+  commentId: P:CalloraVoipSdk.SipTransportHardeningConfiguration.HandshakeTimeout
+  fullName: CalloraVoipSdk.SipTransportHardeningConfiguration.HandshakeTimeout
+  nameWithType: SipTransportHardeningConfiguration.HandshakeTimeout
+- uid: CalloraVoipSdk.SipTransportHardeningConfiguration.HandshakeTimeout*
+  name: HandshakeTimeout
+  href: _api/CalloraVoipSdk.SipTransportHardeningConfiguration.html#CalloraVoipSdk_SipTransportHardeningConfiguration_HandshakeTimeout_
+  commentId: Overload:CalloraVoipSdk.SipTransportHardeningConfiguration.HandshakeTimeout
+  isSpec: "True"
+  fullName: CalloraVoipSdk.SipTransportHardeningConfiguration.HandshakeTimeout
+  nameWithType: SipTransportHardeningConfiguration.HandshakeTimeout
+- uid: CalloraVoipSdk.SipTransportHardeningConfiguration.MaxConcurrentInboundConnections
+  name: MaxConcurrentInboundConnections
+  href: _api/CalloraVoipSdk.SipTransportHardeningConfiguration.html#CalloraVoipSdk_SipTransportHardeningConfiguration_MaxConcurrentInboundConnections
+  commentId: P:CalloraVoipSdk.SipTransportHardeningConfiguration.MaxConcurrentInboundConnections
+  fullName: CalloraVoipSdk.SipTransportHardeningConfiguration.MaxConcurrentInboundConnections
+  nameWithType: SipTransportHardeningConfiguration.MaxConcurrentInboundConnections
+- uid: CalloraVoipSdk.SipTransportHardeningConfiguration.MaxConcurrentInboundConnections*
+  name: MaxConcurrentInboundConnections
+  href: _api/CalloraVoipSdk.SipTransportHardeningConfiguration.html#CalloraVoipSdk_SipTransportHardeningConfiguration_MaxConcurrentInboundConnections_
+  commentId: Overload:CalloraVoipSdk.SipTransportHardeningConfiguration.MaxConcurrentInboundConnections
+  isSpec: "True"
+  fullName: CalloraVoipSdk.SipTransportHardeningConfiguration.MaxConcurrentInboundConnections
+  nameWithType: SipTransportHardeningConfiguration.MaxConcurrentInboundConnections
+- uid: CalloraVoipSdk.SipTransportHardeningConfiguration.MaxEndpointHintEntries
+  name: MaxEndpointHintEntries
+  href: _api/CalloraVoipSdk.SipTransportHardeningConfiguration.html#CalloraVoipSdk_SipTransportHardeningConfiguration_MaxEndpointHintEntries
+  commentId: P:CalloraVoipSdk.SipTransportHardeningConfiguration.MaxEndpointHintEntries
+  fullName: CalloraVoipSdk.SipTransportHardeningConfiguration.MaxEndpointHintEntries
+  nameWithType: SipTransportHardeningConfiguration.MaxEndpointHintEntries
+- uid: CalloraVoipSdk.SipTransportHardeningConfiguration.MaxEndpointHintEntries*
+  name: MaxEndpointHintEntries
+  href: _api/CalloraVoipSdk.SipTransportHardeningConfiguration.html#CalloraVoipSdk_SipTransportHardeningConfiguration_MaxEndpointHintEntries_
+  commentId: Overload:CalloraVoipSdk.SipTransportHardeningConfiguration.MaxEndpointHintEntries
+  isSpec: "True"
+  fullName: CalloraVoipSdk.SipTransportHardeningConfiguration.MaxEndpointHintEntries
+  nameWithType: SipTransportHardeningConfiguration.MaxEndpointHintEntries
+- uid: CalloraVoipSdk.SipTransportHardeningConfiguration.MaxInboundConnectionsPerRemote
+  name: MaxInboundConnectionsPerRemote
+  href: _api/CalloraVoipSdk.SipTransportHardeningConfiguration.html#CalloraVoipSdk_SipTransportHardeningConfiguration_MaxInboundConnectionsPerRemote
+  commentId: P:CalloraVoipSdk.SipTransportHardeningConfiguration.MaxInboundConnectionsPerRemote
+  fullName: CalloraVoipSdk.SipTransportHardeningConfiguration.MaxInboundConnectionsPerRemote
+  nameWithType: SipTransportHardeningConfiguration.MaxInboundConnectionsPerRemote
+- uid: CalloraVoipSdk.SipTransportHardeningConfiguration.MaxInboundConnectionsPerRemote*
+  name: MaxInboundConnectionsPerRemote
+  href: _api/CalloraVoipSdk.SipTransportHardeningConfiguration.html#CalloraVoipSdk_SipTransportHardeningConfiguration_MaxInboundConnectionsPerRemote_
+  commentId: Overload:CalloraVoipSdk.SipTransportHardeningConfiguration.MaxInboundConnectionsPerRemote
+  isSpec: "True"
+  fullName: CalloraVoipSdk.SipTransportHardeningConfiguration.MaxInboundConnectionsPerRemote
+  nameWithType: SipTransportHardeningConfiguration.MaxInboundConnectionsPerRemote
 - uid: CalloraVoipSdk.TelemetryManager
   name: TelemetryManager
   href: _api/CalloraVoipSdk.TelemetryManager.html
@@ -11179,6 +11308,32 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.VoipConfiguration.RequireSecureSignalingForSdes
   nameWithType: VoipConfiguration.RequireSecureSignalingForSdes
+- uid: CalloraVoipSdk.VoipConfiguration.SipSignalingHardening
+  name: SipSignalingHardening
+  href: _api/CalloraVoipSdk.VoipConfiguration.html#CalloraVoipSdk_VoipConfiguration_SipSignalingHardening
+  commentId: P:CalloraVoipSdk.VoipConfiguration.SipSignalingHardening
+  fullName: CalloraVoipSdk.VoipConfiguration.SipSignalingHardening
+  nameWithType: VoipConfiguration.SipSignalingHardening
+- uid: CalloraVoipSdk.VoipConfiguration.SipSignalingHardening*
+  name: SipSignalingHardening
+  href: _api/CalloraVoipSdk.VoipConfiguration.html#CalloraVoipSdk_VoipConfiguration_SipSignalingHardening_
+  commentId: Overload:CalloraVoipSdk.VoipConfiguration.SipSignalingHardening
+  isSpec: "True"
+  fullName: CalloraVoipSdk.VoipConfiguration.SipSignalingHardening
+  nameWithType: VoipConfiguration.SipSignalingHardening
+- uid: CalloraVoipSdk.VoipConfiguration.SipTransportHardening
+  name: SipTransportHardening
+  href: _api/CalloraVoipSdk.VoipConfiguration.html#CalloraVoipSdk_VoipConfiguration_SipTransportHardening
+  commentId: P:CalloraVoipSdk.VoipConfiguration.SipTransportHardening
+  fullName: CalloraVoipSdk.VoipConfiguration.SipTransportHardening
+  nameWithType: VoipConfiguration.SipTransportHardening
+- uid: CalloraVoipSdk.VoipConfiguration.SipTransportHardening*
+  name: SipTransportHardening
+  href: _api/CalloraVoipSdk.VoipConfiguration.html#CalloraVoipSdk_VoipConfiguration_SipTransportHardening_
+  commentId: Overload:CalloraVoipSdk.VoipConfiguration.SipTransportHardening
+  isSpec: "True"
+  fullName: CalloraVoipSdk.VoipConfiguration.SipTransportHardening
+  nameWithType: VoipConfiguration.SipTransportHardening
 - uid: CalloraVoipSdk.VoipConfiguration.SrtpPolicy
   name: SrtpPolicy
   href: _api/CalloraVoipSdk.VoipConfiguration.html#CalloraVoipSdk_VoipConfiguration_SrtpPolicy
