@@ -335,8 +335,10 @@ internal sealed class RtpInboundProcessor
         // Symmetric-RTP latch (CVE-2017-14099 hardening): only a validated packet — not an SSRC collision, and
         // Valid/TooLate rather than a duplicate or sequence jump — may steer the outbound path. A change away
         // from an established source re-latches only on a keyed (authenticated) call; a plaintext call locks.
-        if (source is not null)
-            _latch.Consider(source, authenticated: inboundSrtp is not null);
+        // On a plaintext call a refused new source is also not admitted for delivery — a spoofed packet must not
+        // reach the media consumer, not just be prevented from re-pointing the outbound path (#161 P1-4).
+        if (source is not null && !_latch.Consider(source, authenticated: inboundSrtp is not null))
+            return;
 
         try
         {

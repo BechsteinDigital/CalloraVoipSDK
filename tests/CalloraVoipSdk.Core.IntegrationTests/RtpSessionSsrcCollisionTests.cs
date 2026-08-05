@@ -97,6 +97,24 @@ public sealed class RtpSessionSsrcCollisionTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await peer.ReceiveAsync(timeout.Token));
     }
 
+    [Fact]
+    public async Task A_plaintext_packet_from_a_new_source_is_dropped_not_just_kept_off_the_send_path()
+    {
+        await using var session = CreateSession(FreeUdpPort(), FreeUdpPort());
+        var delivered = new List<uint>();
+        session.PacketReceived += (_, p) => delivered.Add(p.Ssrc); // inject is synchronous on this thread
+
+        var sourceA = new IPEndPoint(IPAddress.Loopback, 40001);
+        var sourceB = new IPEndPoint(IPAddress.Loopback, 40002);
+
+        // First source latches and is delivered; a plaintext packet from a different source is refused, so it is
+        // dropped — not merely prevented from re-pointing the outbound path (#161 P1-4).
+        session.InjectInboundDatagramForTest(Packet(seq: 1, ssrc: 0x0000_AAAA, payload: [0x01]), sourceA);
+        session.InjectInboundDatagramForTest(Packet(seq: 1, ssrc: 0x0000_BBBB, payload: [0x01]), sourceB);
+
+        Assert.Equal([0x0000_AAAAu], delivered);
+    }
+
     private static RtpSession CreateSession(int localPort, int remotePort) =>
         new(new RtpSessionOptions
         {
