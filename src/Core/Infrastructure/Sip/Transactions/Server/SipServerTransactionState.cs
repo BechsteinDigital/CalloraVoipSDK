@@ -18,6 +18,7 @@ internal sealed class SipServerTransactionState : IDisposable
     private IDisposable? _inviteSuccessRetransmitTimer;
     private IDisposable? _cleanupTimer;
     private IDisposable? _absoluteExpiryTimer;
+    private int _disposed;
 
     /// <summary>
     /// Creates state container for one server transaction key.
@@ -68,6 +69,12 @@ internal sealed class SipServerTransactionState : IDisposable
     /// Returns true when this state belongs to an INVITE server transaction.
     /// </summary>
     public bool IsInvite => string.Equals(Method, "INVITE", StringComparison.Ordinal);
+
+    /// <summary>
+    /// Returns true once this transaction state has been disposed (removed from the engine). Lets the engine
+    /// skip arming the absolute-expiry timer on a state that a concurrent cleanup already reaped (#158 P1-7).
+    /// </summary>
+    public bool IsDisposed => Volatile.Read(ref _disposed) != 0;
 
     /// <summary>
     /// Flag set when first request for this transaction has been observed.
@@ -272,6 +279,9 @@ internal sealed class SipServerTransactionState : IDisposable
     /// <inheritdoc />
     public void Dispose()
     {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            return;
+
         CancelInviteRetransmissionTimers();
         CancelCleanupTimer();
         CancelAbsoluteExpiryTimer();

@@ -642,6 +642,10 @@ internal sealed class SipServerTransactionEngine : ISipServerTransactionEngine
             return;
         if (Volatile.Read(ref _disposed) != 0)
             return;
+        // A concurrent cleanup/transport-error may have removed and disposed this state between GetOrAdd and
+        // here; don't schedule a timer against a reaped transaction (#158 P1-7, review F2).
+        if (state.IsDisposed)
+            return;
 
         var timerHandle = _timerScheduler.Schedule(
             _absoluteTransactionLifetime,

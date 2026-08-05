@@ -664,7 +664,8 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
         // #158 P1-5: bound the number of concurrent inbound sessions before creating dialog state. A UAS
         // creates a session (and fires IncomingInvite) for every served-user INVITE, before any line/trunk
         // takes ownership — a flood of INVITEs with distinct Call-IDs would otherwise pin unbounded state.
-        // At the cap, answer 486 Busy Here (RFC 3261 §21.4.24) and create no session.
+        // At the cap, answer 486 Busy Here (RFC 3261 §21.4.24) and create no session. Best-effort count check:
+        // a small overshoot under concurrent creation is acceptable for a memory-bound ceiling (see the engine).
         if (_sessions.Count >= _maxConcurrentInboundSessions)
         {
             _logger.LogWarning(
