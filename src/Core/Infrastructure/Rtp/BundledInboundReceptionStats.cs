@@ -23,11 +23,29 @@ namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
 /// </summary>
 internal sealed class BundledInboundReceptionStats
 {
+    /// <summary>
+    /// Default hard cap on distinct inbound SSRCs tracked. A remote (even after SRTP auth) chooses the SSRCs it
+    /// sends and can spray distinct values via RTP or Sender Reports — each otherwise created persistent,
+    /// never-expiring state (K4). 256 is far above any real bundle (primary audio/video, RTX, simulcast layers,
+    /// and an SFU's per-participant streams, plus reserve).
+    /// </summary>
+    private const int DefaultMaxTrackedSources = 256;
+
     private readonly ConcurrentDictionary<uint, BundledSourceReceptionState> _sources = new();
     // The negotiated media parameters resolved per SSRC (kind, mid, clock) the first time that SSRC delivers a
     // packet — remembered so the per-SSRC jitter snapshot can attribute each inbound remote SSRC to a track.
     private readonly ConcurrentDictionary<uint, BundledInboundSourceKind> _sourceKinds = new();
+    private readonly int _maxTrackedSources;
     private readonly Func<DateTimeOffset> _utcNow;
+
+    private long _rejectedSourceCount;
+
+    /// <summary>
+    /// Number of inbound SSRCs refused because the tracking table was full — a bounded counter surfaced for
+    /// telemetry so a spray of distinct SSRCs is observable without logging per packet (K3/K4). Thread-safe:
+    /// the RTP and Sender-Report receive paths run on different threads and increment it via Interlocked.
+    /// </summary>
+    public long RejectedSourceCount => Interlocked.Read(ref _rejectedSourceCount);
 
     // The negotiated inbound media clock/kind/mid keyed by RTP payload type (RFC 3550 §A.8 needs the clock; the
     // kind/mid attribute the source to a track). The inbound SSRC is the remote's choice and unknown before its
@@ -47,12 +65,17 @@ internal sealed class BundledInboundReceptionStats
     /// payload type is the reliable discriminator. A payload type not in the map (or a null map) falls back to
     /// inferring the clock from the first usable packet pair, with an unknown kind.
     /// </param>
+    /// <param name="maxTrackedSources">Hard cap on distinct inbound SSRCs tracked (K4); see the default.</param>
     public BundledInboundReceptionStats(
         Func<DateTimeOffset>? utcNow = null,
-        IReadOnlyDictionary<byte, BundledInboundClockDescriptor>? clockByPayloadType = null)
+        IReadOnlyDictionary<byte, BundledInboundClockDescriptor>? clockByPayloadType = null,
+        int maxTrackedSources = DefaultMaxTrackedSources)
     {
+        if (maxTrackedSources <= 0)
+            throw new ArgumentOutOfRangeException(nameof(maxTrackedSources), "Max tracked sources must be positive.");
         _utcNow = utcNow ?? (() => DateTimeOffset.UtcNow);
         _clockByPayloadType = clockByPayloadType ?? new Dictionary<byte, BundledInboundClockDescriptor>();
+        _maxTrackedSources = maxTrackedSources;
     }
 
     /// <summary>
@@ -68,6 +91,8 @@ internal sealed class BundledInboundReceptionStats
     public void RecordRtp(uint ssrc, ushort sequenceNumber, uint rtpTimestamp, byte payloadType = 0)
     {
         var state = GetOrAddSource(ssrc, payloadType);
+        if (state is null)
+            return; // tracking table full — this source is not admitted (K4), its packet is not counted.
         // A source first seen via its SR (or via a packet whose payload type was not yet in the negotiated map)
         // was created with an unknown kind and an inferred clock, and the GetOrAdd factory only runs once — so an
         // RTP packet that now resolves the negotiated clock/kind by payload type must upgrade the source here,
@@ -98,8 +123,24 @@ internal sealed class BundledInboundReceptionStats
     // absent from the map (or NoPayloadType from an SR) creates an inferred-clock, unknown-kind source. Racing
     // GetOrAdd factories can both build a state, but the loser is discarded by the dictionary; a rate handed to a
     // discarded state is harmless.
-    private BundledSourceReceptionState GetOrAddSource(uint ssrc, int payloadType)
-        => _sources.GetOrAdd(ssrc, _ =>
+    private BundledSourceReceptionState? GetOrAddSource(uint ssrc, int payloadType)
+    {
+        // Established source: return it directly — the cap is only consulted for a genuinely new SSRC, so the
+        // hot path (an already-tracked stream) pays no Count check.
+        if (_sources.TryGetValue(ssrc, out var existing))
+            return existing;
+
+        // New SSRC over the cap: refuse it instead of growing without bound for a peer that sprays distinct
+        // SSRCs (K4). An active source is never evicted — a legitimate stream keeps its state; the refused
+        // packet is simply not counted. The check-then-add is not atomic, so concurrent receive threads can
+        // admit at most one extra each — bounded by the number of IO threads, never unbounded.
+        if (_sources.Count >= _maxTrackedSources)
+        {
+            Interlocked.Increment(ref _rejectedSourceCount);
+            return null;
+        }
+
+        return _sources.GetOrAdd(ssrc, _ =>
         {
             if (payloadType != NoPayloadType &&
                 _clockByPayloadType.TryGetValue((byte)payloadType, out var descriptor))
@@ -111,6 +152,7 @@ internal sealed class BundledInboundReceptionStats
             _sourceKinds.TryAdd(ssrc, new BundledInboundSourceKind(BundledStreamKind.Unknown, Mid: null));
             return new BundledSourceReceptionState();
         });
+    }
 
     /// <summary>
     /// Records that a Sender Report was received from <paramref name="senderSsrc"/>, capturing the LSR (the
@@ -125,6 +167,8 @@ internal sealed class BundledInboundReceptionStats
         // An SR carries no payload type; a source seen only via its SR is created with an inferred clock and an
         // unknown kind until its first RTP packet (which resolves the negotiated clock/kind by payload type).
         var state = GetOrAddSource(senderSsrc, NoPayloadType);
+        if (state is null)
+            return; // tracking table full — an SR from an unknown SSRC is not admitted (K4).
         state.RecordSenderReport(ToMiddle32Bits(senderReportNtpTimestamp), _utcNow());
     }
 
