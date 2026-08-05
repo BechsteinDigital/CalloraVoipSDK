@@ -14,7 +14,8 @@ internal sealed class SipTransportFactory : ISipTransportFactory
     public ISipTransportRuntime Create(
         TlsConfiguration? tls,
         ILoggerFactory loggerFactory,
-        SipTransportProtocol defaultTransport = SipTransportProtocol.Udp)
+        SipTransportProtocol defaultTransport = SipTransportProtocol.Udp,
+        SipTransportOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(loggerFactory);
         var logger = loggerFactory.CreateLogger<SipTransportFactory>();
@@ -29,6 +30,7 @@ internal sealed class SipTransportFactory : ISipTransportFactory
             new SipWireProtocol(),
             tls,
             defaultTransport,
-            routeResolver: null);
+            routeResolver: null,
+            options);
     }
 }

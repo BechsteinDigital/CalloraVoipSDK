@@ -95,11 +95,12 @@ internal sealed class RecordingTransportFactory : ISipTransportFactory
     public ISipTransportRuntime Create(
         TlsConfiguration? tls,
         ILoggerFactory loggerFactory,
-        SipTransportProtocol defaultTransport = SipTransportProtocol.Udp)
+        SipTransportProtocol defaultTransport = SipTransportProtocol.Udp,
+        SipTransportOptions? options = null)
     {
         LastDefaultTransport = defaultTransport;
         CreatedRuntime = new RecordingTransportRuntime(
-            new SipTransportFactory().Create(tls, loggerFactory, defaultTransport));
+            new SipTransportFactory().Create(tls, loggerFactory, defaultTransport, options));
         return CreatedRuntime;
     }
 }

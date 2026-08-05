@@ -183,7 +183,10 @@ public sealed class VoipClient : IVoipClient
             try
             {
                 _transportRuntime = transportFactory.Create(
-                    config.Tls, logFactory, MapTransport(config.DefaultTransport));
+                    config.Tls,
+                    logFactory,
+                    MapTransport(config.DefaultTransport),
+                    config.SipTransportHardening.ToTransportOptions());
             }
             catch (Exception ex) when (IsTransportInitializationFailure(ex))
             {
