@@ -17,14 +17,30 @@ internal sealed class H264Depacketiser : IVideoDepacketiser
     // presence in the access unit marks a key frame.
     private const int IdrNalType = 5;
 
+    // Above this retained capacity a reassembly buffer is released on Reset so a single large frame cannot
+    // permanently pin memory per track/RID lane; a typical coded frame is well under this.
+    private const int RetainCapacityBytes = 256 * 1024;
+
     private readonly MemoryStream _frame = new();
     private readonly MemoryStream _fragment = new();
+    private readonly int _maxFrameBytes;
     private bool _fragmentActive;
     private bool _isKeyFrame;
     private uint _timestamp;
 
+    /// <summary>Creates the depacketiser with a hard reassembly cap (K4).</summary>
+    public H264Depacketiser(int maxFrameBytes = VideoPayloadFormat.DefaultMaxEncodedFrameBytes)
+    {
+        if (maxFrameBytes <= 0)
+            throw new ArgumentOutOfRangeException(nameof(maxFrameBytes), "Max frame size must be positive.");
+        _maxFrameBytes = maxFrameBytes;
+    }
+
     /// <inheritdoc />
     public long DiscardedPacketCount { get; private set; }
+
+    /// <inheritdoc />
+    public long OversizedFrameDiscardCount { get; private set; }
 
     /// <inheritdoc />
     public bool TryProcess(ReadOnlyMemory<byte> rtpPayload, uint rtpTimestamp, bool marker, out byte[]? frame, out bool isKeyFrame)
@@ -79,6 +95,8 @@ internal sealed class H264Depacketiser : IVideoDepacketiser
     {
         _frame.SetLength(0);
         _fragment.SetLength(0);
+        ShrinkIfOversized(_frame);
+        ShrinkIfOversized(_fragment);
         _fragmentActive = false;
         _isKeyFrame = false;
     }
@@ -90,10 +108,30 @@ internal sealed class H264Depacketiser : IVideoDepacketiser
         return false;
     }
 
+    // K4: refuse a write that would push the reassembly buffer past the cap. The caller returns false and
+    // TryProcess then discards the whole frame (Reset), so it never grows without bound or desyncs the next.
+    private bool WithinCap(MemoryStream target, int addLength)
+    {
+        if (target.Length + addLength <= _maxFrameBytes)
+            return true;
+        OversizedFrameDiscardCount++;
+        return false;
+    }
+
+    // Release an over-grown buffer (its length is already 0) so a one-off large frame cannot pin memory.
+    private static void ShrinkIfOversized(MemoryStream stream)
+    {
+        if (stream.Capacity > RetainCapacityBytes)
+            stream.Capacity = 0;
+    }
+
     private bool AppendNal(ReadOnlySpan<byte> nal)
     {
         if (_fragmentActive)
             return false; // a new NAL inside an open FU-A run means lost fragments
+
+        if (!WithinCap(_frame, StartCode.Length + nal.Length))
+            return false;
 
         if ((nal[0] & 0x1F) == IdrNalType)
             _isKeyFrame = true;
@@ -118,6 +156,9 @@ internal sealed class H264Depacketiser : IVideoDepacketiser
             var size = BinaryPrimitives.ReadUInt16BigEndian(payload[offset..]);
             offset += 2;
             if (size == 0 || offset + size > payload.Length)
+                return false;
+
+            if (!WithinCap(_frame, StartCode.Length + size))
                 return false;
 
             if ((payload[offset] & 0x1F) == IdrNalType)
@@ -159,10 +200,14 @@ internal sealed class H264Depacketiser : IVideoDepacketiser
             return false; // continuation without a start — the first fragment was lost
         }
 
+        if (!WithinCap(_fragment, payload.Length - 2))
+            return false; // never-terminated FU-A run — bounded then discarded (fail closed)
         _fragment.Write(payload[2..]);
 
         if (end)
         {
+            if (!WithinCap(_frame, StartCode.Length + (int)_fragment.Length))
+                return false;
             _frame.Write(StartCode);
             _frame.Write(_fragment.GetBuffer().AsSpan(0, (int)_fragment.Length));
             _fragment.SetLength(0);

@@ -10,13 +10,29 @@ namespace CalloraVoipSdk.Core.Infrastructure.Rtp.Packetisation;
 /// </summary>
 internal sealed class Vp8Depacketiser : IVideoDepacketiser
 {
+    // Above this retained capacity the reassembly buffer is released on Reset so a single large frame
+    // cannot permanently pin memory per track/RID lane; a typical coded frame is well under this.
+    private const int RetainCapacityBytes = 256 * 1024;
+
     private readonly MemoryStream _frame = new();
+    private readonly int _maxFrameBytes;
     private bool _frameActive;
     private bool _isKeyFrame;
     private uint _timestamp;
 
+    /// <summary>Creates the depacketiser with a hard reassembly cap (K4).</summary>
+    public Vp8Depacketiser(int maxFrameBytes = VideoPayloadFormat.DefaultMaxEncodedFrameBytes)
+    {
+        if (maxFrameBytes <= 0)
+            throw new ArgumentOutOfRangeException(nameof(maxFrameBytes), "Max frame size must be positive.");
+        _maxFrameBytes = maxFrameBytes;
+    }
+
     /// <inheritdoc />
     public long DiscardedPacketCount { get; private set; }
+
+    /// <inheritdoc />
+    public long OversizedFrameDiscardCount { get; private set; }
 
     /// <inheritdoc />
     public bool TryProcess(ReadOnlyMemory<byte> rtpPayload, uint rtpTimestamp, bool marker, out byte[]? frame, out bool isKeyFrame)
@@ -51,6 +67,14 @@ internal sealed class Vp8Depacketiser : IVideoDepacketiser
             return false; // continuation of a frame whose start we never saw — drop
         }
 
+        // K4: bound reassembly. A same-timestamp run with no marker cannot grow past the cap — over it the
+        // whole frame under assembly is discarded (Reset), so it never pins memory or desyncs the next frame.
+        if (_frame.Length + (payload.Length - headerLength) > _maxFrameBytes)
+        {
+            OversizedFrameDiscardCount++;
+            return Discard();
+        }
+
         _frame.Write(payload[headerLength..]);
 
         if (!marker)
@@ -67,6 +91,9 @@ internal sealed class Vp8Depacketiser : IVideoDepacketiser
     public void Reset()
     {
         _frame.SetLength(0);
+        // Release an over-grown buffer (its length is already 0) so a one-off large frame cannot pin memory.
+        if (_frame.Capacity > RetainCapacityBytes)
+            _frame.Capacity = 0;
         _frameActive = false;
         _isKeyFrame = false;
     }
