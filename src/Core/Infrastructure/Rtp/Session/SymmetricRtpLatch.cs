@@ -35,31 +35,37 @@ internal sealed class SymmetricRtpLatch
     public IPEndPoint Target(IPEndPoint fallback) => Volatile.Read(ref _latched) ?? fallback;
 
     /// <summary>
-    /// Considers a validated inbound packet's <paramref name="source"/> for the latch. The caller MUST only pass
-    /// a source that passed SSRC/sequence validation. The first source always latches; a subsequent change of
-    /// source re-latches only when <paramref name="authenticated"/> (a keyed call), and is otherwise refused so
-    /// an unauthenticated flood cannot hijack the outbound path.
+    /// Considers a validated inbound packet's <paramref name="source"/> for the latch and returns whether the
+    /// packet is <b>admitted</b> for delivery. The caller MUST only pass a source that passed SSRC/sequence
+    /// validation. The first source always latches; a subsequent change of source re-latches only when
+    /// <paramref name="authenticated"/> (a keyed call). On a plaintext call a change of source is refused and the
+    /// packet is <b>not admitted</b> — media stays latched to the first source and the spoofed packet is dropped,
+    /// so an unauthenticated flood can neither hijack the outbound path nor be delivered as inbound media.
     /// </summary>
-    public void Consider(IPEndPoint source, bool authenticated)
+    /// <returns><see langword="true"/> to deliver the packet; <see langword="false"/> to drop it (refused source).</returns>
+    public bool Consider(IPEndPoint source, bool authenticated)
     {
         var current = Volatile.Read(ref _latched);
         if (source.Equals(current))
-            return;
+            return true;
 
         if (current is null || authenticated)
         {
             Volatile.Write(ref _latched, source);
             _logger.LogDebug("RTP symmetric latch: sending media to observed source {Source}.", source);
-            return;
+            return true;
         }
 
-        // Refused (plaintext lock). Log once per distinct new source so a flood does not spam the log.
+        // Refused (plaintext lock): neither re-latch the outbound path nor deliver this packet. Log once per
+        // distinct new source so a flood does not spam the log.
         if (!source.Equals(_lastRefused))
         {
             _lastRefused = source;
             _logger.LogWarning(
-                "Ignoring RTP from a new source {Source}: media stays latched to {Latched} (plaintext lock — " +
+                "Dropping RTP from a new source {Source}: media stays latched to {Latched} (plaintext lock — " +
                 "possible spoof or an un-renegotiated NAT rebind).", source, current);
         }
+
+        return false;
     }
 }

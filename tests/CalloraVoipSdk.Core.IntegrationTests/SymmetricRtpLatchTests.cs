@@ -63,6 +63,42 @@ public sealed class SymmetricRtpLatchTests
         Assert.Equal(PeerA, latch.Target(Fallback));
     }
 
+    // ── admission decision (#161 P1-4): the return value gates delivery, not just the outbound path ──
+
+    [Fact]
+    public void The_first_source_is_admitted()
+        => Assert.True(new SymmetricRtpLatch(NullLogger.Instance).Consider(PeerA, authenticated: false));
+
+    [Fact]
+    public void The_latched_source_is_admitted()
+    {
+        var latch = new SymmetricRtpLatch(NullLogger.Instance);
+        latch.Consider(PeerA, authenticated: false);
+
+        Assert.True(latch.Consider(PeerA, authenticated: false));
+    }
+
+    [Fact]
+    public void A_plaintext_new_source_is_refused_for_delivery()
+    {
+        var latch = new SymmetricRtpLatch(NullLogger.Instance);
+        latch.Consider(PeerA, authenticated: false);
+
+        // Refused: the caller must drop the packet, not just keep the outbound path latched.
+        Assert.False(latch.Consider(AttackerB, authenticated: false));
+        Assert.Equal(PeerA, latch.Target(Fallback));
+    }
+
+    [Fact]
+    public void A_keyed_new_source_is_admitted_and_re_latches()
+    {
+        var latch = new SymmetricRtpLatch(NullLogger.Instance);
+        latch.Consider(PeerA, authenticated: true);
+
+        Assert.True(latch.Consider(AttackerB, authenticated: true));
+        Assert.Equal(AttackerB, latch.Target(Fallback));
+    }
+
     [Fact]
     public void A_refused_re_latch_is_logged_as_a_warning_once_per_source()
     {

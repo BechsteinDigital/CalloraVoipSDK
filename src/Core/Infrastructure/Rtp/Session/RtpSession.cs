@@ -317,8 +317,8 @@ internal sealed class RtpSession : IRtpSession
     /// Test seam only, so the SSRC-tracking cap can be exercised deterministically on one thread —
     /// never called on the runtime receive path.
     /// </summary>
-    internal void InjectInboundDatagramForTest(ReadOnlySpan<byte> datagram)
-        => _inbound.Process(datagram, source: null);
+    internal void InjectInboundDatagramForTest(ReadOnlySpan<byte> datagram, IPEndPoint? source = null)
+        => _inbound.Process(datagram, source);
 
     /// <summary>
     /// Sends one RTCP datagram via the RTP socket (RTCP-MUX mode).
