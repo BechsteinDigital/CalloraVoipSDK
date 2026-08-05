@@ -308,9 +308,18 @@ internal sealed class RtpInboundProcessor
         }
 
         // SSRC collision detection + resolution (RFC 3550 §8.2): a third party is transmitting with our SSRC.
+        // Only an admitted source may force the disruptive reseed+BYE: an authenticated peer (keyed leg), the
+        // deterministic test-injection path, or the already-latched media source (plaintext). A refused foreign
+        // plaintext packet spoofing our SSRC is dropped without a reseed, so it cannot make us abandon our SSRC
+        // or emit a BYE (#161 P1-4 C).
         if (packet.Ssrc == _localSsrc())
         {
-            _onSsrcCollision(packet.Ssrc);
+            if (inboundSrtp is not null || source is null || _latch.IsLatchedSource(source))
+                _onSsrcCollision(packet.Ssrc);
+            else
+                _logger.LogDebug(
+                    "Dropping RTP carrying our SSRC {Ssrc:X8} from unadmitted source {Source}: no collision reseed (possible spoof).",
+                    packet.Ssrc, source);
             return;
         }
 

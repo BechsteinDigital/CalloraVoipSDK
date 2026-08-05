@@ -96,4 +96,12 @@ internal sealed class SymmetricRtpLatch
 
         return false;
     }
+
+    /// <summary>
+    /// Whether <paramref name="source"/> is the currently latched media source. Read-only — never latches. Used
+    /// to gate the disruptive RFC 3550 §8.2 SSRC-collision reseed on a plaintext leg: only the established media
+    /// source may make us abandon our SSRC and emit a BYE, so an unauthenticated foreign source cannot spoof our
+    /// SSRC to force a reseed. Returns <see langword="false"/> while unlatched. Runs on the receive-loop thread.
+    /// </summary>
+    public bool IsLatchedSource(IPEndPoint source) => source.Equals(Volatile.Read(ref _latched));
 }

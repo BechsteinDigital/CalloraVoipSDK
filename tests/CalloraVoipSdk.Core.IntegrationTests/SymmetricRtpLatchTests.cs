@@ -160,6 +160,22 @@ public sealed class SymmetricRtpLatchTests
         Assert.Equal(1, logger.Warnings);
     }
 
+    // ── collision gate (#161 P1-4 C): only the latched source is recognised as the media source ──
+
+    [Fact]
+    public void No_source_is_the_latched_source_before_a_latch()
+        => Assert.False(new SymmetricRtpLatch(NullLogger.Instance).IsLatchedSource(PeerA));
+
+    [Fact]
+    public void The_latched_source_is_recognised()
+    {
+        var latch = new SymmetricRtpLatch(NullLogger.Instance);
+        latch.Consider(PeerA, authenticated: false);
+
+        Assert.True(latch.IsLatchedSource(PeerA));
+        Assert.False(latch.IsLatchedSource(AttackerB));
+    }
+
     private sealed class CapturingLogger : ILogger
     {
         public int Warnings { get; private set; }
