@@ -1,0 +1,89 @@
+name: Issue link
+
+# Two jobs, one purpose: an issue always knows what is happening to it.
+#
+#   require-link  — a PR must name the issue it addresses, so acceptance criteria are never
+#                   invented in the PR description. Escape hatch: the `no-issue` label for
+#                   chores (typos, formatting, dependency bumps).
+#   notify-issue  — posts the PR link on every referenced issue when the PR opens, and the
+#                   outcome when it closes. Reviewing an issue then needs one tab, not three.
+#
+# Deliberately does NOT tick the issue's acceptance-criteria checkboxes. A machine cannot tell
+# whether a criterion is genuinely met; a human ticking them is the point of having them.
+
+on:
+  pull_request_target:
+    types: [opened, edited, reopened, synchronize, labeled, unlabeled, closed]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: issue-link-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  require-link:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - name: A PR must reference its issue
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const labels = pr.labels.map(l => l.name);
+            if (labels.includes('no-issue')) {
+              core.info('Labelled `no-issue` — skipping the link requirement.');
+              return;
+            }
+            // Closing keywords GitHub itself honours, plus a bare "#123" so a PR that
+            // contributes to an issue without closing it still passes.
+            const body = pr.body || '';
+            const linked = /\B#\d+\b/.test(body) ||
+                           /\b(close[sd]?|fix(e[sd])?|resolve[sd]?)\b[^\n]*#\d+/i.test(body);
+            if (!linked) {
+              core.setFailed(
+                'This PR does not reference an issue.\n\n' +
+                'Add "Closes #123" to the description (the issue is where the acceptance ' +
+                'criteria live), or apply the `no-issue` label if this is a chore.'
+              );
+            }
+
+  notify-issue:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report the PR on the issues it references
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const body = pr.body || '';
+            const refs = [...new Set([...body.matchAll(/\B#(\d+)\b/g)].map(m => Number(m[1])))]
+              .filter(n => n !== pr.number);
+            if (refs.length === 0) return;
+
+            const opened = context.payload.action !== 'closed';
+            const merged = pr.merged;
+            const note = opened
+              ? `🔧 PR #${pr.number} — **${pr.title}** — is open against this issue.\n\n` +
+                `Tick the acceptance criteria above as the review confirms them.`
+              : merged
+                ? `✅ Merged in #${pr.number} (\`${pr.merge_commit_sha?.slice(0, 8) ?? 'merged'}\`).\n\n` +
+                  `If any acceptance criterion above is still unticked, this issue stays open — ` +
+                  `a merge is not by itself proof that the criteria are met.`
+                : `↩️ PR #${pr.number} was closed without merging. This issue is unchanged.`;
+
+            for (const issue_number of refs) {
+              try {
+                const { data: issue } = await github.rest.issues.get(
+                  { ...context.repo, issue_number });
+                if (issue.pull_request) continue;   // a PR reference, not an issue
+                await github.rest.issues.createComment(
+                  { ...context.repo, issue_number, body: note });
+              } catch (e) {
+                core.info(`Skipping #${issue_number}: ${e.message}`);
+              }
+            }

@@ -7,7 +7,20 @@ first — see SECURITY.md. Contribution rules: CONTRIBUTING.md and ENGINEERING_R
 
 <!-- What does this PR change and why? One or two sentences. -->
 
-Fixes #<!-- issue number, if any -->
+**Closes:** #<!-- issue number — REQUIRED. Use one of: Closes / Fixes / Resolves #123.
+     Every PR must reference the issue it addresses; CI checks for it. If no issue exists
+     yet, open one first — it is where the acceptance criteria live. Chore-only PRs
+     (typos, formatting, dependency bumps) may use the `no-issue` label instead. -->
+
+<!-- If this closes only SOME of the parent review's findings, say which and link the parent:
+     "Closes #172 (P1-1 of #163). Remaining in #163: P1-3, P2." -->
+
+## Acceptance criteria
+
+<!-- Copy the checkboxes from the issue and tick the ones this PR satisfies. A reviewer
+     should be able to diff this list against the issue without opening both tabs. -->
+
+- [ ]
 
 ## How
 
