@@ -59,19 +59,72 @@ people up most often:
   (see `docs/audit/CODE_FINDINGS_REGISTER.md`).
 - **Match the surrounding code** in style, comment density, and naming.
 
+## How work is tracked
+
+Everything lives in GitHub Issues — there is no second tracker, so an issue, its commits,
+its PR and the CI result are always one click apart.
+
+**One finding, one issue, one PR.** A review that turns up five defects becomes five
+issues plus a parent that links them as sub-issues, not one issue with five headings. The
+parent carries a checklist so you can see at a glance what is left:
+
+```markdown
+### Findings
+- [x] P1-1 Response authentication — #174
+- [ ] P2 Fail-closed parsing — #181
+```
+
+**The issue owns the acceptance criteria.** They are checkboxes, and each one is meant to
+be checkable by reading a diff. The issue closes when they are all ticked — not when a PR
+merges. A merge is evidence, not proof; if a criterion is still open after the merge, the
+issue stays open and says why.
+
+Nobody ticks them automatically. A bot cannot tell whether "excess candidates create no
+persistent entries" is genuinely true, so a human does it during review. That is the
+whole reason the boxes exist.
+
+### Picking something up
+
+| Label | Meaning |
+|---|---|
+| [`good first issue`](../../labels/good%20first%20issue) | Small, self-contained, no deep protocol context needed |
+| [`help wanted`](../../labels/help%20wanted) | Well-scoped and genuinely unclaimed |
+| [`review-finding`](../../labels/review-finding) | A concrete defect with acceptance criteria — the best kind of ticket to fix |
+| `P1` / `P2` / `P3` | Interop/stability critical · correctness · hygiene |
+
+Comment on the issue before you start on anything larger than a one-liner, so two people
+do not fix the same thing. No formal assignment process — saying "taking this" is enough.
+
 ## Pull request flow
 
 1. Fork the repo and create a branch from `main` (e.g. `fix/srtcp-tag-length`).
 2. Make your change with tests; run the build and the architecture gates locally.
-3. Open a PR against `main`. Fill in the PR template, and link the issue it resolves
-   (e.g. `Fixes #6`).
-4. CI must be green. A maintainer will review; expect questions on RFC compliance and
+3. Open a PR against `main` and fill in the template.
+   - **Reference the issue — this is required and CI checks it.** Use `Closes #123`
+     (or `Fixes` / `Resolves`). A chore with genuinely no issue behind it can carry the
+     `no-issue` label instead.
+   - **Copy the issue's acceptance criteria into the PR** and tick what your change
+     satisfies, so a reviewer can compare the two without opening both tabs.
+   - Closing only part of a parent review? Say so: `Closes #172 (P1-1 of #163).
+     Remaining in #163: P1-3, P2.`
+4. A bot posts your PR on the referenced issues, and posts the outcome when it closes —
+   so the issue thread stays readable on its own.
+5. CI must be green. A maintainer will review; expect questions on RFC compliance and
    threading for stack changes.
+
+If you are fixing something you found yourself, open the issue first anyway. It takes a
+minute, it gives the fix a place to state what "done" means, and it means the next person
+who hits the same bug finds it.
 
 ## Commit messages
 
 Use clear, imperative messages. Conventional-commit prefixes (`fix:`, `feat:`, `docs:`,
 `test:`) are appreciated but not required.
+
+**Do name the finding you are fixing** when a review issue has several:
+`fix(stun): make the long-term nonce manager stateless (#156 P1-2)`. GitHub cannot query
+issue bodies, so this line is what lets anyone map a commit back to the finding it closes —
+including six months from now, when the file has moved and the line numbers are gone.
 
 ## Licensing
 

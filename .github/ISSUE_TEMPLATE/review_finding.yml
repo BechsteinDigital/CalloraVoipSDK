@@ -1,0 +1,84 @@
+name: Review finding
+description: One concrete finding from a code review or audit — scoped so it can be fixed in a single PR.
+title: "[<area>] <one-line defect>"
+labels: ["review-finding"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        One finding per issue. If a review turned up five defects, that is five issues plus a
+        parent that links them — not one issue with five headings. A finding that cannot be
+        fixed in a single PR is still too big; split it.
+
+        Looking for something to work on instead? Try the
+        [`good first issue`](https://github.com/BechsteinDigital/callora-voip-sdk/labels/good%20first%20issue)
+        and [`help wanted`](https://github.com/BechsteinDigital/callora-voip-sdk/labels/help%20wanted) labels.
+
+  - type: input
+    id: parent
+    attributes:
+      label: Parent review
+      description: The review issue this finding belongs to, if any. Also add it as a sub-issue there.
+      placeholder: "#156"
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - P1 — interop or stability critical
+        - P2 — correctness or robustness
+        - P3 — hygiene, scope gap, follow-up
+    validations:
+      required: true
+
+  - type: textarea
+    id: where
+    attributes:
+      label: Where
+      description: >
+        Permalink to the code at a specific commit (press `y` on GitHub to pin the SHA), so the
+        line numbers stay valid after the file moves.
+      placeholder: "https://github.com/BechsteinDigital/callora-voip-sdk/blob/<sha>/src/…#L120-L134"
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What is wrong
+      description: The defect itself, and the RFC paragraph it violates where one applies.
+    validations:
+      required: true
+
+  - type: textarea
+    id: risk
+    attributes:
+      label: Risk
+      description: What actually breaks, for whom. "A malformed packet from any sender faults the receive task" beats "may cause issues".
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: >
+        Checkboxes only — each one independently checkable by reading the diff. This is the
+        contract: when every box is ticked, the issue closes.
+      value: |
+        - [ ]
+        - [ ]
+        - [ ] Covered by a test on the lowest sensible level (L0 wire → L4 facade)
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: dod
+    attributes:
+      label: Definition of done
+      options:
+        - label: Every acceptance criterion above is ticked
+        - label: A test fails before the fix and passes after it
+        - label: Architecture gates, build and the relevant test suites are green
+        - label: Docs or CHANGELOG updated if consumer-visible behaviour changed
