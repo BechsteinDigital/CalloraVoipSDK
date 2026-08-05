@@ -75,7 +75,9 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
         string? inboundUserAgent = null,
         int? maxConcurrentInboundSessions = null,
         TimeSpan? inboundRingDeadline = null,
-        int? maxInboundSessionsPerRemote = null)
+        int? maxInboundSessionsPerRemote = null,
+        int? maxServerTransactions = null,
+        TimeSpan? absoluteServerTransactionLifetime = null)
     {
         var resolvedDigestAuthenticator = digestAuthenticator
             ?? throw new ArgumentNullException(nameof(digestAuthenticator));
@@ -90,7 +92,8 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
         _telemetry = telemetry ?? NullSipTelemetrySink.Instance;
         _identityTrustPolicy = identityTrustPolicy ?? DenyAllSipIdentityTrustPolicy.Instance;
         _userIdentityPolicy = userIdentityPolicy ?? AcceptAllSipUasUserIdentityPolicy.Instance;
-        _serverTransactions = new SipServerTransactionEngine(_transport, _logger);
+        _serverTransactions = new SipServerTransactionEngine(
+            _transport, _logger, maxServerTransactions, absoluteServerTransactionLifetime);
         _subscribeExecutor = new SipClientTransactionExecutor(_transport, _logger);
         _subscriptionService = new SipCallSignalingSubscriptions(
             _transport,
