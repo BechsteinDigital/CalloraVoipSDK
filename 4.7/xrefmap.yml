@@ -6857,6 +6857,19 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.Core.Domain.Lines.SipCredentials.Realm
   nameWithType: SipCredentials.Realm
+- uid: CalloraVoipSdk.Core.Domain.Lines.SipCredentials.ToString
+  name: ToString()
+  href: _api/CalloraVoipSdk.Core.Domain.Lines.SipCredentials.html#CalloraVoipSdk_Core_Domain_Lines_SipCredentials_ToString
+  commentId: M:CalloraVoipSdk.Core.Domain.Lines.SipCredentials.ToString
+  fullName: CalloraVoipSdk.Core.Domain.Lines.SipCredentials.ToString()
+  nameWithType: SipCredentials.ToString()
+- uid: CalloraVoipSdk.Core.Domain.Lines.SipCredentials.ToString*
+  name: ToString
+  href: _api/CalloraVoipSdk.Core.Domain.Lines.SipCredentials.html#CalloraVoipSdk_Core_Domain_Lines_SipCredentials_ToString_
+  commentId: Overload:CalloraVoipSdk.Core.Domain.Lines.SipCredentials.ToString
+  isSpec: "True"
+  fullName: CalloraVoipSdk.Core.Domain.Lines.SipCredentials.ToString
+  nameWithType: SipCredentials.ToString
 - uid: CalloraVoipSdk.Core.Domain.Lines.SipCredentials.Username
   name: Username
   href: _api/CalloraVoipSdk.Core.Domain.Lines.SipCredentials.html#CalloraVoipSdk_Core_Domain_Lines_SipCredentials_Username
