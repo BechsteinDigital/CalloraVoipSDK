@@ -1,3 +1,5 @@
+using CalloraVoipSdk.Core.Application.Media.Sessions;
+
 namespace CalloraVoipSdk.Audio.Abstractions.Processing;
 
 /// <summary>
@@ -8,11 +10,6 @@ namespace CalloraVoipSdk.Audio.Abstractions.Processing;
 /// </summary>
 public static class AudioCodecResolver
 {
-    // Opus RTP clock rate in Hz (RFC 7587 §4.1). Mirrors the internal
-    // OpusPayloadCodec.RtpClockRate constant the platform devices used before A8; kept as a local
-    // constant so this plattform-neutral helper does not depend on a Core-internal type.
-    private const int OpusRtpClockRate = 48_000;
-
     /// <summary>
     /// Resolves the active codec, preferring an explicit codec name, then the payload-type→codec map,
     /// then well-known static payload types (9/≥16 kHz → G.722, 8 → PCMA, otherwise PCMU).
@@ -75,7 +72,7 @@ public static class AudioCodecResolver
     /// <returns>The codec's PCM sample rate in Hz.</returns>
     public static int GetCodecSampleRate(ActiveCodec codec) => codec switch
     {
-        ActiveCodec.Opus => OpusRtpClockRate, // 48 kHz
+        ActiveCodec.Opus => OpusPayloadCodec.RtpClockRate, // 48 kHz (RFC 7587 §4.1) — the shared Core constant
         ActiveCodec.G722 => 16_000,
         _ => 8_000
     };

@@ -17,8 +17,11 @@ using System.Runtime.CompilerServices;
 //   - CalloraVoipSdk.Audio.Linux / .Windows — the shipped platform audio packages. They consume public
 //     Core abstractions (IAudioDevice, the Audio.Abstractions helpers) AND the internal Opus codec
 //     (OpusDeviceCodec -> OpusPayloadCodec), which is shared with Core's RTP media path rather than
-//     duplicated into each audio backend. (Follow-up: extracting a standalone Opus codec into
-//     Audio.Abstractions would let these two grants be dropped — a larger, dependency-carrying refactor.)
+//     duplicated into each audio backend.
+//   - CalloraVoipSdk.Audio.Abstractions — the platform-neutral audio package. It wraps the internal
+//     payload codecs (Opus/G.711/G.722) behind the public IAudioPayloadCodec transcoding surface (#205)
+//     so server-side consumers (e.g. an SFU bridging a phone leg into a WebRTC conference) can decode
+//     and re-encode PCM16 without binding Concentus themselves; the Concentus/NAudio types never leak.
 //   - CalloraVoipSdk.InteropHarness + the *.Tests / *.Performance assemblies — test, benchmark and
 //     interop-harness code that must exercise the internals directly; none are shipped to consumers.
 
@@ -35,5 +38,6 @@ using System.Runtime.CompilerServices;
 
 // ── Shipped first-party assemblies (facade composition + shared Opus codec) ──────────────────────
 [assembly: InternalsVisibleTo("CalloraVoipSdk.Client")]
+[assembly: InternalsVisibleTo("CalloraVoipSdk.Audio.Abstractions")]
 [assembly: InternalsVisibleTo("CalloraVoipSdk.Audio.Linux")]
 [assembly: InternalsVisibleTo("CalloraVoipSdk.Audio.Windows")]
