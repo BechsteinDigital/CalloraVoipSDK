@@ -31,7 +31,8 @@ internal sealed class BundledDtlsKeying : IAsyncDisposable
         IBundledDatagramSender sender,
         Action onHandshakeFailed,
         ILoggerFactory loggerFactory,
-        Action? onKeysInstalled = null)
+        Action? onKeysInstalled = null,
+        Action? onPeerClosed = null)
     {
         _inbound = inbound ?? throw new ArgumentNullException(nameof(inbound));
         ArgumentNullException.ThrowIfNull(outbound);
@@ -54,7 +55,8 @@ internal sealed class BundledDtlsKeying : IAsyncDisposable
                 onKeysInstalled?.Invoke(); // media can now flow (RFC 5763: keys derived from the handshake)
             },
             onHandshakeFailed: onHandshakeFailed,
-            loggerFactory);
+            loggerFactory,
+            onPeerClosed: onPeerClosed);
 
         _inbound.DtlsPacketReceived += _attachment.OnDtlsPacketReceived;
     }

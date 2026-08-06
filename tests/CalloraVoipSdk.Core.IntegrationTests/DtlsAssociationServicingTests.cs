@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Net;
 using CalloraVoipSdk.Core.Infrastructure.Dtls;
 using Microsoft.Extensions.Logging.Abstractions;
 using Org.BouncyCastle.Tls;
@@ -242,6 +243,63 @@ public sealed class DtlsAssociationServicingTests
         {
             _entered.TrySetResult();
             return _release.Task.GetAwaiter().GetResult(); // block the loop until the test releases it
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // End-to-end: two attachments in loopback, one closes -> the other's owner is notified
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task Attachment_WhenPeerClosesTheAssociation_NotifiesTheOwner()
+    {
+        var clientCertificate = DtlsCertificate.GenerateEcdsaP256();
+        var serverCertificate = DtlsCertificate.GenerateEcdsaP256();
+        var clientEndpoint = new IPEndPoint(IPAddress.Loopback, 5000);
+        var serverEndpoint = new IPEndPoint(IPAddress.Loopback, 5001);
+
+        var clientReady = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var serverReady = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var clientPeerClosed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        DtlsMediaAttachment client = null!;
+        DtlsMediaAttachment server = null!;
+        client = DtlsMediaAttachment.Create(
+            isClient: true, serverEndpoint, serverCertificate.Fingerprint,
+            new DtlsSrtpHandshaker(NullLogger<DtlsSrtpHandshaker>.Instance), clientCertificate,
+            sendRaw: (datagram, _, _) =>
+            {
+                server.OnDtlsPacketReceived(datagram.ToArray(), clientEndpoint);
+                return ValueTask.CompletedTask;
+            },
+            onContextsReady: (_, _, _, _) => clientReady.TrySetResult(),
+            onHandshakeFailed: () => clientReady.TrySetException(new InvalidOperationException("client handshake failed")),
+            NullLoggerFactory.Instance,
+            onPeerClosed: () => clientPeerClosed.TrySetResult());
+        server = DtlsMediaAttachment.Create(
+            isClient: false, clientEndpoint, clientCertificate.Fingerprint,
+            new DtlsSrtpHandshaker(NullLogger<DtlsSrtpHandshaker>.Instance), serverCertificate,
+            sendRaw: (datagram, _, _) =>
+            {
+                client.OnDtlsPacketReceived(datagram.ToArray(), serverEndpoint);
+                return ValueTask.CompletedTask;
+            },
+            onContextsReady: (_, _, _, _) => serverReady.TrySetResult(),
+            onHandshakeFailed: () => serverReady.TrySetException(new InvalidOperationException("server handshake failed")),
+            NullLoggerFactory.Instance);
+
+        await using (client)
+        await using (server)
+        {
+            client.Start(default);
+            server.Start(default);
+            await Task.WhenAll(clientReady.Task, serverReady.Task).WaitAsync(TimeSpan.FromSeconds(30));
+
+            // The peer (server) closes its DTLS association; its close_notify reaches the client, whose
+            // association receiver notices it and notifies the owner — media must not keep flowing.
+            await server.DisposeAsync();
+
+            await clientPeerClosed.Task.WaitAsync(TimeSpan.FromSeconds(5));
         }
     }
 
