@@ -216,22 +216,32 @@ internal sealed class SipCoreCallChannel : ICallChannel, IRtcpSocketHandoff
     }
 
     /// <inheritdoc />
-    public string? RemoteAssertedIdentity
-    {
-        get { lock (_sessionSync) return _session?.RemoteAssertedIdentity; }
-    }
+    public string? RemoteAssertedIdentity { get { lock (_sessionSync) return _session?.RemoteAssertedIdentity; } }
 
     /// <inheritdoc />
-    public string? Diversion
-    {
-        get { lock (_sessionSync) return _session?.Diversion; }
-    }
+    public string? Diversion { get { lock (_sessionSync) return _session?.Diversion; } }
 
     /// <inheritdoc />
-    public string? EarlyMediaSdp
-    {
-        get { lock (_sessionSync) return _session?.EarlyMediaSdp; }
-    }
+    public string? RemoteDisplayName { get { lock (_sessionSync) return _session?.RemoteDisplayName; } }
+
+    /// <inheritdoc />
+    public string? RemoteNumber { get { lock (_sessionSync) return UserPartOrNull(_session?.RemoteUri); } }
+
+    /// <inheritdoc />
+    public string? LocalParty { get { lock (_sessionSync) return _session?.LocalUri; } }
+
+    /// <inheritdoc />
+    // The dialed DID (To user part) — inbound only; on an outbound leg the local URI is our own account.
+    public string? CalledNumber { get { lock (_sessionSync) return _session is { IsInbound: true } s ? UserPartOrNull(s.LocalUri) : null; } }
+
+    /// <inheritdoc />
+    public string? EarlyMediaSdp { get { lock (_sessionSync) return _session?.EarlyMediaSdp; } }
+
+    // One SIP-URI user-part parser for every identity property, so each consumer shares it instead of rolling its own.
+    private static string? UserPartOrNull(string? uri)
+        => !string.IsNullOrEmpty(uri) && SipProtocol.TryParseSipUri(uri, out var user, out _, out _) && !string.IsNullOrEmpty(user)
+            ? user
+            : null;
 
     /// <summary>
     /// Attaches the SIP dialog session after INVITE bootstrap or inbound session creation.
@@ -521,41 +531,20 @@ internal sealed class SipCoreCallChannel : ICallChannel, IRtcpSocketHandoff
 
     /// <inheritdoc />
     public Task SendInfoAsync(string contentType, string body, CancellationToken ct)
-    {
-        var session = EnsureSession();
-        return session.SendInfoAsync(contentType, body, ct);
-    }
+        => EnsureSession().SendInfoAsync(contentType, body, ct);
 
     /// <inheritdoc />
-    public Task<bool> SendOptionsAsync(CancellationToken ct)
-    {
-        var session = EnsureSession();
-        return session.SendOptionsAsync(ct);
-    }
+    public Task<bool> SendOptionsAsync(CancellationToken ct) => EnsureSession().SendOptionsAsync(ct);
 
     /// <inheritdoc />
     public Task<bool> SendSubscribeAsync(
-        string eventType,
-        int expiresSeconds,
-        string? acceptHeader,
-        string? body,
-        CancellationToken ct)
-    {
-        var session = EnsureSession();
-        return session.SendSubscribeAsync(eventType, expiresSeconds, acceptHeader, body, ct);
-    }
+        string eventType, int expiresSeconds, string? acceptHeader, string? body, CancellationToken ct)
+        => EnsureSession().SendSubscribeAsync(eventType, expiresSeconds, acceptHeader, body, ct);
 
     /// <inheritdoc />
     public Task<bool> SendNotifyAsync(
-        string eventType,
-        string subscriptionState,
-        string? contentType,
-        string? body,
-        CancellationToken ct)
-    {
-        var session = EnsureSession();
-        return session.SendNotifyAsync(eventType, subscriptionState, contentType, body, ct);
-    }
+        string eventType, string subscriptionState, string? contentType, string? body, CancellationToken ct)
+        => EnsureSession().SendNotifyAsync(eventType, subscriptionState, contentType, body, ct);
 
     /// <inheritdoc />
     public Task<bool> BlindTransferAsync(string targetUri, TimeSpan timeout, CancellationToken ct)

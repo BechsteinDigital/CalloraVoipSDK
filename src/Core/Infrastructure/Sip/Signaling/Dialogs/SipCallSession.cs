@@ -58,6 +58,7 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
     internal string? _activeInviteBranch;
     private string? _remoteAssertedIdentity;
     private readonly string? _diversion;
+    private readonly string? _remoteDisplayName;
     private string? _remoteSdp;
     private string? _earlyMediaSdp;
     private string? _localSdp;
@@ -163,6 +164,7 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
                 _initialInvite.Header("P-Asserted-Identity"),
                 configuration.RemoteEndPoint);
             _diversion = SipCallSessionUtilities.ParseDiversionUri(_initialInvite.Header("Diversion"));
+            _remoteDisplayName = SipProtocol.ExtractDisplayNameFromNameAddr(_initialInvite.Header("From"));
             var initialRemoteCSeq = SipProtocol.ExtractCSeqNumber(_initialInvite.Header("CSeq"));
             if (initialRemoteCSeq > 0)
             {
@@ -184,15 +186,11 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
     /// <inheritdoc />
     public bool IsInbound => _isInbound;
     /// <inheritdoc />
-    public string? RemoteAssertedIdentity
-    {
-        get
-        {
-            lock (_sync) return _remoteAssertedIdentity;
-        }
-    }
+    public string? RemoteAssertedIdentity { get { lock (_sync) return _remoteAssertedIdentity; } }
     /// <inheritdoc />
     public string? Diversion => _diversion;
+    /// <inheritdoc />
+    public string? RemoteDisplayName => _remoteDisplayName;
     /// <inheritdoc />
     public SipDialogState State
     {

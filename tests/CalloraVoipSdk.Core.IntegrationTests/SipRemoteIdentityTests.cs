@@ -4,6 +4,7 @@ using CalloraVoipSdk.Core.Infrastructure.Sdp;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Adapters;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Observability;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Signaling;
+using CalloraVoipSdk.Core.Infrastructure.Sip.Wire;
 using CalloraVoipSdk.Core.Domain.Security;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
@@ -64,18 +65,108 @@ public sealed class SipRemoteIdentityTests
         Assert.Equal("sip:diverted-from@pbx.example", call.Diversion);
     }
 
-    // Minimal inbound-ringing session fake exposing only identity/diversion; everything else no-op.
-    private sealed class StubIdentityCallSession(string? remoteAssertedIdentity, string? diversion)
+    [Theory]
+    [InlineData("\"Alice Example\" <sip:a@b>", "Alice Example")]
+    [InlineData("Bob <sip:b@c>", "Bob")]
+    [InlineData("<sip:a@b>", null)]              // bare addr-spec — no display name
+    [InlineData("sip:a@b;tag=x", null)]          // no angle brackets — no display name
+    [InlineData("\"\" <sip:a@b>", null)]         // empty quoted display name
+    [InlineData("\"Alice \\\"AJ\\\" Jones\" <sip:a@b>", "Alice \"AJ\" Jones")] // escaped quotes
+    [InlineData(null, null)]
+    [InlineData("   ", null)]
+    public void ExtractDisplayNameFromNameAddr_parses_the_display_name(string? header, string? expected)
+    {
+        Assert.Equal(expected, SipProtocol.ExtractDisplayNameFromNameAddr(header));
+    }
+
+    [Fact]
+    public void Inbound_caller_and_dialed_identity_surface_on_the_call()
+    {
+        using var channel = new SipCoreCallChannel(
+            NullLogger<SipCoreCallChannel>.Instance,
+            new SdpNegotiator(),
+            NullSipTelemetrySink.Instance,
+            SrtpPolicy.Disabled,
+            "test");
+
+        var call = new Call(
+            CallId.New(),
+            CallDirection.Inbound,
+            "sip:+4915100@carrier.example",
+            channel,
+            new FakePhoneLine(),
+            NullLogger<Call>.Instance);
+
+        // Before a session is attached the identity is unknown.
+        Assert.Null(call.RemoteDisplayName);
+        Assert.Null(call.RemoteNumber);
+        Assert.Null(call.LocalParty);
+        Assert.Null(call.CalledNumber);
+
+        channel.AttachSession(new StubIdentityCallSession(
+            remoteAssertedIdentity: null,
+            diversion: null,
+            localUri: "sip:+4930999@carrier.example",   // To — the dialed DID
+            remoteUri: "sip:+4915100@carrier.example",  // From — the caller
+            remoteDisplayName: "Alice Example"));
+
+        Assert.Equal("Alice Example", call.RemoteDisplayName);
+        Assert.Equal("+4915100", call.RemoteNumber);
+        Assert.Equal("sip:+4930999@carrier.example", call.LocalParty);
+        Assert.Equal("+4930999", call.CalledNumber);
+    }
+
+    [Fact]
+    public void CalledNumber_is_null_on_an_outbound_leg()
+    {
+        using var channel = new SipCoreCallChannel(
+            NullLogger<SipCoreCallChannel>.Instance,
+            new SdpNegotiator(),
+            NullSipTelemetrySink.Instance,
+            SrtpPolicy.Disabled,
+            "test");
+
+        var call = new Call(
+            CallId.New(),
+            CallDirection.Outbound,
+            "sip:callee@peer.example",
+            channel,
+            new FakePhoneLine(),
+            NullLogger<Call>.Instance);
+
+        channel.AttachSession(new StubIdentityCallSession(
+            remoteAssertedIdentity: null,
+            diversion: null,
+            localUri: "sip:me@home.example",
+            remoteUri: "sip:callee@peer.example",
+            remoteDisplayName: null,
+            isInbound: false));
+
+        // The dialed-DID concept only applies inbound; the callee still surfaces as RemoteNumber.
+        Assert.Null(call.CalledNumber);
+        Assert.Equal("callee", call.RemoteNumber);
+        Assert.Equal("sip:me@home.example", call.LocalParty);
+    }
+
+    // Minimal inbound-ringing session fake exposing identity/diversion/dialed-number; everything else no-op.
+    private sealed class StubIdentityCallSession(
+        string? remoteAssertedIdentity,
+        string? diversion,
+        string localUri = "sip:sdk@127.0.0.1",
+        string remoteUri = "sip:remote@127.0.0.1",
+        string? remoteDisplayName = null,
+        bool isInbound = true)
         : ISipCallSession
     {
         public string CallId => "identity-stub-call";
-        public string LocalUri => "sip:sdk@127.0.0.1";
-        public string RemoteUri => "sip:remote@127.0.0.1";
+        public string LocalUri => localUri;
+        public string RemoteUri => remoteUri;
         public SipDialogState State => SipDialogState.Ringing;
         public SipDialogTerminationReason? LastTerminationReason => null;
-        public bool IsInbound => true;
+        public bool IsInbound => isInbound;
         public string? RemoteAssertedIdentity => remoteAssertedIdentity;
         public string? Diversion => diversion;
+        public string? RemoteDisplayName => remoteDisplayName;
         public string? RemoteSdp => null;
         public IPEndPoint LocalSignalingEndPoint => new(IPAddress.Loopback, 5060);
         public IPEndPoint? RemoteSignalingEndPoint => new(IPAddress.Loopback, 5060);

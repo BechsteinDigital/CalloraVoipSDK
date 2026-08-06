@@ -117,6 +117,39 @@ internal static class SipProtocol
     }
 
     /// <summary>
+    /// Extracts the display-name from a SIP name-addr (RFC 3261 §8.1.1.3 / §25.1), i.e. the text
+    /// before the <c>&lt;</c> of a <c>"Display Name" &lt;uri&gt;</c> header. A quoted-string display
+    /// name is unquoted and its quoted-pairs unescaped. Returns <see langword="null"/> for a bare
+    /// <c>addr-spec</c> (no angle brackets), an empty display part, or an absent header.
+    /// </summary>
+    public static string? ExtractDisplayNameFromNameAddr(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var trimmed = value.Trim();
+        var angle = trimmed.IndexOf('<');
+        if (angle <= 0) return null; // bare addr-spec, or a leading '<' with no display part
+        var display = trimmed[..angle].Trim();
+        if (display.Length < 2 || display[0] != '"' || display[^1] != '"')
+            return display.Length == 0 ? null : display; // unquoted token display-name, or empty
+
+        // Quoted-string display-name: strip the quotes and unescape quoted-pairs (a backslash
+        // escapes the following character).
+        var inner = display[1..^1];
+        if (!inner.Contains('\\'))
+            return inner.Length == 0 ? null : inner;
+
+        var unescaped = new char[inner.Length];
+        var count = 0;
+        for (var i = 0; i < inner.Length; i++)
+        {
+            if (inner[i] == '\\' && i + 1 < inner.Length) i++;
+            unescaped[count++] = inner[i];
+        }
+
+        return count == 0 ? null : new string(unescaped, 0, count);
+    }
+
+    /// <summary>
     /// Extracts the tag parameter value from a SIP header.
     /// </summary>
     public static string? ExtractTag(string? value)

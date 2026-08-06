@@ -485,6 +485,7 @@
   CalloraVoipSdk.Core.Domain.Calls.ICall.AcceptAsync(System.Threading.CancellationToken ct = default) : System.Threading.Tasks.Task
   CalloraVoipSdk.Core.Domain.Calls.ICall.AttendedTransferAsync(CalloraVoipSdk.Core.Domain.Calls.ICall consultationCall, System.Threading.CancellationToken ct = default) : System.Threading.Tasks.Task<System.Boolean>
   CalloraVoipSdk.Core.Domain.Calls.ICall.BlindTransferAsync(System.String targetUri, System.Threading.CancellationToken ct = default) : System.Threading.Tasks.Task
+  CalloraVoipSdk.Core.Domain.Calls.ICall.CalledNumber : System.String { get }
   CalloraVoipSdk.Core.Domain.Calls.ICall.CallId : CalloraVoipSdk.Core.Domain.Calls.CallId { get }
   CalloraVoipSdk.Core.Domain.Calls.ICall.Direction : CalloraVoipSdk.Core.Domain.Calls.CallDirection { get }
   CalloraVoipSdk.Core.Domain.Calls.ICall.Diversion : System.String { get }
@@ -497,12 +498,15 @@
   CalloraVoipSdk.Core.Domain.Calls.ICall.IceConnectionStateChanged : event System.EventHandler<CalloraVoipSdk.Core.Domain.Events.CallIceConnectionStateChangedEventArgs>
   CalloraVoipSdk.Core.Domain.Calls.ICall.IceSnapshot : CalloraVoipSdk.Core.Domain.Calls.CallIceSnapshot { get }
   CalloraVoipSdk.Core.Domain.Calls.ICall.Line : CalloraVoipSdk.Core.Domain.Lines.IPhoneLine { get }
+  CalloraVoipSdk.Core.Domain.Calls.ICall.LocalParty : System.String { get }
   CalloraVoipSdk.Core.Domain.Calls.ICall.MediaParameters : CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters { get }
   CalloraVoipSdk.Core.Domain.Calls.ICall.QualitySnapshot : CalloraVoipSdk.Core.Domain.Calls.CallQualitySnapshot { get }
   CalloraVoipSdk.Core.Domain.Calls.ICall.QualitySnapshotChanged : event System.EventHandler<CalloraVoipSdk.Core.Domain.Events.CallQualitySnapshotChangedEventArgs>
   CalloraVoipSdk.Core.Domain.Calls.ICall.RedirectAsync(System.Collections.Generic.IReadOnlyList<System.String> contactUris, System.Int32 statusCode = default, System.Threading.CancellationToken ct = default) : System.Threading.Tasks.Task<CalloraVoipSdk.Core.Domain.Calls.CallActionResult>
   CalloraVoipSdk.Core.Domain.Calls.ICall.RejectAsync(System.Int32 statusCode = default, System.String reasonPhrase = default, System.Threading.CancellationToken ct = default) : System.Threading.Tasks.Task<CalloraVoipSdk.Core.Domain.Calls.CallActionResult>
   CalloraVoipSdk.Core.Domain.Calls.ICall.RemoteAssertedIdentity : System.String { get }
+  CalloraVoipSdk.Core.Domain.Calls.ICall.RemoteDisplayName : System.String { get }
+  CalloraVoipSdk.Core.Domain.Calls.ICall.RemoteNumber : System.String { get }
   CalloraVoipSdk.Core.Domain.Calls.ICall.RemoteParty : System.String { get }
   CalloraVoipSdk.Core.Domain.Calls.ICall.RestartIceAsync(System.Threading.CancellationToken ct = default) : System.Threading.Tasks.Task
   CalloraVoipSdk.Core.Domain.Calls.ICall.RtpStatistics : System.Nullable<CalloraVoipSdk.Core.Domain.Calls.CallRtpStatistics> { get }
