@@ -88,12 +88,27 @@ internal sealed class PhoneLine : IPhoneLine, IDisposable
         if (State != LineState.Registered)
             throw new InvalidOperationException($"Line [{Account.Username}] is not registered.");
 
-        if (_maxCalls > 0 && Volatile.Read(ref _activeLineCallCount) >= _maxCalls)
+        // Reserve a per-line call slot atomically BEFORE building the call, so N concurrent dials can
+        // never all pass a stale read of the counter and overshoot the cap (increment-then-rollback).
+        if (!TryReserveCallSlot())
             throw new InvalidOperationException(
                 $"Max concurrent calls ({_maxCalls}) reached on line [{Account.Username}].");
 
-        var channel = _channel.PrepareOutboundChannel(options);
-        var call = CreateCall(CallId.New(), CallDirection.Outbound, targetUri, channel);
+        Call call;
+        ICallChannel channel;
+        try
+        {
+            channel = _channel.PrepareOutboundChannel(options);
+            call = CreateCall(CallId.New(), CallDirection.Outbound, targetUri, channel);
+        }
+        catch
+        {
+            // Setup faulted before a Call took ownership of the reservation (CreateCall wires the matching
+            // terminate-release). Release the slot here so a failed dial never leaks per-line capacity.
+            ReleaseCallSlot();
+            throw;
+        }
+
         _callRegistry.Register(call);
         call.TransitionTo(CallState.Dialing);
 
@@ -217,14 +232,26 @@ internal sealed class PhoneLine : IPhoneLine, IDisposable
     // ── Inbound ───────────────────────────────────────────────────────────────
     private void HandleInbound(ICallChannel channel, string remoteParty)
     {
-        if (_maxCalls > 0 && Volatile.Read(ref _activeLineCallCount) >= _maxCalls)
+        // Reserve the per-line slot atomically so concurrent inbound INVITEs can't all overshoot the cap.
+        if (!TryReserveCallSlot())
         {
             _logger.LogWarning("Inbound call rejected: max calls reached on [{User}]", Account.Username);
             _ = ObserveHangupAsync(channel.HangupAsync(), "inbound rejection (max calls)");
             return;
         }
 
-        var call = CreateCall(CallId.New(), CallDirection.Inbound, remoteParty, channel);
+        Call call;
+        try
+        {
+            call = CreateCall(CallId.New(), CallDirection.Inbound, remoteParty, channel);
+        }
+        catch
+        {
+            // Setup faulted before a Call took ownership of the reservation — release so the rejected
+            // inbound never leaks per-line capacity (mirror of the outbound pre-creation failure path).
+            ReleaseCallSlot();
+            throw;
+        }
 
         // Register (which subscribes the CallManager's aggregate StateChanged relay) BEFORE the first
         // Idle→Ringing transition, so the aggregate CallManager.CallStateChanged stream observes that inbound
@@ -242,13 +269,15 @@ internal sealed class PhoneLine : IPhoneLine, IDisposable
     // ── Helpers ───────────────────────────────────────────────────────────────
     private Call CreateCall(CallId id, CallDirection dir, string remote, ICallChannel channel)
     {
-        Interlocked.Increment(ref _activeLineCallCount);
         var call = new Call(id, dir, remote, channel, this, _loggerFactory.CreateLogger<Call>());
 
-        // Decrement the per-line counter when the call terminates.
+        // Release the per-line slot reserved by TryReserveCallSlot exactly once — when this call
+        // terminates. The guard makes the decrement idempotent even if Terminated is observed more than
+        // once, so the increment-then-rollback cap can never be under-counted (which would leak capacity).
+        var released = 0;
         call.StateChanged += (_, e) =>
         {
-            if (e.NewState == CallState.Terminated)
+            if (e.NewState == CallState.Terminated && Interlocked.Exchange(ref released, 1) == 0)
                 Interlocked.Decrement(ref _activeLineCallCount);
         };
 
@@ -258,6 +287,27 @@ internal sealed class PhoneLine : IPhoneLine, IDisposable
 
         return call;
     }
+
+    // Atomically reserves one per-line call slot shared by the inbound and outbound admission paths. Uses
+    // increment-then-rollback so that under N concurrent dials/INVITEs at most _maxCalls reservations can
+    // ever succeed — a stale read can no longer let several callers pass a single free slot. A non-positive
+    // _maxCalls means unlimited: the counter is still kept accurate, but a reservation never fails. Every
+    // successful reservation is balanced by exactly one ReleaseCallSlot or the CreateCall terminate-release.
+    private bool TryReserveCallSlot()
+    {
+        var reserved = Interlocked.Increment(ref _activeLineCallCount);
+        if (_maxCalls > 0 && reserved > _maxCalls)
+        {
+            Interlocked.Decrement(ref _activeLineCallCount);
+            return false;
+        }
+        return true;
+    }
+
+    // Releases a slot reserved by TryReserveCallSlot when call setup faults before a Call takes ownership of
+    // the reservation (the terminate-release is wired inside CreateCall). Only ever runs on that pre-creation
+    // failure path, so it can never double-release with the call's own terminate-release.
+    private void ReleaseCallSlot() => Interlocked.Decrement(ref _activeLineCallCount);
 
     // Aborts a still-pending outbound dial after caller cancellation: sends CANCEL through the call's
     // hangup (the channel maps a pending/ringing outbound INVITE to a SIP CANCEL, RFC 3261 §9.1) and
