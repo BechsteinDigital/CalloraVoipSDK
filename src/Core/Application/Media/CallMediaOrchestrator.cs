@@ -29,6 +29,10 @@ internal sealed class CallMediaOrchestrator : IDisposable
     // a session (a slower ICE selection cannot overwrite a newer one). Removed on teardown so a late ICE result
     // for a terminated call is rejected. Guards the register/displace/teardown mutations of _active (#10).
     private readonly ConcurrentDictionary<CallId, long> _mediaGeneration = new();
+    // Per-call cancellation for the background ICE candidate-pair selection (#165 P1-2): terminating or
+    // disposing cancels the STUN connectivity checks instead of letting them run to completion on an ambient
+    // CancellationToken.None. Created on the first ICE-enabled negotiation, cancelled+removed on teardown.
+    private readonly ConcurrentDictionary<CallId, CancellationTokenSource> _iceCancellation = new();
     private readonly object _setupSync = new();
     private readonly MediaSupervisionOptions _supervision;
 
@@ -75,6 +79,14 @@ internal sealed class CallMediaOrchestrator : IDisposable
         if (e.NewState == CallState.Terminated)
         {
             _activity.TryRemove(e.Call.CallId, out _);
+            // Cancel any in-flight ICE selection so its STUN checks stop instead of running to completion for a
+            // call that is already gone. Cancel-then-dispose is safe: the token was handed out before, and after
+            // cancellation its consumers observe it without registering new callbacks.
+            if (_iceCancellation.TryRemove(e.Call.CallId, out var iceCts))
+            {
+                iceCts.Cancel();
+                iceCts.Dispose();
+            }
             _ = TeardownMediaAsync(e.Call.CallId);
         }
     }
@@ -146,12 +158,34 @@ internal sealed class CallMediaOrchestrator : IDisposable
             return;
         }
 
+        // Tie the ICE selection to the call lifecycle so terminating the call cancels the STUN checks. Read the
+        // token on this thread — a token value captured before teardown disposes the source stays usable for
+        // observing cancellation, whereas reading .Token on the background task could race a dispose (ODE).
+        var cts = _iceCancellation.GetOrAdd(call.CallId, static _ => new CancellationTokenSource());
+        var iceCt = cts.Token;
+
         _ = Task.Run(async () =>
         {
             try
             {
-                var effective = await ResolveIceCandidatePairAsync(call, parameters).ConfigureAwait(false);
+                var effective = await ResolveIceCandidatePairAsync(call, parameters, iceCt).ConfigureAwait(false);
+                if (effective is null)
+                {
+                    // Fail-closed (#165 P1-2): ICE was offered but produced no validated candidate pair. Falling
+                    // back to the SDP-advertised endpoints would send media to an address the peer never proved it
+                    // controls (a connectivity-check bypass), so tear the call down instead of installing a session.
+                    _logger.LogWarning(
+                        "ICE produced no validated candidate pair for call {CallId}; failing the call closed "
+                        + "instead of using the unvalidated SDP endpoints.", call.CallId);
+                    _ = call.HangupAsync();
+                    return;
+                }
                 SetUpMediaSession(call, channel, effective, generation);
+            }
+            catch (OperationCanceledException)
+            {
+                // The call terminated while ICE selection was still running — nothing to install or fail.
+                _logger.LogDebug("ICE selection for call {CallId} was cancelled by call teardown.", call.CallId);
             }
             catch (Exception ex)
             {
@@ -383,6 +417,15 @@ internal sealed class CallMediaOrchestrator : IDisposable
             ObserveDisposeFault(entry.QualityMonitor.DisposeAsync(), "quality monitor");
             ObserveDisposeFault(entry.Session.DisposeAsync(), "media session");
         }
+
+        // Cancel and dispose any ICE selections still tied to a live call so their STUN checks stop. The
+        // _disposed guard in OnMediaParametersNegotiated already blocks new entries past this point.
+        foreach (var iceCts in _iceCancellation.Values)
+        {
+            iceCts.Cancel();
+            iceCts.Dispose();
+        }
+        _iceCancellation.Clear();
     }
 
     // Observes a fire-and-forget DisposeAsync started from the synchronous Dispose: the ValueTask cannot be
@@ -492,7 +535,8 @@ internal sealed class CallMediaOrchestrator : IDisposable
         entry.Channel.SetVideoSendDelegate(null);
     }
 
-    private async Task<CallMediaParameters> ResolveIceCandidatePairAsync(ICall call, CallMediaParameters parameters)
+    private async Task<CallMediaParameters?> ResolveIceCandidatePairAsync(
+        ICall call, CallMediaParameters parameters, CancellationToken ct)
     {
         if (_iceAgent is null || !parameters.IceEnabled)
             return parameters;
@@ -501,7 +545,7 @@ internal sealed class CallMediaOrchestrator : IDisposable
         try
         {
             var selection = await _iceAgent
-                .SelectCandidatePairAsync(callId, parameters, CancellationToken.None)
+                .SelectCandidatePairAsync(callId, parameters, ct)
                 .ConfigureAwait(false);
 
             // Surface the ICE outcome (state + selected pair) read-only on the call.
@@ -522,7 +566,9 @@ internal sealed class CallMediaOrchestrator : IDisposable
                 || selection.LocalEndPoint is null
                 || selection.RemoteEndPoint is null)
             {
-                return parameters;
+                // Fail-closed (#165 P1-2): no validated pair. The caller must NOT fall back to the
+                // unvalidated SDP endpoints, so signal "no media" rather than returning the raw parameters.
+                return null;
             }
 
             var localRtcp = parameters.RtcpMux
@@ -543,9 +589,15 @@ internal sealed class CallMediaOrchestrator : IDisposable
                 RemoteRtcpEndPoint = remoteRtcp
             };
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // Lifecycle cancellation: the call terminated while ICE was selecting. Propagate so the caller
+            // aborts quietly — it must neither install a session nor hang up an already-terminating call.
+            throw;
+        }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "ICE selection failed for call {CallId}; using negotiated SDP endpoints.", callId);
+            _logger.LogWarning(ex, "ICE selection failed for call {CallId}; failing the call closed.", callId);
             (call as Domain.Calls.Call)?.SetIceSnapshot(new CallIceSnapshot(
                 CallIceState.Failed,
                 HasSelectedPair: false,
@@ -554,7 +606,8 @@ internal sealed class CallMediaOrchestrator : IDisposable
                 RemoteCandidate: null,
                 SelectedLocalEndPoint: null,
                 SelectedRemoteEndPoint: null));
-            return parameters;
+            // Fail-closed (#165 P1-2): an ICE failure must not silently downgrade media to the raw SDP endpoints.
+            return null;
         }
     }
 

@@ -348,14 +348,117 @@ public sealed class CallMediaOrchestratorVideoWiringTests
             CallId callId, CallMediaParameters parameters, CancellationToken ct)
         {
             await _gate.Task.ConfigureAwait(false);
-            // No selected pair → the orchestrator keeps the negotiated params and proceeds to SetUpMediaSession.
+            // A validated pair → the orchestrator proceeds to SetUpMediaSession. The test terminates the call
+            // while this is blocked, so the built session must be disposed (generation guard), not installed.
             return new CallIceSelectionResult
+            {
+                State = CallIceNegotiationState.Connected,
+                HasSelectedPair = true,
+                Nominated = true,
+                LocalEndPoint = new IPEndPoint(IPAddress.Loopback, 0),
+                RemoteEndPoint = new IPEndPoint(IPAddress.Loopback, 0),
+                ReasonCode = "test-selected",
+            };
+        }
+    }
+
+    // ── #165 P1-2: fail-closed ICE — no validated pair must not fall back to raw SDP endpoints ──
+
+    [Fact]
+    public async Task Ice_without_a_validated_pair_fails_the_call_closed_and_installs_no_media_session()
+    {
+        var session = new TrackingMediaSession();
+        var ice = new NoPairIceAgent();
+        var channel = new RecordingCallChannel();
+        using var orchestrator = new CallMediaOrchestrator(
+            new FakeSessionFactory(session), NullLoggerFactory.Instance, new RtcpPacketCodec(), ice);
+        var call = new Call(
+            CallId.New(), CallDirection.Inbound, "sip:remote@test.invalid",
+            channel, new FakePhoneLine(), NullLogger<Call>.Instance);
+        orchestrator.AttachCall(call, channel);
+
+        // ICE is offered but selection yields no validated pair. The orchestrator must NOT build a media session
+        // to the unvalidated SDP endpoints — it fails the call closed (Hangup) instead.
+        channel.RaiseMediaNegotiated(IceParams());
+
+        await WaitUntilAsync(() => call.State == CallState.Terminated);
+        Assert.Equal(0, session.StartCount);   // no session was ever started to the unvalidated endpoints
+        Assert.Equal(0, session.DisposeCount); // and none was even built, so there is nothing to dispose
+    }
+
+    [Fact]
+    public async Task Terminating_the_call_cancels_the_in_flight_ice_selection()
+    {
+        var session = new TrackingMediaSession();
+        var ice = new LifecycleObservingIceAgent();
+        var channel = new RecordingCallChannel();
+        using var orchestrator = new CallMediaOrchestrator(
+            new FakeSessionFactory(session), NullLoggerFactory.Instance, new RtcpPacketCodec(), ice);
+        var call = new Call(
+            CallId.New(), CallDirection.Inbound, "sip:remote@test.invalid",
+            channel, new FakePhoneLine(), NullLogger<Call>.Instance);
+        orchestrator.AttachCall(call, channel);
+        channel.RaiseMediaNegotiated(IceParams()); // selection blocks until its lifecycle token is cancelled
+
+        orchestrator.OnCallStateChanged(
+            this, new CallStateChangedEventArgs(CallState.Connected, CallState.Terminated, call));
+
+        // The selection observed cancellation from the call-lifecycle token (not CancellationToken.None), so it
+        // stops instead of running its STUN checks to completion; no session is installed for the gone call.
+        await ice.Cancelled.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(0, session.StartCount);
+    }
+
+    // Blocks the selection on its cancellation token and signals when the token fires — pins that the
+    // orchestrator threads a call-lifecycle token (not CancellationToken.None) into the ICE agent.
+    private sealed class LifecycleObservingIceAgent : ICallIceAgent
+    {
+        public readonly TaskCompletionSource Cancelled = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task<CallIceLocalDescription?> BuildLocalDescriptionAsync(
+            IPEndPoint localEndPoint,
+            System.Net.Sockets.Socket? sharedMediaSocket = null,
+            IPEndPoint? videoLocalEndPoint = null,
+            System.Net.Sockets.Socket? videoSharedMediaSocket = null,
+            CancellationToken ct = default) =>
+            throw new NotSupportedException("Not used by the lifecycle-cancellation test.");
+
+        public async Task<CallIceSelectionResult> SelectCandidatePairAsync(
+            CallId callId, CallMediaParameters parameters, CancellationToken ct)
+        {
+            try
+            {
+                await Task.Delay(Timeout.Infinite, ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                Cancelled.TrySetResult();
+                throw;
+            }
+
+            throw new InvalidOperationException("unreachable: the selection is only released by cancellation.");
+        }
+    }
+
+    // Returns immediately with no selected pair, so the orchestrator's fail-closed path runs synchronously.
+    private sealed class NoPairIceAgent : ICallIceAgent
+    {
+        public Task<CallIceLocalDescription?> BuildLocalDescriptionAsync(
+            IPEndPoint localEndPoint,
+            System.Net.Sockets.Socket? sharedMediaSocket = null,
+            IPEndPoint? videoLocalEndPoint = null,
+            System.Net.Sockets.Socket? videoSharedMediaSocket = null,
+            CancellationToken ct = default) =>
+            throw new NotSupportedException("Not used by the fail-closed test.");
+
+        public Task<CallIceSelectionResult> SelectCandidatePairAsync(
+            CallId callId, CallMediaParameters parameters, CancellationToken ct) =>
+            Task.FromResult(new CallIceSelectionResult
             {
                 State = CallIceNegotiationState.Failed,
                 HasSelectedPair = false,
                 ReasonCode = "test-no-pair",
-            };
-        }
+            });
     }
 
     private sealed class TrackingMediaSession : ICallMediaSession
