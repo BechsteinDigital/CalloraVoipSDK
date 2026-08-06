@@ -808,8 +808,25 @@ public sealed class VoipClient : IVoipClient
     /// <summary>
     /// Disposes <paramref name="candidate"/> if it is a non-null <see cref="IDisposable"/>; otherwise a no-op.
     /// Tolerates the partially initialised state left by a constructor that threw before every field was set.
+    /// Best-effort (#166 P1-2): a component whose <c>Dispose</c> throws must not abort the rest of the teardown
+    /// chain (which would leak sockets, registrations or audio), and — when <see cref="Dispose"/> runs from the
+    /// constructor's catch — must not replace the original initialisation error with the disposal fault. The
+    /// disposal fault is logged and swallowed so cleanup continues and the caught error propagates unchanged.
     /// </summary>
-    private static void DisposeSafely(object? candidate) => (candidate as IDisposable)?.Dispose();
+    private void DisposeSafely(object? candidate)
+    {
+        if (candidate is not IDisposable disposable)
+            return;
+
+        try
+        {
+            disposable.Dispose();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Disposing {Component} during VoipClient teardown failed.", candidate.GetType().Name);
+        }
+    }
 
     private async Task InvokeIncomingHandlerAsync(ICall call, Func<ICall, Task> handler)
     {
