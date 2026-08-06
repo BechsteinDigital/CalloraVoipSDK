@@ -35,11 +35,16 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
     private readonly Action _onHandshakeFailed;
     private readonly ILogger<DtlsMediaAttachment> _logger;
     private readonly QueueDatagramTransport _transport;
+    // Bounded single-writer egress (#191): BouncyCastle sends records synchronously from its
+    // handshake thread; this pump orders them, applies backpressure, and propagates a send failure
+    // back into the handshake instead of the old unordered, error-swallowing fire-and-forget bridge.
+    private readonly DtlsEgressPump _egress;
     private readonly CancellationTokenSource _lifetimeCts = new();
 
-    // Cached once: the token stays usable for in-flight fire-and-forget sends even
-    // after the CTS is disposed during teardown.
-    private readonly CancellationToken _lifetimeToken;
+    // A completed handshake's close_notify travels through the egress pump. Teardown drains it with
+    // this deadline before cancelling the rest of the egress, so a live peer actually receives it —
+    // DTLS does not retransmit alerts (RFC 6347 §4.2.7). Bounded so a dead socket cannot stall it.
+    private static readonly TimeSpan CloseNotifyDrainDeadline = TimeSpan.FromMilliseconds(500);
 
     private Task? _handshakeTask;
     private DtlsSrtpHandshakeResult? _result;
@@ -75,8 +80,8 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
         _onSecondaryContextsReady = onSecondaryContextsReady;
         _onHandshakeFailed = onHandshakeFailed;
         _logger = loggerFactory.CreateLogger<DtlsMediaAttachment>();
+        _egress = new DtlsEgressPump(SendRawToRemoteAsync, _logger);
         _transport = new QueueDatagramTransport(DispatchOutbound);
-        _lifetimeToken = _lifetimeCts.Token;
     }
 
     /// <summary>
@@ -322,28 +327,14 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
 
     private void DispatchOutbound(byte[] datagram)
     {
-        // The BC engine sends synchronously from its handshake thread; bridge to the async
-        // socket without blocking it. Loss is tolerable — DTLS flights retransmit.
-        _ = SendOutboundAsync(datagram);
+        // BouncyCastle calls this synchronously from its handshake thread. Hand the record to the
+        // bounded single-writer pump, which sends records in order and re-throws a prior transport
+        // failure here so the handshake aborts fail-closed instead of losing it to a log line (#191).
+        _egress.Enqueue(datagram);
     }
 
-    private async Task SendOutboundAsync(byte[] datagram)
-    {
-        var remote = Volatile.Read(ref _remoteEndPoint);
-        try
-        {
-            await _sendRaw(datagram, remote, _lifetimeToken).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            // Teardown while a flight was in transit.
-            _logger.LogTrace("DTLS record send aborted by session teardown.");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to send DTLS record to {Remote}.", remote);
-        }
-    }
+    private ValueTask SendRawToRemoteAsync(byte[] datagram, CancellationToken cancellationToken)
+        => _sendRaw(datagram, Volatile.Read(ref _remoteEndPoint), cancellationToken);
 
     /// <summary>
     /// Closes a completed DTLS association (close_notify) while the send bridge is still
@@ -355,10 +346,12 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
             return;
 
-        // Completed handshake: close before cancelling — the close_notify record travels
-        // through the outbound bridge, which the lifetime cancellation would suppress.
-        Volatile.Read(ref _result)?.Dispose();
-
+        // Stop a still-running handshake first and wait for it to end, so _result is final —
+        // either a completed association whose close_notify we must deliver, or null. This closes
+        // the race where a handshake completing mid-teardown would enqueue its close_notify only
+        // after the egress had already been drained and closed. The egress pump keeps its own
+        // cancellation, so cancelling the handshake lifetime here does not abort the close_notify
+        // send below.
         _lifetimeCts.Cancel();
         _transport.Close();
 
@@ -376,10 +369,12 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
             }
         }
 
-        // Covers a handshake that completed between the early close above and the cancel:
-        // the association is closed either way (Dispose is idempotent); only the close
-        // record itself may be lost in that narrow race.
+        // Handshake is done: if it produced an association, closing enqueues close_notify onto the
+        // still-live egress pump. Drain it with a tight deadline so a live peer actually receives
+        // it — DTLS does not retransmit alerts (RFC 6347 §4.2.7) — THEN cancel the remaining egress.
         Volatile.Read(ref _result)?.Dispose();
+        await _egress.DrainAsync(CloseNotifyDrainDeadline).ConfigureAwait(false);
+        await _egress.DisposeAsync().ConfigureAwait(false);
         _lifetimeCts.Dispose();
 
         _outboundSrtp?.Dispose();
