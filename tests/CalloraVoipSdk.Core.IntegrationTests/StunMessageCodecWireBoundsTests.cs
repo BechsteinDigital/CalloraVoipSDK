@@ -177,13 +177,15 @@ public sealed class StunMessageCodecWireBoundsTests
         Assert.False(new StunMessageCodec().VerifyIntegrity(message, key));
     }
 
-    // ── HARD-A5: attribute-flood cap ──────────────────────────────────────────
+    // ── HARD-A5 / #184: attribute-flood and malformed structure fail closed ────
 
     [Fact]
-    public void Decode_attribute_flood_is_capped()
+    public void Decode_attribute_flood_is_rejected()
     {
-        // 200 well-formed zero-length attributes (4 bytes each). Without a cap the decoder would
-        // mint 200 attribute objects; the flood guard bounds the count.
+        // 200 well-formed zero-length attributes (4 bytes each) exceed the per-message attribute cap. A real
+        // STUN/TURN message carries far fewer, so the whole message is rejected (fail closed, #184) rather
+        // than truncated to the first 64 — a truncating parse could drop a trailing MESSAGE-INTEGRITY /
+        // FINGERPRINT, an authentication bypass and amplification primitive.
         const int floodCount = 200;
         var msg = new byte[20 + (floodCount * 4)];
         WriteHeader(msg, floodCount * 4);
@@ -194,11 +196,64 @@ public sealed class StunMessageCodecWireBoundsTests
             BinaryPrimitives.WriteUInt16BigEndian(msg.AsSpan(at + 2), 0);  // zero-length value
         }
 
+        Assert.Null(Decode(msg));
+    }
+
+    [Fact]
+    public void Decode_rejects_nonzero_top_two_bits()
+    {
+        // RFC 5389 §6: the two most-significant bits of every STUN message MUST be zero.
+        var msg = BuildSingleAttributeMessage((ushort)StunAttributeType.Software, [1, 2, 3, 4]);
+        msg[0] |= 0x80;
+
+        Assert.Null(Decode(msg));
+    }
+
+    [Fact]
+    public void Decode_rejects_a_declared_length_that_is_not_a_multiple_of_four()
+    {
+        // RFC 5389 §15: the message length is always a multiple of 4 (attributes are padded).
+        var msg = BuildSingleAttributeMessage((ushort)StunAttributeType.Software, [1, 2, 3, 4]);
+        BinaryPrimitives.WriteUInt16BigEndian(msg.AsSpan(2), 10); // not a multiple of 4
+
+        Assert.Null(Decode(msg));
+    }
+
+    [Fact]
+    public void Decode_rejects_a_truncated_trailing_attribute()
+    {
+        // Header declares an 8-byte section: a zero-length attribute followed by a second attribute whose
+        // header claims a 4-byte value that runs past the section. The truncated TLV must reject the whole
+        // message (#184), not return the first attribute and silently drop the malformed remainder.
+        var msg = new byte[20 + 8];
+        WriteHeader(msg, 8);
+        BinaryPrimitives.WriteUInt16BigEndian(msg.AsSpan(20), 0x7F00); // attr 1 type
+        BinaryPrimitives.WriteUInt16BigEndian(msg.AsSpan(22), 0);      // attr 1 length = 0
+        BinaryPrimitives.WriteUInt16BigEndian(msg.AsSpan(24), 0x7F01); // attr 2 type
+        BinaryPrimitives.WriteUInt16BigEndian(msg.AsSpan(26), 4);      // attr 2 length = 4, but no value remains
+
+        Assert.Null(Decode(msg));
+    }
+
+    [Fact]
+    public void Decode_still_accepts_a_well_formed_message_at_the_attribute_cap()
+    {
+        // Exactly the cap of zero-length attributes is well formed and must still decode — the rejection is
+        // for exceeding the cap, not for reaching it.
+        const int atCap = 64;
+        var msg = new byte[20 + (atCap * 4)];
+        WriteHeader(msg, atCap * 4);
+        for (int i = 0; i < atCap; i++)
+        {
+            int at = 20 + (i * 4);
+            BinaryPrimitives.WriteUInt16BigEndian(msg.AsSpan(at), 0x7F00);
+            BinaryPrimitives.WriteUInt16BigEndian(msg.AsSpan(at + 2), 0);
+        }
+
         var decoded = Decode(msg);
 
         Assert.NotNull(decoded);
-        Assert.True(decoded!.Attributes.Count < floodCount, "attribute flood was not capped");
-        Assert.Equal(64, decoded.Attributes.Count);
+        Assert.Equal(atCap, decoded!.Attributes.Count);
     }
 
     // ── SIP-15 A2: encode length must not silently overflow the 16-bit field ───

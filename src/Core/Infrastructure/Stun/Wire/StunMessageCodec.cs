@@ -55,6 +55,14 @@ internal sealed class StunMessageCodec : IStunMessageCodec
         ushort typeWord    = BinaryPrimitives.ReadUInt16BigEndian(data);
         ushort declaredLen = BinaryPrimitives.ReadUInt16BigEndian(data[2..]);
 
+        // RFC 5389 §6: the two most-significant bits of every STUN message MUST be zero. RFC 5389 §15: the
+        // message length is always a multiple of 4 (every attribute is padded to 4 bytes). A message that
+        // violates either is malformed — fail closed rather than parsing a bogus type/length (#184).
+        if ((typeWord & 0xC000) != 0)
+            return null;
+        if ((declaredLen & 0x03) != 0)
+            return null;
+
         if (data.Length < StunWireConstants.HeaderSize + declaredLen)
             return null;
 
@@ -68,6 +76,8 @@ internal sealed class StunMessageCodec : IStunMessageCodec
 
         var attrSpan   = data[StunWireConstants.HeaderSize..(StunWireConstants.HeaderSize + declaredLen)];
         var attributes = DecodeAttributes(attrSpan, txId);
+        if (attributes is null)
+            return null; // malformed attribute section — fail closed (#184)
 
         return new StunMessage
         {
@@ -474,8 +484,14 @@ internal sealed class StunMessageCodec : IStunMessageCodec
 
     // ── Attribute decoding ────────────────────────────────────────────────────
 
-    /// <summary>Decodes all attributes from the attribute section of a STUN message.</summary>
-    private static IReadOnlyList<StunAttribute> DecodeAttributes(
+    /// <summary>
+    /// Decodes all attributes from the attribute section of a STUN message. Returns <see langword="null"/>
+    /// when the section is malformed (over the attribute cap, a truncated attribute, or trailing bytes that
+    /// are not a clean attribute), so the caller rejects the whole message instead of acting on a partial one
+    /// (#184). A partial parse could otherwise skip a trailing MESSAGE-INTEGRITY/FINGERPRINT — an
+    /// authentication bypass and an amplification primitive.
+    /// </summary>
+    private static IReadOnlyList<StunAttribute>? DecodeAttributes(
         ReadOnlySpan<byte> attrData,
         byte[]             transactionId)
     {
@@ -484,24 +500,30 @@ internal sealed class StunMessageCodec : IStunMessageCodec
 
         while (offset + StunWireConstants.AttributeHeaderSize <= attrData.Length)
         {
-            // Attribute-flood guard: a pathological message of zero-length attributes advances the
-            // offset only 4 bytes per attribute, so a 65535-byte section could mint ~16k attribute
-            // objects. A real STUN/TURN message carries far fewer; stop once the cap is reached.
+            // Attribute-flood guard: a pathological message of zero-length attributes advances the offset only
+            // 4 bytes per attribute, so a 65535-byte section could mint ~16k attribute objects. A real
+            // STUN/TURN message carries far fewer, so a section over the cap is hostile — fail closed on the
+            // whole message rather than truncating (which would drop any attribute past the cap).
             if (result.Count >= MaxAttributesPerMessage)
-                break;
+                return null;
 
             ushort attrType  = BinaryPrimitives.ReadUInt16BigEndian(attrData[offset..]);
             ushort attrLen   = BinaryPrimitives.ReadUInt16BigEndian(attrData[(offset + 2)..]);
             int    dataStart = offset + StunWireConstants.AttributeHeaderSize;
 
             if (dataStart + attrLen > attrData.Length)
-                break; // Truncated attribute — stop gracefully.
+                return null; // Truncated attribute — the message is malformed, fail closed.
 
             var value = attrData[dataStart..(dataStart + attrLen)];
             result.Add(DecodeAttribute(attrType, value, transactionId));
 
             offset = dataStart + AlignTo4(attrLen);
         }
+
+        // A well-formed section is consumed exactly. Any 1–3 trailing bytes, or a final attribute whose
+        // 4-byte padding runs past the declared length, leaves offset != length — malformed, fail closed.
+        if (offset != attrData.Length)
+            return null;
 
         return result;
     }
