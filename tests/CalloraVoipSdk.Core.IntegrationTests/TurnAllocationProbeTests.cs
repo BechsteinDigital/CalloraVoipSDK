@@ -106,8 +106,39 @@ public sealed class TurnAllocationProbeTests
             () => probe.TryAllocateAsync(media.Client, serverEndPoint, credentials, lifetimeSeconds: 600, cts.Token));
     }
 
+    [Fact]
+    public async Task TryReleaseAsync_deletes_a_surplus_allocation_with_a_refresh_zero()
+    {
+        var codec = new StunMessageCodec();
+        using var fakeServer = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        var serverEndPoint = (IPEndPoint)fakeServer.Client.LocalEndPoint!;
+        using var serverCts = new CancellationTokenSource();
+        var refreshLifetime = new TaskCompletionSource<uint>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var serverLoop = RunFakeTurnServerAsync(fakeServer, codec, Relayed, succeed: true, serverCts.Token, refreshLifetime);
+
+        using var media = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        var probe = new TurnAllocationProbe(codec, NullLoggerFactory.Instance);
+        var credentials = new StunCredentials { Username = "user", Password = "pass", Realm = "bootstrap" };
+
+        var allocation = await probe
+            .TryAllocateAsync(media.Client, serverEndPoint, credentials, lifetimeSeconds: 600, CancellationToken.None)
+            .WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.NotNull(allocation);
+
+        await probe.TryReleaseAsync(media.Client, serverEndPoint, allocation!, CancellationToken.None)
+            .WaitAsync(TimeSpan.FromSeconds(10));
+
+        // The surplus allocation was torn down immediately with a Refresh(LIFETIME=0), not left to expire.
+        var requested = await refreshLifetime.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Equal(0u, requested);
+
+        serverCts.Cancel();
+        await serverLoop;
+    }
+
     private static async Task RunFakeTurnServerAsync(
-        UdpClient server, IStunMessageCodec codec, IPEndPoint relayed, bool succeed, CancellationToken ct)
+        UdpClient server, IStunMessageCodec codec, IPEndPoint relayed, bool succeed, CancellationToken ct,
+        TaskCompletionSource<uint>? refreshLifetime = null)
     {
         while (!ct.IsCancellationRequested)
         {
@@ -126,17 +157,39 @@ public sealed class TurnAllocationProbeTests
             }
 
             var request = codec.Decode(received.Buffer);
-            if (request is null || (TurnMessageMethod)(ushort)request.MessageMethod != TurnMessageMethod.Allocate)
+            if (request is null)
                 continue;
 
+            var method = (TurnMessageMethod)(ushort)request.MessageMethod;
             byte[] response;
-            if (!succeed)
-                response = Error(codec, request, 400, "Bad Request");
-            else if (!HasUsername(request))
-                response = Error(codec, request, 401, "Unauthorized",
-                    new RealmAttribute { Value = "callora" }, new NonceAttribute { Value = "nonce-1" });
+            if (method == TurnMessageMethod.Allocate)
+            {
+                if (!succeed)
+                    response = Error(codec, request, 400, "Bad Request");
+                else if (!HasUsername(request))
+                    response = Error(codec, request, 401, "Unauthorized",
+                        new RealmAttribute { Value = "callora" }, new NonceAttribute { Value = "nonce-1" });
+                else
+                    response = AllocateSuccess(codec, request, relayed, 600);
+            }
+            else if (method == TurnMessageMethod.Refresh)
+            {
+                if (!HasUsername(request))
+                {
+                    response = Error(codec, request, 401, "Unauthorized",
+                        new RealmAttribute { Value = "callora" }, new NonceAttribute { Value = "nonce-1" });
+                }
+                else
+                {
+                    var requested = TurnAttributeMapper.DecodeLifetime(request)?.Seconds ?? uint.MaxValue;
+                    refreshLifetime?.TrySetResult(requested);
+                    response = RefreshSuccess(codec, request, requested);
+                }
+            }
             else
-                response = AllocateSuccess(codec, request, relayed, 600);
+            {
+                continue;
+            }
 
             await server.SendAsync(response, response.Length, (IPEndPoint)received.RemoteEndPoint);
         }
@@ -168,5 +221,14 @@ public sealed class TurnAllocationProbeTests
                 TurnAttributeMapper.Encode(new TurnXorRelayedAddressAttribute { EndPoint = relayed }, req.TransactionId),
                 TurnAttributeMapper.Encode(new TurnLifetimeAttribute { Seconds = lifetimeSeconds }),
             ],
+        });
+
+    private static byte[] RefreshSuccess(IStunMessageCodec codec, StunMessage req, uint lifetimeSeconds)
+        => codec.Encode(new StunMessage
+        {
+            MessageClass = StunMessageClass.SuccessResponse,
+            MessageMethod = req.MessageMethod,
+            TransactionId = req.TransactionId,
+            Attributes = [TurnAttributeMapper.Encode(new TurnLifetimeAttribute { Seconds = lifetimeSeconds })],
         });
 }
