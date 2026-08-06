@@ -20,6 +20,14 @@ namespace CalloraVoipSdk.WebRtc;
 /// </remarks>
 internal sealed class RemoteTrackSet
 {
+    /// <summary>
+    /// Cumulative cap on retained remote tracks per kind (#166 P1-4). A track is keyed by MID and never removed,
+    /// so a sequence of reoffers carrying fresh MIDs would otherwise grow the retained set over the peer's whole
+    /// lifetime — unbounded by any single-SDP cap. Far above any real peer-to-peer session; beyond it a new MID
+    /// is not materialised and its frames are dropped, so retention stays bounded.
+    /// </summary>
+    private const int MaxTracksPerKind = 128;
+
     private readonly object _sync = new();
     private readonly Action<RemoteTrack> _onTrackReceived;
     // Audio tracks keyed by MID (empty string for the primary/anchor addressed via the mid-less path), so N remote
@@ -40,7 +48,7 @@ internal sealed class RemoteTrackSet
     /// frame. A null MID keys the primary/anchor audio track (the mid-less path), so it stays one track — backward
     /// compatible with the pre-4.7.0 single-audio path.
     /// </summary>
-    public RemoteTrack EnsureAudioTrack(string? mid, string? streamId, string? trackId)
+    public RemoteTrack? EnsureAudioTrack(string? mid, string? streamId, string? trackId)
     {
         var key = mid ?? string.Empty;
         RemoteTrack? created = null;
@@ -49,6 +57,10 @@ internal sealed class RemoteTrackSet
         {
             if (!_audio.TryGetValue(key, out var existing))
             {
+                // #166 P1-4: beyond the cumulative cap a fresh MID is not retained (no track, no callback), so a
+                // reoffer flood of new MIDs cannot grow retention without limit. Its frames are dropped.
+                if (_audio.Count >= MaxTracksPerKind)
+                    return null;
                 existing = new RemoteTrack(TrackKind.Audio, streamId, trackId, mid);
                 _audio[key] = existing;
                 created = existing;
@@ -63,7 +75,7 @@ internal sealed class RemoteTrackSet
     /// Materialises the video track for <paramref name="mid"/> (raising the callback once) without delivering a
     /// frame. A null MID keys the single legacy video track (the 1+1 path), so it stays one track.
     /// </summary>
-    public RemoteTrack EnsureVideoTrack(string? mid, string? streamId, string? trackId)
+    public RemoteTrack? EnsureVideoTrack(string? mid, string? streamId, string? trackId)
     {
         var key = mid ?? string.Empty;
         RemoteTrack? created = null;
@@ -72,6 +84,10 @@ internal sealed class RemoteTrackSet
         {
             if (!_video.TryGetValue(key, out var existing))
             {
+                // #166 P1-4: beyond the cumulative cap a fresh MID is not retained (no track, no callback), so a
+                // reoffer flood of new MIDs cannot grow retention without limit. Its frames are dropped.
+                if (_video.Count >= MaxTracksPerKind)
+                    return null;
                 existing = new RemoteTrack(TrackKind.Video, streamId, trackId, mid);
                 _video[key] = existing;
                 created = existing;
@@ -88,12 +104,12 @@ internal sealed class RemoteTrackSet
     /// mid-less path).
     /// </summary>
     public void DeliverAudioFrame(string? mid, string? streamId, string? trackId, EncodedFrame frame)
-        => EnsureAudioTrack(mid, streamId, trackId).RaiseFrame(frame);
+        => EnsureAudioTrack(mid, streamId, trackId)?.RaiseFrame(frame);
 
     /// <summary>
     /// Delivers one inbound video frame on the <paramref name="mid"/> track (P2c), materialising it first if not
     /// already present. A null MID targets the single legacy video track (the 1+1 path).
     /// </summary>
     public void DeliverVideoFrame(string? mid, string? streamId, string? trackId, EncodedFrame frame)
-        => EnsureVideoTrack(mid, streamId, trackId).RaiseFrame(frame);
+        => EnsureVideoTrack(mid, streamId, trackId)?.RaiseFrame(frame);
 }
