@@ -65,7 +65,7 @@ internal sealed class TurnAllocationProbe
     /// <param name="lifetimeSeconds">Requested allocation lifetime, or <see langword="null"/> for the server default.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The allocation result, or <see langword="null"/> on failure.</returns>
-    public async Task<TurnAllocateResult?> TryAllocateAsync(
+    public Task<TurnAllocateResult?> TryAllocateAsync(
         Socket socket,
         IPEndPoint serverEndPoint,
         StunCredentials? credentials,
@@ -75,38 +75,82 @@ internal sealed class TurnAllocationProbe
         ArgumentNullException.ThrowIfNull(socket);
         ArgumentNullException.ThrowIfNull(serverEndPoint);
 
+        return RunControlOperationAsync(
+            socket, serverEndPoint,
+            (control, token) => control.AllocateAsync(credentials, lifetimeSeconds, token),
+            "allocation", ct);
+    }
+
+    /// <summary>
+    /// Best-effort immediate teardown of a relay allocation obtained via <see cref="TryAllocateAsync"/> that is
+    /// no longer needed — e.g. a surplus allocation not retained under first-wins candidate gathering. Sends a
+    /// single authenticated Refresh with LIFETIME=0 (RFC 8656 §7 / §3.9) on the same socket, so the relay port,
+    /// permissions and refresh timers are released now instead of lingering until the allocation expires (and
+    /// counting against the server's per-user quota in the meantime). Any failure is logged and swallowed — a
+    /// relay that cannot be torn down explicitly still expires on its own.
+    /// </summary>
+    /// <param name="socket">The media socket the allocation was made on.</param>
+    /// <param name="serverEndPoint">The TURN server's transport address.</param>
+    /// <param name="allocation">The allocation to delete; its effective (realm/nonce-primed) credentials are reused.</param>
+    /// <param name="ct">Cancellation token.</param>
+    public async Task TryReleaseAsync(
+        Socket socket,
+        IPEndPoint serverEndPoint,
+        TurnAllocateResult allocation,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(socket);
+        ArgumentNullException.ThrowIfNull(serverEndPoint);
+        ArgumentNullException.ThrowIfNull(allocation);
+
+        await RunControlOperationAsync(
+            socket, serverEndPoint,
+            (control, token) => control.RefreshAsync(allocation.EffectiveCredentials, 0, token),
+            "refresh(0) teardown", ct).ConfigureAwait(false);
+    }
+
+    // Runs one authenticated TURN control operation over the raw socket: builds a transactor + control client,
+    // pumps inbound datagrams into the transactor for the duration, and bounds the whole attempt with the
+    // gathering timeout so a silent server does not hang through the full RTO schedule. Returns null on the
+    // internal timeout or any TURN failure (never throws for those); the caller's own cancellation propagates.
+    // Shared by the allocation and the Refresh(0) teardown.
+    private async Task<T?> RunControlOperationAsync<T>(
+        Socket socket,
+        IPEndPoint serverEndPoint,
+        Func<TurnRelayControlClient, CancellationToken, Task<T>> operation,
+        string operationName,
+        CancellationToken ct)
+        where T : class
+    {
         var transactor = new TurnControlTransactor(
             _codec,
             (request, token) => socket.SendToAsync(request, SocketFlags.None, serverEndPoint, token).AsTask(),
             _loggerFactory.CreateLogger<TurnControlTransactor>());
         var control = new TurnRelayControlClient(new TurnTransactionEngine(_codec), transactor);
 
-        // Bound the whole attempt so a silent server does not hang through the transactor's full RTO schedule.
-        // The internal timeout yields null (no relay candidate); the caller's own cancellation propagates.
         using var timeoutCts = new CancellationTokenSource(_gatheringTimeout);
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
         var receiveLoop = RunReceiveLoopAsync(socket, transactor, linkedCts.Token);
         try
         {
-            return await control.AllocateAsync(credentials, lifetimeSeconds, linkedCts.Token).ConfigureAwait(false);
+            return await operation(control, linkedCts.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested)
         {
             _logger.LogDebug(
-                "TURN allocation on {Server} did not complete within {Timeout}; no relay candidate gathered.",
-                serverEndPoint, _gatheringTimeout);
+                "TURN {Operation} on {Server} did not complete within {Timeout}.",
+                operationName, serverEndPoint, _gatheringTimeout);
             return null;
         }
         catch (TurnChallengeException ex)
         {
             _logger.LogDebug(
-                ex, "TURN allocation on {Server} exhausted the auth challenge/retry; no relay candidate gathered.",
-                serverEndPoint);
+                ex, "TURN {Operation} on {Server} exhausted the auth challenge/retry.", operationName, serverEndPoint);
             return null;
         }
         catch (TurnException ex)
         {
-            _logger.LogDebug(ex, "TURN allocation on {Server} failed; no relay candidate gathered.", serverEndPoint);
+            _logger.LogDebug(ex, "TURN {Operation} on {Server} failed.", operationName, serverEndPoint);
             return null;
         }
         finally

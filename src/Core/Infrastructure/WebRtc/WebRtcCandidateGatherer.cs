@@ -140,11 +140,14 @@ internal sealed class WebRtcCandidateGatherer(
         if (relatedBase is null)
         {
             // First-wins: this later TURN server's allocation was not retained/bound. Advertising a relay
-            // candidate for it would let ICE nominate an unusable, unbound relay path (#155 P1-3). The surplus
-            // allocation is left to expire at its lifetime — an immediate Refresh(0) teardown needs a control
-            // client the one-shot TurnAllocationProbe does not hold; tracked as a follow-up.
+            // candidate for it would let ICE nominate an unusable, unbound relay path (#155 P1-3). Tear the
+            // surplus allocation down now with a Refresh(0) (#188) instead of letting it linger until its
+            // lifetime expires and count against the server's quota; best-effort — a failed teardown still
+            // expires on its own. Awaited while the gatherer still owns the socket, before media takes over.
             logger.LogDebug(
-                "TURN server {Host}: allocation not retained (first-wins); no relay candidate advertised.", server.Host);
+                "TURN server {Host}: allocation not retained (first-wins); tearing down the surplus allocation.",
+                server.Host);
+            await turnProbe.TryReleaseAsync(socket, serverEndPoint, allocation, ct).ConfigureAwait(false);
             return;
         }
         onCandidate(WebRtcIceCandidateFactory.RelayCandidate(allocation.RelayedEndPoint, relatedBase));
