@@ -31,12 +31,19 @@ internal sealed class SipTlsCertificateProvider
     }
 
     /// <summary>
-    /// Returns the configured X.509 certificate, loading it from disk on first
-    /// call. Returns <see langword="null"/> when no certificate path is configured.
-    /// Thread-safe: concurrent first calls load the certificate exactly once.
+    /// Returns the configured X.509 certificate. A caller-supplied in-memory
+    /// <see cref="TlsConfiguration.ClientCertificate"/> takes precedence and is returned as-is;
+    /// otherwise the certificate is loaded from <see cref="TlsConfiguration.CertificatePath"/> on
+    /// first call. Returns <see langword="null"/> when neither source is configured.
+    /// Thread-safe: concurrent first calls load a file certificate exactly once.
     /// </summary>
     public X509Certificate2? GetCertificate()
     {
+        // An in-memory certificate is caller-owned (issue #183): return it directly, never cache or
+        // dispose it. Only file-loaded certificates are owned and cached by this provider.
+        if (_configuration.ClientCertificate is not null)
+            return _configuration.ClientCertificate;
+
         if (_configuration.CertificatePath == null)
             return null;
 
