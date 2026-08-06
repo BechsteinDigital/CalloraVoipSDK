@@ -71,6 +71,33 @@ public sealed class VoipClientModuleRegistrationSafetyTests
         Assert.True(factory.CreatedRuntime!.IsDisposed);
     }
 
+    // #166 P1-2: a component whose Dispose throws during the failed-constructor cleanup must not replace the
+    // original initialisation error nor abort the rest of the teardown. With a throwing module (attach-boom) and
+    // a transport that throws on Dispose, the surfaced error must still be attach-boom — not the dispose IOException
+    // — and the throwing transport's Dispose must still have been attempted (the chain continues, best-effort).
+    [Fact]
+    public void A_throwing_component_dispose_neither_masks_the_original_error_nor_aborts_cleanup()
+    {
+        var factory = new RecordingTransportFactory { ThrowOnDispose = true };
+
+        var services = new ServiceCollection();
+        services.AddCalloraVoip(options =>
+        {
+            options.UserAgent = "CalloraVoipSdk.Core.IntegrationTests/1.0";
+            options.EnableAutomaticAudioDeviceSelection = false;
+        });
+        services.AddSingleton<ISipTransportFactory>(factory);
+        services.AddSingleton<IVoipClientModule>(new ThrowingModule());
+
+        using var provider = services.BuildServiceProvider();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => { _ = provider.GetRequiredService<IVoipClient>(); });
+
+        Assert.Equal("attach-boom", ex.Message);          // original error preserved, not the dispose IOException
+        Assert.NotNull(factory.CreatedRuntime);
+        Assert.True(factory.CreatedRuntime!.IsDisposed);   // teardown reached (and swallowed) the throwing dispose
+    }
+
     private static X509Certificate2 CreateRsaCertificate()
     {
         using var rsa = RSA.Create(2048);
@@ -92,6 +119,9 @@ internal sealed class RecordingTransportFactory : ISipTransportFactory
 
     public SipTransportProtocol? LastDefaultTransport { get; private set; }
 
+    /// <summary>When set, the created runtime throws on Dispose (after recording the attempt) — #166 P1-2.</summary>
+    public bool ThrowOnDispose { get; init; }
+
     public ISipTransportRuntime Create(
         TlsConfiguration? tls,
         ILoggerFactory loggerFactory,
@@ -100,12 +130,13 @@ internal sealed class RecordingTransportFactory : ISipTransportFactory
     {
         LastDefaultTransport = defaultTransport;
         CreatedRuntime = new RecordingTransportRuntime(
-            new SipTransportFactory().Create(tls, loggerFactory, defaultTransport, options));
+            new SipTransportFactory().Create(tls, loggerFactory, defaultTransport, options),
+            ThrowOnDispose);
         return CreatedRuntime;
     }
 }
 
-internal sealed class RecordingTransportRuntime(ISipTransportRuntime inner) : ISipTransportRuntime
+internal sealed class RecordingTransportRuntime(ISipTransportRuntime inner, bool throwOnDispose = false) : ISipTransportRuntime
 {
     public bool IsDisposed { get; private set; }
 
@@ -170,5 +201,7 @@ internal sealed class RecordingTransportRuntime(ISipTransportRuntime inner) : IS
     {
         IsDisposed = true;
         inner.Dispose();
+        if (throwOnDispose)
+            throw new IOException("dispose-boom");
     }
 }

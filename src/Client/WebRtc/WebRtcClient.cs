@@ -62,6 +62,12 @@ public sealed class WebRtcClient : IWebRtcClient
     /// <inheritdoc />
     public IPeerConnection CreatePeer()
     {
+        // #166 P1-1: reject creation once disposal has begun so a peer is never built into — and registered in —
+        // a dead owner. The fast path avoids the expensive peer/DTLS build on an already-disposed client; the
+        // TryTrack gate below closes the residual race with a concurrent DisposeAsync.
+        if (Volatile.Read(ref _disposed) != 0)
+            throw new ObjectDisposedException(nameof(WebRtcClient));
+
         // A fresh DTLS identity per peer is the WebRTC privacy default (unless the app pins one).
         var certificate = _config.DtlsCertificate is { } pinned
             ? DtlsCertificate.FromX509(pinned)
@@ -123,7 +129,16 @@ public sealed class WebRtcClient : IWebRtcClient
 
         var connection = new PeerConnection(
             peer, _loggerFactory.CreateLogger<PeerConnection>(), _peers.Untrack, _config.VideoCodecs, _config.AudioCodecs);
-        _peers.Track(connection);
+
+        // Atomic against DisposeAsync's DrainForDispose: if disposal won the race after the fast-path check
+        // above, TryTrack fails and the just-built (un-started) peer is torn down rather than leaked into the
+        // dead owner (#166 P1-1). Best-effort async teardown — the peer holds no started ICE/DTLS resources yet.
+        if (!_peers.TryTrack(connection))
+        {
+            _ = connection.DisposeAsync();
+            throw new ObjectDisposedException(nameof(WebRtcClient));
+        }
+
         return connection;
     }
 
@@ -140,10 +155,10 @@ public sealed class WebRtcClient : IWebRtcClient
             return;
         }
 
-        // Snapshot the live set; each DisposeAsync untracks the peer from the manager under its own lock,
-        // so iterating the snapshot is safe against that concurrent mutation.
+        // Drain the live set and gate further tracking atomically, so a peer created concurrently with this
+        // teardown is either in this snapshot (disposed here) or rejected by TryTrack — never leaked (#166 P1-1).
         Exception? firstFailure = null;
-        foreach (var peer in _peers.Active)
+        foreach (var peer in _peers.DrainForDispose())
         {
             try
             {
