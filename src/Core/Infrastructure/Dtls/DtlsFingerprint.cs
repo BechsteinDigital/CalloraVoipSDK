@@ -38,14 +38,61 @@ internal sealed record DtlsFingerprint
     }
 
     /// <summary>
-    /// Compares against another fingerprint: algorithm token and hex digest are both
-    /// case-insensitive per RFC 8122 §5 grammar (hex digits may be either case).
+    /// Compares against another fingerprint. The algorithm token is a public RFC 8122 §5 label compared
+    /// case-insensitively (it also fixes the digest length). The hex digest — the only credential binding the
+    /// DTLS connection to the signaled identity — is parsed to fixed bytes and compared in constant time
+    /// (ENGINEERING_RULES K5): a differing length or a malformed digest is not secret and may short-circuit,
+    /// but two equal-length digests are compared without leaking where the first differing byte is.
     /// </summary>
     public bool Matches(DtlsFingerprint other)
     {
         ArgumentNullException.ThrowIfNull(other);
-        return string.Equals(Algorithm, other.Algorithm, StringComparison.OrdinalIgnoreCase)
-               && string.Equals(Value, other.Value, StringComparison.OrdinalIgnoreCase);
+
+        if (!string.Equals(Algorithm, other.Algorithm, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        if (!TryParseDigest(Value, out var thisDigest) || !TryParseDigest(other.Value, out var otherDigest))
+            return false;
+
+        // FixedTimeEquals requires equal-length inputs; the length itself is public (fixed by the algorithm).
+        if (thisDigest.Length != otherDigest.Length)
+            return false;
+
+        return CryptographicOperations.FixedTimeEquals(thisDigest, otherDigest);
+    }
+
+    /// <summary>
+    /// Parses an RFC 8122 §5 colon-delimited hex digest (e.g. <c>AB:CD:…</c>) into its raw bytes. Returns
+    /// <see langword="false"/> for any malformed input (wrong length, missing separators, non-hex characters)
+    /// so a comparison against it fails closed rather than throwing.
+    /// </summary>
+    private static bool TryParseDigest(string value, out byte[] digest)
+    {
+        digest = [];
+        if (string.IsNullOrEmpty(value))
+            return false;
+
+        // Each byte is two hex chars joined by a single ':', so a k-byte digest is exactly 3*k - 1 chars long.
+        if ((value.Length + 1) % 3 != 0)
+            return false;
+
+        var count = (value.Length + 1) / 3;
+        var buffer = new byte[count];
+        for (var i = 0; i < count; i++)
+        {
+            var pos = i * 3;
+            if (i > 0 && value[pos - 1] != ':')
+                return false;
+            if (!byte.TryParse(
+                    value.AsSpan(pos, 2),
+                    System.Globalization.NumberStyles.AllowHexSpecifier,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out buffer[i]))
+                return false;
+        }
+
+        digest = buffer;
+        return true;
     }
 
     private static string FormatDigest(ReadOnlySpan<byte> digest)
