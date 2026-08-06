@@ -489,25 +489,36 @@ public sealed class VoipClient : IVoipClient
         if (options.LineTls is { } lineTls)
             _lineTlsByAccount[account] = lineTls;
 
-        var outcome = await _convenienceOrchestrator
-            .RegisterAndWaitAsync(
-                account,
-                options.Timeout,
-                options.FailFastOnRegistrationFailed,
-                ct)
-            .ConfigureAwait(false);
-
-        return outcome.Status switch
+        try
         {
-            LineConnectStatus.Registered when outcome.Line is not null =>
-                ConnectResult.Registered(outcome.Line),
-            LineConnectStatus.Timeout =>
-                ConnectResult.Timeout(outcome.Line, outcome.FinalState),
-            LineConnectStatus.Canceled =>
-                ConnectResult.Canceled(outcome.Line, outcome.FinalState),
-            _ =>
-                ConnectResult.Failed(outcome.Line, outcome.Error, outcome.FinalState),
-        };
+            var outcome = await _convenienceOrchestrator
+                .RegisterAndWaitAsync(
+                    account,
+                    options.Timeout,
+                    options.FailFastOnRegistrationFailed,
+                    ct)
+                .ConfigureAwait(false);
+
+            return outcome.Status switch
+            {
+                LineConnectStatus.Registered when outcome.Line is not null =>
+                    ConnectResult.Registered(outcome.Line),
+                LineConnectStatus.Timeout =>
+                    ConnectResult.Timeout(outcome.Line, outcome.FinalState),
+                LineConnectStatus.Canceled =>
+                    ConnectResult.Canceled(outcome.Line, outcome.FinalState),
+                _ =>
+                    ConnectResult.Failed(outcome.Line, outcome.Error, outcome.FinalState),
+            };
+        }
+        finally
+        {
+            // The line factory (PhoneLineManager.Register) consumes the override synchronously while the
+            // line is created, and the SipLineChannel then holds it for its lifetime. Drop the map entry
+            // so the map is bounded to in-flight connects and never retains SipAccount / caller-owned
+            // certificate references for the client's lifetime (#183 review H2).
+            _lineTlsByAccount.TryRemove(account, out _);
+        }
     }
 
     /// <inheritdoc />

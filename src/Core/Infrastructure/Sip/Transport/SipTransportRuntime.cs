@@ -33,8 +33,11 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
     private readonly X509Certificate2? _tlsCertificate;
     private readonly OutboundTlsIdentity _defaultOutboundTlsIdentity;
     // Resolved per-line TLS identities, cached by the TlsConfiguration instance the line binds once
-    // (reference identity) so a file-loaded certificate is not reloaded on every send (#183).
-    private readonly ConcurrentDictionary<TlsConfiguration, OutboundTlsIdentity> _lineTlsIdentities
+    // (reference identity) so a file-loaded certificate is not reloaded on every send (#183). The value
+    // is a Lazy with ExecutionAndPublication so a concurrent first-call resolves the identity — and
+    // loads any file certificate — exactly once (ConcurrentDictionary.GetOrAdd does not serialise its
+    // factory, which would otherwise leak the losing X509Certificate2).
+    private readonly ConcurrentDictionary<TlsConfiguration, Lazy<OutboundTlsIdentity>> _lineTlsIdentities
         = new(ReferenceEqualityComparer.Instance);
     private readonly ILogger<SipTransportRuntime> _logger;
     private readonly ISipWireCodec _wireCodec;
@@ -805,7 +808,10 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
         if (lineTls is null)
             return _defaultOutboundTlsIdentity;
 
-        return _lineTlsIdentities.GetOrAdd(lineTls, BuildLineTlsIdentity);
+        return _lineTlsIdentities
+            .GetOrAdd(lineTls, cfg => new Lazy<OutboundTlsIdentity>(
+                () => BuildLineTlsIdentity(cfg), LazyThreadSafetyMode.ExecutionAndPublication))
+            .Value;
     }
 
     /// <summary>

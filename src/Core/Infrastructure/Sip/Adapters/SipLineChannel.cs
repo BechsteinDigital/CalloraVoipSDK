@@ -246,6 +246,7 @@ internal sealed class SipLineChannel : ILineChannel
                     Body = body ?? string.Empty,
                     ContentType = string.IsNullOrWhiteSpace(contentType) ? "text/plain" : contentType,
                     Transport = MapTransport(_account.Transport),
+                    LineTls = _lineTls,
                 },
                 ct)
             .ConfigureAwait(false);
@@ -276,6 +277,7 @@ internal sealed class SipLineChannel : ILineChannel
                     ExpiresSeconds = expiresSeconds,
                     IfMatch = string.IsNullOrWhiteSpace(ifMatch) ? null : ifMatch,
                     Transport = MapTransport(_account.Transport),
+                    LineTls = _lineTls,
                 },
                 ct)
             .ConfigureAwait(false);
