@@ -351,7 +351,8 @@ internal sealed class SipLineChannel : ILineChannel
             Transport        = MapTransport(_account.Transport),
             SessionDescription = sdpOffer,
             PreloadedRouteSet  = BuildRouteSet(options.OutboundProxy ?? _account.OutboundProxy),
-            CustomHeaders      = options.CustomHeaders
+            CustomHeaders      = options.CustomHeaders,
+            LineTls          = _lineTls
         };
 
         await _callSignalingService

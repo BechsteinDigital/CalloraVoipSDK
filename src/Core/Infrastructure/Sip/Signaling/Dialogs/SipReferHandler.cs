@@ -131,6 +131,7 @@ internal sealed class SipReferHandler
                     sipfrag,
                     remoteEndPoint,
                     _context.SignalingTransport,
+                    _context.LineTls,
                     ct)
                 .ConfigureAwait(false);
         }

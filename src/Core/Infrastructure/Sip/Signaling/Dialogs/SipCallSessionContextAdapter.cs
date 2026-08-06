@@ -59,6 +59,8 @@ internal sealed class SipCallSessionContextAdapter : ISipCallSessionContext
 
     public SipTransportProtocol SignalingTransport => _session._signalingTransport;
 
+    public CalloraVoipSdk.Core.Application.Ports.Security.TlsConfiguration? LineTls => _session._lineTls;
+
     public TimeSpan Timeout => _session._timeout;
 
     public SipRequest? InitialInvite => _session._initialInvite;

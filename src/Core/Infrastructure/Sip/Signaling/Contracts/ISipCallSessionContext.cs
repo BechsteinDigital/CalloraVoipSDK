@@ -1,5 +1,6 @@
 using System.Net;
 using Microsoft.Extensions.Logging;
+using CalloraVoipSdk.Core.Application.Ports.Security;
 using CalloraVoipSdk.Core.Domain.Calls;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Authentication;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Transport;
@@ -138,6 +139,13 @@ internal interface ISipCallSessionContext
     /// SIP transport protocol used for this dialog.
     /// </summary>
     SipTransportProtocol SignalingTransport { get; }
+
+    /// <summary>
+    /// Optional per-line TLS identity presented on this dialog's outbound TLS handshakes for mutual
+    /// TLS (issue #183). The default implementation returns <see langword="null"/> (client-wide
+    /// default identity); the production adapter surfaces the line's configuration.
+    /// </summary>
+    TlsConfiguration? LineTls => null;
 
     /// <summary>
     /// Transaction timeout.
