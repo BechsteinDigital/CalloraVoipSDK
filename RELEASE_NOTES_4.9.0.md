@@ -1,0 +1,58 @@
+# CalloraVoipSdk 4.9.0
+
+**Inbound caller and dialed identity on `ICall`.** An inbound call already carried the identity that a PBX,
+contact center or SFU front end needs to route it — the number it was dialed on (the `To`/DID), the caller's
+number, and the caller's display name — but the SDK surfaced none of it. The dialed DID drove line selection
+internally and was then dropped; the caller's display name was parsed off the `From` header and discarded.
+4.9.0 exposes all of it as four additive, read-only properties.
+
+This is the identity a **screen-pop** and **trunk DID routing** are built from: on an incoming call an agent
+application can now show the caller's number and name and branch on which DID (which product line, which
+campaign) the call arrived — including an SFU or contact-center front end that fans one trunk out to many
+queues. The values are parsed by the SDK through a single SIP-URI parser (`SipProtocol`), so every consumer
+shares one implementation instead of re-parsing `From`/`To` headers by hand.
+
+The properties follow the existing `RemoteAssertedIdentity` pass-through and are **purely additive** —
+`PublicApi.approved.txt` gains four `ICall` members and nothing else, so there is nothing to migrate.
+
+## New in 4.9.0
+
+Four read-only properties on `ICall` (obtained from `IncomingCallEventArgs.Call` or the `OnIncomingCall` hook):
+
+- **`CalledNumber`** — the dialed number (DID) an inbound call was addressed to: the user part of the
+  `To`/Request URI, i.e. the number that selected the receiving line for a SIP trunk. Route by it without
+  re-parsing headers.
+- **`LocalParty`** — the local party's SIP URI in this dialog, parallel to `RemoteParty`: on an inbound call
+  the called (DID) URI; on an outbound call the local account address.
+- **`RemoteNumber`** — the remote party's number, the user part of `RemoteParty` (the caller's number on an
+  inbound call).
+- **`RemoteDisplayName`** — the caller's display name from the inbound `From` header (RFC 3261 §8.1.1.3),
+  which the SDK previously parsed and threw away. Complements `RemoteParty` (the URI without the display name).
+
+Every property is `null` on outbound legs and when the corresponding data is absent (for example when the URI
+has no user part, or the `From` header carried no display name).
+
+```csharp
+using var subscription = client.OnIncomingCall(async call =>
+{
+    // Screen-pop / trunk-DID routing on the inbound identity:
+    var did     = call.CalledNumber;       // dialed DID (the trunk line the call arrived on)
+    var caller  = call.RemoteNumber;       // caller's number
+    var name    = call.RemoteDisplayName;  // caller's display name, or null
+    ScreenPop(did, caller, name);
+
+    await call.AcceptAsync();
+    await client.AttachDefaultAudioAsync(call);
+});
+```
+
+## Behaviour and limits
+
+- **No public API change beyond the four additions.** `PublicApi.approved.txt` gains exactly the four `ICall`
+  members; there is nothing to migrate and no on-wire behaviour changes. All four are `null` for outbound
+  calls and absent data.
+- **Read-only, as-received.** The properties surface parsed values from the inbound INVITE; they are
+  informational identity, not a trust decision. For a trust-gated caller identity use
+  `RemoteAssertedIdentity` (P-Asserted-Identity, RFC 3325).
+
+See [`CHANGELOG.md`](CHANGELOG.md) for the concise entry.
