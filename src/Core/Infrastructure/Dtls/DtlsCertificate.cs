@@ -75,6 +75,13 @@ internal sealed class DtlsCertificate
     /// other curves, and non-exportable (e.g. HSM/CNG) keys are rejected fail-closed rather than silently
     /// producing an unusable identity. Authentication is by SDP <c>a=fingerprint</c> (RFC 8122), so no
     /// PKI trust is required; sharing this with the SIP-TLS certificate is the caller's choice.
+    /// <para>
+    /// Ownership: the caller retains and is responsible for disposing <paramref name="certificate"/>. This
+    /// method copies only the key material and DER bytes it needs into BouncyCastle types and never captures
+    /// or disposes the supplied instance, and it zeroes the exported private-key staging buffer before
+    /// returning (ENGINEERING_RULES K5). The resulting <see cref="DtlsCertificate"/> owns the derived
+    /// BouncyCastle key for its lifetime; keep it no longer than the DTLS-SRTP session it identifies.
+    /// </para>
     /// </summary>
     /// <exception cref="ArgumentException">The certificate is not an exportable ECDSA P-256 key pair.</exception>
     internal static DtlsCertificate FromX509(X509Certificate2 certificate)
@@ -107,9 +114,19 @@ internal sealed class DtlsCertificate
                 nameof(certificate), ex);
         }
 
-        var privateKey = PrivateKeyFactory.CreateKey(pkcs8PrivateKey);
-        var bcCertificate = new X509CertificateParser().ReadCertificate(certificate.RawData);
-        return new DtlsCertificate(privateKey, bcCertificate);
+        try
+        {
+            var privateKey = PrivateKeyFactory.CreateKey(pkcs8PrivateKey);
+            var bcCertificate = new X509CertificateParser().ReadCertificate(certificate.RawData);
+            return new DtlsCertificate(privateKey, bcCertificate);
+        }
+        finally
+        {
+            // ExportPkcs8PrivateKey produced a managed copy of the private-key material. Wipe the staging
+            // buffer as soon as BouncyCastle has parsed it so the long-lived identity's key bytes do not
+            // linger on the managed heap until GC (ENGINEERING_RULES K5). Runs even if CreateKey throws.
+            System.Security.Cryptography.CryptographicOperations.ZeroMemory(pkcs8PrivateKey);
+        }
     }
 
     /// <summary>

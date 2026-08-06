@@ -29,6 +29,21 @@ public sealed class DtlsCertificateFromX509Tests
     }
 
     [Fact]
+    public void FromX509_does_not_take_ownership_of_the_supplied_certificate()
+    {
+        using var certificate = CreateEcdsaCertificate(ECCurve.NamedCurves.nistP256);
+
+        var identity = DtlsCertificate.FromX509(certificate);
+
+        // #193: the caller retains ownership — FromX509 must not dispose the supplied certificate. A disposed
+        // X509Certificate2 throws on private-key access, so this access must still succeed after FromX509.
+        using var stillAccessible = certificate.GetECDsaPrivateKey();
+        Assert.NotNull(stillAccessible);
+        // And the derived identity remains faithful to the supplied certificate.
+        Assert.Equal(DtlsFingerprint.FromDerCertificate(certificate.RawData).Value, identity.Fingerprint.Value);
+    }
+
+    [Fact]
     public void FromX509_rejects_an_rsa_certificate()
     {
         using var rsa = RSA.Create(2048);
