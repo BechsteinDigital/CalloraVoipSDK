@@ -25,6 +25,14 @@ internal sealed class DtlsSrtpHandshakeResult : IDisposable
     public DtlsSrtpNegotiatedKeys Keys { get; }
 
     /// <summary>
+    /// The live DTLS transport, exposed so the association can be serviced after key export (#190):
+    /// a control-receive loop polls <see cref="DtlsTransport.Receive(byte[], int, int, int)"/> to
+    /// notice a peer <c>close_notify</c> or alert and to discard stray DTLS application_data. Media
+    /// itself never flows here — SRTP runs directly over UDP (RFC 5764 §4.2).
+    /// </summary>
+    internal DtlsTransport Transport => _transport;
+
+    /// <summary>
     /// Closes the DTLS association (sends <c>close_notify</c> via the underlying datagram
     /// transport). Idempotent and safe to call concurrently.
     /// </summary>
