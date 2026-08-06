@@ -50,8 +50,17 @@ internal sealed class DtlsAssociationReceiver : IAsyncDisposable
     public long DiscardedApplicationDataRecords => Interlocked.Read(ref _discardedApplicationDataRecords);
 
     /// <summary>Starts the control-receive loop on a dedicated long-running thread.</summary>
-    public void Start() => _loop = Task.Factory.StartNew(
-        Run, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+    public void Start()
+    {
+        // Defensive: a handshake completing during teardown could, in principle, reach here after
+        // DisposeAsync has already run. Do not start an unobserved worker in that case (the owner's
+        // await barrier makes this unreachable today, but the guard keeps it robust to reordering).
+        if (Volatile.Read(ref _disposed) != 0)
+            return;
+
+        _loop = Task.Factory.StartNew(
+            Run, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+    }
 
     private void Run()
     {

@@ -59,5 +59,8 @@ internal sealed class BouncyCastleDtlsControlChannel : IDtlsControlChannel
             // The underlying transport was closed under us (teardown) — the association is done.
             return new DtlsControlReceiveResult(DtlsControlSignal.Closed, 0);
         }
+        // A genuine local fault (a TlsFatalAlert with the transport still open, or any other
+        // exception) is deliberately NOT caught here: it propagates to the receive loop, which
+        // treats it fail-closed (ceases media) rather than assuming the channel is healthy (K1).
     }
 }
