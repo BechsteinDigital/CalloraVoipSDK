@@ -26,4 +26,14 @@ public sealed record SipCredentials
         Password = password ?? throw new ArgumentNullException(nameof(password));
         Realm    = realm;
     }
+
+    /// <summary>
+    /// Returns a diagnostic string that deliberately <b>never</b> includes the password (#165 P1-3). The
+    /// record-generated <c>ToString()</c>/<c>PrintMembers</c> would otherwise emit every property — including
+    /// <see cref="Password"/> — so a structured log, an exception dump or a debugger inspection would persist the
+    /// cleartext authentication secret. Only the non-secret <see cref="Username"/> and <see cref="Realm"/> are
+    /// surfaced; the presence of a password is marked with a fixed redaction placeholder.
+    /// </summary>
+    public override string ToString()
+        => $"SipCredentials {{ Username = {Username}, Realm = {Realm}, Password = *** }}";
 }
