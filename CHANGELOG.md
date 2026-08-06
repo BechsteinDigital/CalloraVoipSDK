@@ -8,6 +8,143 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
 
 The next line. Entries here accumulate the consumer-visible changes not yet released.
 
+## [4.8.0] - 2026-08-06
+
+A stack-wide hardening release from a series of protocol-layer review findings (DTLS/STUN/TURN/RTP/
+RTCP/SDP/SIP/WebRTC/Audio), plus two additive public features: **mutual TLS per SIP line with a
+certificate from memory** and a **public PCM transcoding surface**. The new public APIs are purely
+additive — `PublicApi.approved.txt` only grew, nothing was removed — so an existing consumer that
+does not opt into the new configuration surfaces stays behaviour-identical. Every hardening cap sits
+far above any real signalling/media, so legitimate traffic is unaffected. See `RELEASE_NOTES_4.8.0.md`
+and ADR-064 (per-line mTLS), ADR-065 (transcoding surface) and ADR-066 (DTLS close-block) for detail.
+
+### Added
+
+- **SIP mutual TLS per line, with a client certificate from memory.** Outbound SIP over TLS/WSS now
+  presents a client certificate when one is configured — sent only if the registrar asks for it
+  (RFC 8446 §4.4.2), so behaviour against registrars that do not request one is byte-identical. Two
+  lines to the same endpoint present their own identity over separate pooled connections (pool key
+  `(transport, addr:port, identity)`), and the line identity is stamped on every request the line
+  originates (REGISTER, INVITE and all in-dialog requests, MESSAGE, PUBLISH). Per-line
+  `ExpectedSipDomain`/`TrustMode` stay fail-closed (RFC 5922). New public surface:
+  `ConnectOptions.LineTls`, `TlsConfiguration.ClientCertificate` (in-memory `X509Certificate2`, taking
+  precedence over `CertificatePath` and never disposed by the SDK — caller-owned). (#183)
+- **Public PCM transcoding surface** (`CalloraVoipSdk.Audio.Abstractions`): `IAudioPayloadCodec` +
+  `AudioPayloadCodecFactory` let a server-side consumer (e.g. an SFU decoding N−1 legs to mix a phone
+  participant into a WebRTC conference) transcode Opus / G.711 (A-law/µ-law) / G.722 ↔ PCM16 without
+  taking a direct dependency on Concentus/NAudio (neither appears in any public signature). I/O is
+  PCM16 little-endian `byte[]`; fixed-rate codecs reject a non-canonical `pcmSampleRate` fail-closed;
+  one instance per stream direction (Opus/G.722 carry state). Shipped transitively via the
+  `CalloraVoipSdk` meta-package — no new `PackageReference`. (#205)
+- **Fail-closed SIP-TLS server trust:** `SipTlsTrustMode { System, DangerousAcceptAnyChain }` and
+  `TlsConfiguration.TrustMode`. Strict RFC 5922 §7.2 SIP-domain identity (only `sip:` URI SANs without
+  userinfo; exact dNSName match, no wildcard/suffix; IDNs canonicalised to A-labels), RFC 5924 §5 EKU
+  policy, and hard SAN-decode caps. (#164)
+- **Configurable SIP inbound hardening:** `SipTransportHardeningConfiguration`
+  (`VoipConfiguration.SipTransportHardening`) and `SipSignalingHardeningConfiguration`
+  (`VoipConfiguration.SipSignalingHardening`) expose the new inbound transport/signalling limits;
+  defaults equal the built-in limits, so behaviour is unchanged without an override. (#158)
+- **DTLS handshake deadline:** `DtlsHandshakeOptions.HandshakeTimeout` (default 20 s); a self-tripped
+  deadline throws `DtlsSrtpHandshakeTimeoutException` (a subtype of `DtlsSrtpHandshakeException`, so
+  the media session still fails closed). (#163)
+
+### Changed
+
+- **STUN Binding success responses now require MESSAGE-INTEGRITY when credentials were sent** (RFC 5389
+  §10.1.2). A non-conforming ICE server that omits it triggers a safe, logged host-only fallback rather
+  than being trusted. (#156)
+- **`StunMessageCodec.Decode` rejects the whole message fail-closed** (not partially) on an attribute-cap
+  overflow, a truncated TLV, a non-4-aligned length, or set reserved bits — closing an auth-bypass
+  primitive where a trailing MESSAGE-INTEGRITY/FINGERPRINT could be silently dropped. (#184)
+- **The offerer sends the codec the answer accepted** (RFC 3264 §6.1), not always its own first offered
+  codec; no common codec logs a warning before failing closed. (#160)
+- **Plaintext legs now discard foreign RTP/RTCP** bound to the symmetric latch (previously delivered),
+  and suppress foreign SSRC-collision reseeds — a spoofed source can no longer force PLI/NACK
+  amplification or a disruptive SSRC change (RFC 3550 §8.2). (#161)
+- **`SipCredentials.ToString()` redacts the password** (`***`) instead of emitting it — the
+  record-generated member printer previously leaked the cleartext password into logs/exception dumps.
+  (#165)
+- **A 416 Unsupported URI Scheme no longer silently downgrades `sips:` to `sip:`** — the end-to-end SIPS
+  intent is not stripped onto a cleartext hop; the 416 propagates as a final failure. (#158)
+- **A structurally non-conforming remote answer is now rejected** (RFC 3264 §6 / RFC 8829): same m-line
+  count/order, 1:1 MIDs, transport profile, PT subset and BUNDLE-group subset are validated; the offerer
+  fails closed (state → Failed) instead of proceeding on a mismatched answer. (#160)
+
+### Deprecated
+
+- **`TlsConfiguration.AcceptUntrustedCertificates`** is now an `[Obsolete]` alias for
+  `TrustMode = DangerousAcceptAnyChain`. It still compiles and behaves as before. (#164)
+
+### Security
+
+DTLS-SRTP:
+
+- **Constant-time DTLS fingerprint comparison** (RFC 5763 §6.7.1 / RFC 8122): `DtlsFingerprint.Matches`
+  parses both hex digests to bytes and compares via `CryptographicOperations.FixedTimeEquals`; a
+  malformed remote digest fails closed without throwing. (#192)
+- **DTLS private-identity staging bytes are zeroed** (`CryptographicOperations.ZeroMemory` in `finally`),
+  with an explicit ownership contract (the caller keeps/disposes the supplied `X509Certificate2`). (#193)
+- **Stateless HelloVerifyRequest cookie before the certificate flight** (RFC 6347 §4.2.1): a spoofed UDP
+  source can no longer trigger the amplified server flight, and a cookie-less ClientHello creates no
+  per-client state; plus a 32 KiB handshake-message cap and a 10-entry chain cap. (#163)
+- **Ordered DTLS egress with error propagation and a `close_notify` drain:** a single-writer egress pump
+  (`DtlsEgressPump`) replaces the fire-and-forget bridge — local record order, bounded backpressure, and
+  a transport failure that now reaches BouncyCastle and fails the handshake closed instead of only being
+  logged; teardown drains `close_notify` on a tight deadline before cancelling, since DTLS does not
+  retransmit alerts (RFC 6347 §4.2.7). (#191)
+- **The DTLS association is serviced after key export:** a single-consumer control-receive loop notices a
+  peer `close_notify`/alert and ends the association deterministically (mapped to
+  `WebRtcConnectionState.Closed` on the WebRTC/bundle path), discards and counts stray DTLS
+  application_data in pure-SRTP mode (RFC 5764), and passively rejects renegotiation. Media no longer
+  keeps flowing under a keying channel the peer considers closed (RFC 8827 §6.5). (#190)
+
+STUN/TURN:
+
+- **STUN auth-response integrity** (RFC 5389 §7.3.3/§10.1.2/§15.5): the client binds a Binding response to
+  message class/method, source transport address, FINGERPRINT and MESSAGE-INTEGRITY — a spoof on the
+  shared UDP socket no longer ends the transaction. (#156)
+- **Stateless STUN nonce** (RFC 5389 §10.2.2): `Base64(salt ‖ ts ‖ HMAC-SHA256)`, constant-time verified
+  and TTL-bound, holding no per-client state (amplification cap for STUN and TURN servers). (#156)
+- **STUN and TURN server TCP/TLS slowloris deadlines:** `StreamHandshakeTimeout` / `StreamReadTimeout` so a
+  peer that dribbles bytes or stalls the TLS ClientHello cannot hold a connection slot indefinitely. (#155, #156)
+- **Malformed `ALTERNATE-SERVER` / decode faults fail closed** (RFC 8489 §14.4): a truncated/unknown-family
+  attribute becomes an unknown raw attribute instead of a throw or a `0.0.0.0` wildcard redirect. (#156)
+- **TURN surplus allocation teardown** (RFC 8656 §7/§3.9): a lost (unretained) relay allocation is torn down
+  immediately with a `LIFETIME=0` refresh rather than holding a port/permissions/quota until expiry. (#188)
+
+RTP/RTCP wire DoS caps:
+
+- **RTCP compound budgets** (RFC 3550 §6.2, 32 packets / 1500 bytes), **transport-cc feedback expansion cap**
+  (reject `statusCount > 4096` before allocating), **depacketiser frame caps** (1 MiB per track/RID lane,
+  with `OversizedFrameDiscardCount` telemetry), and a **BUNDLE reception-state cap** (256 tracked sources,
+  `RejectedSourceCount` telemetry) — an authenticated peer can no longer exhaust process memory via
+  compound floods, header-field expansion, unterminated frames or SSRC spray. (#161, #162)
+
+SIP / app-domain:
+
+- **Fail-closed ICE:** with no validated candidate pair, no session is installed to the unvalidated SDP
+  endpoints (consent/connectivity-check bypass closed); plain-SIP legs unchanged. (#165)
+- **Atomic per-line concurrent-call cap** (`TryReserveCallSlot`): N simultaneous INVITEs/dials cannot
+  overshoot the configured maximum. (#165)
+- **Bounded SIP inbound resources** (#158): connection admission (global + per-IP) with a TLS-handshake/
+  WS-upgrade deadline; transport hints learned only after a valid parse; a session cap (486 over the limit)
+  with per-remote fair share; a ring deadline (auto-480); and a server-transaction table with an
+  absolute-expiry reaper and a capacity cap.
+
+### Fixed
+
+- **Inbound audio now carries its real RTP timestamp** (RFC 3550 §5.1): `EncodedFrame.RtpTimestamp` was
+  `null`, so an SFU stamped forwarded audio at `0` (unplayable). No public API shape change. (#170)
+- **SDP BUNDLE is grouped semantically, not by string prefix** (RFC 5888/8843/9143): a hostile
+  `a=group:BUNDLE …` can no longer pull an ungrouped m-line onto the shared transport, `BUNDLEX` is not
+  treated as BUNDLE, and the answer group is an ordered, deduplicated subset of the offer. (#160)
+- **DTLS handshake timeout classification:** a handshake that ran at least the configured deadline is
+  classified as a timeout by wall-clock (`DtlsSrtpHandshakeTimeoutException`), independent of whether the
+  deadline timer or the engine failsafe ended it; a genuine protocol error stays fast and generic. (#163)
+- **Per-media-section SDP collection caps:** payload types, `fmtp`, `rtcp-fb`, `extmap`, `rid`, `candidate`
+  and `crypto` are each typed-capped per m-section, and the previously un-capped WebRTC
+  `SetRemoteDescription` path is now bounded (non-throwing `TryParse`). (#160)
+
 ## [4.7.2] - 2026-08-01
 
 ICE connection-setup latency patch plus a round of review-finding fixes. The internal connectivity-check

@@ -19,7 +19,7 @@ It exposes a stable, developer-friendly API through `VoipClient` while keeping t
 🧪 **Examples:** [`examples/`](examples) — runnable samples (BasicCalling, Dialer, Transfer, CustomAudio, VideoCalling, WebRtcPeer, WebRtcRecording, WebRtcDependencyInjection, and a browser video-call website `WebRtcVideoCall.Web`)
 🛠️ **Maintainers:** [`MAINTAINING.md`](MAINTAINING.md) — architecture map, invariants, workflows; rules in [`ENGINEERING_RULES.md`](ENGINEERING_RULES.md)
 
-> **Project status — 4.7.** The **SIP + RTP core** is the mature, production-oriented surface:
+> **Project status — 4.8.** The **SIP + RTP core** is the mature, production-oriented surface:
 > registration, in/outbound call control, transfer, DTMF, SRTP (SDES) and measured RTCP quality
 > metrics — with symmetric RTP (comedia) as the production-proven NAT path. It is exercised in CI
 > by an **automated interop suite against a real Asterisk (PJSIP) container** — registration,
@@ -39,6 +39,25 @@ It exposes a stable, developer-friendly API through `VoipClient` while keeping t
 > [issue tracker](../../issues) — bug reports and interop feedback are especially welcome.
 
 **Contents:** [Why](#why-calloravoipsdk) · [Progressive API](#progressive-api-simple-first-deeper-when-needed) · [Features](#current-feature-set) · [Install](#installation) · [Quickstart](#quickstart) · [Architecture](#architecture) · [Contributing](#contributing) · [Security](#security) · [License](#license)
+
+## What's new in 4.8
+
+A **stack-wide security-hardening** release across every wire boundary (DTLS-SRTP, STUN, TURN, RTP/RTCP, SDP,
+SIP, WebRTC), plus two additive public features:
+
+- **Mutual TLS per SIP line, with a certificate from memory** — outbound SIP/TLS now presents a per-line client
+  certificate (sent only if the registrar requests it, RFC 8446 §4.4.2), so two lines to the same registrar can
+  present different identities. Configure via `TlsConfiguration.ClientCertificate` (an `X509Certificate2` you own)
+  or per connect boundary via `ConnectOptions.LineTls`. See ADR-064.
+- **A public PCM transcoding surface** — `IAudioPayloadCodec` / `AudioPayloadCodecFactory` (in
+  `CalloraVoipSdk.Audio.Abstractions`) transcode Opus / G.711 / G.722 ↔ PCM16 for server-side mixing (e.g. an SFU
+  bridging a phone leg into a WebRTC conference) without a direct Concentus/NAudio dependency. See ADR-065.
+
+The hardening is defensive throughout — fail-closed decoding, constant-time comparisons, anti-amplification and
+anti-slowloris deadlines, source binding on plaintext legs, DTLS post-handshake `close_notify` handling
+(ADR-066), and bounded wire-DoS caps at every parser and listener. **The public API only grew** (nothing
+removed); `TlsConfiguration.AcceptUntrustedCertificates` is now an `[Obsolete]` alias for `TrustMode`. Full
+detail in [`CHANGELOG.md`](CHANGELOG.md) and [`RELEASE_NOTES_4.8.0.md`](RELEASE_NOTES_4.8.0.md).
 
 ## What's new in 4.7
 
