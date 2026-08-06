@@ -105,6 +105,7 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
             _logger,
             _endpointTlsHosts,
             ValidateTlsServerCertificate,
+            _tlsCertificate,
             (remote, transport, payload) => HandleInboundPayloadAsync(remote, transport, payload, inboundConnectionId: null));
 
         _udp = new UdpClient(new IPEndPoint(IPAddress.Any, 0));

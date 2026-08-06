@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Net.WebSockets;
+using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Logging;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Sip.Transport;
@@ -18,6 +19,7 @@ internal sealed class SipOutboundConnectionPool : IDisposable
     private readonly ILogger _logger;
     private readonly IReadOnlyDictionary<string, string> _tlsHosts;
     private readonly RemoteCertificateValidationCallback _validateTlsCertificate;
+    private readonly X509Certificate2? _clientCertificate;
     private readonly Func<IPEndPoint, SipTransportProtocol, ReadOnlyMemory<byte>, Task> _onFrameAsync;
 
     private readonly ConcurrentDictionary<string, SipStreamConnection> _streamConnections = new(StringComparer.Ordinal);
@@ -31,16 +33,23 @@ internal sealed class SipOutboundConnectionPool : IDisposable
     /// <param name="logger">Sink for connection diagnostics.</param>
     /// <param name="tlsHosts">Resolved endpoint-key to SIP-domain map for TLS SNI / certificate validation.</param>
     /// <param name="validateTlsCertificate">Server certificate validation callback for TLS/WSS.</param>
+    /// <param name="clientCertificate">
+    /// Optional client identity certificate offered for mutual TLS on outbound TLS/WSS handshakes, or
+    /// <see langword="null"/> to present no client certificate (issue #183). The caller owns the
+    /// instance; the pool never disposes it.
+    /// </param>
     /// <param name="onFrameAsync">Callback invoked for each inbound SIP frame received on a pooled connection.</param>
     public SipOutboundConnectionPool(
         ILogger logger,
         IReadOnlyDictionary<string, string> tlsHosts,
         RemoteCertificateValidationCallback validateTlsCertificate,
+        X509Certificate2? clientCertificate,
         Func<IPEndPoint, SipTransportProtocol, ReadOnlyMemory<byte>, Task> onFrameAsync)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _tlsHosts = tlsHosts ?? throw new ArgumentNullException(nameof(tlsHosts));
         _validateTlsCertificate = validateTlsCertificate ?? throw new ArgumentNullException(nameof(validateTlsCertificate));
+        _clientCertificate = clientCertificate;
         _onFrameAsync = onFrameAsync ?? throw new ArgumentNullException(nameof(onFrameAsync));
     }
 
@@ -102,7 +111,7 @@ internal sealed class SipOutboundConnectionPool : IDisposable
             {
                 var targetHost = SipTransportRuntimeUtilities.SelectTlsTargetHost(_tlsHosts, key, remoteEndPoint.Address);
                 stream = await SipTransportRuntimeUtilities.AuthenticateOutboundTlsAsync(
-                    stream, targetHost, _validateTlsCertificate, ct).ConfigureAwait(false);
+                    stream, targetHost, _validateTlsCertificate, ct, _clientCertificate).ConfigureAwait(false);
             }
 
             var created = new SipStreamConnection(
@@ -137,7 +146,13 @@ internal sealed class SipOutboundConnectionPool : IDisposable
             socket.Options.AddSubProtocol("sip"); // RFC 7118: SIP-over-WebSocket subprotocol
             socket.Options.KeepAliveInterval = TimeSpan.FromSeconds(30);
             if (transport == SipTransportProtocol.Wss)
+            {
                 socket.Options.RemoteCertificateValidationCallback = _validateTlsCertificate;
+                // Mutual TLS over WSS: offer the client identity certificate; transmitted only when the
+                // server requests one (RFC 8446 §4.4.2; issue #183).
+                if (_clientCertificate is not null)
+                    socket.Options.ClientCertificates = new X509CertificateCollection { _clientCertificate };
+            }
 
             // WSS: use the resolved SIP domain as the URI host so TLS SNI + certificate validation
             // run against the domain, not the IP. WS stays on the IP (no TLS involved).
