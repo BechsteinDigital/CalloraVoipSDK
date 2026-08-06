@@ -95,7 +95,8 @@ public sealed class Issue183PerLineTlsIdentityTests
         var request = new CertificateRequest($"CN={commonName}", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
         request.CertificateExtensions.Add(
             new X509EnhancedKeyUsageExtension(new OidCollection { new Oid("1.3.6.1.5.5.7.3.2") }, critical: false));
-        return request.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-5), DateTimeOffset.UtcNow.AddHours(1));
+        using var ephemeral = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-5), DateTimeOffset.UtcNow.AddHours(1));
+        return Issue183TestCertificates.WithUsablePrivateKey(ephemeral);
     }
 
     private static X509Certificate2 SelfSignedServer(string dnsSan)
@@ -110,7 +111,8 @@ public sealed class Issue183PerLineTlsIdentityTests
         var san = new SubjectAlternativeNameBuilder();
         san.AddDnsName(dnsSan);
         request.CertificateExtensions.Add(san.Build());
-        return request.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-5), DateTimeOffset.UtcNow.AddHours(1));
+        using var ephemeral = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-5), DateTimeOffset.UtcNow.AddHours(1));
+        return Issue183TestCertificates.WithUsablePrivateKey(ephemeral);
     }
 
     /// <summary>

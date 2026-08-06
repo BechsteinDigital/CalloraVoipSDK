@@ -112,6 +112,7 @@ public sealed class Issue183OutboundClientCertificateTests
         var eku = new Oid(clientAuth ? "1.3.6.1.5.5.7.3.2" : "1.3.6.1.5.5.7.3.1");
         request.CertificateExtensions.Add(
             new X509EnhancedKeyUsageExtension(new OidCollection { eku }, critical: false));
-        return request.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-5), DateTimeOffset.UtcNow.AddHours(1));
+        using var ephemeral = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-5), DateTimeOffset.UtcNow.AddHours(1));
+        return Issue183TestCertificates.WithUsablePrivateKey(ephemeral);
     }
 }
