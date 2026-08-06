@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-003: RFC 3581 &#167;4 – rport/received Reflection in UAS Responses | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-003: RFC 3581 &#167;4 – rport/received Reflection in UAS Responses | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-003-rfc3581-rport-uas-response-reflection.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-003-rfc-3581-4--rportreceived-reflection-in-uas-responses">ADR-003: RFC 3581 §4 – rport/received Reflection in UAS Responses</h1>
+
+<p>Status: Accepted
+Date: 2026-04-09
+RFC reference: RFC 3581 §4 (Symmetric Response Routing)</p>
+<hr>
+<h2 id="context">Context</h2>
+<p>RFC 3581 extends RFC 3261 to enable symmetric response routing for NAT traversal.
+When a UAC includes an unvalued <code>;rport</code> parameter in the top Via header of a
+request, the UAS MUST:</p>
+<ol>
+<li>Fill in <code>rport=&lt;actual-source-port&gt;</code> with the UDP/TCP source port of the incoming packet.</li>
+<li>Add <code>received=&lt;source-IP&gt;</code> when the source address differs from the Via sent-by host.</li>
+</ol>
+<p>Without these two modifications, responses may be routed to the port/address the
+UAC advertised in its Via (which may be its private/NATed address), rather than
+to the actual address where it is reachable from the server's perspective.</p>
+<p>Previously the SDK copied the Via header verbatim from the request into every UAS
+response. The bare <code>;rport</code> was never filled in, and <code>received=</code> was never added.</p>
+<hr>
+<h2 id="decision">Decision</h2>
+<p>Add <code>SipProtocol.ReflectViaRport(string? viaHeader, IPEndPoint actualRemote)</code>.</p>
+<p>The method:</p>
+<ul>
+<li>Returns the header unchanged when no bare <code>;rport</code> is present.</li>
+<li>Inserts <code>=&lt;sourcePort&gt;</code> immediately after <code>;rport</code>.</li>
+<li>Appends <code>;received=&lt;sourceIP&gt;</code> when the sent-by host (parsed from the Via
+<code>host[:port]</code> field) differs from <code>actualRemote.Address</code>.</li>
+</ul>
+<p>Call <code>ReflectViaRport</code> in:</p>
+<ul>
+<li><code>SipCallSignalingService.CreateIngressResponseHeaders</code> (early validation / provisional replies).</li>
+<li><code>SipCallSessionHeaderService.CreateResponseHeadersFromRequest</code> (dialog-level UAS responses).</li>
+</ul>
+<p>Both sites already have access to the remote endpoint (<code>remoteEndPoint</code> parameter
+and <code>_context.RemoteEndPoint</code> respectively).</p>
+<hr>
+<h2 id="consequences">Consequences</h2>
+<p><strong>Positive:</strong></p>
+<ul>
+<li>SIP clients behind NAT receive responses on the address/port they are actually
+reachable on, eliminating one major class of one-way-audio / no-ringback failures.</li>
+<li>Completes the RFC 3581 UAC + UAS pair: UAC already set <code>;rport</code> in outbound Via.</li>
+<li>Zero breaking change — the modification only fires when <code>;rport</code> (without value)
+is present.</li>
+</ul>
+<p><strong>Negative:</strong></p>
+<ul>
+<li>Only applies when <code>remoteEndPoint</code> is passed through. Code paths where the UAS
+builds responses without a known remote endpoint (e.g., internally constructed
+responses not going through either helper) would miss the reflection. No such
+paths currently exist.</li>
+</ul>
+<hr>
+<h2 id="alternatives-considered">Alternatives considered</h2>
+<ol>
+<li><strong>Add <code>remoteEndPoint</code> to every response builder parameter</strong> — Rejected as
+unnecessarily invasive. The two entry points (<code>CreateIngressResponseHeaders</code>
+and <code>CreateResponseHeadersFromRequest</code>) cover all current UAS response paths.</li>
+<li><strong>Reflect at the transport layer</strong> — Rejected. Reflection is a SIP semantic
+concern (Via header modification), not a transport concern. Doing it at the
+transport layer would require the transport to understand SIP header structure.</li>
+</ol>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-003-rfc3581-rport-uas-response-reflection.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

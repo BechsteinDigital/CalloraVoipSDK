@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-055: TURN Control Stack — Allocation, Permission, and Keepalive over the Shared Socket | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-055: TURN Control Stack — Allocation, Permission, and Keepalive over the Shared Socket | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-055-turn-control-stack-allocation-permission-keepalive.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-055-turn-control-stack--allocation-permission-and-keepalive-over-the-shared-socket">ADR-055: TURN Control Stack — Allocation, Permission, and Keepalive over the Shared Socket</h1>
+
+<p>Status: Accepted
+Date: 2026-07-19</p>
+<h2 id="context">Context</h2>
+<p>Modelling the relay as an ICE candidate (ADR-C16-01) needs a working TURN allocation underneath it:
+an allocation on the server (RFC 8656 §7), a permission for each peer IP before any datagram is
+relayed (§9), a bound channel or Send/Data indications to carry the payload (§10–12), and refreshes
+to keep both the allocation and the permissions alive for the call's duration (§3.9, §9). All of this
+must ride the <strong>same shared media 5-tuple</strong> the BUNDLE transport owns (ADR-011) — the allocation was
+made on that socket during gathering, so its control round-trips and its relayed data share the socket
+with STUN checks, DTLS, and RTP.</p>
+<p>Two constraints shaped the design. First, the Rtp/media layer must not depend on the TURN module
+(module boundary): TURN-aware assembly lives in the WebRTC composition layer, and the media session
+receives only a protocol-agnostic binding of delegates. Second, the control plane must be safe to
+share: a Refresh in flight next to a CreatePermission next to a ChannelBind must not corrupt each
+other's transaction state or lose the server's rotated NONCE.</p>
+<h3 id="verified-current-state">Verified current state</h3>
+<ul>
+<li><code>TurnRelayCandidateSendPath</code> (<code>src/Core/Infrastructure/Turn/Client/TurnRelayCandidateSendPath.cs</code>)
+installs a permission <strong>once per peer IP</strong> via a <code>ConcurrentDictionary&lt;IPAddress, Lazy&lt;Task&gt;&gt;</code>, so
+concurrent checks to the same peer fire CreatePermission exactly once; a faulted entry is evicted so
+the next check retransmit retries rather than poisoning the peer. NONCE threading is serialised under
+a <code>SemaphoreSlim</code> (read → CreatePermission → write, no lost update). The shared permission task runs
+under <code>CancellationToken.None</code> (self-bounded by the transactor's RTO schedule); each caller observes
+its own token via <code>.WaitAsync(ct)</code>, so one caller cancelling cannot cancel a permission others depend
+on. <code>RefreshInstalledPermissionsAsync</code> re-issues CreatePermission for every known peer under the same
+gate (RFC 8656 §9, ~5 min lifetime).</li>
+<li><code>TurnAllocationRefreshLoop</code> (<code>.../Turn/Client/TurnAllocationRefreshLoop.cs</code>) refreshes the allocation
+at <strong>half the granted lifetime</strong> (RFC 8656 §3.9 cadence — a lost refresh still has a second attempt
+before expiry), threading rotated REALM/NONCE and granted lifetime forward; a transient failure backs
+off <code>~5 s</code> and retries rather than abandoning the allocation; a server-returned lifetime 0 stops the
+loop (allocation gone, no teardown). On dispose it best-effort deletes the allocation with <code>Refresh(0)</code>
+bounded by a <code>~2 s</code> teardown timeout. The refresh transaction is <strong>injected as a delegate</strong>, so the
+loop is transport-agnostic and its clock/delay are injectable for deterministic tests.</li>
+<li><code>WebRtcRelayBinding.CreateFactory</code> (<code>src/Core/Infrastructure/WebRtc/WebRtcRelayBinding.cs</code>) is the
+TURN-aware producer: given the transport's <code>targetedSend</code>, it assembles <code>TurnRelayIndicationChannel</code>
+<ul>
+<li><code>TurnControlTransactor</code> (correlates responses by transaction id) + <code>TurnRelayControlClient</code> +
+<code>TurnRelayCandidateSendPath</code>, plus a <code>CompositeRelayKeepAlive</code> of the allocation-refresh loop and a
+<code>TurnPermissionRefreshLoop</code>, plus a <code>BindChannel</code> closure (ChannelBind at channel number <code>0x4000</code>
+with a <code>TurnChannelRebindLoop</code> at half the channel lifetime). It hands the media session only a
+<code>RelayIceBinding</code> (<code>Common/Relay</code>) of delegates — <code>indication</code>, <code>OnControlDatagram</code>, <code>SendAsync</code>,
+keepalive, <code>BindChannel</code>. The Rtp session never sees a TURN type.</li>
+</ul>
+</li>
+<li>The control clients all share one authenticated <code>TurnControlTransactor</code> over the shared socket. The
+recon note in <code>4c-4b</code> confirmed the transactor keys pending round-trips by transaction id
+(<code>ConcurrentDictionary&lt;txnId, TCS&gt;</code>), so a Refresh next to a CreatePermission next to a ChannelBind
+is safe on one client — no second auth chain needed.</li>
+<li>Gathering side: <code>TurnAllocationProbe</code> allocates on the already-bound media socket during
+<code>WebRtcPeerConnection.GatherCandidatesAsync</code>, and the first successful allocation is <em>retained</em>
+(<code>_gatheredRelay</code>, keyed to the socket 5-tuple) so it survives the pre-start → post-start socket
+handover into the transport.</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<p>Assemble the whole TURN control stack — allocate, permission, channel-bind, and both refresh loops —
+in the WebRTC composition layer over one shared, authenticated control transactor riding the media
+socket, and expose it to the media session as a protocol-agnostic <code>RelayIceBinding</code> of delegates.</p>
+<ol>
+<li><strong>One shared authenticated control transactor.</strong> Allocation refresh, per-peer permissions, and
+channel-bind/rebind all go through the same <code>TurnControlTransactor</code>, correlated by transaction id.
+Credentials (REALM/NONCE) are threaded forward across operations; the server's NONCE rotation is
+carried through rather than re-authenticated per call.</li>
+<li><strong>Permission is per peer IP, installed lazily and refreshed.</strong> CreatePermission fires once per peer
+IP (RFC 8656 §9, port ignored), deduplicated under concurrent checks; a <code>TurnPermissionRefreshLoop</code>
+re-installs before the ~5 min lifetime so a long-lived relay path does not start dropping inbound.</li>
+<li><strong>Allocation refresh at half the granted lifetime, teardown on dispose.</strong> <code>TurnAllocationRefreshLoop</code>
+keeps the allocation alive (RFC 8656 §3.9) and best-effort deletes it with <code>Refresh(0)</code> on disposal
+so a torn-down session does not leak a server-side allocation.</li>
+<li><strong>The injected-delegate seam keeps the media layer TURN-free.</strong> Refresh, permission, channel-bind,
+and raw-send are all delegates; the producer lives in <code>Infrastructure/WebRtc</code> (may depend on TURN),
+the media session receives only <code>Common/Relay</code> abstractions. This is enforced by the architecture
+tests' module-boundary gate.</li>
+<li><strong>Dispose ordering is a composition-layer contract.</strong> Every control path that rides the socket
+(permission install, refresh, keepalive teardown) must complete before the transport is disposed:
+ICE is drained first (no new checks), then the keepalive is disposed (running its <code>Refresh(0)</code> over a
+still-live transport), then the transport.</li>
+</ol>
+<h3 id="crux">Crux</h3>
+<p>The whole stack is <em>delegates over one socket</em>, not a second network client. Because the allocation is
+made on the very socket the transport later owns, the control transactor's send is the transport's
+targeted send, and the transport routes the server's control responses back via the binding's control
+sink. That single shared, transaction-id-correlated transactor is what lets refresh, permission, and
+channel-bind coexist without separate auth chains — and it is what keeps the Rtp layer off the TURN
+module: the media session only ever holds <code>RelayIceBinding</code> delegates.</p>
+<h2 id="consequences">Consequences</h2>
+<p>Positive: the relay allocation stays alive for the call and is cleaned up on teardown; permissions
+survive their lifetime; the control plane is safe to share; the module boundary holds (verified by the
+architecture gate). All of it is deterministically testable — clocks/delays and the refresh/send
+transactions are injected — and was exercised against a fake TURN server over loopback (Refresh with
+<code>LIFETIME</code>, teardown <code>Refresh(0)</code>, CreatePermission with valid MESSAGE-INTEGRITY from allocation
+credentials, keepalive start-on-start / dispose-on-teardown).</p>
+<p>Divergence and honest open edges:</p>
+<ul>
+<li><strong>Dispose latency under a dead relay.</strong> Teardown <code>Refresh(0)</code> is bounded by <code>_teardownTimeout</code>
+(<code>~2 s</code>); against an unreachable relay server, disposal can take up to that bound. Bounded, but real.</li>
+<li><strong>Separate credential copies self-heal via 438.</strong> The keepalive loop and the permission send path
+thread <em>separate</em> credential copies from the same allocation; a NONCE rotation in one is picked up by
+the other only via a 438 (stale nonce) round-trip. Pre-existing pattern, acceptable, but noted.</li>
+<li><strong>Permission install can outlive ICE drain (theoretical).</strong> The shared permission task runs under
+<code>CancellationToken.None</code>; a <code>targetedSend</code> could in principle fire after transport dispose. Mitigated
+by the dispose ordering (ICE drained first), but the theoretical window is only closed once verified
+under a real end-to-end teardown — not yet done.</li>
+<li><strong>No real-server end-to-end run.</strong> All verification is against a fake TURN server; the full stack has
+not been run against a production TURN server, and no browser interop exists (ADR-009).</li>
+<li><strong>Multi-TURN adoption is partial.</strong> Only the <em>first</em> successful allocation is retained for adoption;
+additional configured TURN servers still emit a gathered candidate but are not adopted for relay.</li>
+<li><strong>TCP/TLS relay data path is out of scope here.</strong> This stack is UDP-relay. The TCP/TLS <em>control</em>
+path is proven separately, but a persistent stream relay data path is a large, unbuilt feature.</li>
+</ul>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li>The media session must receive only the <code>Common/Relay</code> binding, never a TURN type — the producer
+(<code>Infrastructure/WebRtc</code>) is the only place the TURN client stack is assembled (module-boundary gate).</li>
+<li>One shared authenticated control transactor per allocation; correlate by transaction id, thread NONCE
+forward. Do not spin a second auth chain for refresh or channel-bind.</li>
+<li>Dispose order is fixed and load-bearing: <strong>ICE → keepalive (teardown Refresh(0)) → transport</strong>. The
+keepalive teardown rides the transport's send, so the transport must still be alive.</li>
+<li>Permission is keyed by peer IP (port ignored); dedup installs per IP; evict a faulted entry so a
+retransmit retries; refresh before the ~5 min lifetime.</li>
+<li>Keep the refresh cadence at half the granted lifetime and the teardown bounded — do not block disposal
+on an unreachable server.</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Logs (<code>docs/archive/agent-log/</code>):
+<ul>
+<li><code>2026-07-19-dev-relay-4c-4a.md</code> — <code>TurnAllocationRefreshLoop</code> (refresh@lifetime/2, backoff retry,
+lifetime-0 stop, bounded teardown Refresh(0), injected refresh delegate + injectable clock).</li>
+<li><code>2026-07-19-dev-relay-4c-4b.md</code> — keepalive wired into the session lifecycle via <code>IRelayKeepAlive</code>;
+shared control client safe (transactor keyed by txn id); dispose order ICE → keepalive → transport;
+separate-credential-copy 438 self-heal note.</li>
+<li><code>2026-07-19-dev-relay-4d-3b-2b-i.md</code> — <code>TurnRelayCandidateSendPath</code> per-IP permission dedup,
+SemaphoreSlim NONCE threading, <code>CancellationToken.None</code> shared-permission + per-caller <code>.WaitAsync</code>.</li>
+<li><code>2026-07-19-dev-relay-4d-3b-2b-ii-B.md</code> — <code>WebRtcRelayBinding.CreateFactory</code> assembling the stack;
+MESSAGE-INTEGRITY from allocation credentials (RFC 8656 §9 / RFC 5389 §10.2).</li>
+<li><code>2026-07-19-dev.md</code> (slice 4d-2b) — <code>TurnAllocationProbe</code> gathering on the media socket; first
+allocation retained for post-start adoption.</li>
+</ul>
+</li>
+<li>Code:
+<ul>
+<li><code>src/Core/Infrastructure/Turn/Client/TurnRelayCandidateSendPath.cs</code></li>
+<li><code>src/Core/Infrastructure/Turn/Client/TurnAllocationRefreshLoop.cs</code>, <code>TurnPermissionRefreshLoop.cs</code>,
+<code>TurnChannelRebindLoop.cs</code>, <code>TurnControlTransactor.cs</code>, <code>TurnRelayControlClient.cs</code></li>
+<li><code>src/Core/Infrastructure/WebRtc/WebRtcRelayBinding.cs</code></li>
+<li><code>src/Core/Infrastructure/Common/Relay/</code> (<code>RelayIceBinding.cs</code>, <code>IRelayKeepAlive.cs</code>,
+<code>CompositeRelayKeepAlive.cs</code>, <code>IRelayIndicationChannel.cs</code>)</li>
+</ul>
+</li>
+<li>Markers / RFC: RFC 8656 §3.9 (allocation lifetime/refresh), §7 (Allocate), §9 (CreatePermission),
+§10 (Send/Data), §11–12 (ChannelBind/ChannelData), RFC 5389 §10.2 (long-term credential /
+MESSAGE-INTEGRITY). Adjacent: ADR-C16-01 (relay as ICE candidate), ADR-C16-03 (post-nom transport
+transition), ADR-011 (shared BUNDLE socket), ADR-009 (interop boundary).</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-055-turn-control-stack-allocation-permission-keepalive.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>SIP over TLS with mutual TLS (per line) | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="SIP over TLS with mutual TLS (per line) | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/portal/guides/sip-tls-mtls.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="sip-over-tls-with-mutual-tls-per-line">SIP over TLS with mutual TLS (per line)</h1>
+
+<p>The SDK runs SIP over TLS (<code>sip:</code>/<code>sips:</code>, port 5061) and WSS. On such a line it can present a
+<strong>client certificate</strong> for mutual TLS, and each line carries its <strong>own</strong> TLS identity — two accounts
+to the same registrar can present two different certificates. The identity is bound to the <em>line</em>, not
+to the client as a whole (the model Asterisk <code>pjsip</code> and SIPSorcery/PJSIP use), and it is stamped on
+every request the line originates (REGISTER, INVITE, in-dialog requests, MESSAGE, PUBLISH). See
+<a href="../adr/ADR-064-per-line-sip-mutual-tls.md">ADR-064</a>.</p>
+<h2 id="configuration-surface">Configuration surface</h2>
+<table>
+<thead>
+<tr>
+<th>Member</th>
+<th>Type</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>TlsConfiguration.ClientCertificate</code></td>
+<td><code>X509Certificate2?</code></td>
+<td>In-memory client identity; takes precedence over <code>CertificatePath</code> and is <strong>caller-owned</strong> (never disposed by the SDK)</td>
+</tr>
+<tr>
+<td><code>TlsConfiguration.CertificatePath</code> / <code>CertificatePassword</code></td>
+<td><code>string?</code></td>
+<td>File-loaded identity (PFX/P12 or PEM); an SDK-loaded certificate stays SDK-owned</td>
+</tr>
+<tr>
+<td><code>TlsConfiguration.TrustMode</code></td>
+<td><code>SipTlsTrustMode</code></td>
+<td>Server-trust policy: <code>System</code> (default) or <code>DangerousAcceptAnyChain</code></td>
+</tr>
+<tr>
+<td><code>TlsConfiguration.ExpectedSipDomain</code></td>
+<td><code>string?</code></td>
+<td>RFC 5922 §7 SIP-domain SAN check, fail-closed in every trust mode</td>
+</tr>
+<tr>
+<td><code>ConnectOptions.LineTls</code></td>
+<td><code>TlsConfiguration?</code></td>
+<td>Per-line/per-connect override of the client-wide <code>VoipConfiguration.Tls</code></td>
+</tr>
+</tbody>
+</table>
+<p>The client-wide identity is <code>VoipConfiguration.Tls</code>; <code>ConnectOptions.LineTls</code> overrides it for one
+<code>ConnectAsync</code> call. <code>null</code> keeps the client-wide identity. TLS members are only relevant when the
+line's transport is <code>Tls</code> or <code>Wss</code>.</p>
+<h2 id="a-client-certificate-from-memory">A client certificate from memory</h2>
+<p>Consumers often hold the identity in memory — from a secret store, an HSM export, or a rotated
+in-process cache — not as a file. Assign it to <code>ClientCertificate</code>; keep the instance alive for as long
+as the line uses it, and dispose it yourself when done.</p>
+<pre><code class="lang-csharp">using CalloraVoipSdk;
+using CalloraVoipSdk.Core.Application.Ports.Security;
+using CalloraVoipSdk.Core.Domain.Lines;
+
+using var identity = /* X509Certificate2 with a private key, from your store/HSM */;
+
+using var client = new VoipClient(new VoipConfiguration
+{
+    DefaultTransport = SipTransport.Tls,
+});
+
+var account = new SipAccount
+{
+    SipServer = &quot;sip.example.com&quot;,
+    Username  = &quot;line-a&quot;,
+    Password  = &quot;…&quot;,
+    Transport = SipTransport.Tls,
+};
+
+var result = await client.ConnectAsync(account, new ConnectOptions
+{
+    LineTls = new TlsConfiguration
+    {
+        ClientCertificate = identity,      // caller-owned; the SDK never disposes it
+        ExpectedSipDomain = &quot;sip.example.com&quot;,
+    },
+});
+</code></pre>
+<p>The certificate is presented <strong>only if the registrar sends a <code>CertificateRequest</code></strong> (RFC 8446 §4.4.2),
+so behaviour against a registrar that does not request one is byte-identical to a line without a client
+certificate. A file-loaded identity is the same shape with <code>CertificatePath</code>/<code>CertificatePassword</code>
+instead of <code>ClientCertificate</code>.</p>
+<h2 id="two-lines-two-identities-one-registrar">Two lines, two identities, one registrar</h2>
+<p>Because the pool key is <code>(transport, addr:port, identity)</code>, two lines to the same endpoint present
+their own certificate over separate pooled connections — they do not collapse onto one connection.</p>
+<pre><code class="lang-csharp">using var identityA = /* certificate for line A */;
+using var identityB = /* certificate for line B */;
+
+await client.ConnectAsync(
+    new SipAccount { SipServer = &quot;sip.example.com&quot;, Username = &quot;line-a&quot;, Transport = SipTransport.Tls },
+    new ConnectOptions { LineTls = new TlsConfiguration { ClientCertificate = identityA } });
+
+await client.ConnectAsync(
+    new SipAccount { SipServer = &quot;sip.example.com&quot;, Username = &quot;line-b&quot;, Transport = SipTransport.Tls },
+    new ConnectOptions { LineTls = new TlsConfiguration { ClientCertificate = identityB } });
+</code></pre>
+<h2 id="server-trust-modes">Server-trust modes</h2>
+<p><code>TrustMode</code> governs the <strong>standard</strong> chain/hostname decision only:</p>
+<table>
+<thead>
+<tr>
+<th>Value</th>
+<th>Behaviour</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>System</code> <em>(default)</em></td>
+<td>Platform trust store; the server chain and hostname must validate</td>
+</tr>
+<tr>
+<td><code>DangerousAcceptAnyChain</code></td>
+<td>Accept any chain/hostname result (self-signed included) — development/test only</td>
+</tr>
+</tbody>
+</table>
+<p><code>DangerousAcceptAnyChain</code> never relaxes the two fail-closed checks: a configured <code>ExpectedSipDomain</code> is
+still enforced (RFC 5922 §7 — exact <code>dNSName</code> or <code>sip:</code> URI SAN; <code>sips:</code>, userinfo URIs and wildcards
+are rejected), and a <strong>missing</strong> peer certificate is still rejected, in every mode.</p>
+<pre><code class="lang-csharp">LineTls = new TlsConfiguration
+{
+    ClientCertificate = identity,
+    TrustMode         = SipTlsTrustMode.DangerousAcceptAnyChain,  // lab only
+    ExpectedSipDomain = &quot;sip.example.com&quot;,                        // still enforced
+};
+</code></pre>
+<h3 id="deprecated-acceptuntrustedcertificates">Deprecated: <code>AcceptUntrustedCertificates</code></h3>
+<p><code>TlsConfiguration.AcceptUntrustedCertificates</code> is now an <code>[Obsolete]</code> alias — <code>true</code> maps to
+<code>TrustMode = DangerousAcceptAnyChain</code>. It still compiles and behaves as before; prefer <code>TrustMode</code> in
+new code. If both are set in one initializer, the last assignment wins.</p>
+<h2 id="limitations">Limitations</h2>
+<ul>
+<li>The client certificate is sent <strong>only when the registrar requests it</strong> with a <code>CertificateRequest</code>
+(RFC 8446 §4.4.2). A registrar that does not request one sees no client identity, by design.</li>
+<li>Live <code>verify_client=yes</code> interop against a production registrar is <strong>not</strong> part of CI and is
+therefore not claimed here. The per-line behaviour is covered by wire tests against a loopback
+mutual-TLS server (two lines → two certificates at the same endpoint) — see ADR-064.</li>
+<li>An in-memory <code>ClientCertificate</code> is <strong>caller-owned</strong>: keep it alive while the line uses it and
+dispose it yourself. Only a certificate the SDK loads from <code>CertificatePath</code> is SDK-disposed.</li>
+</ul>
+<h2 id="see-also">See also</h2>
+<ul>
+<li><a href="../concepts/voipclient.html">VoipClient</a> — client-wide TLS via <code>VoipConfiguration.Tls</code></li>
+<li><a href="nat-and-trunks.html">NAT and SIP trunks</a> — choosing the SIP transport</li>
+<li><a href="srtp-srtcp.html">SRTP / SRTCP</a> — securing the media path (TLS secures signalling only)</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/portal/guides/sip-tls-mtls.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-012: WebRTC Public Facade (WebRtcClient) | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-012: WebRTC Public Facade (WebRtcClient) | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-012-webrtc-public-facade.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-012-webrtc-public-facade-webrtcclient">ADR-012: WebRTC Public Facade (<code>WebRtcClient</code>)</h1>
+
+<p>Status: Accepted
+Date: 2026-07-18</p>
+<h2 id="context">Context</h2>
+<p>The WebRTC transport core is feature-complete internally (ADR-009/010): ICE-connection-state
+events, BUNDLE B1–B5, <code>a=msid</code> track identity (both directions), and the C6 Send-vs-Dispose
+hardening are all built and tested — but the whole stack sits behind <code>internal WebRtcPeerConnection</code> and is unusable by any app. Exposing it is the gateway to the browser-MVP
+milestone (and to browser-interop validation).</p>
+<p>The exposure must mirror the SDK's established public-API architecture, not invent a new one. That
+architecture is <strong>four levels</strong> (verified against the <code>VoipClient</code> SIP facade):</p>
+<ol>
+<li><strong>L1 — Facade</strong> (<code>VoipClient</code>): happy path + product-oriented convenience.</li>
+<li><strong>L2 — Managers</strong> (<code>Calls</code>/<code>Lines</code>/<code>Media</code>/<code>Sessions</code>/<code>Policies</code>/<code>Quality</code>/<code>Telemetry</code>):
+advanced application control, all mockable interfaces.</li>
+<li><strong>L3 — Ports, Modules, Media-Taps, swappable implementations</strong>: own integrations and
+extensions (DI-injectable ports via <code>ResolveService&lt;T&gt;</code>, <code>IModuleRegistry</code>, media frame taps,
+<code>SdkConfiguration.Services</code>).</li>
+<li><strong>L4 — internal SIP/RTP/SRTP/Infrastructure</strong>: deliberately no stable public API (<code>internal</code>).</li>
+</ol>
+<p>WebRTC is signaling-neutral (ADR-009 §4): the app owns the signaling channel (WebSocket/HTTP/
+Callora); the SDK provides a peer + SDP-in/SDP-out + ICE. That is a different developer model than
+SIP (register/dial), so it needs its own facade — not a bolt-on to <code>VoipClient</code>.</p>
+<h2 id="decision">Decision</h2>
+<h3 id="1-webrtcclient-mirrors-the-four-level-architecture">1. <code>WebRtcClient</code> mirrors the four-level architecture</h3>
+<p>A public <code>WebRtcClient : IWebRtcClient</code> (namespace <code>CalloraVoipSdk.WebRtc</code>, in <code>src/Client</code>) that
+offers exactly the same four levels as <code>VoipClient</code>. L4 (peer/BUNDLE/DTLS/ICE/SRTP) stays
+<code>internal</code>.</p>
+<h3 id="2-two-facades-composed--not-one-flat-client-not-two-islands">2. Two facades, composed — not one flat client, not two islands</h3>
+<ul>
+<li>One flat client mixing <code>Dial()</code> and <code>CreatePeer()</code> is rejected: it merges two mental models
+(Account/Line/Call vs Peer/Offer/Answer/Track) into one surface — objectively worse DX,
+independent of any guardrail.</li>
+<li>Two disconnected clients are rejected for the CPaaS case: bridging Browser ⇄ SDK ⇄ SIP would
+force the app to wire media between two clients by hand.</li>
+<li><strong>Chosen:</strong> separate capability facades under one optional composing entry — the same pattern
+<code>VoipClient</code> already uses to compose its managers, one level up (protocol level). <code>VoipClient</code>
+(SIP) and <code>WebRtcClient</code> (WebRTC) each work standalone; a future <code>CalloraClient</code> composes both
+and adds <code>BridgeAsync(peer, sipCall)</code>. Composition at the <em>facade</em> level keeps WebRTC out of the
+SIP <em>core</em> (ADR-009 guardrail satisfied).</li>
+</ul>
+<p>Naming: <strong><code>VoipClient</code> is NOT renamed</strong> (correct for the SIP/telephony stack; renaming is
+binary-breaking + cross-repo for no DX gain). WebRTC facade = <strong><code>WebRtcClient</code></strong> (clear parallel,
+no prejudice). A future unified entry, if ever wanted, is <strong><code>CalloraClient</code></strong> (brand-first,
+scope-agnostic) — preferred over <code>RtcClient</code> (jargon) / <code>CommunicationClient</code> (clunky) — and would
+<em>compose</em> the two facades, not rename them.</p>
+<h3 id="3-signaling-adapter-happy-path--raw-peer-for-the-expert">3. Signaling-adapter happy path + raw peer for the expert</h3>
+<ul>
+<li><strong>L1 happy path:</strong> the app plugs in a thin signaling channel (<code>IWebRtcSignaling</code>: send/receive
+one message) and calls <code>ConnectPeerAsync(signaling, …)</code>; the SDK drives the whole
+offer/answer/ICE/DTLS/BUNDLE handshake. As easy as SIP's register+dial.</li>
+<li><strong>Expert path:</strong> <code>CreatePeer()</code> returns the raw <code>IPeerConnection</code> (SDP-in/SDP-out); the app owns
+the SDP transport.</li>
+</ul>
+<h3 id="4-track-model-for-inbound-media-trackreceived">4. Track model for inbound media (<code>TrackReceived</code>)</h3>
+<p>Inbound media is surfaced per <strong>track</strong> (W3C model), not as flat audio/video events and not as one
+combined A/V event:</p>
+<pre><code class="lang-csharp">event EventHandler&lt;RemoteTrack&gt; TrackReceived;
+
+sealed class RemoteTrack { TrackKind Kind; string? StreamId; string? TrackId; event …&lt;EncodedFrame&gt; FrameReceived; }
+readonly struct EncodedFrame(ReadOnlyMemory&lt;byte&gt; Payload, uint? RtpTimestamp, bool IsKeyFrame, long? PresentationTimeUsec);
+</code></pre>
+<blockquote>
+<p>As-shipped (step 4): <code>RtpTimestamp</code> is <code>uint?</code> (null for audio — the inbound audio path surfaces only
+the payload; present for video), and <code>StreamId</code>/<code>TrackId</code> are nullable (the remote may advertise no
+<code>a=msid</code>; RFC 8830 <code>-</code> → null). Nullable is more honest than a fake <code>0</code>/empty. <code>PresentationTimeUsec</code>
+stays <code>null</code> until the RTCP-SR mapping lands.</p>
+</blockquote>
+<p>Rationale: A and V arrive as separate RTP streams; a muxer wants per-track samples with
+presentation timestamps and interleaves itself. Sync drift comes from <em>missing timing</em>, not from
+separate delivery. The track model serves both driving use cases from one shape:</p>
+<ul>
+<li><strong>Meet + recording:</strong> subscribe to all tracks of a <code>StreamId</code> (one participant), mux by
+<code>PresentationTimeUsec</code> → lip-synced, no post-hoc re-sync.</li>
+<li><strong>AI voice into video:</strong> subscribe to the audio track alone (independent STT→LLM→TTS, inject TTS
+on the outbound audio track) without touching video.</li>
+</ul>
+<p><code>RemoteTrack.StreamId</code> <strong>is the <code>a=msid</code> stream id</strong> built in the msid slice — the payoff of doing
+msid first.</p>
+<h3 id="5-optionsconfigdi--11-like-voipclient">5. Options/config/DI — 1:1 like <code>VoipClient</code></h3>
+<p>Mutable <code>WebRtcOptions</code> (<code>{get;set;}</code>, DI/options) and immutable <code>WebRtcConfiguration</code>
+(<code>{get;init;}</code>, direct construction); <code>WebRtcOptions.ToConfiguration(loggerFactory)</code> is a pure 1:1
+projection. <code>services.AddCalloraWebRtc(Action&lt;WebRtcOptions&gt;)</code> → <code>CalloraWebRtcBuilder</code>
+(<code>WithIceServers</code>/<code>WithDtlsCertificate</code>/<code>WithSignaling</code>/<code>WithModule</code>). <code>ResolveService&lt;T&gt;</code>
+(DI-or-default) throughout the constructor.</p>
+<h3 id="6-l2-managers-are-shared-not-duplicated">6. L2 managers are shared, not duplicated</h3>
+<p><code>WebRtcClient</code> reuses the Core managers (<code>IMediaManager</code>, <code>IQualityManager</code>, <code>ISessionManager</code>,
+<code>ITelemetryManager</code>, <code>IDeviceManager</code>, <code>IModuleRegistry</code>) and adds only <code>IPeerConnectionManager Peers</code>. Shared media types are what make a future bridge feasible.</p>
+<h3 id="build-order-one-commit-each">Build order (one commit each)</h3>
+<ol>
+<li><code>IPeerConnection</code> + adapter surfacing the internal peer (behaviour-neutral) + tests.</li>
+<li><code>WebRtcClient</code>/<code>IWebRtcClient</code> + <code>IPeerConnectionManager</code> (peer registry) + <code>CreatePeer</code> + tests.</li>
+<li><code>WebRtcOptions</code>/<code>WebRtcConfiguration</code> + <code>AddCalloraWebRtc</code>/<code>CalloraWebRtcBuilder</code> +
+<code>ResolveService</code> seams + tests.</li>
+<li>Track model: <code>TrackReceived</code>/<code>RemoteTrack</code>/<code>EncodedFrame</code> wired from the peer's inbound path + tests.</li>
+<li>Signaling adapter: <code>IWebRtcSignaling</code> + <code>ConnectPeerAsync</code> (SDK drives the handshake) + tests.</li>
+<li>L3 opening: media taps on the peer + <code>IModuleRegistry</code> binding + a sample.</li>
+</ol>
+<h2 id="consequences">Consequences</h2>
+<p>Positive: the built WebRTC stack becomes usable; the facade unlocks browser-interop validation; a
+dev who knows <code>VoipClient</code> gets <code>WebRtcClient</code> for free (same DNA); the design is bridge-ready
+without prejudicing <code>VoipClient</code>/<code>WebRtcClient</code> names.</p>
+<p>Tradeoffs: a public API surface is expensive to change — hence this ADR before code. Some sub-parts
+are seams whose implementation lands later (below).</p>
+<h2 id="deferred--follow-up-slices">Deferred / follow-up slices</h2>
+<ul>
+<li><strong>Trickle-ICE:</strong> <code>LocalIceCandidateDiscovered</code> / <code>AddRemoteIceCandidateAsync</code> + a
+<code>WebRtcSignal.Candidate</code> kind. v1 candidates ride in the SDP (the offer carries the host
+candidate).</li>
+<li><strong>Codec-pipeline ports</strong> (<code>IVideoSource</code>/<code>IVideoSink</code>/<code>IVideoEncoder</code>/<code>IVideoDecoder</code>, ADR-009
+§5): defined as an L3 seam now; implementation with <code>CalloraVoipSdk.Video.FFmpeg</code>. Transport-only
+until then (the app supplies encoded frames via L1).</li>
+<li><strong>RTCP-SR RTP↔NTP mapping</strong> → fills <code>EncodedFrame.PresentationTimeUsec</code> for cross-track
+lip-sync; <code>null</code> until then (per-track <code>RtpTimestamp</code> still delivered).</li>
+<li><strong><code>CalloraClient</code> + <code>BridgeAsync</code></strong> (Browser ⇄ SIP): additive, composes the two facades.</li>
+<li><strong>SCTP DataChannels, TURN/TCP/TLS:</strong> after the audio/video MVP (ADR-009 §6/§7).</li>
+</ul>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li>No &quot;WebRTC-ready/production&quot; claims without browser-interop validation (Chrome/Firefox).</li>
+<li>No WebRTC code in the SIP signalling core; composition is allowed only at the facade level.</li>
+<li>Public API stability applies to L1–L3; L4 (<code>Infrastructure</code>) stays <code>internal</code> and unstable.</li>
+<li>Transport-only until the FFmpeg codec package: the app owns the codec; the SDK packetises.</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-012-webrtc-public-facade.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

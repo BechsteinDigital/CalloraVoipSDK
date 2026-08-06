@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-041: ICE Consent-Freshness and Restart as Built-but-Unwired SIP Primitives | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-041: ICE Consent-Freshness and Restart as Built-but-Unwired SIP Primitives | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-041-consent-freshness-and-ice-restart-primitives.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-041-ice-consent-freshness-and-restart-as-built-but-unwired-sip-primitives">ADR-041: ICE Consent-Freshness and Restart as Built-but-Unwired SIP Primitives</h1>
+
+<p>Status: Accepted
+Date: 2026-07-09</p>
+<h2 id="context">Context</h2>
+<p>Two ICE liveness concerns follow pair selection: <strong>consent freshness</strong> (RFC 7675 — periodic STUN
+checks that keep permission to send to a peer, so a moved/gone peer stops receiving media) and
+<strong>ICE restart</strong> (RFC 8445 §9.1.1.1 — a re-negotiation that discards the check state and re-gathers
+when the peer's ufrag/pwd change). Both were built for the SIP path as pure, deterministic units
+in the ICE epic (I6, I8).</p>
+<p>The honest situation this ADR records is that <strong>both are built and tested but neither is wired
+into the SIP call lifecycle</strong>. The I6 log flagged that no caller starts the consent monitor after
+nomination and that the reaction to consent loss (terminate vs. restart) was an open founder
+decision. The I8 log then found the wiring was materially larger than first estimated — the STUN
+probe lives inside <code>CallIceAgent</code>, not the orchestrator, so belt-and-braces wiring would require
+making <code>CallIceAgent</code> stateful and <code>IAsyncDisposable</code>, having it hold the nominated pair and own an
+<code>IceConsentMonitor</code>, plus a new <code>IIceRestartCoordinator</code> application port. That wiring was scoped
+as a fresh-context ~200–300-line change touching the media hot path — and, per current code, it
+was never done on the SIP path.</p>
+<h3 id="verified-current-state-graphify--logs">Verified current state (graphify + logs)</h3>
+<ul>
+<li><strong>Consent policy.</strong> <code>IceConsentFreshnessPolicy</code>
+(<code>src/Core/Application/Media/Ice/IceConsentFreshnessPolicy.cs</code>): <code>ConsentExpiry</code> = 30 s
+(RFC 7675 §5.1); <code>NextCheckDelay(random01)</code> = base interval × 0.8–1.2 (ICE Ta pacing, RFC 8445
+§14.3); <code>IsConsentFresh(lastConfirmed, now)</code>. The constructor rejects an interval that is not
+positive and shorter than the 30 s expiry.</li>
+<li><strong>Consent monitor.</strong> <code>IceConsentMonitor</code> (<code>.../Ice/IceConsentMonitor.cs</code>): an <code>IAsyncDisposable</code>
+background loop that periodically fires an injected consent-check delegate, refreshes the
+confirmation time on an answer, and calls <code>onConsentLost</code> once when no answer arrives within the
+expiry. Clock/delay/randomness are injectable (deterministic tests); <code>Start</code>/<code>DisposeAsync</code> are
+idempotent under a lock + <code>_disposed</code> flag.</li>
+<li><strong>Consent wiring on the SIP path: absent.</strong> <code>IceConsentMonitor</code> is referenced only by the
+Infrastructure bundle-level ICE subsystem (<code>IceMediaConsentSession</code>, <code>IceNominationDriver</code>) and
+the TURN keepalive loop — <strong>not</strong> by <code>CallIceAgent</code>, <code>CallMediaOrchestrator</code>, or any SIP-path
+type. <code>CallIceAgent</code> is a stateless <code>internal sealed class</code> (no <code>IAsyncDisposable</code>), returns a
+one-shot <code>CallIceSelectionResult</code>, and holds no nominated pair after selection.</li>
+<li><strong>Restart detector.</strong> <code>IceRestartDetector.IsRestart(current, incoming)</code>
+(<code>.../Ice/IceRestartDetector.cs</code>): pure comparison — a re-negotiation is a restart when the
+peer's ice-ufrag and/or ice-pwd changed (RFC 8445 §9.1.1.1); first negotiation and ICE removal
+are not restarts. Re-gathering already yields fresh local ufrag/pwd.</li>
+<li><strong>Restart wiring: absent everywhere.</strong> <code>IceRestartDetector</code> is referenced by <strong>no</strong> production
+type (only its own file); the planned <code>IIceRestartCoordinator</code> application port does not exist
+(<code>RequestRestartAsync</code> appears nowhere in <code>src/</code>). Restart detection is an unconsumed primitive.</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<p>Build consent freshness and restart detection as <strong>pure, injectable, separately-tested primitives</strong>
+and <strong>defer their SIP-path wiring</strong> rather than bolt them onto the media hot path under time
+pressure:</p>
+<ol>
+<li><strong><code>IceConsentFreshnessPolicy</code></strong> owns the RFC 7675 timing (30 s expiry, Ta-paced interval) as
+pure functions; <strong><code>IceConsentMonitor</code></strong> owns the loop with injected clock/delay/check and a
+single <code>onConsentLost</code> callback, idempotent to start/dispose.</li>
+<li><strong><code>IceRestartDetector.IsRestart</code></strong> is a pure ufrag/pwd comparison (§9.1.1.1), no lifecycle.</li>
+<li><strong>SIP-path wiring is explicitly deferred.</strong> Belt-and-braces wiring requires making
+<code>CallIceAgent</code> stateful + <code>IAsyncDisposable</code>, having it own the monitor and hold the nominated
+pair, and introducing an <code>IIceRestartCoordinator</code> port whose consent-loss reaction is
+founder-decided (restart primary, call-termination fallback). Because that touches the media hot
+path, it is a fresh-context package, not a tail-end of I6/I8.</li>
+</ol>
+<p>Crux: separate the <em>timing/detection logic</em> (pure, provable now) from the <em>lifecycle wiring</em>
+(stateful, hot-path, founder-gated) and refuse to conflate a built primitive with a working
+feature.</p>
+<h2 id="consequences">Consequences</h2>
+<p>Positive: the RFC 7675 timing and the §9.1.1.1 restart trigger are captured as deterministic,
+injectable units with known-answer tests (freshness at 29/30/31 s, interval scaling/clamp, monitor
+loses consent after expiry / stays fresh on success / stops cleanly on dispose / dispose is
+idempotent; restart-detector cases + a re-gather-produces-fresh-credentials test on
+<code>CallIceAgent</code>). When wiring lands, it composes a proven loop rather than new timing logic.</p>
+<p>Honest limits / divergence — this is the load-bearing part of the ADR:</p>
+<ul>
+<li><strong>Neither primitive runs on the SIP path.</strong> No SIP-path caller starts <code>IceConsentMonitor</code> after
+nomination, so a nominated SIP pair is <strong>not</strong> kept alive or torn down on consent loss by this
+code; <code>IceRestartDetector</code> is invoked by nothing in production. The RFC 7675 / §9.1.1.1
+<em>behaviour</em> is therefore <strong>not</strong> claimed for SIP calls — only the building blocks exist.</li>
+<li><strong>Consent freshness is live only on the bundle/WebRTC path</strong>, where <code>IceMediaConsentSession</code> /
+<code>IceNominationDriver</code> consume the monitor. That subsystem is out of this cluster's scope
+(ADR-010 orbit); this ADR does not assert the SIP agent shares it.</li>
+<li><strong>The consent-loss reaction is undecided for SIP</strong> (terminate the call vs. request an ICE
+restart). The founder direction noted in I8 (restart primary, terminate fallback) was captured
+as intent, not implemented.</li>
+<li><strong>Base interval (5 s) is an engineering choice</strong>, not an RFC default — sized so several checks
+fit in each 30 s window.</li>
+</ul>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li><code>ConsentExpiry</code> MUST be 30 s (RFC 7675 §5.1); the check interval MUST be positive and shorter
+than the expiry (constructor-enforced); randomization is Ta pacing (RFC 8445 §14.3), not RFC 7675.</li>
+<li><code>IceConsentMonitor.Start</code> / <code>DisposeAsync</code> MUST be idempotent; <code>onConsentLost</code> fires at most once.</li>
+<li><code>IceRestartDetector.IsRestart</code> MUST treat only a ufrag/pwd change as a restart — first
+negotiation and ICE removal are not restarts.</li>
+<li>Documentation MUST NOT claim SIP-path consent freshness or ICE restart until a caller starts the
+monitor after nomination and a restart coordinator (or explicit terminate) reacts to consent
+loss; today both are unwired primitives on the SIP path.</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Logs: docs/archive/agent-log/2026-07-09-dev-ice-i6-consent-freshness.md;
+docs/archive/agent-log/2026-07-09-dev-ice-i8-restart.md</li>
+<li>Code: <code>IceConsentFreshnessPolicy.cs</code>; <code>IceConsentMonitor.cs</code>; <code>IceRestartDetector.cs</code>
+(all src/Core/Application/Media/Ice/); <code>CallIceAgent</code> (stateless, no monitor reference);
+consumers of <code>IceConsentMonitor</code> = <code>IceMediaConsentSession</code>, <code>IceNominationDriver</code>
+(src/Core/Infrastructure/Stun/Ice/) + <code>TurnAllocationRefreshLoop</code> only; no
+<code>IIceRestartCoordinator</code> / <code>RequestRestartAsync</code> in <code>src/</code></li>
+<li>Tests: IceConsentFreshnessTests (12); IceRestartDetectorTests (6);
+CallIceAgentTests.Restart_gathering_produces_fresh_ice_credentials</li>
+<li>Marker: RFC 7675 §5.1; RFC 8445 §9.1.1.1, §14.3; I6/I8</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-041-consent-freshness-and-ice-restart-primitives.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

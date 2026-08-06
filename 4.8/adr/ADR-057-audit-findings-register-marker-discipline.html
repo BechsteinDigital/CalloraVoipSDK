@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-057: Audit → Findings-Register → Code-Marker as Durable, Claim-Verified Audit Memory | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-057: Audit → Findings-Register → Code-Marker as Durable, Claim-Verified Audit Memory | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-057-audit-findings-register-marker-discipline.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-057-audit--findings-register--code-marker-as-durable-claim-verified-audit-memory">ADR-057: Audit → Findings-Register → Code-Marker as Durable, Claim-Verified Audit Memory</h1>
+
+<p>Status: Accepted
+Date: 2026-07-22</p>
+<h2 id="context">Context</h2>
+<p>This is a single-maintainer commercial SDK built with AI agents, where the working state of a
+security/hardening audit is otherwise ephemeral: a review run produces findings, a later run
+&quot;knows&quot; they were fixed, and the reasoning behind a subtle protocol/crypto decision is lost the
+moment the transcript scrolls away. Two failure modes recur and are both documented in the C17
+audit logs:</p>
+<ol>
+<li><strong>Findings that outlive their transcript but not the repo.</strong> The original finding/decision
+register lived <em>outside</em> the repo and did not survive the public-repository cut
+(<code>docs/audit/CODE_FINDINGS_REGISTER.md</code> §Zweck: &quot;Das Original-Register dieser Marker lag
+außerhalb des Repos und ist nicht überliefert&quot;). The ICE test suite likewise &quot;überlebte den
+Public-Repository-Cut nicht&quot; (CORE-006). So an out-of-repo memory is not durable memory.</li>
+<li><strong>A single confident review can be wrong.</strong> The 2026-07-08 full-SDK code review reported K1
+(<code>SrtpContext</code> not thread-safe) and K2 (keys never zeroed) as <em>Critical</em>; the same-day
+delta-audit direct-verified both against the real code and <strong>overturned them</strong> — the review
+agent had cited a path (<code>Srtp/SrtpContext.cs</code>) that does not exist (real:
+<code>Srtp/Context/SrtpContext.cs</code>) and never read the code. That correction is itself a
+claim-audit finding.</li>
+</ol>
+<h3 id="verified-current-state">Verified current state</h3>
+<ul>
+<li><strong>The register exists and is git-tracked.</strong> <code>docs/audit/CODE_FINDINGS_REGISTER.md</code> reconstructs
+every marker family referenced in code — <strong>ADR</strong> (architecture), <strong>CF</strong> (protocol correctness),
+<strong>HARD</strong> (security/concurrency/resource/quality), <strong>CORE</strong> (feature/true-up), <strong>N</strong> (NAT source).
+It is versioned via a targeted <code>.gitignore</code> exception (<code>.gitignore</code> L104 <code>!docs/audit/</code>, over the
+L102 <code>docs/*</code> ignore), so audit memory lives in the repo, not a transcript.</li>
+<li><strong>Findings are anchored at the code, not in a TODO.</strong> <code>ENGINEERING_RULES.md</code> K6 (&quot;Marker statt
+TODO&quot;) forbids <code>TODO</code>/<code>FIXME</code>/<code>HACK</code> and requires fixed findings to carry their marker
+(<code>CF-xxx</code>/<code>HARD-xxx</code>/<code>ADR-xxx</code>) directly at the code; open points are structured follow-up prose
+with a rationale. The register's &quot;Fundstellen&quot; column is the reverse index (<code>Datei:Zeile</code>).</li>
+<li><strong>Reconstruction is honest about its provenance.</strong> Each register description is derived
+&quot;ausschließlich aus dem umgebenden Code-/Kommentar-Kontext&quot; and marked as reconstructed — it
+states the code-anchored state, not a claim to the original wording.</li>
+<li><strong>True-up is a recurring, code-verified activity.</strong> <code>2026-07-07-true-up.md</code> re-verified every
+OPEN tracking item against code; <code>2026-07-08-audit.md</code> is a delta-audit against the prior review;
+<code>2026-07-16-audit.md</code> re-verified the CORE-P0 backlog against <code>main</code> (<code>7ff14ce</code>) and corrected a
+stale <code>STATE.json</code>. The convention &quot;Testgrün allein ist kein Beweis für Status-Hochstufungen&quot;
+(<code>CLAUDE.md</code>, K8 of the harte Projektregeln) is the governing claim rule.</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<p>Make audit findings <strong>durable, code-anchored, and claim-verified</strong> through one loop rather than
+leaving them in transcripts or an out-of-repo tracker:</p>
+<ol>
+<li><strong>Every finding becomes a marker</strong> in a stable family (ADR / CF / HARD / CORE / N). The marker is
+written at the code it governs (comment / XML-doc), and the register
+(<code>CODE_FINDINGS_REGISTER.md</code>) is its reverse index with <code>Datei:Zeile</code> provenance.</li>
+<li><strong>The register is git-tracked</strong>, via the explicit <code>!docs/audit/</code> exception, so audit memory
+ships with the code and survives repository cuts — the exact failure that lost the original.</li>
+<li><strong><code>TODO</code>/<code>FIXME</code>/<code>HACK</code> are banned</strong> (K6); an open point is either a marker with structured
+follow-up prose or it does not exist. This is the discipline the register indexes.</li>
+<li><strong>A finding is only &quot;fixed&quot; when direct-verified against code</strong> — not when a review asserts it.
+Critical claims are cross-checked (delta-audit / a second read-only pass) before they enter
+status docs or memory; a review's severity is a hypothesis until verified.</li>
+<li><strong>Audits run as fan-out read-only subagent passes</strong> (six subsystem reviewers on 2026-07-08, four
+<ul>
+<li>three waves on 2026-07-16), consolidated tersely, with per-finding confidence and file:line —
+explicitly a &quot;Zustands-Audit mit Stichproben-Tiefe&quot;, never claimed as a line-by-line full proof.</li>
+</ul>
+</li>
+</ol>
+<h3 id="crux-design-pieces">Crux design pieces</h3>
+<ul>
+<li><strong>In-repo over out-of-repo memory.</strong> The register is git-tracked <em>because</em> the original was not
+and was lost. Durability is the whole point.</li>
+<li><strong>Marker-at-code as the anchor.</strong> A finding lives at the line it governs; the register is a
+generated-style index over those markers, so the two cannot drift into two separate truths the way
+a free-standing TODO list would.</li>
+<li><strong>Verify-before-claim.</strong> The 07-08 K1/K2 overturn is the canonical case: a high-confidence Critical
+was false because the reviewer never read the cited (nonexistent) path. Cross-verification of
+Critical claims is therefore mandatory, and the correction is logged as its own finding.</li>
+<li><strong>Reconstruction transparency.</strong> Where the original wording is gone, the register says so and
+derives from code context only — it never fabricates a stronger provenance than it has.</li>
+</ul>
+<h2 id="consequences">Consequences</h2>
+<p>Positive: audit state is recoverable from the repo alone; a fixed finding carries its marker at the
+code and drops out of the &quot;open&quot; register, so debt is inventoried and traceable; a single wrong
+review cannot silently promote a false Critical into memory. The register doubles as the source for
+the C-cluster ADR reconstruction (this ADR among them) — the markers are how the decision inventory
+was built.</p>
+<p>Tradeoffs: the register is a <strong>reconstruction</strong>, so its descriptions capture the code-anchored state
+and not necessarily the original finding's full intent — a caveat it states about itself. Marker and
+register are kept in sync by discipline, not a gate (unlike the layering baselines of the sibling
+C01-02 decision): a marker written at code without a register entry, or vice versa, is only caught by
+review. The audits are sampling-depth state audits, not exhaustive proofs; coverage honesty is
+recorded per run rather than enforced.</p>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li>Open work is a marker with follow-up rationale, never a <code>TODO</code>/<code>FIXME</code>/<code>HACK</code> (K6).</li>
+<li>Findings carry their marker (<code>CF-</code>/<code>HARD-</code>/<code>ADR-</code>/<code>CORE-</code>) at the governed code; the register
+indexes them with <code>Datei:Zeile</code>.</li>
+<li>The register stays git-tracked under the <code>!docs/audit/</code> exception.</li>
+<li>A Critical/High finding is direct-verified against the real code (correct path read) before it
+enters status docs or memory; an overturned claim is logged as its own finding.</li>
+<li>No <code>DONE</code>/<code>compliant</code>/<code>abgeschlossen</code> from test-green alone — code + tests + scope coverage, per
+the CLAUDE.md claim rules.</li>
+<li>The register is honestly labelled a reconstruction where the original is not preserved.</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Logs: docs/archive/agent-log/2026-07-07-true-up.md,
+docs/archive/agent-log/2026-07-08-full-sdk-code-review.md,
+docs/archive/agent-log/2026-07-08-audit.md, docs/archive/agent-log/2026-07-16-audit.md</li>
+<li>Docs: docs/audit/CODE_FINDINGS_REGISTER.md (Zweck/Herkunft, marker families), ENGINEERING_RULES.md
+(K6 Marker statt TODO), CLAUDE.md (Scope- und Claim-Regeln), .gitignore (L102 <code>docs/*</code>,
+L104 <code>!docs/audit/</code>)</li>
+<li>Marker families indexed: ADR, CF-xxx, HARD-xxx, CORE-xxx, N1/N2; canonical overturn = K1/K2</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-057-audit-findings-register-marker-discipline.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

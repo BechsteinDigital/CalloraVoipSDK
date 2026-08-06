@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-006: API Versioning and Compatibility Strategy | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-006: API Versioning and Compatibility Strategy | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-006-api-versioning-strategy.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-006-api-versioning-and-compatibility-strategy">ADR-006: API Versioning and Compatibility Strategy</h1>
+
+<p>Status: Accepted
+Date: 2026-04-14
+Owners: Core SDK Team
+Related: CORE-114, CORE-215</p>
+<h2 id="context">Context</h2>
+<p>The SDK is approaching the first official <code>1.0</code> release and will be consumed as a modular product.
+Breaking changes after adoption must be intentional, documented and detectable before merge.</p>
+<h2 id="decision">Decision</h2>
+<ol>
+<li>Versioning model</li>
+</ol>
+<ul>
+<li>The repository uses Semantic Versioning (<code>MAJOR.MINOR.PATCH</code>).</li>
+<li>Until <code>1.0.0</code>, <code>0.x</code> may evolve quickly, but all public API changes must still be explicit and reviewed.</li>
+<li><code>1.0.0</code> is the first stable contract release.</li>
+</ul>
+<ol start="2">
+<li>Breaking-change definition</li>
+</ol>
+<ul>
+<li>Removing or renaming a public type/member is breaking.</li>
+<li>Changing method signatures, parameter types/order, return type, or behavior-contract in incompatible form is breaking.</li>
+<li>Tightening nullability in a way that invalidates existing consumer code is treated as breaking.</li>
+</ul>
+<ol start="3">
+<li>Deprecation workflow</li>
+</ol>
+<ul>
+<li>Preferred path: mark old API with <code>[Obsolete(..., false)]</code> first.</li>
+<li>Keep obsolete API for at least one minor cycle before removal.</li>
+<li>Removal of obsolete API increments <code>MAJOR</code> (after <code>1.0</code>).</li>
+</ul>
+<ol start="4">
+<li>API surface gate</li>
+</ol>
+<ul>
+<li>Intent: any public API change is detectable before merge and requires an explicit, reviewed baseline update in the same PR.</li>
+<li><strong>IMPLEMENTED (2026-07-28):</strong> <code>PublicApiSurfaceTests</code> in the <code>CalloraVoipSdk.ArchitectureTests</code>
+project reflects over the exported (public/protected) API and diffs it against the checked-in
+baseline <code>tests/CalloraVoipSdk.ArchitectureTests/PublicApi.approved.txt</code>. It runs in the same
+dedicated CI step as the other architecture gates.
+<ul>
+<li><strong>Scope — captured:</strong> the two assemblies an external consumer references,
+<code>CalloraVoipSdk.Client</code> (public facade: <code>VoipClient</code>/<code>IVoipClient</code>, <code>WebRtc</code>, <code>Hosting</code>,
+<code>DependencyInjection</code>, <code>Modules</code>) and <code>CalloraVoipSdk.Core</code> (public domain/application/config
+types reachable through the facade). Per exported type one <code>TYPE …</code> line plus one line per
+public/protected member (methods with parameter+return types, properties with type+accessors,
+events, fields, enum values), sorted <code>OrdinalIgnoreCase</code> for reproducibility. Compiler-generated
+members (property/event accessors, <code>&lt;…&gt;</code>/backing-field names, record <code>EqualityContract</code>/
+<code>PrintMembers</code>) are filtered out. Record-emitted public API such as <code>Deconstruct</code> is kept, since
+a consumer can call it.</li>
+<li><strong>Scope — NOT captured:</strong> internal types (the test project is deliberately absent from Core's
+<code>InternalsVisibleTo</code>, so it sees exactly the consumer view), attribute usage/<code>[Obsolete]</code> flags,
+XML-doc text, nullability annotations, and optional plug-in assemblies (<code>CalloraVoipSdk.Audio.*</code>).
+It is a <em>name+signature</em> surface diff, not a full binary-compatibility analyzer.</li>
+<li><strong>Baseline update (intentional API change):</strong>
+<code>UPDATE_PUBLIC_API=1 dotnet test tests/CalloraVoipSdk.ArchitectureTests/CalloraVoipSdk.ArchitectureTests.csproj</code>
+regenerates <code>PublicApi.approved.txt</code>; the regenerated file is reviewed in the same PR. Without
+the env var the test compares and fails, listing added (additive) and removed/changed
+(potentially breaking, §2) signatures.</li>
+</ul>
+</li>
+<li>Complementary governance (unchanged): the rest of the <code>CalloraVoipSdk.ArchitectureTests</code> suite
+(<code>EngineeringRulesTests</code> + <code>SourceScan</code>, shrink-only baselines) enforces the engineering rules
+(layering, file size, silent-catch, sync-over-async); <code>[Obsolete]</code> discipline + CHANGELOG remain
+the deprecation-workflow controls that the surface diff itself does not encode.</li>
+</ul>
+<ol start="5">
+<li>Changelog discipline</li>
+</ol>
+<ul>
+<li><code>CHANGELOG.md</code> is mandatory for consumer-visible changes.</li>
+<li>Breaking, deprecated, and additive API changes are recorded per release.</li>
+<li><code>main</code> is versioned as the next <code>MINOR</code> prerelease (<code>X.Y.0-preview</code>, set in <code>src/Directory.Build.props</code>), so
+no build off <code>main</code> is mistaken for a stable release; the stable version is pinned only by the release tag.</li>
+<li>The <code>[Unreleased]</code> section is maintained continuously — every consumer-visible change lands there in the
+same PR that introduces it, not retroactively at release time.</li>
+</ul>
+<ol start="6">
+<li>Feature-claim gating</li>
+</ol>
+<ul>
+<li>A capability that spans multiple internal slices (e.g. SDP negotiation + media transport + public API) is
+announced as a consumer-visible <strong>feature</strong> — in <code>CHANGELOG.md</code>, docs, or marketing — only once <strong>all</strong>
+layers work together end-to-end and the public API a consumer would call is present.</li>
+<li>Partial internal groundwork (some slices merged, not yet usable) is recorded under an explicit
+&quot;Internal / in progress (not yet consumer-visible)&quot; heading, never as a shipped feature.</li>
+<li>Rationale: a consumer must never read a feature claim for something they cannot yet use. Example: multi-track
+WebRTC is not claimed until offer, answer, and the media runtime interoperate (SDP-only groundwork is not a
+feature). The DEV/PO <code>DONE</code>-claim rules (code + tests + scope coverage) apply on top of this gate.</li>
+</ul>
+<h2 id="consequences">Consequences</h2>
+<ul>
+<li>API drift is visible immediately in tests and code review.</li>
+<li>Additive changes stay possible, but are explicit.</li>
+<li>Existing consumers get predictable migration windows via <code>[Obsolete]</code> before removals.</li>
+</ul>
+<h2 id="errata-2026-07-27">Errata (2026-07-27)</h2>
+<p>During the docs consolidation / ADR backfill, §4's claimed automated API-surface gate
+(<code>PublicApiSurfaceTests</code> vs. <code>PublicApi.approved.txt</code>) was verified against the code and found
+<strong>not implemented</strong> (no such test, baseline, or <code>CalloraVoipSdk.Core.Tests</code> project). The
+decision's <em>intent</em> stands, but the enforcement described was aspirational. §4 was corrected
+to state the actual governance (review + <code>[Obsolete]</code> + CHANGELOG; <code>ArchitectureTests</code> for
+engineering-rule gates). Building a real public-API-surface gate remained open follow-up work.</p>
+<h2 id="errata-2026-07-28">Errata (2026-07-28)</h2>
+<p>The follow-up work from the 2026-07-27 erratum is now done. A reflection-based
+<code>PublicApiSurfaceTests</code> and its baseline <code>PublicApi.approved.txt</code> were added to the existing
+<code>CalloraVoipSdk.ArchitectureTests</code> project (rather than a new <code>CalloraVoipSdk.Core.Tests</code> project —
+the architecture-test project already hosts the shrink-only governance gates and now carries the
+first <code>ProjectReference</code>s to <code>CalloraVoipSdk.Client</code>/<code>CalloraVoipSdk.Core</code> for the reflection).
+§4 above now describes the gate as built, including its exact scope and the
+<code>UPDATE_PUBLIC_API=1</code> regeneration workflow. The initial baseline captured 180 exported types /
+1122 members across the two consumer-facing assemblies. Observation recorded during baseline
+generation (not a change made here): seven <code>CalloraVoipSdk.Core.Infrastructure.*</code> types are
+currently exported publicly (e.g. <code>TlsConfiguration</code>, <code>SipDomainCertificateValidator</code>, the SIP
+observability records/<code>ISipTelemetrySink</code>, <code>AesGcmRecordingEncryptionProvider</code>), which is in
+tension with the &quot;Infrastructure stays an internal implementation detail&quot; rule; the gate now makes
+any further such drift visible. Deciding whether to <code>internal</code>-ise or intentionally keep them is
+separate follow-up work.</p>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-006-api-versioning-strategy.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-001: UAS User Identity Policy (RFC 3261 &#167;8.2.2.1) | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-001: UAS User Identity Policy (RFC 3261 &#167;8.2.2.1) | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-001-uas-user-identity-policy.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-001-uas-user-identity-policy-rfc-3261-8221">ADR-001: UAS User Identity Policy (RFC 3261 §8.2.2.1)</h1>
+
+<p>Status: Accepted
+Date: 2026-04-09
+RFC reference: RFC 3261 §8.2.2.1</p>
+<hr>
+<h2 id="context">Context</h2>
+<p>RFC 3261 §8.2.2.1 states:</p>
+<blockquote>
+<p>&quot;The UAS MUST inspect the Request-URI. If the Request-URI uses a scheme not supported by the UAS, the UAS SHOULD reject the request with a 416 (Unsupported URI Scheme) response. The UAS SHOULD also check the value of the To header field in the request. [...] If the user identified by the To header field is not known at this UAS, the UAS SHOULD respond with a 404 (Not Found) response.&quot;</p>
+</blockquote>
+<p>The keyword is <strong>SHOULD</strong> (not MUST), meaning a conformant implementation may choose to accept all users and let the application layer decide. In many deployment scenarios (softphone, embedded phone, B2BUA) the SIP proxy has already validated the target address before forwarding — so UA-level user validation is redundant.</p>
+<p>However, for deployments where the UA listens directly on the network (no proxy), user validation at the UA level prevents unauthorized session establishment.</p>
+<hr>
+<h2 id="decision">Decision</h2>
+<p>Introduce a pluggable <code>ISipUasUserIdentityPolicy</code> interface injected into <code>SipCallSignalingService</code>:</p>
+<pre><code class="lang-csharp">public interface ISipUasUserIdentityPolicy
+{
+    bool IsServedUser(string requestUri);
+}
+</code></pre>
+<ul>
+<li><strong>Default:</strong> <code>AcceptAllSipUasUserIdentityPolicy</code> — always returns <code>true</code> (existing behavior preserved, backwards compatible).</li>
+<li><strong>Custom:</strong> Callers register an implementation via DI to restrict which Request-URIs are accepted.</li>
+<li>When <code>IsServedUser</code> returns <code>false</code>, the UAS responds with <strong>404 Not Found</strong> after sending the mandatory <strong>100 Trying</strong> (§8.2.6.1).</li>
+</ul>
+<p>The policy receives the <strong>raw Request-URI</strong> from the inbound SIP request, not the To header, because the Request-URI is the actual routing target per §8.2.2.1.</p>
+<hr>
+<h2 id="consequences">Consequences</h2>
+<p><strong>Positive:</strong></p>
+<ul>
+<li>RFC 3261 §8.2.2.1 SHOULD requirement satisfied.</li>
+<li>Zero breaking change — existing code without explicit policy injection continues to accept all INVITEs.</li>
+<li>Policy is independently testable and injectable.</li>
+</ul>
+<p><strong>Negative:</strong></p>
+<ul>
+<li>Adds one optional constructor parameter to <code>SipCallSignalingService</code>; DI container must register it when needed.</li>
+<li>The check fires after <code>100 Trying</code> is sent, which is correct per §8.2.6.1 but means the remote party sees a brief provisional before the rejection.</li>
+</ul>
+<hr>
+<h2 id="alternatives-considered">Alternatives considered</h2>
+<ol>
+<li><strong>Hard-coded user list</strong> — Rejected. Not flexible enough for SDK consumers.</li>
+<li><strong>Check at application layer</strong> — Rejected. §8.2.2.1 places the obligation on the UAS, not the application. The policy belongs in the protocol stack.</li>
+<li><strong>Always reject unknown users using a configured username</strong> — Rejected. The <code>SipCallSignalingService</code> does not own account configuration; coupling it to registration state would violate DDD layer separation.</li>
+</ol>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-001-uas-user-identity-policy.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

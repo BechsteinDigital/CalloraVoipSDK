@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-054: TURN Relay as a First-Class ICE Candidate | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-054: TURN Relay as a First-Class ICE Candidate | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-054-turn-relay-as-ice-candidate.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-054-turn-relay-as-a-first-class-ice-candidate">ADR-054: TURN Relay as a First-Class ICE Candidate</h1>
+
+<p>Status: Accepted
+Date: 2026-07-19</p>
+<h2 id="context">Context</h2>
+<p>BUNDLE media (ADR-010, ADR-011) runs over one shared 5-tuple driven by a send-side ICE agent
+(C11: <code>IceMediaConsentSession</code>, <code>IceNominationDriver</code>, <code>IceMediaAttachment</code>). Until this cluster,
+that agent modelled exactly one local send path — the media socket — so it could offer only host
+and server-reflexive (srflx) candidates. srflx is not a second send path: it is the STUN-mapped
+<em>view</em> of the same socket, so <code>_sendRaw</code> (<code>SendToAsync</code>) served both. When both peers sit behind
+NATs that block a direct path (symmetric NAT, restrictive firewalls), there is no working pair and
+the call has no media — the classic reason TURN exists (RFC 8656): a relay allocation on a public
+server that forwards packets between the two peers.</p>
+<p>The architectural question was whether a TURN relay is a <em>separate transport</em> bolted on beside the
+direct one, or a <strong>third local ICE candidate</strong> that competes in the same connectivity checks. The
+distinguishing property of a local candidate (RFC 8445 §5.1.1) is its <em>send path</em>: host/srflx frame
+directly onto the socket; a relay frames each datagram through a TURN server (Send indication,
+RFC 8656 §10). Making relay a candidate means one nomination machinery, one consent loop, and
+&quot;force relay&quot; collapses to an ICE policy (relay-only) over the same code — not a parallel stack.</p>
+<h3 id="verified-current-state">Verified current state</h3>
+<ul>
+<li><code>IceLocalCandidate</code> (<code>src/Core/Infrastructure/Stun/Ice/IceLocalCandidate.cs</code>) is the abstraction
+point: a local candidate is a <code>Type</code> (host/srflx/relay), a <code>Priority</code>, and a <code>Check</code> delegate
+<code>(remoteTarget, useCandidate, ct) → Task&lt;bool&gt;</code>. Its doc states plainly: host and srflx share the
+direct send path, &quot;a relay candidate carries its own path (framed through a TURN server), which is
+what makes more than one local candidate meaningful.&quot;</li>
+<li><code>IceMediaConsentSession.SendCheckVia(send, target, useCandidate, ct)</code>
+(<code>.../Ice/IceMediaConsentSession.cs</code> L170) sends a check over an <em>injected</em> send path;
+<code>SendCheckAsync</code> delegates to it with the direct <code>_sendRaw</code> (byte-identical direct path). The
+nomination state (remote + sendVia) is one atomic <code>IceNominatedTarget</code> reference, so consent
+freshness follows the nominated pair's path with no torn read.</li>
+<li><code>IceMediaAttachment</code> takes an optional <code>relaySend</code>; when present it builds a second
+<code>IceLocalCandidate</code> of type <code>relay</code> with RFC 8445 §5.1.2.1 priority at <strong>type-preference 0</strong> (below
+host/srflx, so a working direct pair is always preferred) and hands it to <code>IceNominationDriver</code>,
+which pairs local × remote and orders by pair priority. <code>OnDriverNominated</code> routes a relay
+nomination through <code>_relaySend</code> (a consent redirect); a direct nomination is unchanged. The dedup
+key is <code>(remote, sendVia)</code>, so a relay↔direct switch on the same remote is not swallowed as a no-op.</li>
+<li>The relay send path itself is <code>TurnRelayCandidateSendPath</code>
+(<code>src/Core/Infrastructure/Turn/Client/TurnRelayCandidateSendPath.cs</code>): its <code>SendAsync(datagram, remoteTarget, ct)</code> matches the candidate <code>Check</code> delegate shape exactly — it installs a per-peer-IP
+permission (RFC 8656 §9), frames the datagram as a Send indication addressed to the remote
+(RFC 8656 §10), and hands it to an injected raw-send delegate. It holds no socket and no transport
+type, so it composes above any media transport.</li>
+<li>The relay candidate can be adopted <strong>after</strong> the agent is running: <code>IceNominationDriver.AddLocalCandidate</code>
+and <code>IceMediaAttachment.AddRelayLocalCandidate(relaySend)</code> pair a late local candidate against all
+known and later-trickled remotes — required because the Answerer only binds its socket (and gathers
+the allocation) after <code>SetRemoteDescription</code>, i.e. after the session was built direct-only.</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<p>Model the TURN relay as a <strong>first-class local ICE candidate</strong>, distinguished only by its send path,
+not as a parallel transport:</p>
+<ol>
+<li><strong>The send path is the candidate.</strong> <code>IceLocalCandidate.Check</code> is the abstraction point. Host/srflx
+bind <code>Check</code> to the direct socket send; the relay binds it to <code>TurnRelayCandidateSendPath.SendAsync</code>,
+which frames through the TURN server. The nomination driver, consent session, and pair-priority
+ordering are shared unchanged — a relay candidate &quot;plugs in exactly like the direct one.&quot;</li>
+<li><strong>Direct is always preferred.</strong> The relay candidate carries RFC 8445 type-preference 0, so it wins
+only when no direct (host/srflx) pair works. &quot;Force relay&quot; is then just an ICE policy that suppresses
+the direct candidates — the same machinery, no separate transport.</li>
+<li><strong>Consent follows the nominated path.</strong> <code>SendCheckVia</code> lets the consent loop (C11) send freshness
+checks over whichever path was nominated; the nominated target (remote + send path) is read as one
+atomic reference so relay↔direct nomination transitions never observe a torn state.</li>
+<li><strong>Late adoption for the Answerer.</strong> The agent accepts a relay local candidate after it is running
+(<code>AddLocalCandidate</code> / <code>AddRelayLocalCandidate</code>), because the allocation is gathered on the shared
+socket, and for the Answerer that socket is bound only after <code>SetRemoteDescription</code>. The
+Offerer wires the candidate at session-construction time; the Answerer adopts it post-construction.</li>
+</ol>
+<h3 id="crux">Crux</h3>
+<p><code>_sendRaw</code> was already the single choke point for &quot;send one datagram to a remote&quot;; srflx reusing it
+proved a candidate is <em>only</em> its send path. So the relay is not new transport machinery — it is a
+second <code>Check</code> delegate whose body happens to frame through TURN. Everything above (priority ordering,
+nomination, consent freshness, dedup) is untouched. The atomic <code>IceNominatedTarget</code> (remote + sendVia
+in one reference) is what makes a live relay↔direct switch safe on the concurrent driver/receive threads.</p>
+<h2 id="consequences">Consequences</h2>
+<p>Positive: one ICE agent, one consent loop, one nomination path serve host, srflx, and relay. The
+direct path is byte-identical when no <code>relaySend</code> is injected (production defaulted to <code>null</code> through
+several slices precisely to keep it verifiably behaviour-neutral). &quot;Force relay&quot; needs no new code path.</p>
+<p>Divergence and honest open edges:</p>
+<ul>
+<li><strong>Controlled-agent relay gap.</strong> Only the <em>controlling</em> agent drives nomination and installs relay
+permissions. <code>IceMediaAttachment.Nominate(IPEndPoint)</code> remains for the controlled agent's inbound
+subscription and does <strong>not</strong> build a relay candidate on that side. Consequence: Offerer-relay ↔
+Answerer-direct works, but Answerer-owning-the-relay while the Offerer is direct does not — the
+controlled side neither triggers its own relay nomination nor installs a permission. This needs a
+design and is not built.</li>
+<li><strong>No real socket relay round-trip until end-to-end validation.</strong> Each slice was tested against a
+fake TURN server over loopback (permission install, Send-indication framing, MESSAGE-INTEGRITY from
+allocation credentials). A full relay pair being <em>nominated</em> over a real session socket is
+timeout-bound (direct exhaustion ~10 s), so the whole-session relay nomination is not exercised in a
+fast unit test — the glue pieces are tested individually.</li>
+<li><strong>No browser interop validation</strong> (ADR-009 guardrail): no production-ready relay claim until an
+end-to-end run against a real TURN server and a browser peer exists.</li>
+<li>Priority tuning (foundation &quot;3&quot;, type-pref 0, local-pref 65535) follows RFC 8445 §5.1.2 but has not
+been validated against a browser's candidate ordering in a real trickle exchange.</li>
+</ul>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li>Do <strong>not</strong> turn the relay into a separate transport or a second consent loop — the candidate/send-path
+abstraction is the invariant. New candidate types extend <code>IceLocalCandidate.Check</code>, not the agent.</li>
+<li>The relay candidate stays at type-preference 0: a working direct pair must always be preferred.</li>
+<li>Read the nominated target (remote + send path) as one atomic <code>IceNominatedTarget</code> reference; never
+split it back into two volatile fields (the C11 torn-read finding).</li>
+<li>The relay send path holds no transport type and does its own I/O only through the injected raw-send
+delegate — keep the Rtp/ICE layers off the TURN module (module boundary).</li>
+<li>No <code>relaySend</code> wired in production without the corresponding permission/allocation stack (ADR-C16-02)
+and dispose ordering (ICE drained before the transport) in place.</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Logs (<code>docs/archive/agent-log/</code>):
+<ul>
+<li><code>2026-07-19-dev-relay-4d-3b-1.md</code> — relay-capable ICE agent: <code>SendCheckVia</code>, <code>Nominate(remote, sendVia)</code>, second <code>IceLocalCandidate</code> at type-pref 0, atomic <code>IceNominatedTarget</code>, <code>(remote, send)</code>
+dedup; controlled-agent inbound <code>Nominate(IPEndPoint)</code> kept.</li>
+<li><code>2026-07-19-dev-relay-4d-3b-2b-i.md</code> — <code>TurnRelayCandidateSendPath</code> outbound engine (per-IP
+permission dedup, Send-indication framing, NONCE threading).</li>
+<li><code>2026-07-19-dev-relay-4d-3b-2b-ii-B.md</code> — Offerer-path producer; the <code>_gatheredRelay</code> timing finding.</li>
+<li><code>2026-07-19-dev-relay-4d-3b-2c.md</code> — Answerer late-local-candidate adoption (<code>AddLocalCandidate</code>,
+<code>AddRelayLocalCandidate</code>, <code>AdoptRelay</code>).</li>
+<li><code>2026-07-19-dev.md</code> (slice 4d-2b) — media-socket-bound relay gathering (<code>TurnAllocationProbe</code>,
+<code>RelayCandidate</code> builder, allocation retention for post-start adoption).</li>
+</ul>
+</li>
+<li>Code:
+<ul>
+<li><code>src/Core/Infrastructure/Stun/Ice/IceLocalCandidate.cs</code></li>
+<li><code>src/Core/Infrastructure/Stun/Ice/IceMediaConsentSession.cs</code> (<code>SendCheckVia</code> L170)</li>
+<li><code>src/Core/Infrastructure/Stun/Ice/IceMediaAttachment.cs</code>, <code>IceNominationDriver.cs</code>, <code>IceNominatedTarget.cs</code></li>
+<li><code>src/Core/Infrastructure/Turn/Client/TurnRelayCandidateSendPath.cs</code></li>
+</ul>
+</li>
+<li>Markers / RFC: RFC 8445 §5.1.1, §5.1.2 / §5.1.2.1 (candidate types, priority); RFC 8656 §9
+(CreatePermission), §10 (Send/Data indications); RFC 8839 (relay candidate SDP). Adjacent: C11
+ICE ADRs (send-side agent, consent, shared-socket gathering), ADR-010/011 (BUNDLE transport),
+ADR-009 (browser-interop boundary).</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-054-turn-relay-as-ice-candidate.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

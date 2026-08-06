@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-017: REGISTER Expires / Refresh Lifecycle | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-017: REGISTER Expires / Refresh Lifecycle | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-017-register-expires-lifecycle.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-017-register-expires--refresh-lifecycle">ADR-017: REGISTER Expires / Refresh Lifecycle</h1>
+
+<p>Status: Accepted
+Date: 2026-07-09</p>
+<h2 id="context">Context</h2>
+<p>Behind NAT against a real registrar (sipgate), the SDK's REGISTER refresh interval
+churned — observed refreshes of 22s → 5s → 5s → 46s instead of stable minutes. A
+churning REGISTER continually re-opens the NAT pinhole and destabilises the binding,
+which in turn can starve inbound INVITE delivery.</p>
+<p>Two distinct root causes were found:</p>
+<ol>
+<li><strong>Wrong grant read.</strong> <code>SipRegistrationService.TryGetEffectiveExpires</code> took the
+<em>first</em> <code>expires=</code> it saw in the raw multi-binding Contact of the 200 OK. In a
+multi-binding 200 OK that is the <em>remaining lifetime</em> of an arbitrary (often stale)
+binding that counts down per poll — so each refresh computed a shorter and shorter
+base. RFC 3261 §10.2.1.1 requires the per-Contact <code>expires</code> of <strong>our own</strong> binding
+to take precedence over the top-level <code>Expires</code>.</li>
+<li><strong>Expires dropped on the wire in responses.</strong> <code>SipHeaderRowRules.RequestOnlyHeaderNames</code>
+classified <code>Expires</code> as request-only, so every <code>Expires</code> header was discarded during
+<em>response</em> parsing. That is RFC-wrong (RFC 3261 §10.3: top-level <code>Expires</code> is legal in a
+REGISTER 200 OK; RFC 6665: SUBSCRIBE 200 OK) and left the top-level branch of the
+selection logic dead.</li>
+</ol>
+<h3 id="verified-current-state-graphify--source">Verified current state (graphify + source)</h3>
+<ul>
+<li><code>SipRegistrationService.TryGetEffectiveExpires</code> (<code>src/Core/Infrastructure/Sip/Signaling/Registration/SipRegistrationService.cs</code>,
+method at L701) now resolves in RFC order: <strong>(1)</strong> own-Contact binding via
+<code>NormalizeContactCore</code> URI match (L708–713), <strong>(2)</strong> top-level <code>Expires</code> header (L715–717,
+§10.3), <strong>(3)</strong> longest remaining binding (L719–725), <strong>(4)</strong> requested fallback (L727).
+Bindings come from a single <code>ParseRegisteredBindings</code> pass reused in the success path.</li>
+<li><strong>The wire tripwire is resolved.</strong> <code>SipHeaderRowRules.RequestOnlyHeaderNames</code>
+(<code>src/Core/Infrastructure/Sip/Wire/SipHeaderRowRules.cs</code> L41–56) <strong>no longer contains
+<code>Expires</code></strong>; L45–46 carries an explicit comment that <code>Expires</code> is valid in responses
+(RFC 3261 §10.3 / RFC 6665) and must survive response parsing. The follow-up package the
+analysis log flagged has since been implemented — see Consequences.</li>
+<li><code>Min-Expires</code> remains response-only (<code>ResponseOnlyHeaderNames</code>, L62). A 423 triggers a
+retry with the server's <code>Min-SE</code>: <code>ExecuteRegisterAsync</code> reads <code>TryGetMinExpires</code>
+(L301–309, L749) and re-registers with the raised interval.</li>
+<li>Refresh scheduling lives in the line channel (<code>SipLineChannel.ComputeRefreshDelay</code>,
+per log): refresh at ~80% of the granted lifetime, floored by a <code>MinRefreshSeconds = 15</code>
+secondary guard, itself capped at <code>baseline-1</code> so short grants never refresh after the
+binding dies.</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<p>Drive the refresh clock off the <strong>effective grant for our own binding</strong>, selected in strict
+RFC 3261 §10.2.1.1 / §10.3 precedence, and keep <code>Expires</code> alive through response parsing so
+the top-level branch is real. Honour a 423 by re-registering with <code>Min-Expires</code>. Schedule the
+refresh at 80% of that grant with a hard floor and a hard ceiling.</p>
+<p>Crux: the bug was never in the refresh timer — it was in <em>which number</em> fed it. Fix the
+selection (own binding first, not first-seen), unblock the wire (Expires survives), and the
+timer stabilises without a churn heuristic.</p>
+<h2 id="consequences">Consequences</h2>
+<p>Positive: stable multi-minute refresh cadence against multi-binding registrars; correct
+behaviour for registrars that only send a top-level <code>Expires</code>; 423/Min-SE handled; the refresh
+floor prevents churn while the ceiling prevents refreshing a binding that already expired.</p>
+<p>Divergence, honestly stated: the 2026-07-08/09 logs describe the top-level <code>Expires</code> branch as
+<em>defensive but dead</em> because of the <code>RequestOnlyHeaderNames</code> tripwire, with a tripwire test
+(<code>OwnBinding_selected_evenWhenTopLevelExpiresPresent</code>) guarding the workaround. <strong>The current
+code has moved past that state</strong> — <code>Expires</code> is no longer request-only and the top-level branch
+is live. The ADR records the resolved end-state, not the interim workaround.</p>
+<p>Not proven by tests: end-to-end registrar stability (whether steadier refresh measurably
+improves inbound INVITE delivery) — that stays a real-world observation; delivery precedes the
+INVITE and was never causally provable from the log alone.</p>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li>Own-Contact per-Contact <code>expires</code> MUST outrank top-level <code>Expires</code> (§10.2.1.1); never read
+the first <code>expires=</code> of a multi-binding Contact as the grant.</li>
+<li><code>Expires</code> MUST survive response parsing; do not re-add it to <code>RequestOnlyHeaderNames</code>.</li>
+<li>Refresh delay stays within <code>[MinRefreshSeconds, baseline-1]</code>; short grants must refresh
+before the binding dies.</li>
+<li>A 423 MUST re-register with the offered <code>Min-Expires</code>.</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Logs: docs/archive/agent-log/2026-07-08-dev-sip-registration-expires.md;
+docs/archive/agent-log/2026-07-09-analysis-b7-expires-in-responses.md</li>
+<li>Code: <code>SipRegistrationService.TryGetEffectiveExpires</code> / <code>TryGetMinExpires</code>
+(src/Core/Infrastructure/Sip/Signaling/Registration/SipRegistrationService.cs);
+<code>SipHeaderRowRules</code> (src/Core/Infrastructure/Sip/Wire/SipHeaderRowRules.cs);
+<code>SipLineChannel.ComputeRefreshDelay</code></li>
+<li>Tests: SipRegistrationExpiresTests</li>
+<li>Marker: RFC 3261 §10.2.1.1, §10.3; RFC 6665; B.7 (Expires-in-responses follow-up)</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-017-register-expires-lifecycle.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>
