@@ -199,7 +199,8 @@ public sealed class VoipClient : IVoipClient
                 ?? new SipDigestAuthentication();
             var telemetry = new ClientTelemetrySink(
                 ResolveService<ISipTelemetrySink>(services)
-                ?? NullSipTelemetrySink.Instance);
+                ?? NullSipTelemetrySink.Instance,
+                _logger);
             TelemetryManager = new TelemetryManager(telemetry);
 
             var resolvedRegistrationService = ResolveService<ISipRegistrationService>(services);
