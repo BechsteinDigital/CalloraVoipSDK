@@ -1,4 +1,5 @@
 using System.Net;
+using CalloraVoipSdk.Core.Application.Ports.Security;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Routing;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Wire;
 
@@ -49,6 +50,23 @@ internal interface ISipTransportRuntime : IDisposable
         IPEndPoint remoteEndPoint,
         SipTransportProtocol transport,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Sends a SIP request over an explicit transport protocol, presenting the per-line TLS identity
+    /// resolved from <paramref name="lineTls"/> for mutual TLS (issue #183). A <see langword="null"/>
+    /// <paramref name="lineTls"/> uses the client-wide default identity. The default implementation
+    /// ignores <paramref name="lineTls"/> (for test doubles); the production runtime honours it.
+    /// </summary>
+    Task SendRequestAsync(
+        string method,
+        string requestUri,
+        IReadOnlyDictionary<string, string> headers,
+        string? body,
+        IPEndPoint remoteEndPoint,
+        SipTransportProtocol transport,
+        TlsConfiguration? lineTls,
+        CancellationToken ct = default)
+        => SendRequestAsync(method, requestUri, headers, body, remoteEndPoint, transport, ct);
 
     /// <summary>
     /// Sends a SIP response datagram to a remote endpoint.

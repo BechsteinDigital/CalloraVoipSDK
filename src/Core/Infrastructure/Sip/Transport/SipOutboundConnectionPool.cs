@@ -18,8 +18,7 @@ internal sealed class SipOutboundConnectionPool : IDisposable
 {
     private readonly ILogger _logger;
     private readonly IReadOnlyDictionary<string, string> _tlsHosts;
-    private readonly RemoteCertificateValidationCallback _validateTlsCertificate;
-    private readonly X509Certificate2? _clientCertificate;
+    private readonly OutboundTlsIdentity _defaultIdentity;
     private readonly Func<IPEndPoint, SipTransportProtocol, ReadOnlyMemory<byte>, Task> _onFrameAsync;
 
     private readonly ConcurrentDictionary<string, SipStreamConnection> _streamConnections = new(StringComparer.Ordinal);
@@ -32,42 +31,51 @@ internal sealed class SipOutboundConnectionPool : IDisposable
     /// </summary>
     /// <param name="logger">Sink for connection diagnostics.</param>
     /// <param name="tlsHosts">Resolved endpoint-key to SIP-domain map for TLS SNI / certificate validation.</param>
-    /// <param name="validateTlsCertificate">Server certificate validation callback for TLS/WSS.</param>
-    /// <param name="clientCertificate">
-    /// Optional client identity certificate offered for mutual TLS on outbound TLS/WSS handshakes, or
-    /// <see langword="null"/> to present no client certificate (issue #183). The caller owns the
-    /// instance; the pool never disposes it.
+    /// <param name="defaultIdentity">
+    /// Client-wide TLS identity (client certificate + server-trust callback) applied when a send carries
+    /// no per-line identity. Its <see cref="OutboundTlsIdentity.Key"/> is empty, keeping the pool key
+    /// byte-identical to the pre-#183 behaviour (issue #183).
     /// </param>
     /// <param name="onFrameAsync">Callback invoked for each inbound SIP frame received on a pooled connection.</param>
     public SipOutboundConnectionPool(
         ILogger logger,
         IReadOnlyDictionary<string, string> tlsHosts,
-        RemoteCertificateValidationCallback validateTlsCertificate,
-        X509Certificate2? clientCertificate,
+        OutboundTlsIdentity defaultIdentity,
         Func<IPEndPoint, SipTransportProtocol, ReadOnlyMemory<byte>, Task> onFrameAsync)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _tlsHosts = tlsHosts ?? throw new ArgumentNullException(nameof(tlsHosts));
-        _validateTlsCertificate = validateTlsCertificate ?? throw new ArgumentNullException(nameof(validateTlsCertificate));
-        _clientCertificate = clientCertificate;
+        _defaultIdentity = defaultIdentity ?? throw new ArgumentNullException(nameof(defaultIdentity));
         _onFrameAsync = onFrameAsync ?? throw new ArgumentNullException(nameof(onFrameAsync));
+    }
+
+    /// <summary>
+    /// Builds the connection-pool key: the endpoint key, suffixed with the TLS identity discriminator
+    /// when the identity is not the client-wide default. A default (empty-key) identity yields the
+    /// unchanged pre-#183 key so a per-line identity never collides with a default connection.
+    /// </summary>
+    private static string BuildPoolKey(SipTransportProtocol transport, IPEndPoint endpoint, OutboundTlsIdentity identity)
+    {
+        var baseKey = SipTransportRuntimeUtilities.BuildEndpointKey(transport, endpoint);
+        return identity.Key.Length == 0 ? baseKey : $"{baseKey}#{identity.Key}";
     }
 
     /// <summary>
     /// Sends one payload over a reusable stream (TCP/TLS) connection. RFC 3261 §18.4: on a failed
     /// send the stale connection is removed and the send retried once on a fresh connection.
     /// </summary>
-    public async Task SendStreamAsync(IPEndPoint remoteEndPoint, ReadOnlyMemory<byte> payload, SipTransportProtocol transport, CancellationToken ct)
+    public async Task SendStreamAsync(IPEndPoint remoteEndPoint, ReadOnlyMemory<byte> payload, SipTransportProtocol transport, CancellationToken ct, OutboundTlsIdentity? identity = null)
     {
+        var effectiveIdentity = identity ?? _defaultIdentity;
         var targetEndPoint = SipTransportRuntimeUtilities.NormalizeWildcardEndPoint(remoteEndPoint);
-        var connection = await GetOrCreateStreamAsync(targetEndPoint, transport, ct).ConfigureAwait(false);
+        var connection = await GetOrCreateStreamAsync(targetEndPoint, transport, effectiveIdentity, ct).ConfigureAwait(false);
         try
         {
             await connection.SendAsync(payload, ct).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            var staleKey = SipTransportRuntimeUtilities.BuildEndpointKey(transport, targetEndPoint);
+            var staleKey = BuildPoolKey(transport, targetEndPoint, effectiveIdentity);
             if (_streamConnections.TryRemove(staleKey, out var stale))
             {
                 _logger.LogDebug(
@@ -77,7 +85,7 @@ internal sealed class SipOutboundConnectionPool : IDisposable
                 stale.Dispose();
             }
 
-            var fresh = await GetOrCreateStreamAsync(targetEndPoint, transport, ct).ConfigureAwait(false);
+            var fresh = await GetOrCreateStreamAsync(targetEndPoint, transport, effectiveIdentity, ct).ConfigureAwait(false);
             await fresh.SendAsync(payload, ct).ConfigureAwait(false);
         }
     }
@@ -85,16 +93,17 @@ internal sealed class SipOutboundConnectionPool : IDisposable
     /// <summary>
     /// Sends one payload over a reusable WS/WSS connection.
     /// </summary>
-    public async Task SendWebSocketAsync(IPEndPoint remoteEndPoint, ReadOnlyMemory<byte> payload, SipTransportProtocol transport, CancellationToken ct)
+    public async Task SendWebSocketAsync(IPEndPoint remoteEndPoint, ReadOnlyMemory<byte> payload, SipTransportProtocol transport, CancellationToken ct, OutboundTlsIdentity? identity = null)
     {
+        var effectiveIdentity = identity ?? _defaultIdentity;
         var targetEndPoint = SipTransportRuntimeUtilities.NormalizeWildcardEndPoint(remoteEndPoint);
-        var connection = await GetOrCreateWebSocketAsync(targetEndPoint, transport, ct).ConfigureAwait(false);
+        var connection = await GetOrCreateWebSocketAsync(targetEndPoint, transport, effectiveIdentity, ct).ConfigureAwait(false);
         await connection.SendAsync(payload, ct).ConfigureAwait(false);
     }
 
-    private async Task<SipStreamConnection> GetOrCreateStreamAsync(IPEndPoint remoteEndPoint, SipTransportProtocol transport, CancellationToken ct)
+    private async Task<SipStreamConnection> GetOrCreateStreamAsync(IPEndPoint remoteEndPoint, SipTransportProtocol transport, OutboundTlsIdentity identity, CancellationToken ct)
     {
-        var key = SipTransportRuntimeUtilities.BuildEndpointKey(transport, remoteEndPoint);
+        var key = BuildPoolKey(transport, remoteEndPoint, identity);
         if (_streamConnections.TryGetValue(key, out var existing))
             return existing;
 
@@ -109,9 +118,12 @@ internal sealed class SipOutboundConnectionPool : IDisposable
             Stream stream = client.GetStream();
             if (transport == SipTransportProtocol.Tls)
             {
-                var targetHost = SipTransportRuntimeUtilities.SelectTlsTargetHost(_tlsHosts, key, remoteEndPoint.Address);
+                // TLS SNI / server-cert name validation use the resolved SIP domain, keyed by the
+                // endpoint (not the identity-suffixed pool key).
+                var targetHost = SipTransportRuntimeUtilities.SelectTlsTargetHost(
+                    _tlsHosts, SipTransportRuntimeUtilities.BuildEndpointKey(transport, remoteEndPoint), remoteEndPoint.Address);
                 stream = await SipTransportRuntimeUtilities.AuthenticateOutboundTlsAsync(
-                    stream, targetHost, _validateTlsCertificate, ct, _clientCertificate).ConfigureAwait(false);
+                    stream, targetHost, identity.ValidateServerCertificate, ct, identity.ClientCertificate).ConfigureAwait(false);
             }
 
             var created = new SipStreamConnection(
@@ -130,9 +142,9 @@ internal sealed class SipOutboundConnectionPool : IDisposable
         }
     }
 
-    private async Task<SipWebSocketConnection> GetOrCreateWebSocketAsync(IPEndPoint remoteEndPoint, SipTransportProtocol transport, CancellationToken ct)
+    private async Task<SipWebSocketConnection> GetOrCreateWebSocketAsync(IPEndPoint remoteEndPoint, SipTransportProtocol transport, OutboundTlsIdentity identity, CancellationToken ct)
     {
-        var key = SipTransportRuntimeUtilities.BuildEndpointKey(transport, remoteEndPoint);
+        var key = BuildPoolKey(transport, remoteEndPoint, identity);
         if (_webSocketConnections.TryGetValue(key, out var existing))
             return existing;
 
@@ -147,17 +159,19 @@ internal sealed class SipOutboundConnectionPool : IDisposable
             socket.Options.KeepAliveInterval = TimeSpan.FromSeconds(30);
             if (transport == SipTransportProtocol.Wss)
             {
-                socket.Options.RemoteCertificateValidationCallback = _validateTlsCertificate;
+                socket.Options.RemoteCertificateValidationCallback = identity.ValidateServerCertificate;
                 // Mutual TLS over WSS: offer the client identity certificate; transmitted only when the
                 // server requests one (RFC 8446 §4.4.2; issue #183).
-                if (_clientCertificate is not null)
-                    socket.Options.ClientCertificates = new X509CertificateCollection { _clientCertificate };
+                if (identity.ClientCertificate is not null)
+                    socket.Options.ClientCertificates = new X509CertificateCollection { identity.ClientCertificate };
             }
 
             // WSS: use the resolved SIP domain as the URI host so TLS SNI + certificate validation
-            // run against the domain, not the IP. WS stays on the IP (no TLS involved).
+            // run against the domain, not the IP. WS stays on the IP (no TLS involved). The host map is
+            // keyed by the endpoint, not the identity-suffixed pool key.
+            var endpointKey = SipTransportRuntimeUtilities.BuildEndpointKey(transport, remoteEndPoint);
             var wsHost = transport == SipTransportProtocol.Wss
-                ? SipTransportRuntimeUtilities.SelectTlsTargetHost(_tlsHosts, key, remoteEndPoint.Address)
+                ? SipTransportRuntimeUtilities.SelectTlsTargetHost(_tlsHosts, endpointKey, remoteEndPoint.Address)
                 : remoteEndPoint.Address.ToString();
             var targetUri = SipTransportRuntimeUtilities.BuildWebSocketTargetUri(wsHost, remoteEndPoint.Port, transport);
             await socket.ConnectAsync(targetUri, ct).ConfigureAwait(false);
