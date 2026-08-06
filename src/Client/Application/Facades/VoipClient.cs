@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Collections.Concurrent;
 using System.Net.Sockets;
 using CalloraVoipSdk.Core.Application.Calls;
 using CalloraVoipSdk.Core.Application.Convenience;
@@ -11,6 +12,7 @@ using CalloraVoipSdk.Core.Application.Ports.Video;
 using CalloraVoipSdk.Core.Application.Ports.Connectivity;
 using CalloraVoipSdk.Core.Application.Ports.Media;
 using CalloraVoipSdk.Core.Application.Ports.Sdp;
+using CalloraVoipSdk.Core.Application.Ports.Security;
 using CalloraVoipSdk.Core.Application.Media.Rtcp.Wire;
 using CalloraVoipSdk.Core.Domain.Calls;
 using CalloraVoipSdk.Core.Domain.Events;
@@ -51,6 +53,11 @@ public sealed class VoipClient : IVoipClient
     private readonly ILogger<VoipClient> _logger;
     private readonly CallMediaOrchestrator _mediaOrchestrator;
     private readonly SdkConvenienceOrchestrator _convenienceOrchestrator;
+    // Per-line TLS override bound at the connect boundary (#183). Keyed by the SipAccount instance the
+    // caller passes to ConnectAsync, read by the line factory when the line is created. Kept in the
+    // Application layer so TlsConfiguration never crosses into the Domain PhoneLineManager (rule R1).
+    private readonly ConcurrentDictionary<SipAccount, TlsConfiguration> _lineTlsByAccount =
+        new(ReferenceEqualityComparer.Instance);
     private int _runtimeStarted;
     private int _disposed;
 
@@ -347,7 +354,8 @@ public sealed class VoipClient : IVoipClient
                     config.OfferDtlsSrtp,
                     config.EnableVideo,
                     config.PreferredVideoCodecs,
-                    config.RequireSecureSignalingForSdes);
+                    config.RequireSecureSignalingForSdes,
+                    _lineTlsByAccount.GetValueOrDefault(account));
 
                 return new PhoneLine(
                     account,
@@ -476,25 +484,41 @@ public sealed class VoipClient : IVoipClient
         ArgumentNullException.ThrowIfNull(account);
         options ??= ConnectOptions.Default;
 
-        var outcome = await _convenienceOrchestrator
-            .RegisterAndWaitAsync(
-                account,
-                options.Timeout,
-                options.FailFastOnRegistrationFailed,
-                ct)
-            .ConfigureAwait(false);
+        // Bind the per-line TLS override before registration so the line factory sees it when the line
+        // is created (#183). Stored by account instance; a null override leaves the client-wide default.
+        if (options.LineTls is { } lineTls)
+            _lineTlsByAccount[account] = lineTls;
 
-        return outcome.Status switch
+        try
         {
-            LineConnectStatus.Registered when outcome.Line is not null =>
-                ConnectResult.Registered(outcome.Line),
-            LineConnectStatus.Timeout =>
-                ConnectResult.Timeout(outcome.Line, outcome.FinalState),
-            LineConnectStatus.Canceled =>
-                ConnectResult.Canceled(outcome.Line, outcome.FinalState),
-            _ =>
-                ConnectResult.Failed(outcome.Line, outcome.Error, outcome.FinalState),
-        };
+            var outcome = await _convenienceOrchestrator
+                .RegisterAndWaitAsync(
+                    account,
+                    options.Timeout,
+                    options.FailFastOnRegistrationFailed,
+                    ct)
+                .ConfigureAwait(false);
+
+            return outcome.Status switch
+            {
+                LineConnectStatus.Registered when outcome.Line is not null =>
+                    ConnectResult.Registered(outcome.Line),
+                LineConnectStatus.Timeout =>
+                    ConnectResult.Timeout(outcome.Line, outcome.FinalState),
+                LineConnectStatus.Canceled =>
+                    ConnectResult.Canceled(outcome.Line, outcome.FinalState),
+                _ =>
+                    ConnectResult.Failed(outcome.Line, outcome.Error, outcome.FinalState),
+            };
+        }
+        finally
+        {
+            // The line factory (PhoneLineManager.Register) consumes the override synchronously while the
+            // line is created, and the SipLineChannel then holds it for its lifetime. Drop the map entry
+            // so the map is bounded to in-flight connects and never retains SipAccount / caller-owned
+            // certificate references for the client's lifetime (#183 review H2).
+            _lineTlsByAccount.TryRemove(account, out _);
+        }
     }
 
     /// <inheritdoc />

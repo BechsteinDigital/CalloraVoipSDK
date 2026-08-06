@@ -137,6 +137,7 @@ internal sealed class SipForkedInviteHandler
                 body: null,
                 remoteEndPoint,
                 _context.SignalingTransport,
+                _context.LineTls,
                 ct)
             .ConfigureAwait(false);
     }
@@ -169,6 +170,7 @@ internal sealed class SipForkedInviteHandler
                 body: null,
                 remoteEndPoint,
                 _context.SignalingTransport,
+                _context.LineTls,
                 ct)
             .ConfigureAwait(false);
     }

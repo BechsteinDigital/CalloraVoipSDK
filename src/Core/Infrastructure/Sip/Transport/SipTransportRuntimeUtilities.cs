@@ -87,24 +87,30 @@ internal static class SipTransportRuntimeUtilities
 
     /// <summary>
     /// Authenticates an outbound TLS client stream, using <paramref name="targetHost"/> for SNI and
-    /// certificate name validation (the SIP domain, not the resolved IP address).
+    /// certificate name validation (the SIP domain, not the resolved IP address). When
+    /// <paramref name="clientCertificate"/> is supplied it is offered as the client identity for
+    /// mutual TLS (RFC 5922 / RFC 8446 §4.4.2).
     /// </summary>
     public static async Task<SslStream> AuthenticateOutboundTlsAsync(
         Stream innerStream,
         string targetHost,
         RemoteCertificateValidationCallback validateCertificate,
-        CancellationToken ct)
+        CancellationToken ct,
+        X509Certificate2? clientCertificate = null)
     {
         var sslStream = new SslStream(innerStream, leaveInnerStreamOpen: false, validateCertificate);
-        await sslStream.AuthenticateAsClientAsync(
-                new SslClientAuthenticationOptions
-                {
-                    TargetHost = targetHost,
-                    EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
-                    CertificateRevocationCheckMode = X509RevocationMode.NoCheck
-                },
-                ct)
-            .ConfigureAwait(false);
+        var authOptions = new SslClientAuthenticationOptions
+        {
+            TargetHost = targetHost,
+            EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
+            CertificateRevocationCheckMode = X509RevocationMode.NoCheck
+        };
+        // Mutual TLS: present the SDK's identity certificate as the client certificate. TLS transmits
+        // it only when the server sends a CertificateRequest, so registrars that do not request a
+        // client certificate see unchanged behaviour (RFC 8446 §4.4.2; issue #183).
+        if (clientCertificate is not null)
+            authOptions.ClientCertificates = new X509CertificateCollection { clientCertificate };
+        await sslStream.AuthenticateAsClientAsync(authOptions, ct).ConfigureAwait(false);
         return sslStream;
     }
 

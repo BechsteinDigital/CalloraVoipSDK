@@ -31,6 +31,14 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
     private readonly TlsConfiguration? _tlsConfiguration;
     private readonly SipTlsCertificateProvider? _tlsCertificateProvider;
     private readonly X509Certificate2? _tlsCertificate;
+    private readonly OutboundTlsIdentity _defaultOutboundTlsIdentity;
+    // Resolved per-line TLS identities, cached by the TlsConfiguration instance the line binds once
+    // (reference identity) so a file-loaded certificate is not reloaded on every send (#183). The value
+    // is a Lazy with ExecutionAndPublication so a concurrent first-call resolves the identity — and
+    // loads any file certificate — exactly once (ConcurrentDictionary.GetOrAdd does not serialise its
+    // factory, which would otherwise leak the losing X509Certificate2).
+    private readonly ConcurrentDictionary<TlsConfiguration, Lazy<OutboundTlsIdentity>> _lineTlsIdentities
+        = new(ReferenceEqualityComparer.Instance);
     private readonly ILogger<SipTransportRuntime> _logger;
     private readonly ISipWireCodec _wireCodec;
     private readonly ISipRouteResolver _routeResolver;
@@ -99,12 +107,16 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
             _tlsCertificate,
             _logger,
             HandleInboundPayloadAsync);
+        // Client-wide default TLS identity: the configured certificate plus the runtime server-trust
+        // callback. Its empty key keeps outbound pool connections byte-identical to pre-#183 behaviour.
+        _defaultOutboundTlsIdentity = new OutboundTlsIdentity(
+            _tlsCertificate, ValidateTlsServerCertificate, key: string.Empty);
         // Frames received on an outbound (pooled) connection carry no accepted inbound connection id — a
         // response to them can only ever go back out through the pool, so the id is null here (#158 P1-2).
         _outboundPool = new SipOutboundConnectionPool(
             _logger,
             _endpointTlsHosts,
-            ValidateTlsServerCertificate,
+            _defaultOutboundTlsIdentity,
             (remote, transport, payload) => HandleInboundPayloadAsync(remote, transport, payload, inboundConnectionId: null));
 
         _udp = new UdpClient(new IPEndPoint(IPAddress.Any, 0));
@@ -197,7 +209,7 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
     /// and UDP was selected, the message MUST be sent over TCP and the Via transport token
     /// updated accordingly.
     /// </summary>
-    public async Task SendRequestAsync(
+    public Task SendRequestAsync(
         string method,
         string requestUri,
         IReadOnlyDictionary<string, string> headers,
@@ -205,6 +217,34 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
         IPEndPoint remoteEndPoint,
         SipTransportProtocol transport,
         CancellationToken ct = default)
+        => SendRequestCoreAsync(method, requestUri, headers, body, remoteEndPoint, transport, _defaultOutboundTlsIdentity, ct);
+
+    /// <summary>
+    /// Sends a SIP request over an explicit transport, presenting the per-line TLS identity resolved
+    /// from <paramref name="lineTls"/> for mutual TLS (issue #183). A <see langword="null"/>
+    /// <paramref name="lineTls"/> uses the client-wide default identity (behaviour-preserving).
+    /// </summary>
+    public Task SendRequestAsync(
+        string method,
+        string requestUri,
+        IReadOnlyDictionary<string, string> headers,
+        string? body,
+        IPEndPoint remoteEndPoint,
+        SipTransportProtocol transport,
+        TlsConfiguration? lineTls,
+        CancellationToken ct = default)
+        => SendRequestCoreAsync(
+            method, requestUri, headers, body, remoteEndPoint, transport, ResolveOutboundTlsIdentity(lineTls), ct);
+
+    private async Task SendRequestCoreAsync(
+        string method,
+        string requestUri,
+        IReadOnlyDictionary<string, string> headers,
+        string? body,
+        IPEndPoint remoteEndPoint,
+        SipTransportProtocol transport,
+        OutboundTlsIdentity identity,
+        CancellationToken ct)
     {
         var bytes = _wireCodec.SerializeRequest(method, requestUri, headers, body);
 
@@ -221,7 +261,7 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
         }
 
         SipWireTraceLogger.RequestSent(_logger, method, headers, body, remoteEndPoint, transport);
-        await SendPayloadAsync(remoteEndPoint, bytes, transport, ct).ConfigureAwait(false);
+        await SendPayloadAsync(remoteEndPoint, bytes, transport, identity, ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -270,7 +310,9 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
             return;
         }
 
-        await SendPayloadAsync(remoteEndPoint, bytes, transport, ct).ConfigureAwait(false);
+        // Responses use the client-wide default TLS identity: a UAS response reuses/creates a connection
+        // on the runtime's own identity, not a per-line client identity.
+        await SendPayloadAsync(remoteEndPoint, bytes, transport, _defaultOutboundTlsIdentity, ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -558,6 +600,7 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
         IPEndPoint remoteEndPoint,
         ReadOnlyMemory<byte> payload,
         SipTransportProtocol transport,
+        OutboundTlsIdentity identity,
         CancellationToken ct)
     {
         var targetEndPoint = SipTransportRuntimeUtilities.NormalizeWildcardEndPoint(remoteEndPoint);
@@ -570,12 +613,12 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
 
             case SipTransportProtocol.Tcp:
             case SipTransportProtocol.Tls:
-                await _outboundPool.SendStreamAsync(targetEndPoint, payload, transport, ct).ConfigureAwait(false);
+                await _outboundPool.SendStreamAsync(targetEndPoint, payload, transport, ct, identity).ConfigureAwait(false);
                 break;
 
             case SipTransportProtocol.Ws:
             case SipTransportProtocol.Wss:
-                await _outboundPool.SendWebSocketAsync(targetEndPoint, payload, transport, ct).ConfigureAwait(false);
+                await _outboundPool.SendWebSocketAsync(targetEndPoint, payload, transport, ct, identity).ConfigureAwait(false);
                 break;
 
             default:
@@ -753,6 +796,57 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Resolves the outbound TLS identity for a send: the client-wide default when
+    /// <paramref name="lineTls"/> is <see langword="null"/>, otherwise a per-line identity (its own
+    /// client certificate and RFC 5922 server-trust policy) cached by the configuration instance (#183).
+    /// </summary>
+    private OutboundTlsIdentity ResolveOutboundTlsIdentity(TlsConfiguration? lineTls)
+    {
+        if (lineTls is null)
+            return _defaultOutboundTlsIdentity;
+
+        return _lineTlsIdentities
+            .GetOrAdd(lineTls, cfg => new Lazy<OutboundTlsIdentity>(
+                () => BuildLineTlsIdentity(cfg), LazyThreadSafetyMode.ExecutionAndPublication))
+            .Value;
+    }
+
+    /// <summary>
+    /// Builds a per-line TLS identity: loads the line's client certificate and binds a server-trust
+    /// callback to the line's own <see cref="SipTlsTrustMode"/> / <see cref="TlsConfiguration.ExpectedSipDomain"/>
+    /// (DECISION D). The pool key isolates it from other identities to the same endpoint.
+    /// </summary>
+    private OutboundTlsIdentity BuildLineTlsIdentity(TlsConfiguration lineTls)
+    {
+        var provider = new SipTlsCertificateProvider(lineTls);
+        var clientCertificate = provider.GetCertificate();
+
+        bool ValidateLineServerCertificate(
+            object? _, X509Certificate? certificate, X509Chain? chain, SslPolicyErrors sslPolicyErrors)
+        {
+            var (accepted, reason) = SipTlsServerTrustEvaluator.Evaluate(
+                lineTls.TrustMode,
+                lineTls.ExpectedSipDomain,
+                certificate,
+                sslPolicyErrors,
+                provider.ValidatePeerCertificateSipDomain);
+
+            if (!accepted)
+            {
+                _logger.LogWarning("SIP TLS server certificate rejected for line: {Reason}.", reason);
+                return false;
+            }
+
+            return true;
+        }
+
+        // Distinct identities (client-certificate thumbprint plus server-trust policy) map to distinct
+        // pooled connections, so two lines to the same endpoint never share an identity.
+        var key = $"{clientCertificate?.Thumbprint ?? "nocert"}|{lineTls.TrustMode}|{lineTls.ExpectedSipDomain}";
+        return new OutboundTlsIdentity(clientCertificate, ValidateLineServerCertificate, key);
     }
 
     /// <summary>

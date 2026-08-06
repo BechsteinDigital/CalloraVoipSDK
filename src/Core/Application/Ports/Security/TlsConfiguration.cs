@@ -1,3 +1,5 @@
+using System.Security.Cryptography.X509Certificates;
+
 namespace CalloraVoipSdk.Core.Application.Ports.Security;
 
 /// <summary>
@@ -24,6 +26,18 @@ public sealed class TlsConfiguration
     /// Password for the certificate file, if required.
     /// </summary>
     public string? CertificatePassword { get; init; }
+
+    /// <summary>
+    /// Optional in-memory X.509 identity certificate for SIP TLS. When set, it takes precedence over
+    /// <see cref="CertificatePath"/> and is used both as the inbound TLS listener certificate and as
+    /// the client certificate presented on outbound mutual-TLS handshakes (issue #183).
+    /// <para>
+    /// The certificate must carry its private key. Lifetime is owned by the caller: the SDK never
+    /// disposes a certificate supplied here (only certificates it loads itself from
+    /// <see cref="CertificatePath"/>). Keep the instance alive for as long as the client uses it.
+    /// </para>
+    /// </summary>
+    public X509Certificate2? ClientCertificate { get; init; }
 
     private readonly SipTlsTrustMode _trustMode = SipTlsTrustMode.System;
 

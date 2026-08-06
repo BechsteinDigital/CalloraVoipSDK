@@ -206,6 +206,7 @@ internal sealed class SipCallSessionSubscriptionService : IDisposable
                     "SIP/2.0 200 OK",
                     remoteEndPoint,
                     _context.SignalingTransport,
+                    _context.LineTls,
                     ct)
                 .ConfigureAwait(false);
         }

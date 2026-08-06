@@ -1,5 +1,6 @@
 using System.IO;
 using System.Net;
+using CalloraVoipSdk.Core.Application.Ports.Security;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Routing;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Transport;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Wire;
@@ -125,6 +126,22 @@ internal sealed class CapturingSipTransportRuntime : ISipTransportRuntime
         CancellationToken ct = default)
     {
         var request = new CapturedSipRequest(method, requestUri, headers, body, remoteEndPoint);
+        ThrowIfConfigured(request);
+        Capture(request);
+        return Task.CompletedTask;
+    }
+
+    public Task SendRequestAsync(
+        string method,
+        string requestUri,
+        IReadOnlyDictionary<string, string> headers,
+        string? body,
+        IPEndPoint remoteEndPoint,
+        SipTransportProtocol transport,
+        TlsConfiguration? lineTls,
+        CancellationToken ct = default)
+    {
+        var request = new CapturedSipRequest(method, requestUri, headers, body, remoteEndPoint) { LineTls = lineTls };
         ThrowIfConfigured(request);
         Capture(request);
         return Task.CompletedTask;

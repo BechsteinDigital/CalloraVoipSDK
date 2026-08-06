@@ -494,6 +494,7 @@ internal sealed class SipClientTransactionExecutor : ISipClientTransactionExecut
                 request.Body,
                 request.RemoteEndPoint,
                 request.Transport,
+                request.LineTls,
                 ct)
             .ConfigureAwait(false);
     }
@@ -743,6 +744,7 @@ internal sealed class SipClientTransactionExecutor : ISipClientTransactionExecut
                         body: null,
                         request.RemoteEndPoint,
                         request.Transport,
+                        request.LineTls,
                         CancellationToken.None)
                     .ConfigureAwait(false);
             }

@@ -43,6 +43,7 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
     internal readonly string _initialRequestUri;
     internal readonly IReadOnlyList<string> _initialRouteSet;
     internal readonly SipTransportProtocol _signalingTransport;
+    internal readonly CalloraVoipSdk.Core.Application.Ports.Security.TlsConfiguration? _lineTls;
     internal readonly TimeSpan _timeout;
     internal readonly SipRequest? _initialInvite;
     internal IPEndPoint _remoteEndPoint;
@@ -129,6 +130,7 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
             : configuration.InitialRequestUri!;
         _initialRouteSet = configuration.InitialRouteSet;
         _signalingTransport = configuration.SignalingTransport;
+        _lineTls = configuration.LineTls;
         _timeout = configuration.Timeout;
         _remoteEndPoint = configuration.RemoteEndPoint;
         _initialInvite = initialization.InitialInvite;

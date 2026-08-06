@@ -1,3 +1,4 @@
+using CalloraVoipSdk.Core.Application.Ports.Security;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Transport;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Sip.Signaling;
@@ -7,6 +8,12 @@ namespace CalloraVoipSdk.Core.Infrastructure.Sip.Signaling;
 /// </summary>
 internal sealed record SipMessageRequest
 {
+    /// <summary>
+    /// Optional per-line TLS identity presented on the outbound MESSAGE handshake for mutual TLS
+    /// (issue #183). <see langword="null"/> uses the client-wide default identity.
+    /// </summary>
+    public TlsConfiguration? LineTls { get; init; }
+
     /// <summary>SIP username used in the local From URI (e.g. "alice").</summary>
     public string LocalUsername { get; init; } = string.Empty;
 

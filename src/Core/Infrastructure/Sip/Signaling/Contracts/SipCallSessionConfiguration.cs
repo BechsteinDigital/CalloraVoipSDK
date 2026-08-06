@@ -1,4 +1,5 @@
 using System.Net;
+using CalloraVoipSdk.Core.Application.Ports.Security;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Transport;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Sip.Signaling;
@@ -8,6 +9,12 @@ namespace CalloraVoipSdk.Core.Infrastructure.Sip.Signaling;
 /// </summary>
 internal sealed class SipCallSessionConfiguration
 {
+    /// <summary>
+    /// Optional per-line TLS identity presented on this dialog's outbound TLS handshakes for mutual
+    /// TLS (issue #183). <see langword="null"/> uses the client-wide default identity.
+    /// </summary>
+    public TlsConfiguration? LineTls { get; init; }
+
     /// <summary>
     /// SIP Call-ID value for the dialog.
     /// </summary>

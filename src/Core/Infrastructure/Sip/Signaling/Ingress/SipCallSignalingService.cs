@@ -231,7 +231,8 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
                     RemoteEndPoint = routeCandidate.EndPoint,
                     SignalingTransport = routeCandidate.Transport,
                     ReferredBy = request.ReferredBy,
-                    CustomHeaders = request.CustomHeaders
+                    CustomHeaders = request.CustomHeaders,
+                    LineTls = request.LineTls
                 };
 
                 var session = SipCallSession.CreateOutbound(

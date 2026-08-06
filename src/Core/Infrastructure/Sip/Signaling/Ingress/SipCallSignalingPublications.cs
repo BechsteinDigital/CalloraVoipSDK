@@ -91,7 +91,7 @@ internal sealed class SipCallSignalingPublications
             try
             {
                 var result = await _executor
-                    .ExecuteAsync(BuildTransaction(normalizedRemoteUri, headers, body, routeCandidate, request.Timeout), ct)
+                    .ExecuteAsync(BuildTransaction(normalizedRemoteUri, headers, body, routeCandidate, request.Timeout, request.LineTls), ct)
                     .ConfigureAwait(false);
                 response = result.FinalResponse.Response;
             }
@@ -116,7 +116,7 @@ internal sealed class SipCallSignalingPublications
                 try
                 {
                     var retryResult = await _executor
-                        .ExecuteAsync(BuildTransaction(normalizedRemoteUri, retryHeaders, body, routeCandidate, request.Timeout), ct)
+                        .ExecuteAsync(BuildTransaction(normalizedRemoteUri, retryHeaders, body, routeCandidate, request.Timeout, request.LineTls), ct)
                         .ConfigureAwait(false);
                     response = retryResult.FinalResponse.Response;
                 }
@@ -152,7 +152,8 @@ internal sealed class SipCallSignalingPublications
         IReadOnlyDictionary<string, string> headers,
         string body,
         SipRouteCandidate route,
-        TimeSpan timeout) => new()
+        TimeSpan timeout,
+        CalloraVoipSdk.Core.Application.Ports.Security.TlsConfiguration? lineTls) => new()
     {
         Method = "PUBLISH",
         RequestUri = requestUri,
@@ -160,7 +161,8 @@ internal sealed class SipCallSignalingPublications
         Body = body,
         RemoteEndPoint = route.EndPoint,
         Transport = route.Transport,
-        Timeout = timeout
+        Timeout = timeout,
+        LineTls = lineTls
     };
 
     private static Dictionary<string, string> BuildPublishHeaders(

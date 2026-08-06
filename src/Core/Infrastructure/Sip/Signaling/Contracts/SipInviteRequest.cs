@@ -1,3 +1,5 @@
+using CalloraVoipSdk.Core.Application.Ports.Security;
+
 namespace CalloraVoipSdk.Core.Infrastructure.Sip.Signaling;
 
 /// <summary>
@@ -5,6 +7,13 @@ namespace CalloraVoipSdk.Core.Infrastructure.Sip.Signaling;
 /// </summary>
 internal sealed class SipInviteRequest
 {
+    /// <summary>
+    /// Optional per-line TLS identity (client certificate + server-trust policy) presented on the
+    /// outbound INVITE dialog's TLS handshake for mutual TLS (issue #183). <see langword="null"/> uses
+    /// the client-wide default identity.
+    /// </summary>
+    public TlsConfiguration? LineTls { get; init; }
+
     /// <summary>
     /// Local user part for From/Contact headers.
     /// </summary>

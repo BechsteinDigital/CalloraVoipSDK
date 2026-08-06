@@ -134,6 +134,7 @@ internal sealed class SipCallSessionTransactionService
                         Body = body,
                         RemoteEndPoint = _context.RemoteEndPoint,
                         Transport = _context.SignalingTransport,
+                        LineTls = _context.LineTls,
                         Timeout = _context.Timeout,
                         OnProvisionalResponse = envelope =>
                         {
@@ -526,6 +527,7 @@ internal sealed class SipCallSessionTransactionService
                         Body = null,
                         RemoteEndPoint = remoteEndPoint,
                         Transport = _context.SignalingTransport,
+                        LineTls = _context.LineTls,
                         Timeout = _context.Timeout
                     },
                     ct)
@@ -625,6 +627,7 @@ internal sealed class SipCallSessionTransactionService
                     Body = null,
                     RemoteEndPoint = _context.RemoteEndPoint,
                     Transport = _context.SignalingTransport,
+                    LineTls = _context.LineTls,
                     Timeout = _context.Timeout
                 },
                 ct)
@@ -722,6 +725,7 @@ internal sealed class SipCallSessionTransactionService
                         Body = body,
                         RemoteEndPoint = remoteEndPoint,
                         Transport = _context.SignalingTransport,
+                        LineTls = _context.LineTls,
                         Timeout = _context.Timeout
                     },
                     ct)
@@ -900,6 +904,7 @@ internal sealed class SipCallSessionTransactionService
                     Body = null,
                     RemoteEndPoint = remoteEndPoint,
                     Transport = _context.SignalingTransport,
+                    LineTls = _context.LineTls,
                     Timeout = _context.Timeout
                 },
                 ct)

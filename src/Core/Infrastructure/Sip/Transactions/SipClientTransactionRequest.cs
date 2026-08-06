@@ -1,4 +1,5 @@
 using System.Net;
+using CalloraVoipSdk.Core.Application.Ports.Security;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Signaling;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Transport;
 
@@ -38,6 +39,13 @@ internal sealed class SipClientTransactionRequest
     /// Transport protocol used for this transaction.
     /// </summary>
     public SipTransportProtocol Transport { get; init; } = SipTransportProtocol.Udp;
+
+    /// <summary>
+    /// Optional per-line TLS identity (client certificate + server-trust policy) presented on the
+    /// outbound handshake for mutual TLS (issue #183). <see langword="null"/> uses the client-wide
+    /// default identity — behaviour-preserving for non-TLS lines and lines without an override.
+    /// </summary>
+    public TlsConfiguration? LineTls { get; init; }
 
     /// <summary>
     /// Overall timeout waiting for the final response. <see langword="null"/> derives the RFC 3261 64*T1
