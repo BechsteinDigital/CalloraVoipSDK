@@ -89,7 +89,7 @@
 
 
   <h1 id="CalloraVoipSdk_ConnectOptions" data-uid="CalloraVoipSdk.ConnectOptions" class="text-break">
-Class ConnectOptions  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Application/Workflows/ConnectOptions.cs/#L6"><i class="bi bi-code-slash"></i></a>
+Class ConnectOptions  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Application/Workflows/ConnectOptions.cs/#L8"><i class="bi bi-code-slash"></i></a>
   </h1>
 
   <div class="facts text-secondary">
@@ -154,7 +154,7 @@ Class ConnectOptions  <a class="header-action link-secondary" title="View source
 
   <h3 id="CalloraVoipSdk_ConnectOptions_Default" data-uid="CalloraVoipSdk.ConnectOptions.Default">
   Default
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Application/Workflows/ConnectOptions.cs/#L11"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Application/Workflows/ConnectOptions.cs/#L13"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Default connect options.</p>
@@ -186,7 +186,7 @@ Class ConnectOptions  <a class="header-action link-secondary" title="View source
 
   <h3 id="CalloraVoipSdk_ConnectOptions_FailFastOnRegistrationFailed" data-uid="CalloraVoipSdk.ConnectOptions.FailFastOnRegistrationFailed">
   FailFastOnRegistrationFailed
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Application/Workflows/ConnectOptions.cs/#L22"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Application/Workflows/ConnectOptions.cs/#L33"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Completes with <a class="xref" href="CalloraVoipSdk.ConnectStatus.html#CalloraVoipSdk_ConnectStatus_Failed">Failed</a> as soon as the line enters
@@ -215,11 +215,47 @@ Domain.Lines.LineState.RegistrationFailed.</p>
 
 
 
+  <a id="CalloraVoipSdk_ConnectOptions_LineTls_" data-uid="CalloraVoipSdk.ConnectOptions.LineTls*"></a>
+
+  <h3 id="CalloraVoipSdk_ConnectOptions_LineTls" data-uid="CalloraVoipSdk.ConnectOptions.LineTls">
+  LineTls
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Application/Workflows/ConnectOptions.cs/#L22"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Optional per-line TLS configuration (mutual-TLS client certificate and RFC 5922 server-trust
+policy) applied to this line's SIP-over-TLS signaling, overriding the client-wide
+<code>SdkConfiguration.Tls</code> (issue #183). When <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> the line uses the
+client-wide TLS identity. The supplied certificate is caller-owned; the SDK never disposes it.
+Only relevant when the line's transport is TLS or WSS.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TlsConfiguration? LineTls { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TlsConfiguration</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
   <a id="CalloraVoipSdk_ConnectOptions_Timeout_" data-uid="CalloraVoipSdk.ConnectOptions.Timeout*"></a>
 
   <h3 id="CalloraVoipSdk_ConnectOptions_Timeout" data-uid="CalloraVoipSdk.ConnectOptions.Timeout">
   Timeout
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Application/Workflows/ConnectOptions.cs/#L16"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Application/Workflows/ConnectOptions.cs/#L27"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Maximum time to wait until the line reaches Domain.Lines.LineState.Registered.</p>
@@ -251,7 +287,7 @@ Domain.Lines.LineState.RegistrationFailed.</p>
 </article>
 
         <div class="contribution d-print-none">
-          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Application/Workflows/ConnectOptions.cs/#L6" class="edit-link">Edit this page</a>
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Application/Workflows/ConnectOptions.cs/#L8" class="edit-link">Edit this page</a>
         </div>
 
 

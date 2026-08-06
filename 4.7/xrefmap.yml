@@ -57,6 +57,19 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.ConnectOptions.FailFastOnRegistrationFailed
   nameWithType: ConnectOptions.FailFastOnRegistrationFailed
+- uid: CalloraVoipSdk.ConnectOptions.LineTls
+  name: LineTls
+  href: _api/CalloraVoipSdk.ConnectOptions.html#CalloraVoipSdk_ConnectOptions_LineTls
+  commentId: P:CalloraVoipSdk.ConnectOptions.LineTls
+  fullName: CalloraVoipSdk.ConnectOptions.LineTls
+  nameWithType: ConnectOptions.LineTls
+- uid: CalloraVoipSdk.ConnectOptions.LineTls*
+  name: LineTls
+  href: _api/CalloraVoipSdk.ConnectOptions.html#CalloraVoipSdk_ConnectOptions_LineTls_
+  commentId: Overload:CalloraVoipSdk.ConnectOptions.LineTls
+  isSpec: "True"
+  fullName: CalloraVoipSdk.ConnectOptions.LineTls
+  nameWithType: ConnectOptions.LineTls
 - uid: CalloraVoipSdk.ConnectOptions.Timeout
   name: Timeout
   href: _api/CalloraVoipSdk.ConnectOptions.html#CalloraVoipSdk_ConnectOptions_Timeout
