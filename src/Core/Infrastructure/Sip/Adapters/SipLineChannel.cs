@@ -7,6 +7,7 @@ using CalloraVoipSdk.Core.Domain.Lines;
 using CalloraVoipSdk.Core.Domain.Messages;
 using CalloraVoipSdk.Core.Application.Observability;
 using CalloraVoipSdk.Core.Application.Ports.Sdp;
+using CalloraVoipSdk.Core.Application.Ports.Security;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Observability;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Signaling;
 using CalloraVoipSdk.Core.Infrastructure.Sip.Wire;
@@ -35,6 +36,7 @@ internal sealed class SipLineChannel : ILineChannel
     private bool _warnedSdesInsecureSignaling;
     private readonly bool _enableVideo;
     private readonly IReadOnlyList<string>? _preferredVideoCodecNames;
+    private readonly TlsConfiguration? _lineTls;
     private readonly ILogger<SipLineChannel> _logger;
     private readonly ILogger<SipCoreCallChannel> _callChannelLogger;
     private readonly object _sync = new();
@@ -78,13 +80,15 @@ internal sealed class SipLineChannel : ILineChannel
         bool offerDtlsSrtp = false,
         bool enableVideo = false,
         IReadOnlyList<string>? preferredVideoCodecNames = null,
-        bool requireSecureSignalingForSdes = false)
+        bool requireSecureSignalingForSdes = false,
+        TlsConfiguration? lineTls = null)
     {
         _dtlsOptions = dtlsOptions;
         _offerDtlsSrtp = offerDtlsSrtp && dtlsOptions is not null;
         _requireSecureSignalingForSdes = requireSecureSignalingForSdes;
         _enableVideo = enableVideo;
         _preferredVideoCodecNames = preferredVideoCodecNames;
+        _lineTls = lineTls;
         _account = account ?? throw new ArgumentNullException(nameof(account));
         _userAgent = string.IsNullOrWhiteSpace(userAgent) ? "CalloraVoipSdk/1.0" : userAgent;
         _registrationService = registrationService ?? throw new ArgumentNullException(nameof(registrationService));
@@ -710,6 +714,7 @@ internal sealed class SipLineChannel : ILineChannel
             Transport = MapTransport(_account.Transport),
             ExistingCallId = existingCallId,
             StartCSeq = startCSeq,
+            LineTls = _lineTls,
             // Manual override (N1) wins; otherwise the address learned from the
             // registrar's received=/rport= (N2); otherwise the local address.
             PublicHost = HasManualPublicOverride ? _account.PublicSipHost : _learnedPublicContact?.Host,

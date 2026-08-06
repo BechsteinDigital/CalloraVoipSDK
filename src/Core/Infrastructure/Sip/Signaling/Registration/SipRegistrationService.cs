@@ -220,7 +220,8 @@ internal sealed class SipRegistrationService : ISipRegistrationService
                                 Body = null,
                                 RemoteEndPoint = routeCandidate.EndPoint,
                                 Transport = routeCandidate.Transport,
-                                Timeout = request.Timeout
+                                Timeout = request.Timeout,
+                                LineTls = request.LineTls
                             },
                             ct)
                         .ConfigureAwait(false);
