@@ -51,6 +51,15 @@ internal sealed class QueueDatagramTransport : DatagramTransport
         }
     }
 
+    /// <summary>
+    /// Whether the transport has stopped accepting inbound datagrams — either torn down locally via
+    /// <see cref="Close"/>, or closed by the DTLS record layer after it processed a peer
+    /// <c>close_notify</c> (BouncyCastle calls <see cref="Close"/> on the underlying transport when
+    /// the association closes). The control-receive loop uses this to tell a peer close from a plain
+    /// receive timeout, since both surface as <see cref="Receive(Span{byte}, int)"/> returning -1 (#190).
+    /// </summary>
+    public bool IsClosed => _inbound.IsAddingCompleted;
+
     /// <inheritdoc />
     public int GetReceiveLimit() => DefaultDatagramLimit;
 

@@ -58,6 +58,9 @@ internal sealed class WebRtcSessionEventBridge
         ArgumentNullException.ThrowIfNull(raiseVideoLayerFrameReceived);
         session.Connected += () => transitionTo(WebRtcConnectionState.Connected);
         session.HandshakeFailed += () => transitionTo(WebRtcConnectionState.Failed);
+        // A peer close_notify (or fatal alert) after keying tears down the secure media channel; media
+        // must not keep flowing under a keying channel the peer considers closed (#190, RFC 8827 §6.5).
+        session.PeerClosed += () => transitionTo(WebRtcConnectionState.Closed);
         session.MediaConsentLost += () => transitionTo(WebRtcConnectionState.Failed);
         session.MediaConnectivityDegraded += () => transitionTo(WebRtcConnectionState.Disconnected);
         session.MediaConnectivityRecovered += () => transitionTo(WebRtcConnectionState.Connected);
