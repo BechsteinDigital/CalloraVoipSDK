@@ -33,6 +33,11 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
     private readonly Action<ISrtpContext, ISrtpContext, ISrtcpContext, ISrtcpContext> _onContextsReady;
     private readonly Action<ISrtpContext, ISrtpContext>? _onSecondaryContextsReady;
     private readonly Action _onHandshakeFailed;
+    // Invoked when the peer closes the DTLS association (close_notify/fatal alert) after key export, so
+    // the owner ceases media for this leg — media must not keep flowing under a keying channel the peer
+    // considers closed (#190). A no-op when the owner does not wire it (the association is still serviced
+    // and the close logged; stray application_data is still discarded).
+    private readonly Action _onPeerClosed;
     private readonly ILogger<DtlsMediaAttachment> _logger;
     private readonly QueueDatagramTransport _transport;
     // Bounded single-writer egress (#191): BouncyCastle sends records synchronously from its
@@ -48,6 +53,9 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
 
     private Task? _handshakeTask;
     private DtlsSrtpHandshakeResult? _result;
+    // Services the association after key export (#190): notices a peer close_notify/alert and discards
+    // stray application_data. Null until the handshake completes; set once, read on teardown.
+    private DtlsAssociationReceiver? _associationReceiver;
     private ISrtpContext? _outboundSrtp;
     private ISrtpContext? _inboundSrtp;
     private ISrtcpContext? _outboundSrtcp;
@@ -66,6 +74,7 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
         Action<ISrtpContext, ISrtpContext, ISrtcpContext, ISrtcpContext> onContextsReady,
         Action<ISrtpContext, ISrtpContext>? onSecondaryContextsReady,
         Action onHandshakeFailed,
+        Action? onPeerClosed,
         ILoggerFactory loggerFactory,
         bool useServerCookie)
     {
@@ -79,6 +88,7 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
         _onContextsReady = onContextsReady;
         _onSecondaryContextsReady = onSecondaryContextsReady;
         _onHandshakeFailed = onHandshakeFailed;
+        _onPeerClosed = onPeerClosed ?? (() => { });
         _logger = loggerFactory.CreateLogger<DtlsMediaAttachment>();
         _egress = new DtlsEgressPump(SendRawToRemoteAsync, _logger);
         _transport = new QueueDatagramTransport(DispatchOutbound);
@@ -140,6 +150,7 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
         ILoggerFactory loggerFactory,
         IPEndPoint? remoteEndPointOverride = null,
         Action<ISrtpContext, ISrtpContext>? onSecondaryContextsReady = null,
+        Action? onPeerClosed = null,
         bool useServerCookie = true)
     {
         ArgumentNullException.ThrowIfNull(parameters);
@@ -165,7 +176,7 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
         return Create(
             parameters.DtlsIsClient, remoteEndPointOverride ?? parameters.RemoteEndPoint, expected,
             handshaker!, certificate!, sendRaw, onContextsReady, onHandshakeFailed, loggerFactory,
-            onSecondaryContextsReady, useServerCookie);
+            onSecondaryContextsReady, onPeerClosed, useServerCookie);
     }
 
     /// <summary>
@@ -180,6 +191,7 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
     /// <param name="onContextsReady">Receives the derived outbound/inbound SRTP and SRTCP contexts.</param>
     /// <param name="onSecondaryContextsReady">Optional RTX (RFC 4588) SRTP contexts from the same keys.</param>
     /// <param name="onHandshakeFailed">Invoked when the handshake fails, so the owner keeps media blocked.</param>
+    /// <param name="onPeerClosed">Invoked when the peer closes the association after key export, so the owner ceases media (#190).</param>
     public static DtlsMediaAttachment Create(
         bool isClient,
         IPEndPoint remoteEndPoint,
@@ -191,6 +203,7 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
         Action onHandshakeFailed,
         ILoggerFactory loggerFactory,
         Action<ISrtpContext, ISrtpContext>? onSecondaryContextsReady = null,
+        Action? onPeerClosed = null,
         bool useServerCookie = false)
     {
         ArgumentNullException.ThrowIfNull(remoteEndPoint);
@@ -204,7 +217,7 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
 
         return new DtlsMediaAttachment(
             isClient, remoteEndPoint, expectedRemoteFingerprint, handshaker, certificate,
-            sendRaw, onContextsReady, onSecondaryContextsReady, onHandshakeFailed, loggerFactory,
+            sendRaw, onContextsReady, onSecondaryContextsReady, onHandshakeFailed, onPeerClosed, loggerFactory,
             useServerCookie);
     }
 
@@ -291,6 +304,20 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
                 // exported DTLS-SRTP secret does not linger on the managed heap (RFC 3711 §9.4).
                 // The retained _result keeps only the (non-secret) DTLS transport alive for teardown.
                 result.Keys.Dispose();
+
+                // Serve the association from here on (#190): media now flows directly over SRTP, so
+                // nobody would otherwise read the DTLS channel again and a peer close_notify would go
+                // unnoticed. The receiver notices a peer close (→ the owner ceases media) and discards
+                // stray DTLS application_data. It runs under the lifetime token and is drained on
+                // teardown before the association is closed (see DisposeAsync).
+                var receiver = new DtlsAssociationReceiver(
+                    new BouncyCastleDtlsControlChannel(result.Transport, _transport),
+                    _transport.GetReceiveLimit(),
+                    _onPeerClosed,
+                    _logger,
+                    _lifetimeCts.Token);
+                Volatile.Write(ref _associationReceiver, receiver);
+                receiver.Start();
             }
             catch (OperationCanceledException)
             {
@@ -346,13 +373,19 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
             return;
 
-        // Stop a still-running handshake first and wait for it to end, so _result is final —
-        // either a completed association whose close_notify we must deliver, or null. This closes
-        // the race where a handshake completing mid-teardown would enqueue its close_notify only
-        // after the egress had already been drained and closed. The egress pump keeps its own
-        // cancellation, so cancelling the handshake lifetime here does not abort the close_notify
-        // send below.
         _lifetimeCts.Cancel();
+
+        // Stop the association receiver first, and cleanly: cancelling its (linked) token makes the
+        // loop exit after its current bounded receive TIMES OUT — a clean -1 that does NOT fault
+        // BouncyCastle's record layer. That ordering matters, because a faulted record layer makes
+        // BouncyCastle skip the close_notify we send below (it only warns close_notify while healthy).
+        // So we must NOT close the transport before the receiver has stopped.
+        var receiver = Volatile.Read(ref _associationReceiver);
+        if (receiver is not null)
+            await receiver.DisposeAsync().ConfigureAwait(false);
+
+        // Unblock a still-running handshake (no receiver was started in that case) and wait for it to
+        // end, so _result is final. Harmless once the handshake has already completed.
         _transport.Close();
 
         if (_handshakeTask is { } handshakeTask)
@@ -369,9 +402,16 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
             }
         }
 
-        // Handshake is done: if it produced an association, closing enqueues close_notify onto the
-        // still-live egress pump. Drain it with a tight deadline so a live peer actually receives
-        // it — DTLS does not retransmit alerts (RFC 6347 §4.2.7) — THEN cancel the remaining egress.
+        // A handshake that completed during teardown may have started a receiver after the snapshot
+        // above — stop that one too, so no worker is left behind.
+        var lateReceiver = Volatile.Read(ref _associationReceiver);
+        if (lateReceiver is not null && !ReferenceEquals(lateReceiver, receiver))
+            await lateReceiver.DisposeAsync().ConfigureAwait(false);
+
+        // Handshake is done and the receiver is stopped (the record layer is still healthy): closing
+        // the association enqueues close_notify onto the still-live egress pump. Drain it with a tight
+        // deadline so a live peer actually receives it — DTLS does not retransmit alerts
+        // (RFC 6347 §4.2.7) — THEN cancel the remaining egress.
         Volatile.Read(ref _result)?.Dispose();
         await _egress.DrainAsync(CloseNotifyDrainDeadline).ConfigureAwait(false);
         await _egress.DisposeAsync().ConfigureAwait(false);

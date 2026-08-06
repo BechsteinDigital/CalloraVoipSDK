@@ -8,6 +8,8 @@
   href: presence-publish.md
 - name: Audio devices
   href: audio-devices.md
+- name: Audio transcoding (PCM)
+  href: audio-transcoding.md
 - name: Media tap
   href: media-tap.md
 - name: Video calls
@@ -20,6 +22,8 @@
   href: webrtc.md
 - name: NAT and SIP trunks
   href: nat-and-trunks.md
+- name: SIP over TLS (mutual TLS)
+  href: sip-tls-mtls.md
 - name: SRTP / SRTCP
   href: srtp-srtcp.md
 - name: RTCP quality metrics

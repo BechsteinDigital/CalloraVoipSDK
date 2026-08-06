@@ -16,6 +16,58 @@ screen-pop and route by the dialed DID without re-parsing SIP headers. **`Public
 `ICall` members and nothing else** — a purely additive minor, no breaking change; every property is `null` on
 outbound calls and absent data. See [Calls](concepts/calls.md#inbound-caller-and-dialed-identity).
 
+### 4.8.0 — 2026-08-06
+
+**Stack-wide hardening plus two additive public features.** A series of protocol-layer review findings
+across DTLS/STUN/TURN/RTP/RTCP/SDP/SIP/WebRTC/Audio, hardened fail-closed with caps far above real
+signalling/media, so legitimate traffic is unaffected. `PublicApi.approved.txt` only grew — a consumer
+that opts into none of the new surfaces stays behaviour-identical. See
+[ADR-064](../adr/ADR-064-per-line-sip-mutual-tls.md),
+[ADR-065](../adr/ADR-065-public-pcm-transcoding-surface.md) and
+[ADR-066](../adr/ADR-066-dtls-post-handshake-association-servicing.md).
+
+**New features**
+
+- **Mutual TLS per SIP line, with a certificate from memory.** Outbound SIP over TLS/WSS presents a
+  client certificate when configured — sent only if the registrar requests one (RFC 8446 §4.4.2), so
+  behaviour is byte-identical otherwise. Two lines to the same registrar present their own identity over
+  separate pooled connections (pool key `(transport, addr:port, identity)`), stamped on every request
+  the line originates. New: `ConnectOptions.LineTls`, `TlsConfiguration.ClientCertificate` (caller-owned
+  in-memory `X509Certificate2`, precedence over `CertificatePath`). See the
+  [SIP mTLS guide](guides/sip-tls-mtls.md). (#183)
+- **Public PCM transcoding surface** (`CalloraVoipSdk.Audio.Abstractions`): `IAudioPayloadCodec` +
+  `AudioPayloadCodecFactory` transcode Opus / G.711 / G.722 ↔ PCM16 for a server-side mixer/SFU, with no
+  Concentus/NAudio in any public signature and no new `PackageReference`. See the
+  [audio transcoding guide](guides/audio-transcoding.md). (#205)
+- **Fail-closed SIP-TLS server trust:** `SipTlsTrustMode { System, DangerousAcceptAnyChain }` +
+  `TlsConfiguration.TrustMode`, strict RFC 5922 §7.2 SIP-domain identity and RFC 5924 §5 EKU policy;
+  `AcceptUntrustedCertificates` is now an `[Obsolete]` alias. (#164)
+- **Configurable SIP inbound hardening** (`SipTransportHardeningConfiguration` /
+  `SipSignalingHardeningConfiguration`, defaults equal to the built-in limits) and a **DTLS handshake
+  deadline** (`DtlsHandshakeOptions.HandshakeTimeout`, default 20 s →
+  `DtlsSrtpHandshakeTimeoutException`). (#158, #163)
+
+**Security & correctness**
+
+- **DTLS-SRTP:** constant-time fingerprint comparison (RFC 5763/8122), private-identity zeroing, a
+  stateless HelloVerifyRequest cookie before the certificate flight (RFC 6347 §4.2.1), ordered
+  single-writer egress with a `close_notify` drain, and the association is now serviced after key export
+  — a peer `close_notify`/alert ends it deterministically and surfaces as WebRTC
+  `connectionState = "closed"` (RFC 8827 §6.5). (#190, #191, #192, #193, #163)
+- **STUN/TURN:** Binding success responses require MESSAGE-INTEGRITY when credentials were sent (a
+  non-conforming ICE server triggers a logged host-only fallback), `StunMessageCodec.Decode` rejects the
+  whole message fail-closed, stateless STUN nonce, TCP/TLS slowloris deadlines, and surplus TURN
+  allocations are torn down immediately with `LIFETIME=0` (RFC 8656). (#156, #184, #188)
+- **RTP/RTCP DoS caps:** RTCP compound budgets, a transport-cc feedback expansion cap, depacketiser
+  frame caps and a BUNDLE reception-state cap; plaintext legs discard foreign RTP/RTCP bound to the
+  latch and suppress foreign SSRC-collision reseeds (RFC 3550 §8.2). (#161, #162)
+- **SDP/WebRTC:** a structurally non-conforming remote answer is rejected (RFC 3264 §6 / RFC 8829), the
+  offerer sends the codec the answer accepted (RFC 3264 §6.1), BUNDLE is grouped semantically not by
+  string prefix (RFC 5888/8843/9143), and per-media-section collection caps bound the parser. (#160)
+- **Fixed:** inbound audio now carries its real RTP timestamp (`EncodedFrame.RtpTimestamp`, RFC 3550
+  §5.1) — an SFU no longer stamps forwarded audio at `0`; `SipCredentials.ToString()` redacts the
+  password; a 416 no longer downgrades `sips:` to `sip:`. (#170, #165, #158)
+
 ### 4.7.2 — 2026-08-01
 
 **ICE connection-setup latency patch.** The internal ICE connectivity-check scheduler is reworked into a

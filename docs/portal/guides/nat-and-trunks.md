@@ -19,6 +19,10 @@ using var client = new VoipClient(new VoipConfiguration
 With `AddCalloraVoip(...)` use `options.DefaultTransport` or `builder.WithTransport(SipTransport.Tls)`.
 A `sips:` scheme or an explicit `;transport=` on the target URI still overrides the default per call.
 
+Over TLS/WSS each line can present its **own** client certificate for mutual TLS, with a per-line trust
+mode and RFC 5922 SIP-domain check — two accounts to the same trunk stay isolated. See
+[SIP over TLS (mutual TLS)](sip-tls-mtls.md).
+
 ## Advertised media address
 
 The SDK resolves the media address it advertises in SDP so it does not offer a loopback
@@ -49,7 +53,9 @@ Full ICE (RFC 8445 / RFC 7675) is implemented and **opt-in** — role + tie-brea
 restart initiation (`ICall.RestartIceAsync()`, RFC 8445 §9). Enable it via `VoipConfiguration.Ice`.
 It is off by default and **not yet proven in production trunks**, so validate it against your own
 network before relying on it; without ICE, plan for a media-relaying/SBC path on hostile NAT. On the
-WebRTC side the same ICE stack *is* exercised in CI against real browsers and a real coturn relay.
+WebRTC side the same ICE stack *is* exercised in CI against real browsers and a real coturn relay. A
+lost (unretained) TURN relay allocation is torn down immediately with a `LIFETIME=0` refresh rather
+than holding a port/permissions/quota until it expires (RFC 8656 §7/§3.9).
 
 ## Registering against a trunk
 

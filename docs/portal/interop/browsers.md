@@ -39,6 +39,15 @@ The peer binds to the host's LAN IPv4 rather than loopback: Firefox does not gen
 candidates, so both sides must offer the same routable address. Browser `.local` mDNS candidates
 are resolved through the SDK's `IMdnsResolver` seam (RFC 8828) instead of being dropped.
 
+## Connection lifecycle (4.8)
+
+When the browser closes the DTLS association (`close_notify`/alert), the peer ends the association and
+surfaces `State == PeerConnectionState.Closed` — media does not keep flowing under a keying channel the
+peer considers closed (RFC 8827 §6.5). A STUN Binding success is only trusted when it carries
+MESSAGE-INTEGRITY after credentials were sent (RFC 5389 §10.1.2); a non-conforming server that omits it
+triggers a safe, logged **host-only** fallback rather than being trusted — useful to know if a
+misconfigured STUN/TURN server yields host-only candidates.
+
 ## Known limits
 
 - **Safari / WebKit** — a `BrowserEngine.WebKit` exists in the matrix, but no verified run.

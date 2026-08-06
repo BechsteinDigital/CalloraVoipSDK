@@ -46,7 +46,7 @@ The client also carries the high-level verbs most apps need directly:
 | `UserAgent` | `"CalloraVoipSdk/1.0"` | SIP `User-Agent` header |
 | `LoggerFactory` | `null` | `ILoggerFactory` for diagnostics |
 | `DefaultTransport` | `Udp` | Default outbound SIP transport: UDP / TCP / TLS / WS / WSS |
-| `Tls` | `null` | TLS settings for the TLS/WSS transports |
+| `Tls` | `null` | Client-wide TLS settings for the TLS/WSS transports. Per-line client certificates and server-trust modes: [SIP over TLS (mutual TLS)](../guides/sip-tls-mtls.md) |
 | `SrtpPolicy` | `Optional` | `Disabled` / `Optional` / `Required` — see [SRTP/SRTCP](../guides/srtp-srtcp.md) |
 | `OfferDtlsSrtp` | `false` | Offer DTLS-SRTP keying (RFC 5763) instead of SDES |
 | `RequireSecureSignalingForSdes` | `false` | Refuse SDES keying over insecure signalling (UDP/TCP/WS) |
