@@ -6,6 +6,7 @@
   CalloraVoipSdk.ConnectOptions..ctor()
   CalloraVoipSdk.ConnectOptions.Default : CalloraVoipSdk.ConnectOptions { get }
   CalloraVoipSdk.ConnectOptions.FailFastOnRegistrationFailed : System.Boolean { get, init }
+  CalloraVoipSdk.ConnectOptions.LineTls : CalloraVoipSdk.Core.Application.Ports.Security.TlsConfiguration { get, init }
   CalloraVoipSdk.ConnectOptions.Timeout : System.TimeSpan { get, init }
   CalloraVoipSdk.ConnectResult.Canceled(CalloraVoipSdk.Core.Domain.Lines.IPhoneLine line, System.Nullable<CalloraVoipSdk.Core.Domain.Lines.LineState> finalState = default) : CalloraVoipSdk.ConnectResult
   CalloraVoipSdk.ConnectResult.Error : System.Exception { get }
@@ -288,6 +289,7 @@
   CalloraVoipSdk.Core.Application.Ports.Security.TlsConfiguration.AcceptUntrustedCertificates : System.Boolean { get, init }
   CalloraVoipSdk.Core.Application.Ports.Security.TlsConfiguration.CertificatePassword : System.String { get, init }
   CalloraVoipSdk.Core.Application.Ports.Security.TlsConfiguration.CertificatePath : System.String { get, init }
+  CalloraVoipSdk.Core.Application.Ports.Security.TlsConfiguration.ClientCertificate : System.Security.Cryptography.X509Certificates.X509Certificate2 { get, init }
   CalloraVoipSdk.Core.Application.Ports.Security.TlsConfiguration.ExpectedSipDomain : System.String { get, init }
   CalloraVoipSdk.Core.Application.Ports.Security.TlsConfiguration.TrustMode : CalloraVoipSdk.Core.Application.Ports.Security.SipTlsTrustMode { get, init }
   CalloraVoipSdk.Core.Application.Ports.Video.IVideoDevice.Connect(CalloraVoipSdk.Core.Application.Media.IVideoReceiver receiver, CalloraVoipSdk.Core.Application.Media.IVideoSender sender, CalloraVoipSdk.Core.Application.Ports.Video.VideoConnectionParameters parameters) : System.Void
