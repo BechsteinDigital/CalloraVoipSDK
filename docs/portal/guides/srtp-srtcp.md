@@ -61,7 +61,12 @@ yields a failed call rather than a silent downgrade.
 ## Limitations
 
 - Keying is **SDES** (`a=crypto`). DTLS-SRTP is available separately (RFC 5763, opt-in via
-  `VoipConfiguration.OfferDtlsSrtp`) and is not the SDES negotiation path described here.
+  `VoipConfiguration.OfferDtlsSrtp`) and is not the SDES negotiation path described here. On the DTLS
+  path (4.8) the handshake has a self-tripped deadline (`DtlsHandshakeOptions.HandshakeTimeout`,
+  default 20 s → `DtlsSrtpHandshakeTimeoutException`), and after keying the association is serviced: a
+  peer `close_notify`/alert ends it deterministically rather than leaving media flowing under a channel
+  the peer considers closed (RFC 8827 §6.5). On the WebRTC/bundle path this surfaces as
+  `connectionState = "closed"` ([ADR-066](../adr/ADR-066-dtls-post-handshake-association-servicing.md)).
 - For maximum interop over SDES, `AES_CM_128_HMAC_SHA1_80` remains the safest choice — it is what
   virtually every PBX and trunk supports.
 - SRTP protects the media path; it does not by itself secure signaling — run SIP over TLS

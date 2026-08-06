@@ -255,6 +255,14 @@ Typische Erweiterungspunkte:
 
 ## 5. Bekannte Baustellen (Stand 2026-07-28, Release 4.6.0)
 
+> **Nachtrag 4.8.0 (2026-08-06):** Seit dieser Bestandsaufnahme landeten die ICE-Setup-Latenz-Überarbeitung
+> (4.7.2) und ein **stack-weiter Härtungs-Sweep** aus Review-Findings über DTLS/STUN/TURN/RTP/RTCP/SDP/SIP
+> (4.8.0), plus per-Line-mTLS ([ADR-064](docs/adr/ADR-064-per-line-sip-mutual-tls.md)), eine öffentliche
+> PCM-Transcoding-Fläche ([ADR-065](docs/adr/ADR-065-public-pcm-transcoding-surface.md)) und
+> DTLS-post-handshake-`close_notify`-Servicing ([ADR-066](docs/adr/ADR-066-dtls-post-handshake-association-servicing.md)).
+> Die einzelnen Punkte unten stammen aus dem 4.6.0-Stand — Details zu allem Neuen in
+> [`CHANGELOG.md`](CHANGELOG.md) und [`RELEASE_NOTES_4.8.0.md`](RELEASE_NOTES_4.8.0.md).
+
 Quellen: `docs/audit/INTEROP_SOAK_AUDIT.md` (F-Register) und die Tiefenanalyse 2026-07-22
 (`docs/audit/2026-07-22-quelltext-tiefenanalyse.md`). **Sämtliche P1-Befunde der Tiefenanalyse
 (SIP-Re-ACK, Digest-Retry auf UPDATE/SUBSCRIBE, `+sip.instance`, SRTCP-Auth-Tag, TURN-Send-Indication

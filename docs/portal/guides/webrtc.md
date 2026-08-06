@@ -51,6 +51,19 @@ await peer.SendAudioAsync(encodedOpusPayload);
 Prefer full control? Drive it yourself with the neutral primitives: `CreateOffer()`,
 `SetRemoteDescriptionAsync(sdp)`, `StartAsync()`.
 
+### Negotiation correctness (4.8)
+
+- A structurally non-conforming remote answer is **rejected** (RFC 3264 §6 / RFC 8829): m-line
+  count/order, 1:1 MIDs, transport profile, PT subset and BUNDLE-group subset are validated, and the
+  offerer fails closed (`State → Failed`) instead of proceeding on a mismatched answer.
+- The offerer sends the codec the **answer accepted** (RFC 3264 §6.1), not always its own first offered
+  codec; with no common codec it logs a warning and fails closed.
+- Inbound audio now carries its real RTP timestamp (`EncodedFrame.RtpTimestamp`, RFC 3550 §5.1) — an
+  SFU forwarding received audio no longer stamps it at `0`.
+- A peer DTLS `close_notify`/alert ends the association and surfaces as
+  `State == PeerConnectionState.Closed` (`ConnectionStateChanged`, RFC 8827 §6.5) — media does not keep
+  flowing under a keying channel the peer has closed.
+
 ### Trickle ICE
 
 Implement `IWebRtcTrickleSignaling` (it extends `IWebRtcSignaling`) instead of the plain interface and
