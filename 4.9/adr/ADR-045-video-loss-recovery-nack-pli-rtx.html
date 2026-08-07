@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-045: Video Loss Recovery — Gated NACK/PLI Feedback and RTX | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-045: Video Loss Recovery — Gated NACK/PLI Feedback and RTX | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-045-video-loss-recovery-nack-pli-rtx.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-045-video-loss-recovery--gated-nackpli-feedback-and-rtx">ADR-045: Video Loss Recovery — Gated NACK/PLI Feedback and RTX</h1>
+
+<p>Status: Accepted
+Date: 2026-07-14</p>
+<h2 id="context">Context</h2>
+<p>Video loss recovery has two halves over the video RTCP-mux channel: the <strong>receiver</strong> signals loss
+(a Generic NACK naming the lost sequence numbers, RFC 4585 §6.2.1, plus a PLI keyframe fallback,
+RFC 4585 §6.3.1) and the <strong>sender</strong> answers a NACK by retransmitting the packets on an RTX repair
+stream (RFC 4588). Inbound PLI/FIR is surfaced to the application as a keyframe request. This ADR
+covers the feedback + retransmit behaviour; the SDP that gates it is ADR-C12-01, the reorder
+window that consumes recovered packets is ADR-C12-02, and the RTX repair-stream keying is
+ADR-C12-04.</p>
+<h3 id="verified-current-state-graphify-grounded">Verified current state (graphify-grounded)</h3>
+<ul>
+<li><code>VideoKeyFrameFeedback</code> (<code>src/Core/Infrastructure/Rtp/VideoKeyFrameFeedback.cs</code>) runs both
+directions on the single-stream video RTCP channel. <code>OnRtcpPackets</code> (L64-98): any PLI/FIR →
+<code>KeyFrameRequested</code> callback (for the encoder); a Generic NACK → <code>_onRetransmitRequested</code>.
+<code>OnLoss</code> (L108-125): sends a Generic NACK <strong>only if <code>_remoteSupportsNack</code> and the missing set is
+non-empty</strong>, plus a throttled PLI <strong>only if <code>_remoteSupportsPli</code></strong> — feedback the peer did not
+advertise in <code>a=rtcp-fb</code> is never sent (RFC 4585 §3). PLI is throttled to 1/500 ms
+(<code>PliThrottleTicks</code>, L19). NACK bitmask grouping (<code>BuildNackEntries</code>, L155-178) is RFC 4585
+§6.2.1-exact (bit i = PID + i + 1). PLI/FIR sent SRTCP-protected via <code>SendControlAsync</code>,
+suppressed before DTLS.</li>
+<li>Loss detection is <strong>arrival-order and reorder-safe</strong>: <code>VideoArrivalLossTracker.Track</code>
+(<code>src/Core/Infrastructure/Rtp/VideoArrivalLossTracker.cs</code> L34) / <code>LossReport</code> (L61) is tri-state:
+<code>null</code> for in-order/duplicate/reorder (no signal), empty for a forward gap &gt; 256 (PLI only), a
+list for a small forward gap [2..256] (NACK + PLI). The highest-seen reference advances only on
+forward progress (L48-50) so a single reorder costs at most one signal, not a spurious cascade.</li>
+<li>Sender RTX: <code>VideoRtpStream.OnRetransmitRequested</code> (L275-289) pulls each still-buffered original
+from <code>RtpRetransmissionBuffer</code>, re-wraps it with the rtx PT/SSRC and a fresh rtx sequence
+(<code>RtxPacketFactory.Encapsulate</code>), and sends on the secondary stream. Sent packets are retained
+via <code>_rtp.PacketSent += _retransmitBuffer.Store</code> (L182). The rtx SSRC is full-range random
+(<code>RtpRandom.NextSsrc</code>, L179) — not a guessable 31-bit value.</li>
+<li>Receiver RTX: inbound repair packets (<code>SecondaryPacketReceived</code> → <code>OnRtxPacketReceived</code>,
+L419-434) are decapsulated and fed into the reorder window.</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<ol>
+<li><strong>Feedback is strictly gated on the peer's advertised <code>a=rtcp-fb</code>.</strong> NACK only if the peer
+offered <code>nack</code>; PLI only if it offered <code>nack pli</code>. A peer with no <code>a=rtcp-fb</code> gets no loss
+feedback.</li>
+<li><strong>Loss classification is tri-state and reorder-safe.</strong> In-order/duplicate/reorder → nothing;
+small forward gap → NACK the enumerated sequences + PLI; large forward gap (&gt; 256) → PLI only
+(enumerating is pointless, a keyframe recovers faster). This is what suppresses the spurious
+NACK+PLI storm every reorder used to trigger.</li>
+<li><strong>Signal loss on arrival, recover in order.</strong> Loss is detected arrival-order (fast NACK, before
+the reorder window slides past the gap); ordered delivery and depacketiser reset are downstream.</li>
+<li><strong>RTX send path is closed; the recovered packet re-enters the reorder window on receive.</strong> The
+sender retransmits on the repair stream; the receiver decapsulates into the reorder buffer.</li>
+</ol>
+<h3 id="crux">Crux</h3>
+<p>Detecting loss on <strong>arrival</strong> (not on release from the reorder window) is deliberate: it fires the
+NACK as early as possible, before the window can slide past the gap, at the cost of an occasional
+spurious NACK on a reorder — harmless, since the duplicated RTX is dropped downstream as a
+duplicate/too-late. The reorder-safe advance of the highest-seen reference is the mechanism that
+keeps one reorder from being read as a fresh forward gap on every following in-order packet.</p>
+<h2 id="consequences">Consequences</h2>
+<p>Positive: the recovery loop is RFC-correct and bandwidth-honest (no spurious feedback storms);
+an RTX-capable, jitter-buffering peer gets genuine packet recovery.</p>
+<p>Divergence / honesty:</p>
+<ul>
+<li><strong>No RFC 4585 NACK timing (RTCP bandwidth share).</strong> NACKs are sent per-gap, ungoverned by the
+RTCP interval — noted follow-up.</li>
+<li><strong>FIR is honoured on receive but never generated</strong> (<code>VideoKeyFrameFeedback</code> class doc L15).</li>
+<li>A <strong>forward loss ≥ half the sequence space is classified as reorder</strong> and not detected
+(<code>VideoArrivalLossTracker.LossReport</code> doc L55-60) — pathological, documented.</li>
+<li>A peer with <strong>no <code>a=rtcp-fb</code> gets no feedback</strong> — a behaviour change from the earlier
+unconditional PLI, but not a regression against SDK↔SDK or standard WebRTC peers (our offer
+always carries <code>nack</code> + <code>nack pli</code>).</li>
+</ul>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li>Feedback gated on peer capabilities; fail-closed identically to the PLI path (no plaintext RTCP
+before DTLS/SRTCP).</li>
+<li>NACK bitmask stays RFC 4585 §6.2.1-symmetric (bit i = PID + i + 1); missing list must be
+ascending (<code>OnLoss</code> contract, L104-106).</li>
+<li>Loss classification stays reorder-safe (highest-seen advances only forward).</li>
+<li>rtx SSRC full-range random; RTX runs on the receive-loop thread (single consumer, no extra lock).</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Logs: <code>docs/archive/agent-log/2026-07-14-dev-video-pli-feedback.md</code>,
+<code>…-video-nack-gating.md</code>, <code>…-video-reorder-loss-signalling.md</code>,
+<code>…-video-rtx-retransmit.md</code>, <code>…-video-rtx-receive.md</code>.</li>
+<li>Code (graphify-verified): <code>src/Core/Infrastructure/Rtp/VideoKeyFrameFeedback.cs</code>
+(<code>OnRtcpPackets</code> L64, <code>OnLoss</code> L108, <code>RequestThrottledPli</code> L127, <code>BuildNackEntries</code> L155);
+<code>src/Core/Infrastructure/Rtp/VideoArrivalLossTracker.cs</code> (<code>Track</code> L34, <code>LossReport</code> L61);
+<code>src/Core/Infrastructure/Rtp/VideoRtpStream.cs</code> (<code>OnRetransmitRequested</code> L275,
+<code>OnRtxPacketReceived</code> L419, retransmit buffer wiring L174-187);
+<code>src/Core/Infrastructure/Rtp/Retransmission/RtxPacketFactory.cs</code>, <code>RtpRetransmissionBuffer.cs</code>.</li>
+<li>RFC: 4585 §3 (mode negotiation), §6.2.1 (Generic NACK), §6.3.1 (PLI); 4588 (RTX);
+5104 §4.3.1 (FIR); 3550 §8.1 (SSRC randomness).</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-045-video-loss-recovery-nack-pli-rtx.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

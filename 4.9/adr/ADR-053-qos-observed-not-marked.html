@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-053: QoS as an Observed Metric, Not a Marked Packet | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-053: QoS as an Observed Metric, Not a Marked Packet | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-053-qos-observed-not-marked.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-053-qos-as-an-observed-metric-not-a-marked-packet">ADR-053: QoS as an Observed Metric, Not a Marked Packet</h1>
+
+<p>Status: Accepted
+Date: 2026-07-08</p>
+<h2 id="context">Context</h2>
+<p>VoIP call quality on a shared network is governed by two levers: <strong>marking</strong> outbound media so
+routers can prioritise it (Differentiated Services / DSCP, e.g. EF for RTP per RFC 4594), and
+<strong>observing</strong> the delivered quality (RFC 3550 interarrival jitter, RTCP-derived round-trip time,
+loss). The C15 cluster raised QoS as a product concern. The concrete work that landed under it was
+not packet marking at all — it was making the <em>observation</em> plane correct after a real Fritz!Box
+acceptance call surfaced two frozen metrics: <code>jitterMs</code> stuck at exactly the 20 ms frame interval,
+and <code>rttMs</code> stuck at a never-updated 60 ms default.</p>
+<p>This ADR records the deliberate stance the cluster settled: the SDK <strong>measures</strong> QoS and feeds the
+adaptive media path from those measurements; it does <strong>not</strong> DSCP/ToS-mark media sockets.</p>
+<h3 id="verified-current-state">Verified current state</h3>
+<ul>
+<li><strong>No DSCP / ToS / traffic-class marking exists anywhere in production code.</strong> A tree-wide search
+for <code>dscp | typeofservice | SetSocketOption | IPTOS | traffic-class | qos</code> over <code>*.cs</code> in <code>src/</code>
+returns zero production hits — the only <code>qos</code> match is the test name
+<code>tests/.../QosMetricsTests.cs</code>. Every media UDP socket is created plain: <code>RtpSession</code>
+(<code>Infrastructure/Rtp/Session/RtpSession.cs:166</code>), <code>BundledMediaTransport</code>
+(<code>Infrastructure/Rtp/BundledMediaTransport.cs:101</code>), the SIP audio/video sockets in
+<code>Infrastructure/Sip/Adapters/SipCoreCallChannel.cs:143/148</code>, and the WebRTC socket in
+<code>Infrastructure/WebRtc/WebRtcPeerConnection.cs:780</code>. The media socket sets only
+<code>ReceiveBufferSize</code> and <code>Bind</code> (<code>RtpSession.cs:167-170</code>) — no <code>SetSocketOption</code> for
+<code>IP_TOS</code>/<code>SO_PRIORITY</code>, no <code>DontFragment</code>.</li>
+<li><strong>No QoS config surface exists.</strong> <code>src/Core/Sdk/</code> has no DSCP/priority/QoS option; nothing is
+configurable because nothing is marked.</li>
+<li><strong>The jitter estimator is RFC 3550 §6.4.1</strong> and now measures variance, not the frame interval.
+<code>BundledSourceReceptionState.UpdateJitter</code> (<code>Infrastructure/Rtp/BundledSourceReceptionState.cs:201</code>)
+computes <code>transitDifference = |arrivalDeltaRtpUnits − rtpDelta|</code> and smooths
+<code>J += (transitDifference − J)/16</code>. The original defect was a <code>double → uint</code> saturation of the
+arrival time (~1.4e13 ≫ <code>uint.MaxValue</code>) that pinned every arrival to the same value, collapsing
+<code>J</code> onto exactly one frame duration; the fix was integer arithmetic with an explicit
+modulo-2³² <code>unchecked</code> truncation. Exposed via <code>IJitterBuffer.EstimatedJitterMs</code>
+(<code>Infrastructure/Rtp/JitterBuffer/IJitterBuffer.cs:18</code>) → <code>CallMediaRuntimeMetrics.EstimatedJitterMs</code>
+(<code>Application/Media/CallMediaRuntimeMetrics.cs:76</code>).</li>
+<li><strong>RTCP-derived RTT is now actually delivered to the media path.</strong> <code>CallRtcpQualityMonitor</code>
+computes RTT from LSR/DLSR and pushes it via
+<code>ICallMediaSession.UpdateRoundTripTimeHint</code> (<code>Application/Media/ICallMediaSession.cs:28</code>,
+fed at <code>CallRtcpQualityMonitor.cs:555</code>) into <code>RtpCallMediaSession.UpdateRoundTripTimeHint</code>
+(<code>Infrastructure/Rtp/RtpCallMediaSession.cs:333</code>) and the bundled equivalent
+(<code>BundledCallMediaSession.cs:71</code>). Before the fix the value was computed but stranded in the
+monitor, so the buffer kept its <code>InitialRoundTripTimeMs</code> default forever
+(comment preserved at <code>CallRtcpQualityMonitor.cs:552</code>).</li>
+<li>Correctness is pinned by <code>tests/.../QosMetricsTests.cs</code>, whose own doc-comment names the
+regression (&quot;jitterMs froze at exactly the frame interval (20.00 ms) … rttMs reported the
+never-updated 60 ms default&quot;).</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<p>Treat QoS as an <strong>observed and consumed</strong> signal, not a marked one:</p>
+<ol>
+<li><strong>Measure</strong> interarrival jitter (RFC 3550 §6.4.1) and RTCP-derived RTT correctly, and surface
+them on the runtime metrics (<code>EstimatedJitterMs</code>, the RTT hint feed).</li>
+<li><strong>Feed the adaptive media path</strong> from those measurements — the RTT hint drives the jitter
+buffer's delay floor (RTT consumption mechanics are owned by C09-02), so the observation plane
+is not merely a dashboard but an input to playout.</li>
+<li><strong>Do not DSCP/ToS-mark media sockets.</strong> No <code>IP_TOS</code>/<code>SO_PRIORITY</code> socket option is set on any
+media socket, and no QoS config surface is offered.</li>
+</ol>
+<h3 id="crux">Crux</h3>
+<p>The cluster name (&quot;QoS&quot;, with an implied &quot;mark RTP as EF&quot;) and what shipped diverge on purpose.
+DSCP marking is cheap to <em>set</em> but <strong>not portable and rarely honoured</strong>: on Windows the OS strips
+application-set DSCP unless a Group-Policy QoS policy grants it (raw <code>IP_TOS</code> is ignored for
+non-admin processes), and end-to-end it survives only inside a single administratively-controlled
+DiffServ domain — across the public Internet or a consumer CPE (the Fritz!Box in the field report)
+the codepoint is almost always re-bleached to best-effort. A marking the SDK cannot guarantee is
+worse than none: it invites a false &quot;QoS is handled&quot; claim. The measurable, always-available lever
+is the observation plane feeding the adaptive buffer, so that is what was built and hardened.</p>
+<h2 id="consequences">Consequences</h2>
+<p>Positive: jitter now reports true variance and RTT tracks the real RTCP measurement, both feeding
+the adaptive delay floor — the metrics are trustworthy inputs, not decoration. No unportable,
+silently-dropped socket option sits in the media path pretending to prioritise traffic.</p>
+<p>Honest divergence / limits:</p>
+<ul>
+<li><strong>This is a negative decision on the cluster's headline feature.</strong> There is <em>no</em> EF/DSCP marking
+for RTP. A deployment that owns its DiffServ domain and wants router-level prioritisation gets
+nothing from the SDK today and would need the follow-up below. The cluster label &quot;QoS&quot; overstates
+what is implemented if read as &quot;traffic prioritisation&quot;.</li>
+<li>Jitter resolution is bounded at ~1 ms by the <code>ToUnixTimeMilliseconds</code> arrival quantisation
+(≈ 8 RTP units at 8 kHz) — sufficient for telephony monitoring; sub-ms would need a
+Stopwatch-based receive clock (this is partially superseded by the C21 monotonic-clock work).</li>
+<li>RTT only converges once the peer references our SR via LSR; the value stays at the
+<code>InitialRoundTripTimeMs</code> seed until the first qualifying inbound report (seed mechanics: C09-02).</li>
+<li>The monitor's raw RTT snapshot and the buffer's smoothed RTT deliberately differ slightly for the
+same source.</li>
+</ul>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li>No media socket may set <code>IP_TOS</code>/<code>SO_PRIORITY</code>/DSCP without an accompanying decision, because a
+silently-dropped marking is a false capability claim; if marking is added it must be explicitly
+documented as best-effort and per-deployment opt-in, never a default that implies guarantees.</li>
+<li>The jitter estimator must keep measuring variance, not the frame interval: the integer /
+<code>unchecked</code> truncation in <code>UpdateJitter</code> must not regress to floating-point arrival conversion
+(<code>QosMetricsTests</code> &quot;perfectly-timed arrivals → jitter &lt; 2 ms&quot; is the guard).</li>
+<li>A computed QoS metric must reach its consumer, not strand in the monitor: RTCP-derived RTT stays
+wired through <code>UpdateRoundTripTimeHint</code> to the media session
+(<code>QosMetricsTests</code> &quot;valid LSR/DLSR → session hint ≈ measured RTT&quot;).</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<ul>
+<li><code>docs/archive/agent-log/2026-07-08-dev-qos.md</code> — QoS-metrics run (jitter overflow root cause + RTT
+plumbing fix, tests, caveats).</li>
+<li><code>docs/reference/decision-inventory.md</code> — cluster C15 &quot;QoS/DSCP-Markierung Media&quot;.</li>
+<li>Code (verified): <code>Infrastructure/Rtp/BundledSourceReceptionState.cs:201</code> (jitter),
+<code>Infrastructure/Rtp/JitterBuffer/IJitterBuffer.cs:18</code>,
+<code>Application/Media/ICallMediaSession.cs:28</code> + <code>Application/Media/CallRtcpQualityMonitor.cs:555</code>
+(RTT feed), <code>Infrastructure/Rtp/Session/RtpSession.cs:166-170</code>,
+<code>Infrastructure/Rtp/BundledMediaTransport.cs:101</code>,
+<code>Infrastructure/Sip/Adapters/SipCoreCallChannel.cs:143/148</code>,
+<code>Infrastructure/WebRtc/WebRtcPeerConnection.cs:780</code> (plain sockets, no ToS),
+<code>tests/CalloraVoipSdk.Core.IntegrationTests/QosMetricsTests.cs</code>.</li>
+<li>Related ADRs: C09-02 (jitter-buffer RTT convergence seed — owns RTT <em>consumption</em>),
+C21-01 (monotonic media clock — the finer arrival-clock follow-up).</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-053-qos-observed-not-marked.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

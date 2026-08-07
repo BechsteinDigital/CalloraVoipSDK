@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-016: Peer-Calibrated Refactoring Backlog — Harden, Don&#39;t Rebuild | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-016: Peer-Calibrated Refactoring Backlog — Harden, Don&#39;t Rebuild | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-016-peer-calibrated-refactoring-backlog.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-016-peer-calibrated-refactoring-backlog--harden-dont-rebuild">ADR-016: Peer-Calibrated Refactoring Backlog — Harden, Don't Rebuild</h1>
+
+<p>Status: Accepted
+Date: 2026-07-17</p>
+<h2 id="context">Context</h2>
+<p>Before committing to a large structural refactor, the team ran a read-only architecture assessment
+of the whole Core (six fan-out audits over SIP / RTP+Media / SRTP+STUN+TURN+DTLS / SDP / Client+SDK
+/ Domain+Application), measured against three catalogs — Microsoft Framework Design Guidelines /
+SOLID / Clean Architecture, GoF patterns, and the refactoring.guru/Fowler smell→technique catalog —
+and <strong>peer-calibrated</strong> against SIPSorcery, PJSIP, baresip/libre, and Ozeki rather than applying the
+catalog blindly. The sibling <code>callora</code> repo had used the same method and found an anemic-domain
+problem; the question was whether <code>voip</code> had the same debt or a different shape.</p>
+<h3 id="verified-current-state">Verified current state</h3>
+<ul>
+<li><strong>DDD layering is clean and gate-backed.</strong> <code>LayeringBaseline = []</code> /
+<code>LayerSegmentBaseline = []</code> in <code>tests/CalloraVoipSdk.ArchitectureTests/EngineeringRulesTests.cs</code>
+(L20/L63) — matching the assessment's &quot;0 verifizierte Schichtverletzungen&quot;.</li>
+<li><strong>Rich Domain over peer median.</strong> Aggregates with invariants exist:
+<code>Call</code>/<code>PhoneLine</code> (<code>src/Core/Domain/Calls/Call.cs</code>, <code>Core.Domain.Calls</code>), validated value objects
+(<code>SipAddress</code>/<code>CallId</code>/<code>DtmfTone</code>). So the callora-style &quot;introduce value objects / rich
+aggregates&quot; refactor is N/A here.</li>
+<li><strong>The named God-Class site is real and has since been decomposed.</strong> <code>TurnServer</code>
+(<code>src/Core/Infrastructure/Turn/Server/TurnServer.cs</code> L26) now delegates to extracted collaborators
+— graphify shows <code>TurnAllocationRegistry</code>, <code>TurnAllocateRequestHandler</code>,
+<code>TurnServerResponseFactory</code>, <code>TurnPortReservationStore</code>, <code>TurnMobilityService</code>,
+<code>TurnTcpConnectionBroker</code>, <code>TurnTcpExtensionHandler</code> (R3 / HARD-G2 Extract-Class outcome), not a
+pure file-split.</li>
+<li><strong>The convention layer is codified.</strong> <code>ENGINEERING_RULES.md</code> records the K-conventions
+(K1 fail-closed, K2 enricher order, K3 threading, K4 trust-boundary error handling, K5 secrets)
+and R1–R6 as the mechanical rules — the vocabulary the assessment says &quot;the team already speaks&quot;.</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<p>Treat the gap to world-class as <strong>hardening + discipline, not a rebuild</strong>, and drive it through one
+merged, peer-calibrated backlog:</p>
+<ol>
+<li><strong>Merge the refactoring.guru R-list with the existing Hardening Paket G</strong> into a single
+prioritised order (R1=G1, R2=G3, R3⊆G2), so the two backlogs cannot diverge.</li>
+<li><strong>Adopt only three tight clusters</strong> as substantial work: (A) the <code>TurnServer</code> God-Class Extract
+Class; (B) genuine duplicate-code twins (crypto replay window SRTP≙SRTCP, SIP wire scanner, SDP
+keying ×3); (C) the already-noted G-items (namespace drift, silent-catch) which the audit confirms
+and broadens.</li>
+<li><strong>Explicitly reject</strong> catalog items that fight the peer norms or the zero-alloc/pass-through hot
+path: primitive-obsession wrapping of wire types (SSRC/PT/SeqNo), Visitor for wire codecs,
+State-pattern classes for the transaction/call FSM, config-type merge, and splitting long
+RFC-atomic wire/crypto/FSM methods. &quot;Ziel ist nicht 23/23.&quot;</li>
+<li><strong>Order by value/risk</strong>: R1 (namespace + arch-test tighten) → R2 (silent-catch) → R6 (DRY batch)
+→ R4 (crypto replay window) → R5 (<code>CallMediaParameters</code> record/<code>with</code>) → R7 (long param list) →
+R3/G2 (<code>TurnServer</code> split, biggest structural value, most invasive last).</li>
+</ol>
+<h3 id="crux-design-pieces">Crux design pieces</h3>
+<ul>
+<li><strong>Peer calibration as the filter.</strong> A smell in the Fowler catalog is only adopted if it also reads
+as debt against SIPSorcery/PJSIP/baresip/Ozeki; several catalog &quot;findings&quot; were actively refuted
+(primitive obsession, Visitor, State classes, long-method splits) because the peers do the same by
+design.</li>
+<li><strong>Merge, don't fork, the backlogs.</strong> R and Paket G become one order — the assessment's guardrail
+against maintaining two overlapping debt lists.</li>
+<li><strong>Guardrail-gap discovery.</strong> The assessment found the R2 namespace drift (<code>Core.Security</code> under
+<code>Domain/Security/</code>) was <em>invisible</em> to the then-current arch test (foreign-layer-only match), so
+the fix pairs a rename with tightening the gate to a full path match (HARD-G1 / R1) — now the
+<code>Schicht_Segment</code> gate at <code>EngineeringRulesTests.cs</code> L65 with <code>LayerSegmentBaseline = []</code>.</li>
+</ul>
+<h2 id="consequences">Consequences</h2>
+<p>Positive: a single, evidence-based, peer-calibrated backlog that avoids pattern-theater; the
+substantial adopts (TurnServer split, replay-window dedup, <code>with</code>-based param cloning, drift + gate
+fix) are the ones that reduce real risk (off-by-one SRTP/SRTCP sync, hand-copy bug vector,
+guardrail blind spot). The <code>TurnServer</code> decomposition and HARD-G1 fix have since landed and are
+code-verified.</p>
+<p>Tradeoffs: the assessment is a judgement layer, not a gate — its &quot;reject&quot; decisions rely on peer
+calibration that a future contributor could disagree with; they are recorded here so the rejection
+is a decision, not an oversight. The report itself is gitignored/local (&quot;Read-only Befund. Keine
+Edits.&quot;), so this ADR is its durable record.</p>
+<p><strong>Log↔code divergence:</strong> the assessment lists R-items with line numbers as of 2026-07-17; several
+have since been implemented (R3 <code>TurnServer</code> decomposed per graphify; HARD-G1 drift closed →
+<code>Core.Domain.Security</code>, gate at L65). Line numbers in the assessment are historical and were not
+re-verified; the direction (harden-not-rebuild, merged backlog, the reject list) is current.</p>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li>Refactoring adopts a catalog item only if it also reads as debt against the VoIP peer set — no
+blind catalog application, &quot;nicht 23/23&quot;.</li>
+<li>The R-list and Paket G stay one merged, prioritised order.</li>
+<li>Wire/crypto/FSM hot-path types keep loose primitives and RFC-atomic methods (no wrapping, no
+method-split) — the explicit reject list stands unless a peer-calibrated reason changes.</li>
+<li>Structural refactors preserve the empty layering/namespace baselines and the ≤1000-line rule.</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Logs: docs/archive/agent-log/2026-07-17-refactoring-assessment.md</li>
+<li>Code: tests/CalloraVoipSdk.ArchitectureTests/EngineeringRulesTests.cs
+(LayeringBaseline L20, LayerSegmentBaseline L63, namespace gate L65),
+src/Core/Infrastructure/Turn/Server/TurnServer.cs (L26, extracted collaborators via graphify),
+src/Core/Domain/Calls/Call.cs (rich aggregate), ENGINEERING_RULES.md (R1–R6, K1–K5)</li>
+<li>Marker: R1–R10, HARD-G1 (=R1), HARD-G2 (⊇R3), HARD-G3 (=R2), HARD-R5, Paket G</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-016-peer-calibrated-refactoring-backlog.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

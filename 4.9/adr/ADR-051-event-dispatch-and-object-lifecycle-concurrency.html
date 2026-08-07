@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-051: Event-Dispatch and Object-Lifecycle Concurrency Contract | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-051: Event-Dispatch and Object-Lifecycle Concurrency Contract | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-051-event-dispatch-and-object-lifecycle-concurrency.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-051-event-dispatch-and-object-lifecycle-concurrency-contract">ADR-051: Event-Dispatch and Object-Lifecycle Concurrency Contract</h1>
+
+<p>Status: Accepted
+Date: 2026-07-08</p>
+<h2 id="context">Context</h2>
+<p>The SDK raises domain and facade events (call state, DTMF, transfer, quality, ICE/congestion)
+from whichever thread the underlying work runs on: the SIP signalling thread for dialog events
+and the media/RTCP threads for quality events. There is no dispatcher thread and no captured
+<code>SynchronizationContext</code> — a handler runs inline on the thread that produced the event. That
+choice keeps latency and allocation low but makes two classes of concurrency bug easy to write:</p>
+<ol>
+<li><strong>Torn observation around a lock.</strong> If the mutable state is updated under a lock and the event
+is then raised <em>after</em> the lock is released, a subscriber can read a different value than the
+one the event reports, because a second writer can move the field in the window between unlock
+and invoke. The same window lets a handler that unsubscribes mid-dispatch race the iteration,
+and lets an event fire after the owning object has been disposed.</li>
+<li><strong>Field-by-field reads of a logically-paired state.</strong> Two related fields (host+port of the
+advertised contact; CSeq+branch of the active INVITE) are only meaningful as a pair. Reading
+them through two separate property accesses spans two lock scopes and can straddle a write,
+yielding a host from one negotiation and a port from the next.</li>
+</ol>
+<p>A separate but related lifetime hazard is the ICE path: the media-negotiation event handler is
+synchronous on the signalling thread, but ICE connectivity checks are inherently async, so the
+original code blocked the signalling thread with <code>.GetAwaiter().GetResult()</code> (the B.4 audit
+core finding). Blocking an SDK dispatch thread on network I/O is the lifecycle inverse of the
+torn-read problem: it is a correctness hazard created by mixing sync dispatch with async work.</p>
+<p>The governing rule is ENGINEERING_RULES <strong>K3</strong> (Threading contracts). This ADR records the
+concurrency contract for <em>event dispatch and object lifecycle</em>; the sibling C14-02 records the
+lock-free <em>media-hot-path</em> contract. Allocation hygiene (C07-01) and the tap <em>API shape</em>
+(C18-01) are separate decisions that obey — but do not define — this contract.</p>
+<h3 id="verified-current-state-graphify--code">Verified current state (graphify + code)</h3>
+<ul>
+<li><strong>Snapshot-inside-lock, invoke-outside-lock is the house pattern.</strong>
+<code>Call.TransitionTo</code> (<code>src/Core/Domain/Calls/Call.cs</code>, ~L370) validates and mutates state under
+<code>lock (_sync)</code> and snapshots the delegate <em>inside</em> the lock (<code>stateChangedSnapshot = StateChanged; // snapshot before releasing lock</code>), then invokes it after the lock is released. The other Call
+events (quality, ICE, congestion, key-frame-request) follow the same shape.</li>
+<li><strong>State is read lock-free via <code>volatile</code>.</strong> <code>private volatile int _stateInt</code> with
+<code>public CallState State =&gt; (CallState)_stateInt;</code> — reads take no lock; every write is under
+<code>_sync</code>. This is the deliberate trade recorded in the field comment.</li>
+<li><strong>Disposed-guard before dispatch.</strong> <code>SipCoreCallChannel</code> (<code>.../Sip/Adapters/SipCoreCallChannel.cs</code>)
+gates every inbound event handler on <code>Volatile.Read(ref _disposed) != 0</code> before touching the
+notifier, because the <code>-=</code> unsubscribe in <code>Dispose()</code> races in-flight deliveries on a background
+thread.</li>
+<li><strong>Handler iteration over a snapshot.</strong> <code>SipTransportRuntime.DispatchRequest</code>/<code>DispatchResponse</code>
+iterate <code>_requestHandlers.Values.ToArray()</code> — a snapshot taken before iterating — so a handler
+that unsubscribes itself cannot mutate the collection under the loop.</li>
+<li><strong>Paired state read/written atomically (HARD-C1/C2).</strong>
+<code>SipCallSessionContextAdapter</code> (<code>.../Sip/Signaling/Dialogs/</code>) exposes
+<code>AdvertisedPublicContact =&gt; { lock(_sync) return (host, port); }</code> (HARD-C1) and
+<code>ActiveInvite</code> / <code>SetActiveInvite</code> / <code>ClearActiveInvite</code> (HARD-C2) as single-lock snapshot
+APIs; the individual-field getters exist but the paired API is the documented correct path.
+<code>SipActiveInviteStateConsistencyTests.Active_invite_snapshot_is_observed_as_a_consistent_pair_under_concurrency</code>
+drives concurrent writers/readers and asserts zero torn reads.</li>
+<li><strong>Idempotent dispose via <code>Interlocked.Exchange</code>.</strong> ~20 threaded types in <code>src/</code> open Dispose with
+<code>if (Interlocked.Exchange(ref _disposed, 1) != 0) return;</code> (canonical:
+<code>MediaConnection.Dispose</code>, <code>.../Application/Media/MediaConnection.cs</code>).</li>
+<li><strong>Async hygiene.</strong> <code>ConfigureAwait(false)</code> is pervasive (~674 sites in <code>src/</code>); every
+<code>TaskCompletionSource</code> in <code>src/</code> is constructed with <code>TaskCreationOptions.RunContinuationsAsynchronously</code>;
+fire-and-forget starts go through fault-observing helpers (e.g. <code>PhoneLine.ObserveHangupAsync</code>
+logs the fault; <code>Call</code> dispose-hangup uses <code>ContinueWith(..., OnlyOnFaulted, TaskScheduler.Default)</code>).</li>
+<li><strong>ICE sync-over-async removed.</strong> <code>CallMediaOrchestrator</code> runs media setup after ICE pair
+selection on a background <code>Task.Run</code> wrapped in try/catch-and-log; <code>CallMediaOrchestrator</code> is
+no longer in the ArchitectureTests <code>SyncOverAsyncBaseline</code>, so the gate structurally forbids the
+<code>.GetAwaiter().GetResult()</code> regressing. The non-ICE path is unchanged and synchronous.</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<p>Events fire <strong>synchronously on the producing SDK thread</strong> (SIP signalling or media/RTCP); the SDK
+does not marshal handlers to another thread. Handlers are contractually forbidden to block or
+throw. To make that sync-dispatch model correct under concurrency, every event-raising and
+lifecycle path obeys the following invariants:</p>
+<ol>
+<li><strong>Snapshot the delegate inside the lock, invoke outside it.</strong> The state write and the delegate
+capture happen atomically under the object's <code>_sync</code>; the invocation runs after unlock so a
+handler cannot re-enter the lock and cannot deadlock the producer. Subscribers therefore always
+observe the state the event reports.</li>
+<li><strong>Read hot, single-valued state lock-free via <code>volatile</code>; guard multi-field writes with the
+lock.</strong> A scalar like <code>CallState</code> is <code>volatile</code>; a paired state is only ever exposed through an
+atomic snapshot API.</li>
+<li><strong>Read/write logically-paired state as one snapshot (HARD-C1/C2), never field-by-field.</strong>
+<code>(host, port)</code> and <code>(cseq, branch)</code> are published, read, and cleared as tuples under one lock
+acquisition.</li>
+<li><strong>Guard dispatch and iteration against lifetime races.</strong> Check the disposed flag before
+dispatching an inbound event; iterate a <code>.ToArray()</code> snapshot when a handler may unsubscribe
+itself during the loop.</li>
+<li><strong>Dispose is idempotent and race-safe</strong> via a single <code>Interlocked.Exchange(ref _disposed, 1)</code>
+gate at the top of Dispose.</li>
+<li><strong>Async hygiene is non-negotiable in library code:</strong> <code>ConfigureAwait(false)</code> on every await,
+<code>RunContinuationsAsynchronously</code> on every <code>TaskCompletionSource</code>, and fire-and-forget only
+through a helper that observes and logs the fault. No SDK dispatch thread ever blocks on async
+work (no sync-over-async), enforced for the ICE path by the ArchitectureTests baseline gate.</li>
+</ol>
+<h3 id="crux">Crux</h3>
+<p>The load-bearing insight is that <strong>synchronous inline dispatch is cheap and correct only if the
+producer never holds a lock across foreign handler code and never lets a second writer open a
+window between the state mutation and the notification.</strong> Capturing the delegate inside the same
+lock that commits the state collapses that window to zero without keeping the lock held over the
+untrusted handler. Everything else in the contract (atomic pairs, disposed-guard, snapshot
+iteration, idempotent dispose, no sync-over-async) removes the remaining lifetime and ordering
+races that the inline model would otherwise expose.</p>
+<h2 id="consequences">Consequences</h2>
+<p>Positive: subscribers see consistent, non-torn state; producers cannot deadlock on or be blocked
+by a misbehaving handler; disposal is safe against in-flight events; the ICE path no longer stalls
+the signalling thread, and a gate prevents the regression.</p>
+<p>Tradeoffs and honest divergences:</p>
+<ul>
+<li><strong>The contract is partly convention, partly gated.</strong> Only two facets are mechanically enforced:
+R6 (<code>no sync-over-async</code>, baseline-gated) and R5 (no silent catch). Snapshot-inside-lock, the
+HARD-C1/C2 atomic-pair discipline, <code>ConfigureAwait(false)</code>, and <code>RunContinuationsAsynchronously</code>
+are review-enforced conventions, not gates — a new torn-read or a missing <code>ConfigureAwait</code> would
+not fail CI today. The paired-state guarantee does have a dedicated concurrency stress test, but
+it covers <code>ActiveInvite</code>, not every paired field.</li>
+<li><strong>The individual-field getters for HARD-C1/C2 state still exist</strong> alongside the snapshot API; the
+discipline that callers use the snapshot path is documented, not compiler-forced.</li>
+<li><strong>&quot;Handlers must not block or throw&quot; is a contract on the consumer</strong>, unenforceable by the SDK; a
+blocking handler will stall the producing thread by design. Frame fan-out isolates handler faults
+(see C14-02), but the top-level event delegates rely on the documented rule.</li>
+<li><strong>Two event-raising styles coexist</strong>: capture-inside-lock (Call) and disposed-guard-then-notify
+(SipCoreCallChannel). Both are correct for their thread model; the split is deliberate, not drift.</li>
+</ul>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li>New event-raising code snapshots the delegate inside the lock and invokes outside; reviewers
+reject &quot;mutate under lock, raise after unlock&quot; without an in-lock capture.</li>
+<li>New logically-paired mutable state ships with an atomic snapshot API and carries a HARD-C1/C2-style
+marker; individual-field access to such state is a review finding.</li>
+<li>Every threaded type's Dispose opens with the <code>Interlocked.Exchange</code> idempotency gate.</li>
+<li>Library awaits use <code>ConfigureAwait(false)</code>; every <code>TaskCompletionSource</code> uses
+<code>RunContinuationsAsynchronously</code>; fire-and-forget goes through a fault-observing helper.</li>
+<li>No new <code>.GetAwaiter().GetResult()</code> in product code outside the reviewed <code>SyncOverAsyncBaseline</code>
+(Dispose/transport paths); the ArchitectureTests gate enforces this and its baseline may only shrink.</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>ENGINEERING_RULES.md — K3 (Threading contracts), R5 (no silent catch), R6 (no sync-over-async baseline).</li>
+<li>docs/archive/agent-log/2026-07-08-dev-b4-threading.md — ICE sync-over-async removal, gate-enforced.</li>
+<li>docs/thread-memory-safety-analysis.md — race catalogue (StateChanged-outside-lock, unsynchronised
+session properties, handler-iteration snapshot, disposal-vs-event race) that this contract closes.</li>
+<li>Code (graphify-oriented, then read): <code>src/Core/Domain/Calls/Call.cs</code> (<code>TransitionTo</code>, <code>State</code>);
+<code>src/Core/Infrastructure/Sip/Adapters/SipCoreCallChannel.cs</code> (disposed-guard);
+<code>src/Core/Infrastructure/Sip/Transport/SipTransportRuntime.cs</code> (<code>.ToArray()</code> dispatch);
+<code>src/Core/Infrastructure/Sip/Signaling/Dialogs/SipCallSessionContextAdapter.cs</code> (HARD-C1/C2);
+<code>src/Core/Application/Media/MediaConnection.cs</code> (idempotent Dispose);
+<code>src/Core/Application/Media/CallMediaOrchestrator.cs</code> (background media setup, fault-logged);
+<code>src/Core/Domain/Lines/PhoneLine.cs</code> (<code>ObserveHangupAsync</code>);
+<code>tests/CalloraVoipSdk.Core.IntegrationTests/SipActiveInviteStateConsistencyTests.cs</code>.</li>
+<li>Related ADRs: C14-02 (media-hot-path concurrency), C07-01 (allocation avoidance), C18-01 (media-tap contract).</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-051-event-dispatch-and-object-lifecycle-concurrency.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

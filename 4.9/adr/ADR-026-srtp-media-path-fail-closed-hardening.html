@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-026: SRTP Media-Path Wiring — Fail-Closed Keying, Wire-Derived Keys, and Hardening | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-026: SRTP Media-Path Wiring — Fail-Closed Keying, Wire-Derived Keys, and Hardening | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-026-srtp-media-path-fail-closed-hardening.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-026-srtp-media-path-wiring--fail-closed-keying-wire-derived-keys-and-hardening">ADR-026: SRTP Media-Path Wiring — Fail-Closed Keying, Wire-Derived Keys, and Hardening</h1>
+
+<p>Status: Accepted
+Date: 2026-07-09</p>
+<h2 id="context">Context</h2>
+<p>Negotiating SDES keys (see ADR C04-01) is inert until SRTP contexts are actually wired into
+the RTP send/receive path. That wiring is the security boundary where a mistake means either
+plaintext media on a call that negotiated encryption, or a crash on a malformed inbound
+packet. Three questions had to be answered together: <strong>where does the media path get its key
+material</strong>, <strong>what happens when a secure negotiation yields no usable key</strong>, and <strong>how does the
+crypto hot path survive hostile input and clean up its secrets</strong>.</p>
+<p>The guiding rule is ENGINEERING_RULES <strong>K1</strong>: if SRTP/DTLS is negotiated or required, media on
+that leg is either encrypted or dropped/rejected — never sent or accepted in clear. Sends
+issued before key installation are suppressed and counted, not buffered and not sent in clear.</p>
+<h3 id="verified-current-state-graphify--code">Verified current state (graphify + code)</h3>
+<ul>
+<li><strong>Keys are recovered from the SDP that actually went over the wire</strong>, not from an in-memory
+side channel. <code>CallMediaParametersSrtpEnricher.Enrich</code>
+(<code>src/…/Sip/Adapters/CallMediaParametersSrtpEnricher.cs</code>, graphify community 522) extracts
+the peer's key from the remote SDP (<code>SdpUtilities.TryExtractAudioCrypto</code>) and our own key
+from the local description (the answer we sent, or the offer we sent). It stamps SRTP fields
+<strong>only when both keys are present and the suites agree</strong> (<code>sdesUsable</code> gate) — otherwise all
+SRTP fields stay null. &quot;Never half-encrypted&quot; is enforced by construction. The video m-line
+is enriched the same way (<code>EnrichVideo</code>), and a keyed video leg without usable keys &quot;stays
+fail-closed-silent.&quot;</li>
+<li><strong>This enricher runs second in a fixed order.</strong> An explicit in-code INVARIANT
+(<code>CallMediaParametersSrtpEnricher.cs</code> line 81) states: <em>&quot;the ICE enricher runs before this
+one (Ice → Srtp → Dtls), so an incoming video already carries its ICE credentials/role;
+both branches must preserve them.&quot;</em> This is ENGINEERING_RULES <strong>K2</strong> (enricher order
+ICE → SRTP → DTLS, <code>with</code>-clone not hand-copy — HARD-R5).</li>
+<li><strong>Fail-closed at context creation.</strong> <code>RtpCallMediaSession</code>
+(<code>src/…/Rtp/RtpCallMediaSession.cs</code>, graphify community 16) builds the SDES contexts via
+<code>SdesMediaCryptoContextFactory.TryCreate(parameters, …)</code> and sets
+<code>RequireEncryptedMedia = parameters.IsSrtpNegotiated || parameters.IsDtlsNegotiated</code>
+(verified lines 167-184). The in-code comment names the rule: <em>&quot;Fail-closed backstop: any
+secure-signaled negotiation (SDES, DTLS, or a keyless degenerate exchange) must never fall
+through to plain RTP.&quot;</em> DTLS legs start with no contexts and stay fail-closed until the DTLS
+attachment installs post-handshake contexts; on DTLS failure &quot;media stays fail-closed and
+transmission ceases&quot; (lines 199-204). Invalid SDES material on a negotiated-SRTP leg throws
+rather than falling back to plaintext (log <code>2026-07-08-dev-srtp-media-path</code>).</li>
+<li><strong>Inbound is unprotected before any interpretation.</strong> <code>SrtpContext.Unprotect</code>
+(<code>src/…/Srtp/Context/SrtpContext.cs</code> L109, graphify degree 23) runs before the codec /
+jitter buffer / symmetric-latch; auth or replay failure → drop (never reaches playout).
+Outbound <code>Protect</code> runs under a dedicated lock so ROC advancement is ordered against
+sequence-number assignment (log <code>-media-path</code>).</li>
+<li><strong>Hardening (log <code>2026-07-08-dev-srtp-hardening</code>):</strong> <code>GetRtpHeaderLength</code> validates the
+CSRC offset and extension length against the packet length and throws
+<code>CryptographicException</code> on malformed input (previously a negative payload length threw an
+uncaught <code>ArgumentOutOfRangeException</code> that killed the receive loop). <code>ISrtpContext : IDisposable</code>; <code>Dispose</code> zeroes cipher key / salt / auth key via
+<code>CryptographicOperations.ZeroMemory</code>, idempotent, <code>ObjectDisposedException</code> after
+(ENGINEERING_RULES <strong>K5</strong>). All context state is under one internal lock; <code>RtpSession</code>'s
+outer protect lock is kept deliberately (belt-and-braces + ROC ordering).</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<p>Wire SRTP into the media path with three non-negotiable properties:</p>
+<ol>
+<li><strong>Wire-derived keys.</strong> SRTP contexts are built from the key material in the SDP strings that
+actually crossed the wire (<code>CallMediaParametersSrtpEnricher</code> → <code>SdesMediaCryptoContextFactory</code>),
+so the session keys exactly what was signalled. The domain model holds plain string
+key-param fields only; no crypto types leak into <code>CallMediaParameters</code>.</li>
+<li><strong>Fail-closed keying (K1).</strong> <code>RequireEncryptedMedia</code> is set whenever SRTP or DTLS was
+negotiated. Invalid/absent key material on such a leg drops/ceases media instead of sending
+plaintext; SDES contexts are installed up front, DTLS contexts post-handshake, and sends
+before installation are suppressed and counted (the BUNDLE path exposes this as
+<code>SuppressedSends</code>/<code>RtcpSuppressedSends</code>).</li>
+<li><strong>Hardened crypto boundary (K4/K5).</strong> Malformed RTP headers are validated and rejected as a
+<code>CryptographicException</code>-driven drop that the receive loop survives; inbound is
+unprotected before interpretation; derived session keys are zeroed on dispose; context
+state is lock-guarded.</li>
+</ol>
+<p><strong>Crux:</strong> the media path keys itself from what was signalled and refuses to run in clear on a
+secure leg — the decision point is <code>RequireEncryptedMedia</code>, and the failure mode is
+drop/cease, never downgrade.</p>
+<h2 id="consequences">Consequences</h2>
+<p>Positive: SDES SRTP is proven end-to-end in-process (<code>SrtpSignalingToMediaE2eTests</code>: SDK frame
+arrives as ciphertext, peer decrypts with the answer key, reverse direction decrypts with the
+offer key — peers derive their contexts <em>only</em> from exchanged SDP, like a real SIP peer, log
+<code>2026-07-08-dev-srtp-e2e</code>). A manipulated packet is dropped without crash and the next valid
+packet still delivers. Regression floor: a plain RTP session is byte-identical to before.</p>
+<p>Tradeoffs / honest divergence:</p>
+<ul>
+<li><strong>RTCP is not encrypted in this slice.</strong> The media-path slice logs SRTCP as absent (&quot;RTCP
+runs in clear, logged&quot;); SRTCP crypto/wiring is a separate cluster (C06). This ADR does not
+claim full RFC 3711.</li>
+<li><strong>No MKI / key lifetime / KDR</strong> in the media path (mirrors ADR C04-01).</li>
+<li><strong><code>SrtpContext</code> was single-SSRC at this point</strong> — one sender index, one 64-packet replay
+window; the SSRC only feeds the IV. Per-SSRC ROC/replay under a shared key is a BUNDLE
+concern handled elsewhere (ADR-011); for one-context-per-stream SDES calls the single-SSRC
+model is correct.</li>
+<li><strong>The suppress-and-count fail-closed counter (<code>SuppressedSends</code>) is implemented in the
+BUNDLE/DTLS outbound pipeline</strong> (<code>BundledOutboundPipeline</code>), not in the classic SDES
+single-stream <code>RtpSession</code> path, where SDES contexts are installed synchronously up front so
+there is no pre-keying send window. Honest scope note: K1's &quot;suppress + count&quot; is realized in
+the DTLS/BUNDLE path; the SDES path realizes K1 as up-front install + fail-closed
+<code>RequireEncryptedMedia</code>.</li>
+<li><strong>Not security-audited; no interop claim.</strong> Evidence is loopback packet-level + in-proc E2E.</li>
+</ul>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li>SRTP fields are stamped only when both keys are present and the suites agree (<code>sdesUsable</code>);
+never half-encrypted (<code>CallMediaParametersSrtpEnricher.Enrich</code>).</li>
+<li>Enricher order ICE → SRTP → DTLS is preserved; SRTP enrichment carries forward the ICE
+fields the prior enricher stamped (in-code INVARIANT; ENGINEERING_RULES K2 / HARD-R5).</li>
+<li><code>RequireEncryptedMedia = IsSrtpNegotiated || IsDtlsNegotiated</code>; a secure leg with no usable
+key drops/ceases media, never plaintext (ENGINEERING_RULES K1).</li>
+<li>Inbound is unprotected before codec/jitter/latch; auth/replay failure → drop.</li>
+<li>Malformed RTP header → <code>CryptographicException</code> drop; receive loop survives.</li>
+<li>Session keys zeroed on dispose (<code>CryptographicOperations.ZeroMemory</code>), idempotent; context
+state lock-guarded (ENGINEERING_RULES K5).</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Logs: <code>docs/archive/agent-log/2026-07-08-dev-srtp-media-path.md</code> (S2 wiring, fail-closed,
+wire-derived keys), <code>2026-07-08-dev-srtp-e2e.md</code> (S3 in-proc E2E),
+<code>2026-07-08-dev-srtp-hardening.md</code> (B.1 header bounds, key zeroing, thread-safety).</li>
+<li>Code (graphify-verified): <code>RtpCallMediaSession.cs</code> (community 16, lines 167-204),
+<code>CallMediaParametersSrtpEnricher.cs</code> (community 522, <code>sdesUsable</code> gate + INVARIANT line 81),
+<code>SrtpContext.cs</code> (<code>Unprotect</code> L109, <code>Dispose</code>/<code>SrtpSessionKeys.Zero</code>),
+<code>BundledOutboundPipeline.cs</code> (<code>SuppressedSends</code>/<code>RtcpSuppressedSends</code>, fail-closed comment).</li>
+<li>Markers / RFC: RFC 3711 §3.2/§3.4 (SRTP contexts, IV), RFC 4568 (SDES keys);
+ENGINEERING_RULES K1 (fail-closed), K2 (enricher order / HARD-R5), K4 (wire-boundary parse),
+K5 (secrets zeroing / FixedTimeEquals), K7 (RFC refs).</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-026-srtp-media-path-fail-closed-hardening.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

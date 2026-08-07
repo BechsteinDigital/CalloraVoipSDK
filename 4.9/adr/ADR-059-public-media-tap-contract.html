@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-059: Public Per-Call Media-Tap Contract (Synchronous, Encoded, Fan-Out) | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-059: Public Per-Call Media-Tap Contract (Synchronous, Encoded, Fan-Out) | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-059-public-media-tap-contract.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-059-public-per-call-media-tap-contract-synchronous-encoded-fan-out">ADR-059: Public Per-Call Media-Tap Contract (Synchronous, Encoded, Fan-Out)</h1>
+
+<p>Status: Accepted
+Date: 2026-07-07</p>
+<h2 id="context">Context</h2>
+<p>The plugin/module extension point (<code>IVoipClientModule</code> / <code>ModuleRegistry</code>, slice A2) gives external
+packages a discovery seam, but a module such as a realtime-AI bridge (Callora.Realtime) needs a
+second thing: a supported public way to observe inbound and inject outbound media on a live call
+without reaching into <code>Infrastructure/*</code>. Slice A3 (CORE-301, &quot;per-call frame access/injection&quot;)
+built that contract as the first real consumer surface for the module system.</p>
+<p>The strategic constraints were already fixed by earlier decisions:</p>
+<ul>
+<li>Codec handling is <strong>transport-only</strong> — the SDK does not natively encode/decode audio in the
+general media path (video-interop/codec decision).</li>
+<li>The media hot path must stay RAM-efficient and allocation-lean, with events firing synchronously
+on the SDK media/RTCP threads and handlers forbidden to block or throw (project hard rules 2/4,
+threading contract K3).</li>
+<li>ADR-008 (community module store) later <em>names</em> this tap (<code>CreateReceiver</code> / <code>CreateSender</code>) as one
+of the public contracts a third-party module may use, but it does not decide the tap's shape,
+delivery model, or frame representation. That design is what A3 settled and what this ADR records.</li>
+</ul>
+<h3 id="verified-current-state">Verified current state</h3>
+<ul>
+<li><code>IMediaReceiver</code> (<code>src/Core/Application/Media/IMediaReceiver.cs</code>): <code>event FrameReceived</code>,
+<code>AttachToCall(ICall)</code>, <code>Detach()</code>, <code>IDisposable</code>. XML doc states the event &quot;runs synchronously on
+the media path; handlers must not block and must not perform I/O inline.&quot;</li>
+<li><code>IMediaSender</code> (<code>src/Core/Application/Media/IMediaSender.cs</code>): <code>AttachToCall(ICall)</code>, <code>Detach()</code>,
+<code>SendAsync(MediaFrame, ct)</code>, <code>IDisposable</code>. Frames sent outside <code>Connected</code>/<code>OnHold</code> are dropped.</li>
+<li><code>MediaFrame</code> (<code>src/Core/Application/Media/MediaFrame.cs</code>): a <code>readonly record struct</code> of
+<code>(ReadOnlyMemory&lt;byte&gt; Payload, int PayloadType, uint DurationRtpUnits)</code> — the payload is the
+<strong>encoded</strong> codec payload (PCMU/PCMA/G.722…), explicitly &quot;not decoded PCM&quot;.</li>
+<li>Both live in <code>Core.Application.Media</code> (layer-correct public application surface); the WebRTC
+<code>IMediaTap</code> (<code>src/Client/WebRtc/IMediaTap.cs</code>) is a separate, later concern and not this contract.</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<p>Expose media access to external modules as a <strong>per-call tap</strong> with these fixed properties:</p>
+<ol>
+<li><p><strong>Two directed seams, not one duplex object.</strong> <code>IMediaReceiver</code> observes inbound frames;
+<code>IMediaSender</code> injects outbound frames. Each attaches to exactly one call; attaching to a second
+call detaches from the first. <code>Detach()</code> and <code>Dispose()</code> stop delivery deterministically.</p>
+</li>
+<li><p><strong>Fan-out on the receive side.</strong> Multiple receivers attach to the same call in parallel (default
+audio, recording, a realtime bridge); every attached receiver observes every inbound frame. One
+receiver's listener fault is isolated from the others.</p>
+</li>
+<li><p><strong>Synchronous delivery on the media thread — no backpressure.</strong> <code>FrameReceived</code> fires inline on
+the RTP receive path. Handlers must buffer into their own queue and return immediately; blocking
+delays the receive path. There is deliberately <strong>no</strong> SDK-side backpressure or bounded queue for
+the tap: absorbing a slow consumer is the consumer's duty. This explicitly does <em>not</em> satisfy the
+CORE-301 &quot;no backpressure effect at a slow consumer&quot; acceptance criterion by the synchronous
+event alone — that is documented as a consumer obligation, with any <code>ChannelReader</code>/decode sugar
+left to a later teilpaket.</p>
+</li>
+<li><p><strong>Encoded frames, transport-only.</strong> <code>MediaFrame</code> carries the codec payload as negotiated for the
+call, identified by RTP <code>PayloadType</code> plus <code>DurationRtpUnits</code>; the SDK neither decodes inbound nor
+encodes outbound on this contract. Consumers discover the format via <code>ICall.MediaParameters</code>.</p>
+</li>
+<li><p><strong>Send is gated by call state.</strong> <code>SendAsync</code> drops frames while the call is not <code>Connected</code> or
+<code>OnHold</code>; it never buffers pre-connect frames.</p>
+</li>
+</ol>
+<h2 id="consequences">Consequences</h2>
+<p>Positive:</p>
+<ul>
+<li>Modules get a stable, <code>Infrastructure</code>-free way to do real media work; this is the concrete surface
+ADR-008 later relies on when it lists the media tap as an allowed third-party contract.</li>
+<li>The synchronous, unbuffered, encoded-frame model keeps the hot path allocation-lean and pushes all
+buffering/decoding cost into the consumer, consistent with the transport-only codec stance.</li>
+</ul>
+<p>Tradeoffs:</p>
+<ul>
+<li>The blocking/no-backpressure contract is a sharp edge: a misbehaving handler stalls the receive
+path. It is mitigated only by the documented contract and by per-listener fault isolation, not by
+the SDK. A safer async/<code>ChannelReader</code> sugar remains deferred follow-up (CORE-301 teilpaket 2).</li>
+<li>Two single-attachment seams (receiver, sender) rather than a duplex session keeps each direction
+simple but means a duplex consumer wires two objects.</li>
+</ul>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li>Tap types stay in <code>Core.Application.Media</code> (public application layer); no <code>Infrastructure/*</code> leaks
+into the contract, and modules must consume only this surface (ADR-008 condition 4).</li>
+<li>The &quot;synchronous, must-not-block&quot; event contract is part of the public XML doc and must not be
+weakened silently; any move to an async delivery model is a new, additive contract.</li>
+<li>Frame payloads remain encoded; introducing SDK-side decode/encode on this path is out of scope and
+would contradict the transport-only codec decision.</li>
+<li>Per-listener fault isolation on inbound fan-out must remain (one slow/failing receiver must not
+starve the others). Note: the isolation <code>catch</code> in <code>SipCoreCallChannel.DeliverInboundAudioFrame</code>
+was flagged during A3 as lacking logging (silent-catch rule) — follow-up, not a contract change.</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<ul>
+<li><code>docs/archive/agent-log/2026-07-07-dev-a3.md</code> (CORE-301 teilpaket 1: media-tap contract, blocking
+vertrag, encoded-not-PCM, fan-out/detach/dispose, backpressure = consumer duty).</li>
+<li><code>docs/archive/agent-log/2026-07-07-dev-a2.md</code> (module extension point that this tap serves).</li>
+<li>Code: <code>src/Core/Application/Media/IMediaReceiver.cs</code>, <code>IMediaSender.cs</code>, <code>MediaFrame.cs</code>.</li>
+<li>Related: ADR-007 (host/plugin split), ADR-008 (community module store — references this tap as a
+public module contract but does not design it).</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-059-public-media-tap-contract.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>
