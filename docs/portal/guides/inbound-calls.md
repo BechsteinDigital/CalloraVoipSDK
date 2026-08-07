@@ -38,6 +38,27 @@ await call.RedirectAsync(/* target */); // 3xx (CallActionResult)
 `AcceptAsync` throws if the call is not acceptable; `RejectAsync`/`RedirectAsync` return
 a `CallActionResult` for foreseeable outcomes.
 
+## Caller identity (screen-pop)
+
+An inbound `ICall` exposes the caller and the dialed number, parsed by the SDK — no header parsing needed:
+
+```csharp
+client.OnIncomingCall(async call =>
+{
+    var dialedDid = call.CalledNumber;       // which DID / trunk line the call arrived on
+    var caller    = call.RemoteNumber;       // caller's number
+    var name      = call.RemoteDisplayName;  // caller's display name (or null)
+
+    ScreenPop(dialedDid, caller, name);      // and route by dialedDid if you serve many DIDs
+
+    await call.AcceptAsync();
+});
+```
+
+`CalledNumber` is the number that selected the receiving line — branch on it for per-DID routing. All four
+identity properties (`CalledNumber`, `LocalParty`, `RemoteNumber`, `RemoteDisplayName`) are `null` on outbound
+calls; see [Calls](../concepts/calls.md#inbound-caller-and-dialed-identity).
+
 ## Guarding inbound media
 
 Set `VoipConfiguration.InboundMediaTimeout` (default 15 s) so answered calls that never

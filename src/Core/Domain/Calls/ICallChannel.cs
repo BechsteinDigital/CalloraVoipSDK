@@ -65,6 +65,18 @@ internal interface ICallChannel : IDisposable
     /// </summary>
     string? Diversion => null;
 
+    /// <summary>Remote party display-name (inbound From), or <see langword="null"/>. Default: null.</summary>
+    string? RemoteDisplayName => null;
+
+    /// <summary>Remote party number — user part of the remote URI, or <see langword="null"/>. Default: null.</summary>
+    string? RemoteNumber => null;
+
+    /// <summary>Local party URI (inbound: the called/DID URI), or <see langword="null"/>. Default: null.</summary>
+    string? LocalParty => null;
+
+    /// <summary>Dialed number (DID) on an inbound leg — user part of the local URI, or <see langword="null"/>. Default: null.</summary>
+    string? CalledNumber => null;
+
     /// <summary>
     /// SDP body from a provisional (180/183) early-media response, or <see langword="null"/>.
     /// Default implementation returns null.

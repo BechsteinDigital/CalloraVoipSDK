@@ -121,6 +121,36 @@ public interface ICall
     /// </summary>
     string? Diversion { get; }
 
+    /// <summary>
+    /// The remote party's display name as received — the caller's name from the inbound INVITE
+    /// <c>From</c> header (RFC 3261 §8.1.1.3). <see langword="null"/> when the header carried no
+    /// display name, or for outbound calls. Complements <see cref="RemoteParty"/> (which is the URI
+    /// without the display name). Defaults to <see langword="null"/>.
+    /// </summary>
+    string? RemoteDisplayName => null;
+
+    /// <summary>
+    /// The remote party's number — the user part of <see cref="RemoteParty"/> (the caller's number on
+    /// an inbound call), parsed by the SDK so every consumer shares one implementation.
+    /// <see langword="null"/> when the URI has no user part. Defaults to <see langword="null"/>.
+    /// </summary>
+    string? RemoteNumber => null;
+
+    /// <summary>
+    /// The local party's SIP URI in this dialog: on an inbound call the address the call was placed to
+    /// — the <c>To</c>/Request URI, i.e. the dialed number (DID) for a SIP trunk; on an outbound call
+    /// the local account address. Parallel to <see cref="RemoteParty"/>. Defaults to <see langword="null"/>.
+    /// </summary>
+    string? LocalParty => null;
+
+    /// <summary>
+    /// The dialed number (DID) an inbound call was addressed to — the user part of
+    /// <see cref="LocalParty"/> (the <c>To</c>/Request URI). This is the number that selected the
+    /// receiving line for a SIP trunk. <see langword="null"/> for outbound calls or when the URI has
+    /// no user part. Defaults to <see langword="null"/>.
+    /// </summary>
+    string? CalledNumber => null;
+
     // ── Events ────────────────────────────────────────────────────────────────
 
     /// <summary>

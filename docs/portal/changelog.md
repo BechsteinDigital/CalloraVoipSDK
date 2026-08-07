@@ -5,6 +5,17 @@ The authoritative changelog lives in the repository:
 
 ## Release highlights
 
+### 4.9.0 — 2026-08-06
+
+**Inbound caller and dialed identity on `ICall`.** Four additive, read-only properties surface the identity an
+inbound call already carried but never exposed: `CalledNumber` (the dialed DID — the `To` user part that
+selects the receiving trunk line), `LocalParty` (the local party URI, parallel to `RemoteParty`), `RemoteNumber`
+(the caller's number) and `RemoteDisplayName` (the caller's display name from the `From` header, RFC 3261
+§8.1.1.3, previously discarded). The SDK parses the user parts once (`SipProtocol`), so a contact center can
+screen-pop and route by the dialed DID without re-parsing SIP headers. **`PublicApi.approved.txt` gains four
+`ICall` members and nothing else** — a purely additive minor, no breaking change; every property is `null` on
+outbound calls and absent data. See [Calls](concepts/calls.md#inbound-caller-and-dialed-identity).
+
 ### 4.8.0 — 2026-08-06
 
 **Stack-wide hardening plus two additive public features.** A series of protocol-layer review findings

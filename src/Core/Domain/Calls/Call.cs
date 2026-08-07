@@ -64,6 +64,18 @@ internal sealed class Call : ICall, IDisposable
     public string? Diversion => _channel.Diversion;
 
     /// <inheritdoc />
+    public string? RemoteDisplayName => _channel.RemoteDisplayName;
+
+    /// <inheritdoc />
+    public string? RemoteNumber => _channel.RemoteNumber;
+
+    /// <inheritdoc />
+    public string? LocalParty => _channel.LocalParty;
+
+    /// <inheritdoc />
+    public string? CalledNumber => _channel.CalledNumber;
+
+    /// <inheritdoc />
     public string? EarlyMediaSdp => _channel.EarlyMediaSdp;
 
     // ── Events ────────────────────────────────────────────────────────────────

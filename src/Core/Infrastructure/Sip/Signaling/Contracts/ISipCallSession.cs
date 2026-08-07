@@ -51,6 +51,13 @@ internal interface ISipCallSession : IDisposable
     string? Diversion => null;
 
     /// <summary>
+    /// Remote party display-name from the inbound INVITE From header (RFC 3261 §8.1.1.3), or
+    /// <see langword="null"/> when the header carried none. Defaults to <see langword="null"/> so
+    /// existing implementations keep compiling.
+    /// </summary>
+    string? RemoteDisplayName => null;
+
+    /// <summary>
     /// Remote SDP body received from the far end.
     /// For inbound sessions: the SDP from the initial INVITE body.
     /// For outbound sessions: the SDP from the 200 OK answer.

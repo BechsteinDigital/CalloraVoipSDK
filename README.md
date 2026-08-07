@@ -19,7 +19,7 @@ It exposes a stable, developer-friendly API through `VoipClient` while keeping t
 🧪 **Examples:** [`examples/`](examples) — runnable samples (BasicCalling, Dialer, Transfer, CustomAudio, VideoCalling, WebRtcPeer, WebRtcRecording, WebRtcDependencyInjection, and a browser video-call website `WebRtcVideoCall.Web`)
 🛠️ **Maintainers:** [`MAINTAINING.md`](MAINTAINING.md) — architecture map, invariants, workflows; rules in [`ENGINEERING_RULES.md`](ENGINEERING_RULES.md)
 
-> **Project status — 4.8.** The **SIP + RTP core** is the mature, production-oriented surface:
+> **Project status — 4.9.** The **SIP + RTP core** is the mature, production-oriented surface:
 > registration, in/outbound call control, transfer, DTMF, SRTP (SDES) and measured RTCP quality
 > metrics — with symmetric RTP (comedia) as the production-proven NAT path. It is exercised in CI
 > by an **automated interop suite against a real Asterisk (PJSIP) container** — registration,
@@ -39,6 +39,21 @@ It exposes a stable, developer-friendly API through `VoipClient` while keeping t
 > [issue tracker](../../issues) — bug reports and interop feedback are especially welcome.
 
 **Contents:** [Why](#why-calloravoipsdk) · [Progressive API](#progressive-api-simple-first-deeper-when-needed) · [Features](#current-feature-set) · [Install](#installation) · [Quickstart](#quickstart) · [Architecture](#architecture) · [Contributing](#contributing) · [Security](#security) · [License](#license)
+
+## What's new in 4.9
+
+Inbound caller and dialed identity on `ICall` — four additive, read-only properties, no breaking change (the
+public API gains four `ICall` members and nothing else). An inbound call already knew the number it was dialed
+on and the caller's name but surfaced neither; the SDK now parses both once (`SipProtocol`) so a contact center
+can screen-pop and route by DID without re-parsing SIP headers. Full detail in [`CHANGELOG.md`](CHANGELOG.md).
+
+- **`ICall.CalledNumber`** — the dialed DID (the `To` user part) the inbound call arrived on, the number that
+  selected the receiving trunk line. Route by it directly.
+- **`ICall.RemoteNumber`** / **`ICall.RemoteDisplayName`** — the caller's number and display name (from the
+  `From` header, RFC 3261 §8.1.1.3, previously discarded), ready for a screen-pop.
+- **`ICall.LocalParty`** — the local party URI, parallel to `RemoteParty` (the called/DID URI on inbound).
+
+All four are `null` on outbound calls and when the data is absent.
 
 ## What's new in 4.8
 

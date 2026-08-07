@@ -8,6 +8,30 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
 
 The next line. Entries here accumulate the consumer-visible changes not yet released.
 
+## [4.9.0] - 2026-08-06
+
+Inbound caller and dialed identity surfaced on `ICall`. An inbound call already knew which number it was
+addressed to (the `To`/DID that selects the receiving trunk line) and the caller's display name, but exposed
+neither — the display name was parsed and then discarded. Four additive, read-only properties now carry that
+identity, threaded through the same pass-through as `RemoteAssertedIdentity`, and the SDK parses the user parts
+once (`SipProtocol`) so consumers no longer each roll their own SIP-URI parser. **`PublicApi.approved.txt` gains
+four `ICall` members and nothing else** — a purely additive minor with no breaking change; every property is
+`null` on outbound legs and when the data is absent. See `RELEASE_NOTES_4.9.0.md`.
+
+### Added
+
+- **`ICall.CalledNumber`** — the dialed number (DID) an inbound call was addressed to, the user part of the
+  `To`/Request URI. This is the number that selected the receiving line for a SIP trunk, so a contact center can
+  route by the called DID without re-parsing headers. `null` for outbound calls or when the URI has no user part.
+- **`ICall.LocalParty`** — the local party's SIP URI in this dialog: on an inbound call the address the call was
+  placed to (the `To`/Request URI, i.e. the dialed DID for a trunk); on an outbound call the local account
+  address. Parallel to `RemoteParty`. `null` when unavailable.
+- **`ICall.RemoteNumber`** — the remote party's number, the user part of `RemoteParty` (the caller's number on
+  an inbound call), parsed once by the SDK. `null` when the URI has no user part.
+- **`ICall.RemoteDisplayName`** — the caller's display name from the inbound `From` header (RFC 3261 §8.1.1.3),
+  previously parsed and discarded. Complements `RemoteParty` (the URI without the display name) for screen-pop.
+  `null` when the header carried no display name, or for outbound calls.
+
 ## [4.8.0] - 2026-08-06
 
 A stack-wide hardening release from a series of protocol-layer review findings (DTLS/STUN/TURN/RTP/

@@ -1,7 +1,10 @@
 {
-  "latest": "4.6",
+  "latest": "4.9",
   "versions": [
-    { "label": "4.6", "path": "" },
+    { "label": "4.9", "path": "" },
+    { "label": "4.8", "path": "4.8" },
+    { "label": "4.7", "path": "4.7" },
+    { "label": "4.6", "path": "4.6" },
     { "label": "4.5", "path": "4.5" }
   ]
 }

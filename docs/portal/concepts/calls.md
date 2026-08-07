@@ -72,6 +72,37 @@ call.StateChanged += (_, e) =>
 response status (RFC 3261 §21), not the advisory Q.850 `Reason` header — the same choice PJSIP,
 SIPSorcery and Twilio make.
 
+## Inbound caller and dialed identity
+
+An inbound call surfaces both who is calling and which number they dialed, parsed once by the SDK so you do
+not re-parse SIP headers yourself. All four properties are read-only and `null` on outbound calls (and when
+the data is absent):
+
+| Property | Meaning |
+|----------|---------|
+| `CalledNumber` | The dialed number (DID) the call was addressed to — the `To`/Request-URI user part, i.e. the number that selected the receiving trunk line. |
+| `LocalParty` | The local party's SIP URI in this dialog, parallel to `RemoteParty` (on inbound the called/DID URI). |
+| `RemoteNumber` | The caller's number — the user part of `RemoteParty`. |
+| `RemoteDisplayName` | The caller's display name from the inbound `From` header (RFC 3261 §8.1.1.3), or `null` when none was sent. |
+
+Typical use is a **screen-pop** and **trunk DID routing** — show the caller and branch on the DID the call
+arrived on:
+
+```csharp
+client.OnIncomingCall(async call =>
+{
+    ScreenPop(
+        dialedDid:   call.CalledNumber,      // route by which DID / line the call came in on
+        callerNumber: call.RemoteNumber,
+        callerName:  call.RemoteDisplayName);
+
+    await call.AcceptAsync();
+});
+```
+
+These are informational identity as received. For a trust-gated caller identity use `RemoteAssertedIdentity`
+(P-Asserted-Identity, RFC 3325).
+
 ## Media
 
 Each call has a media session. Attach the default audio device with
