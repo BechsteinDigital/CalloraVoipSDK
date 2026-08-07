@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-046: Video Media Security — Per-m-line SDES, RTX Keying, DTLS Precedence | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-046: Video Media Security — Per-m-line SDES, RTX Keying, DTLS Precedence | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-046-video-media-security-sdes-dtls.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-046-video-media-security--per-m-line-sdes-rtx-keying-dtls-precedence">ADR-046: Video Media Security — Per-m-line SDES, RTX Keying, DTLS Precedence</h1>
+
+<p>Status: Accepted
+Date: 2026-07-14</p>
+<h2 id="context">Context</h2>
+<p>The video m-line must be securable exactly like audio, but keyed independently: SDES (RFC 4568)
+derives SRTP/SRTCP contexts from the video m-line's <strong>own</strong> <code>a=crypto</code>, and DTLS-SRTP (RFC 5763)
+runs its own association on the video 5-tuple. The two are mutually exclusive per m-line, and the
+RTX repair stream needs its own keyed context (RFC 4588 §9). Getting this wrong risks a
+plaintext leak or a two-time pad. This ADR covers video-specific keying and the DTLS/SDES
+precedence rule; audio SDES offer/answer is ADR-C04-01, the DTLS-SRTP foundation is the C05 track.</p>
+<h3 id="verified-current-state-graphify-grounded">Verified current state (graphify-grounded)</h3>
+<ul>
+<li><code>SdesMediaCryptoContextFactory</code> (<code>src/Core/Infrastructure/Rtp/SdesMediaCryptoContextFactory.cs</code>)
+has a per-m-line overload <code>TryCreate(suite, local, remote, logger)</code> (L40) so audio and video
+each key from their own <code>a=crypto</code>; <code>TryCreateSecondarySrtp</code> (L59-67) builds an independent
+context pair for the RTX repair stream from the same key material (RFC 4588 §9 — own replay
+window). <code>TryParseKeyMaterial</code> (L74-95) throws on set-but-unparsable material — <strong>fail closed,
+never plaintext</strong>.</li>
+<li><code>VideoRtpStream</code> builds the four SDES contexts (L144-146), hands them to the <code>RtpSession</code>
+(which only borrows), and disposes them — zeroing keys — after the session stops (L512-518).
+All-null for a plain/DTLS leg → primary path unchanged; <strong>mutually exclusive with DTLS</strong> (class
+doc L26-31). The RTX SDES contexts are built only when both SDES and RTX are negotiated
+(L194-201).</li>
+<li>Offer/answer (both <code>SdpOfferAnswerNegotiator</code>): the answer generates our <strong>own</strong> fresh key
+(<code>SdesCryptoSelector.SelectAnswer</code>), never echoing the offer key (RFC 4568 §5.1.3);
+audio/video call <code>BuildDefaultOffer</code> separately so each m-line gets fresh RNG keys (no
+two-time pad, RFC 4568 §7.1.3). Offerer-side reuses a retained
+<code>_activeLocalVideoSrtpKeyParams</code> across Hold/Unhold so a re-offer does not rekey a live stream.</li>
+<li>DTLS/SDES precedence: <code>SdpSecurityInspector.IsDtlsProfile</code> (<code>StartsWith(&quot;UDP/TLS/&quot;)</code>) guards the
+SDES branch in <code>TryNegotiateVideoAnswerMedia</code> (L493: <code>!IsDtlsProfile</code>) and the decline logic in
+<code>SdpUtilities.TryResolveVideoParameters</code> — a DTLS profile is fingerprint-keyed, any <code>a=crypto</code>
+on it is ignored (RFC 5763). Negotiator and resolver decide <strong>identically</strong> across the full
+profile × crypto × fingerprint matrix. A secure m-line keyable by neither → zero-port decline
+(L516-523), never answered in the clear.</li>
+<li><code>RequireEncryptedMedia = IsSrtpNegotiated || IsDtlsNegotiated</code> stays true for SDES video
+(<code>VideoRtpStream</code> L162).</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<ol>
+<li><strong>Per-m-line SDES keying.</strong> The video stream derives its SRTP/SRTCP contexts from the video
+m-line's own key material via the raw-parameter factory overload; the session borrows, the
+stream owns and zeroes.</li>
+<li><strong>RTX repair stream keyed independently</strong> from the same video key material (RFC 4588 §9), so it
+keeps its own ROC/replay window and never reuses a (key, SSRC, index) triple.</li>
+<li><strong>Fresh answer key, never the offer echo</strong> (RFC 4568 §5.1.3); fresh RNG key per m-line (no
+two-time pad); retained offer key reused across Hold/Unhold so a live SDES video stream never
+rekeys mid-call.</li>
+<li><strong>DTLS takes precedence over SDES per m-line</strong> (RFC 5763): a <code>UDP/TLS/*</code> profile always goes
+the DTLS path and ignores any stray <code>a=crypto</code>; negotiator and resolver must decide identically.</li>
+<li><strong>Fail-closed everywhere.</strong> Unparsable key material throws; a secure m-line keyable by neither
+method is declined; RTX stays silent until its context exists.</li>
+</ol>
+<h3 id="crux">Crux</h3>
+<p>Two invariants carry the security weight. <strong>Never fail open</strong>: a secure-negotiated video m-line
+either keys or declines (zero port) — it never sends plaintext, and unparsable key material
+throws rather than degrading. <strong>Never two-time-pad</strong>: audio, video, and the video-RTX repair
+stream each get independent contexts with distinct keys/SSRCs, and the offerer reuses its retained
+key across re-offers so a rekey can't collide with in-flight packets. The DTLS-precedence rule
+exists because the negotiator (what we answer) and the resolver (what we key) must agree on which
+method secures the leg, or one could answer SDES while the other tries DTLS.</p>
+<h2 id="consequences">Consequences</h2>
+<p>Positive: SDES video is bidirectional at both the media and signaling layers; DTLS video keys
+post-handshake; RTX recovers under both. The precedence fix closes an answer/resolve divergence
+that could otherwise leave a leg keyed one way and answered another.</p>
+<p>Divergence / honesty:</p>
+<ul>
+<li><strong>No single SIP↔SIP loopback E2E with SDES video in both roles</strong> — the layers (media keying,
+offer, answer, RTX keying) are each proven separately (video-sdes-offer log caveat).</li>
+<li>A pre-existing <code>IsSdesSecuredProfile</code> (exact-equals) vs <code>IsSecureProfile</code> (<code>Contains(&quot;SAVP&quot;)</code>)
+substring divergence for exotic non-DTLS-SAVP profiles (e.g. <code>TCP/TLS/RTP/SAVP</code>) — no real RTP
+transport, noted follow-up, not introduced here.</li>
+<li>SDES video is only reachable once the SDP <code>a=crypto</code> negotiation populates the params — the
+media-layer keying alone is not a production path (documented across the SDES slices).</li>
+</ul>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li>Set-but-unparsable SRTP material throws (fail closed); a keyless-secure m-line is declined.</li>
+<li>Offerer key reused across Hold/Unhold (regression: <code>Hold_reoffer_reuses_the_live_video_key</code>).</li>
+<li>Audio, video, and video-RTX contexts stay independent (no two-time pad); answer key ≠ offer key.</li>
+<li>Negotiator and resolver stay in lockstep on DTLS/SDES precedence (full-matrix tested).</li>
+<li>All owned SDES contexts disposed exactly once, keys zeroed, session only borrows.</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Logs: <code>docs/archive/agent-log/2026-07-14-dev-video-sdes-keying.md</code>,
+<code>…-video-sdes-offer.md</code>, <code>…-video-sdes-sdp-answer.md</code>, <code>…-video-sdes-rtx-keying.md</code>,
+<code>…-video-dtls-sdes-precedence.md</code>.</li>
+<li>Code (graphify-verified): <code>src/Core/Infrastructure/Rtp/SdesMediaCryptoContextFactory.cs</code>
+(<code>TryCreate</code> L40, <code>TryCreateSecondarySrtp</code> L59, <code>TryParseKeyMaterial</code> L74);
+<code>src/Core/Infrastructure/Rtp/VideoRtpStream.cs</code> (SDES build L144, RTX SDES L194, dispose L512);
+<code>src/Core/Infrastructure/Sdp/OfferAnswer/SdpOfferAnswerNegotiator.cs</code>
+(<code>TryNegotiateVideoAnswerMedia</code> SDES/DTLS branch L488-523);
+<code>src/Core/Infrastructure/Sdp/SdpSecurityInspector.cs</code> (<code>IsDtlsProfile</code>);
+<code>src/Core/Infrastructure/Sdp/SdpUtilities.cs</code> (<code>TryResolveVideoParameters</code> L521);
+<code>src/Core/Infrastructure/Sdp/OfferAnswer/SdesCryptoSelector.cs</code>;
+<code>src/Core/Domain/Calls/CallVideoParameters.cs</code>.</li>
+<li>Related: ADR-C04-01 (audio SDES offer/answer), C05 (DTLS-SRTP foundation).</li>
+<li>RFC: 4568 §5.1.3/§7.1.3 (SDES answer/key generation), 4588 §9 (RTX keying), 5763 (DTLS-SRTP,
+precedence), 3711 §4.3.2 (session-key derivation).</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-046-video-media-security-sdes-dtls.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

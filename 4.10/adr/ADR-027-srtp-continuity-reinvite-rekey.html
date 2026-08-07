@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-027: SRTP Continuity Across Re-INVITE — Hold/Unhold Key Stability and Peer Rekey | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-027: SRTP Continuity Across Re-INVITE — Hold/Unhold Key Stability and Peer Rekey | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-027-srtp-continuity-reinvite-rekey.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-027-srtp-continuity-across-re-invite--holdunhold-key-stability-and-peer-rekey">ADR-027: SRTP Continuity Across Re-INVITE — Hold/Unhold Key Stability and Peer Rekey</h1>
+
+<p>Status: Accepted
+Date: 2026-07-09</p>
+<h2 id="context">Context</h2>
+<p>An established SRTP call does not stay static: hold/unhold and other mid-dialog re-INVITEs
+re-run offer/answer. Two failure modes had to be closed. First, a hold/unhold re-offer
+originally dropped the profile back to plain <code>RTP/AVP</code> with no <code>a=crypto</code> — a <strong>security
+downgrade</strong> of a running encrypted call (medium finding from the offer-SDES review, log
+<code>2026-07-09-dev-srtp-offer-sdes</code>). Second, a re-INVITE that genuinely changes the media (new
+peer SDES key, new endpoint, new codec) must actually <strong>rekey</strong> — rebuild the media session
+with the new keys — rather than keep decrypting with stale keys. Both must be achieved without
+touching the initial-call fire path and without an in-place rekey mutation of the live crypto
+context on the media hot path (thread-safety-critical).</p>
+<h3 id="verified-current-state-graphify--code">Verified current state (graphify + code)</h3>
+<ul>
+<li><strong>Hold/unhold reuses the live key rather than rekeying.</strong> <code>SdesCryptoSelector.BuildOffer(keyParams)</code>
+(<code>src/…/Sdp/OfferAnswer/SdesCryptoSelector.cs</code>, graphify community 275) builds an offer that
+reuses an already-issued inline key; its XML doc states: <em>&quot;Used on a re-offer (hold/unhold)
+of an SRTP call so the offered key stays identical to the running media context — the peer
+keeps decrypting without a rekey.&quot;</em> <code>BuildDefaultOffer()</code> delegates to <code>BuildOffer(fresh)</code>,
+so the two are semantically identical apart from key provenance.</li>
+<li><strong>The running key is snapshotted once and threaded through re-offers.</strong> <code>SipCoreCallChannel</code>
+holds <code>_activeLocalSrtpKeyParams</code> (volatile), set in <code>TryPublishMediaParameters</code> from the
+enriched outbound-encrypt key; a <code>BuildReofferSdpOptions()</code> helper reads it once (consistent
+snapshot) and hold/unhold re-offers advertise <code>RTP/SAVP</code> + the same key. A plain call
+re-offers plain (log <code>2026-07-09-dev-srtp-holdunhold-continuity</code>).</li>
+<li><strong>Genuine media change triggers a rebuild, not a mutation.</strong> <code>TryRepublishMediaParametersOnRekey</code>
+runs only on the <em>second</em> Established (<code>_mediaParametersFired == 1</code>) and only when the media
+signature genuinely changed (<code>RekeySignature</code> = <code>RemoteEndPoint|PayloadType|CodecName| SrtpSuite|Local|Remote-Keys</code>), so a retransmitted/no-op re-INVITE does not re-fire. It
+re-publishes <code>MediaParametersNegotiated</code>; the <code>CallMediaOrchestrator</code> builds a fresh media
+session with the new keys (log <code>2026-07-09-dev-peer-rekey-slice1</code>). The SRTP enrichment used
+by both the initial and rekey paths was extracted to <code>CallMediaParametersSrtpEnricher</code>
+(graphify community 522) so both paths share identical key-recovery logic.</li>
+<li><strong>Both directions rekey.</strong> An outbound (unhold) rekey works because the transaction service
+calls <code>SetRemoteSdp(2xx body)</code> before <code>TransitionTo(Established)</code> (slice 1). An inbound
+re-INVITE/UPDATE was fixed to also record its own answer:
+<code>ISipCallSession.LocalSdp</code> (default interface member, no test churn), <code>SipCallSession</code>
+<code>_localSdp</code>/<code>SetLocalSdp</code> under <code>_sync</code>, and <code>SipCallSessionInboundService</code> calls
+<code>SetRemoteSdp</code> + <code>SetLocalSdp</code> <strong>before</strong> <code>TransitionTo</code>. The channel then enriches with
+<code>session.LocalSdp ?? _localAnswerSdp ?? _localOfferSdp</code>, so an inbound re-INVITE rekeys both
+the new local and new peer key (log <code>2026-07-09-dev-peer-rekey-slice2</code>).</li>
+<li><strong>Fail-closed is preserved across rekey.</strong> The <code>sdesUsable</code> gate (both keys + suite match;
+ADR C04-02) applies on the rekey path too — never half-keyed. A policy violation detected on
+rekey calls <code>TerminateForSrtpPolicyViolationAsync</code>. Peer hold (<code>a=sendonly</code>) transitions to
+<code>OnHold</code>, not a second <code>Established</code>, so the Established-gated rekey does not run.</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<p>Keep SRTP continuous across re-INVITE via two distinct mechanisms:</p>
+<ol>
+<li><strong>Key stability for hold/unhold.</strong> A hold/unhold re-offer of a running SRTP call re-advertises
+<code>RTP/SAVP</code> with the <strong>same</strong> master key/salt that keys the live context. Because the key is
+identical, the running <code>SrtpContext</code> stays valid — no in-place rekey, no downgrade
+(<code>SdesCryptoSelector.BuildOffer</code> + <code>_activeLocalSrtpKeyParams</code> snapshot). A plain call stays
+plain.</li>
+<li><strong>Rebuild-on-change for genuine rekey.</strong> A re-INVITE that changes the media signature
+re-publishes negotiated parameters; the orchestrator builds a <em>new</em> media session with the
+new keys. Signature comparison suppresses retransmission/no-op re-INVITEs. Both outbound
+(unhold) and inbound re-INVITE/UPDATE record remote <strong>and</strong> local SDP before the state
+transition, so rekey covers both directions.</li>
+</ol>
+<p><strong>Crux:</strong> hold/unhold is solved by making the key <em>stable</em> (avoiding rekey entirely), and true
+key change is solved by <em>rebuilding the session</em> off a debounced re-publish — never by mutating
+a live crypto context on the media hot path.</p>
+<h2 id="consequences">Consequences</h2>
+<p>Positive: no downgrade of a running SRTP call on hold/unhold; genuine peer rekey (new key,
+codec, or endpoint) works in both directions; the initial-call fire path is provably untouched
+(rekey is strictly additive, gated on the second Established); the media hot path is never
+mutated in place. Reviews: hold/unhold APPROVED (no findings), both rekey slices APPROVED
+(no findings).</p>
+<p>Tradeoffs / honest divergence:</p>
+<ul>
+<li><strong>Hold/unhold is key-reuse only, not true rekey.</strong> If a peer returns a <em>new</em> key in a
+hold/unhold answer, <code>_activeLocalSrtpKeyParams</code> keeps the initial key and the change is not
+renegotiated on that specific path. Peer-initiated rekey with a new key is handled by the
+rebuild path (slices 1/2), which is the general mechanism; the hold/unhold path is the
+narrow key-stable optimization (log <code>-holdunhold-continuity</code>).</li>
+<li><strong>Race:</strong> hold before the first media publish → <code>_activeLocalSrtpKeyParams</code> is null → plain
+re-offer. No active SRTP context exists at that instant, so no security break (log
+<code>-holdunhold-continuity</code>).</li>
+<li><strong>Re-entrancy note carried forward:</strong> <code>TryRepublishMediaParametersOnRekey</code> is safe today
+because <code>StateChanged</code> fires strictly serially from <code>SipCallSession.TransitionTo</code> under
+<code>lock</code>; a second concurrent fire source would need the guard re-evaluated (flagged in slice 1
+for slice 2, still standing as a design constraint, log <code>-peer-rekey-slice1</code>).</li>
+<li><strong>Test-coverage caveat:</strong> a dedicated <code>SipCallSessionInboundService</code> handler test asserting
+<code>SetRemoteSdp</code>/<code>SetLocalSdp</code> ordering before <code>TransitionTo</code> is recommended follow-up; today
+the ordering is covered indirectly by the green SIP regression + code inspection (log
+<code>-peer-rekey-slice2</code>). This ADR does not claim that dedicated test exists.</li>
+</ul>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li>A running SRTP call never re-offers plain on hold/unhold; it re-advertises <code>RTP/SAVP</code> with
+the stable live key (<code>_activeLocalSrtpKeyParams</code> snapshot via <code>BuildReofferSdpOptions</code>).</li>
+<li>Rekey fires only on the second Established and only on a genuine media-signature change;
+retransmissions/no-ops do not re-fire.</li>
+<li>Rekey records both local and remote SDP before the state transition (outbound and inbound
+paths symmetric); the <code>sdesUsable</code> gate applies — never half-keyed.</li>
+<li>The initial-call fire path is unchanged by the rekey addition.</li>
+<li>Live crypto contexts are never mutated in place; rekey rebuilds the media session.</li>
+<li>SRTP policy violation on rekey terminates the call (<code>TerminateForSrtpPolicyViolationAsync</code>).</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Logs: <code>docs/archive/agent-log/2026-07-09-dev-srtp-holdunhold-continuity.md</code> (key stability),
+<code>2026-07-09-dev-peer-rekey-slice1.md</code> (outbound re-publish/rebuild),
+<code>2026-07-09-dev-peer-rekey-slice2.md</code> (inbound bidirectional rekey);
+origin of the downgrade finding: <code>2026-07-09-dev-srtp-offer-sdes.md</code>.</li>
+<li>Code (graphify-verified): <code>SdesCryptoSelector.cs</code> (community 275, <code>BuildOffer</code>/<code>BuildDefaultOffer</code>),
+<code>CallMediaParametersSrtpEnricher.cs</code> (community 522, shared enrichment),
+<code>SipCoreCallChannel</code> (<code>_activeLocalSrtpKeyParams</code>, <code>TryRepublishMediaParametersOnRekey</code>,
+<code>RekeySignature</code>), <code>SipCallSession</code>/<code>ISipCallSession</code> (<code>LocalSdp</code>/<code>SetLocalSdp</code>),
+<code>SipCallSessionInboundService</code> (SetRemote/SetLocal before TransitionTo).</li>
+<li>Markers / RFC: RFC 3264 §5.1/§8 (offer/answer, re-INVITE), RFC 4568 (SDES);
+ENGINEERING_RULES K1 (fail-closed / no downgrade), K3 (threading: serial StateChanged, volatile
+snapshot), K7 (RFC refs).</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-027-srtp-continuity-reinvite-rekey.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

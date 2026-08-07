@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-035: RTX Retransmission Mechanics — OSN Encapsulation and the Retransmit Buffer | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-035: RTX Retransmission Mechanics — OSN Encapsulation and the Retransmit Buffer | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-035-rtx-retransmission-mechanics.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-035-rtx-retransmission-mechanics--osn-encapsulation-and-the-retransmit-buffer">ADR-035: RTX Retransmission Mechanics — OSN Encapsulation and the Retransmit Buffer</h1>
+
+<p>Status: Accepted
+Date: 2026-07-14</p>
+<h2 id="context">Context</h2>
+<p>NACK-driven loss recovery over RTP (RFC 4585 → RFC 4588) needs two codec-agnostic
+building blocks below the media-specific wiring: a way to <strong>re-wrap</strong> an already-sent
+packet as a retransmission on a repair stream, and a bounded <strong>history</strong> of recently sent
+packets so a NACK can find the target to re-wrap. These are the mechanics of RTX — distinct
+from the transport channel they ride on and from the video feedback loop that drives them.
+They were built as an isolated, independently testable slice, before any session wiring, so
+the format and the buffer could be pinned byte-exact on their own.</p>
+<p>This ADR captures <strong>only</strong> the generic RTX mechanics. It deliberately does <strong>not</strong> re-decide:</p>
+<ul>
+<li>the <strong>secondary-stream transport</strong> (a second SSRC + its own SRTP context on the shared
+socket) — that is ADR-C07-03, which owns the channel and explicitly disclaims RTX
+semantics; and</li>
+<li>the <strong>video loss-recovery loop</strong> (gated NACK/PLI, <code>VideoRtpStream</code> send/receive wiring,
+reorder-window re-entry) — that is ADR-C12-03, which consumes these primitives as given.</li>
+</ul>
+<p>The mechanics sit in the seam between those two: C07-03 provides the pipe, C12-03 provides
+the video policy, and this ADR provides the RFC 4588 §4 packet format and the retransmit
+buffer that both rely on but neither defines. The building blocks are codec-agnostic by
+construction (they operate on a plain <code>RtpPacket</code> and live under <code>Rtp/Retransmission/</code>, not
+under any video type), so the same mechanics are available to an audio RTX path if one is
+ever wired — nothing here is video-specific.</p>
+<p>Governing rules: ENGINEERING_RULES <strong>K3</strong> (thread-safety by design, bounded buffers on the
+media path, drop-oldest over unbounded growth), <strong>K7</strong> (RFC references in code), and the
+RFC 3711 §3.2 per-SSRC cryptographic-context invariant that motivates the separate stream.</p>
+<h3 id="verified-current-state-graphify--code">Verified current state (graphify + code)</h3>
+<ul>
+<li><strong><code>RtxPacketFactory</code></strong> (<code>src/Core/Infrastructure/Rtp/Retransmission/RtxPacketFactory.cs</code>,
+<code>internal static</code>, graphify community 33). <code>Encapsulate(original, rtxPayloadType, rtxSsrc, rtxSequenceNumber)</code> (L27) allocates <code>2 + payload.Length</code> bytes, writes the original 16-bit
+sequence number big-endian as the OSN prefix (<code>BinaryPrimitives.WriteUInt16BigEndian</code>,
+L33), copies the original payload after it, and stamps the rtx PT/SSRC/seq while copying
+the original's <code>Timestamp</code> and <code>Marker</code> (RFC 4588 §4). <code>TryDecapsulate(rtx, originalPayloadType, originalSsrc, out original)</code> (L54) rejects a payload shorter than the
+2-byte OSN (<code>return false</code>, L60-61), else reads the OSN back into the sequence number and
+restores the caller-supplied original PT/SSRC. Both methods carry a <code>DECISION</code> doc block
+(L18-25, L47-53): the original's <strong>header extensions and CSRC list are intentionally not
+carried across</strong> — RFC 4588 §4 defines the RTX payload as OSN + original payload only, and
+a repair packet's own extensions (abs-send-time, transport-cc) differ from the original's.</li>
+<li><strong><code>RtpRetransmissionBuffer</code></strong>
+(<code>src/Core/Infrastructure/Rtp/Retransmission/RtpRetransmissionBuffer.cs</code>, <code>internal sealed</code>). A bounded seq→<code>RtpPacket</code> history: a <code>Dictionary&lt;ushort, RtpPacket&gt;</code> plus a
+<code>Queue&lt;ushort&gt;</code> eviction order under a single <code>_sync</code> lock. <code>Store</code> (L39): a new sequence
+enqueues and, when at capacity, evicts the oldest first; a <strong>resent sequence replaces the
+stored entry without re-enqueuing</strong> (guarded by <code>ContainsKey</code>, L45) so the queue and
+dictionary never diverge and the window never grows past capacity. <code>TryGet</code> (L61) and
+<code>Count</code> (L70) read under the same lock. Capacity defaults to 512 and is <strong>capped at 32768</strong>
+(ctor <code>ThrowIfGreaterThan</code>, L28) with the rationale in the ctor doc (L19-24): staying well
+below 65536 guarantees 16-bit sequence-number wrap cannot alias a live entry with an
+evicted one.</li>
+<li><strong>Tests</strong> (<code>tests/CalloraVoipSdk.Core.IntegrationTests/RtxRetransmissionTests.cs</code>, community
+33): <code>Encapsulate_prefixes_osn_and_rewrites_stream_identity</code> (L15),
+<code>Encapsulate_then_decapsulate_reproduces_the_original</code> (L31),
+<code>Encapsulation_intentionally_drops_header_extensions_and_csrc</code> (L48),
+<code>Decapsulate_of_a_zero_length_original_payload_is_supported</code> (L84),
+<code>Buffer_returns_a_stored_packet_by_sequence_number</code> (L98),
+<code>Buffer_evicts_the_oldest_packet_beyond_capacity</code> (L111),
+<code>Buffer_resend_of_same_sequence_replaces_without_growing</code> (L125),
+<code>Buffer_is_safe_under_concurrent_store_and_lookup</code> (L137).</li>
+<li><strong>Consumers (out of scope here, named for the boundary):</strong> <code>VideoRtpStream</code>
+(<code>OnRetransmitRequested</code> L275 uses <code>Encapsulate</code>; <code>_rtp.PacketSent += buffer.Store</code> wiring)
+drives these primitives; <code>VideoCodecCatalog.NegotiateRtx/BuildRtx/TryReadApt</code> negotiates the
+<code>a=rtpmap …/rtx</code> + <code>a=fmtp … apt=</code> binding. Both are decided in ADR-C12-03 / the video SDP
+ADR, not here.</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<p>Ship RTX as two codec-agnostic mechanics, isolated from both the transport and the video
+policy:</p>
+<ol>
+<li><strong>OSN encapsulation format (<code>RtxPacketFactory</code>, RFC 4588 §4).</strong> A retransmission is the
+original payload prefixed with the original 16-bit sequence number (big-endian, 2 bytes),
+re-stamped with the repair stream's payload type, SSRC, and a fresh sequence number, and
+carrying the original's timestamp and marker. Decapsulation strips the OSN and restores the
+caller-supplied original PT/SSRC; a payload shorter than the OSN fails closed
+(<code>false</code>/<code>null</code>).</li>
+<li><strong>Header extensions and CSRC are intentionally not carried.</strong> The RTX payload is OSN +
+original payload only (RFC 4588 §4). The recovered packet has no extensions/CSRC; a repair
+packet's own extensions (abs-send-time, transport-cc) are stamped by the send path, not
+inherited from the original. This is pinned by a dedicated test, not left implicit.</li>
+<li><strong>Bounded, wrap-safe retransmit buffer (<code>RtpRetransmissionBuffer</code>).</strong> A capacity-limited
+seq→packet history with drop-oldest eviction, resent-sequence replace-in-place (no regrow,
+no queue/dictionary divergence), and a hard 32768 cap so 16-bit wrap cannot alias a live
+entry with an evicted one. Thread-safe by a single lock: the send path stores, the RTCP
+receive path looks up, on different threads.</li>
+</ol>
+<p><strong>Crux:</strong> RTX must run on its <strong>own</strong> SSRC and sequence space, not by replaying the original
+over the primary SRTP context. A plain resend would be rejected by the primary stream's
+SRTP replay window (RFC 3711 §3.2 keys the cryptographic context — ROC + replay — per SSRC).
+Giving the repair packet a distinct SSRC gives it a distinct replay context, so the resend
+is accepted rather than dropped as a replay. The OSN prefix is what lets the receiver map the
+repair packet back to the original sequence number the NACK named. The buffer's 32768 cap is
+the second load-bearing invariant: it keeps 16-bit sequence-number arithmetic unambiguous.</p>
+<h2 id="consequences">Consequences</h2>
+<p>Positive: the RTX format and buffer are byte-exact and concurrency-tested in isolation, so
+the later video wiring (ADR-C12-03) could compose them without re-verifying the format, and
+an audio RTX path could reuse the identical primitives unchanged. The separate-SSRC design
+means the audio-critical primary SRTP path is never touched by retransmission traffic.</p>
+<p>Divergence / honesty:</p>
+<ul>
+<li><strong>No RTT-scaled buffer sizing.</strong> Capacity is a fixed count (default 512, &quot;roughly a
+round-trip worth of packets, baresip keeps ~500 ms&quot;), not derived from a measured RTT — a
+NACK for a packet older than the window simply misses. Noted, not adaptive.</li>
+<li><strong>These mechanics transmit nothing on their own.</strong> As the founding log states, &quot;es
+überträgt noch nichts neu&quot; — no session wiring, no NACK receipt, no RTX SSRC/PT management,
+no receive-side decapsulation are in this slice. Those are ADR-C12-03 (video) and would be
+a separate decision for any future audio RTX. No DONE / compliance claim.</li>
+<li><strong>No RFC 4588 §8 SDP (<code>a=rtpmap …/rtx</code>, <code>a=fmtp apt=</code>) here.</strong> The apt binding is negotiated
+in <code>VideoCodecCatalog</code> and belongs to the video SDP ADR; this slice assumes the rtx PT/SSRC
+are already chosen and passed in.</li>
+<li><strong>No external-stack interop claim.</strong> Evidence is in-process unit tests over the packet types.</li>
+</ul>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li>Encapsulate/Decapsulate stay RFC 4588 §4 byte-exact (OSN = big-endian original sequence
+number, 2 bytes, prefixed to the original payload); the header-extension/CSRC drop is a
+DECISION on both methods and pinned by a test — it must not silently start carrying them.</li>
+<li><code>TryDecapsulate</code> fails closed (<code>false</code>/<code>null</code>) on a payload shorter than the OSN.</li>
+<li><code>RtpRetransmissionBuffer</code> stays bounded and drop-oldest; capacity capped at 32768 so
+sequence-number wrap cannot alias a live entry with an evicted one; a resent sequence
+replaces in place and is not re-enqueued (queue/dictionary invariant).</li>
+<li>The buffer is the only shared state and is fully lock-guarded (store on the send thread,
+lookup on the RTCP-receive thread) — ENGINEERING_RULES K3.</li>
+<li>Retransmission MUST ride a separate SSRC (own SRTP replay/ROC context, RFC 3711 §3.2) — the
+reason a plain resend over the primary context is rejected; the transport that provides that
+separate context is ADR-C07-03, not re-decided here.</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Log: <code>docs/archive/agent-log/2026-07-14-dev-rtx-mechanics.md</code> (RTX-Retransmit-Mechanik:
+OSN encapsulation + retransmit buffer, isolated mechanics, 9 tests, SRTP-replay rationale,
+MAJOR-1 header-extension/CSRC-drop → DECISION + pinning test).</li>
+<li>Code (graphify-verified, community 33): <code>RtxPacketFactory.cs</code>
+(<code>Encapsulate</code> L27, <code>TryDecapsulate</code> L54, DECISION L18-25/L47-53),
+<code>RtpRetransmissionBuffer.cs</code> (<code>Store</code> L39, <code>TryGet</code> L61, capacity cap L28, ctor rationale
+L19-24); tests <code>RtxRetransmissionTests.cs</code> (OSN layout L15, roundtrip L31,
+extension/CSRC drop L48, zero-length L84, buffer lookup/evict/replace/concurrency L98-137).</li>
+<li>Boundary (decided elsewhere, not here): ADR-C07-03 (secondary-stream transport + separate
+SRTP context), ADR-C12-03 (gated NACK/PLI + <code>VideoRtpStream</code> RTX wiring + reorder re-entry),
+video SDP ADR (<code>VideoCodecCatalog</code> rtx/apt negotiation, RFC 4588 §8.1).</li>
+<li>RFC: 4588 §4 (RTX packet format / OSN), §9 (separate SSRC/sequence space); 4585 §6.2.1
+(Generic NACK that drives retransmission); 3711 §3.2 (per-SSRC cryptographic context —
+ROC + replay); ENGINEERING_RULES K3 (bounded buffers / thread-safety), K7 (RFC refs).</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-035-rtx-retransmission-mechanics.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

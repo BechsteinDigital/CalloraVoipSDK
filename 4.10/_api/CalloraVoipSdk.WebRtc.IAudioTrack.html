@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IAudioTrack | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IAudioTrack | CalloraVoipSdk ">
+      
+      <meta name="description" content="A handle to an outbound audio track added with  (its own m=audio line on the shared BUNDLE transport, beyond the peer&#39;s primary audio anchor). Send encoded audio payloads on this track with ; each track carries its own SSRC, so payloads sent on distinct handles never collide (RFC 3550 &#167;8.1). The SFU pattern of one audio stream per remote participant on a single peer connection.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/new/main/apiSpec/new?filename=CalloraVoipSdk_WebRtc_IAudioTrack.md&amp;value=---%0Auid%3A%20CalloraVoipSdk.WebRtc.IAudioTrack%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="CalloraVoipSdk.WebRtc.IAudioTrack">
+
+
+
+  <h1 id="CalloraVoipSdk_WebRtc_IAudioTrack" data-uid="CalloraVoipSdk.WebRtc.IAudioTrack" class="text-break">
+Interface IAudioTrack  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IAudioTrack.cs/#L19"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="CalloraVoipSdk.html">CalloraVoipSdk</a>.<a class="xref" href="CalloraVoipSdk.WebRtc.html">WebRtc</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>CalloraVoipSdk.Client.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>A handle to an outbound audio track added with <a class="xref" href="CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_AddAudioTrack">AddAudioTrack()</a> (its own
+<code>m=audio</code> line on the shared BUNDLE transport, beyond the peer's primary audio anchor). Send encoded
+audio payloads on this track with <a class="xref" href="CalloraVoipSdk.WebRtc.IAudioTrack.html#CalloraVoipSdk_WebRtc_IAudioTrack_SendFrameAsync_System_ReadOnlyMemory_System_Byte__System_UInt32_System_Threading_CancellationToken_">SendFrameAsync(ReadOnlyMemory&lt;byte&gt;, uint, CancellationToken)</a>;
+each track carries its own SSRC, so payloads sent on distinct handles never collide (RFC 3550 §8.1). The
+SFU pattern of one audio stream per remote participant on a single peer connection.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IAudioTrack</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+  <h2 id="CalloraVoipSdk_WebRtc_IAudioTrack_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>Adding a track supplements the peer's implicit primary audio track (the always-on transport anchor that
+<a class="xref" href="CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_SendAudioAsync_System_ReadOnlyMemory_System_Byte__System_Threading_CancellationToken_">SendAudioAsync(ReadOnlyMemory&lt;byte&gt;, CancellationToken)</a> addresses); the frameless
+<a class="xref" href="CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_SendAudioAsync_System_ReadOnlyMemory_System_Byte__System_Threading_CancellationToken_">SendAudioAsync(ReadOnlyMemory&lt;byte&gt;, CancellationToken)</a> keeps addressing that primary track. A track added before
+<a class="xref" href="CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_CreateOffer">CreateOffer()</a> is negotiated in the first offer; a track added mid-call is pending
+until the next offer/answer cycle applies it to the live session (RFC 8829 renegotiation). Audio has no
+simulcast, so there is no per-layer send overload. DTMF (RFC 4733) stays on the primary audio track and is
+not surfaced per additional track — send it via <a class="xref" href="CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_SendDtmfAsync_System_Byte_System_Int32_System_Threading_CancellationToken_">SendDtmfAsync(byte, int, CancellationToken)</a>.</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="CalloraVoipSdk_WebRtc_IAudioTrack_Direction_" data-uid="CalloraVoipSdk.WebRtc.IAudioTrack.Direction*"></a>
+
+  <h3 id="CalloraVoipSdk_WebRtc_IAudioTrack_Direction" data-uid="CalloraVoipSdk.WebRtc.IAudioTrack.Direction">
+  Direction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IAudioTrack.cs/#L25"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The direction this track was added with (RFC 3264).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">TrackDirection Direction { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="CalloraVoipSdk.WebRtc.TrackDirection.html">TrackDirection</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_WebRtc_IAudioTrack_Mid_" data-uid="CalloraVoipSdk.WebRtc.IAudioTrack.Mid*"></a>
+
+  <h3 id="CalloraVoipSdk_WebRtc_IAudioTrack_Mid" data-uid="CalloraVoipSdk.WebRtc.IAudioTrack.Mid">
+  Mid
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IAudioTrack.cs/#L22"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The track's negotiated MID (<code>a=mid</code>, RFC 5888) — a numeric token on the multi-track transport.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string Mid { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="CalloraVoipSdk_WebRtc_IAudioTrack_SendFrameAsync_" data-uid="CalloraVoipSdk.WebRtc.IAudioTrack.SendFrameAsync*"></a>
+
+  <h3 id="CalloraVoipSdk_WebRtc_IAudioTrack_SendFrameAsync_System_ReadOnlyMemory_System_Byte__System_UInt32_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.WebRtc.IAudioTrack.SendFrameAsync(System.ReadOnlyMemory{System.Byte},System.UInt32,System.Threading.CancellationToken)">
+  SendFrameAsync(ReadOnlyMemory&lt;byte&gt;, uint, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IAudioTrack.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sends one already-encoded audio RTP payload on this track, with <code class="paramref">rtpTimestamp</code> set on the
+outbound RTP packets (RFC 3550 §5.1). The app owns the codec (transport-only). The timestamp is stamped on
+the wire — not derived from an internal cursor — so an SFU forwarding this stream preserves the source's
+timestamp for A/V-sync against forwarded video; the app supplies the source's own RTP timestamp per payload.
+Suppressed until the DTLS handshake keys the transport; a no-op when the negotiated directions do not carry
+outbound audio on this track (a send-only/inactive remote answer, or a recv-only/inactive local side, RFC 3264).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task SendFrameAsync(ReadOnlyMemory&lt;byte&gt; encodedAudioFrame, uint rtpTimestamp, CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>encodedAudioFrame</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlymemory-1">ReadOnlyMemory</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>&gt;</dt>
+    <dd><p>The already-encoded audio RTP payload.</p>
+</dd>
+    <dt><code>rtpTimestamp</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The payload's RTP timestamp on the track's negotiated audio clock; stamped on the outbound packets.</p>
+</dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Cancels the send.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task">Task</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IAudioTrack.cs/#L19" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-002: UAS Redirect (RFC 3261 &#167;8.3) — RedirectAsync on ISipCallSession | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-002: UAS Redirect (RFC 3261 &#167;8.3) — RedirectAsync on ISipCallSession | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-002-uas-redirect-redirect-async.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-002-uas-redirect-rfc-3261-83--redirectasync-on-isipcallsession">ADR-002: UAS Redirect (RFC 3261 §8.3) — RedirectAsync on ISipCallSession</h1>
+
+<p>Status: Accepted
+Date: 2026-04-09
+RFC reference: RFC 3261 §8.3</p>
+<hr>
+<h2 id="context">Context</h2>
+<p>RFC 3261 §8.3 defines redirect server behavior: when a UAS receives an INVITE
+it does not wish to answer itself, it MAY respond with a 3xx response whose
+Contact header lists alternative target URIs. The UAC then retries at those
+locations without any involvement from the original UAS.</p>
+<p>Common use cases:</p>
+<ul>
+<li><strong>Call deflection to voicemail</strong> — phone is busy, redirect to voicemail URI</li>
+<li><strong>Multi-device forwarding</strong> — reject on one device, redirect to another</li>
+<li><strong>Unconditional call forwarding</strong> — always redirect to a different number</li>
+</ul>
+<p>The SDK previously only supported rejecting inbound calls via <code>HangupAsync</code>
+(which sends <code>486 Busy Here</code>). There was no way to send a <code>3xx</code> response.</p>
+<hr>
+<h2 id="decision">Decision</h2>
+<p>Add <code>RedirectAsync(IReadOnlyList&lt;string&gt; contactUris, int statusCode = 302, CancellationToken ct)</code> to <code>ISipCallSession</code>.</p>
+<p><strong>Semantics:</strong></p>
+<ul>
+<li>Valid only for inbound dialogs (<code>IsInbound == true</code>) in <code>Ringing</code> state.</li>
+<li>Sends a 3xx response from the inbound INVITE server transaction.</li>
+<li><code>Contact</code> header lists the caller-supplied URIs (not the local contact).</li>
+<li><code>Record-Route</code> is explicitly <strong>removed</strong> from the response (§8.3: redirect server does not forward routing state; the UAC creates a new dialog to the Contact target).</li>
+<li><code>To</code> header carries the local tag (§8.2.6.2).</li>
+<li>Dialog transitions to <code>Terminated</code> immediately after the redirect response is sent.</li>
+<li>Default status code is <code>302 Moved Temporarily</code>; <code>300</code>, <code>301</code>, <code>305</code>, and <code>380</code> are also supported.</li>
+</ul>
+<p><strong>Validation:</strong></p>
+<ul>
+<li>Empty contact list → <code>ArgumentException</code></li>
+<li>Status code outside 300–399 → <code>ArgumentOutOfRangeException</code></li>
+<li>Wrong state → <code>InvalidOperationException</code></li>
+</ul>
+<hr>
+<h2 id="consequences">Consequences</h2>
+<p><strong>Positive:</strong></p>
+<ul>
+<li>Enables call deflection / forwarding without rejecting with a busy response.</li>
+<li>Zero breaking change — <code>ISipCallSession</code> gains a new method with a default parameter.</li>
+<li><code>HangupAsync</code> behavior is unchanged (still sends 486).</li>
+</ul>
+<p><strong>Negative:</strong></p>
+<ul>
+<li>Callers must ensure redirect URIs are valid SIP URIs — no validation is performed.</li>
+<li>The 3xx approach only works if the UAC supports redirect handling per §8.1.3.4.
+Peers that ignore 3xx will see the call fail rather than forward.</li>
+</ul>
+<hr>
+<h2 id="alternatives-considered">Alternatives considered</h2>
+<ol>
+<li><strong>Overload HangupAsync with a redirect option</strong> — Rejected. The method contract
+(&quot;terminate the dialog&quot;) would be misleading for a redirect, which is semantically
+different from rejection.</li>
+<li><strong>Emit a domain event and handle in application layer</strong> — Rejected. The application
+layer would need access to internal SIP transaction state to send the 3xx response,
+violating the infrastructure abstraction boundary.</li>
+<li><strong>Always send 302 (no status-code parameter)</strong> — Rejected. 301 Moved Permanently
+and 300 Multiple Choices are valid RFC 3261 response codes for distinct semantics
+(permanent vs. temporary relocation, multiple alternatives).</li>
+</ol>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-002-uas-redirect-redirect-async.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

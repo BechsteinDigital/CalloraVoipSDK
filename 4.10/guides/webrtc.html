@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>WebRTC | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="WebRTC | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/portal/guides/webrtc.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="webrtc">WebRTC</h1>
+
+<blockquote>
+<p><strong>Status (4.7).</strong> The WebRTC facade is <strong>validated in CI against real browsers</strong> — Chromium and
+Firefox, headless via Playwright, audio and VP8 video, in both roles (SDK as offerer and as
+answerer), over DTLS-SRTP including AES-GCM. Known scope limits: data channels (SCTP) are <strong>not
+included</strong>; TURN relay is <strong>UDP-only</strong> (no TCP/TLS relay); and Safari/WebKit is not yet
+verified. The media socket follows the address family of the configured <code>LocalEndPoint</code>, so IPv4
+and IPv6 both work. Browser <strong>mDNS (<code>.local</code>) host candidates are resolved</strong> via the OS resolver
+(RFC 8828). Trickle ICE and early-bind are included: an ephemeral media port still yields a live
+m-line, though a fixed, reachable port remains the recommendation for NAT reachability without
+TURN.</p>
+</blockquote>
+<blockquote>
+<p><strong>Multi-party / SFU enablement (4.7, stable).</strong> Additive, transport-only primitives on top of the
+4.6 facade: <strong>multiple video and audio tracks</strong> over one BUNDLE, <strong>mid-call renegotiation</strong>
+(RFC 8829), <strong>receive-side simulcast demux</strong> (the RID a layer arrived on is surfaced per frame),
+and a <strong>per-peer recommended outgoing bitrate</strong> derived from transport-cc feedback. All additive —
+a peer that uses none of them negotiates byte-identical SDP and behaves exactly as before. The SDK
+stays a peer, not a conference server: it <strong>forwards, it does not mix or transcode</strong>. Two limits
+worth knowing up front: <strong>ICE restart on a connected peer is not supported</strong> (dispose and re-create
+the peer), and these primitives are <strong>not yet covered by the browser-interop CI matrix</strong> — the
+browser suite exercises the 1 audio + 1 video path. See the sections below.</p>
+</blockquote>
+<p>The <code>CalloraVoipSdk.WebRtc</code> namespace is a signalling-neutral WebRTC peer surface that mirrors the
+four-level design of <code>VoipClient</code>. It is <strong>transport-only</strong>: the SDK runs ICE, DTLS-SRTP, BUNDLE and
+RTP/RTCP and moves already-encoded frames — your app owns the signalling channel and the codec.</p>
+<h2 id="create-a-peer-and-connect">Create a peer and connect</h2>
+<p>Give the SDK your signalling channel (WebSocket, HTTP, Callora, …) by implementing <code>IWebRtcSignaling</code>;
+the SDK drives the RFC 8829 offer/answer and completes when connected:</p>
+<pre><code class="lang-csharp">using CalloraVoipSdk.WebRtc;
+
+var rtc = new WebRtcClient(new WebRtcConfiguration
+{
+    LocalEndPoint = new IPEndPoint(IPAddress.Loopback, 46000),   // a reachable media port
+    EnableVideo = true,
+});
+
+await using var peer = rtc.CreatePeer();
+
+// Subscribe BEFORE connecting so inbound tracks are not missed.
+peer.TrackReceived += (_, track) =&gt;
+    track.FrameReceived += (_, frame) =&gt; { /* your depacketised codec bytes */ };
+
+await peer.ConnectAsync(mySignalling, WebRtcRole.Offerer);   // or WebRtcRole.Answerer
+await peer.SendAudioAsync(encodedOpusPayload);
+</code></pre>
+<p>Prefer full control? Drive it yourself with the neutral primitives: <code>CreateOffer()</code>,
+<code>SetRemoteDescriptionAsync(sdp)</code>, <code>StartAsync()</code>.</p>
+<h3 id="negotiation-correctness-48">Negotiation correctness (4.8)</h3>
+<ul>
+<li>A structurally non-conforming remote answer is <strong>rejected</strong> (RFC 3264 §6 / RFC 8829): m-line
+count/order, 1:1 MIDs, transport profile, PT subset and BUNDLE-group subset are validated, and the
+offerer fails closed (<code>State → Failed</code>) instead of proceeding on a mismatched answer.</li>
+<li>The offerer sends the codec the <strong>answer accepted</strong> (RFC 3264 §6.1), not always its own first offered
+codec; with no common codec it logs a warning and fails closed.</li>
+<li>Inbound audio now carries its real RTP timestamp (<code>EncodedFrame.RtpTimestamp</code>, RFC 3550 §5.1) — an
+SFU forwarding received audio no longer stamps it at <code>0</code>.</li>
+<li>A peer DTLS <code>close_notify</code>/alert ends the association and surfaces as
+<code>State == PeerConnectionState.Closed</code> (<code>ConnectionStateChanged</code>, RFC 8827 §6.5) — media does not keep
+flowing under a keying channel the peer has closed.</li>
+</ul>
+<h3 id="trickle-ice">Trickle ICE</h3>
+<p>Implement <code>IWebRtcTrickleSignaling</code> (it extends <code>IWebRtcSignaling</code>) instead of the plain interface and
+<code>ConnectAsync</code> trickles candidates automatically: local candidates (host + server-reflexive from
+configured STUN) are signalled as they are gathered, and remote candidates are applied during
+negotiation. Driving signalling yourself? Subscribe to <code>LocalIceCandidateDiscovered</code>, call
+<code>GatherCandidatesAsync()</code> for server-reflexive candidates, and feed the peer's candidates in with
+<code>AddIceCandidateAsync(candidate)</code>.</p>
+<h2 id="tracks-the-w3c-model">Tracks (the W3C model)</h2>
+<p><code>TrackReceived</code> fires once per inbound track with a <code>RemoteTrack</code> (<code>Kind</code>, <code>StreamId</code> = the remote
+<code>a=msid</code>, <code>TrackId</code>). Group by <code>StreamId</code> to keep one participant's audio and video together (e.g. for a
+recording); subscribe per track to keep them separable (e.g. routing audio to a voice bot). Frames arrive
+as <code>EncodedFrame</code> (payload, RTP timestamp, key-frame flag).</p>
+<h2 id="media-taps-recording--analytics--ai">Media taps (recording / analytics / AI)</h2>
+<p>Attach an <code>IMediaTap</code> to observe media in both directions without owning the peer:</p>
+<pre><code class="lang-csharp">using var recording = peer.AttachMediaTap(new MyRecorder());   // OnAudio/OnVideo, Inbound + Outbound
+</code></pre>
+<h2 id="dependency-injection--composition">Dependency injection &amp; composition</h2>
+<pre><code class="lang-csharp">services
+    .AddCalloraVoip(voip =&gt; { /* SIP facade */ })
+    .AddWebRtc(rtc =&gt; { rtc.EnableVideo = true; });   // WebRTC facade, composed in one chain
+</code></pre>
+<p><code>IWebRtcClient.Peers</code> tracks live peers; <code>IWebRtcClient.Modules</code> registers facade plugins
+(programmatically or auto-attached from DI as <code>IWebRtcClientModule</code> services).</p>
+<h2 id="screen-sharing">Screen sharing</h2>
+<p>Screen sharing needs no separate API: it is just video. Capture the screen with your platform's
+API, encode the frames with your codec (transport-only — the SDK never encodes), and send them on the
+peer's video track exactly like camera frames:</p>
+<pre><code class="lang-csharp">// EnableVideo on the client, then feed screen-captured encoded frames instead of camera frames.
+await peer.SendVideoFrameAsync(encodedScreenFrame, rtpTimestamp);
+</code></pre>
+<p>Screen content differs from camera content (higher resolution, lower frame rate, &quot;detail&quot; over
+&quot;motion&quot;) — size your encoder accordingly; the SDK moves the bytes unchanged.</p>
+<p>Sharing the screen <em>alongside</em> the camera is supported since 4.7 — add a second video track and send
+each on its own handle, so the two stay separable on the wire with distinct SSRCs:</p>
+<pre><code class="lang-csharp">IVideoTrack screen = peer.AddVideoTrack();
+await peer.SendVideoFrameAsync(cameraFrame, ts);        // primary track
+await screen.SendFrameAsync(screenFrame, ts);           // the added track
+</code></pre>
+<p>See <a href="#multiple-video-tracks-and-mid-call-renegotiation">Multiple video tracks</a>. A future <code>a=content</code>
+(RFC 4796) hint to flag the track as screen content is optional and not yet emitted, so the receiver
+tells them apart by MID / <code>a=msid</code>, not by a content tag.</p>
+<h2 id="simulcast-send-side">Simulcast (send-side)</h2>
+<p>Send the same video at several resolutions/bitrates so an SFU can forward the layer each viewer can
+afford (RFC 8853). Configure the layer rids on the client, encode each layer yourself (transport-only),
+and send it on its rid:</p>
+<pre><code class="lang-csharp">// Configure simulcast rids on the WebRtcConfiguration, then per frame, per layer:
+await peer.SendVideoFrameAsync(&quot;hi&quot;, encodedHiRes, rtpTimestamp);
+await peer.SendVideoFrameAsync(&quot;lo&quot;, encodedLoRes, rtpTimestamp);
+</code></pre>
+<p>The offer advertises the rids; the SDK confirms them against the answer and falls back to a single
+stream when the answerer does not confirm them. The active <code>rid</code> is surfaced to <code>IMediaTap.OnVideo</code> and
+to recording (RFC 8852). Receiving a remote peer's simulcast layers is covered by
+<a href="#receive-side-simulcast-demux">Receive-side simulcast demux</a> below.</p>
+<h2 id="multiple-video-tracks-and-mid-call-renegotiation">Multiple video tracks and mid-call renegotiation</h2>
+<blockquote>
+<p><strong>4.7, additive, transport-only.</strong></p>
+</blockquote>
+<p><code>AddVideoTrack()</code> adds a further video track — its own <code>m=video</code> line and SSRC on the shared BUNDLE
+transport — and returns an <code>IVideoTrack</code> to send on. Call it <strong>before or after</strong> connect:</p>
+<pre><code class="lang-csharp">IVideoTrack camera = peer.AddVideoTrack();
+IVideoTrack screen = peer.AddVideoTrack(new VideoTrackOptions { /* direction, codecs, simulcast, stream id */ });
+await camera.SendFrameAsync(frame, rtpTimestamp);
+
+// Inbound video tracks are told apart by mid:
+peer.TrackReceived += (_, track) =&gt; { var mid = track.Mid; };
+
+// Refresh exactly one track's decoder (RFC 4585 §6.3.1 PLI):
+await peer.RequestVideoKeyFrameAsync(mid);
+</code></pre>
+<p>Adding a track on a <strong>connected</strong> peer applies live: a second <code>CreateOffer</code> /
+<code>SetRemoteDescriptionAsync</code> cycle applies the delta with <strong>no transport, DTLS, ICE or SRTP rebuild</strong>,
+and the tracks already running keep flowing. A new track's SSRCs are allocated distinct from every live
+one, so it never collides a running stream's per-SSRC SRTP context (RFC 3550 §8.1). Observe where you
+are in the exchange via <code>SignalingState</code> / <code>SignalingStateChanged</code> (W3C <code>RTCSignalingState</code>).</p>
+<p><strong>Honest limits.</strong> <strong>ICE restart is not supported</strong> — a re-offer that rotates the ICE ufrag on the
+shared transport is rejected; dispose and re-create the peer to restart ICE. A peer that uses only
+<code>WebRtcConfiguration.EnableVideo</code> and never calls <code>AddVideoTrack</code> emits the byte-identical 1+1 SDP as
+before, and <code>SendVideoFrameAsync</code> still addresses the primary track.</p>
+<h2 id="multiple-audio-tracks">Multiple audio tracks</h2>
+<blockquote>
+<p><strong>4.7, additive, transport-only.</strong></p>
+</blockquote>
+<p>Add more than one audio track on the shared BUNDLE transport — one <code>m=audio</code> line, SSRC and
+per-participant <code>a=msid</code> per track — so an SFU can forward several participants' audio to a peer
+without a second connection:</p>
+<pre><code class="lang-csharp">// The primary audio track anchors ICE/DTLS and is created with the peer.
+IAudioTrack extra = peer.AddAudioTrack();                        // or AddAudioTrack(new AudioTrackOptions { ... })
+await extra.SendFrameAsync(encodedOpusPayload, rtpTimestamp);    // track.Mid / track.Direction describe it
+
+// Inbound audio tracks arrive tagged with their mid:
+peer.TrackReceived += (_, track) =&gt; { var mid = track.Mid; /* separate per participant */ };
+</code></pre>
+<p>Tracks add and remove mid-call through the renegotiation path. The added send path threads your RTP
+timestamp through unchanged, so A/V sync holds against the same participant's forwarded video.</p>
+<p><strong>Honest limits.</strong> The <strong>primary</strong> audio m-line anchors ICE/DTLS and is never deactivated — a peer
+that uses only the one audio track produces byte-identical SDP to before. DTMF (RFC 4733) stays on
+the primary track, not per-MID. This is the forwarding building block for multi-party audio; the SDK
+<strong>forwards, it does not mix</strong> the conference.</p>
+<h2 id="receive-side-simulcast-demux">Receive-side simulcast demux</h2>
+<blockquote>
+<p><strong>4.7, additive, forwarding-only.</strong></p>
+</blockquote>
+<p>When a remote peer sends several encodings of <strong>one</strong> video m-line, the SDK separates them
+receive-side into independent per-RID reassembly (each layer keeps its own reorder + depacketise
+state) and tags every frame with the RID it arrived on. There is still <strong>one</strong> <code>RemoteTrack</code> per
+m-line; distinguish the layers by <code>frame.Rid</code>:</p>
+<pre><code class="lang-csharp">peer.TrackReceived += (_, track) =&gt;
+    track.FrameReceived += (_, frame) =&gt;
+    {
+        string? rid = frame.Rid;   // the a=rid layer id, e.g. &quot;hi&quot; / &quot;lo&quot;; null when not simulcast
+        // forward or select by rid — the SFU decides which layer goes where
+    };
+</code></pre>
+<p>This completes simulcast (the send side was already there): an SFU receives each layer addressably.
+<strong>Forwarding-only</strong> — the SDK never drops or transcodes a layer; which layer is forwarded is your
+SFU/app logic. Non-simulcast receive is byte-identical (<code>Rid</code> is <code>null</code>).</p>
+<h2 id="per-peer-bitrate-recommendation">Per-peer bitrate recommendation</h2>
+<blockquote>
+<p><strong>4.7, additive.</strong></p>
+</blockquote>
+<p>A finished recommended send bitrate toward the connected peer — plus a coarse <code>NetworkQuality</code> —
+derived from the transport-wide congestion feedback the peer returns (transport-cc, RFC 8888). For an
+SFU this is the per-receiver signal of which simulcast layer to forward:</p>
+<pre><code class="lang-csharp">peer.RecommendedBitrateChanged += (_, recommendation) =&gt;
+{
+    long bps = recommendation.BitrateBps;         // recommendation.Quality is a coarse NetworkQuality
+    // choose the layer / pace your encoder — the SDK does not decide for you
+};
+
+long? bps = peer.RecommendedOutgoingBitrateBps;   // null until transport-cc is negotiated
+</code></pre>
+<p><strong>A recommendation, not raw metrics, and reactive</strong> — it fires per feedback interval, no polling. The
+property and event stay <code>null</code>/silent when transport-cc was not negotiated. The SDK does <strong>no</strong>
+throttling (your app owns the cadence) and makes <strong>no</strong> layer decision.</p>
+<h2 id="sfu-enablement--how-these-fit-together">SFU enablement — how these fit together</h2>
+<p>These primitives are the peer-side building blocks for multi-party conferencing: multiple video and
+audio tracks carry several participants over one transport, mid-call renegotiation lets participants
+join and leave without rebuilding the connection, receive-side simulcast makes each video layer
+addressable, and the per-peer bitrate recommendation tells the forwarder which layer each receiver can
+afford. The SDK supplies the peer primitives; the <strong>SFU / selection logic lives in your app or
+conference host</strong> — the SDK is not itself an SFU, and it never mixes or transcodes.</p>
+<p>They are also <strong>not yet covered by the browser-interop CI matrix</strong>, which exercises the 1 audio +
+1 video path against Chromium and Firefox. Validate a multi-track topology against your own clients
+before relying on it — see the <a href="../interop/browsers.html">browsers page</a>.</p>
+<h2 id="samples">Samples</h2>
+<ul>
+<li><code>examples/CalloraVoipSdk.Sample.WebRtcPeer</code> — two peers connect over an in-memory channel, tracks + tap.</li>
+<li><code>examples/CalloraVoipSdk.Sample.WebRtcRecording</code> — record inbound audio via a media tap.</li>
+<li><code>examples/CalloraVoipSdk.Sample.WebRtcDependencyInjection</code> — DI + two-facade composition.</li>
+<li><code>examples/CalloraVoipSdk.Sample.WebRtcVideoCall.Web</code> — a browser video-call website in its simplest
+form (WebSocket signalling relay + native browser WebRTC, two tabs = two people, peer-to-peer). The
+SDK media peer is not in the media path here — that is the browser-interop milestone.</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/portal/guides/webrtc.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

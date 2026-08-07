@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-036: RTCP Wire Codec — Feedback/XR Framing and Tolerant Compound Decode | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-036: RTCP Wire Codec — Feedback/XR Framing and Tolerant Compound Decode | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-036-rtcp-wire-codec-tolerant-decode.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-036-rtcp-wire-codec--feedbackxr-framing-and-tolerant-compound-decode">ADR-036: RTCP Wire Codec — Feedback/XR Framing and Tolerant Compound Decode</h1>
+
+<p>Status: Accepted
+Date: 2026-07-15</p>
+<h2 id="context">Context</h2>
+<p>Beyond the SR/RR/SDES/BYE base set (RFC 3550 §6), the SDK's RTCP path must (a) speak the
+feedback wire formats that WebRTC and modern SIP peers use — Generic NACK (RFC 4585 §6.2.1),
+PLI (RFC 4585 §6.3.1), FIR (RFC 5104 §4.3.1) — and (b) parse inbound Extended Reports
+(RFC 3611) far enough to surface the peer's VoIP-quality metrics. Both are <em>inbound-untrusted</em>
+wire: a compound RTCP datagram typically <em>starts</em> with the SR/RR the quality monitor needs, and
+one malformed or simply-unrecognized trailing packet must never cost the whole datagram. This is
+the K4 parse-robustness contract applied to the RTCP demux.</p>
+<p>Three slices built this incrementally: the feedback wire representation (<code>2026-07-14</code>), XR VoIP-
+metrics decode (<code>2026-07-09</code>), and a review-driven robustness fix that moved malformed-feedback
+handling from &quot;throw and drop the datagram&quot; to &quot;skip just that packet&quot; (<code>2026-07-15</code>).</p>
+<h3 id="verified-current-state">Verified current state</h3>
+<ul>
+<li><strong><code>RtcpPacketType</code></strong> (<code>Application/Media/Rtcp/Packets/RtcpPacketType.cs</code>) enumerates
+<code>SenderReport=200 … App=204</code>, plus <code>TransportFeedback=205</code> (RTPFB), <code>PayloadFeedback=206</code>
+(PSFB), <code>ExtendedReport=207</code>.</li>
+<li><strong><code>RtcpFeedbackCodec</code></strong> (<code>Infrastructure/Rtcp/Wire/RtcpFeedbackCodec.cs</code>) is a dedicated codec
+kept apart from the base <code>RtcpPacketCodec</code>. The common feedback layout after the 4-byte header
+is <code>sender SSRC(4) | media SSRC(4) | FCI</code> (RFC 4585 §6.1), and the feedback message type (FMT)
+travels in the header's low 5 bits — where SR/RR carry a report count. It decodes/encodes
+<code>RtcpPictureLossIndication</code> (PSFB FMT=1), <code>RtcpFullIntraRequest</code> (PSFB FMT=4, with the common-
+header media-SSRC pinned to 0 per RFC 5104 §4.3.1 and real targets in the FCI entries),
+<code>RtcpGenericNack</code> (RTPFB FMT=1, PID+BLP with <code>LostSequenceNumbers()</code> bitmask expansion), and
+dispatches transport-wide-cc (RTPFB FMT=15) to <code>RtcpTransportFeedbackCodec</code>. Unknown <code>(type,fmt)</code>
+combinations return <code>null</code> (skipped). Truncated/inconsistent FCI throws <code>ArgumentException</code>.</li>
+<li><strong><code>RtcpPacketCodec.DecodeXr</code></strong> (<code>Infrastructure/Rtcp/Wire/RtcpPacketCodec.cs</code>) parses the XR
+SSRC then iterates typed blocks (<code>BT(1) | type-specific(1) | block-length(2 words) | content</code>,
+RFC 3611 §2). VoIP-Metrics blocks (BT=7, §4.7, 32-byte content) decode into
+<code>RtcpVoipMetricsBlock</code>; other block types are skipped via block-length; an inconsistent block
+length <strong><code>break</code>s</strong> the block loop rather than throwing, so a bad XR block does not discard the
+compound.</li>
+<li><strong><code>RtcpPacketCodec.Decode</code></strong> is the compound driver. It walks packets by the length field, and
+for feedback types routes through <strong><code>DecodeFeedbackTolerant</code></strong>, which wraps
+<code>RtcpFeedbackCodec.Decode</code> in <code>try/catch (ArgumentException) → null</code>. The catch is scoped to
+<code>ArgumentException</code> so a genuine decoder bug (<code>IndexOutOfRange</code>) still propagates. The outer
+length-field validation still throws on a datagram-level inconsistency (that advances the read
+offset), but a malformed <em>feedback FCI</em> now yields &quot;skip this packet, keep the compound&quot;.</li>
+<li><strong>Consumption is wired:</strong> <code>CallRtcpQualityMonitor.HandleExtendedReport</code>
+(<code>Application/Media/CallRtcpQualityMonitor.cs</code>) reads the peer's VoIP-Metrics block keyed by our
+local SSRC (RFC 3611 §4.7 — the peer reports on the stream it received from us) and surfaces
+remote MOS-LQ/MOS-CQ (<code>MosFromByte</code>: score×10, 0/127 = unavailable). This closes the XR-decode
+log's stated follow-up (&quot;metrics not yet aggregated in the monitor&quot;) — see divergence below.</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<p>Model RTCP inbound parsing as <strong>two layers with opposite strictness</strong>, and keep feedback framing
+in its own codec:</p>
+<ol>
+<li><strong>Sub-codecs are strict.</strong> <code>RtcpFeedbackCodec</code> and <code>DecodeXr</code>'s per-block/per-FCI parsing throw
+<code>ArgumentException</code> on a truncated or inconsistent payload. Unrecognized formats (unknown FMT,
+unknown XR block type) are <em>not</em> errors — they return <code>null</code> / are skipped by length.</li>
+<li><strong>The compound layer is tolerant.</strong> <code>RtcpPacketCodec.Decode</code> catches sub-codec
+<code>ArgumentException</code> for feedback packets (<code>DecodeFeedbackTolerant</code>) and <code>break</code>s the XR block
+loop on inconsistency, so one bad or unknown trailing packet never discards the SR/RR the
+datagram carries (RFC 3550 §6.1: unrecognized packet types are skipped via the length field).</li>
+<li><strong>Feedback framing lives in <code>RtcpFeedbackCodec</code></strong>, separate from the base RTCP codec, because
+the FMT-in-header-bits convention and the SSRC-pair + FCI layout are distinct from the RC-based
+SR/RR framing; the base codec dispatches 205/206 to it and falls through on encode.</li>
+<li><strong>XR is decode-only</strong> for the VoIP-Metrics block (BT=7). We do not emit XR; other block types
+(RRT/DLRR §4.4/§4.5 etc.) are skipped, not parsed.</li>
+</ol>
+<h3 id="crux">Crux</h3>
+<p>The security/robustness boundary is <em>strict inner, tolerant outer</em>. Untrusted RTCP is length-
+delimited, so the read offset is always recoverable from the length field regardless of a
+packet's internal validity — that is exactly what lets the compound layer swallow a malformed
+sub-packet without losing frame sync. Scoping the tolerance to <code>ArgumentException</code> (the type the
+sub-codecs deliberately throw for wire-malformation) keeps real logic bugs loud. A single
+malformed NACK from a peer can therefore never suppress the SR/RR that drives quality reporting.</p>
+<h2 id="consequences">Consequences</h2>
+<p>Positive: the RTCP path is DoS/junk-tolerant at the datagram boundary while individual decoders
+stay honest; feedback and base framing are cleanly separated; inbound XR MOS is available to the
+quality monitor.</p>
+<p>Honest divergence:</p>
+<ul>
+<li><strong>The XR-decode log (2026-07-09) is now stale on its own follow-up.</strong> It claimed the parsed
+metrics were <em>not yet</em> consumed by <code>CallRtcpQualityMonitor</code>; the current tree <em>does</em> consume
+them (<code>HandleExtendedReport</code> → remote MOS-LQ/CQ). The rest of the log (decode-only, no XR send,
+other block types skipped) still holds.</li>
+<li><strong>XR is inbound-only.</strong> We never send Extended Reports, and only the VoIP-Metrics block is
+decoded — RRT/DLRR-based RTT (an alternative to the SR/DLSR path) is not implemented.</li>
+<li><strong>Feedback framing predates its live use here.</strong> The wire codec (Slice 1) was built before the
+session wiring; NACK→RTX, PLI/FIR→keyframe, and transport-cc live handling are separate clusters
+(C08/C10/C12). This ADR covers the <em>wire representation and tolerant demux</em> only.</li>
+<li><strong>No foreign-stack interop</strong> validated for the feedback/XR wire at codec time — roundtrip and
+byte-layout tests only.</li>
+</ul>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li>Compound decode must survive a malformed or unknown trailing packet: SR/RR that leads the
+datagram is preserved (regression-guarded by <code>RtcpFeedbackCodecTests</code> — &quot;…skipped_and_the_
+compound_survives&quot;, and <code>RtcpExtendedReportDecodeTests</code> — unknown-block-type keeps the envelope).</li>
+<li>Tolerance stays scoped to <code>ArgumentException</code>; sub-codecs keep throwing on malformed FCI so a
+decoder bug (<code>IndexOutOfRange</code>) is not silently swallowed (K4 — parse failures observable).</li>
+<li>The compound length-field validation in the main loop still throws on datagram-level
+inconsistency (frame-sync loss is fatal, per-packet malformation is not).</li>
+<li>FIR common-header media-SSRC stays 0 (RFC 5104 §4.3.1); NACK BLP bit <em>i</em> → PID+<em>i</em>+1 with
+ushort wrap; byte layout regression-guarded by roundtrip tests.</li>
+<li>The <code>return null;</code> catch body is not a silent catch under R5 (the rule targets empty/comment-only
+bodies); its intent is documented inline (RFC 3550 §6.1).</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Logs: <code>docs/archive/agent-log/2026-07-14-dev-rtcp-feedback-wire.md</code>,
+<code>docs/archive/agent-log/2026-07-09-dev-b9-rtcp-xr.md</code>,
+<code>docs/archive/agent-log/2026-07-15-dev-rtcp-tolerant-feedback-decode.md</code></li>
+<li>Code (graphify-verified): <code>Rtcp/Wire/RtcpFeedbackCodec.cs</code>
+(<code>.Decode()</code>/<code>.Encode()</code>/<code>.DecodeFir()</code>/<code>.DecodeNack()</code>/<code>.EncodePli()</code>),
+<code>Rtcp/Wire/RtcpPacketCodec.cs</code> (<code>.Decode()</code>, <code>.DecodeFeedbackTolerant()</code>, <code>.DecodeXr()</code>,
+<code>.DecodeVoipMetrics()</code>), <code>Rtcp/Packets/RtcpPacketType.cs</code>,
+<code>Rtcp/Packets/RtcpExtendedReport.cs</code> / <code>RtcpVoipMetricsBlock.cs</code>,
+<code>Application/Media/CallRtcpQualityMonitor.cs</code> (<code>.HandleExtendedReport()</code>, <code>.MosFromByte()</code>);
+tests <code>RtcpFeedbackCodecTests</code>, <code>RtcpExtendedReportDecodeTests</code>, <code>RtcpCompoundDecodeTests</code></li>
+<li>Git: <code>f12c7a6</code> (tolerant feedback decode merge), <code>26816e5</code> (decode each inbound RTCP compound
+once, then fan out, #14)</li>
+<li>Markers/RFC: RFC 3550 §6.1/§6.4.1; RFC 4585 §6.1/§6.2.1/§6.3.1; RFC 5104 §4.3.1; RFC 3611
+§2/§4.7; ENGINEERING_RULES K4 (trust-boundary parse robustness), K5, R5 (no silent catch), K7</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-036-rtcp-wire-codec-tolerant-decode.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

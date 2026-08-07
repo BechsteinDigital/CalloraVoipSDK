@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IAudioDeviceRuntimeControl | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IAudioDeviceRuntimeControl | CalloraVoipSdk ">
+      
+      <meta name="description" content="Optional runtime control port for audio devices. Provides hot-switch, mute, volume, and format controls while calls are active.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/new/main/apiSpec/new?filename=CalloraVoipSdk_Core_Application_Ports_Audio_IAudioDeviceRuntimeControl.md&amp;value=---%0Auid%3A%20CalloraVoipSdk.Core.Application.Ports.Audio.IAudioDeviceRuntimeControl%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="CalloraVoipSdk.Core.Application.Ports.Audio.IAudioDeviceRuntimeControl">
+
+
+
+  <h1 id="CalloraVoipSdk_Core_Application_Ports_Audio_IAudioDeviceRuntimeControl" data-uid="CalloraVoipSdk.Core.Application.Ports.Audio.IAudioDeviceRuntimeControl" class="text-break">
+Interface IAudioDeviceRuntimeControl  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Ports/Audio/IAudioDeviceRuntimeControl.cs/#L7"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="CalloraVoipSdk.html">CalloraVoipSdk</a>.<a class="xref" href="CalloraVoipSdk.Core.html">Core</a>.<a class="xref" href="CalloraVoipSdk.Core.Application.html">Application</a>.<a class="xref" href="CalloraVoipSdk.Core.Application.Ports.html">Ports</a>.<a class="xref" href="CalloraVoipSdk.Core.Application.Ports.Audio.html">Audio</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>CalloraVoipSdk.Core.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Optional runtime control port for audio devices.
+Provides hot-switch, mute, volume, and format controls while calls are active.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IAudioDeviceRuntimeControl</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="CalloraVoipSdk_Core_Application_Ports_Audio_IAudioDeviceRuntimeControl_GetAvailableInputDevices_" data-uid="CalloraVoipSdk.Core.Application.Ports.Audio.IAudioDeviceRuntimeControl.GetAvailableInputDevices*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Application_Ports_Audio_IAudioDeviceRuntimeControl_GetAvailableInputDevices" data-uid="CalloraVoipSdk.Core.Application.Ports.Audio.IAudioDeviceRuntimeControl.GetAvailableInputDevices">
+  GetAvailableInputDevices()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Ports/Audio/IAudioDeviceRuntimeControl.cs/#L12"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Lists available input endpoints.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IReadOnlyList&lt;AudioDeviceDescriptor&gt; GetAvailableInputDevices()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="CalloraVoipSdk.Core.Application.Ports.Audio.AudioDeviceDescriptor.html">AudioDeviceDescriptor</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Application_Ports_Audio_IAudioDeviceRuntimeControl_GetAvailableOutputDevices_" data-uid="CalloraVoipSdk.Core.Application.Ports.Audio.IAudioDeviceRuntimeControl.GetAvailableOutputDevices*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Application_Ports_Audio_IAudioDeviceRuntimeControl_GetAvailableOutputDevices" data-uid="CalloraVoipSdk.Core.Application.Ports.Audio.IAudioDeviceRuntimeControl.GetAvailableOutputDevices">
+  GetAvailableOutputDevices()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Ports/Audio/IAudioDeviceRuntimeControl.cs/#L17"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Lists available output endpoints.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IReadOnlyList&lt;AudioDeviceDescriptor&gt; GetAvailableOutputDevices()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="CalloraVoipSdk.Core.Application.Ports.Audio.AudioDeviceDescriptor.html">AudioDeviceDescriptor</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Application_Ports_Audio_IAudioDeviceRuntimeControl_GetRuntimeSnapshot_" data-uid="CalloraVoipSdk.Core.Application.Ports.Audio.IAudioDeviceRuntimeControl.GetRuntimeSnapshot*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Application_Ports_Audio_IAudioDeviceRuntimeControl_GetRuntimeSnapshot" data-uid="CalloraVoipSdk.Core.Application.Ports.Audio.IAudioDeviceRuntimeControl.GetRuntimeSnapshot">
+  GetRuntimeSnapshot()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Ports/Audio/IAudioDeviceRuntimeControl.cs/#L22"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns a consistent point-in-time runtime snapshot.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">AudioDeviceRuntimeSnapshot GetRuntimeSnapshot()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="CalloraVoipSdk.Core.Application.Ports.Audio.AudioDeviceRuntimeSnapshot.html">AudioDeviceRuntimeSnapshot</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Application_Ports_Audio_IAudioDeviceRuntimeControl_SetInputMuted_" data-uid="CalloraVoipSdk.Core.Application.Ports.Audio.IAudioDeviceRuntimeControl.SetInputMuted*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Application_Ports_Audio_IAudioDeviceRuntimeControl_SetInputMuted_System_Boolean_" data-uid="CalloraVoipSdk.Core.Application.Ports.Audio.IAudioDeviceRuntimeControl.SetInputMuted(System.Boolean)">
+  SetInputMuted(bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Ports/Audio/IAudioDeviceRuntimeControl.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Mutes or unmutes microphone input.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void SetInputMuted(bool isMuted)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>isMuted</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Application_Ports_Audio_IAudioDeviceRuntimeControl_SetInputVolume_" data-uid="CalloraVoipSdk.Core.Application.Ports.Audio.IAudioDeviceRuntimeControl.SetInputVolume*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Application_Ports_Audio_IAudioDeviceRuntimeControl_SetInputVolume_System_Single_" data-uid="CalloraVoipSdk.Core.Application.Ports.Audio.IAudioDeviceRuntimeControl.SetInputVolume(System.Single)">
+  SetInputVolume(float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Ports/Audio/IAudioDeviceRuntimeControl.cs/#L46"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets microphone input gain factor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void SetInputVolume(float volume)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>volume</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>Linear gain in range 0..2 (0 = silence, 1 = neutral).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Application_Ports_Audio_IAudioDeviceRuntimeControl_SetOutputMuted_" data-uid="CalloraVoipSdk.Core.Application.Ports.Audio.IAudioDeviceRuntimeControl.SetOutputMuted*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Application_Ports_Audio_IAudioDeviceRuntimeControl_SetOutputMuted_System_Boolean_" data-uid="CalloraVoipSdk.Core.Application.Ports.Audio.IAudioDeviceRuntimeControl.SetOutputMuted(System.Boolean)">
+  SetOutputMuted(bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Ports/Audio/IAudioDeviceRuntimeControl.cs/#L62"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Mutes or unmutes speaker playback.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void SetOutputMuted(bool isMuted)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>isMuted</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Application_Ports_Audio_IAudioDeviceRuntimeControl_SetOutputVolume_" data-uid="CalloraVoipSdk.Core.Application.Ports.Audio.IAudioDeviceRuntimeControl.SetOutputVolume*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Application_Ports_Audio_IAudioDeviceRuntimeControl_SetOutputVolume_System_Single_" data-uid="CalloraVoipSdk.Core.Application.Ports.Audio.IAudioDeviceRuntimeControl.SetOutputVolume(System.Single)">
+  SetOutputVolume(float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Ports/Audio/IAudioDeviceRuntimeControl.cs/#L52"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets speaker output gain factor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void SetOutputVolume(float volume)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>volume</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>Linear gain in range 0..2 (0 = silence, 1 = neutral).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Application_Ports_Audio_IAudioDeviceRuntimeControl_SwitchInputDevice_" data-uid="CalloraVoipSdk.Core.Application.Ports.Audio.IAudioDeviceRuntimeControl.SwitchInputDevice*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Application_Ports_Audio_IAudioDeviceRuntimeControl_SwitchInputDevice_System_String_" data-uid="CalloraVoipSdk.Core.Application.Ports.Audio.IAudioDeviceRuntimeControl.SwitchInputDevice(System.String)">
+  SwitchInputDevice(string?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Ports/Audio/IAudioDeviceRuntimeControl.cs/#L31"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Switches microphone endpoint at runtime.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void SwitchInputDevice(string? deviceId)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>deviceId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Device identifier from <a class="xref" href="CalloraVoipSdk.Core.Application.Ports.Audio.IAudioDeviceRuntimeControl.html#CalloraVoipSdk_Core_Application_Ports_Audio_IAudioDeviceRuntimeControl_GetAvailableInputDevices">GetAvailableInputDevices()</a>.
+Use <code>-1</code>, <code>null</code>, or empty to select the platform default device.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Application_Ports_Audio_IAudioDeviceRuntimeControl_SwitchOutputDevice_" data-uid="CalloraVoipSdk.Core.Application.Ports.Audio.IAudioDeviceRuntimeControl.SwitchOutputDevice*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Application_Ports_Audio_IAudioDeviceRuntimeControl_SwitchOutputDevice_System_String_" data-uid="CalloraVoipSdk.Core.Application.Ports.Audio.IAudioDeviceRuntimeControl.SwitchOutputDevice(System.String)">
+  SwitchOutputDevice(string?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Ports/Audio/IAudioDeviceRuntimeControl.cs/#L40"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Switches speaker endpoint at runtime.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void SwitchOutputDevice(string? deviceId)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>deviceId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Device identifier from <a class="xref" href="CalloraVoipSdk.Core.Application.Ports.Audio.IAudioDeviceRuntimeControl.html#CalloraVoipSdk_Core_Application_Ports_Audio_IAudioDeviceRuntimeControl_GetAvailableOutputDevices">GetAvailableOutputDevices()</a>.
+Use <code>-1</code>, <code>null</code>, or empty to select the platform default device.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Application_Ports_Audio_IAudioDeviceRuntimeControl_UpdateFormat_" data-uid="CalloraVoipSdk.Core.Application.Ports.Audio.IAudioDeviceRuntimeControl.UpdateFormat*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Application_Ports_Audio_IAudioDeviceRuntimeControl_UpdateFormat_CalloraVoipSdk_Core_Application_Ports_Audio_AudioDeviceFormat_" data-uid="CalloraVoipSdk.Core.Application.Ports.Audio.IAudioDeviceRuntimeControl.UpdateFormat(CalloraVoipSdk.Core.Application.Ports.Audio.AudioDeviceFormat)">
+  UpdateFormat(AudioDeviceFormat)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Ports/Audio/IAudioDeviceRuntimeControl.cs/#L69"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates runtime capture/playback format.
+The implementation applies supported changes immediately.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void UpdateFormat(AudioDeviceFormat format)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>format</code> <a class="xref" href="CalloraVoipSdk.Core.Application.Ports.Audio.AudioDeviceFormat.html">AudioDeviceFormat</a></dt>
+    <dd><p>Requested runtime format.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Ports/Audio/IAudioDeviceRuntimeControl.cs/#L7" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

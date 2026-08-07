@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-033: DoS Hardening at the RTP and SIP Wire Boundaries | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-033: DoS Hardening at the RTP and SIP Wire Boundaries | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-033-wire-boundary-dos-hardening.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-033-dos-hardening-at-the-rtp-and-sip-wire-boundaries">ADR-033: DoS Hardening at the RTP and SIP Wire Boundaries</h1>
+
+<p>Status: Accepted
+Date: 2026-07-09</p>
+<h2 id="context">Context</h2>
+<p>Two untrusted wire boundaries can be driven by a remote peer into a denial of service if the
+parser is not defensive:</p>
+<ol>
+<li>The <strong>RTP receive loop</strong> demuxes each datagram (RFC 7983: STUN/DTLS/RTP/RTCP share the media
+5-tuple) and hands RTP/RTCP to <code>SrtpContext.Unprotect</code> / <code>UnprotectRtcp</code>. A datagram that
+passes the version/PT demux but is shorter than <code>12 + auth-tag</code> makes <code>Unprotect</code> throw
+<code>ArgumentException(&quot;SRTP packet too short.&quot;)</code>. The RTP branch caught
+<code>SrtpAuthenticationException</code>, <code>SrtpReplayException</code>, and <code>CryptographicException</code> — but
+<strong>not</strong> <code>ArgumentException</code>. A single 12..21-byte runt demuxed as RTP therefore escaped
+uncaught, terminated the receive loop, and killed all inbound media for the call — a
+remote-triggerable DoS, pre-existing and not introduced by the SRTCP work that found it.
+It went unnoticed because the existing malformed-packet test sent 40 B (past the length
+guard, failing on auth, which <em>was</em> caught) and so never exercised the short path.</li>
+<li>The <strong>SIP stream framer</strong> buffers TCP/TLS bytes until it can frame a message. Without hard
+limits, a peer that never sends a <code>CRLFCRLF</code> terminator, or advertises a huge Content-Length,
+forces unbounded memory growth. The 64-KB SIP <em>message-parser</em> limit only applies <em>after</em>
+framing, so the framer must bound its own buffer.</li>
+</ol>
+<p>The governing rule is ENGINEERING_RULES <strong>K4</strong>: untrusted remote input is parsed under a
+<code>Try*</code>/null or drop contract (decode never throws out of the loop — HARD-G3, failures
+observable not silent), and <strong>DoS caps at every wire boundary</strong> (message sizes, attribute
+counts, frame limits) are mandatory for new parsers/listeners.</p>
+<h3 id="verified-current-state-graphify--code">Verified current state (graphify + code)</h3>
+<ul>
+<li><strong>The RTP branch now drops all <code>Unprotect</code> throws.</strong> <code>RtpSession.ProcessDatagram</code>
+(<code>src/Core/Infrastructure/Rtp/Session/RtpSession.cs</code> L649-675) wraps <code>inboundSrtp.Unprotect</code>
+in <code>catch (SrtpAuthenticationException)</code> → drop, <code>catch (SrtpReplayException)</code> → drop, and
+<code>catch (Exception ex) when (ex is ArgumentException or CryptographicException or ObjectDisposedException)</code>
+→ LogDebug + drop. The comment (L665-671) records both the short-packet case (<code>&lt; 12 + auth-tag</code>)
+and the <code>ObjectDisposedException</code> teardown race (a receive racing session dispose while the
+DTLS attachment already zeroed the keys).</li>
+<li><strong>The SRTCP branch mirrors it exactly.</strong> The RTCP arm (L568-598) has the identical
+<code>catch … when (ex is ArgumentException or CryptographicException or ObjectDisposedException)</code>,
+plus a separate guard when the RTCP compound decode itself throws
+(<code>catch … when (ex is ArgumentException or NotSupportedException)</code>, L607-611) so a malformed
+compound is dropped, not fatal.</li>
+<li><strong>The secondary-stream branch mirrors it too.</strong> <code>ProcessSecondaryDatagram</code> (L798-848) applies
+the same three-way fail-closed drop for the RTX/secondary SRTP context — parity is preserved
+across all three inbound crypto paths.</li>
+<li><strong>The framer enforces hard header and body caps.</strong> <code>SipWireStreamFramer</code>
+(<code>src/Core/Infrastructure/Sip/Transport/SipWireStreamFramer.cs</code>) defines
+<code>DefaultMaxHeaderBytes = 64 * 1024</code> and <code>DefaultMaxBodyBytes = 256 * 1024</code> (L15-16). An
+unterminated header past the limit throws before buffering more (L72-74); a framed header over
+the limit throws (L79-81); a Content-Length over <code>_maxBodyBytes</code> throws (L94-96); chunked
+transfer-encoding is rejected (L88); a stream message with no Content-Length is rejected
+(L92-93). Each cap makes <code>TryReadFrame</code> throw so the transport tears the connection down
+instead of buffering unbounded memory (class comment L12-14).</li>
+<li><strong>The user-space datagram buffer is a fixed cap decoupled from the kernel queue.</strong>
+<code>MediaSocketDefaults</code> (<code>src/Core/Infrastructure/Common/Network/MediaSocketDefaults.cs</code>) keeps
+<code>DatagramBufferBytes = 8192</code> (the per-receive user buffer, MTU-bounded with headroom)
+separate from <code>SocketReceiveBufferBytes = 1 MiB</code> (the SO_RCVBUF kernel queue) — the in-code
+comment records that conflating them previously undersized SO_RCVBUF at 8 KiB.</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<p>Treat every inbound wire boundary as hostile and cap it in place:</p>
+<ol>
+<li><strong>Every SRTP/SRTCP unprotect throw is a clean drop.</strong> The RTP, RTCP, and secondary-stream
+branches each catch <code>SrtpAuthenticationException</code>, <code>SrtpReplayException</code>, and
+(<code>ArgumentException | CryptographicException | ObjectDisposedException</code>) → LogDebug + drop.
+A too-short or malformed datagram, and a receive racing teardown, never terminate the loop.</li>
+<li><strong>The SIP framer bounds its own buffer.</strong> Header and body byte caps, chunked reject, and
+mandatory Content-Length make <code>TryReadFrame</code> throw so the connection is closed rather than
+buffering unbounded memory.</li>
+</ol>
+<p><strong>Crux:</strong> the receive loop is the single most attractive DoS target — one uncaught throw kills
+all inbound media for the call — so the failure mode for <em>any</em> malformed inbound packet is
+observable-drop, never propagation; the fix is defined as parity across all three inbound crypto
+branches, not a one-off patch of the branch that happened to be reported.</p>
+<h2 id="consequences">Consequences</h2>
+<p>Positive:</p>
+<ul>
+<li>A 12-byte RTP runt is dropped and the next valid SRTP packet still arrives via
+<code>PacketReceived</code> — pinned by <code>SrtpHardeningTests.Receive_loop_survives_short_srtp_packets</code>
+(12-byte runt → previously <code>ArgumentException</code> → loop kill; now drop, then a positive
+assertion that a subsequent valid packet is delivered; the test is red without the fix, via
+timeout). The SRTCP runt path is covered by its mirror test.</li>
+<li>The framer rejects an unterminated/oversized header, an oversized body, chunked encoding, and
+a missing Content-Length — each an explicit <code>SipWireStreamFramerTests</code> case — so a stream peer
+cannot force unbounded buffering.</li>
+</ul>
+<p>Tradeoffs / honest divergence:</p>
+<ul>
+<li><strong>Silent-catch rule interaction.</strong> These catches all LogDebug, so they satisfy
+ENGINEERING_RULES R5 (no silent catch). LogDebug (not Warn) is a deliberate choice: a malformed
+inbound packet is expected background noise on an open UDP port and must not become a
+log-amplification vector — consistent with K4's amplification-suppression intent, but it means
+a real attack is only visible at debug verbosity.</li>
+<li><strong>Caps are fixed defaults, not yet configurable.</strong> <code>DefaultMaxHeaderBytes</code> / <code>DefaultMaxBodyBytes</code>
+are constructor defaults and <code>DatagramBufferBytes</code> is a constant; there is no public knob to
+tune them per deployment. Adequate for the current threat model; a config surface is a possible
+follow-up, not built.</li>
+<li><strong>The short-packet fix was shipped as a one-line mirror of an already-approved SRTCP catch</strong>
+(no separate review roundtrip). Honest scope note: correctness rests on that catch being
+byte-for-byte identical to the reviewed SRTCP arm plus the added survival test, not on an
+independent review of the RTP arm.</li>
+<li>Not security-audited; no external-interop/fuzzing claim — evidence is targeted unit tests over
+real sockets.</li>
+</ul>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li>All three inbound crypto branches (RTP, SRTCP, secondary) drop
+<code>ArgumentException | CryptographicException | ObjectDisposedException</code> from unprotect and never
+propagate — parity is the invariant (RtpSession L568-598 / L649-675 / L798-848).</li>
+<li>A malformed RTCP compound decode is caught (<code>ArgumentException | NotSupportedException</code>) and
+dropped, never fatal.</li>
+<li>Every framer cap (header bytes, body bytes, chunked, missing Content-Length) makes
+<code>TryReadFrame</code> throw so the transport closes the connection — no unbounded buffering
+(ENGINEERING_RULES K4).</li>
+<li>The user-space datagram buffer cap stays decoupled from the kernel SO_RCVBUF request.</li>
+<li>Every drop is observable at LogDebug (ENGINEERING_RULES R5 / HARD-G3), tuned to avoid log
+amplification on an open port.</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Logs: <code>docs/archive/agent-log/2026-07-09-dev-rtp-short-packet-dos.md</code> (short-packet RTP DoS,
+<code>ArgumentException</code> catch, <code>Receive_loop_survives_short_srtp_packets</code>),
+<code>2026-07-09-dev-b6-sip-framer-alloc.md</code> (framer caps context — same file that carries the
+framer allocation work in C07-01).</li>
+<li>Code (graphify-verified): <code>RtpSession.cs</code> (RTP drop L649-675, SRTCP drop L568-598, compound
+guard L607-611, secondary drop L798-848), <code>SipWireStreamFramer.cs</code> (caps L12-16, throws
+L72-96), <code>MediaSocketDefaults.cs</code> (<code>DatagramBufferBytes</code> / <code>SocketReceiveBufferBytes</code>).</li>
+<li>Markers / RFC: ENGINEERING_RULES K4 (wire-boundary DoS caps, Try/drop contract, amplification
+suppression / HARD-G3), R5 (no silent catch); RFC 7983 (media 5-tuple demux), RFC 3711 §3.3/§3.4
+(SRTP/SRTCP auth-tag length), RFC 3261 (SIP Content-Length framing), RFC 5626 §4.4.1
+(keepalive ping).</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-033-wire-boundary-dos-hardening.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

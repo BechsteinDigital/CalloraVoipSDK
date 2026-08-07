@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-021: Trunk-Inbound Line Matching | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-021: Trunk-Inbound Line Matching | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-021-trunk-inbound-matching.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-021-trunk-inbound-line-matching">ADR-021: Trunk-Inbound Line Matching</h1>
+
+<p>Status: Accepted
+Date: 2026-07-08</p>
+<h2 id="context">Context</h2>
+<p>Once the NAT-public contact was learned and the inbound INVITE finally arrived, it was
+<em>rejected</em>: &quot;local URI 'sip:00493075435072@sipconnect.sipgate.de' does not match account
+username.&quot; <code>SipLineChannel.IsSessionForThisLine</code> required the INVITE To-user to equal the
+registration username. That holds for 1:1 accounts but breaks for trunks, where the dialed DID
+is never the trunk credential (DID ≠ trunk username). So a correctly registered trunk could not
+accept any inbound call.</p>
+<h3 id="verified-current-state-graphify--logs">Verified current state (graphify + logs)</h3>
+<ul>
+<li><code>TrunkInboundMatcher</code> (<code>src/Core/Infrastructure/Sip/Adapters/TrunkInboundMatcher.cs</code>, L18) is a
+pure, testable matcher; <code>.IsForThisLine()</code> is the single decision entry point.</li>
+<li><code>SipLineChannel.IsSessionForThisLine</code> delegates to it and resolves trusted registrar addresses
+via <code>ResolveTrustedRegistrarAddresses</code> (best-effort DNS for SipServer + OutboundProxy, cached),
+using <code>session.RemoteSignalingEndPoint</code> (the INVITE source) for the peer match.</li>
+<li><code>SipAccount.InboundNumbers</code> is an optional public-API DID whitelist.</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<p>Do not reject trunk inbound on the user-part. Match like established stacks (PJSIP best-match,
+FreeSWITCH gateway/ACL):</p>
+<ul>
+<li><strong><code>InboundNumbers</code> set</strong> → accept only those DIDs on the registered domain (multi-line-safe).</li>
+<li><strong>Otherwise</strong> → accept on any of: exact username match <strong>OR</strong> peer match (INVITE source ==
+the registered registrar/proxy address) <strong>OR</strong> To-domain == the registered domain (trunk
+default).</li>
+</ul>
+<p>Crux: the accept criterion is <em>peer/domain</em>, not user-part; the peer match (INVITE came from our
+registrar) is the strong criterion, and the DID whitelist is the tightening knob.</p>
+<h2 id="consequences">Consequences</h2>
+<p>Positive: registered trunks accept inbound DIDs; 1:1 username accounts are unchanged;
+<code>InboundNumbers</code> gives multi-line safety and explicit DID control; peer-match accepts even
+off-domain DIDs that genuinely come from our registrar.</p>
+<p>Tradeoffs / honest limits: the trunk default &quot;any DID on the domain&quot; has a spoofing trade-off —
+<code>InboundNumbers</code> is documented as the hardening, and a stricter &quot;registrar-peer only&quot; mode is a
+possible follow-up package. DID exposure to the application layer (<code>CalledNumber</code> on <code>ICall</code>)
+was deliberately <em>not</em> built in this pass — it needs its own result class (follow-up T1b); it is
+not required for mere acceptance. Full call (accept + media + conversation) stayed a founder
+real-test.</p>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li>Trunk inbound MUST NOT be rejected on To-user alone.</li>
+<li>When <code>InboundNumbers</code> is set, only listed DIDs on the registered domain are accepted.</li>
+<li>Peer match uses the actual INVITE source endpoint against the resolved registrar/proxy
+addresses; an unparseable Request/To URI is rejected.</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Logs: docs/archive/agent-log/2026-07-08-dev-sip-trunk-inbound.md</li>
+<li>Code: <code>TrunkInboundMatcher</code> (src/Core/Infrastructure/Sip/Adapters/TrunkInboundMatcher.cs);
+<code>SipLineChannel.IsSessionForThisLine</code> / <code>ResolveTrustedRegistrarAddresses</code>;
+<code>SipAccount.InboundNumbers</code></li>
+<li>Tests: TrunkInboundMatcher tests (7 cases)</li>
+<li>Marker: RFC 3261 §8.2 (UAS request handling); T1 (trunk-inbound)</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-021-trunk-inbound-matching.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

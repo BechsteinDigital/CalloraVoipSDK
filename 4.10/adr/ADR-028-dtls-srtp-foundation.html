@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-028: DTLS-SRTP Keying Foundation (RFC 5763/5764) | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-028: DTLS-SRTP Keying Foundation (RFC 5763/5764) | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-028-dtls-srtp-foundation.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-028-dtls-srtp-keying-foundation-rfc-57635764">ADR-028: DTLS-SRTP Keying Foundation (RFC 5763/5764)</h1>
+
+<p>Status: Accepted
+Date: 2026-07-14</p>
+<h2 id="context">Context</h2>
+<p>The SDK needs SRTP keying that browsers and modern SIP peers actually use: DTLS-SRTP
+(RFC 5763/5764), where the two endpoints run a DTLS 1.2 handshake over the media path and
+derive the SRTP master keys from the TLS keying-material exporter. Neither .NET's BCL nor the
+existing SDES a=crypto path (RFC 4568) covers this — there is no managed DTLS in the platform,
+and hand-rolling a DTLS stack is security-critical and not a sensible in-house build (the
+reference stacks delegate too: SipSorcery → BouncyCastle, baresip → OpenSSL).</p>
+<p>This ADR captures the <strong>cryptographic foundation only</strong> — the handshake engine, certificate,
+fingerprint, and key export — independent of how a call decides to use it (see the signaling
+and media-wiring ADRs in this cluster).</p>
+<h3 id="verified-current-state">Verified current state</h3>
+<ul>
+<li><strong><code>DtlsSrtpKeyExporter</code></strong> (<code>src/Core/Infrastructure/Dtls/DtlsSrtpKeyExporter.cs</code>) exports
+the <code>EXTRACTOR-dtls_srtp</code> block of length <code>2 * (key_len + salt_len)</code> (RFC 5764 §4.2) and
+splits it into local/remote <code>SrtpKeyMaterial</code> by handshake role. The block layout is
+<code>client_write_key || server_write_key || client_write_salt || server_write_salt</code>.</li>
+<li><strong><code>DtlsSrtpClient</code></strong> / <strong><code>DtlsSrtpServer</code></strong> (BouncyCastle <code>DefaultTlsClient</code>/<code>Server</code>
+subclasses) offer/mirror the <code>use_srtp</code> extension, pin <code>DTLSv12</code> only, and
+<code>RequiresExtendedMasterSecret() =&gt; true</code> — both because §4.2 export must bind to the full
+transcript (triple-handshake hardening) and because the BC exporter refuses to run without
+it. The client asserts the server mirrors exactly one offered profile
+(<code>handshake_failure</code>/<code>illegal_parameter</code>) and rejects a non-empty srtp_mki echo
+(RFC 5764 §4.1.3, <code>illegal_parameter</code>) <strong>before</strong> certificates or keys are touched.</li>
+<li><strong>Peer authentication</strong> is by SDP-signaled fingerprint (RFC 5763 §6.7.1), verified in the
+<code>TlsAuthentication</code> before key use; a mismatch is a fatal alert, not a soft failure.</li>
+<li><strong><code>DtlsSrtpHandshaker</code></strong> wraps the blocking BouncyCastle engine in <code>Task.Run</code> with
+cancellation via transport close; <strong><code>QueueDatagramTransport</code></strong> bridges the RTP socket demux
+and the blocking engine.</li>
+<li><strong>Exporter-secret hygiene</strong> (<code>git 1ef5e7c</code>): the concatenated block carries <em>both</em>
+endpoints' write keys and salts. <code>SplitKeyingMaterial</code> now copies each half into its own
+buffer and <code>CryptographicOperations.ZeroMemory</code>s the aggregate in a <code>finally</code>, so the full
+exported secret is no longer pinned on the managed heap for the SRTP contexts' lifetime.
+Verified by <code>DtlsSrtpKeyExporterTests</code> (returned halves keep their bytes while the source
+block reads all-zero — proving independent copies + wipe together).</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<p>Take on <strong>BouncyCastle.Cryptography</strong> as a Core dependency for the DTLS 1.2 handshake, but keep
+the <strong>key derivation (RFC 5764 §4.2) and the SRTP engine as in-house code</strong>. BouncyCastle owns
+the record layer and handshake state machine; the SDK owns everything from the exporter output
+onward.</p>
+<p>Concrete foundation contract:</p>
+<ol>
+<li><strong>ECDSA P-256 self-signed certificate</strong> per client instance, with an <strong>sha-256</strong> fingerprint
+only (the WebRTC de-facto standard; RFC 8122-recommended). Other fingerprint algorithms are
+deferred until demanded.</li>
+<li><strong><code>use_srtp</code> without MKI</strong>, profiles <code>SRTP_AES128_CM_HMAC_SHA1_80</code> (preferred) + <code>_32</code>,
+mapping onto the existing SRTP engine.</li>
+<li><strong><code>extended_master_secret</code> enforced on both sides.</strong></li>
+<li><strong>Fingerprint verified before key use</strong>; profile/MKI mismatch aborts before certificate
+validation.</li>
+</ol>
+<h3 id="crux">Crux</h3>
+<p>The security boundary is &quot;export, then own it&quot;: the concatenated exporter output is treated as a
+single secret to be split into independent per-direction copies and immediately wiped — the SDK
+never retains the aggregate, and the derived key material lives only in <code>SrtpKeyMaterial</code> copies.
+Everything the peer can influence (profile, MKI, certificate) is validated <em>before</em> any key
+touches an SRTP context.</p>
+<h2 id="consequences">Consequences</h2>
+<p>Positive: a tested, RFC-shaped DTLS-SRTP keying core that both the SIP path and the WebRTC path
+build on, without an in-house DTLS state machine. The exporter-secret wipe closes a real
+key-lifetime leak (aggregate secret was previously heap-pinned for the context lifetime).</p>
+<p>Tradeoffs / honest divergence:</p>
+<ul>
+<li><strong>Interop is BouncyCastle↔BouncyCastle loopback only</strong> at foundation time — no browser or
+foreign-stack handshake has been validated here.</li>
+<li><strong>Per-context key copies are still not zeroed at teardown</strong> — only the aggregate exporter
+block is wiped. Zeroing the copies needs a disposable <code>SrtpKeyMaterial</code> and also touches the
+SDES <code>ParseInline</code> path (explicit follow-up in <code>1ef5e7c</code>).</li>
+<li>sha-256-only fingerprints; single protection-profile family.</li>
+</ul>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li>Export requires a completed handshake <strong>with</strong> <code>extended_master_secret</code>; the exporter must not
+run otherwise.</li>
+<li>Peer profile echo must be exactly one offered profile; srtp_mki must be empty
+(RFC 5764 §4.1.3) — both checked before certificate/key handling.</li>
+<li>Fingerprint verified before any exported key reaches an SRTP context (RFC 5763 §6.7.1).</li>
+<li>The concatenated exporter secret is wiped in a <code>finally</code>; returned key material must be
+independent copies, never aliasing views into the wiped block (regression-guarded by
+<code>DtlsSrtpKeyExporterTests</code>).</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Logs: <code>docs/archive/agent-log/2026-07-14-dev-dtls-srtp-foundation.md</code></li>
+<li>Code (graphify-verified): <code>Dtls/DtlsSrtpKeyExporter.cs</code> (<code>.Export()</code>, <code>.SplitKeyingMaterial()</code>),
+<code>Dtls/DtlsSrtpClient.cs</code>, <code>Dtls/DtlsSrtpServer.cs</code>, <code>Dtls/DtlsSrtpHandshaker.cs</code>,
+<code>Dtls/DtlsCertificate.cs</code> (<code>.GenerateEcdsaP256()</code>), <code>Dtls/DtlsFingerprint.cs</code>,
+<code>Dtls/QueueDatagramTransport.cs</code>; tests <code>DtlsSrtpKeyExporterTests</code>, <code>DtlsSrtpHandshakeTests</code></li>
+<li>Git: <code>1ef5e7c</code> (wipe the concatenated DTLS-SRTP exporter secret after splitting, #14)</li>
+<li>Markers: RFC 5763, RFC 5764 §4.1/§4.1.3/§4.2/§6.7.1, RFC 8122; K5 (Secrets — zeroization);
+DECISION (BouncyCastle Core dependency)</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-028-dtls-srtp-foundation.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>
