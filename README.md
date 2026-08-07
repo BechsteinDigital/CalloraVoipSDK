@@ -19,7 +19,7 @@ It exposes a stable, developer-friendly API through `VoipClient` while keeping t
 🧪 **Examples:** [`examples/`](examples) — runnable samples (BasicCalling, Dialer, Transfer, CustomAudio, VideoCalling, WebRtcPeer, WebRtcRecording, WebRtcDependencyInjection, and a browser video-call website `WebRtcVideoCall.Web`)
 🛠️ **Maintainers:** [`MAINTAINING.md`](MAINTAINING.md) — architecture map, invariants, workflows; rules in [`ENGINEERING_RULES.md`](ENGINEERING_RULES.md)
 
-> **Project status — 4.9.** The **SIP + RTP core** is the mature, production-oriented surface:
+> **Project status — 4.10.** The **SIP + RTP core** is the mature, production-oriented surface:
 > registration, in/outbound call control, transfer, DTMF, SRTP (SDES) and measured RTCP quality
 > metrics — with symmetric RTP (comedia) as the production-proven NAT path. It is exercised in CI
 > by an **automated interop suite against a real Asterisk (PJSIP) container** — registration,
@@ -39,6 +39,20 @@ It exposes a stable, developer-friendly API through `VoipClient` while keeping t
 > [issue tracker](../../issues) — bug reports and interop feedback are especially welcome.
 
 **Contents:** [Why](#why-calloravoipsdk) · [Progressive API](#progressive-api-simple-first-deeper-when-needed) · [Features](#current-feature-set) · [Install](#installation) · [Quickstart](#quickstart) · [Architecture](#architecture) · [Contributing](#contributing) · [Security](#security) · [License](#license)
+
+## What's new in 4.10
+
+Per-call outgoing-audio mute on `ICall` — two additive members, no breaking change (the public API gains two
+`ICall` members and nothing else). The device-wide `IVoipClient.SetAudioInputMuted` mutes every call at once;
+the new per-call mute gates only that call's outbound audio, **locally** (no SIP signalling, unlike hold), so a
+contact-center agent or multi-line softphone can mute one call while another stays live.
+
+- **`ICall.MuteAsync(bool muted, …)`** — stop/resume sending this call's outgoing audio. Local only; valid in
+  any live state; a no-op if already in the requested state. Inbound audio is unaffected (outgoing/microphone
+  mute, not speaker).
+- **`ICall.IsMuted`** — reads the current outgoing-mute state.
+
+Full detail in [`CHANGELOG.md`](CHANGELOG.md) and [`RELEASE_NOTES_4.10.0.md`](RELEASE_NOTES_4.10.0.md).
 
 ## What's new in 4.9
 

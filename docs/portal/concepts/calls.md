@@ -22,6 +22,23 @@ bool ok = await call.AttendedTransferAsync(consultationCall);
 > `AttendedTransferAsync` is the exception to the rule above: it currently has **no** state
 > guard, so a wrong-state call is not rejected — invoke it only from `Connected`.
 
+### Mute this call's outgoing audio
+
+`MuteAsync` gates **this call's** outgoing audio locally — the SDK stops (or resumes) sending its
+captured audio to the peer:
+
+```csharp
+await call.MuteAsync(true);   // stop sending this call's audio to the peer
+bool muted = call.IsMuted;   // true
+await call.MuteAsync(false);  // resume
+```
+
+Unlike `HoldAsync` it is **not signalled** to the peer (no re-INVITE), and unlike the device-wide
+`IVoipClient.SetAudioInputMuted` — which mutes the capture device for *every* call — it affects
+**only this call**, so concurrent calls mute independently. It is **outgoing** (microphone) mute:
+inbound audio is unaffected. Being local, it is valid in any live state and does not throw for state;
+it is a no-op when the call is already in the requested state.
+
 Methods that return a `CallActionResult` instead of throwing for foreseeable outcomes
 (remote decline, invalid request, timeout):
 
