@@ -8,6 +8,28 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
 
 The next line. Entries here accumulate the consumer-visible changes not yet released.
 
+## [4.10.0] - 2026-08-07
+
+Per-call outgoing-audio mute on `ICall`. The device-wide mute (`IVoipClient.SetAudioInputMuted`) silences the
+capture device for every call at once, so it cannot mute one call while another stays live — the case a
+contact-center agent or multi-line softphone hits constantly. 4.10.0 adds a per-call mute that gates only that
+call's outbound audio, locally: no SIP signalling (unlike hold, which sends a re-INVITE) and independent of the
+device-wide mute, so on a client with several concurrent calls each mutes on its own. The gate sits at the
+single outbound choke point, so both the default microphone path and custom audio are covered; while muted no
+RTP is sent for this call's outgoing direction and **inbound audio is unaffected** (it is microphone/outgoing
+mute, not speaker/output). It is valid in any live state and is a no-op if already in the requested state.
+**`PublicApi.approved.txt` gains two `ICall` members and nothing else** — a purely additive minor with no
+breaking change. See `RELEASE_NOTES_4.10.0.md`.
+
+### Added
+
+- **`ICall.MuteAsync(bool muted, CancellationToken ct = default)`** — mutes or unmutes this call's outgoing
+  audio locally. Unlike `HoldAsync` it is not signalled to the peer (no re-INVITE), and unlike the device-wide
+  `IVoipClient.SetAudioInputMuted` it affects only this call, so concurrent calls mute independently. While
+  muted no packets are sent for the outgoing direction; inbound audio is unaffected. Valid in any live state
+  (does not throw for state); a no-op when already in the requested state.
+- **`ICall.IsMuted`** — reads this call's current outgoing-mute state. `false` by default.
+
 ## [4.9.0] - 2026-08-06
 
 Inbound caller and dialed identity surfaced on `ICall`. An inbound call already knew which number it was

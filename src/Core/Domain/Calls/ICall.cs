@@ -151,6 +151,12 @@ public interface ICall
     /// </summary>
     string? CalledNumber => null;
 
+    /// <summary>
+    /// Whether this call's outgoing audio is currently muted locally (see <see cref="MuteAsync"/>).
+    /// <see langword="false"/> by default.
+    /// </summary>
+    bool IsMuted => false;
+
     // ── Events ────────────────────────────────────────────────────────────────
 
     /// <summary>
@@ -244,6 +250,20 @@ public interface ICall
     /// The call state is not <see cref="CallState.OnHold"/>.
     /// </exception>
     Task UnholdAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Mutes or unmutes this call's <b>outgoing</b> audio locally: the SDK stops (or resumes) sending
+    /// this call's captured audio to the peer. Unlike <see cref="HoldAsync"/> it is <b>not signalled</b>
+    /// to the peer (no re-INVITE), and unlike the client-wide device mute
+    /// (<c>IVoipClient.SetAudioInputMuted</c>) it affects <b>only this call</b>, so on a client with
+    /// several concurrent calls each mutes independently. While muted the peer receives no audio for this
+    /// call (no packets are sent for the outgoing direction); inbound audio is unaffected. Local-only, so
+    /// it is valid in any live state and does not throw for state; a no-op if already in the requested
+    /// state. Read the current state via <see cref="IsMuted"/>. The default implementation is a no-op.
+    /// </summary>
+    /// <param name="muted"><see langword="true"/> to mute outgoing audio; <see langword="false"/> to resume.</param>
+    /// <param name="ct">Cancels the operation; on cancellation <see cref="OperationCanceledException"/> is thrown.</param>
+    Task MuteAsync(bool muted, CancellationToken ct = default) => Task.CompletedTask;
 
     /// <summary>
     /// Initiates a local ICE restart (RFC 8445 §9) on a connected, ICE-negotiated call: the SDK

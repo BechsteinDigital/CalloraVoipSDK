@@ -48,6 +48,19 @@ await call.UnholdAsync();   // re-INVITE sendrecv
 Hold/unhold on an SRTP call keeps the media secured; the hold/unhold re-offer reuses the
 existing SRTP keys (no rekey, by design).
 
+## Mute / unmute
+
+```csharp
+await call.MuteAsync(true);   // stop sending this call's outgoing audio (local, no re-INVITE)
+await call.MuteAsync(false);  // resume
+bool muted = call.IsMuted;
+```
+
+Mute is **local and per-call**: it gates only this call's outgoing (microphone) audio, sends no SIP
+signalling (unlike hold), and is independent of the client-wide device mute
+(`IVoipClient.SetAudioInputMuted`) — so on a client with several concurrent calls each mutes on its
+own. Inbound audio is unaffected. See [Calls](../concepts/calls.md#mute-this-calls-outgoing-audio).
+
 ## Transfer
 
 ```csharp

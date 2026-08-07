@@ -106,6 +106,12 @@ internal interface ICallChannel : IDisposable
     /// </summary>
     void SetAudioSendDelegate(Func<CallAudioFrame, CancellationToken, Task>? sendDelegate);
 
+    /// <summary>Whether this call's outgoing audio is muted locally (send-path gate). Default: false.</summary>
+    bool IsOutgoingAudioMuted => false;
+
+    /// <summary>Mutes/unmutes this call's outgoing audio locally (no SIP signalling). Default: no-op.</summary>
+    void SetOutgoingAudioMuted(bool muted) { }
+
     /// <summary>
     /// Delivers one inbound video frame received from the network.
     /// Called by the application media orchestrator when a complete encoded video frame

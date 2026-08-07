@@ -497,9 +497,11 @@
   CalloraVoipSdk.Core.Domain.Calls.ICall.IceConnectionState : CalloraVoipSdk.Core.Domain.Calls.CallIceState { get }
   CalloraVoipSdk.Core.Domain.Calls.ICall.IceConnectionStateChanged : event System.EventHandler<CalloraVoipSdk.Core.Domain.Events.CallIceConnectionStateChangedEventArgs>
   CalloraVoipSdk.Core.Domain.Calls.ICall.IceSnapshot : CalloraVoipSdk.Core.Domain.Calls.CallIceSnapshot { get }
+  CalloraVoipSdk.Core.Domain.Calls.ICall.IsMuted : System.Boolean { get }
   CalloraVoipSdk.Core.Domain.Calls.ICall.Line : CalloraVoipSdk.Core.Domain.Lines.IPhoneLine { get }
   CalloraVoipSdk.Core.Domain.Calls.ICall.LocalParty : System.String { get }
   CalloraVoipSdk.Core.Domain.Calls.ICall.MediaParameters : CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters { get }
+  CalloraVoipSdk.Core.Domain.Calls.ICall.MuteAsync(System.Boolean muted, System.Threading.CancellationToken ct = default) : System.Threading.Tasks.Task
   CalloraVoipSdk.Core.Domain.Calls.ICall.QualitySnapshot : CalloraVoipSdk.Core.Domain.Calls.CallQualitySnapshot { get }
   CalloraVoipSdk.Core.Domain.Calls.ICall.QualitySnapshotChanged : event System.EventHandler<CalloraVoipSdk.Core.Domain.Events.CallQualitySnapshotChangedEventArgs>
   CalloraVoipSdk.Core.Domain.Calls.ICall.RedirectAsync(System.Collections.Generic.IReadOnlyList<System.String> contactUris, System.Int32 statusCode = default, System.Threading.CancellationToken ct = default) : System.Threading.Tasks.Task<CalloraVoipSdk.Core.Domain.Calls.CallActionResult>

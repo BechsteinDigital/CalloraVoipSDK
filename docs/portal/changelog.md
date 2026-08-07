@@ -5,6 +5,18 @@ The authoritative changelog lives in the repository:
 
 ## Release highlights
 
+### 4.10.0 — 2026-08-07
+
+**Per-call outgoing-audio mute on `ICall`.** Two additive members — `MuteAsync(bool muted, …)` and `IsMuted` —
+mute this call's outbound audio **locally**: no SIP signalling (unlike hold, which sends a re-INVITE) and
+independent of the device-wide `IVoipClient.SetAudioInputMuted` (which mutes every call at once), so a
+contact-center agent or multi-line softphone can mute one call while another stays live. The gate sits at the
+single outbound choke point (default microphone and custom audio both covered); while muted no RTP is sent for
+this call's outgoing direction and inbound audio is unaffected (outgoing/microphone mute, not speaker). Valid
+in any live state; a no-op if already in the requested state. **`PublicApi.approved.txt` gains two `ICall`
+members and nothing else** — a purely additive minor, no breaking change. See
+[Calls](concepts/calls.md#mute-this-calls-outgoing-audio).
+
 ### 4.9.0 — 2026-08-06
 
 **Inbound caller and dialed identity on `ICall`.** Four additive, read-only properties surface the identity an

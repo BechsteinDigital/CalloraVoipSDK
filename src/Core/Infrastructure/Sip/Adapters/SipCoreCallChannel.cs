@@ -575,9 +575,20 @@ internal sealed class SipCoreCallChannel : ICallChannel, IRtcpSocketHandoff
         return session.SendReferAsync(referTo, referredBy: session.LocalUri, ct: ct);
     }
 
+    // Per-call outgoing-audio mute (#per-call-mute): a local send-path gate — no SIP signalling, and
+    // independent of the device-wide IVoipClient.SetAudioInputMuted, so each concurrent call mutes its
+    // own outbound audio. Volatile: written from the caller thread, read on the media send hotpath.
+    private volatile bool _outgoingAudioMuted;
+
+    /// <inheritdoc />
+    public bool IsOutgoingAudioMuted => _outgoingAudioMuted;
+
+    /// <inheritdoc />
+    public void SetOutgoingAudioMuted(bool muted) => _outgoingAudioMuted = muted;
+
     /// <inheritdoc />
     public Task SendAudioFrameAsync(CallAudioFrame frame, CancellationToken ct = default)
-        => _audioTap.SendFrameAsync(frame, ct);
+        => _outgoingAudioMuted ? Task.CompletedTask : _audioTap.SendFrameAsync(frame, ct);
 
     /// <inheritdoc />
     public void DeliverInboundAudioFrame(CallAudioFrame frame) => _audioTap.DeliverInbound(frame);
