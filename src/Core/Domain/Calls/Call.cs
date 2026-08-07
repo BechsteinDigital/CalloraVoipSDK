@@ -76,6 +76,9 @@ internal sealed class Call : ICall, IDisposable
     public string? CalledNumber => _channel.CalledNumber;
 
     /// <inheritdoc />
+    public bool IsMuted => _channel.IsOutgoingAudioMuted;
+
+    /// <inheritdoc />
     public string? EarlyMediaSdp => _channel.EarlyMediaSdp;
 
     // ── Events ────────────────────────────────────────────────────────────────
@@ -165,6 +168,15 @@ internal sealed class Call : ICall, IDisposable
         await _channel.UnholdAsync().ConfigureAwait(false);
         TransitionTo(CallState.Connected);
         RaiseHoldChanged(isOnHold: false, byRemote: false);
+    }
+
+    /// <inheritdoc />
+    public Task MuteAsync(bool muted, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        // Local send-path gate only — no SIP signalling, no state transition, valid in any live state.
+        _channel.SetOutgoingAudioMuted(muted);
+        return Task.CompletedTask;
     }
 
     /// <summary>
