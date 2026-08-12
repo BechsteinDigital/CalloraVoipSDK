@@ -77,7 +77,7 @@ internal sealed class RtpSessionOptions
 
     /// <summary>
     /// Negotiated one-byte header-extension id for the transport-wide sequence number
-    /// (transport-cc / RFC 8888). When set, each outgoing RTP packet carries an incrementing
+    /// (transport-cc). When set, each outgoing RTP packet carries an incrementing
     /// transport-wide counter in an RFC 8285 header extension so the receiver can report arrival
     /// times for congestion control. <see langword="null"/> stamps no extension (default).
     /// </summary>

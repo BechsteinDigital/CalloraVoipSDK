@@ -15,7 +15,14 @@ namespace CalloraVoipSdk.Core.Infrastructure.Rtcp.Wire;
 /// Encoding emits two-bit status-vector chunks (one chunk per seven packets); run-length chunks
 /// are a valid, more compact representation this encoder does not yet produce (decoding accepts
 /// all chunk forms peers send). It is dispatched by <see cref="RtcpFeedbackCodec"/> for the
-/// RFC 8888/8285 transport-wide feedback message on the RTCP encode/decode path.
+/// transport-wide feedback message on the RTCP encode/decode path.
+/// <para>
+/// <b>This is not RFC 8888.</b> RFC 8888 defines Congestion Control Feedback as RTPFB <b>FMT=11</b> with a
+/// different body; what this codec speaks is the earlier draft-holmer transport-cc format, RTPFB
+/// <b>FMT=15</b> — the one Chrome/libwebrtc has long used and what the vast majority of WebRTC endpoints
+/// negotiate. The distinction is not pedantry: a peer expecting CCFB would receive a message it cannot
+/// parse. Supporting real CCFB means implementing FMT=11 and negotiating it separately (#162 P2-10).
+/// </para>
 /// </remarks>
 internal static class RtcpTransportFeedbackCodec
 {

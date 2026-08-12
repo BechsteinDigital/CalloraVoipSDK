@@ -9,7 +9,7 @@ namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
 /// <summary>
 /// Decodes each inbound decrypted RTCP compound on one BUNDLE media session and fans it out to the reception
 /// statistics, the outbound quality tracker, the per-track RTCP feedback path, and the transport-wide congestion
-/// plane (RFC 3550 §6.4.1, RFC 4585, RFC 8888). Extracted from <see cref="BundledMediaSession"/> so that session
+/// plane (RFC 3550 §6.4.1, RFC 4585, transport-cc). Extracted from <see cref="BundledMediaSession"/> so that session
 /// stays a wiring/lifecycle unit under the 1000-line rule; the behaviour is byte-identical to the former inline
 /// <c>OnControlPacketReceived</c>.
 /// </summary>
@@ -59,7 +59,7 @@ internal sealed class BundledInboundRtcpDispatcher
     /// back for the peer's RTT; and every report block the peer sends about OUR outbound streams (carried in an
     /// inbound SR or RR) feeds the outbound quality tracker to derive our own RTT and the loss the peer sees. The
     /// decoded compound is then fanned to each video track (PLI/FIR → key-frame request; Generic NACK → RTX) and to
-    /// the transport-wide congestion controller (transport-cc feedback, RFC 8888). Runs on the receive loop; a
+    /// the transport-wide congestion controller (transport-cc feedback). Runs on the receive loop; a
     /// malformed compound must not tear it down, so decode failures are swallowed with a log.
     /// </summary>
     /// <param name="rtcp">The decrypted RTCP compound bytes.</param>
@@ -100,7 +100,7 @@ internal sealed class BundledInboundRtcpDispatcher
         _video.OnRtcpPackets(packets);
 
         // And to the transport-wide congestion controller: any transport-cc feedback report in the compound
-        // (RFC 8888) updates its delay-trend + loss estimators and the recommended bitrate. Same thread — no
+        // (transport-cc) updates its delay-trend + loss estimators and the recommended bitrate. Same thread — no
         // added confinement concern.
         _congestion?.OnRtcpPackets(packets);
     }

@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging;
 namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
 
 /// <summary>
-/// The transport-wide congestion-control plane for one BUNDLE (transport-cc / RFC 8888), factored out of
+/// The transport-wide congestion-control plane for one BUNDLE (transport-cc), factored out of
 /// <see cref="BundledMediaSession"/>. transport-cc numbers the transport, not a stream, so there is exactly
 /// one plane per bundle, and it is built only when the a=extmap was negotiated. Two halves:
 /// <list type="bullet">
@@ -91,13 +91,13 @@ internal sealed class BundledCongestionPlane : IAsyncDisposable
     internal TransportCcCongestionController Controller => _congestion;
 
     /// <summary>
-    /// Folds an already-decoded inbound RTCP compound's transport-cc feedback (RFC 8888) into the sender-side
+    /// Folds an already-decoded inbound RTCP compound's transport-cc feedback (transport-cc) into the sender-side
     /// delay-trend + loss estimators and the recommended bitrate. Runs on the receive loop.
     /// </summary>
     public void OnRtcpPackets(IReadOnlyList<RtcpPacket> packets) => _congestion.OnRtcpPackets(packets);
 
     /// <summary>
-    /// Starts the receive-side feedback loop (RFC 8888). Harmless before keying — its SRTCP send fails closed,
+    /// Starts the receive-side feedback loop (transport-cc). Harmless before keying — its SRTCP send fails closed,
     /// so early ticks are an empty batch or a suppressed send.
     /// </summary>
     public void Start() => _feedback.Start();

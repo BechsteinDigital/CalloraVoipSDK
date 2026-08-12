@@ -223,8 +223,9 @@ public interface IPeerConnection : IAsyncDisposable
     WebRtcStats GetStats();
 
     /// <summary>
-    /// The SDK's current recommended outbound send bitrate to this peer in bits per second (transport-cc /
-    /// RFC 8888), for setting the encoder or — for an SFU — selecting which simulcast layer to forward to this
+    /// The SDK's current recommended outbound send bitrate to this peer in bits per second (transport-cc,
+    /// draft-holmer-rmcat-transport-wide-cc-extensions-01 — not RFC 8888 CCFB, see the codec remarks),
+    /// for setting the encoder or — for an SFU — selecting which simulcast layer to forward to this
     /// receiver. <see langword="null"/> until a media session is running and transport-cc has been negotiated
     /// for this leg. The point-in-time counterpart to <see cref="RecommendedBitrateChanged"/>; the same value
     /// the last event carried.
@@ -232,7 +233,7 @@ public interface IPeerConnection : IAsyncDisposable
     long? RecommendedOutgoingBitrateBps { get; }
 
     /// <summary>
-    /// Raised whenever the SDK revises its recommended send bitrate to this peer (transport-cc / RFC 8888),
+    /// Raised whenever the SDK revises its recommended send bitrate to this peer (transport-cc),
     /// carrying the finished <see cref="BitrateRecommendation"/> (bitrate + coarse quality). This is the reactive
     /// signal an SFU reacts to per receiver, re-choosing the simulcast layer it forwards when the path's
     /// bandwidth changes. Reactive per feedback report (roughly once per round-trip); the SDK does not throttle

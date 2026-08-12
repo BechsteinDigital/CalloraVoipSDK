@@ -283,7 +283,7 @@ internal sealed class PeerConnection : IPeerConnection
             KeyFrames = s.KeyFrames,
             FramesDropped = s.FramesDropped,
             // Video RTCP feedback we sent the peer on detected inbound loss (RFC 4585) and the sender-side
-            // congestion estimate (transport-cc / RFC 8888) — both null until a video track / the extension is
+            // congestion estimate (transport-cc) — both null until a video track / the extension is
             // negotiated. FirCount stays null: the bundle honours an inbound FIR as a keyframe request but never
             // generates FIR (PLI is the keyframe fallback), so there is no sent-FIR count to report.
             NackCount = s.NacksSent,
@@ -450,7 +450,7 @@ internal sealed class PeerConnection : IPeerConnection
         handler?.Invoke(this, EventArgs.Empty);
     }
 
-    // The SDK revised its recommended send bitrate for this peer (transport-cc / RFC 8888). Surfaced as a
+    // The SDK revised its recommended send bitrate for this peer (transport-cc). Surfaced as a
     // top-level event carrying the finished recommendation (bitrate + coarse quality) — an SFU reacts per
     // receiver. Snapshot the handler under the event lock and invoke outside it (K3), like the other fan-outs.
     private void OnRecommendedBitrateChanged(long bitrateBps, NetworkQuality quality)

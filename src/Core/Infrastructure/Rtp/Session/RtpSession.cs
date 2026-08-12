@@ -697,7 +697,7 @@ internal sealed class RtpSession : IRtpSession
             if (advanceTimestamp)
                 _timestamp += (uint)_options.SamplesPerPacket;
 
-            // Transport-wide sequence number (transport-cc / RFC 8888): a monotonic counter across
+            // Transport-wide sequence number (transport-cc): a monotonic counter across
             // this transport's primary packets, allocated under the same lock so it stays ordered.
             if (_options.TransportWideCcExtensionId is not null)
             {

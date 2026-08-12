@@ -4,7 +4,7 @@ namespace CalloraVoipSdk.Core.Infrastructure.Rtp.Session;
 
 /// <summary>
 /// Builds the RFC 8285 one-byte header extension stamped on each outgoing RTP packet from the negotiated
-/// per-stream extensions: the transport-wide sequence number (transport-cc / RFC 8888); on a BUNDLE
+/// per-stream extensions: the transport-wide sequence number (transport-cc); on a BUNDLE
 /// transport, the MID SDES token (RFC 9143) so the peer can associate this stream's SSRC with its m-line;
 /// and, on a simulcast encoding, the RID SDES token (RFC 8852) so the peer can associate the SSRC with its
 /// <c>a=rid</c> layer.

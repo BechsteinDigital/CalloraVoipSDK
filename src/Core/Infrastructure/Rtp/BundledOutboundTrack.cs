@@ -174,7 +174,7 @@ internal sealed class BundledOutboundTrack
     /// packets carrying an explicit timestamp (a shared video frame timestamp) do not.
     /// </param>
     /// <param name="transportCcSequence">
-    /// The transport-wide sequence number (transport-cc / RFC 8888) to stamp on this packet, or
+    /// The transport-wide sequence number (transport-cc) to stamp on this packet, or
     /// <see langword="null"/> when the extension was not negotiated. It is a single counter shared across
     /// every track on the bundled transport (transport-cc is transport-wide, not per-stream), so the caller
     /// — <see cref="BundledOutboundPipeline"/> — allocates it, not the per-track cursor here.
