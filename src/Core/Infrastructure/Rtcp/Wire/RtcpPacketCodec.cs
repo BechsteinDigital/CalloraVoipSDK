@@ -363,15 +363,52 @@ internal sealed class RtcpPacketCodec : IRtcpPacketCodec
     // Encode — individual packet types
     // -------------------------------------------------------------------------
 
+    // The RC/SC header field is 5 bits (RFC 3550 §6.1), so at most 31 items fit in one packet.
+    private const int MaxHeaderCount = 31;
+
+    // #162 P2-2: validate rather than mask. Masking the count with & 0x1F while still writing every item
+    // to the body made the packet contradict itself at 32 items — RC/SC wrapped to 0 while the body
+    // carried 32 entries, so our own encode no longer round-tripped through our own decode (32 blocks in,
+    // 0 blocks out). A caller with more than 31 items must page them across several packets, as
+    // BundledRtcpReporter already does (RFC 3550 §6.1/§6.4.1); failing loudly here is what makes an
+    // unpaged caller visible instead of silently emitting a corrupt packet.
+    private static int ValidateCount(int count, string what)
+    {
+        if ((uint)count > MaxHeaderCount)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(count), count,
+                $"RTCP {what}: at most {MaxHeaderCount} fit in one packet (5-bit RC/SC field, RFC 3550 §6.1); page across multiple packets.");
+        }
+
+        return count;
+    }
+
+    // The header length field counts 32-bit words minus one and is 16 bits wide (RFC 3550 §6.4.1). The
+    // count check above bounds SR/RR, but an SDES packet's size is driven by its item values, so its
+    // length is checked independently rather than truncated into the field.
+    private static ushort LengthWords(int totalBytes, string what)
+    {
+        var words = totalBytes / 4 - 1;
+        if ((uint)words > ushort.MaxValue)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(totalBytes), totalBytes,
+                $"RTCP {what}: encoded length {totalBytes} bytes exceeds the 16-bit header length field (RFC 3550 §6.4.1).");
+        }
+
+        return (ushort)words;
+    }
+
     private static byte[] EncodeSr(RtcpSenderReport sr)
     {
-        var rc      = sr.ReportBlocks.Count;
+        var rc      = ValidateCount(sr.ReportBlocks.Count, "SR reception report blocks");
         var total   = 4 + 4 + 20 + rc * 24;   // header + SSRC + sender-info + blocks
         var buf     = new byte[total];
 
-        buf[0] = (byte)(0x80 | (rc & 0x1F));
+        buf[0] = (byte)(0x80 | rc);
         buf[1] = (byte)RtcpPacketType.SenderReport;
-        BinaryPrimitives.WriteUInt16BigEndian(buf.AsSpan(2), (ushort)(total / 4 - 1));
+        BinaryPrimitives.WriteUInt16BigEndian(buf.AsSpan(2), LengthWords(total, "SR"));
 
         BinaryPrimitives.WriteUInt32BigEndian(buf.AsSpan(4), sr.Ssrc);
         BinaryPrimitives.WriteUInt32BigEndian(buf.AsSpan(8),  (uint)(sr.NtpTimestamp >> 32));
@@ -386,13 +423,13 @@ internal sealed class RtcpPacketCodec : IRtcpPacketCodec
 
     private static byte[] EncodeRr(RtcpReceiverReport rr)
     {
-        var rc    = rr.ReportBlocks.Count;
+        var rc    = ValidateCount(rr.ReportBlocks.Count, "RR reception report blocks");
         var total = 4 + 4 + rc * 24;
         var buf   = new byte[total];
 
-        buf[0] = (byte)(0x80 | (rc & 0x1F));
+        buf[0] = (byte)(0x80 | rc);
         buf[1] = (byte)RtcpPacketType.ReceiverReport;
-        BinaryPrimitives.WriteUInt16BigEndian(buf.AsSpan(2), (ushort)(total / 4 - 1));
+        BinaryPrimitives.WriteUInt16BigEndian(buf.AsSpan(2), LengthWords(total, "RR"));
 
         BinaryPrimitives.WriteUInt32BigEndian(buf.AsSpan(4), rr.Ssrc);
         WriteReportBlocks(buf.AsSpan(8), rr.ReportBlocks);
@@ -429,9 +466,9 @@ internal sealed class RtcpPacketCodec : IRtcpPacketCodec
         var total        = 4 + bodyLen;
         var buf          = new byte[total];
 
-        buf[0] = (byte)(0x80 | (sdes.Chunks.Count & 0x1F));
+        buf[0] = (byte)(0x80 | ValidateCount(sdes.Chunks.Count, "SDES chunks"));
         buf[1] = (byte)RtcpPacketType.Sdes;
-        BinaryPrimitives.WriteUInt16BigEndian(buf.AsSpan(2), (ushort)(total / 4 - 1));
+        BinaryPrimitives.WriteUInt16BigEndian(buf.AsSpan(2), LengthWords(total, "SDES"));
 
         var offset = 4;
         foreach (var chunk in chunkBuffers)
@@ -486,9 +523,9 @@ internal sealed class RtcpPacketCodec : IRtcpPacketCodec
         var total = RoundUp4(raw);
         var buf   = new byte[total];
 
-        buf[0] = (byte)(0x80 | (bye.Sources.Count & 0x1F));
+        buf[0] = (byte)(0x80 | ValidateCount(bye.Sources.Count, "BYE sources"));
         buf[1] = (byte)RtcpPacketType.Bye;
-        BinaryPrimitives.WriteUInt16BigEndian(buf.AsSpan(2), (ushort)(total / 4 - 1));
+        BinaryPrimitives.WriteUInt16BigEndian(buf.AsSpan(2), LengthWords(total, "BYE"));
 
         var offset = 4;
         foreach (var ssrc in bye.Sources)
