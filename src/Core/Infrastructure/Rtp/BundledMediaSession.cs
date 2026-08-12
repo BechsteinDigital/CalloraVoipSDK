@@ -61,7 +61,7 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     // the mid-less AudioReceived event; these extra receive-only sinks surface on the mid-tagged event instead.
     private readonly BundledAudioTrackSet _audioTracks;
 
-    // Transport-wide congestion control (transport-cc / RFC 8888), one plane for the WHOLE bundle because
+    // Transport-wide congestion control (transport-cc), one plane for the WHOLE bundle because
     // transport-cc numbers the transport, not a stream. Null unless the a=extmap was negotiated. See
     // BundledCongestionPlane — the sender-side controller (recommended bitrate) and the receive-side feedback
     // sender, with their own lifetime token; OnControlPacketReceived fans decoded feedback into it.
@@ -348,7 +348,7 @@ internal sealed class BundledMediaSession : IAsyncDisposable
 
         _video = builtVideo.Count > 0 ? new BundledVideoTrackSet(builtVideo) : new BundledVideoTrackSet();
 
-        // Transport-wide congestion control (transport-cc / RFC 8888), one plane per bundle. Only when the
+        // Transport-wide congestion control (transport-cc), one plane per bundle. Only when the
         // a=extmap was negotiated (so the transport actually stamps a transport-wide sequence) — otherwise the
         // plane stays off. See BundledCongestionPlane: it wires the sender-side controller to PacketSent and the
         // receive-side feedback sender to inbound RTP; OnControlPacketReceived fans decoded feedback into it.
@@ -356,7 +356,7 @@ internal sealed class BundledMediaSession : IAsyncDisposable
             _congestion = new BundledCongestionPlane(
                 transportCcExtensionId, _outbound, _inbound, _rtcpCodec, options.Audio.Ssrc, loggerFactory);
 
-        // Inbound RTCP decode + fan-out (RFC 3550 §6.4.1 / RFC 4585 / RFC 8888): built now that the video set and
+        // Inbound RTCP decode + fan-out (RFC 3550 §6.4.1 / RFC 4585 / transport-cc): built now that the video set and
         // congestion plane exist. Invoked only from the receive loop (subscribed on _inbound above), which starts
         // in StartAsync, so this field is always assigned before the first dispatch.
         _rtcpDispatcher = new BundledInboundRtcpDispatcher(
@@ -468,7 +468,7 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         RaiseAudioReceived(packet);
     }
 
-    // Decodes an inbound decrypted RTCP compound and fans it out (RFC 3550 §6.4.1 / RFC 4585 / RFC 8888) via the
+    // Decodes an inbound decrypted RTCP compound and fans it out (RFC 3550 §6.4.1 / RFC 4585 / transport-cc) via the
     // extracted dispatcher. Runs on the receive loop; the dispatcher swallows a malformed compound with a log so it
     // cannot tear the loop down.
     private void OnControlPacketReceived(byte[] rtcp) => _rtcpDispatcher.Dispatch(rtcp);
@@ -757,7 +757,7 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     }
 
     /// <summary>
-    /// The bundle's sender-side transport-wide congestion controller (transport-cc / RFC 8888), or
+    /// The bundle's sender-side transport-wide congestion controller (transport-cc), or
     /// <see langword="null"/> when the extension was not negotiated. Exposes the recommended outbound bitrate,
     /// its change event, and coarse network quality; the public WebRTC facade projects these onto its own
     /// reactive surface via <c>WebRtcCongestionRelay</c> (4.7.0 congestion API).
@@ -821,7 +821,7 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         // Start emitting periodic Sender Reports (RFC 3550 §6.4). Its SRTCP send fails closed until the DTLS
         // handshake below installs the outbound SRTCP key, so an early start just suppresses the first ticks.
         _rtcpReporter.Start();
-        // Start the transport-cc receive-side feedback loop (RFC 8888), when negotiated. Its SRTCP send fails
+        // Start the transport-cc receive-side feedback loop (transport-cc), when negotiated. Its SRTCP send fails
         // closed the same way, so early ticks before keying are harmless (an empty batch or a suppressed send).
         _congestion?.Start();
         _dtls.Start(cancellationToken);

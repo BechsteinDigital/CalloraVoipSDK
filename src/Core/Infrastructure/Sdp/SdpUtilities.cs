@@ -591,7 +591,7 @@ internal static class SdpUtilities
     }
 
     // The negotiated one-byte header-extension id for the transport-wide sequence number
-    // (transport-cc / RFC 8888), or null when the extension was not negotiated on this m-line.
+    // (transport-cc), or null when the extension was not negotiated on this m-line.
     private static byte? ResolveTransportCcExtensionId(IReadOnlyList<SdpExtmap> extensions)
     {
         foreach (var extension in extensions)

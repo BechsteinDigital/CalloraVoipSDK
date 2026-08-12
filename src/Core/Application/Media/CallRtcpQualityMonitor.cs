@@ -359,7 +359,8 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
             {
                 Ssrc = rtpSnapshot.LocalSsrc,
                 NtpTimestamp = ntp,
-                RtpTimestamp = rtpSnapshot.LastSentRtpTimestamp,
+                RtpTimestamp = ExtrapolateSenderReportRtpTimestamp(
+                    rtpSnapshot.LastSentRtpTimestamp, rtpSnapshot.SinceLastRtpSend, _clockRate),
                 SenderPacketCount = rtpSnapshot.SenderPacketCount,
                 SenderOctetCount = rtpSnapshot.SenderOctetCount,
                 ReportBlocks = reportBlocks
@@ -376,6 +377,24 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
             ReportBlocks = reportBlocks
         };
         return [receiverReport, sdes];
+    }
+
+    // RFC 3550 §6.4.1: the SR's RTP timestamp must correspond to the same instant as its NTP timestamp — the
+    // report instant, NOT the last packet sent. Pairing current NTP with the last sent RTP timestamp makes the
+    // NTP↔RTP mapping stale during a send pause or DTX, and that mapping is what the peer uses to compute
+    // inter-media synchronisation. Project the last sent timestamp forward onto the report instant on this
+    // stream's clock (#162 P2-8; the bundle path already did this):
+    //   srRtpTs = lastRtpTs + round(sinceLastSend × clockRate)
+    // The add wraps as RTP timestamps do (§5.1). Falls back to the raw last timestamp when the sender reported
+    // no elapsed span — never worse than the previous behaviour.
+    internal static uint ExtrapolateSenderReportRtpTimestamp(
+        uint lastSentRtpTimestamp, TimeSpan? sinceLastSend, int clockRate)
+    {
+        if (sinceLastSend is not { } elapsed || elapsed <= TimeSpan.Zero || clockRate <= 0)
+            return lastSentRtpTimestamp;
+
+        var advance = (long)Math.Round(elapsed.TotalSeconds * clockRate, MidpointRounding.AwayFromZero);
+        return unchecked(lastSentRtpTimestamp + (uint)advance);
     }
 
     private IReadOnlyList<RtcpReportBlock> BuildReportBlocks(CallMediaRtpSnapshot rtpSnapshot, DateTimeOffset nowMono)

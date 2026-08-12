@@ -109,7 +109,7 @@ internal static class OneByteRtpHeaderExtensions
     }
 
     /// <summary>
-    /// Builds the transport-wide sequence number element (transport-cc / RFC 8888): a two-byte
+    /// Builds the transport-wide sequence number element (transport-cc): a two-byte
     /// big-endian counter for the negotiated <paramref name="id"/>, stamped on each outgoing packet
     /// so the receiver can report arrival times keyed by it.
     /// </summary>

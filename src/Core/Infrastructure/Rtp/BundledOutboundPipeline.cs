@@ -30,7 +30,7 @@ internal sealed class BundledOutboundPipeline
     private readonly bool _stampsTransportCc;
     private readonly ILogger<BundledOutboundPipeline> _logger;
 
-    // The transport-wide-cc sequence counter (transport-cc / RFC 8888): a SINGLE monotonic counter shared
+    // The transport-wide-cc sequence counter (transport-cc): a SINGLE monotonic counter shared
     // across every track on this bundled transport, since transport-cc numbers the whole transport, not a
     // per-stream stream. -1 before the first stamped send so the first packet takes sequence 0. Advanced with
     // Interlocked because concurrent sends on different tracks share it. Only used when transport-cc was
@@ -52,7 +52,7 @@ internal sealed class BundledOutboundPipeline
     /// <param name="sender">The shared 5-tuple send seam (B3).</param>
     /// <param name="logger">Logger.</param>
     /// <param name="stampsTransportCc">
-    /// Whether outgoing media packets carry a transport-wide-cc sequence number (transport-cc / RFC 8888): true
+    /// Whether outgoing media packets carry a transport-wide-cc sequence number (transport-cc): true
     /// only when the <c>a=extmap</c> for the transport-wide extension was negotiated on the bundle. When false
     /// no counter is advanced and the wire bytes are byte-identical to before (the tracks stamp MID/RID only).
     /// </param>
@@ -336,7 +336,7 @@ internal sealed class BundledOutboundPipeline
             return;
         }
 
-        // Allocate the transport-wide-cc sequence number (transport-cc / RFC 8888) for this packet from the one
+        // Allocate the transport-wide-cc sequence number (transport-cc) for this packet from the one
         // shared counter — only when negotiated, and only after the fail-closed check so a suppressed send does
         // not consume a number (a hole in the transport-wide sequence would look like loss to the peer's
         // congestion estimator). RTX repair packets are deliberately never numbered here (SendRtxAsync bypasses

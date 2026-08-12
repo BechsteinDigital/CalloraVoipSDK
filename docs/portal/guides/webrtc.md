@@ -225,7 +225,9 @@ SFU/app logic. Non-simulcast receive is byte-identical (`Rid` is `null`).
 > **4.7, additive.**
 
 A finished recommended send bitrate toward the connected peer — plus a coarse `NetworkQuality` —
-derived from the transport-wide congestion feedback the peer returns (transport-cc, RFC 8888). For an
+derived from the transport-wide congestion feedback the peer returns (transport-cc,
+draft-holmer-rmcat-transport-wide-cc-extensions-01 — RTPFB FMT=15, the format Chrome and libwebrtc use.
+RFC 8888 CCFB is a different message, FMT=11, and is not implemented). For an
 SFU this is the per-receiver signal of which simulcast layer to forward:
 
 ```csharp

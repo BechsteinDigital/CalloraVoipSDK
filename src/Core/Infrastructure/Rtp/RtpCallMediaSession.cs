@@ -363,6 +363,7 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
             SenderPacketCount: sender.SenderPacketCount,
             SenderOctetCount: sender.SenderOctetCount,
             LastSentRtpTimestamp: sender.LastSentRtpTimestamp,
+            SinceLastRtpSend: sender.SinceLastSend,
             HasSentRtpPackets: sender.HasSentPackets,
             PacketsExpected: report.PacketsExpected,
             PacketsReceived: report.PacketsReceived,

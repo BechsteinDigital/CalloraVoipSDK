@@ -6,7 +6,7 @@ namespace CalloraVoipSdk.Core.Infrastructure.WebRtc;
 
 /// <summary>
 /// Projects the built <see cref="BundledMediaSession"/>'s sender-side transport-wide congestion signal
-/// (transport-cc / RFC 8888) onto the peer's public WebRTC surface, factored out of
+/// (transport-cc) onto the peer's public WebRTC surface, factored out of
 /// <see cref="WebRtcPeerConnection"/> so that file stays within the size limit (mirroring the existing
 /// collaborator split — gathering, SDP options, candidate emission, the session-event bridge). Two halves:
 /// <list type="bullet">

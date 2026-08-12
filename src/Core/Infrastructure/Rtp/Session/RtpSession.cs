@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using CalloraVoipSdk.Core.Application.Media.Rtcp.Packets;
 using CalloraVoipSdk.Core.Application.Media.Rtcp.Wire;
 using CalloraVoipSdk.Core.Infrastructure.Common.Network;
+using CalloraVoipSdk.Core.Infrastructure.Common.Timing;
 using CalloraVoipSdk.Core.Infrastructure.Rtcp.Wire;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Wire;
@@ -80,6 +81,8 @@ internal sealed class RtpSession : IRtpSession
     private long _packetsSent;
     private long _octetsSent;
     private int _lastSentTimestamp;
+    // Monotonic instant of the send that carried _lastSentTimestamp; 0 until the first send (#162 P2-8).
+    private long _lastSentAtMonoTicks;
     private int _hasSentPackets;
 
     // Set once ICE consent is lost (RFC 7675 §5.1): media/RTCP transmission ceases while the socket
@@ -488,12 +491,17 @@ internal sealed class RtpSession : IRtpSession
     {
         var packetsSent = Interlocked.Read(ref _packetsSent);
         var octetsSent = Interlocked.Read(ref _octetsSent);
+        var lastSentAtMonoTicks = Volatile.Read(ref _lastSentAtMonoTicks);
         return new RtpSenderStatisticsSnapshot(
             LocalSsrc: Volatile.Read(ref _ssrc),
             SenderPacketCount: ClampToUInt32(packetsSent),
             SenderOctetCount: ClampToUInt32(octetsSent),
             LastSentRtpTimestamp: unchecked((uint)Volatile.Read(ref _lastSentTimestamp)),
-            HasSentPackets: Volatile.Read(ref _hasSentPackets) != 0);
+            HasSentPackets: Volatile.Read(ref _hasSentPackets) != 0,
+            // Measured here, on this clock, so the consumer never has to reconcile two monotonic origins.
+            SinceLastSend: lastSentAtMonoTicks == 0
+                ? null
+                : MonotonicClock.Now - new DateTimeOffset(lastSentAtMonoTicks, TimeSpan.Zero));
     }
 
     // -------------------------------------------------------------------------
@@ -689,7 +697,7 @@ internal sealed class RtpSession : IRtpSession
             if (advanceTimestamp)
                 _timestamp += (uint)_options.SamplesPerPacket;
 
-            // Transport-wide sequence number (transport-cc / RFC 8888): a monotonic counter across
+            // Transport-wide sequence number (transport-cc): a monotonic counter across
             // this transport's primary packets, allocated under the same lock so it stays ordered.
             if (_options.TransportWideCcExtensionId is not null)
             {
@@ -754,6 +762,10 @@ internal sealed class RtpSession : IRtpSession
         Interlocked.Increment(ref _packetsSent);
         Interlocked.Add(ref _octetsSent, payload.Length);
         Volatile.Write(ref _lastSentTimestamp, unchecked((int)timestamp));
+        // Anchor for the SR RTP-timestamp extrapolation (#162 P2-8): remember WHEN this RTP timestamp
+        // went out, so a report during a send pause/DTX can project it forward instead of reporting a
+        // stale NTP↔RTP mapping. Monotonic, so a wall-clock step cannot skew the projection.
+        Volatile.Write(ref _lastSentAtMonoTicks, MonotonicClock.Now.Ticks);
         Volatile.Write(ref _hasSentPackets, 1);
 
         // Notify after a successful send so a retransmit buffer (RFC 4588 RTX) can retain the

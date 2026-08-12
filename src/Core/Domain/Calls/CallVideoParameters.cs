@@ -105,8 +105,8 @@ public sealed class CallVideoParameters
     internal string? RemoteIcePwd { get; init; }
 
     /// <summary>
-    /// Negotiated one-byte header-extension id for the transport-wide sequence number (transport-cc
-    /// / RFC 8888) on the video m-line, recovered from the SDP <c>a=extmap</c>. When present, the
+    /// Negotiated one-byte header-extension id for the transport-wide sequence number (transport-cc)
+    /// on the video m-line, recovered from the SDP <c>a=extmap</c>. When present, the
     /// video stream stamps the transport-wide counter on outgoing packets; <see langword="null"/>
     /// when the extension was not negotiated.
     /// </summary>

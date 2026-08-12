@@ -84,6 +84,7 @@ internal sealed class BundledCallMediaSession : ICallMediaSession
         SenderPacketCount: 0,
         SenderOctetCount: 0,
         LastSentRtpTimestamp: 0,
+        SinceLastRtpSend: null,
         HasSentRtpPackets: false,
         PacketsExpected: 0,
         PacketsReceived: 0,

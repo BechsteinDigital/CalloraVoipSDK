@@ -21,4 +21,9 @@ internal readonly record struct CallMediaRtpSnapshot(
     uint InterarrivalJitterRtpUnits,
     double LocalReceiveJitterMs,
     double LocalReceivePacketLossPercent,
-    double LocalRoundTripTimeHintMs);
+    double LocalRoundTripTimeHintMs,
+    // Monotonic time elapsed since the packet carrying LastSentRtpTimestamp went out, or null when nothing
+    // has been sent. An elapsed span, not an instant: this layer keeps its own monotonic origin, so only a
+    // delta measured on the sender's clock crosses the boundary intact. Last and optional so existing
+    // positional construction — the test fakes in particular — stays valid (#162 P2-8).
+    TimeSpan? SinceLastRtpSend = null);

@@ -39,8 +39,9 @@ internal sealed record BundledMediaSessionOptions
     public byte? RidExtensionId { get; init; }
 
     /// <summary>
-    /// The negotiated transport-wide-cc header-extension id (<c>a=extmap … transport-wide-cc</c>, RFC 8888 /
-    /// draft-holmer), or <see langword="null"/> when the extension was not negotiated on the bundle. When
+    /// The negotiated transport-wide-cc header-extension id (<c>a=extmap … transport-wide-cc</c>,
+    /// draft-holmer-rmcat-transport-wide-cc-extensions-01), or <see langword="null"/> when the extension was
+    /// not negotiated on the bundle. When
     /// present the transport stamps a single transport-wide sequence number across every track (transport-cc
     /// is transport-wide, not per-stream) so the peer can report arrivals and this side can run congestion
     /// control, and this side sends receive-side feedback for the peer's own controller.

@@ -186,7 +186,7 @@ internal static class WebRtcSessionFactory
                 videoTracks.Add(videoTrack);
         }
 
-        // Transport-wide-cc (transport-cc / RFC 8888): the negotiated a=extmap id, one plane for the WHOLE bundle
+        // Transport-wide-cc (transport-cc): the negotiated a=extmap id, one plane for the WHOLE bundle
         // (transport-cc numbers the transport, not a stream). Read from the first sending video section that
         // carries it. Null (not negotiated, or an audio-only bundle) leaves the transport un-stamped and the
         // congestion plane off.
@@ -545,7 +545,7 @@ internal static class WebRtcSessionFactory
         return rid is not null && rid.Id is >= 1 and <= 14 ? (byte)rid.Id : null;
     }
 
-    // The negotiated transport-wide-cc header-extension id (transport-cc / RFC 8888) on a media section, or
+    // The negotiated transport-wide-cc header-extension id (transport-cc) on a media section, or
     // null when the extension was not negotiated. Read from our own (local) description so the id we stamp
     // matches the one both sides agreed on (RFC 8285 §5 keeps the same id across offer/answer). Mirrors
     // <see cref="RidExtensionId"/> / <see cref="MidExtensionId"/>.

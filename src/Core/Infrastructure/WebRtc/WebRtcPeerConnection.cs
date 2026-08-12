@@ -104,7 +104,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     // connection-/signalling-state events; pure event fan-out (holds no state, takes no lock, extracted for the
     // size limit) — the peer keeps sole ownership of the _sync-guarded state.
     private readonly WebRtcSessionEventBridge _sessionEvents;
-    // Projects the session's transport-cc congestion signal (RFC 8888) onto this peer's public surface; see the relay.
+    // Projects the session's transport-cc congestion signal (transport-cc) onto this peer's public surface; see the relay.
     private readonly WebRtcCongestionRelay _congestion;
 
     /// <summary>Raised when the connection state changes (RFC 8829 <c>connectionstatechange</c>).</summary>
@@ -168,7 +168,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     public event Action<string>? LocalIceCandidateDiscovered;
 
     /// <summary>
-    /// Raised whenever the sender-side transport-wide congestion control (transport-cc / RFC 8888) revises the
+    /// Raised whenever the sender-side transport-wide congestion control (transport-cc) revises the
     /// recommended outbound bitrate for this peer, carrying the new bitrate (bits/second) and coarse network
     /// quality. Silent when transport-cc was not negotiated. Reactive per feedback report; the app decides when
     /// to act (the SDK does not throttle). Projected from the media session by <see cref="WebRtcCongestionRelay"/>.
@@ -327,13 +327,13 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
 
     /// <summary>
     /// Point-in-time recommended outbound bitrate (bits/second) and coarse network quality from transport-cc
-    /// (RFC 8888); each null before a session is built or when transport-cc was not negotiated. Reactive
+    /// (transport-cc); each null before a session is built or when transport-cc was not negotiated. Reactive
     /// counterpart: <see cref="RecommendedBitrateChanged"/>. Projected by <see cref="WebRtcCongestionRelay"/>.
     /// </summary>
     public long? RecommendedOutgoingBitrateBps => _congestion.RecommendedOutgoingBitrateBps;
 
     /// <summary>
-    /// Point-in-time coarse outbound network quality from transport-cc (RFC 8888); null before a session is
+    /// Point-in-time coarse outbound network quality from transport-cc (transport-cc); null before a session is
     /// built or when transport-cc was not negotiated. Reactive counterpart: <see cref="RecommendedBitrateChanged"/>.
     /// Projected by <see cref="WebRtcCongestionRelay"/>.
     /// </summary>

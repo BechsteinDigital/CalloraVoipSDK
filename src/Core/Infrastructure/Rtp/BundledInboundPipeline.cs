@@ -44,7 +44,7 @@ internal sealed class BundledInboundPipeline
 
     /// <summary>
     /// Raised with every successfully SRTP-decrypted and decoded inbound RTP packet, before track routing.
-    /// The transport-wide-cc receive-side feedback (transport-cc / RFC 8888) subscribes here to read each
+    /// The transport-wide-cc receive-side feedback (transport-cc) subscribes here to read each
     /// packet's transport-wide sequence number across all MIDs (transport-cc numbers the whole transport, not
     /// a single stream). Fires on the shared receive-loop thread; a handler must be fast and must not throw
     /// (an exception is caught and logged so the shared receive loop cannot be torn down).
@@ -283,7 +283,7 @@ internal sealed class BundledInboundPipeline
         // throwing track sink cannot skip the accounting; a null tracker leaves reception reporting off.
         _receptionStats?.RecordRtp(packet.Ssrc, packet.SequenceNumber, packet.Timestamp, packet.PayloadType);
 
-        // Surface the decoded packet to receive-side transport-cc feedback (RFC 8888): it reads the packet's
+        // Surface the decoded packet to receive-side transport-cc feedback (transport-cc): it reads the packet's
         // transport-wide sequence number across every MID. Before routing and isolated, so a subscriber fault
         // cannot skip track dispatch or tear down the shared receive loop.
         try

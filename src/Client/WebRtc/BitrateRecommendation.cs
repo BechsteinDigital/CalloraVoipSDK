@@ -4,7 +4,7 @@ namespace CalloraVoipSdk.WebRtc;
 
 /// <summary>
 /// A ready-to-use send-bitrate recommendation for a peer connection, derived by the SDK from transport-wide
-/// congestion control (transport-cc / RFC 8888). The SDK does the estimation and hands back a finished
+/// congestion control (transport-cc). The SDK does the estimation and hands back a finished
 /// recommendation — the app sets its encoder (or, for an SFU, selects the simulcast layer to forward to this
 /// receiver) to this value; it never has to interpret raw delay/loss metrics. Carried by
 /// <see cref="IPeerConnection.RecommendedBitrateChanged"/> and mirrored point-in-time by
