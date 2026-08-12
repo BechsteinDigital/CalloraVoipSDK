@@ -49,6 +49,46 @@ public sealed class TurnStreamFramerBoundsTests
         Assert.Equal(new byte[] { 0xAA, 0xBB, 0xCC }, f2.Payload);
     }
 
+    // #189: the padding must be consumed regardless of what follows. The sibling test covers
+    // ChannelData → ChannelData; a ChannelData → STUN boundary is the case that actually breaks the
+    // control plane, because an unconsumed pad byte shifts the STUN header and the transaction is lost.
+    [Theory]
+    [InlineData(0)]  // payload 0 mod 4 → 0 pad
+    [InlineData(1)]  // 1 mod 4 → 3 pad
+    [InlineData(2)]  // 2 mod 4 → 2 pad
+    [InlineData(3)]  // 3 mod 4 → 1 pad
+    public async Task Padded_channel_data_keeps_a_following_stun_frame_aligned(int payloadLen)
+    {
+        var payload = new byte[payloadLen];
+        for (var i = 0; i < payloadLen; i++)
+            payload[i] = (byte)(i + 1);
+
+        var channelData = TurnChannelDataCodec.Encode(0x4003, payload, padToFourBytes: true);
+
+        // A STUN Binding request with an 8-byte body: 28 bytes total, the shape TurnStreamFramer returns
+        // whole to the control path.
+        var stun = new byte[28];
+        BinaryPrimitives.WriteUInt16BigEndian(stun.AsSpan(0), 0x0001);
+        BinaryPrimitives.WriteUInt16BigEndian(stun.AsSpan(2), 8);
+        stun[27] = 0x5A;   // sentinel: proves the whole frame arrived, not a shifted window
+
+        var wire = new byte[channelData.Length + stun.Length];
+        channelData.CopyTo(wire, 0);
+        stun.CopyTo(wire, channelData.Length);
+        using var stream = Stream(wire);
+
+        var first = await TurnStreamFramer.ReadFrameAsync(stream);
+        Assert.True(first!.IsChannelData);
+        Assert.Equal(payload, first.Payload);
+
+        // Only correct when the 0-3 pad bytes were consumed: otherwise the STUN type/length is read from
+        // inside the padding and the frame is either rejected or silently truncated.
+        var second = await TurnStreamFramer.ReadFrameAsync(stream);
+        Assert.False(second!.IsChannelData);
+        Assert.Equal(28, second.Payload.Length);
+        Assert.Equal(0x5A, second.Payload[27]);
+    }
+
     [Fact]
     public async Task ReadFrame_rejects_oversized_stun_frame_before_allocating()
     {
