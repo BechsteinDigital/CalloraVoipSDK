@@ -54,6 +54,45 @@ if (rtp is { } s)
 RTCP compound decoding tolerates unknown packet types (e.g. RFC 3611 XR blocks from peers
 that send more than SR/RR), so a richer-than-expected report does not break parsing.
 
+## What the SDK speaks
+
+The support matrix below is what the wire codec actually implements — not what RTCP as a whole
+defines. A peer may send anything in this list and be understood; anything outside it is skipped
+without disturbing the rest of the compound.
+
+| Packet | PT / FMT | Receive | Send |
+|---|---|:--:|:--:|
+| Sender Report (SR) | 200 | ✅ | ✅ |
+| Receiver Report (RR) | 201 | ✅ | ✅ |
+| Source Description (SDES) | 202 | ✅ | ✅ CNAME only |
+| Goodbye (BYE) | 203 | ✅ | ✅ |
+| Application-defined (APP) | 204 | — | — |
+| Extended Report (XR) | 207 | ✅ VoIP Metrics only | — |
+| Picture Loss Indication (PLI) | 206 / 1 | ✅ | ✅ |
+| Full Intra Request (FIR) | 206 / 4 | ✅ | ✅ |
+| Generic NACK | 205 / 1 | ✅ | ✅ |
+| Transport-wide CC feedback | 205 / 15 | ✅ | ✅ |
+
+### Gaps worth knowing before you integrate
+
+- **XR is receive-only, and only VoIP Metrics (BT=7).** RFC 3611 defines seven other block types
+  (loss/duplicate RLE, packet receipt times, receiver reference time, DLRR, statistics summary);
+  those are skipped over. The SDK never emits an XR, so a peer relying on our MOS or DLRR will not
+  get one.
+- **Transport-wide congestion control is the draft format, not RFC 8888.** What we speak is
+  draft-holmer-rmcat-transport-wide-cc-extensions-01, RTPFB **FMT=15** — the format Chrome and
+  libwebrtc use and what nearly every WebRTC endpoint negotiates. RFC 8888 CCFB is RTPFB **FMT=11**
+  with a different body and is *not* implemented; a peer expecting CCFB receives nothing it can
+  parse.
+- **No REMB (PSFB FMT=15) and no TMMBR/TMMBN (RFC 5104).** Bitrate signalling is receive-side
+  transport-cc plus the SDK's own estimate, surfaced as a recommended send bitrate. A peer that
+  only signals bandwidth via REMB or TMMBR will not be heard.
+- **No SLI or RPSI** (PSFB FMT=2/3). Key-frame recovery is PLI and FIR.
+- **SDES carries CNAME only.** Other items (NAME, EMAIL, TOOL, …) are parsed on receive but never
+  sent.
+
+None of these is a defect against a promise — they are listed here so the promise is explicit.
+
 ## Threading
 
 `QualitySnapshotChanged` fires on the media/RTCP thread. Keep the handler
