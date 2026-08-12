@@ -108,6 +108,12 @@ public sealed class TurnRelayCandidateSendPathTests
         // An already-permissioned IP still resolves after the cap is reached (no new transaction).
         await sendPath.SendAsync(check, new IPEndPoint(new IPAddress(new byte[] { 10, 0, 0, 0 }), 50000), CancellationToken.None);
         Assert.Equal(256, permissionRequests);
+
+        // #189: the refresh cycle stays on the same ceiling. Permissions expire after 5 minutes (RFC 8656
+        // §9), so the whole cached set is re-installed periodically — if the overflow had been cached, the
+        // flood would come back every cycle and turn a one-shot burst into sustained load on the server.
+        Assert.True(await sendPath.RefreshInstalledPermissionsAsync(CancellationToken.None));
+        Assert.Equal(512, permissionRequests);   // exactly the capped set again, not one more
     }
 
     [Fact]
