@@ -89,6 +89,16 @@ internal static class SdesCryptoSelector
     {
         var material = RandomNumberGenerator.GetBytes(
             SrtpCryptoSuiteNames.KeyLength(suite) + SrtpCryptoSuiteNames.SaltLength(suite));
-        return $"inline:{Convert.ToBase64String(material)}";
+        try
+        {
+            return $"inline:{Convert.ToBase64String(material)}";
+        }
+        finally
+        {
+            // #157 P2-5: the base64 string is what goes on the wire, but the raw buffer is a second
+            // plaintext copy of the master key + salt with no owner — wipe it rather than leaving it
+            // for the GC (RFC 3711 §9.4 key hygiene).
+            CryptographicOperations.ZeroMemory(material);
+        }
     }
 }

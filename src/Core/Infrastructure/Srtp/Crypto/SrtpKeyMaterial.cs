@@ -64,7 +64,13 @@ internal sealed class SrtpKeyMaterial : IDisposable
 
         const string prefix = "inline:";
         if (!keyParam.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-            throw new FormatException($"SRTP key-param must start with 'inline:' but was '{keyParam}'.");
+        {
+            // #157 P2-5: never interpolate the key-param itself. A malformed prefix does not make the
+            // rest of the string harmless — it still carries base64 master key material, and as an inner
+            // exception it would reach generic error logs. The length is enough to diagnose the shape.
+            throw new FormatException(
+                $"SRTP key-param must start with 'inline:' (RFC 4568 §6.1); got {keyParam.Length} characters with a different prefix.");
+        }
 
         var raw = Convert.FromBase64String(keyParam[prefix.Length..].Split('|')[0]);
 

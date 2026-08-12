@@ -285,26 +285,35 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
                     .ConfigureAwait(false);
 
                 Volatile.Write(ref _result, result);
-                _outboundSrtp = new SrtpContext(result.Keys.LocalKeys);
-                _inboundSrtp = new SrtpContext(result.Keys.RemoteKeys);
-                _outboundSrtcp = new SrtcpContext(result.Keys.LocalKeys);
-                _inboundSrtcp = new SrtcpContext(result.Keys.RemoteKeys);
-                _onContextsReady(_outboundSrtp, _inboundSrtp, _outboundSrtcp, _inboundSrtcp);
-
-                // RTX repair stream (RFC 4588 §9): its own SRTP contexts from the same keys,
-                // so its independent sequence space has its own replay window / ROC.
-                if (_onSecondaryContextsReady is { } onRtx)
+                try
                 {
-                    _rtxOutboundSrtp = new SrtpContext(result.Keys.LocalKeys);
-                    _rtxInboundSrtp = new SrtpContext(result.Keys.RemoteKeys);
-                    onRtx(_rtxOutboundSrtp, _rtxInboundSrtp);
-                }
+                    _outboundSrtp = new SrtpContext(result.Keys.LocalKeys);
+                    _inboundSrtp = new SrtpContext(result.Keys.RemoteKeys);
+                    _outboundSrtcp = new SrtcpContext(result.Keys.LocalKeys);
+                    _inboundSrtcp = new SrtcpContext(result.Keys.RemoteKeys);
+                    _onContextsReady(_outboundSrtp, _inboundSrtp, _outboundSrtcp, _inboundSrtcp);
 
-                // Every context above has now derived its session keys from these master halves,
-                // and this SDK never re-keys within a session — wipe the master key/salt so the
-                // exported DTLS-SRTP secret does not linger on the managed heap (RFC 3711 §9.4).
-                // The retained _result keeps only the (non-secret) DTLS transport alive for teardown.
-                result.Keys.Dispose();
+                    // RTX repair stream (RFC 4588 §9): its own SRTP contexts from the same keys,
+                    // so its independent sequence space has its own replay window / ROC.
+                    if (_onSecondaryContextsReady is { } onRtx)
+                    {
+                        _rtxOutboundSrtp = new SrtpContext(result.Keys.LocalKeys);
+                        _rtxInboundSrtp = new SrtpContext(result.Keys.RemoteKeys);
+                        onRtx(_rtxOutboundSrtp, _rtxInboundSrtp);
+                    }
+                }
+                finally
+                {
+                    // Every context above has now derived its session keys from these master halves,
+                    // and this SDK never re-keys within a session — wipe the master key/salt so the
+                    // exported DTLS-SRTP secret does not linger on the managed heap (RFC 3711 §9.4).
+                    // The retained _result keeps only the (non-secret) DTLS transport alive for teardown.
+                    //
+                    // #157 P2-6: in a finally, because a throwing context constructor or owner callback
+                    // would otherwise skip the wipe entirely and leave the exported secret behind on
+                    // precisely the path where nothing else cleans up.
+                    result.Keys.Dispose();
+                }
 
                 // Serve the association from here on (#190): media now flows directly over SRTP, so
                 // nobody would otherwise read the DTLS channel again and a peer close_notify would go
@@ -330,6 +339,17 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
                 // Fail closed: the session keeps dropping all media (RequireEncryptedMedia);
                 // the failure callback lets the owner cease transmission / surface teardown.
                 _logger.LogError(ex, "DTLS-SRTP handshake failed; media stays blocked for this call leg.");
+                _onHandshakeFailed();
+            }
+            catch (Exception ex)
+            {
+                // #157 P2-6: keying does not end at the handshake. A throwing SRTP context constructor
+                // or owner callback used to escape both typed catches — leaving the handshake task
+                // faulted and unobserved, and the owner never told that keying failed, so it would sit
+                // waiting for media that can never be authenticated. Treat it exactly like a handshake
+                // failure: log and fail closed. The master keys are already wiped by the finally above.
+                _logger.LogError(
+                    ex, "DTLS-SRTP keying failed after the handshake completed; media stays blocked for this call leg.");
                 _onHandshakeFailed();
             }
         }

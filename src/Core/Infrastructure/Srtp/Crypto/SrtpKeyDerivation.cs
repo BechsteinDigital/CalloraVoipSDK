@@ -83,28 +83,42 @@ internal static class SrtpKeyDerivation
         var counter = 0;
 
         using var aes = Aes.Create();
-        aes.Key     = key.ToArray();
-        aes.Mode    = CipherMode.ECB;
-        aes.Padding = PaddingMode.None;
-        using var encryptor = aes.CreateEncryptor();
-
+        // #157 P2-5: the Key setter copies internally (that copy is wiped by Aes.Dispose), but the array
+        // handed to it is a second plaintext master-key copy this method owns — hold it so the finally
+        // below can wipe it instead of leaving it to the GC (RFC 3711 §9.4).
+        var keyCopy = key.ToArray();
+        // The counter blocks are raw keystream and the IV derives from the master salt; both are wiped
+        // with the key copy on every exit path.
         var block = new byte[16];
         var counterIv = (byte[])iv.Clone();
-
-        while (written < outputLength)
+        try
         {
-            counterIv[14] = (byte)(counter >> 8);
-            counterIv[15] = (byte)counter;
+            aes.Key     = keyCopy;
+            aes.Mode    = CipherMode.ECB;
+            aes.Padding = PaddingMode.None;
+            using var encryptor = aes.CreateEncryptor();
 
-            encryptor.TransformBlock(counterIv, 0, 16, block, 0);
+            while (written < outputLength)
+            {
+                counterIv[14] = (byte)(counter >> 8);
+                counterIv[15] = (byte)counter;
 
-            var toCopy = Math.Min(16, outputLength - written);
-            block.AsSpan(0, toCopy).CopyTo(output.AsSpan(written));
-            written += toCopy;
+                encryptor.TransformBlock(counterIv, 0, 16, block, 0);
 
-            counter++;
+                var toCopy = Math.Min(16, outputLength - written);
+                block.AsSpan(0, toCopy).CopyTo(output.AsSpan(written));
+                written += toCopy;
+
+                counter++;
+            }
+
+            return output;
         }
-
-        return output;
+        finally
+        {
+            CryptographicOperations.ZeroMemory(keyCopy);
+            CryptographicOperations.ZeroMemory(block);
+            CryptographicOperations.ZeroMemory(counterIv);
+        }
     }
 }
