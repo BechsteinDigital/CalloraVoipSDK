@@ -1,5 +1,6 @@
 using CalloraVoipSdk.Core.Application.Media.Rtcp.Packets;
 using CalloraVoipSdk.Core.Application.Media.Rtcp.Wire;
+using CalloraVoipSdk.Core.Application.Media.Rtcp;
 using CalloraVoipSdk.Core.Infrastructure.Common.Timing;
 using Microsoft.Extensions.Logging;
 
@@ -57,7 +58,7 @@ internal sealed class BundledRtcpReporter : IAsyncDisposable
     private readonly Func<IReadOnlyList<BundledReceptionReportBlock>> _snapshotReceptionBlocks;
     private readonly uint _localSsrc;
     private readonly Action<uint, uint, DateTimeOffset>? _onSenderReportSent;
-    private readonly Func<ReadOnlyMemory<byte>, CancellationToken, ValueTask> _sendRtcp;
+    private readonly Func<ReadOnlyMemory<byte>, CancellationToken, ValueTask<RtcpSendOutcome>> _sendRtcp;
     private readonly IRtcpPacketCodec _codec;
     private readonly string _cname;
     private readonly TimeSpan _interval;
@@ -112,7 +113,7 @@ internal sealed class BundledRtcpReporter : IAsyncDisposable
         Func<IReadOnlyList<BundledSenderReportInfo>> snapshotSenderReports,
         Func<IReadOnlyList<BundledReceptionReportBlock>> snapshotReceptionBlocks,
         uint localSsrc,
-        Func<ReadOnlyMemory<byte>, CancellationToken, ValueTask> sendRtcp,
+        Func<ReadOnlyMemory<byte>, CancellationToken, ValueTask<RtcpSendOutcome>> sendRtcp,
         IRtcpPacketCodec codec,
         string cname,
         ILoggerFactory loggerFactory,
@@ -205,10 +206,11 @@ internal sealed class BundledRtcpReporter : IAsyncDisposable
         var packets = new List<RtcpPacket>(Math.Max(senders.Count, 1) + 1);
         var sdesChunks = new List<RtcpSdesChunk>();
 
+        var pendingRttAnchors = new List<(uint Ssrc, uint Lsr, DateTimeOffset SentAt)>(senders.Count);
         int blocksReported;
         if (senders.Count > 0)
         {
-            blocksReported = BuildSenderReports(senders, receptionBlocks, ntp, now, packets, sdesChunks);
+            blocksReported = BuildSenderReports(senders, receptionBlocks, ntp, now, packets, sdesChunks, pendingRttAnchors);
         }
         else
         {
@@ -230,7 +232,22 @@ internal sealed class BundledRtcpReporter : IAsyncDisposable
         packets.Add(new RtcpSdesPacket { Chunks = sdesChunks });
 
         var datagram = _codec.Encode(packets);
-        await _sendRtcp(datagram, ct).ConfigureAwait(false);
+        var outcome = await _sendRtcp(datagram, ct).ConfigureAwait(false);
+
+        // #162 P2-5: reporting state follows the wire, not the intent. The send path fails closed before the
+        // outbound SRTCP key exists, and committing here anyway would advance the average RTCP size for bytes
+        // that never left, latch _hasReported (which gates the teardown BYE, so we could announce a departure
+        // the peer never heard arrive), and shorten the next interval on a report nobody received. Retry on the
+        // next tick instead — by then the handshake has usually keyed the transport.
+        if (outcome is RtcpSendOutcome.Suppressed)
+        {
+            _logger.LogTrace("RTCP report suppressed before the wire; reporting state not committed.");
+            return;
+        }
+
+        // On the wire: only now are the RTT anchors real, because only now can the peer echo them.
+        foreach (var (ssrc, lsr, sentAt) in pendingRttAnchors)
+            _onSenderReportSent?.Invoke(ssrc, lsr, sentAt);
 
         // RFC 3550 §6.3.3: fold the sent size into the running average, record that we have reported (gates the
         // teardown BYE), and schedule the next interval from the observed membership.
@@ -250,7 +267,8 @@ internal sealed class BundledRtcpReporter : IAsyncDisposable
         ulong ntp,
         DateTimeOffset now,
         List<RtcpPacket> packets,
-        List<RtcpSdesChunk> sdesChunks)
+        List<RtcpSdesChunk> sdesChunks,
+        List<(uint Ssrc, uint Lsr, DateTimeOffset SentAt)> pendingRttAnchors)
     {
         var srMiddle32 = ToMiddle32Bits(ntp);
         // One monotonic instant shared by every SR in this compound (they share the same NTP timestamp too),
@@ -275,10 +293,12 @@ internal sealed class BundledRtcpReporter : IAsyncDisposable
             });
             sdesChunks.Add(SdesChunk(sender.Ssrc));
 
-            // Publish this SR's LSR + send instant so the quality tracker can match a peer's echoed report and
-            // derive RTT (RFC 3550 §6.4.1). The instant is monotonic, not the wall-clock `now` used for the
-            // on-wire NTP/RTP timestamps, so a system-clock step cannot corrupt the derived RTT.
-            _onSenderReportSent?.Invoke(sender.Ssrc, srMiddle32, monotonicSentAt);
+            // Queue this SR's LSR + send instant. Published only once the compound actually reaches the wire
+            // (#162 P2-5): an LSR the peer never received can never be echoed, so publishing it here would seed
+            // the RTT matcher with an anchor that only ever produces a miss. The instant is monotonic, not the
+            // wall-clock `now` used for the on-wire NTP/RTP timestamps, so a clock step cannot corrupt the RTT
+            // (RFC 3550 §6.4.1).
+            pendingRttAnchors.Add((sender.Ssrc, srMiddle32, monotonicSentAt));
         }
 
         return blockOffset;

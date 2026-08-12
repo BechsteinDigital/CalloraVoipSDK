@@ -292,7 +292,9 @@ internal sealed class BundledVideoTrack : IDisposable
             localSsrc,
             remoteSupportsNack,
             remoteSupportsPli,
-            _outbound.SendRtcpAsync,
+            // Key-frame feedback keeps no reporting state, so the send outcome (#162 P2-5) is not consulted:
+            // a suppressed PLI/NACK is re-driven by the next loss or the next key-frame need.
+            async (datagram, ct) => await _outbound.SendRtcpAsync(datagram, ct).ConfigureAwait(false),
             () => KeyFrameRequested?.Invoke(),
             onRetransmitRequested ?? (_ => { }),
             loggerFactory.CreateLogger<VideoKeyFrameFeedback>(),

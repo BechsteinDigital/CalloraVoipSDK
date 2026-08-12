@@ -78,7 +78,10 @@ internal sealed class BundledCongestionPlane : IAsyncDisposable
         outbound.PacketSent += _congestion.OnPacketSent;
 
         _feedback = new TransportCcFeedbackSender(
-            rtcpCodec, transportCcExtensionId, feedbackSenderSsrc, outbound.SendRtcpAsync,
+            // Feedback keeps no reporting state, so the send outcome (#162 P2-5) is not consulted here: a
+            // suppressed batch is simply the next batch's problem.
+            rtcpCodec, transportCcExtensionId, feedbackSenderSsrc,
+            async (datagram, ct) => await outbound.SendRtcpAsync(datagram, ct).ConfigureAwait(false),
             Stopwatch.GetTimestamp, Stopwatch.Frequency,
             loggerFactory.CreateLogger<TransportCcFeedbackSender>(), _lifetimeCts.Token);
         inbound.RtpPacketReceived += _feedback.OnRtpPacketReceived;

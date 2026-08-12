@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using CalloraVoipSdk.Core.Application.Media.Rtcp;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Wire;
 using CalloraVoipSdk.Core.Infrastructure.Srtp.Context;
@@ -139,14 +140,18 @@ internal sealed class BundledOutboundPipeline
     /// shared 5-tuple (RFC 3550 §6, RFC 3711 §3.4). Fails closed: until <see cref="InstallOutboundRtcpKey"/>
     /// supplies the key — or if the context is disposed mid-send during teardown — the packet is suppressed
     /// and counted, never leaving as plaintext.
+    /// <para>
+    /// Returns what actually happened (#162 P2-5). A suppressed compound never reached the wire, so the
+    /// periodic reporter must not commit reporting state for it — see <see cref="RtcpSendOutcome"/>.
+    /// </para>
     /// </summary>
-    public async ValueTask SendRtcpAsync(ReadOnlyMemory<byte> rtcp, CancellationToken cancellationToken)
+    public async ValueTask<RtcpSendOutcome> SendRtcpAsync(ReadOnlyMemory<byte> rtcp, CancellationToken cancellationToken)
     {
         if (Volatile.Read(ref _outboundSrtcp) is not { } outboundSrtcp)
         {
             Interlocked.Increment(ref _rtcpSuppressedSends);
             _logger.LogDebug("Suppressing outbound RTCP: no SRTCP context installed yet.");
-            return;
+            return RtcpSendOutcome.Suppressed;
         }
 
         byte[] datagram;
@@ -160,7 +165,7 @@ internal sealed class BundledOutboundPipeline
             // packet; never fall through to an unprotected RTCP send.
             Interlocked.Increment(ref _rtcpSuppressedSends);
             _logger.LogDebug("Suppressing outbound RTCP: SRTCP context disposed during teardown.");
-            return;
+            return RtcpSendOutcome.Suppressed;
         }
         catch (SrtpKeyLifetimeExceededException ex)
         {
@@ -168,7 +173,7 @@ internal sealed class BundledOutboundPipeline
             // keystream, no plaintext RTCP. RTCP goes silent until rekey.
             Interlocked.Increment(ref _rtcpSuppressedSends);
             _logger.LogError(ex, "Suppressing outbound RTCP: SRTCP key lifetime exhausted; media requires rekey.");
-            return;
+            return RtcpSendOutcome.Suppressed;
         }
         // Any other ProtectRtcp fault (a cryptographic/argument error) is deliberately NOT caught here: it
         // propagates to the periodic reporter's catch-all, which logs and retries next interval. The invariant
@@ -177,6 +182,7 @@ internal sealed class BundledOutboundPipeline
 
         await _sender.SendAsync(datagram, cancellationToken).ConfigureAwait(false);
         Interlocked.Increment(ref _rtcpPacketsSent);
+        return RtcpSendOutcome.Sent;
     }
 
     /// <summary>
