@@ -172,6 +172,14 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
             return;
 
         _mediaSession.RtcpCompoundReceived -= OnRtcpCompoundReceived;
+
+        // #162 P2-6: announce our departure before tearing the socket down. Until now the SIP path simply
+        // went silent, leaving the peer to time this participant out (RFC 3550 §6.3.7) — the bundle path has
+        // sent a BYE for a while. Best-effort and bounded: a farewell must never outrank shutting down, and
+        // BYE is not retransmitted (§6.6), so a deadline costs at most this one packet. Gated on having
+        // reported at least once — a participant the peer never heard from has nothing to depart from.
+        await SendGoodbyeAsync().ConfigureAwait(false);
+
         _cts.Cancel();
         _udp?.Dispose();
 
@@ -272,6 +280,56 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "RTCP receive loop failed unexpectedly.");
+        }
+    }
+
+    // Bound on the best-effort teardown BYE (#162 P2-6), matching the bundle path's.
+    private static readonly TimeSpan GoodbyeSendDeadline = TimeSpan.FromMilliseconds(500);
+
+    // RFC 3550 §6.6: leaving without a BYE is legal but leaves the peer to time us out. §6.1 requires the
+    // compound to lead with a report and carry a CNAME, so the farewell is RR + SDES + BYE for our own SSRC —
+    // the same shape the bundle path sends, and self-consistent: the SSRC that departs is the one the SDES
+    // identifies.
+    private async ValueTask SendGoodbyeAsync()
+    {
+        if (Volatile.Read(ref _rtcpPacketsSent) == 0)
+            return;   // never announced ourselves; nothing to depart from
+
+        try
+        {
+            var rtpSnapshot = _mediaSession.GetRtpSnapshot();
+            var packets = new RtcpPacket[]
+            {
+                new RtcpReceiverReport { Ssrc = rtpSnapshot.LocalSsrc, ReportBlocks = [] },
+                new RtcpSdesPacket
+                {
+                    Chunks =
+                    [
+                        new RtcpSdesChunk
+                        {
+                            Ssrc = rtpSnapshot.LocalSsrc,
+                            Items = [new RtcpSdesItem { ItemType = RtcpSdesItemType.CName, Value = _cname }],
+                        },
+                    ],
+                },
+                new RtcpByePacket { Sources = [rtpSnapshot.LocalSsrc], Reason = "leaving" },
+            };
+
+            var datagram = _codec.Encode(packets);
+            using var deadline = new CancellationTokenSource(GoodbyeSendDeadline);
+
+            if (_rtcpMux)
+                await _mediaSession.SendRtcpMuxDatagramAsync(datagram, deadline.Token).ConfigureAwait(false);
+            else if (_udp is not null)
+                await _udp.SendAsync(datagram, _remoteRtcpEndPoint, deadline.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogDebug("RTCP BYE on teardown timed out after {Deadline}; continuing shutdown.", GoodbyeSendDeadline);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "RTCP BYE on teardown could not be sent (best-effort).");
         }
     }
 
