@@ -79,6 +79,8 @@ internal sealed class BundledRtcpReporter : IAsyncDisposable
     // Loop-thread-only interval state (RFC 3550 §6.3): the running average RTCP compound size, the next
     // scheduled interval, and whether any report has gone out (gates the teardown BYE, §6.6).
     private double _averageRtcpSize = InitialAverageRtcpSizeBytes;
+    // Per-SSRC packet count observed at the previous report; the delta decides sender status (#162 P2-7).
+    private readonly Dictionary<uint, long> _lastSenderPacketCounts = [];
     private TimeSpan _nextInterval;
     private bool _hasReported;
 
@@ -188,7 +190,11 @@ internal sealed class BundledRtcpReporter : IAsyncDisposable
         // Capture reception blocks exactly once per report: the snapshot advances each source's fraction-lost
         // interval baseline (RFC 3550 §A.3), so it must run whether or not this endpoint is also sending.
         var receptionBlocks = ToReportBlocks(_snapshotReceptionBlocks());
-        var senders = _snapshotSenderReports();
+        // #162 P2-7 sender aging (RFC 3550 §6.3.4/§6.4): the snapshot reports every track that has EVER sent,
+        // so a track that fell silent kept emitting Sender Reports forever — describing a stream that stopped,
+        // and inflating the sender count the interval calculation splits bandwidth by. A track counts as a
+        // sender only while its packet counter still moves between reports.
+        var senders = AgeOutSilentSenders(_snapshotSenderReports());
 
         // RFC 3550 §6.2 membership estimate for the interval calculation: self plus each distinct inbound
         // source, with our sending tracks and every inbound source counting as senders.
@@ -326,6 +332,32 @@ internal sealed class BundledRtcpReporter : IAsyncDisposable
 
         var advance = (long)Math.Round(elapsedSeconds * sender.ClockRate, MidpointRounding.AwayFromZero);
         return unchecked(sender.LastRtpTimestamp + (uint)advance);
+    }
+
+    // Keeps only the tracks that actually sent RTP since the previous report (RFC 3550 §6.3.4). A track seen
+    // for the first time counts as a sender — it has sent, we just have nothing to compare against yet — so a
+    // freshly started stream is not silenced for one interval. Loop-thread-only state, like the interval fields.
+    private IReadOnlyList<BundledSenderReportInfo> AgeOutSilentSenders(IReadOnlyList<BundledSenderReportInfo> senders)
+    {
+        var active = new List<BundledSenderReportInfo>(senders.Count);
+        foreach (var sender in senders)
+        {
+            if (!_lastSenderPacketCounts.TryGetValue(sender.Ssrc, out var previous) || sender.PacketCount != previous)
+                active.Add(sender);
+
+            _lastSenderPacketCounts[sender.Ssrc] = sender.PacketCount;
+        }
+
+        // Forget tracks the snapshot no longer lists at all, so a removed and later re-added SSRC starts over
+        // rather than being aged out against a stale count.
+        if (_lastSenderPacketCounts.Count > senders.Count)
+        {
+            var live = senders.Select(s => s.Ssrc).ToHashSet();
+            foreach (var ssrc in _lastSenderPacketCounts.Keys.Where(k => !live.Contains(k)).ToArray())
+                _lastSenderPacketCounts.Remove(ssrc);
+        }
+
+        return active;
     }
 
     // One page of at most 31 reception blocks (RFC 3550 §6.4.1 RC-field limit) starting at <paramref name="offset"/>.

@@ -18,6 +18,12 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
 {
     private static readonly TimeSpan DefaultSendInterval = TimeSpan.FromSeconds(5);
 
+    // RFC 3550 §6.2: RTCP bandwidth, conventionally ~5% of the session bandwidth. For a point-to-point leg
+    // the Tmin floor dominates, so this only shapes the growth curve; it matches the bundle path's default.
+    private const double DefaultRtcpBandwidthBitsPerSecond = 5000.0;
+    // §6.3.3: seeds the running average compound size until a real one is measured.
+    private const double InitialAverageRtcpSizeBytes = 128.0;
+
     // Anchor for the default monotonic clock (RTT/DLSR deltas). Mirrors Infrastructure's MonotonicClock, kept
     // local here because the Application layer must not reference Infrastructure (DDD layering); the absolute
     // value is irrelevant since only differences are consumed.
@@ -32,6 +38,17 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
     private readonly ILogger<CallRtcpQualityMonitor> _logger;
     private readonly IRtcpPacketCodec _codec;
     private readonly TimeSpan _sendInterval;
+    // #162 P2-7: RFC 3550 §6.2/§6.3.1 interval calculation, shared with the bundle path. _sendInterval is
+    // kept as the Tmin floor it always was, so an explicitly configured interval still governs the cadence.
+    private readonly RtcpTransmissionInterval _intervalCalculator;
+    // §6.3.3: running average compound size, seeded until the first report measures a real one.
+    private double _averageRtcpSize = InitialAverageRtcpSizeBytes;
+    // §6.3.4 sender aging: 1 while we sent RTP during the last reporting interval. "Has ever sent" is not
+    // the same question, and answering it that way made every endpoint a permanent sender.
+    private int _weSentThisInterval;
+    // The sender packet count observed at the previous report; the delta is what decides sender status.
+    private uint _lastReportedSenderPacketCount;
+    private bool _hasPreviousSenderPacketCount;
     private readonly Func<DateTimeOffset> _monotonicNow;
     private readonly CancellationTokenSource _cts = new();
     private readonly object _sync = new();
@@ -95,6 +112,7 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
         _sendInterval = sendInterval is { } explicitInterval && explicitInterval > TimeSpan.Zero
             ? explicitInterval
             : DefaultSendInterval;
+        _intervalCalculator = new RtcpTransmissionInterval(_sendInterval, DefaultRtcpBandwidthBitsPerSecond);
         _monotonicNow = monotonicNow ?? DefaultMonotonicNow;
         _latestSnapshot = CallQualitySnapshot.CreateEmpty(DateTimeOffset.UtcNow, _rtcpMux);
     }
@@ -244,11 +262,33 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
     {
         try
         {
-            await SendReportAsync(cancellationToken).ConfigureAwait(false);
+            // #162 P2-7: RFC 3550 §6.2/§6.3.1 scheduling instead of a fixed PeriodicTimer. A rigid interval
+            // makes every endpoint report on the same cadence, which is exactly what the RFC's randomisation
+            // exists to prevent; the bundle path has computed its interval this way for a while. The first
+            // report uses half Tmin (§6.2), so the loop delays before it — the old immediate send skipped
+            // that deliberate stagger entirely.
+            var interval = _intervalCalculator.Compute(
+                members: 2, senders: 1, weSent: false, averageRtcpSizeBytes: InitialAverageRtcpSizeBytes, initial: true);
 
-            using var timer = new PeriodicTimer(_sendInterval);
-            while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
-                await SendReportAsync(cancellationToken).ConfigureAwait(false);
+            while (true)
+            {
+                await Task.Delay(interval, cancellationToken).ConfigureAwait(false);
+                var sizeBytes = await SendReportAsync(cancellationToken).ConfigureAwait(false);
+
+                // §6.3.3: fold the observed compound size into the running average, so the interval tracks
+                // what we actually put on the wire rather than a constant.
+                if (sizeBytes > 0)
+                    _averageRtcpSize += (sizeBytes - _averageRtcpSize) / 16.0;
+
+                // A point-to-point leg: us and the peer. Whether we count as a sender is decided per report
+                // by the sender-aging check, not by "has ever sent".
+                interval = _intervalCalculator.Compute(
+                    members: 2,
+                    senders: Volatile.Read(ref _weSentThisInterval) != 0 ? 1 : 0,
+                    weSent: Volatile.Read(ref _weSentThisInterval) != 0,
+                    averageRtcpSizeBytes: _averageRtcpSize,
+                    initial: false);
+            }
         }
         catch (OperationCanceledException)
         {
@@ -345,12 +385,27 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
         }
     }
 
-    private async Task SendReportAsync(CancellationToken cancellationToken)
+    // Returns the encoded compound size in bytes, or 0 when nothing reached the wire, so the caller can
+    // fold it into the RFC 3550 §6.3.3 running average.
+    private async Task<int> SendReportAsync(CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
         var monotonicNow = _monotonicNow();
         var rtpSnapshot = _mediaSession.GetRtpSnapshot();
-        var packets = BuildCompoundReport(rtpSnapshot, now, monotonicNow, out var localSrMiddle32, out var sentSenderReport);
+
+        // #162 P2-7 sender aging (RFC 3550 §6.3.4/§6.4): "we sent" means RTP went out during THIS reporting
+        // interval, not that the endpoint ever sent. Using HasSentRtpPackets made a leg that spoke once emit
+        // Sender Reports forever — inflating the peer's sender count, skewing its bandwidth split, and
+        // describing a stream that stopped. The packet counter is the reliable signal and needs no extra
+        // plumbing: no increment since the previous report means no RTP was sent in between.
+        var weSent = _hasPreviousSenderPacketCount
+            ? rtpSnapshot.SenderPacketCount != _lastReportedSenderPacketCount
+            : rtpSnapshot.HasSentRtpPackets;
+        _lastReportedSenderPacketCount = rtpSnapshot.SenderPacketCount;
+        _hasPreviousSenderPacketCount = true;
+        Volatile.Write(ref _weSentThisInterval, weSent ? 1 : 0);
+
+        var packets = BuildCompoundReport(rtpSnapshot, now, monotonicNow, weSent, out var localSrMiddle32, out var sentSenderReport);
         var datagram = _codec.Encode(packets);
 
         try
@@ -366,7 +421,7 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
             else
             {
                 PublishSnapshot(rtpSnapshot, now, rtcpActive: false);
-                return;
+                return 0;
             }
         }
         catch (OperationCanceledException)
@@ -380,7 +435,7 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
                 "Failed sending RTCP report to {RemoteRtcpEndPoint}.",
                 _remoteRtcpEndPoint);
             PublishSnapshot(rtpSnapshot, now, rtcpActive: false);
-            return;
+            return 0;
         }
 
         Interlocked.Increment(ref _rtcpPacketsSent);
@@ -395,12 +450,14 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
         }
 
         PublishSnapshot(rtpSnapshot, now, rtcpActive: true);
+        return datagram.Length;
     }
 
     private IReadOnlyList<RtcpPacket> BuildCompoundReport(
         CallMediaRtpSnapshot rtpSnapshot,
         DateTimeOffset capturedAtUtc,
         DateTimeOffset capturedAtMono,
+        bool weSent,
         out uint localSrMiddle32,
         out bool sentSenderReport)
     {
@@ -419,7 +476,9 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
             ]
         };
 
-        if (rtpSnapshot.HasSentRtpPackets)
+        // RFC 3550 §6.4: a Sender Report is for a participant that sent RTP during this interval; everyone
+        // else sends a Receiver Report. `weSent` carries the aged answer (#162 P2-7).
+        if (weSent)
         {
             var ntp = ToNtpTimestamp(capturedAtUtc);
             localSrMiddle32 = ToMiddle32Bits(ntp);

@@ -1,4 +1,4 @@
-namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
+namespace CalloraVoipSdk.Core.Application.Media.Rtcp;
 
 /// <summary>
 /// Computes the RTCP transmission interval per RFC 3550 §6.2 / §6.3.1: a bandwidth-proportional, member- and
