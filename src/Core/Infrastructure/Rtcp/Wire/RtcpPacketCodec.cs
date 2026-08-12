@@ -240,16 +240,47 @@ internal sealed class RtcpPacketCodec : IRtcpPacketCodec
                 if (offset + valueLen > body.Length)
                     throw new ArgumentException("SDES item value exceeds available data.");
 
-                var value = Encoding.UTF8.GetString(body.Slice(offset, valueLen));
+                var value = TryDecodeUtf8(body.Slice(offset, valueLen));
                 offset += valueLen;
 
-                items.Add(new RtcpSdesItem { ItemType = itemType, Value = value });
+                // A field we cannot decode is dropped, not laundered and not fatal: the chunk keeps its SSRC
+                // and its other items. A chunk that ends up without a CNAME is what libwebrtc also produces
+                // for a CNAME-less chunk, and consumers already tolerate it.
+                if (value is not null)
+                    items.Add(new RtcpSdesItem { ItemType = itemType, Value = value });
             }
 
             chunks.Add(new RtcpSdesChunk { Ssrc = ssrc, Items = items });
         }
 
         return new RtcpSdesPacket { Chunks = chunks };
+    }
+
+    // RFC 3550 §6.5 requires SDES text (and §6.6 the BYE reason) to be UTF-8. Encoding.UTF8.GetString
+    // silently substitutes U+FFFD for invalid sequences, so malformed wire input becomes a string that looks
+    // valid and compares unequal to whatever the peer meant — a CNAME laundered that way fails to match and
+    // nothing says why (#162 P2-4).
+    //
+    // Returns null for invalid UTF-8 rather than throwing, and the caller drops just that field. A text
+    // field's encoding is not a structural property: a bad CNAME does not make the SSRC, the report blocks
+    // or the departure list unreadable, and discarding a compound over it would trade this interval's loss
+    // statistics for a cosmetic item. Structural defects (a length running past the body) still throw.
+    //
+    // Reference behaviour, checked rather than assumed: neither Pion (string(txtBytes)) nor libwebrtc
+    // (cname.assign(bytes, len)) validates UTF-8 at all, and SIPSorcery uses Encoding.UTF8.GetString — so
+    // dropping the field is already stricter than every one of them, while keeping the compound they keep.
+    private static readonly UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+
+    private static string? TryDecodeUtf8(ReadOnlySpan<byte> value)
+    {
+        try
+        {
+            return StrictUtf8.GetString(value);
+        }
+        catch (DecoderFallbackException)
+        {
+            return null;
+        }
     }
 
     private static RtcpByePacket DecodeBye(ReadOnlySpan<byte> body, int sc)
@@ -266,8 +297,15 @@ internal sealed class RtcpPacketCodec : IRtcpPacketCodec
         if (body.Length > afterSources)
         {
             var reasonLen = body[afterSources];
-            if (afterSources + 1 + reasonLen <= body.Length)
-                reason = Encoding.UTF8.GetString(body.Slice(afterSources + 1, reasonLen));
+            // #162 P2-4: a reason whose declared length runs past the body is malformed, not "a BYE without a
+            // reason". Silently dropping it handed the caller a well-formed-looking departure notice built from
+            // a packet we could not read — the one shape where accepting a fragment is worse than rejecting the
+            // packet, since a BYE retires participant state (RFC 3550 §6.6).
+            if (afterSources + 1 + reasonLen > body.Length)
+                throw new ArgumentException($"BYE reason declares {reasonLen} bytes but only {body.Length - afterSources - 1} remain.");
+
+            // Invalid UTF-8 leaves the reason null — the sources, which are what a BYE is for, still stand.
+            reason = TryDecodeUtf8(body.Slice(afterSources + 1, reasonLen));
         }
 
         return new RtcpByePacket { Sources = sources, Reason = reason };
@@ -285,6 +323,7 @@ internal sealed class RtcpPacketCodec : IRtcpPacketCodec
 
         var ssrc = BinaryPrimitives.ReadUInt32BigEndian(body);
         var metrics = new List<RtcpVoipMetricsBlock>();
+        var truncated = false;
 
         var offset = 4;
         while (offset + 4 <= body.Length)
@@ -294,7 +333,14 @@ internal sealed class RtcpPacketCodec : IRtcpPacketCodec
             var contentBytes = blockWords * 4;
             var contentStart = offset + 4;
             if (contentStart + contentBytes > body.Length)
-                break; // truncated / inconsistent block length
+            {
+                // #162 P2-4: stop, but say so. Returning the blocks read so far as if they were the whole
+                // report let a consumer treat a partially-parsed XR as a complete one — publishing the
+                // previous metrics as current. Skipping stays right (a bad block must not discard the
+                // surrounding compound); pretending it did not happen does not.
+                truncated = true;
+                break;
+            }
 
             if (blockType == VoipMetricsBlockType && contentBytes >= VoipMetricsContentBytes)
                 metrics.Add(DecodeVoipMetrics(body.Slice(contentStart, VoipMetricsContentBytes)));
@@ -302,7 +348,7 @@ internal sealed class RtcpPacketCodec : IRtcpPacketCodec
             offset = contentStart + contentBytes;
         }
 
-        return new RtcpExtendedReport { Ssrc = ssrc, VoipMetrics = metrics };
+        return new RtcpExtendedReport { Ssrc = ssrc, VoipMetrics = metrics, IsTruncated = truncated };
     }
 
     private const byte VoipMetricsBlockType = 7;

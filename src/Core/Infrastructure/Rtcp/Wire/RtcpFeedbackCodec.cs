@@ -34,7 +34,7 @@ internal static class RtcpFeedbackCodec
         return (type, fmt) switch
         {
             (RtcpPacketType.PayloadFeedback, RtcpPictureLossIndication.FeedbackMessageType)
-                => new RtcpPictureLossIndication { SenderSsrc = senderSsrc, MediaSsrc = mediaSsrc },
+                => DecodePli(senderSsrc, mediaSsrc, fci),
             (RtcpPacketType.PayloadFeedback, RtcpFullIntraRequest.FeedbackMessageType)
                 => DecodeFir(senderSsrc, fci),
             (RtcpPacketType.TransportFeedback, RtcpGenericNack.FeedbackMessageType)
@@ -58,7 +58,20 @@ internal static class RtcpFeedbackCodec
         _ => null,
     };
 
-    // FIR FCI (RFC 5104 §4.3.1): per entry SSRC(4) + SeqNr(1) + Reserved(3).
+    // PLI carries no FCI at all (RFC 4585 §6.3.1: length is fixed at 2, the SSRC pair). Trailing bytes mean
+    // the sender and we disagree about what this packet is, and accepting them anyway made a PLI out of
+    // something that was not one (#162 P2-4). The header length is authoritative, so this cannot be padding.
+    private static RtcpPictureLossIndication DecodePli(uint senderSsrc, uint mediaSsrc, ReadOnlySpan<byte> fci)
+    {
+        if (fci.Length != 0)
+            throw new ArgumentException($"PLI carries {fci.Length} FCI bytes; RFC 4585 §6.3.1 defines none.");
+
+        return new RtcpPictureLossIndication { SenderSsrc = senderSsrc, MediaSsrc = mediaSsrc };
+    }
+
+    // FIR FCI (RFC 5104 §4.3.1): per entry SSRC(4) + SeqNr(1) + Reserved(3). The header's media-SSRC field is
+    // deliberately not validated — §4.3.1 says it is unused and SHALL be 0, so the targets are the FCI entries.
+    // Rejecting a non-zero value would break peers that echo it without meaning anything by it.
     private static RtcpFullIntraRequest DecodeFir(uint senderSsrc, ReadOnlySpan<byte> fci)
     {
         const int entryLength = 8;
