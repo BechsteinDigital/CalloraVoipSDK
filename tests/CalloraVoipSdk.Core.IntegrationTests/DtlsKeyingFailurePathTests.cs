@@ -68,6 +68,65 @@ public sealed class DtlsKeyingFailurePathTests
     }
 
     [Fact]
+    public async Task A_repeated_start_does_not_run_a_second_handshake()
+    {
+        // #157 P2-7: Start used to overwrite _handshakeTask with a fresh handshake on every call. Two
+        // handshakes consume the same datagram queue and race to install SRTP contexts through the owner
+        // callback, while the first task is orphaned — nobody awaits it, so its failure goes unobserved.
+        var clientCertificate = DtlsCertificate.GenerateEcdsaP256();
+        var serverCertificate = DtlsCertificate.GenerateEcdsaP256();
+        var clientEndpoint = new IPEndPoint(IPAddress.Loopback, 5104);
+        var serverEndpoint = new IPEndPoint(IPAddress.Loopback, 5105);
+
+        var clientKeyings = 0;
+        var clientReady = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var serverReady = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        DtlsMediaAttachment client = null!;
+        DtlsMediaAttachment server = null!;
+        client = DtlsMediaAttachment.Create(
+            isClient: true, serverEndpoint, serverCertificate.Fingerprint,
+            new DtlsSrtpHandshaker(NullLogger<DtlsSrtpHandshaker>.Instance), clientCertificate,
+            sendRaw: (datagram, _, _) =>
+            {
+                server.OnDtlsPacketReceived(datagram.ToArray(), clientEndpoint);
+                return ValueTask.CompletedTask;
+            },
+            onContextsReady: (_, _, _, _) =>
+            {
+                Interlocked.Increment(ref clientKeyings);
+                clientReady.TrySetResult();
+            },
+            onHandshakeFailed: () => clientReady.TrySetException(new InvalidOperationException("client handshake failed")),
+            NullLoggerFactory.Instance);
+        server = DtlsMediaAttachment.Create(
+            isClient: false, clientEndpoint, clientCertificate.Fingerprint,
+            new DtlsSrtpHandshaker(NullLogger<DtlsSrtpHandshaker>.Instance), serverCertificate,
+            sendRaw: (datagram, _, _) =>
+            {
+                client.OnDtlsPacketReceived(datagram.ToArray(), serverEndpoint);
+                return ValueTask.CompletedTask;
+            },
+            onContextsReady: (_, _, _, _) => serverReady.TrySetResult(),
+            onHandshakeFailed: () => serverReady.TrySetException(new InvalidOperationException("server handshake failed")),
+            NullLoggerFactory.Instance);
+
+        await using (client)
+        await using (server)
+        {
+            client.Start(default);
+            client.Start(default);   // ignored — the second handshake must never begin
+            server.Start(default);
+
+            await Task.WhenAll(clientReady.Task, serverReady.Task).WaitAsync(Patience);
+
+            // Let a second handshake, had one started, get far enough to key again before asserting.
+            await Task.Delay(500);
+            Assert.Equal(1, Volatile.Read(ref clientKeyings));
+        }
+    }
+
+    [Fact]
     public async Task A_throwing_rtx_callback_still_wipes_the_exported_master_keys()
     {
         // The RTX contexts (RFC 4588 §9) are derived after the primary ones, so a throw there lands

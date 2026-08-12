@@ -23,6 +23,43 @@ public sealed class BundledMediaSessionTests
     private const byte VideoPayloadType = 96;
 
     [Fact]
+    public async Task StartAsync_is_idempotent_and_keeps_the_bundle_usable()
+    {
+        // #157 P2-7: a repeated start used to run the whole start sequence again — a second receive loop
+        // and a second DTLS handshake over the same datagram queue, racing to install SRTP contexts while
+        // the first handshake task was dropped unawaited. The second call now returns the first call's
+        // task, and the media path still works afterwards.
+        var certA = DtlsCertificate.GenerateEcdsaP256();
+        var certB = DtlsCertificate.GenerateEcdsaP256();
+
+        var (client, server) = CreatePair(certA, certB);
+        await using var clientLease = client;
+        await using var serverLease = server;
+
+        var audio = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
+        server.AudioReceived += p => audio.TrySetResult(p.Payload.ToArray());
+
+        var firstServerStart = server.StartAsync();
+        Assert.Same(firstServerStart, server.StartAsync());
+        await firstServerStart;
+
+        var firstClientStart = client.StartAsync();
+        Assert.Same(firstClientStart, client.StartAsync());
+        await firstClientStart;
+        await client.StartAsync();   // a third start, after the first has completed, is still a no-op
+
+        using var overall = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        while (!audio.Task.IsCompleted)
+        {
+            overall.Token.ThrowIfCancellationRequested();
+            await client.SendAudioAsync(new byte[] { 9, 8, 7, 6 });
+            await Task.Delay(20, overall.Token);
+        }
+
+        Assert.Equal(new byte[] { 9, 8, 7, 6 }, await audio.Task);
+    }
+
+    [Fact]
     public async Task Audio_and_video_flow_over_one_dtls_keyed_ice_active_bundle()
     {
         var certA = DtlsCertificate.GenerateEcdsaP256();

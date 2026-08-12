@@ -53,6 +53,9 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
     private static readonly TimeSpan CloseNotifyDrainDeadline = TimeSpan.FromMilliseconds(500);
 
     private Task? _handshakeTask;
+    // Latches the one handshake start (#157 P2-7); a repeated Start is ignored rather than orphaning
+    // the first task and racing a second handshake over the same datagram queue.
+    private int _handshakeStarted;
     private DtlsSrtpHandshakeResult? _result;
     // Services the association after key export (#190): notices a peer close_notify/alert and discards
     // stray application_data. Null until the handshake completes; set once, read on teardown.
@@ -256,9 +259,20 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
         _transport.Enqueue(datagram);
     }
 
-    /// <summary>Starts the DTLS handshake in the background in the negotiated role.</summary>
+    /// <summary>
+    /// Starts the DTLS handshake in the background in the negotiated role. Idempotent (#157 P2-7): a
+    /// second call is a no-op. Two handshakes would consume the same datagram queue, race to install
+    /// SRTP contexts through the owner callback, and orphan the first task — nobody would ever await it,
+    /// so its failure would go unobserved.
+    /// </summary>
     public void Start(CancellationToken cancellationToken)
     {
+        if (Interlocked.Exchange(ref _handshakeStarted, 1) != 0)
+        {
+            _logger.LogDebug("DTLS handshake already started for this attachment; ignoring the repeated start.");
+            return;
+        }
+
         var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetimeCts.Token);
         _handshakeTask = RunHandshakeAsync(linked);
     }

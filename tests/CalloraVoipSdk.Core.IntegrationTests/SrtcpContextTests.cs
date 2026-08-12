@@ -33,7 +33,11 @@ public sealed class SrtcpContextTests
 
     private static SrtpKeyMaterial Material(byte seed, SrtpCryptoSuite suite)
     {
-        var material = new byte[30];
+        // Size the material for the suite: AES-CM takes a 14-byte master salt, AEAD-GCM a 12-byte one
+        // (RFC 3711 §3.2.1 / RFC 7714 §8.1). This used to be a flat 30 bytes for every suite, which the
+        // old "at least" length check accepted for GCM by ignoring the two surplus bytes (#157 P2-4).
+        var material = new byte[
+            SrtpCryptoSuiteNames.KeyLength(suite) + SrtpCryptoSuiteNames.SaltLength(suite)];
         for (var i = 0; i < material.Length; i++)
             material[i] = (byte)(seed + i);
         return SrtpKeyMaterial.ParseInline(

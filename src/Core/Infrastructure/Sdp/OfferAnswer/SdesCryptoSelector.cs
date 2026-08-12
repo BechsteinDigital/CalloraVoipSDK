@@ -36,7 +36,14 @@ internal static class SdesCryptoSelector
 
             // Only inline keying is supported (RFC 4568 §6.1); skip lines we could not
             // parse a remote key from — answering them would negotiate an undecryptable call.
-            if (!line.KeyParams.StartsWith("inline:", StringComparison.OrdinalIgnoreCase))
+            if (!SdesKeyParam.TryParse(line.KeyParams, out var offeredKey))
+                continue;
+
+            // #157 P2-4: never answer a crypto tag whose parameters we do not implement. An MKI is not
+            // cosmetic — the peer prefixes it to every packet's authentication portion, so we would read
+            // MKI bytes as ciphertext: the negotiation looks successful and media never decodes. Skipping
+            // the line lets a later offered line (or no SRTP at all, fail-closed) decide instead.
+            if (offeredKey.Mki is not null)
                 continue;
 
             var localAnswer = new SdpCryptoAttribute
