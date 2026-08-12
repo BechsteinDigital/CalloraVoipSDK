@@ -114,6 +114,13 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
         if (Interlocked.CompareExchange(ref _started, 1, 0) != 0)
             return Task.CompletedTask;
 
+        // #162 P2-9: a Start racing (or following) a Dispose must not touch the cancellation source the
+        // teardown already disposed — reading _cts.Token below would throw ObjectDisposedException out of a
+        // start path callers do not expect to fail. Checked after the start latch so the two orderings are
+        // decided by the same pair of interlocked reads.
+        if (Volatile.Read(ref _disposed) != 0)
+            return Task.CompletedTask;
+
         if (_rtcpMux)
         {
             _mediaSession.RtcpCompoundReceived += OnRtcpCompoundReceived;
@@ -134,6 +141,11 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
                     "Failed to bind RTCP socket on {LocalRtcpEndPoint}; quality reporting is disabled.",
                     _localRtcpEndPoint);
                 PublishSnapshot(_mediaSession.GetRtpSnapshot(), DateTimeOffset.UtcNow, rtcpActive: false);
+
+                // #162 P2-9: release the start latch. A bind failure is usually transient (the port is still
+                // held by a previous leg), but leaving _started at 1 made it permanent — every later attempt
+                // returned "already started" and quality reporting stayed dead for the session's lifetime.
+                Volatile.Write(ref _started, 0);
                 return Task.CompletedTask;
             }
         }
@@ -540,6 +552,7 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
     {
         Interlocked.Increment(ref _rtcpPacketsReceived);
         var rtpSnapshot = _mediaSession.GetRtpSnapshot();
+        var updatedMetrics = false;
 
         foreach (var packet in packets)
         {
@@ -547,19 +560,27 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
             {
                 case RtcpSenderReport senderReport:
                     HandleSenderReport(senderReport, rtpSnapshot.LocalSsrc, capturedAtMono);
+                    updatedMetrics = true;
                     break;
 
                 case RtcpReceiverReport receiverReport:
                     HandleReceiverReport(receiverReport, rtpSnapshot.LocalSsrc, capturedAtMono);
+                    updatedMetrics = true;
                     break;
 
                 case RtcpExtendedReport extendedReport:
                     HandleExtendedReport(extendedReport, rtpSnapshot.LocalSsrc);
+                    updatedMetrics = true;
                     break;
             }
         }
 
-        PublishSnapshot(rtpSnapshot, capturedAtUtc, rtcpActive: true);
+        // #162 P2-9: only publish when something a subscriber can act on actually changed. Every decoded
+        // datagram used to raise a quality event, so a compound carrying only SDES or feedback — which say
+        // nothing about quality — woke every subscriber with an identical snapshot. Reception itself is still
+        // recorded (_rtcpPacketsReceived above), so liveness tracking is unaffected.
+        if (updatedMetrics)
+            PublishSnapshot(rtpSnapshot, capturedAtUtc, rtcpActive: true);
     }
 
     private void HandleSenderReport(RtcpSenderReport senderReport, uint localSsrc, DateTimeOffset capturedAtMono)
@@ -593,7 +614,10 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
 
     // RFC 3611 §4.7: MOS is carried as the score ×10 (valid 10–50); 0 and 127 mean unavailable.
     private static double? MosFromByte(byte mosTimesTen)
-        => mosTimesTen is 0 or 127 ? null : mosTimesTen / 10.0;
+        // RFC 3611 §4.7: MOS values are carried in units of 0.1 over the range 1.0-5.0, i.e. 10..50 on the
+        // wire; 127 means unavailable and 0 is unset. Anything else is out of range — 255 used to surface as
+        // a MOS of 25.5, a number no scale produces, published to callers as a quality figure (#162 P2-9).
+        => mosTimesTen is >= 10 and <= 50 ? mosTimesTen / 10.0 : null;
 
     private void UpdateRemoteQualityMetrics(
         IReadOnlyList<RtcpReportBlock> blocks,
@@ -649,16 +673,21 @@ internal sealed class CallRtcpQualityMonitor : IAsyncDisposable
     private void PublishSnapshot(CallMediaRtpSnapshot rtpSnapshot, DateTimeOffset capturedAtUtc, bool rtcpActive)
     {
         var snapshot = CreateSnapshot(rtpSnapshot, capturedAtUtc, rtcpActive);
+        Action<CallQualitySnapshot>? handler;
         lock (_sync)
         {
             _latestSnapshot = snapshot;
             _latestRtpSnapshot = rtpSnapshot;
             _hasRtpSnapshot = true;
+            // K3 (#162 P2-9): snapshot the delegate inside the lock, invoke outside it. Reading the event
+            // field outside meant a concurrent unsubscribe — including the one DisposeAsync performs — could
+            // land between the read and the call, so a subscriber could be invoked after it detached.
+            handler = QualitySnapshotUpdated;
         }
 
         try
         {
-            QualitySnapshotUpdated?.Invoke(snapshot);
+            handler?.Invoke(snapshot);
         }
         catch (Exception ex)
         {
