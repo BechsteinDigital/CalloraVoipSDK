@@ -163,6 +163,17 @@ internal sealed class SrtpContext : ISrtpContext
         _ssrcState.TryGetValue(ssrc, out var existing);
         var state = existing ?? new SrtpSsrcState();
         var packetIndex = state.ComputePacketIndex(seq);
+
+        // #157 P2-3: reject a replay BEFORE the copy and the cipher work. Replaying one recorded valid
+        // packet needs no key, and each repeat used to cost an allocation, a full HMAC/GCM verification
+        // and a decrypt — an unkeyed attacker could spend our CPU at line rate. The window check is
+        // read-only (it does not shift or set a bit), and it only runs for an SSRC we already track, so
+        // no state is created for a forged SSRC. The authoritative check below is unchanged: this one
+        // can only reject packets that the post-authentication check would reject anyway, since an index
+        // enters the window solely through an authenticated packet (RFC 3711 §3.3.2).
+        if (existing is not null)
+            state.CheckReplay(packetIndex);
+
         var headerLen = GetRtpHeaderLength(rtpSpan); // AEAD-GCM needs the header (AAD) to authenticate.
 
         // Copy the encrypted RTP region out, then verify + decrypt it in place. A failed tag throws
@@ -181,7 +192,9 @@ internal sealed class SrtpContext : ISrtpContext
             _ssrcState[ssrc] = state;
         }
 
-        // Replay check + window update (RFC 3711 §3.3.2).
+        // Replay check + window update (RFC 3711 §3.3.2). This is the authoritative check — the
+        // pre-check above is an optimisation that never widens what is accepted, and a first packet
+        // from a newly admitted SSRC reaches its window here for the first time.
         state.CheckReplay(packetIndex);
         state.UpdateReplayWindow(packetIndex);
 
