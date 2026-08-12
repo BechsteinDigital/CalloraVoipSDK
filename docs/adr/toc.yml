@@ -70,6 +70,10 @@
       href: ADR-029-dtls-srtp-signaling-and-keying-precedence.md
     - name: "ADR-030: DTLS-SRTP Media Wiring and Fail-Closed Context Installation"
       href: ADR-030-dtls-srtp-media-wiring.md
+    - name: "ADR-066: DTLS Post-Handshake Association Servicing and Egress Ordering"
+      href: ADR-066-dtls-post-handshake-association-servicing.md
+    - name: "ADR-067: Scope of the DTLS Stateless Cookie (HelloVerifyRequest)"
+      href: ADR-067-dtls-stateless-cookie-scope.md
 - name: "Media Security — SRTCP"
   items:
     - name: "ADR-031: SRTCP Crypto Core and RTCP-Path Wiring"

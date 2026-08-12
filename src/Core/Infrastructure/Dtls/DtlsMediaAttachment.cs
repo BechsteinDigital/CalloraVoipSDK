@@ -18,7 +18,8 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
     private readonly bool _isClient;
     // Opt-in RFC 6347 §4.2.1 stateless cookie on the server role: true for SIP legs without ICE
     // source validation, false for WebRTC legs (ICE already validates the source, and a browser
-    // DTLS client stalls on a server-sent HelloVerifyRequest).
+    // DTLS client stalls on a server-sent HelloVerifyRequest). The discriminator is the path, not
+    // a nominated ICE generation — that trade-off and its residual gap are recorded in ADR-067.
     private readonly bool _useServerCookie;
     // The peer media endpoint DTLS records are exchanged with and the source inbound records are accepted
     // from. Mutable: a bundled transport whose ICE agent nominates (or re-nominates) a different candidate
