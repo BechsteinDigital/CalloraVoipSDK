@@ -54,6 +54,9 @@ internal sealed class BundledRtcpReporter : IAsyncDisposable
     // §6.3.3: seeds the running average RTCP compound size until the first report measures a real one.
     private const double InitialAverageRtcpSizeBytes = 128.0;
 
+    // Bound on the best-effort teardown BYE (#162 P2-6). A farewell must not outrank shutting down.
+    private static readonly TimeSpan GoodbyeSendDeadline = TimeSpan.FromMilliseconds(500);
+
     private readonly Func<IReadOnlyList<BundledSenderReportInfo>> _snapshotSenderReports;
     private readonly Func<IReadOnlyList<BundledReceptionReportBlock>> _snapshotReceptionBlocks;
     private readonly uint _localSsrc;
@@ -402,22 +405,35 @@ internal sealed class BundledRtcpReporter : IAsyncDisposable
 
         try
         {
-            var senders = _snapshotSenderReports();
-            IReadOnlyList<uint> sources = senders.Count > 0
-                ? senders.Select(s => s.Ssrc).ToArray()
-                : [_localSsrc];
+            // #162 P2-6: the compound must be self-consistent. It used to lead with an RR and an SDES CNAME for
+            // _localSsrc while the BYE departed the *sending* SSRCs — so on a bundle whose tracks do not use the
+            // local SSRC, the peer received a farewell for sources this compound never identified, and none for
+            // the one it did. Depart every SSRC this participant used, and give each of them a CNAME chunk, so
+            // every source in the BYE was announced by the same compound (RFC 3550 §6.1/§6.5/§6.6).
+            var sources = _snapshotSenderReports()
+                .Select(s => s.Ssrc)
+                .Append(_localSsrc)
+                .Distinct()
+                .ToArray();
 
-            // §6.1: a compound must begin with an SR/RR and carry a CNAME; at teardown we lead with an empty RR
-            // for our SSRC, the SDES CNAME, then the BYE.
             var packets = new List<RtcpPacket>
             {
                 new RtcpReceiverReport { Ssrc = _localSsrc, ReportBlocks = [] },
-                new RtcpSdesPacket { Chunks = [SdesChunk(_localSsrc)] },
+                new RtcpSdesPacket { Chunks = [.. sources.Select(SdesChunk)] },
                 new RtcpByePacket { Sources = sources, Reason = "leaving" },
             };
 
             var datagram = _codec.Encode(packets);
-            await _sendRtcp(datagram, CancellationToken.None).ConfigureAwait(false);
+
+            // #162 P2-6: bounded. CancellationToken.None let a wedged transport hold teardown open with no
+            // limit — a best-effort farewell must never outrank shutting down. RTCP BYE is not retransmitted
+            // (RFC 3550 §6.6), so a deadline costs at most this one packet.
+            using var deadline = new CancellationTokenSource(GoodbyeSendDeadline);
+            await _sendRtcp(datagram, deadline.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogDebug("Bundled RTCP BYE on teardown timed out after {Deadline}; continuing shutdown.", GoodbyeSendDeadline);
         }
         catch (Exception ex)
         {
