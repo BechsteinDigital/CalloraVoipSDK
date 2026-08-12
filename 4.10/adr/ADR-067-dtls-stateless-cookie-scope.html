@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-067: Scope of the DTLS Stateless Cookie (HelloVerifyRequest) | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-067: Scope of the DTLS Stateless Cookie (HelloVerifyRequest) | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-067-dtls-stateless-cookie-scope.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-067-scope-of-the-dtls-stateless-cookie-helloverifyrequest">ADR-067: Scope of the DTLS Stateless Cookie (HelloVerifyRequest)</h1>
+
+<p>Status: Accepted
+Date: 2026-08-12</p>
+<h2 id="context">Context</h2>
+<p>RFC 6347 §4.2.1 defines a stateless cookie exchange for the DTLS server role: on an unverified
+<code>ClientHello</code> the server answers with a <code>HelloVerifyRequest</code> carrying a cookie derived from the client
+address, and only a <code>ClientHello</code> that echoes that cookie earns the expensive certificate flight. Without
+it, a single spoofed-source <code>ClientHello</code> makes the server sign and transmit a full certificate flight to
+an address that never asked for it — the classic DTLS amplification vector.</p>
+<p><code>DtlsSrtpHandshaker</code> implements the exchange (<code>DtlsSrtpHandshaker.cs</code> — <code>HelloVerifyRequest</code> before the
+server cert flight, commit <code>548a471d</code>). It is <strong>not</strong> unconditionally on: <code>DtlsMediaAttachment</code> carries a
+<code>_useServerCookie</code> flag, defaulted <strong>on</strong> for the SIP entry point (<code>TryCreate</code>) and <strong>off</strong> for the
+explicit/bundled entry point (<code>Create</code>) that the WebRTC path uses (commit <code>37610295</code>).</p>
+<p>Two things about that split were only recorded as code comments, which is why review of the DTLS
+sammelticket (#163) left it flagged rather than closed:</p>
+<ol>
+<li><strong>Why the WebRTC path opts out at all.</strong></li>
+<li><strong>That the opt-out keys on the <em>path</em> (&quot;this leg has ICE&quot;) rather than on a <em>nominated</em> ICE
+generation</strong>, which is the stricter reading of the acceptance criterion the finding was written
+against.</li>
+</ol>
+<h2 id="decision">Decision</h2>
+<p>The cookie is scoped to legs that have no other source validation, and the criterion for that is the
+path, not the nomination state.</p>
+<ol>
+<li><p><strong>SIP legs without ICE: cookie on.</strong> A SIP media leg accepts DTLS records at a negotiated address
+with no prior connectivity check, so the <code>ClientHello</code> source is unverified. This is exactly the case
+RFC 6347 §4.2.1 exists for, and it stays on by default.</p>
+</li>
+<li><p><strong>WebRTC/ICE legs: cookie off, ICE is the source validation.</strong> On the bundle path a DTLS record only
+reaches the association through a transport whose inbound source filter is pinned to the ICE-nominated
+remote endpoint. An attacker cannot deliver a spoofed <code>ClientHello</code> to the handshake without first
+completing an ICE connectivity check against a peer-supplied <code>ice-pwd</code> (RFC 8445 §7) — a stronger
+return-routability proof than the cookie, and it happens <em>before</em> any certificate work. Layering the
+cookie on top buys nothing and costs interop: some browser DTLS clients stall on a server-sent
+<code>HelloVerifyRequest</code> on an already-validated 5-tuple.</p>
+</li>
+<li><p><strong>The discriminator is the path, not the nominated generation.</strong> The flag is fixed when the attachment
+is constructed; it does not consult &quot;is there a nominated pair <em>right now</em>&quot;. In the real sequence the
+handshake only starts after nomination, so the two readings coincide — but the code does not enforce
+the ordering, and this ADR records that deliberately.</p>
+</li>
+<li><p><strong>The cookie's client id is snapshotted at handshake start.</strong> When the cookie is on, it binds to the
+remote endpoint read once at handshake start. An ICE re-nomination inside the cookie window would bind
+to the stale address and time out. Accepted: only the opt-in SIP path uses the cookie, and that path
+never re-nominates (<code>UpdateRemoteEndPoint</code> is a bundle/ICE facility).</p>
+</li>
+</ol>
+<h2 id="consequences">Consequences</h2>
+<ul>
+<li><strong>The amplification surface is closed on the path that has it</strong> (SIP without ICE) and left to the
+stronger mechanism on the path that has one (ICE).</li>
+<li><strong>Browser interop is unaffected</strong>: no <code>HelloVerifyRequest</code> is emitted towards a browser DTLS client.</li>
+<li><strong>The residual gap is explicit</strong>: an internal caller that used <code>DtlsMediaAttachment.Create</code> for a leg
+<em>without</em> ICE source validation would silently get no cookie, because the default there is off. That is
+an internal API (<code>internal sealed class</code>) with two call sites, both on the bundle path; the guard is
+this ADR plus the parameter documentation, not a runtime assertion.</li>
+<li><strong>Reference parity</strong>: libwebrtc/BoringSSL and pjsip likewise do not run a DTLS cookie exchange on ICE
+legs — the ICE check is treated as the return-routability proof there as well.</li>
+</ul>
+<h2 id="alternatives-considered">Alternatives considered</h2>
+<ul>
+<li><strong>Cookie unconditionally on.</strong> Rejected: it re-verifies an address ICE already verified, and it stalls
+browser clients — a regression on the path that carries the WebRTC traffic, in exchange for no
+additional protection.</li>
+<li><strong>Tie the opt-out to a nominated ICE generation at handshake start</strong> (assert nomination instead of
+assuming it). Deferred rather than rejected: it is the stricter reading and would turn the ordering
+assumption into an enforced invariant, but it needs a nomination-state seam from the ICE agent into the
+DTLS attachment that does not exist today. Tracked as follow-up, not as part of #163.</li>
+<li><strong>Cookie on for every server-role leg, with a browser allowlist.</strong> Rejected: fingerprinting the peer
+stack to decide a security parameter is fragile and inverts the reasoning — the question is whether the
+source is already validated, not which client is on the other end.</li>
+</ul>
+<h2 id="references">References</h2>
+<ul>
+<li>RFC 6347 §4.2.1 — DTLS denial-of-service countermeasure (stateless cookie).</li>
+<li>RFC 8445 §7 — ICE connectivity checks (<code>ice-pwd</code>-authenticated return routability).</li>
+<li>ADR-066 — post-handshake association servicing; the same association, after key export.</li>
+<li>Issue #163 — DTLS review sammelticket; this ADR closes its documentation caveat.</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-067-dtls-stateless-cookie-scope.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

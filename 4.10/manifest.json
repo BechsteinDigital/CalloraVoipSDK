@@ -672,6 +672,16 @@
     },
     {
       "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-067-dtls-stateless-cookie-scope.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-067-dtls-stateless-cookie-scope.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
       "source_relative_path": "docs/adr/README.md",
       "output": {
         ".html": {
@@ -684,11 +694,11 @@
       "type": "Toc",
       "source_relative_path": "docs/adr/toc.yml",
       "output": {
-        ".html": {
-          "relative_path": "adr/toc.html"
-        },
         ".json": {
           "relative_path": "adr/toc.json"
+        },
+        ".html": {
+          "relative_path": "adr/toc.html"
         }
       },
       "version": ""
@@ -3441,11 +3451,11 @@
       "type": "Toc",
       "source_relative_path": "docs/portal/_api/toc.yml",
       "output": {
-        ".html": {
-          "relative_path": "_api/toc.html"
-        },
         ".json": {
           "relative_path": "_api/toc.json"
+        },
+        ".html": {
+          "relative_path": "_api/toc.html"
         }
       },
       "version": ""
@@ -3484,11 +3494,11 @@
       "type": "Toc",
       "source_relative_path": "docs/portal/architecture/toc.yml",
       "output": {
-        ".html": {
-          "relative_path": "architecture/toc.html"
-        },
         ".json": {
           "relative_path": "architecture/toc.json"
+        },
+        ".html": {
+          "relative_path": "architecture/toc.html"
         }
       },
       "version": ""
@@ -3557,11 +3567,11 @@
       "type": "Toc",
       "source_relative_path": "docs/portal/commercial/toc.yml",
       "output": {
-        ".html": {
-          "relative_path": "commercial/toc.html"
-        },
         ".json": {
           "relative_path": "commercial/toc.json"
+        },
+        ".html": {
+          "relative_path": "commercial/toc.html"
         }
       },
       "version": ""
@@ -3640,11 +3650,11 @@
       "type": "Toc",
       "source_relative_path": "docs/portal/concepts/toc.yml",
       "output": {
-        ".html": {
-          "relative_path": "concepts/toc.html"
-        },
         ".json": {
           "relative_path": "concepts/toc.json"
+        },
+        ".html": {
+          "relative_path": "concepts/toc.html"
         }
       },
       "version": ""
@@ -3673,11 +3683,11 @@
       "type": "Toc",
       "source_relative_path": "docs/portal/examples/toc.yml",
       "output": {
-        ".html": {
-          "relative_path": "examples/toc.html"
-        },
         ".json": {
           "relative_path": "examples/toc.json"
+        },
+        ".html": {
+          "relative_path": "examples/toc.html"
         }
       },
       "version": ""
@@ -3716,11 +3726,11 @@
       "type": "Toc",
       "source_relative_path": "docs/portal/getting-started/toc.yml",
       "output": {
-        ".html": {
-          "relative_path": "getting-started/toc.html"
-        },
         ".json": {
           "relative_path": "getting-started/toc.json"
+        },
+        ".html": {
+          "relative_path": "getting-started/toc.html"
         }
       },
       "version": ""
@@ -3859,11 +3869,11 @@
       "type": "Toc",
       "source_relative_path": "docs/portal/guides/toc.yml",
       "output": {
-        ".html": {
-          "relative_path": "guides/toc.html"
-        },
         ".json": {
           "relative_path": "guides/toc.json"
+        },
+        ".html": {
+          "relative_path": "guides/toc.html"
         }
       },
       "version": ""
@@ -3972,11 +3982,11 @@
       "type": "Toc",
       "source_relative_path": "docs/portal/interop/toc.yml",
       "output": {
-        ".html": {
-          "relative_path": "interop/toc.html"
-        },
         ".json": {
           "relative_path": "interop/toc.json"
+        },
+        ".html": {
+          "relative_path": "interop/toc.html"
         }
       },
       "version": ""
@@ -4045,11 +4055,11 @@
       "type": "Toc",
       "source_relative_path": "docs/portal/production/toc.yml",
       "output": {
-        ".html": {
-          "relative_path": "production/toc.html"
-        },
         ".json": {
           "relative_path": "production/toc.json"
+        },
+        ".html": {
+          "relative_path": "production/toc.html"
         }
       },
       "version": ""
@@ -4088,11 +4098,11 @@
       "type": "Toc",
       "source_relative_path": "docs/portal/toc.yml",
       "output": {
-        ".html": {
-          "relative_path": "toc.html"
-        },
         ".json": {
           "relative_path": "toc.json"
+        },
+        ".html": {
+          "relative_path": "toc.html"
         }
       },
       "version": ""
