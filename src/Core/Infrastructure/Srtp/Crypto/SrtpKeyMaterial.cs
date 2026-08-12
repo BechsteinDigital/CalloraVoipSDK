@@ -79,9 +79,13 @@ internal sealed class SrtpKeyMaterial : IDisposable
             var keyLength = SrtpCryptoSuiteNames.KeyLength(suite);
             var saltLength = SrtpCryptoSuiteNames.SaltLength(suite); // 14 for AES-CM, 12 for AEAD-GCM
 
-            if (raw.Length < keyLength + saltLength)
+            // #157 P2-4: exact, not "at least". The suite fixes both lengths (RFC 4568 §6.1), so surplus
+            // bytes are not spare key material — they mean the peer encoded something we are not reading
+            // the way it intended. Accepting them silently truncated the peer's intent and produced a
+            // negotiation that looks successful while the key material is not the one it described.
+            if (raw.Length != keyLength + saltLength)
                 throw new FormatException(
-                    $"SRTP inline key too short: {raw.Length} bytes, expected at least {keyLength + saltLength}.");
+                    $"SRTP inline key has {raw.Length} bytes, expected exactly {keyLength + saltLength} for this crypto suite.");
 
             // Copy the key and salt into their own owned buffers so the plaintext master material can
             // be wiped when this instance is disposed, then wipe the base64-decoded staging array below.
