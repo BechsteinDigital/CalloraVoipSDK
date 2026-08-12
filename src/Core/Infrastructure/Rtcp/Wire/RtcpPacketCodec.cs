@@ -240,7 +240,7 @@ internal sealed class RtcpPacketCodec : IRtcpPacketCodec
                 if (offset + valueLen > body.Length)
                     throw new ArgumentException("SDES item value exceeds available data.");
 
-                var value = Encoding.UTF8.GetString(body.Slice(offset, valueLen));
+                var value = DecodeUtf8Strict(body.Slice(offset, valueLen), "SDES item");
                 offset += valueLen;
 
                 items.Add(new RtcpSdesItem { ItemType = itemType, Value = value });
@@ -250,6 +250,24 @@ internal sealed class RtcpPacketCodec : IRtcpPacketCodec
         }
 
         return new RtcpSdesPacket { Chunks = chunks };
+    }
+
+    // RFC 3550 §6.5 requires SDES text (and §6.6 the BYE reason) to be UTF-8. Encoding.UTF8.GetString
+    // silently substitutes U+FFFD for invalid sequences, which turns malformed wire input into a string
+    // that looks valid and compares unequal to whatever the peer meant — a CNAME laundered that way would
+    // silently fail to match, and nothing would say why (#162 P2-4). Decode strictly and reject instead.
+    private static readonly UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+
+    private static string DecodeUtf8Strict(ReadOnlySpan<byte> value, string what)
+    {
+        try
+        {
+            return StrictUtf8.GetString(value);
+        }
+        catch (DecoderFallbackException ex)
+        {
+            throw new ArgumentException($"{what} is not valid UTF-8 (RFC 3550 §6.5).", ex);
+        }
     }
 
     private static RtcpByePacket DecodeBye(ReadOnlySpan<byte> body, int sc)
@@ -266,8 +284,14 @@ internal sealed class RtcpPacketCodec : IRtcpPacketCodec
         if (body.Length > afterSources)
         {
             var reasonLen = body[afterSources];
-            if (afterSources + 1 + reasonLen <= body.Length)
-                reason = Encoding.UTF8.GetString(body.Slice(afterSources + 1, reasonLen));
+            // #162 P2-4: a reason whose declared length runs past the body is malformed, not "a BYE without a
+            // reason". Silently dropping it handed the caller a well-formed-looking departure notice built from
+            // a packet we could not read — the one shape where accepting a fragment is worse than rejecting the
+            // packet, since a BYE retires participant state (RFC 3550 §6.6).
+            if (afterSources + 1 + reasonLen > body.Length)
+                throw new ArgumentException($"BYE reason declares {reasonLen} bytes but only {body.Length - afterSources - 1} remain.");
+
+            reason = DecodeUtf8Strict(body.Slice(afterSources + 1, reasonLen), "BYE reason");
         }
 
         return new RtcpByePacket { Sources = sources, Reason = reason };
@@ -285,6 +309,7 @@ internal sealed class RtcpPacketCodec : IRtcpPacketCodec
 
         var ssrc = BinaryPrimitives.ReadUInt32BigEndian(body);
         var metrics = new List<RtcpVoipMetricsBlock>();
+        var truncated = false;
 
         var offset = 4;
         while (offset + 4 <= body.Length)
@@ -294,7 +319,14 @@ internal sealed class RtcpPacketCodec : IRtcpPacketCodec
             var contentBytes = blockWords * 4;
             var contentStart = offset + 4;
             if (contentStart + contentBytes > body.Length)
-                break; // truncated / inconsistent block length
+            {
+                // #162 P2-4: stop, but say so. Returning the blocks read so far as if they were the whole
+                // report let a consumer treat a partially-parsed XR as a complete one — publishing the
+                // previous metrics as current. Skipping stays right (a bad block must not discard the
+                // surrounding compound); pretending it did not happen does not.
+                truncated = true;
+                break;
+            }
 
             if (blockType == VoipMetricsBlockType && contentBytes >= VoipMetricsContentBytes)
                 metrics.Add(DecodeVoipMetrics(body.Slice(contentStart, VoipMetricsContentBytes)));
@@ -302,7 +334,7 @@ internal sealed class RtcpPacketCodec : IRtcpPacketCodec
             offset = contentStart + contentBytes;
         }
 
-        return new RtcpExtendedReport { Ssrc = ssrc, VoipMetrics = metrics };
+        return new RtcpExtendedReport { Ssrc = ssrc, VoipMetrics = metrics, IsTruncated = truncated };
     }
 
     private const byte VoipMetricsBlockType = 7;

@@ -15,4 +15,16 @@ internal sealed class RtcpExtendedReport : RtcpPacket
 
     /// <summary>VoIP Metrics blocks (RFC 3611 §4.7) carried by this report, in wire order.</summary>
     public IReadOnlyList<RtcpVoipMetricsBlock> VoipMetrics { get; init; } = [];
+
+    /// <summary>
+    /// Whether block parsing stopped early on a block whose declared length ran past the body, so
+    /// <see cref="VoipMetrics"/> may be missing blocks the sender included (#162 P2-4).
+    /// </summary>
+    /// <remarks>
+    /// Skipping a malformed block is right — a bad block must not discard the surrounding compound. What was
+    /// wrong is that the result was indistinguishable from a complete report, so a consumer could publish the
+    /// blocks read so far as the current metrics. A consumer that treats a partial report as authoritative
+    /// should check this first.
+    /// </remarks>
+    public bool IsTruncated { get; init; }
 }
