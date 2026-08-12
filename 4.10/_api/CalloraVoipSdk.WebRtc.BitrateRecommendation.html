@@ -6,7 +6,7 @@
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <meta name="title" content="Struct BitrateRecommendation | CalloraVoipSdk ">
       
-      <meta name="description" content="A ready-to-use send-bitrate recommendation for a peer connection, derived by the SDK from transport-wide congestion control (transport-cc / RFC 8888). The SDK does the estimation and hands back a finished recommendation — the app sets its encoder (or, for an SFU, selects the simulcast layer to forward to this receiver) to this value; it never has to interpret raw delay/loss metrics. Carried by  and mirrored point-in-time by .">
+      <meta name="description" content="A ready-to-use send-bitrate recommendation for a peer connection, derived by the SDK from transport-wide congestion control (transport-cc). The SDK does the estimation and hands back a finished recommendation — the app sets its encoder (or, for an SFU, selects the simulcast layer to forward to this receiver) to this value; it never has to interpret raw delay/loss metrics. Carried by  and mirrored point-in-time by .">
       <link rel="icon" href="../favicon.ico">
       <link rel="stylesheet" href="../public/docfx.min.css">
       <link rel="stylesheet" href="../public/main.css">
@@ -98,7 +98,7 @@ Struct BitrateRecommendation  <a class="header-action link-secondary" title="Vie
   </div>
 
   <div class="markdown summary"><p>A ready-to-use send-bitrate recommendation for a peer connection, derived by the SDK from transport-wide
-congestion control (transport-cc / RFC 8888). The SDK does the estimation and hands back a finished
+congestion control (transport-cc). The SDK does the estimation and hands back a finished
 recommendation — the app sets its encoder (or, for an SFU, selects the simulcast layer to forward to this
 receiver) to this value; it never has to interpret raw delay/loss metrics. Carried by
 <a class="xref" href="CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_RecommendedBitrateChanged">RecommendedBitrateChanged</a> and mirrored point-in-time by

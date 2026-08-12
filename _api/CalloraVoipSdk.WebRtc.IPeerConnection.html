@@ -207,11 +207,12 @@ WebRTC facade, mirroring the SIP <code>ICall</code>.</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_IPeerConnection_RecommendedOutgoingBitrateBps" data-uid="CalloraVoipSdk.WebRtc.IPeerConnection.RecommendedOutgoingBitrateBps">
   RecommendedOutgoingBitrateBps
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IPeerConnection.cs/#L232"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IPeerConnection.cs/#L233"><i class="bi bi-code-slash"></i></a>
   </h3>
 
-  <div class="markdown level1 summary"><p>The SDK's current recommended outbound send bitrate to this peer in bits per second (transport-cc /
-RFC 8888), for setting the encoder or — for an SFU — selecting which simulcast layer to forward to this
+  <div class="markdown level1 summary"><p>The SDK's current recommended outbound send bitrate to this peer in bits per second (transport-cc,
+draft-holmer-rmcat-transport-wide-cc-extensions-01 — not RFC 8888 CCFB, see the codec remarks),
+for setting the encoder or — for an SFU — selecting which simulcast layer to forward to this
 receiver. <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> until a media session is running and transport-cc has been negotiated
 for this leg. The point-in-time counterpart to <a class="xref" href="CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_RecommendedBitrateChanged">RecommendedBitrateChanged</a>; the same value
 the last event carried.</p>
@@ -1154,10 +1155,10 @@ are configured.</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_IPeerConnection_RecommendedBitrateChanged" data-uid="CalloraVoipSdk.WebRtc.IPeerConnection.RecommendedBitrateChanged">
   RecommendedBitrateChanged
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IPeerConnection.cs/#L242"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IPeerConnection.cs/#L243"><i class="bi bi-code-slash"></i></a>
   </h3>
 
-  <div class="markdown level1 summary"><p>Raised whenever the SDK revises its recommended send bitrate to this peer (transport-cc / RFC 8888),
+  <div class="markdown level1 summary"><p>Raised whenever the SDK revises its recommended send bitrate to this peer (transport-cc),
 carrying the finished <a class="xref" href="CalloraVoipSdk.WebRtc.BitrateRecommendation.html">BitrateRecommendation</a> (bitrate + coarse quality). This is the reactive
 signal an SFU reacts to per receiver, re-choosing the simulcast layer it forwards when the path's
 bandwidth changes. Reactive per feedback report (roughly once per round-trip); the SDK does not throttle
