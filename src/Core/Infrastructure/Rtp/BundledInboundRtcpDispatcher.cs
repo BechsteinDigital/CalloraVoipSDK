@@ -91,6 +91,13 @@ internal sealed class BundledInboundRtcpDispatcher
                 case RtcpReceiverReport receiverReport:
                     RecordRemoteReportBlocks(receiverReport.ReportBlocks, arrival);
                     break;
+                case RtcpByePacket bye:
+                    // #162 P2-6: BYE was decoded and then dropped on the floor. A departed source that keeps
+                    // its reception state goes on producing report blocks for a stream nobody is sending, its
+                    // frozen extended-highest-sequence makes every later interval look like total loss, and its
+                    // slot stays taken against the tracked-source cap.
+                    OnRemoteGoodbye(bye);
+                    break;
             }
         }
 
@@ -103,6 +110,19 @@ internal sealed class BundledInboundRtcpDispatcher
         // (transport-cc) updates its delay-trend + loss estimators and the recommended bitrate. Same thread — no
         // added confinement concern.
         _congestion?.OnRtcpPackets(packets);
+    }
+
+    // Retires every source a remote BYE announced as departed (RFC 3550 §6.6). Removal is by SSRC and
+    // idempotent; a BYE naming an SSRC we never tracked is a no-op, since this is unauthenticated wire input
+    // and must not be able to create state either. Logged at Debug so a peer that departs and immediately
+    // resumes under the same SSRC — which legitimately re-creates the entry — stays diagnosable.
+    private void OnRemoteGoodbye(RtcpByePacket bye)
+    {
+        foreach (var ssrc in bye.Sources)
+        {
+            if (_receptionStats.RemoveSource(ssrc))
+                _logger.LogDebug("Remote source {Ssrc} departed via RTCP BYE; reception state retired.", ssrc);
+        }
     }
 
     // Feeds the peer's reception report blocks (about our outbound streams) into the outbound quality tracker.

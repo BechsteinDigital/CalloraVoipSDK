@@ -173,6 +173,27 @@ internal sealed class BundledInboundReceptionStats
     }
 
     /// <summary>
+    /// Drops all reception state for a source that announced its departure with an RTCP BYE
+    /// (RFC 3550 §6.6, #162 P2-6). Returns whether the source was tracked.
+    /// </summary>
+    /// <remarks>
+    /// A departed source must stop appearing in report blocks: continuing to report loss and jitter for a
+    /// participant that has left describes a stream nobody is sending, and its frozen extended-highest-sequence
+    /// would make every subsequent interval look like total loss. Dropping the entry also frees its slot
+    /// against the tracked-source cap, so a long-lived session with churn does not fill up with ghosts.
+    /// <para>
+    /// Removal is by SSRC and idempotent. A BYE for an unknown SSRC is a no-op — it is unauthenticated wire
+    /// input, so it must not be able to create state either.
+    /// </para>
+    /// </remarks>
+    /// <param name="ssrc">The departing synchronisation source.</param>
+    public bool RemoveSource(uint ssrc)
+    {
+        _sourceKinds.TryRemove(ssrc, out _);
+        return _sources.TryRemove(ssrc, out _);
+    }
+
+    /// <summary>
     /// Snapshots one <see cref="BundledReceptionReportBlock"/> per active source for the reporter to build
     /// SR/RR report blocks from. Stateful per RFC 3550 §A.3: capturing advances each source's fraction-lost
     /// interval baseline, so call exactly once per emitted report. Sources that have not yet delivered a
