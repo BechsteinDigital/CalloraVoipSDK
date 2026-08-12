@@ -52,6 +52,31 @@ internal sealed class QueueDatagramTransport : DatagramTransport
     }
 
     /// <summary>
+    /// Feeds one inbound DTLS datagram straight from the media receive buffer, allocating the queued
+    /// copy only once the datagram has been admitted (#157 P2-8). Returns whether it was accepted.
+    /// </summary>
+    /// <remarks>
+    /// The closed and full checks run <em>before</em> the copy, so a flood against a full queue or a
+    /// torn-down transport costs no allocation at all — the bounded queue capped retained memory, never
+    /// the allocation rate. The capacity check is advisory: <see cref="BlockingCollection{T}.TryAdd(T)"/>
+    /// below remains the real gate, and losing that race merely means one copy was made needlessly.
+    /// Oversized records are refused here rather than queued: the handshake engine reads at most
+    /// <see cref="GetReceiveLimit"/> bytes, so a larger record could never be consumed anyway.
+    /// </remarks>
+    public bool TryEnqueue(ReadOnlySpan<byte> datagram)
+    {
+        if (_inbound.IsAddingCompleted
+            || datagram.Length == 0
+            || datagram.Length > DefaultDatagramLimit
+            || _inbound.Count >= InboundQueueCapacity)
+        {
+            return false;
+        }
+
+        return Enqueue(datagram.ToArray());
+    }
+
+    /// <summary>
     /// Whether the transport has stopped accepting inbound datagrams — either torn down locally via
     /// <see cref="Close"/>, or closed by the DTLS record layer after it processed a peer
     /// <c>close_notify</c> (BouncyCastle calls <see cref="Close"/> on the underlying transport when

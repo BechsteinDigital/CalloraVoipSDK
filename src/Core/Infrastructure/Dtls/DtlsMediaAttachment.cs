@@ -52,10 +52,15 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
     // DTLS does not retransmit alerts (RFC 6347 §4.2.7). Bounded so a dead socket cannot stall it.
     private static readonly TimeSpan CloseNotifyDrainDeadline = TimeSpan.FromMilliseconds(500);
 
+    // Log the first refused inbound record, then every Nth: a flood must stay diagnosable without
+    // becoming one log line per packet (#157 P2-8).
+    private const int DroppedRecordLogInterval = 256;
+
     private Task? _handshakeTask;
     // Latches the one handshake start (#157 P2-7); a repeated Start is ignored rather than orphaning
     // the first task and racing a second handshake over the same datagram queue.
     private int _handshakeStarted;
+    private long _droppedInboundRecords;
     private DtlsSrtpHandshakeResult? _result;
     // Services the association after key export (#190): notices a peer close_notify/alert and discards
     // stray application_data. Null until the handshake completes; set once, read on teardown.
@@ -245,7 +250,7 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
     /// connectivity-checked candidate pair keeps the handshake flowing; the fingerprint
     /// remains the authentication boundary (RFC 5763 §6.7.1).
     /// </summary>
-    public void OnDtlsPacketReceived(byte[] datagram, IPEndPoint source)
+    public void OnDtlsPacketReceived(ReadOnlySpan<byte> datagram, IPEndPoint source)
     {
         var remote = Volatile.Read(ref _remoteEndPoint);
         if (!remote.Equals(source))
@@ -256,7 +261,21 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
             return;
         }
 
-        _transport.Enqueue(datagram);
+        // #157 P2-8: admission happens before the managed copy. The span points into the reused media
+        // receive buffer, and TryEnqueue allocates only after the size and queue-space checks pass — so
+        // an unauthenticated sender aimed at the media port no longer converts every stray datagram into
+        // a heap allocation. A refusal is counted rather than ignored: DTLS retransmits, so dropping is
+        // safe, but a persistently full queue is a symptom worth seeing.
+        if (!_transport.TryEnqueue(datagram))
+        {
+            var dropped = Interlocked.Increment(ref _droppedInboundRecords);
+            if (dropped == 1 || dropped % DroppedRecordLogInterval == 0)
+            {
+                _logger.LogDebug(
+                    "Dropped inbound DTLS record from {Source} (queue full, closed, or oversized); {Count} dropped so far.",
+                    source, dropped);
+            }
+        }
     }
 
     /// <summary>

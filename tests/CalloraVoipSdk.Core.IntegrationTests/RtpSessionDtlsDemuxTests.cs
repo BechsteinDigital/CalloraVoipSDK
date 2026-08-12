@@ -29,7 +29,9 @@ public sealed class RtpSessionDtlsDemuxTests
             new RtpPacketCodec(), NullLogger<RtpSession>.Instance);
 
         var dtlsReceived = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
-        session.DtlsPacketReceived += (datagram, _) => dtlsReceived.TrySetResult(datagram);
+        // The handler now receives the record as a span over the reused receive buffer (#157 P2-8), so
+        // the test copies it before handing it to the TCS — exactly what a real handler must do.
+        session.DtlsPacketReceived += (datagram, _) => dtlsReceived.TrySetResult(datagram.ToArray());
         var rtpReceived = false;
         session.PacketReceived += (_, _) => rtpReceived = true;
 
