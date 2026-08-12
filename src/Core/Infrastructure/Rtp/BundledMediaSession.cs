@@ -90,6 +90,8 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     // NOT gated by this — it reads the router/set lock-free; this only orders control-plane mutations against
     // each other. 0 = live, 1 = disposed (set in DisposeAsync so a late add fails fast rather than leaking a track).
     private readonly object _trackMutationGate = new();
+    private readonly object _startGate = new();   // latches the one start (#157 P2-7)
+    private Task? _startTask;
     private int _disposed;
 
     // Tracks removed by SetVideoTrackInactive: routing already dropped, but disposed only in DisposeAsync (never
@@ -797,8 +799,19 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         BundledMediaSessionComposition.FoldStreamQuality(
             _outboundQuality.SnapshotPerSsrc(), _receptionStats.SnapshotJitterMsPerSsrc(), _outboundStreamIdentity);
 
-    /// <summary>Starts the shared receive loop, the ICE consent loop, and the DTLS handshake.</summary>
-    public async Task StartAsync(CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Starts the shared receive loop, the ICE consent loop, and the DTLS handshake. Idempotent
+    /// (#157 P2-7): a second call returns the first call's task instead of racing a second receive loop
+    /// and DTLS handshake over the same datagram queue, so a later call's cancellation token is not
+    /// honoured. The lock spans only owned code — the core yields inside the transport start (K3).
+    /// </summary>
+    public Task StartAsync(CancellationToken cancellationToken = default)
+    {
+        lock (_startGate)
+            return _startTask ??= StartCoreAsync(cancellationToken);
+    }
+
+    private async Task StartCoreAsync(CancellationToken cancellationToken)
     {
         await _transport.StartAsync(cancellationToken).ConfigureAwait(false);
         _ice.Start();
