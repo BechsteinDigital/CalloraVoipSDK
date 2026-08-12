@@ -37,7 +37,7 @@ internal sealed class BundledInboundPipeline
     public event Action<byte[], IPEndPoint, Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>?>? StunPacketReceived;
 
     /// <summary>Raised with an independent copy of a DTLS record and its source for the handshake layer.</summary>
-    public event Action<byte[], IPEndPoint>? DtlsPacketReceived;
+    public event MediaDatagramHandler? DtlsPacketReceived;
 
     /// <summary>Raised with a decrypted (or plain, pre-keying this never fires) RTCP compound packet.</summary>
     public event Action<byte[]>? ControlPacketReceived;
@@ -123,7 +123,16 @@ internal sealed class BundledInboundPipeline
 
         if (source is not null && kind is MediaPacketKind.Dtls)
         {
-            DispatchToEndpointHandler(DtlsPacketReceived, datagram, source, "DTLS");
+            // No copy here (#157 P2-8): the handler admits the record — source, size, queue space — and
+            // allocates only if it keeps it. The span is valid for the duration of the call.
+            try
+            {
+                DtlsPacketReceived?.Invoke(datagram, source);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unhandled exception in DTLS datagram handler.");
+            }
             return;
         }
 

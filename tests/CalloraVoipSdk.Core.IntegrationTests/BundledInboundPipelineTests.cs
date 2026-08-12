@@ -115,7 +115,7 @@ public sealed class BundledInboundPipelineTests
     {
         var harness = new Harness();
         byte[]? received = null;
-        harness.Pipeline.DtlsPacketReceived += (d, _) => received = d;
+        harness.Pipeline.DtlsPacketReceived += (d, _) => received = d.ToArray();
 
         var dtls = new byte[13];
         dtls[0] = 22; // handshake content type

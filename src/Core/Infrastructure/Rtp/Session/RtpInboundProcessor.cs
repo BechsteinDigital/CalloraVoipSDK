@@ -37,7 +37,7 @@ internal sealed class RtpInboundProcessor
     private readonly Action<RtpPacket> _onPacketReceived;
     private readonly Action<IReadOnlyList<RtcpPacket>> _onRtcpCompound;
     private readonly Action<byte[], IPEndPoint> _onStun;
-    private readonly Action<byte[], IPEndPoint> _onDtls;
+    private readonly MediaDatagramHandler _onDtls;
     private readonly Action<RtpPacket> _onSecondary;
 
     // Inbound security contexts. Fixed from options for SDES/plain calls; the DTLS-SRTP path installs them once
@@ -64,7 +64,7 @@ internal sealed class RtpInboundProcessor
         Action<RtpPacket> onPacketReceived,
         Action<IReadOnlyList<RtcpPacket>> onRtcpCompound,
         Action<byte[], IPEndPoint> onStun,
-        Action<byte[], IPEndPoint> onDtls,
+        MediaDatagramHandler onDtls,
         Action<RtpPacket> onSecondary)
     {
         _options = options;
@@ -139,12 +139,12 @@ internal sealed class RtpInboundProcessor
         // DTLS records (RFC 5764 §5.1.2 / RFC 7983) — routed to the DTLS-SRTP handshake layer.
         if (source is not null && kind is MediaPacketKind.Dtls)
         {
-            // Independent copy — the receive buffer is reused and the handshake engine
-            // consumes the record on its own thread.
-            var dtlsDatagram = datagram.ToArray();
+            // No copy here (#157 P2-8): the handler admits the record — source, size, queue space — and
+            // makes the independent copy only if it keeps it, since the receive buffer is reused and the
+            // handshake engine consumes the record on its own thread.
             try
             {
-                _onDtls(dtlsDatagram, source);
+                _onDtls(datagram, source);
             }
             catch (Exception ex)
             {

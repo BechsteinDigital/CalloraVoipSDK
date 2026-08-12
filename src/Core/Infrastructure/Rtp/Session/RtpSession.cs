@@ -116,7 +116,7 @@ internal sealed class RtpSession : IRtpSession
     /// consumes these records and answers via <see cref="SendRawAsync"/> on this same
     /// socket. DTLS datagrams are not passed to the RTP/RTCP paths.
     /// </summary>
-    internal event Action<byte[], IPEndPoint>? DtlsPacketReceived;
+    internal event MediaDatagramHandler? DtlsPacketReceived;
 
     /// <summary>
     /// Raised for an inbound RTP packet whose payload type matches the configured secondary
