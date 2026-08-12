@@ -148,6 +148,101 @@ if (rtp is { } s)
 <h2 id="compound-packet-tolerance">Compound-packet tolerance</h2>
 <p>RTCP compound decoding tolerates unknown packet types (e.g. RFC 3611 XR blocks from peers
 that send more than SR/RR), so a richer-than-expected report does not break parsing.</p>
+<h2 id="what-the-sdk-speaks">What the SDK speaks</h2>
+<p>The support matrix below is what the wire codec actually implements — not what RTCP as a whole
+defines. A peer may send anything in this list and be understood; anything outside it is skipped
+without disturbing the rest of the compound.</p>
+<table>
+<thead>
+<tr>
+<th>Packet</th>
+<th>PT / FMT</th>
+<th style="text-align: center;">Receive</th>
+<th style="text-align: center;">Send</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Sender Report (SR)</td>
+<td>200</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td>Receiver Report (RR)</td>
+<td>201</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td>Source Description (SDES)</td>
+<td>202</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">✅ CNAME only</td>
+</tr>
+<tr>
+<td>Goodbye (BYE)</td>
+<td>203</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td>Application-defined (APP)</td>
+<td>204</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+</tr>
+<tr>
+<td>Extended Report (XR)</td>
+<td>207</td>
+<td style="text-align: center;">✅ VoIP Metrics only</td>
+<td style="text-align: center;">—</td>
+</tr>
+<tr>
+<td>Picture Loss Indication (PLI)</td>
+<td>206 / 1</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td>Full Intra Request (FIR)</td>
+<td>206 / 4</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td>Generic NACK</td>
+<td>205 / 1</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td>Transport-wide CC feedback</td>
+<td>205 / 15</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">✅</td>
+</tr>
+</tbody>
+</table>
+<h3 id="gaps-worth-knowing-before-you-integrate">Gaps worth knowing before you integrate</h3>
+<ul>
+<li><strong>XR is receive-only, and only VoIP Metrics (BT=7).</strong> RFC 3611 defines seven other block types
+(loss/duplicate RLE, packet receipt times, receiver reference time, DLRR, statistics summary);
+those are skipped over. The SDK never emits an XR, so a peer relying on our MOS or DLRR will not
+get one.</li>
+<li><strong>Transport-wide congestion control is the draft format, not RFC 8888.</strong> What we speak is
+draft-holmer-rmcat-transport-wide-cc-extensions-01, RTPFB <strong>FMT=15</strong> — the format Chrome and
+libwebrtc use and what nearly every WebRTC endpoint negotiates. RFC 8888 CCFB is RTPFB <strong>FMT=11</strong>
+with a different body and is <em>not</em> implemented; a peer expecting CCFB receives nothing it can
+parse.</li>
+<li><strong>No REMB (PSFB FMT=15) and no TMMBR/TMMBN (RFC 5104).</strong> Bitrate signalling is receive-side
+transport-cc plus the SDK's own estimate, surfaced as a recommended send bitrate. A peer that
+only signals bandwidth via REMB or TMMBR will not be heard.</li>
+<li><strong>No SLI or RPSI</strong> (PSFB FMT=2/3). Key-frame recovery is PLI and FIR.</li>
+<li><strong>SDES carries CNAME only.</strong> Other items (NAME, EMAIL, TOOL, …) are parsed on receive but never
+sent.</li>
+</ul>
+<p>None of these is a defect against a promise — they are listed here so the promise is explicit.</p>
 <h2 id="threading">Threading</h2>
 <p><code>QualitySnapshotChanged</code> fires on the media/RTCP thread. Keep the handler
 non-blocking — copy the values and hand off (see <a href="../concepts/events.html">Events</a> and
