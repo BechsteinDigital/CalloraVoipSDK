@@ -82,6 +82,8 @@ Guardrails** (see `ADR-011` for the format model).
 | [ADR-028](ADR-028-dtls-srtp-foundation.md) | DTLS-SRTP Keying Foundation (RFC 5763/5764) | Accepted | 2026-07-14 |
 | [ADR-029](ADR-029-dtls-srtp-signaling-and-keying-precedence.md) | DTLS-SRTP Signaling, Answer-Role, and Keying-Method Precedence | Accepted | 2026-07-14 |
 | [ADR-030](ADR-030-dtls-srtp-media-wiring.md) | DTLS-SRTP Media Wiring and Fail-Closed Context Installation | Accepted | 2026-07-14 |
+| [ADR-066](ADR-066-dtls-post-handshake-association-servicing.md) | DTLS Post-Handshake Association Servicing and Egress Ordering | Accepted | 2026-08-06 |
+| [ADR-067](ADR-067-dtls-stateless-cookie-scope.md) | Scope of the DTLS Stateless Cookie (HelloVerifyRequest) | Accepted | 2026-08-12 |
 
 ### Media Security — SRTCP
 
