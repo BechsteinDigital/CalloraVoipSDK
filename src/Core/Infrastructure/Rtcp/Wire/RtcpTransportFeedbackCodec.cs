@@ -64,25 +64,46 @@ internal static class RtcpTransportFeedbackCodec
             throw new ArgumentException(
                 $"Reference time {feedback.ReferenceTimeTicks} is out of the signed 24-bit range.", nameof(feedback));
 
-        var symbols = new int[statuses.Count];
+        // #162 P2-4: symbols are indexed by SEQUENCE NUMBER relative to the base, not by list position. The
+        // status list only carries the packets we have something to say about; every sequence number in
+        // between is implicitly "not received" and MUST still occupy its slot (draft §3.1.3 — the receiver
+        // walks base, base+1, base+2 … as it consumes symbols). Laying the list out contiguously made a
+        // report about 10 and 12 decode as 10 and 11: every status after a gap was attributed to the wrong
+        // packet, so the congestion estimator saw arrival deltas belonging to other packets.
+        var baseSequence = statuses[0].SequenceNumber;
+        var span16 = 0;
+        for (var i = 0; i < statuses.Count; i++)
+        {
+            // Unsigned 16-bit distance from the base handles the sequence wrap (draft §3.1.1) without
+            // special-casing it: 65535 -> 0 is a distance of 1, not -65535.
+            var offsetFromBase = (ushort)(statuses[i].SequenceNumber - baseSequence);
+            span16 = Math.Max(span16, offsetFromBase + 1);
+        }
+
+        if (span16 > MaxStatusCount)
+        {
+            throw new ArgumentException(
+                $"Transport-cc feedback spans {span16} sequence numbers (base {baseSequence}), above the " +
+                $"{MaxStatusCount} cap; split the window.", nameof(feedback));
+        }
+
+        var symbols = new int[span16];   // default NotReceived (0) fills the gaps
         var deltaBytes = 0;
         for (var i = 0; i < statuses.Count; i++)
         {
             var status = statuses[i];
             if (!status.Received)
-            {
-                symbols[i] = NotReceived;
-                continue;
-            }
+                continue;   // already NotReceived at its own slot
 
+            var slot = (ushort)(status.SequenceNumber - baseSequence);
             if (status.DeltaTicks is >= 0 and <= SmallDeltaMax)
             {
-                symbols[i] = ReceivedSmallDelta;
+                symbols[slot] = ReceivedSmallDelta;
                 deltaBytes += 1;
             }
             else if (status.DeltaTicks is >= short.MinValue and <= short.MaxValue)
             {
-                symbols[i] = ReceivedLargeDelta;
+                symbols[slot] = ReceivedLargeDelta;
                 deltaBytes += 2;
             }
             else
@@ -93,7 +114,7 @@ internal static class RtcpTransportFeedbackCodec
             }
         }
 
-        var chunkCount = (statuses.Count + SymbolsPerVectorChunk - 1) / SymbolsPerVectorChunk;
+        var chunkCount = (span16 + SymbolsPerVectorChunk - 1) / SymbolsPerVectorChunk;
         var unpadded = 4 + SsrcPairLength + HeaderFieldsLength + chunkCount * ChunkLength + deltaBytes;
         var padded = (unpadded + 3) & ~3;
         var buffer = new byte[padded];
@@ -107,8 +128,9 @@ internal static class RtcpTransportFeedbackCodec
         BinaryPrimitives.WriteUInt32BigEndian(span[8..], feedback.MediaSsrc);
 
         var offset = 4 + SsrcPairLength;
-        BinaryPrimitives.WriteUInt16BigEndian(span[offset..], statuses[0].SequenceNumber);
-        BinaryPrimitives.WriteUInt16BigEndian(span[(offset + 2)..], (ushort)statuses.Count);
+        BinaryPrimitives.WriteUInt16BigEndian(span[offset..], baseSequence);
+        // The status count covers the whole span from the base, gaps included — not just the reported entries.
+        BinaryPrimitives.WriteUInt16BigEndian(span[(offset + 2)..], (ushort)span16);
         var referenceTime = feedback.ReferenceTimeTicks;
         buffer[offset + 4] = (byte)((referenceTime >> 16) & 0xFF);
         buffer[offset + 5] = (byte)((referenceTime >> 8) & 0xFF);
@@ -131,16 +153,26 @@ internal static class RtcpTransportFeedbackCodec
             offset += ChunkLength;
         }
 
-        // Receive deltas in packet order (draft §3.1.5); not-received packets contribute none.
+        // Receive deltas in SEQUENCE order (draft §3.1.5), matching the symbol order above; not-received
+        // packets contribute none. List order is not sequence order once a caller reports out of order, and
+        // the receiver pairs the nth delta with the nth received symbol — so the two must be walked the same
+        // way (#162 P2-4).
+        var deltaBySlot = new int[span16];
         for (var i = 0; i < statuses.Count; i++)
         {
-            switch (symbols[i])
+            if (statuses[i].Received)
+                deltaBySlot[(ushort)(statuses[i].SequenceNumber - baseSequence)] = statuses[i].DeltaTicks;
+        }
+
+        for (var slot = 0; slot < span16; slot++)
+        {
+            switch (symbols[slot])
             {
                 case ReceivedSmallDelta:
-                    buffer[offset++] = (byte)statuses[i].DeltaTicks;
+                    buffer[offset++] = (byte)deltaBySlot[slot];
                     break;
                 case ReceivedLargeDelta:
-                    BinaryPrimitives.WriteInt16BigEndian(span[offset..], (short)statuses[i].DeltaTicks);
+                    BinaryPrimitives.WriteInt16BigEndian(span[offset..], (short)deltaBySlot[slot]);
                     offset += 2;
                     break;
             }
