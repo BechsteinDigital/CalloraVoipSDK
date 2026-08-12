@@ -1,4 +1,5 @@
 using CalloraVoipSdk.Core.Application.Media.Rtcp.Packets;
+using CalloraVoipSdk.Core.Application.Media.Rtcp;
 using CalloraVoipSdk.Core.Infrastructure.Rtcp.Wire;
 using CalloraVoipSdk.Core.Infrastructure.Rtp;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -33,7 +34,7 @@ public sealed class BundledRtcpReporterTests
             () => snapshot,
             Array.Empty<BundledReceptionReportBlock>,
             localSsrc: 0x0A0A0A0A,
-            (rtcp, _) => { sent.Add(rtcp.ToArray()); return ValueTask.CompletedTask; },
+            (rtcp, _) => { sent.Add(rtcp.ToArray()); return ValueTask.FromResult(RtcpSendOutcome.Sent); },
             new RtcpPacketCodec(),
             Cname,
             NullLoggerFactory.Instance,
@@ -80,7 +81,7 @@ public sealed class BundledRtcpReporterTests
             () => Array.Empty<BundledSenderReportInfo>(),
             Array.Empty<BundledReceptionReportBlock>,
             localSsrc: 0x0C0C0C0C,
-            (rtcp, _) => { sent.Add(rtcp.ToArray()); return ValueTask.CompletedTask; },
+            (rtcp, _) => { sent.Add(rtcp.ToArray()); return ValueTask.FromResult(RtcpSendOutcome.Sent); },
             new RtcpPacketCodec(),
             Cname,
             NullLoggerFactory.Instance,
@@ -101,7 +102,7 @@ public sealed class BundledRtcpReporterTests
             () => Array.Empty<BundledSenderReportInfo>(),
             Array.Empty<BundledReceptionReportBlock>,
             localSsrc: 0x0C0C0C0C,
-            (_, _) => ValueTask.CompletedTask,
+            (_, _) => ValueTask.FromResult(RtcpSendOutcome.Sent),
             new RtcpPacketCodec(),
             Cname,
             NullLoggerFactory.Instance,
@@ -135,7 +136,7 @@ public sealed class BundledRtcpReporterTests
             () => senders,
             () => receptionBlocks,
             localSsrc: 0x0A0A0A0A,
-            (rtcp, _) => { sent.Add(rtcp.ToArray()); return ValueTask.CompletedTask; },
+            (rtcp, _) => { sent.Add(rtcp.ToArray()); return ValueTask.FromResult(RtcpSendOutcome.Sent); },
             new RtcpPacketCodec(),
             Cname,
             NullLoggerFactory.Instance,
@@ -176,7 +177,7 @@ public sealed class BundledRtcpReporterTests
             () => Array.Empty<BundledSenderReportInfo>(), // never sent → receive-only
             () => receptionBlocks,
             localSsrc: 0x0C0C0C0C,
-            (rtcp, _) => { sent.Add(rtcp.ToArray()); return ValueTask.CompletedTask; },
+            (rtcp, _) => { sent.Add(rtcp.ToArray()); return ValueTask.FromResult(RtcpSendOutcome.Sent); },
             new RtcpPacketCodec(),
             Cname,
             NullLoggerFactory.Instance,
@@ -211,7 +212,7 @@ public sealed class BundledRtcpReporterTests
             () => Array.Empty<BundledSenderReportInfo>(),
             () => Array.Empty<BundledReceptionReportBlock>(),
             localSsrc: 0x0C0C0C0C,
-            (rtcp, _) => { sent.Add(rtcp.ToArray()); return ValueTask.CompletedTask; },
+            (rtcp, _) => { sent.Add(rtcp.ToArray()); return ValueTask.FromResult(RtcpSendOutcome.Sent); },
             new RtcpPacketCodec(),
             Cname,
             NullLoggerFactory.Instance,
@@ -244,7 +245,7 @@ public sealed class BundledRtcpReporterTests
             () => senders,
             Array.Empty<BundledReceptionReportBlock>,
             localSsrc: 0x0A0A0A0A,
-            (_, _) => ValueTask.CompletedTask,
+            (_, _) => ValueTask.FromResult(RtcpSendOutcome.Sent),
             new RtcpPacketCodec(),
             Cname,
             NullLoggerFactory.Instance,
@@ -285,7 +286,7 @@ public sealed class BundledRtcpReporterTests
             () => senders,
             () => receptionBlocks,
             localSsrc: 0x0A0A0A0A,
-            (rtcp, _) => { sent.Add(rtcp.ToArray()); return ValueTask.CompletedTask; },
+            (rtcp, _) => { sent.Add(rtcp.ToArray()); return ValueTask.FromResult(RtcpSendOutcome.Sent); },
             new RtcpPacketCodec(),
             Cname,
             NullLoggerFactory.Instance,
@@ -320,7 +321,7 @@ public sealed class BundledRtcpReporterTests
             () => Array.Empty<BundledSenderReportInfo>(),
             () => receptionBlocks,
             localSsrc: 0x0C0C0C0C,
-            (rtcp, _) => { sent.Add(rtcp.ToArray()); return ValueTask.CompletedTask; },
+            (rtcp, _) => { sent.Add(rtcp.ToArray()); return ValueTask.FromResult(RtcpSendOutcome.Sent); },
             new RtcpPacketCodec(),
             Cname,
             NullLoggerFactory.Instance,
@@ -370,7 +371,7 @@ public sealed class BundledRtcpReporterTests
             () => Array.Empty<BundledSenderReportInfo>(),
             () => blocks,
             localSsrc: 0x0D0D0D0D,
-            (rtcp, _) => { sent.Add(rtcp.ToArray()); return ValueTask.CompletedTask; },
+            (rtcp, _) => { sent.Add(rtcp.ToArray()); return ValueTask.FromResult(RtcpSendOutcome.Sent); },
             new RtcpPacketCodec(),
             Cname,
             NullLoggerFactory.Instance,
@@ -401,7 +402,7 @@ public sealed class BundledRtcpReporterTests
             () => senders,
             Array.Empty<BundledReceptionReportBlock>,
             localSsrc: 0x0A0A0A0A,
-            (rtcp, _) => { sent.Add(rtcp.ToArray()); return ValueTask.CompletedTask; },
+            (rtcp, _) => { sent.Add(rtcp.ToArray()); return ValueTask.FromResult(RtcpSendOutcome.Sent); },
             new RtcpPacketCodec(),
             Cname,
             NullLoggerFactory.Instance,
@@ -429,7 +430,7 @@ public sealed class BundledRtcpReporterTests
             () => Array.Empty<BundledSenderReportInfo>(),
             Array.Empty<BundledReceptionReportBlock>,
             localSsrc: 0x0C0C0C0C,
-            (rtcp, _) => { sent.Add(rtcp.ToArray()); return ValueTask.CompletedTask; },
+            (rtcp, _) => { sent.Add(rtcp.ToArray()); return ValueTask.FromResult(RtcpSendOutcome.Sent); },
             new RtcpPacketCodec(),
             Cname,
             NullLoggerFactory.Instance);
@@ -463,7 +464,7 @@ public sealed class BundledRtcpReporterTests
             () => senders,
             Array.Empty<BundledReceptionReportBlock>,
             localSsrc: 0x0A0A0A0A,
-            (rtcp, _) => { sent.Add(rtcp.ToArray()); return ValueTask.CompletedTask; },
+            (rtcp, _) => { sent.Add(rtcp.ToArray()); return ValueTask.FromResult(RtcpSendOutcome.Sent); },
             new RtcpPacketCodec(),
             Cname,
             NullLoggerFactory.Instance,
@@ -495,7 +496,7 @@ public sealed class BundledRtcpReporterTests
             () => senders,
             Array.Empty<BundledReceptionReportBlock>,
             localSsrc: 0x0A0A0A0A,
-            (rtcp, _) => { sent.Add(rtcp.ToArray()); return ValueTask.CompletedTask; },
+            (rtcp, _) => { sent.Add(rtcp.ToArray()); return ValueTask.FromResult(RtcpSendOutcome.Sent); },
             new RtcpPacketCodec(),
             Cname,
             NullLoggerFactory.Instance,
@@ -525,6 +526,79 @@ public sealed class BundledRtcpReporterTests
     // An injectable delay that lets exactly the first tick through, then blocks forever (until cancelled by
     // disposal), so the loop runs one deterministic iteration. The FIRST iteration's report is fully sent
     // before the loop reaches its SECOND delay call — so signalling there guarantees the send has completed.
+    [Fact]
+    public async Task A_suppressed_report_commits_no_state_and_sends_no_teardown_bye()
+    {
+        // #162 P2-5: the send path fails closed until DTLS installs the outbound SRTCP key. A report that
+        // never reached the wire must not latch "we have reported" — otherwise teardown emits a BYE for a
+        // participant the peer never heard arrive, and the RTT matcher holds an LSR that can never be echoed.
+        var snapshot = new BundledSenderReportInfo[]
+        {
+            new(Ssrc: 0x0A0A0A0A, PacketCount: 42, OctetCount: 6720, LastRtpTimestamp: 5000),
+        };
+        var sent = new List<byte[]>();
+        var rttAnchors = new List<uint>();
+        var oneTick = new OneShotDelay();
+
+        var reporter = new BundledRtcpReporter(
+            () => snapshot,
+            Array.Empty<BundledReceptionReportBlock>,
+            localSsrc: 0x0A0A0A0A,
+            // Everything is suppressed: the transport is not keyed yet.
+            (rtcp, _) => { sent.Add(rtcp.ToArray()); return ValueTask.FromResult(RtcpSendOutcome.Suppressed); },
+            new RtcpPacketCodec(),
+            Cname,
+            NullLoggerFactory.Instance,
+            interval: TimeSpan.FromSeconds(5),
+            delay: oneTick.WaitAsync,
+            utcNow: () => new DateTimeOffset(2026, 7, 20, 0, 0, 0, TimeSpan.Zero),
+            onSenderReportSent: (ssrc, _, _) => rttAnchors.Add(ssrc));
+
+        reporter.Start();
+        await oneTick.WaitForFirstTickConsumed();
+
+        // The compound was built and handed to the send path — that part is unchanged.
+        Assert.Single(sent);
+        // But nothing was committed: no RTT anchor for an LSR the peer never saw.
+        Assert.Empty(rttAnchors);
+
+        await reporter.DisposeAsync();
+
+        // And no BYE: we never announced ourselves, so there is nothing to depart from (RFC 3550 §6.6).
+        Assert.All(sent, datagram => Assert.Empty(new RtcpPacketCodec().Decode(datagram).OfType<RtcpByePacket>()));
+    }
+
+    [Fact]
+    public async Task A_sent_report_publishes_its_rtt_anchor()
+    {
+        // The counterpart: on the wire, the anchor is published — otherwise the test above would pass with an
+        // implementation that never publishes at all.
+        var snapshot = new BundledSenderReportInfo[]
+        {
+            new(Ssrc: 0x0A0A0A0A, PacketCount: 42, OctetCount: 6720, LastRtpTimestamp: 5000),
+        };
+        var rttAnchors = new List<uint>();
+        var oneTick = new OneShotDelay();
+
+        await using var reporter = new BundledRtcpReporter(
+            () => snapshot,
+            Array.Empty<BundledReceptionReportBlock>,
+            localSsrc: 0x0A0A0A0A,
+            (_, _) => ValueTask.FromResult(RtcpSendOutcome.Sent),
+            new RtcpPacketCodec(),
+            Cname,
+            NullLoggerFactory.Instance,
+            interval: TimeSpan.FromSeconds(5),
+            delay: oneTick.WaitAsync,
+            utcNow: () => new DateTimeOffset(2026, 7, 20, 0, 0, 0, TimeSpan.Zero),
+            onSenderReportSent: (ssrc, _, _) => rttAnchors.Add(ssrc));
+
+        reporter.Start();
+        await oneTick.WaitForFirstTickConsumed();
+
+        Assert.Equal(0x0A0A0A0Au, Assert.Single(rttAnchors));
+    }
+
     private sealed class OneShotDelay
     {
         private readonly TaskCompletionSource _firstIterationDone =
