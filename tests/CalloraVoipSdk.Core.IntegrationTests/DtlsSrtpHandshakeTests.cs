@@ -307,6 +307,29 @@ public sealed class DtlsSrtpHandshakeTests
         Assert.Equal(0x0007, DtlsSrtpProfiles.SelectFromOffered(new[] { 0x0001, 0x0007 }));
     }
 
+    [Fact]
+    public async Task Disposing_the_result_wipes_the_exported_master_keys()
+    {
+        // #157 P2-6: a result that is discarded rather than consumed — the caller cancelling in the
+        // instant the handshake completed — has nobody left to wipe the exported master halves, so
+        // Dispose must do it rather than only closing the transport (RFC 3711 §9.4).
+        var (client, server) = await RunLoopbackHandshakeAsync();
+        using (server)
+        {
+            Assert.True(client.Keys.LocalKeys.MasterKey.Span.IndexOfAnyExcept((byte)0) >= 0);
+            Assert.True(client.Keys.RemoteKeys.MasterSalt.Span.IndexOfAnyExcept((byte)0) >= 0);
+
+            client.Dispose();
+
+            Assert.True(client.Keys.LocalKeys.MasterKey.Span.IndexOfAnyExcept((byte)0) < 0);
+            Assert.True(client.Keys.LocalKeys.MasterSalt.Span.IndexOfAnyExcept((byte)0) < 0);
+            Assert.True(client.Keys.RemoteKeys.MasterKey.Span.IndexOfAnyExcept((byte)0) < 0);
+            Assert.True(client.Keys.RemoteKeys.MasterSalt.Span.IndexOfAnyExcept((byte)0) < 0);
+
+            client.Dispose();   // idempotent, and the second pass must not throw on wiped material
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------

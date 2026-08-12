@@ -34,13 +34,23 @@ internal sealed class DtlsSrtpHandshakeResult : IDisposable
 
     /// <summary>
     /// Closes the DTLS association (sends <c>close_notify</c> via the underlying datagram
-    /// transport). Idempotent and safe to call concurrently.
+    /// transport) and wipes the exported SRTP master key material. Idempotent and safe to call
+    /// concurrently.
     /// </summary>
+    /// <remarks>
+    /// #157 P2-6: disposing the result must wipe the keys, not just close the transport. A result that
+    /// is discarded rather than consumed — the caller cancelling in the instant the handshake completed
+    /// — otherwise leaves the exported master halves on the managed heap with nobody left to wipe them
+    /// (RFC 3711 §9.4). Wiping here is safe on the normal path too: SRTP/SRTCP contexts hold their own
+    /// derived session keys, and <see cref="DtlsSrtpNegotiatedKeys.Dispose"/> is idempotent, so the
+    /// consuming path's earlier wipe is simply repeated.
+    /// </remarks>
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
             return;
 
+        Keys.Dispose();
         _transport.Close();
     }
 }

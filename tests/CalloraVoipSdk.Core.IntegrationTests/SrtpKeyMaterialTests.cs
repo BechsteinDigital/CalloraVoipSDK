@@ -82,6 +82,25 @@ public sealed class SrtpKeyMaterialTests
         Assert.True(second.MasterSalt.Span.SequenceEqual(Repeat(0x22, SaltLength)));
     }
 
+    [Fact]
+    public void A_key_param_with_a_bad_prefix_is_rejected_without_echoing_the_key_material()
+    {
+        // #157 P2-5: a malformed prefix does not make the rest harmless — it still carries base64 master
+        // key material. Interpolating the whole key-param put it into a FormatException that reaches
+        // generic error logs as an inner exception (K5: key material never appears in logs).
+        var secret = Convert.ToBase64String(Repeat(0xAB, KeyLength + SaltLength));
+        var keyParam = "inlin:" + secret;   // one character off — a realistic peer typo, not an attack
+
+        var ex = Assert.Throws<FormatException>(
+            () => SrtpKeyMaterial.ParseInline(keyParam, SrtpCryptoSuite.AesCm128HmacSha1_80));
+
+        Assert.DoesNotContain(secret, ex.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(keyParam, ex.Message, StringComparison.Ordinal);
+        // Still diagnosable: the message names the expected prefix and the observed length.
+        Assert.Contains("inline:", ex.Message, StringComparison.Ordinal);
+        Assert.Contains(keyParam.Length.ToString(System.Globalization.CultureInfo.InvariantCulture), ex.Message, StringComparison.Ordinal);
+    }
+
     private static byte[] Repeat(byte value, int count)
     {
         var buffer = new byte[count];
