@@ -71,7 +71,7 @@ public sealed class RtcpParseStrictnessTests
     // ── UTF-8: invalid bytes are not laundered into replacement characters ───
 
     [Fact]
-    public void A_bye_reason_that_is_not_valid_utf8_is_rejected()
+    public void A_bye_reason_that_is_not_valid_utf8_is_dropped_but_the_departure_stands()
     {
         // 0xFF is never valid in UTF-8. Encoding.UTF8.GetString would return "�" and look fine.
         var body = new byte[4 + 1 + 3];
@@ -81,15 +81,20 @@ public sealed class RtcpParseStrictnessTests
         body[6] = 0xFE;
         body[7] = 0xFD;
 
-        var ex = Assert.Throws<ArgumentException>(() => Codec.Decode(Packet(RtcpPacketType.Bye, 1, body)));
-        Assert.Contains("UTF-8", ex.Message, StringComparison.OrdinalIgnoreCase);
+        // The departure itself is readable, so it stands — only the text field is dropped. No reference
+        // stack discards the packet over its text, and the sources are what a BYE is for.
+        var bye = Assert.IsType<RtcpByePacket>(Codec.Decode(Packet(RtcpPacketType.Bye, 1, body)).Single());
+
+        Assert.Equal(0x0A0B0C0Du, bye.Sources.Single());
+        Assert.Null(bye.Reason);   // dropped, not laundered into replacement characters
     }
 
     [Fact]
-    public void An_sdes_item_that_is_not_valid_utf8_is_rejected()
+    public void An_sdes_item_that_is_not_valid_utf8_is_dropped_but_the_chunk_stands()
     {
         // A CNAME laundered into replacement characters compares unequal to whatever the peer meant, and
-        // nothing would say why.
+        // nothing would say why. Dropping the item is stricter than every reference stack (none of them
+        // validates UTF-8) without discarding the chunk's SSRC or its other items.
         var body = new byte[4 + 1 + 1 + 3 + 3];
         BinaryPrimitives.WriteUInt32BigEndian(body, 0x0A0B0C0D);
         body[4] = 1;      // CNAME
@@ -98,8 +103,40 @@ public sealed class RtcpParseStrictnessTests
         body[7] = 0x28;
         body[8] = 0xFF;
 
-        var ex = Assert.Throws<ArgumentException>(() => Codec.Decode(Packet(RtcpPacketType.Sdes, 1, body)));
-        Assert.Contains("UTF-8", ex.Message, StringComparison.OrdinalIgnoreCase);
+        var sdes = Assert.IsType<RtcpSdesPacket>(Codec.Decode(Packet(RtcpPacketType.Sdes, 1, body)).Single());
+        var chunk = sdes.Chunks.Single();
+
+        Assert.Equal(0x0A0B0C0Du, chunk.Ssrc);
+        Assert.Empty(chunk.Items);   // the undecodable CNAME is absent, not mangled
+    }
+
+    [Fact]
+    public void A_compound_survives_an_sdes_item_that_is_not_valid_utf8()
+    {
+        // The point of dropping the field rather than the packet: this interval's loss statistics must not
+        // be lost because a peer's CNAME is malformed. SIPSorcery, libwebrtc and Pion all keep the compound
+        // here — being stricter than them about the text must not mean being worse than them about the data.
+        var rrBody = new byte[4];
+        BinaryPrimitives.WriteUInt32BigEndian(rrBody, 0x0A0A0A0A);
+        var rr = Packet(RtcpPacketType.ReceiverReport, 0, rrBody);
+
+        var sdesBody = new byte[4 + 1 + 1 + 3 + 3];
+        BinaryPrimitives.WriteUInt32BigEndian(sdesBody, 0x0A0B0C0D);
+        sdesBody[4] = 1;
+        sdesBody[5] = 3;
+        sdesBody[6] = 0xC3;
+        sdesBody[7] = 0x28;
+        sdesBody[8] = 0xFF;
+        var sdes = Packet(RtcpPacketType.Sdes, 1, sdesBody);
+
+        var compound = new byte[rr.Length + sdes.Length];
+        rr.CopyTo(compound, 0);
+        sdes.CopyTo(compound, rr.Length);
+
+        var decoded = Codec.Decode(compound);
+
+        Assert.Single(decoded.OfType<RtcpReceiverReport>());
+        Assert.Empty(decoded.OfType<RtcpSdesPacket>().Single().Chunks.Single().Items);
     }
 
     [Fact]
