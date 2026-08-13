@@ -56,8 +56,11 @@ public sealed class VideoRtcpFeedbackSdpTests
 
         Assert.NotNull(answer);
         var videoSection = answer![answer.IndexOf("m=video", StringComparison.Ordinal)..];
+        // #160 P2-7: each entry is answered for the payload type it was offered for — "*" stays "*",
+        // and "96 ccm fir" is confirmed for 96 rather than widened to every format.
         Assert.Contains("a=rtcp-fb:* nack pli", videoSection, StringComparison.Ordinal);
-        Assert.Contains("a=rtcp-fb:* ccm fir", videoSection, StringComparison.Ordinal);
+        Assert.Contains("a=rtcp-fb:96 ccm fir", videoSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("a=rtcp-fb:* ccm fir", videoSection, StringComparison.Ordinal);
         // Plain NACK was not offered — must be absent from the answer.
         Assert.DoesNotContain("a=rtcp-fb:* nack\r\n", videoSection, StringComparison.Ordinal);
     }
@@ -99,10 +102,14 @@ public sealed class VideoRtcpFeedbackSdpTests
     }
 
     [Fact]
-    public void Pt_specific_offered_feedback_is_answered_for_all_formats()
+    public void Pt_specific_offered_feedback_is_answered_for_that_pt_only()
     {
-        // Peer offers FIR for PT 96 specifically; the answer normalises to "* ccm fir"
-        // (DECISION in VideoCodecCatalog.NegotiateFeedback).
+        // #160 P2-7. This used to normalise "96 ccm fir" to "* ccm fir" — a deliberate decision at the
+        // time, on the grounds that "*" is a superset and there was only ever one video codec. RTX put
+        // a second payload type on the m-line, and the answer then claimed feedback for formats the
+        // peer had never offered it for. It also contradicted SdpAnswerValidator, which rejects a
+        // remote answer that widens feedback beyond the offer: an answer must not do what it refuses
+        // to accept.
         var offer =
             "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\ns=peer\r\nc=IN IP4 127.0.0.1\r\nt=0 0\r\n"
             + "m=audio 5002 RTP/AVP 0\r\na=rtpmap:0 PCMU/8000\r\n"
@@ -113,8 +120,28 @@ public sealed class VideoRtcpFeedbackSdpTests
             new SdpMediaNegotiationOptions { Video = VideoOptions() });
 
         Assert.NotNull(answer);
-        Assert.Contains("a=rtcp-fb:* ccm fir", answer!, StringComparison.Ordinal);
-        Assert.DoesNotContain("a=rtcp-fb:96", answer, StringComparison.Ordinal);
+        Assert.Contains("a=rtcp-fb:96 ccm fir", answer!, StringComparison.Ordinal);
+        Assert.DoesNotContain("a=rtcp-fb:* ccm fir", answer, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Feedback_for_a_payload_type_we_did_not_accept_is_dropped()
+    {
+        // #160 P2-7: PT 97 is not in our capability set, so it is not in the answer — feedback for it
+        // would describe a format the answer does not contain.
+        var offer =
+            "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\ns=peer\r\nc=IN IP4 127.0.0.1\r\nt=0 0\r\n"
+            + "m=audio 5002 RTP/AVP 0\r\na=rtpmap:0 PCMU/8000\r\n"
+            + "m=video 5004 RTP/AVP 96 97\r\na=rtpmap:96 VP8/90000\r\na=rtpmap:97 H263/90000\r\n"
+            + "a=rtcp-fb:96 nack\r\na=rtcp-fb:97 nack\r\n";
+
+        var answer = SdpUtilities.TryBuildNegotiatedAnswer(
+            offer, LocalAudio, hold: false,
+            new SdpMediaNegotiationOptions { Video = VideoOptions() });
+
+        Assert.NotNull(answer);
+        Assert.Contains("a=rtcp-fb:96 nack", answer!, StringComparison.Ordinal);
+        Assert.DoesNotContain("a=rtcp-fb:97", answer, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -106,20 +106,61 @@ internal static class VideoCodecCatalog
     ];
 
     /// <summary>
-    /// Answers RTCP feedback with the intersection of what the peer offered and what the
-    /// SDK implements (RFC 4585 §4.2 — only mutually supported feedback is negotiated).
-    /// Matched by feedback type and parameter, ignoring the payload-type field.
-    /// DECISION: the answer always advertises for all formats (<c>*</c>) even when the peer
-    /// offered a specific payload type (e.g. <c>96 ccm fir</c> is answered <c>* ccm fir</c>).
-    /// <c>*</c> is a superset of any single PT, so this is interop-safe for the single-video-
-    /// codec case; per-PT answer mirroring is deferred until multi-codec video needs it.
+    /// Answers RTCP feedback with the intersection of what the peer offered and what the SDK
+    /// implements (RFC 4585 §4.2 — only mutually supported feedback is negotiated), echoing each
+    /// offered entry with the payload type it was offered for.
     /// </summary>
-    public static IReadOnlyList<SdpRtcpFeedback> NegotiateFeedback(IReadOnlyList<SdpRtcpFeedback> offered) =>
-        StandardFeedback
-            .Where(mine => offered.Any(theirs =>
-                theirs.FeedbackType.Equals(mine.FeedbackType, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(theirs.Parameter, mine.Parameter, StringComparison.OrdinalIgnoreCase)))
-            .ToArray();
+    /// <remarks>
+    /// #160 P2-7: the answer used to be built from <see cref="StandardFeedback"/>, which always says
+    /// <c>*</c>. An offer of <c>a=rtcp-fb:96 ccm fir</c> was answered <c>a=rtcp-fb:* ccm fir</c> —
+    /// claiming feedback for <em>every</em> format, including payload types the peer never offered it
+    /// for. The earlier reasoning ("* is a superset, and there is only one video codec") stopped
+    /// holding once RTX put a second payload type on the same m-line.
+    ///
+    /// It also contradicted this stack's own rule: <c>SdpAnswerValidator</c> rejects a remote answer
+    /// that widens feedback beyond the offer (<c>UnofferedRtcpFeedback</c>). An answer must not do what
+    /// it refuses to accept.
+    ///
+    /// Entries for a payload type that was not accepted are dropped — feedback for a format that is
+    /// not in the answer describes nothing.
+    /// </remarks>
+    public static IReadOnlyList<SdpRtcpFeedback> NegotiateFeedback(
+        IReadOnlyList<SdpRtcpFeedback> offered,
+        IReadOnlySet<int> acceptedPayloadTypes)
+    {
+        var answered = new List<SdpRtcpFeedback>(offered.Count);
+        var seen = new HashSet<(string Pt, string Type, string? Param)>();
+
+        foreach (var theirs in offered)
+        {
+            var supported = StandardFeedback.Any(mine =>
+                mine.FeedbackType.Equals(theirs.FeedbackType, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(mine.Parameter, theirs.Parameter, StringComparison.OrdinalIgnoreCase));
+            if (!supported)
+                continue;
+
+            // "*" applies to every format; a numeric payload type only counts when we kept that format.
+            var isWildcard = theirs.PayloadType == "*";
+            if (!isWildcard
+                && (!int.TryParse(theirs.PayloadType, out var pt) || !acceptedPayloadTypes.Contains(pt)))
+            {
+                continue;
+            }
+
+            // A duplicate line says nothing new and must not be echoed twice.
+            if (!seen.Add((theirs.PayloadType, theirs.FeedbackType.ToLowerInvariant(), theirs.Parameter?.ToLowerInvariant())))
+                continue;
+
+            answered.Add(new SdpRtcpFeedback
+            {
+                PayloadType = theirs.PayloadType,
+                FeedbackType = theirs.FeedbackType,
+                Parameter = theirs.Parameter,
+            });
+        }
+
+        return answered;
+    }
 
     /// <summary>The SDP codec name of an RTX repair stream (RFC 4588 §8.1).</summary>
     public const string RtxCodecName = "rtx";
