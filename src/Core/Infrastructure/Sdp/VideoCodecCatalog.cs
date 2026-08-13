@@ -46,10 +46,40 @@ internal static class VideoCodecCatalog
     /// <c>packetization-mode=1</c> (RFC 6184 §8.1). Absence means mode 0 — a peer that
     /// cannot receive the FU-A fragments the packetisation layer emits.
     /// </summary>
+    /// <remarks>
+    /// #160 P2-10: this used to be a substring test, so <c>packetization-mode=10</c> — and any parameter
+    /// whose *value* happened to end in that text, e.g. <c>profile-level-id=42packetization-mode=1</c> —
+    /// read as mode 1. The consequence is not cosmetic: mode 0 means the peer cannot receive the FU-A
+    /// fragments this stack emits, so a wrong "yes" here produces video the far end silently drops.
+    /// The parameter is now matched as an exact key with an exact value (RFC 6184 §8.1).
+    /// </remarks>
     public static bool HasPacketizationMode1(IReadOnlyList<SdpFmtpAttribute> fmtp, int payloadType) =>
-        fmtp.Any(f => f.PayloadType == payloadType
-                      && f.Parameters.Replace(" ", string.Empty, StringComparison.Ordinal)
-                          .Contains("packetization-mode=1", StringComparison.OrdinalIgnoreCase));
+        fmtp.Any(f => f.PayloadType == payloadType && DeclaresPacketizationMode1(f.Parameters));
+
+    // fmtp parameters are a semicolon-separated list of key=value pairs (RFC 4566 §6). Split on the
+    // separator and compare both halves whole, rather than searching the concatenated text.
+    private static bool DeclaresPacketizationMode1(string parameters)
+    {
+        var remaining = parameters.AsSpan();
+        while (!remaining.IsEmpty)
+        {
+            var separator = remaining.IndexOf(';');
+            var pair = (separator < 0 ? remaining : remaining[..separator]).Trim();
+            remaining = separator < 0 ? default : remaining[(separator + 1)..];
+
+            var eq = pair.IndexOf('=');
+            if (eq < 0)
+                continue;
+
+            if (pair[..eq].Trim().Equals("packetization-mode", StringComparison.OrdinalIgnoreCase)
+                && pair[(eq + 1)..].Trim().SequenceEqual("1"))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     /// <summary>
     /// Offer-side fmtp lines for the given video codecs: H.264 announces

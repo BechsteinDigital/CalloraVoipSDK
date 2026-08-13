@@ -21,10 +21,33 @@ internal sealed class SdpMediaDescription
     /// </summary>
     public bool Disabled => Port == 0;
 
+    /// <summary>
+    /// Number of consecutive ports this section occupies (the <c>/n</c> suffix of
+    /// <c>m=&lt;media&gt; &lt;port&gt;[/&lt;number of ports&gt;]</c>, RFC 8866 §5.14). <c>1</c> when absent.
+    /// </summary>
+    /// <remarks>
+    /// #160 P2-11: the suffix used to fail the whole parse, so a peer offering
+    /// <c>m=video 40000/2 RTP/AVP 96</c> — legal SDP, used by hierarchically encoded streams — got
+    /// its entire description rejected. The count is kept rather than acted on: this stack uses one
+    /// port per section, and treating a multi-port offer as single-port is what every peer here does.
+    /// </remarks>
+    public int PortCount { get; init; } = 1;
+
     /// <summary>RTP profile token (<c>RTP/AVP</c>, <c>RTP/SAVP</c>, <c>UDP/TLS/RTP/SAVPF</c>, …).</summary>
     public required string Profile { get; init; }
 
-    /// <summary>Codec payload definitions, in declaration order.</summary>
+    /// <summary>
+    /// The raw <c>fmt</c> tokens of the m-line, in declaration order.
+    /// </summary>
+    /// <remarks>
+    /// #160 P2-11: for an RTP profile these are payload-type numbers and <see cref="Codecs"/> is the
+    /// useful view. For any other profile the field is opaque (RFC 8866 §5.14) — <c>m=application 5000
+    /// UDP/DTLS/SCTP webrtc-datachannel</c> names a protocol, not a payload type. Parsing those as
+    /// integers dropped them silently, leaving a section whose format nobody could read.
+    /// </remarks>
+    public IReadOnlyList<string> Formats { get; init; } = [];
+
+    /// <summary>Codec payload definitions, in declaration order. Empty for a non-RTP profile.</summary>
     public required IReadOnlyList<SdpCodecDefinition> Codecs { get; init; }
 
     /// <summary>Media-level direction.</summary>
