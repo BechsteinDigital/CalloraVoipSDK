@@ -256,7 +256,7 @@ peer sent none.</p>
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallVideoParameters_LocalEndPoint" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallVideoParameters.LocalEndPoint">
   LocalEndPoint
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallVideoParameters.cs/#L68"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallVideoParameters.cs/#L77"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Local UDP endpoint to bind the video RTP socket to.</p>
@@ -316,11 +316,47 @@ peer sent none.</p>
 
 
 
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallVideoParameters_ReducedSizeRtcp_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallVideoParameters.ReducedSizeRtcp*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallVideoParameters_ReducedSizeRtcp" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallVideoParameters.ReducedSizeRtcp">
+  ReducedSizeRtcp
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallVideoParameters.cs/#L56"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Whether reduced-size RTCP was negotiated for this m-line (<code>a=rtcp-rsize</code>, RFC 5506).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool ReducedSizeRtcp { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="CalloraVoipSdk_Core_Domain_Calls_CallVideoParameters_ReducedSizeRtcp_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>#162 P2-3: when false, a feedback packet may not travel alone — it is wrapped in a compound
+beginning with a receiver report (RFC 3550 §6.1).</p>
+</div>
+
+
+
+
   <a id="CalloraVoipSdk_Core_Domain_Calls_CallVideoParameters_RemoteEndPoint_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallVideoParameters.RemoteEndPoint*"></a>
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallVideoParameters_RemoteEndPoint" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallVideoParameters.RemoteEndPoint">
   RemoteEndPoint
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallVideoParameters.cs/#L71"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallVideoParameters.cs/#L80"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Remote UDP endpoint to send video RTP to.</p>
@@ -452,7 +488,7 @@ RFC 4585 §6.3.1): the SDK may request a keyframe on unrecoverable loss.</p>
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallVideoParameters_SrtpSuite" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallVideoParameters.SrtpSuite">
   SrtpSuite
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallVideoParameters.cs/#L54"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallVideoParameters.cs/#L63"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Negotiated SDES crypto-suite token for the video m-line (RFC 4568), e.g.
