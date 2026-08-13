@@ -85,6 +85,7 @@ internal sealed class SdpSessionParser : ISdpSessionParser
 
         // #160 P2-15: one guard for the session level; each media section carries its own.
         var sessionSingletons = new SdpSingletonGuard();
+        var sessionBandwidths = new List<SdpBandwidth>();
 
         var media = new List<SdpMediaDescription>();
         MediaBuilder? current = null;
@@ -133,9 +134,20 @@ internal sealed class SdpSessionParser : ISdpSessionParser
                     break;
 
                 case 'b':
-                    if (current is not null)
-                        current.Bandwidth = ParseBandwidth(value);
+                {
+                    // #160 P3-18: sammeln statt überschreiben, und die Session-Ebene nicht verwerfen.
+                    // Mehrere b= mit verschiedenen Typ-Tokens (AS, TIAS, RR, RS) beschreiben
+                    // Verschiedenes; keines ersetzt das andere (RFC 4566 §5.8).
+                    var bandwidth = ParseBandwidth(value);
+                    if (bandwidth is not null)
+                    {
+                        if (current is null)
+                            sessionBandwidths.Add(bandwidth);
+                        else
+                            current.Bandwidths.Add(bandwidth);
+                    }
                     break;
+                }
 
                 case 'm':
                     if (current is not null)
@@ -182,6 +194,7 @@ internal sealed class SdpSessionParser : ISdpSessionParser
         return new SdpSessionDescription
         {
             OriginAddress = originAddress,
+            Bandwidths = sessionBandwidths.AsReadOnly(),
             ConnectionAddress = sessionConnectionAddress ?? string.Empty,
             SessionDirection = sessionDirection,
             Media = media,

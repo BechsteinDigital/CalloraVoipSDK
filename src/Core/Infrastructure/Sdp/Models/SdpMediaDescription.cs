@@ -106,7 +106,21 @@ internal sealed class SdpMediaDescription
     /// token (<c>AS</c> kbit/s or <c>TIAS</c> bit/s) so it re-serializes unchanged.
     /// <see langword="null"/> when no <c>b=</c> line is present.
     /// </summary>
-    public SdpBandwidth? Bandwidth { get; init; }
+    /// <remarks>
+    /// The first <c>b=</c> line of the section. A description may carry several with different type
+    /// tokens — see <see cref="Bandwidths"/>.
+    /// </remarks>
+    public SdpBandwidth? Bandwidth => Bandwidths.Count > 0 ? Bandwidths[0] : null;
+
+    /// <summary>
+    /// Every <c>b=</c> line of this media section, in order (RFC 4566 §5.8).
+    /// </summary>
+    /// <remarks>
+    /// #160 P3-18: a single field meant a second <c>b=</c> overwrote the first, so an offer carrying
+    /// <c>b=AS:512</c> and <c>b=TIAS:500000</c> kept only the last — different type tokens describe
+    /// different things and neither replaces the other. SIPSorcery keeps a list here too.
+    /// </remarks>
+    public IReadOnlyList<SdpBandwidth> Bandwidths { get; init; } = [];
 
     // -------------------------------------------------------------------------
     // Format parameters (RFC 4566 §6.6)

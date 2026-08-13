@@ -41,7 +41,7 @@ internal sealed class MediaBuilder
     public int? RtcpPort { get; set; }
     public string? Mid { get; set; }
     public SdpMsid? Msid { get; set; }
-    public SdpBandwidth? Bandwidth { get; set; }
+    public List<SdpBandwidth> Bandwidths { get; } = [];
     public string? IceUfrag { get; set; }
     public string? IcePwd { get; set; }
     public string? IceOptions { get; set; }
@@ -78,7 +78,7 @@ internal sealed class MediaBuilder
             RtcpPort = RtcpPort,
             Mid = Mid,
             Msid = Msid,
-            Bandwidth = Bandwidth,
+            Bandwidths = Bandwidths.AsReadOnly(),
             IceUfrag = IceUfrag,
             IcePwd = IcePwd,
             IceOptions = IceOptions,
