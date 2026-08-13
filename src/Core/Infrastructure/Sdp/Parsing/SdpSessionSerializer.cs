@@ -26,13 +26,17 @@ internal sealed class SdpSessionSerializer : ISdpSessionSerializer
         sb.AppendLine($"c=IN {GetNetType(session.ConnectionAddress)} {session.ConnectionAddress}");
         sb.AppendLine("t=0 0");
 
+        // Session-level bandwidth (RFC 4566 §5.8) — applies to every section that does not override it.
+        foreach (var bandwidth in session.Bandwidths)
+            sb.AppendLine($"b={bandwidth.Type}:{bandwidth.Value}");
+
         // Session-level ICE credentials (RFC 8839 §5.4)
         if (session.IceUfrag is not null)
             sb.AppendLine($"a=ice-ufrag:{session.IceUfrag}");
         if (session.IcePwd is not null)
             sb.AppendLine($"a=ice-pwd:{session.IcePwd}");
         if (session.IceOptions is not null)
-            sb.AppendLine($"a=ice-options:{session.IceOptions}");
+            sb.AppendLine($"a=ice-options:{SdpTextGuard.Line(session.IceOptions, "ice-options")}");
 
         // Session-level DTLS fingerprint / setup (RFC 8122 / RFC 4145)
         if (session.Fingerprint is not null)
@@ -42,7 +46,7 @@ internal sealed class SdpSessionSerializer : ISdpSessionSerializer
 
         // BUNDLE group (RFC 5888)
         if (session.Group is not null)
-            sb.AppendLine($"a=group:{session.Group}");
+            sb.AppendLine($"a=group:{SdpTextGuard.Line(session.Group, "group")}");
 
         // Session-level direction
         AppendDirection(sb, session.SessionDirection);
@@ -80,16 +84,16 @@ internal sealed class SdpSessionSerializer : ISdpSessionSerializer
             sb.AppendLine($"c=IN {GetNetType(media.ConnectionAddress)} {media.ConnectionAddress}");
 
         // Bandwidth (RFC 4566 §5.8) — re-serialize with the original type token (AS/TIAS/…)
-        if (media.Bandwidth is not null)
-            sb.AppendLine($"b={media.Bandwidth.Type}:{media.Bandwidth.Value}");
+        foreach (var bandwidth in media.Bandwidths)
+            sb.AppendLine($"b={bandwidth.Type}:{bandwidth.Value}");
 
         // MID (RFC 5888)
         if (media.Mid is not null)
-            sb.AppendLine($"a=mid:{media.Mid}");
+            sb.AppendLine($"a=mid:{SdpTextGuard.Line(media.Mid, "mid")}");
 
         // MSID (RFC 8830): MediaStream / track identity
         if (media.Msid is not null)
-            sb.AppendLine($"a=msid:{media.Msid.Serialize()}");
+            sb.AppendLine($"a=msid:{SdpTextGuard.Line(media.Msid.Serialize(), "msid")}");
 
         // DTLS fingerprint / setup (RFC 8122 / RFC 4145) — media-level overrides session
         if (media.Fingerprint is not null)
@@ -105,12 +109,12 @@ internal sealed class SdpSessionSerializer : ISdpSessionSerializer
         foreach (var codec in media.Codecs)
         {
             var channels = codec.Channels > 1 ? $"/{codec.Channels}" : string.Empty;
-            sb.AppendLine($"a=rtpmap:{codec.PayloadType} {codec.Name}/{codec.ClockRate}{channels}");
+            sb.AppendLine($"a=rtpmap:{codec.PayloadType} {SdpTextGuard.Line(codec.Name, "rtpmap")}/{codec.ClockRate}{channels}");
         }
 
         // fmtp lines (RFC 4566 §6.6)
         foreach (var fmtp in media.Fmtp)
-            sb.AppendLine($"a=fmtp:{fmtp.PayloadType} {fmtp.Parameters}");
+            sb.AppendLine($"a=fmtp:{fmtp.PayloadType} {SdpTextGuard.Line(fmtp.Parameters, "fmtp")}");
 
         // RTCP feedback (RFC 4585 §4.2)
         foreach (var feedback in media.RtcpFeedback)
@@ -118,13 +122,13 @@ internal sealed class SdpSessionSerializer : ISdpSessionSerializer
 
         // RTP header extension mappings (RFC 8285 §5)
         foreach (var extmap in media.Extensions)
-            sb.AppendLine($"a=extmap:{extmap.Serialize()}");
+            sb.AppendLine($"a=extmap:{SdpTextGuard.Line(extmap.Serialize(), "extmap")}");
 
         // Simulcast: rid lines then the simulcast declaration (RFC 8851 / RFC 8853)
         foreach (var rid in media.Rids)
-            sb.AppendLine($"a=rid:{rid.Serialize()}");
+            sb.AppendLine($"a=rid:{SdpTextGuard.Line(rid.Serialize(), "rid")}");
         if (media.Simulcast is not null)
-            sb.AppendLine($"a=simulcast:{media.Simulcast.Serialize()}");
+            sb.AppendLine($"a=simulcast:{SdpTextGuard.Line(media.Simulcast.Serialize(), "simulcast")}");
 
         // Direction
         AppendDirection(sb, media.Direction);
@@ -147,7 +151,7 @@ internal sealed class SdpSessionSerializer : ISdpSessionSerializer
         if (media.IcePwd is not null)
             sb.AppendLine($"a=ice-pwd:{media.IcePwd}");
         if (media.IceOptions is not null)
-            sb.AppendLine($"a=ice-options:{media.IceOptions}");
+            sb.AppendLine($"a=ice-options:{SdpTextGuard.Line(media.IceOptions, "ice-options")}");
 
         // ICE candidates (RFC 8839)
         foreach (var candidate in media.Candidates)

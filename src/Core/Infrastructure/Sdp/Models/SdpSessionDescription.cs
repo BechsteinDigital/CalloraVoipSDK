@@ -24,6 +24,16 @@ internal sealed class SdpSessionDescription
     /// <summary>Session-level media direction fallback.</summary>
     public SdpMediaDirection SessionDirection { get; init; } = SdpMediaDirection.SendRecv;
 
+    /// <summary>
+    /// Session-level <c>b=</c> lines (RFC 4566 §5.8), in order.
+    /// </summary>
+    /// <remarks>
+    /// #160 P3-18: the parser only kept <c>b=</c> inside a media section, so a session-level limit —
+    /// which applies to every section that does not override it — was dropped on the floor.
+    /// SIPSorcery keeps session-level bandwidth attributes as well.
+    /// </remarks>
+    public IReadOnlyList<SdpBandwidth> Bandwidths { get; init; } = [];
+
     /// <summary>Media sections in declaration order.</summary>
     public required IReadOnlyList<SdpMediaDescription> Media { get; init; }
 
