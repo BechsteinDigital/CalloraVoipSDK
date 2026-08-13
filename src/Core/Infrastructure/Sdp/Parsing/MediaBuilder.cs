@@ -25,6 +25,9 @@ internal sealed class MediaBuilder
     /// <summary>The raw fmt tokens of the m-line, opaque for a non-RTP profile (#160 P2-11).</summary>
     public IReadOnlyList<string> Formats { get; init; } = [];
 
+    /// <summary>Tracks the at-most-once attributes of this media section (#160 P2-15).</summary>
+    public SdpSingletonGuard Singletons { get; } = new();
+
     public IDictionary<int, SdpCodecDefinition> Codecs { get; }
 
     public string? ConnectionAddress { get; set; }
