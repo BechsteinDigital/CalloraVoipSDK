@@ -242,14 +242,22 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
         ArgumentNullException.ThrowIfNull(localEndPoint);
         ArgumentNullException.ThrowIfNull(localCapabilities);
 
+        // #160 P2-8: the primary audio is the first *answerable* audio m-line, not simply the first one.
+        // Taking the first meant a leading zero-port audio section — a peer re-offering after having
+        // declined that section, which is ordinary SDP (RFC 8866 §5.14) — ended the whole negotiation:
+        // every later m-line, audio and video alike, was dropped along with it.
         var offeredAudio = remoteOffer.Media
-            .FirstOrDefault(m => m.MediaType.Equals("audio", StringComparison.OrdinalIgnoreCase));
+            .FirstOrDefault(m => m.MediaType.Equals("audio", StringComparison.OrdinalIgnoreCase)
+                                 && !m.Disabled);
 
-        if (offeredAudio is null)
+        var hasAudio = offeredAudio is not null
+                       || remoteOffer.Media.Any(m => m.MediaType.Equals("audio", StringComparison.OrdinalIgnoreCase));
+
+        if (!hasAudio)
             return new SdpOfferAnswerResult { Success = false };
 
-        // Reject disabled m-line (RFC 8866 zero-port) with a mirrored disabled answer.
-        if (offeredAudio.Disabled)
+        // Every audio m-line disabled (RFC 8866 zero-port): mirror the offer back declined.
+        if (offeredAudio is null)
         {
             return new SdpOfferAnswerResult
             {
@@ -308,9 +316,14 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
 
             // Video: the first, or any under BUNDLE. A second video without BUNDLE would share the single
             // local video port and break demux.
+            // #160 P2-6: the video direction is resolved against our LOCAL readiness, not against the
+            // direction the audio answer happened to come out at. Passing the audio result made the two
+            // m-lines dependent: a peer offering audio sendonly and video recvonly (each perfectly legal,
+            // RFC 3264 §6.1) got video "inactive" — the audio answer recvonly, fed back in as if it were
+            // our own capability, cancelled the video answer sendonly against it.
             var videoAnswer = videoAnswered && !isBundle
                 ? null
-                : TryNegotiateVideoAnswerMedia(offered, remoteOffer, localOptions, answerDirection);
+                : TryNegotiateVideoAnswerMedia(offered, remoteOffer, localOptions, localDirection);
             videoAnswered |= videoAnswer is not null;
             answerLines.Add(videoAnswer ?? BuildDisabledMirror(offered));
         }
@@ -807,12 +820,17 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
         SdpMediaOptions? options)
     {
         var host = LocalEndPointHostResolver.ResolveHost(localEndPoint);
+
+        // #160 P2-8: keep the mid on a declined m-line (RFC 8829 §5.3.1 — mids are preserved 1:1, and a
+        // rejection is still an answer). Dropping them left the peer an answer it could not map back onto
+        // its own offer, which is how a decline turns into a stuck renegotiation rather than a clean no.
         var disabledMedia = remoteOffer.Media.Select(m => new SdpMediaDescription
         {
             MediaType = m.MediaType,
             Port = 0,
             Profile = m.Profile,
             Codecs = m.Codecs,
+            Mid = m.Mid,
             Direction = SdpMediaDirection.Inactive
         }).ToArray();
 
