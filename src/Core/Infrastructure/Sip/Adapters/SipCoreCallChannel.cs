@@ -547,33 +547,15 @@ internal sealed class SipCoreCallChannel : ICallChannel, IRtcpSocketHandoff
         => EnsureSession().SendNotifyAsync(eventType, subscriptionState, contentType, body, ct);
 
     /// <inheritdoc />
-    public Task<bool> BlindTransferAsync(string targetUri, TimeSpan timeout, CancellationToken ct)
-    {
-        var session = EnsureSession();
-        return session.SendReferAsync(targetUri, referredBy: session.LocalUri, ct: ct);
-    }
+    public Task<bool> BlindTransferAsync(string targetUri, TimeSpan timeout, CancellationToken ct) =>
+        SipCallChannelTransfers.BlindAsync(EnsureSession(), targetUri, timeout, _logger, ct);
 
     /// <inheritdoc />
-    public Task<bool> AttendedTransferAsync(ICallChannel target, TimeSpan timeout, CancellationToken ct)
-    {
-        var session = EnsureSession();
-        if (target is not SipCoreCallChannel sipTarget)
-            return Task.FromResult(false);
-
-        var targetSession = sipTarget.EnsureSession();
-
-        // RFC 5589 attended transfer: REFER the transferee to the consultation target, carrying an
-        // RFC 3891 Replaces that identifies the established consultation dialog. Falls back to a
-        // plain REFER to the target URI when the consultation dialog has no tags yet.
-        var referTo = AttendedTransferReferTo.Build(
-            targetSession.CallId,
-            targetSession.LocalTag,
-            targetSession.RemoteTag,
-            targetSession.RemoteUri)
-            ?? targetSession.RemoteUri;
-
-        return session.SendReferAsync(referTo, referredBy: session.LocalUri, ct: ct);
-    }
+    public Task<bool> AttendedTransferAsync(ICallChannel target, TimeSpan timeout, CancellationToken ct) =>
+        target is SipCoreCallChannel sipTarget
+            ? SipCallChannelTransfers.AttendedAsync(
+                EnsureSession(), sipTarget.EnsureSession(), timeout, _logger, ct)
+            : Task.FromResult(false);
 
     // Per-call outgoing-audio mute (#per-call-mute): a local send-path gate — no SIP signalling, and
     // independent of the device-wide IVoipClient.SetAudioInputMuted, so each concurrent call mutes its
