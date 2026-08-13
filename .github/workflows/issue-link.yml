@@ -1,15 +1,28 @@
 name: Issue link
 
-# Two jobs, one purpose: an issue always knows what is happening to it.
+# Three jobs, one purpose: an issue always knows what is happening to it, and never claims to be
+# finished when it is not.
 #
 #   require-link  — a PR must name the issue it addresses, so acceptance criteria are never
 #                   invented in the PR description. Escape hatch: the `no-issue` label for
 #                   chores (typos, formatting, dependency bumps).
 #   notify-issue  — posts the PR link on every referenced issue when the PR opens, and the
 #                   outcome when it closes. Reviewing an issue then needs one tab, not three.
+#   guard-criteria— warns while the PR is open, and reopens after the merge, when a closing
+#                   keyword points at an issue that still has unticked acceptance criteria.
 #
 # Deliberately does NOT tick the issue's acceptance-criteria checkboxes. A machine cannot tell
 # whether a criterion is genuinely met; a human ticking them is the point of having them.
+#
+# guard-criteria exists because the notify comment used to *assert* "if any acceptance criterion
+# above is still unticked, this issue stays open" without anything enforcing it. GitHub honours a
+# closing keyword regardless of the issue's contents — and it honours it even when the sentence
+# says otherwise, so a body reading "Closes #123 partially" still closes #123. That is precisely
+# how #160 and #162 were closed with a dozen findings still open. The assertion is now true.
+#
+# It warns rather than blocks while the PR is open, on purpose: a PR that genuinely finishes an
+# issue is written *before* the reviewer ticks the boxes, so blocking would forbid the correct
+# workflow. Enforcement happens where the claim becomes a fact — at the merge.
 
 on:
   pull_request_target:
@@ -50,6 +63,87 @@ jobs:
                 'Add "Closes #123" to the description (the issue is where the acceptance ' +
                 'criteria live), or apply the `no-issue` label if this is a chore.'
               );
+            }
+
+  guard-criteria:
+    runs-on: ubuntu-latest
+    steps:
+      - name: A closing keyword must not point at unfinished acceptance criteria
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            // Read from the payload, never interpolated into the script text: a PR body is
+            // attacker-controlled and must stay a value, not become code.
+            const body = pr.body || '';
+
+            // The keywords GitHub itself acts on, each immediately followed by the reference.
+            // "Closes #123 partially" matches — which is the whole point: GitHub closes #123 and
+            // silently ignores the qualifier, so the qualifier must not fool us either.
+            const closing = [...body.matchAll(
+              /\b(clos(?:e[sd]?|ing)|fix(?:e[sd]|ing)?|resolv(?:e[sd]?|ing))\b\s*:?\s+#(\d+)/gi)];
+            const targets = [...new Set(closing.map(m => Number(m[2])))].filter(n => n !== pr.number);
+            if (targets.length === 0) return;
+
+            // A task-list item that is still open. Matches "- [ ]" and "* [ ]", indented or not.
+            const untickedOf = text => (text || '').match(/^[ \t]*[-*][ \t]+\[[ \t]\]/gm)?.length ?? 0;
+
+            const unfinished = [];
+            for (const issue_number of targets) {
+              try {
+                const { data: issue } = await github.rest.issues.get({ ...context.repo, issue_number });
+                if (issue.pull_request) continue;             // a PR reference, not an issue
+                const open = untickedOf(issue.body);
+                if (open > 0) unfinished.push({ number: issue_number, open, state: issue.state });
+              } catch (e) {
+                core.info(`Skipping #${issue_number}: ${e.message}`);
+              }
+            }
+            if (unfinished.length === 0) return;
+
+            const merged = context.payload.action === 'closed' && pr.merged;
+            const list = unfinished
+              .map(u => `#${u.number} (${u.open} unticked)`)
+              .join(', ');
+
+            if (!merged) {
+              // While the PR is open this is advice, not a gate: a PR that genuinely finishes an
+              // issue is written before the reviewer ticks the boxes. Posted once — an edit or a
+              // push must not re-post it.
+              const marker = '<!-- guard-criteria -->';
+              const { data: comments } = await github.rest.issues.listComments(
+                { ...context.repo, issue_number: pr.number, per_page: 100 });
+              if (comments.some(c => (c.body || '').includes(marker))) return;
+
+              await github.rest.issues.createComment({
+                ...context.repo,
+                issue_number: pr.number,
+                body:
+                  `${marker}\n⚠️ This description uses a closing keyword for ${list}.\n\n` +
+                  `Merging will close ${unfinished.length > 1 ? 'those issues' : 'that issue'} even if the ` +
+                  `criteria are still open — GitHub honours the keyword and ignores any qualifier after it, ` +
+                  `so "Closes #123 partially" still closes #123.\n\n` +
+                  `If this PR does not finish the work, write **\`Part of #123\`** instead. A bare reference ` +
+                  `satisfies the link requirement on its own.`,
+              });
+              return;
+            }
+
+            // After the merge the claim has become a fact, so make the notify comment's promise true:
+            // an issue with open criteria goes back to open, with the reason on it.
+            for (const { number, state } of unfinished) {
+              if (state !== 'closed') continue;
+              await github.rest.issues.update(
+                { ...context.repo, issue_number: number, state: 'open' });
+              await github.rest.issues.createComment({
+                ...context.repo,
+                issue_number: number,
+                body:
+                  `↩️ Reopened: PR #${pr.number} carried a closing keyword for this issue, but it still ` +
+                  `has unticked acceptance criteria. A merge is not by itself proof that they are met.\n\n` +
+                  `If the merge really did finish them, tick them and close this by hand.`,
+              });
+              core.notice(`Reopened #${number}: acceptance criteria still unticked.`);
             }
 
   notify-issue:
