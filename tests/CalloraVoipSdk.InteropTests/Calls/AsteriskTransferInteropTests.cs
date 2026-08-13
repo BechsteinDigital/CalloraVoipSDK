@@ -1,11 +1,8 @@
-using CalloraVoipSdk;
 using CalloraVoipSdk.Core.Domain.Calls;
-using CalloraVoipSdk.Core.Domain.Lines;
 using CalloraVoipSdk.Core.Domain.Security;
-using CalloraVoipSdk.InteropTests.Asterisk;
+using CalloraVoipSdk.InteropTests.Media;
+using CalloraVoipSdk.InteropTests.Pbx;
 using Xunit;
-
-using DomainSipTransport = CalloraVoipSdk.Core.Domain.Lines.SipTransport;
 
 namespace CalloraVoipSdk.InteropTests.Calls;
 
@@ -17,74 +14,56 @@ namespace CalloraVoipSdk.InteropTests.Calls;
 [Trait("Category", "Interop")]
 public sealed class AsteriskTransferInteropTests
 {
-    private static VoipClient NewClient() =>
-        new(new VoipConfiguration { UserAgent = "CalloraInteropTest/1.0", SrtpPolicy = SrtpPolicy.Disabled });
-
-    private static async Task<IPhoneLine> RegisterAsync(AsteriskContainer asterisk, VoipClient client)
-    {
-        var reg = await client.ConnectAsync(
-            new SipAccount
-            {
-                SipServer = asterisk.ContainerIpAddress,
-                Port = 5060,
-                Username = asterisk.Username,
-                Password = asterisk.Password,
-                Transport = DomainSipTransport.Udp,
-            },
-            new ConnectOptions { Timeout = TimeSpan.FromSeconds(20) });
-        Assert.True(reg.IsSuccess, $"Registrierung fehlgeschlagen: Status={reg.Status}");
-        return reg.Line!;
-    }
-
-    private static async Task<ICall> DialAnswerAsync(AsteriskContainer asterisk, VoipClient client, IPhoneLine line, string extension)
-    {
-        var result = await client.DialAndWaitUntilConnectedAsync(
-            line, asterisk.CallTargetUri(extension), new DialWaitOptions { ConnectTimeout = TimeSpan.FromSeconds(10) });
-        Assert.True(result.IsSuccess, $"Dial({extension}) fehlgeschlagen: Status={result.Status}");
-        return result.Call!;
-    }
-
+    // Beide Transfer-Tests brauchen einen GEBRÜCKTEN Call, nicht einen, der in einer Asterisk-
+    // Applikation hängt (#256). Ein Kanal in Milliwatt()/Echo() hat keine Gegenstelle, die sich
+    // umbrücken ließe — Asterisk beantwortet den REFER zwar mit 202, meldet dann aber per NOTIFY
+    // "SIP/2.0 400 Bad Request" (Subscription-State: terminated;reason=noresource) und führt den
+    // Transfer nie aus. Vorher liefen diese Tests gegen die answer-Extension und galten als grün,
+    // weil nur das 202 geprüft wurde: sie hätten den Fehlschlag gar nicht sehen können.
     [DockerRequiredFact]
     public async Task BlindTransfer_IsAcceptedAndReleasesCall()
     {
-        await using var asterisk = new AsteriskContainer();
-        await asterisk.StartAsync();
-        using var client = NewClient();
-        var line = await RegisterAsync(asterisk, client);
+        await using var pbx = new AsteriskPbxFixture(1);
+        await pbx.StartAsync();
+        await using var bridged = await TwoLegBridgedCall.StartAsync(pbx);
 
-        var call = await DialAnswerAsync(asterisk, client, line, "answer");
-        Assert.Equal(CallState.Connected, call.State);
+        Assert.Equal(CallState.Connected, bridged.CallerCall.State);
 
-        // REFER an den Peer: den Call blind zur answer-Extension umleiten. Erfolg = 202 + NOTIFY(200),
-        // der lokale Call wird freigegeben.
-        await call.BlindTransferAsync(asterisk.CallTargetUri("answer"));
+        // REFER an den Peer: den gebrückten Call blind zur Media-Playback-Extension umleiten.
+        // Erfolg = 202 + NOTIFY(200), der lokale Call wird freigegeben.
+        await bridged.CallerCall.BlindTransferAsync(pbx.MediaPlaybackUri);
 
         var deadline = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(8);
-        while (call.State != CallState.Terminated && DateTimeOffset.UtcNow < deadline)
+        while (bridged.CallerCall.State != CallState.Terminated && DateTimeOffset.UtcNow < deadline)
             await Task.Delay(100);
-        Assert.Equal(CallState.Terminated, call.State);
+
+        // Terminated heißt hier belegt "der Transfer wurde ausgeführt": Call.BlindTransferAsync setzt
+        // diesen Zustand nur, wenn das NOTIFY einen Erfolg gemeldet hat (RFC 3515 §2.4.4).
+        Assert.Equal(CallState.Terminated, bridged.CallerCall.State);
+
+        // Die Gegenstelle bleibt verbunden — sie wurde umgebrückt, nicht abgeräumt.
+        Assert.Equal(CallState.Connected, bridged.CalleeCall.State);
     }
 
     [DockerRequiredFact]
     public async Task AttendedTransfer_BridgesConsultationCall()
     {
-        await using var asterisk = new AsteriskContainer();
-        await asterisk.StartAsync();
-        using var client = NewClient();
-        var line = await RegisterAsync(asterisk, client);
+        await using var pbx = new AsteriskPbxFixture(1);
+        await pbx.StartAsync();
+        await using var bridged = await TwoLegBridgedCall.StartAsync(pbx);
 
-        var primary = await DialAnswerAsync(asterisk, client, line, "answer");
-        var consultation = await DialAnswerAsync(asterisk, client, line, "dtmf");
-        Assert.Equal(CallState.Connected, primary.State);
+        var consultation = await bridged.DialCallerConsultationAsync(
+            pbx.MediaPlaybackUri, TimeSpan.FromSeconds(10));
+        Assert.Equal(CallState.Connected, bridged.CallerCall.State);
         Assert.Equal(CallState.Connected, consultation.State);
 
         // Verbindet den Peer des primären Calls mit dem Peer des Beratungs-Calls (REFER mit Replaces).
-        var ok = await primary.AttendedTransferAsync(consultation);
+        var ok = await bridged.CallerCall.AttendedTransferAsync(consultation);
         Assert.True(ok, "Attended-Transfer wurde nicht bestätigt.");
 
         var deadline = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(8);
-        while (primary.State != CallState.Terminated && DateTimeOffset.UtcNow < deadline)
+        while (bridged.CallerCall.State != CallState.Terminated && DateTimeOffset.UtcNow < deadline)
             await Task.Delay(100);
-        Assert.Equal(CallState.Terminated, primary.State);
+        Assert.Equal(CallState.Terminated, bridged.CallerCall.State);
     }
 }
