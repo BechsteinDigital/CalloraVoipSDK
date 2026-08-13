@@ -63,8 +63,15 @@ internal sealed class SdpSessionSerializer : ISdpSessionSerializer
 
     private static void AppendMediaSection(StringBuilder sb, SdpMediaDescription media, string sessionConnectionAddress)
     {
-        // m= line
-        var payloads = string.Join(" ", media.Codecs.Select(c => c.PayloadType.ToString()));
+        // m= line. #160 P2-11: a non-RTP profile has no payload types — its fmt field is an opaque token
+        // (RFC 8866 §5.14), and rebuilding the line from Codecs alone emitted "m=application 5000
+        // UDP/DTLS/SCTP" with an empty fmt, which is not a valid m-line.
+        //
+        // The port count is deliberately not re-emitted: this stack binds one port per section, so
+        // answering "/2" would claim ports it never opened.
+        var payloads = media.Codecs.Count > 0
+            ? string.Join(" ", media.Codecs.Select(c => c.PayloadType.ToString()))
+            : string.Join(" ", media.Formats);
         sb.AppendLine($"m={media.MediaType} {media.Port} {media.Profile} {payloads}");
 
         // Per-media c= override (RFC 4566 §5.7) — only emit when different from session level

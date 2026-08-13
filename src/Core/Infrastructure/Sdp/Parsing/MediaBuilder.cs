@@ -19,6 +19,12 @@ internal sealed class MediaBuilder
     public int Port { get; }
     public string Profile { get; }
 
+    /// <summary>Consecutive ports from the m-line's <c>/n</c> suffix; 1 when absent (#160 P2-11).</summary>
+    public int PortCount { get; init; } = 1;
+
+    /// <summary>The raw fmt tokens of the m-line, opaque for a non-RTP profile (#160 P2-11).</summary>
+    public IReadOnlyList<string> Formats { get; init; } = [];
+
     public IDictionary<int, SdpCodecDefinition> Codecs { get; }
 
     public string? ConnectionAddress { get; set; }
@@ -50,7 +56,9 @@ internal sealed class MediaBuilder
         {
             MediaType = MediaType,
             Port = Port,
+            PortCount = PortCount,
             Profile = Profile,
+            Formats = Formats,
             Direction = Direction ?? sessionDirection,
             Codecs = _mLineOrder
                 .Where(pt => Codecs.ContainsKey(pt))

@@ -79,6 +79,7 @@ internal sealed class SdpSessionParser : ISdpSessionParser
 
         // RFC 4566 §5: v=, s= and t= are mandatory session-description lines.
         var hasVersion = false;
+        var hasOrigin = false;
         var hasSessionName = false;
         var hasTiming = false;
 
@@ -111,6 +112,9 @@ internal sealed class SdpSessionParser : ISdpSessionParser
                     break;
 
                 case 'o':
+                    // #160 P2-12: o= is mandatory and has six fields (RFC 8866 §5.2). Presence alone is
+                    // not enough — a truncated o= is what a malformed description looks like.
+                    hasOrigin = value.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length == 6;
                     originAddress = ParseAddressTail(value) ?? originAddress;
                     break;
 
@@ -156,10 +160,14 @@ internal sealed class SdpSessionParser : ISdpSessionParser
         if (current is not null)
             media.Add(current.Build(sessionDirection));
 
-        // RFC 4566 §5: reject an SDP missing a mandatory v=, s= or t= line rather than
+        // RFC 8866 §5: reject an SDP missing a mandatory v=, o=, s= or t= line rather than
         // accepting a structurally invalid description.
-        if (!hasVersion || !hasSessionName || !hasTiming)
-            throw new FormatException("SDP is missing a mandatory v=, s= or t= line (RFC 4566 §5).");
+        //
+        // #160 P2-12: o= was the one mandatory line not checked. It carries the session id and version
+        // that identify a description across re-offers (RFC 3264 §8) — without it, a re-INVITE cannot be
+        // told apart from a fresh session, and OriginAddress silently stayed whatever it had defaulted to.
+        if (!hasVersion || !hasOrigin || !hasSessionName || !hasTiming)
+            throw new FormatException("SDP is missing a mandatory v=, o=, s= or t= line (RFC 8866 §5).");
 
         // RFC 4566 §5.7: a connection address must be present at the session level or on every
         // media section. Without any valid c=, the media has no destination — reject instead of
@@ -427,24 +435,83 @@ internal sealed class SdpSessionParser : ISdpSessionParser
         if (parts.Length < 4)
             throw new FormatException($"Invalid SDP media line: m={value}");
 
+        var (port, portCount) = ParseMediaPort(parts[1], value);
+
+        var profile = parts[2];
+        var formats = parts.Skip(3).ToArray();
+
+        // #160 P2-11: the fmt field is a payload-type list only under an RTP profile. Under any other
+        // one it is opaque (RFC 8866 §5.14) — "UDP/DTLS/SCTP webrtc-datachannel" names a protocol.
+        // Parsing that as an integer failed silently and left the section with no format at all.
+        var codecs = IsRtpProfile(profile)
+            ? ParsePayloadTypes(formats, value, out var mLineOrder)
+            : Empty(out mLineOrder);
+
+        return new MediaBuilder(parts[0], port, profile, codecs, mLineOrder)
+        {
+            PortCount = portCount,
+            Formats = formats,
+        };
+
+        static Dictionary<int, SdpCodecDefinition> Empty(out IReadOnlyList<int> order)
+        {
+            order = [];
+            return [];
+        }
+    }
+
+    /// <summary>
+    /// Parses the <c>&lt;port&gt;[/&lt;number of ports&gt;]</c> field of an m-line (RFC 8866 §5.14).
+    /// </summary>
+    private static (int Port, int PortCount) ParseMediaPort(string field, string mediaLine)
+    {
+        // #160 P2-11: the "/n" suffix is legal SDP, and rejecting it failed the entire description
+        // rather than the one field — a peer offering "m=video 40000/2 RTP/AVP 96" got nothing back.
+        var portText = field;
+        var count = 1;
+
+        var slash = field.IndexOf('/', StringComparison.Ordinal);
+        if (slash >= 0)
+        {
+            portText = field[..slash];
+            var countText = field[(slash + 1)..];
+            if (!int.TryParse(countText, out count) || count < 1)
+                throw new FormatException($"Invalid SDP media port count: m={mediaLine}");
+        }
+
         // #160 P2-4: validate the numeric wire domains rather than accepting any int. A port outside
         // 0..65535 cannot be bound, and the value would be carried around until something downstream
         // truncated it (RFC 8866 §5.14).
-        if (!int.TryParse(parts[1], out var port) || port is < 0 or > MaxPort)
-            throw new FormatException($"Invalid SDP media port: m={value}");
+        if (!int.TryParse(portText, out var port) || port is < 0 or > MaxPort)
+            throw new FormatException($"Invalid SDP media port: m={mediaLine}");
 
+        // The range has to fit the 16-bit port space too: "65535/4" describes ports that cannot exist.
+        if (port + count - 1 > MaxPort)
+            throw new FormatException($"SDP media port range exceeds the 16-bit port space: m={mediaLine}");
+
+        return (port, count);
+    }
+
+    // RFC 8866 §5.14: only an RTP-based profile gives the fmt field payload-type semantics.
+    private static bool IsRtpProfile(string profile) =>
+        profile.Contains("RTP/", StringComparison.OrdinalIgnoreCase);
+
+    private Dictionary<int, SdpCodecDefinition> ParsePayloadTypes(
+        string[] formats,
+        string mediaLine,
+        out IReadOnlyList<int> mLineOrder)
+    {
         // The RTP payload type field is seven bits (RFC 3550 §5.1), so 0..127. Accepting 256 here meant
         // answering "RTP/AVP 256" and then casting it to byte further down the pipeline, where it silently
         // became 0 — PCMU — a payload type nobody negotiated.
-        var payloadTypes = parts
-            .Skip(3)
+        var payloadTypes = formats
             .Select(v => int.TryParse(v, out var pt) && pt is >= 0 and <= MaxPayloadType ? pt : -1)
             .Where(v => v >= 0)
             .ToArray();
 
         // #160 P1-1 (part 2): bound the payload-type list a single m= line can declare (K4).
         if (payloadTypes.Length > _limits.MaxPayloadTypesPerMedia)
-            throw new FormatException($"SDP media line exceeds the maximum of {_limits.MaxPayloadTypesPerMedia} payload types: m={value}");
+            throw new FormatException($"SDP media line exceeds the maximum of {_limits.MaxPayloadTypesPerMedia} payload types: m={mediaLine}");
 
         // Build the payload-type map with TryAdd rather than ToDictionary: a duplicate PT on the
         // m-line (e.g. "RTP/AVP 0 0") would make ToDictionary throw ArgumentException, escaping the
@@ -453,10 +520,11 @@ internal sealed class SdpSessionParser : ISdpSessionParser
         foreach (var pt in payloadTypes)
         {
             if (!codecs.TryAdd(pt, new SdpCodecDefinition { PayloadType = pt, Name = $"PT{pt}", ClockRate = 8000 }))
-                throw new FormatException($"Duplicate payload type {pt} on SDP media line: m={value}");
+                throw new FormatException($"Duplicate payload type {pt} on SDP media line: m={mediaLine}");
         }
 
-        return new MediaBuilder(parts[0], port, parts[2], codecs, payloadTypes);
+        mLineOrder = payloadTypes;
+        return codecs;
     }
 
     // -------------------------------------------------------------------------
