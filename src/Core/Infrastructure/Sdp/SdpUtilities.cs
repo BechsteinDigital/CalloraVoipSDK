@@ -576,6 +576,8 @@ internal static class SdpUtilities
             RemoteSupportsPli = video.RtcpFeedback.Any(
                 f => f.FeedbackType.Equals("nack", StringComparison.OrdinalIgnoreCase)
                      && string.Equals(f.Parameter, "pli", StringComparison.OrdinalIgnoreCase)),
+            // #162 P2-3: RFC 5506 — ohne dieses Merkmal muss Feedback als Compound reisen.
+            ReducedSizeRtcp = video.ReducedSizeRtcp,
             LocalEndPoint = new IPEndPoint(localEndPoint.Address, videoOptions.Port),
             RemoteEndPoint = new IPEndPoint(remoteIp, video.Port),
             // ICE credentials for the video 5-tuple: the video m-line's own ufrag/pwd when it

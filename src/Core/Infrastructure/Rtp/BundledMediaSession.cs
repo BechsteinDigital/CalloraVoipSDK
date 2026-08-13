@@ -352,9 +352,8 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         // a=extmap was negotiated (so the transport actually stamps a transport-wide sequence) — otherwise the
         // plane stays off. See BundledCongestionPlane: it wires the sender-side controller to PacketSent and the
         // receive-side feedback sender to inbound RTP; OnControlPacketReceived fans decoded feedback into it.
-        if (options.TransportWideCcExtensionId is { } transportCcExtensionId)
-            _congestion = new BundledCongestionPlane(
-                transportCcExtensionId, _outbound, _inbound, _rtcpCodec, options.Audio.Ssrc, loggerFactory);
+        _congestion = BundledMediaSessionComposition.BuildCongestionPlane(
+            options, _outbound, _inbound, _rtcpCodec, loggerFactory);
 
         // Inbound RTCP decode + fan-out (RFC 3550 §6.4.1 / RFC 4585 / transport-cc): built now that the video set and
         // congestion plane exist. Invoked only from the receive loop (subscribed on _inbound above), which starts

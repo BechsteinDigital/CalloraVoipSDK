@@ -103,6 +103,7 @@ internal static class CallMediaParametersSrtpEnricher
             RtxPayloadType = video.RtxPayloadType,
             RemoteSupportsNack = video.RemoteSupportsNack,
             RemoteSupportsPli = video.RemoteSupportsPli,
+            ReducedSizeRtcp = video.ReducedSizeRtcp,
             LocalEndPoint = video.LocalEndPoint,
             RemoteEndPoint = video.RemoteEndPoint,
             SrtpSuite = remoteCrypto!.CryptoSuite,

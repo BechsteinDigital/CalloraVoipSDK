@@ -3,6 +3,8 @@ using CalloraVoipSdk.Core.Application.Media.Rtcp.Wire;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
 using Microsoft.Extensions.Logging;
 
+using CalloraVoipSdk.Core.Application.Media.Rtcp;
+
 namespace CalloraVoipSdk.Core.Infrastructure.Rtp.CongestionControl;
 
 /// <summary>
@@ -61,6 +63,7 @@ internal sealed class TransportCcFeedbackSender : IAsyncDisposable
     private readonly IRtcpPacketCodec _codec;
     private readonly byte _extensionId;
     private readonly uint _localSsrc;
+    private readonly bool _reducedSizeRtcp;
     private readonly Func<ReadOnlyMemory<byte>, CancellationToken, ValueTask> _sendControl;
     private readonly Func<long> _timestamp;
     private readonly long _ticksPerSecond;
@@ -94,7 +97,8 @@ internal sealed class TransportCcFeedbackSender : IAsyncDisposable
         long ticksPerSecond,
         ILogger logger,
         CancellationToken lifetime,
-        Func<TimeSpan, CancellationToken, Task>? delay = null)
+        Func<TimeSpan, CancellationToken, Task>? delay = null,
+        bool reducedSizeRtcp = true)
     {
         ArgumentNullException.ThrowIfNull(codec);
         ArgumentNullException.ThrowIfNull(sendControl);
@@ -105,6 +109,7 @@ internal sealed class TransportCcFeedbackSender : IAsyncDisposable
         _codec = codec;
         _extensionId = extensionId;
         _localSsrc = localSsrc;
+        _reducedSizeRtcp = reducedSizeRtcp;
         _sendControl = sendControl;
         _timestamp = timestamp;
         _ticksPerSecond = ticksPerSecond;
@@ -245,7 +250,8 @@ internal sealed class TransportCcFeedbackSender : IAsyncDisposable
         {
             var feedback = TransportCcFeedbackBuilder.Build(
                 batch, _localSsrc, remoteSsrc, _feedbackPacketCount, epoch, _ticksPerSecond);
-            datagram = _codec.Encode([feedback]);
+            // #162 P2-3: ohne ausgehandeltes a=rtcp-rsize darf das Feedback nicht allein reisen.
+            datagram = RtcpFeedbackFraming.Encode(_codec, feedback, _localSsrc, _reducedSizeRtcp);
         }
         catch (ArgumentException ex)
         {

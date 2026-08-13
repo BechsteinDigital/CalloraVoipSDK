@@ -65,6 +65,12 @@ internal sealed record BundledTrackConfig
     public bool RemoteSupportsPli { get; init; }
 
     /// <summary>
+    /// Whether reduced-size RTCP was negotiated for this track (<c>a=rtcp-rsize</c>, RFC 5506) —
+    /// when false, feedback travels inside a compound (#162 P2-3).
+    /// </summary>
+    public bool ReducedSizeRtcp { get; init; }
+
+    /// <summary>
     /// The negotiated RTX repair payload type (RFC 4588) for this video m-line — the <c>a=rtpmap</c> rtx
     /// format whose <c>a=fmtp … apt</c> points at <see cref="PayloadType"/>, or <see langword="null"/> when
     /// RTX was not negotiated. When present the track retains its sent packets and answers an inbound Generic

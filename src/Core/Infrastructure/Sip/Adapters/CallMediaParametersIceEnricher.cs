@@ -85,6 +85,7 @@ internal static class CallMediaParametersIceEnricher
             RtxPayloadType = video.RtxPayloadType,
             RemoteSupportsNack = video.RemoteSupportsNack,
             RemoteSupportsPli = video.RemoteSupportsPli,
+            ReducedSizeRtcp = video.ReducedSizeRtcp,
             SrtpSuite = video.SrtpSuite,
             SrtpLocalKeyParams = video.SrtpLocalKeyParams,
             SrtpRemoteKeyParams = video.SrtpRemoteKeyParams,
