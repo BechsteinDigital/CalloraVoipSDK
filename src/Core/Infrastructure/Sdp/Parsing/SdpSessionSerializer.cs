@@ -142,6 +142,8 @@ internal sealed class SdpSessionSerializer : ISdpSessionSerializer
         // RTCP (RFC 5761 / RFC 3605)
         if (media.RtcpMux)
             sb.AppendLine("a=rtcp-mux");
+        if (media.ReducedSizeRtcp)
+            sb.AppendLine("a=rtcp-rsize");
         if (media.RtcpPort.HasValue)
             sb.AppendLine($"a=rtcp:{media.RtcpPort.Value}");
 

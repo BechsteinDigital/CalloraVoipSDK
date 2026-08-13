@@ -169,6 +169,10 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             Crypto = crypto,
             Extensions = SdpExtmapNegotiation.BuildOffer(SdpExtmapNegotiation.WithBundledMid(bundle, headerExtUris)),
             RtcpMux = rtcpMux,
+            // #162 P2-3: unbedingt angeboten, wie libwebrtc (`offer->set_rtcp_reduced_size(true)`).
+            // Dieser Stack sendet Feedback als Einzelpaket; das anzubieten macht die Praxis ehrlich,
+            // statt sie stillschweigend gegen RFC 3550 §6.1 laufen zu lassen.
+            ReducedSizeRtcp = true,
             IceUfrag = ice?.Ufrag,
             IcePwd = ice?.Pwd,
             IceOptions = ice?.Options,
@@ -208,6 +212,9 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             Mid = mid,
             Msid = msid,
             RtcpMux = rtcpMux,
+            // #162 P2-3: see the audio offer — this is the path that actually emits single feedback
+            // packets (transport-cc, PLI/FIR), so offering rtcp-rsize is what makes them legal.
+            ReducedSizeRtcp = true,
             Crypto = crypto,
             IceUfrag = ice?.Ufrag,
             IcePwd = ice?.Pwd,
@@ -395,6 +402,11 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
         var ptime = ResolveAnswerPtime(offered.Ptime, offered.MaxPtime);
         var rtcpMux = offered.RtcpMux;
 
+        // #162 P2-3 (RFC 5506): die Answer übernimmt das Angebot, wie libwebrtc es tut
+        // (`answer->set_rtcp_reduced_size(offer->rtcp_reduced_size())`). Ohne Angebot bleibt es aus,
+        // und der Sendepfad muss jedes Feedback in ein Compound wickeln.
+        var reducedSizeRtcp = offered.ReducedSizeRtcp;
+
         // #160 P2-9 (RFC 8858): the peer opened no separate RTCP port, so an answer without rtcp-mux
         // would send RTCP where nothing listens. Declining the m-line is the honest response — it tells
         // the peer this side cannot serve it, instead of agreeing to something neither end can use.
@@ -458,6 +470,7 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             // the 1+1 answer path is byte-identical.
             Msid = ResolveAnswerAudioMsid(localOptions, offered.Mid),
             RtcpMux = rtcpMux,
+            ReducedSizeRtcp = reducedSizeRtcp,
             Crypto = crypto,
             Fingerprint = fingerprint,
             DtlsSetup = dtlsSetup,
@@ -701,6 +714,7 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             Mid = offered.Mid,
             Msid = localOptions.VideoMsid,
             RtcpMux = offered.RtcpMux,
+            ReducedSizeRtcp = offered.ReducedSizeRtcp,
             Crypto = videoCrypto,
             Fingerprint = fingerprint,
             DtlsSetup = dtlsSetup,
