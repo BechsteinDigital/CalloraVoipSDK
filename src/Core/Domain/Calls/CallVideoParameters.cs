@@ -47,6 +47,15 @@ public sealed class CallVideoParameters
     public bool RemoteSupportsPli { get; init; }
 
     /// <summary>
+    /// Whether reduced-size RTCP was negotiated for this m-line (<c>a=rtcp-rsize</c>, RFC 5506).
+    /// </summary>
+    /// <remarks>
+    /// #162 P2-3: when false, a feedback packet may not travel alone — it is wrapped in a compound
+    /// beginning with a receiver report (RFC 3550 §6.1).
+    /// </remarks>
+    public bool ReducedSizeRtcp { get; init; }
+
+    /// <summary>
     /// Negotiated SDES crypto-suite token for the video m-line (RFC 4568), e.g.
     /// <c>AES_CM_128_HMAC_SHA1_80</c>; <see langword="null"/> when the video stream is not
     /// SDES-keyed (plain RTP or DTLS-keyed). Mutually exclusive with DTLS keying.

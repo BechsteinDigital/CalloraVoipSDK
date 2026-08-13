@@ -58,7 +58,8 @@ internal sealed class BundledCongestionPlane : IAsyncDisposable
         BundledInboundPipeline inbound,
         IRtcpPacketCodec rtcpCodec,
         uint feedbackSenderSsrc,
-        ILoggerFactory loggerFactory)
+        ILoggerFactory loggerFactory,
+        bool reducedSizeRtcp = true)
     {
         ArgumentNullException.ThrowIfNull(outbound);
         ArgumentNullException.ThrowIfNull(inbound);
@@ -83,7 +84,9 @@ internal sealed class BundledCongestionPlane : IAsyncDisposable
             rtcpCodec, transportCcExtensionId, feedbackSenderSsrc,
             async (datagram, ct) => await outbound.SendRtcpAsync(datagram, ct).ConfigureAwait(false),
             Stopwatch.GetTimestamp, Stopwatch.Frequency,
-            loggerFactory.CreateLogger<TransportCcFeedbackSender>(), _lifetimeCts.Token);
+            loggerFactory.CreateLogger<TransportCcFeedbackSender>(), _lifetimeCts.Token,
+            // #162 P2-3: ohne ausgehandeltes a=rtcp-rsize reist das Feedback in einem Compound.
+            delay: null, reducedSizeRtcp: reducedSizeRtcp);
         inbound.RtpPacketReceived += _feedback.OnRtpPacketReceived;
     }
 

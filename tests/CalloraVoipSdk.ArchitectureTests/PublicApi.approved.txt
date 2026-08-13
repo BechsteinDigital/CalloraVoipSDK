@@ -462,6 +462,7 @@
   CalloraVoipSdk.Core.Domain.Calls.CallVideoParameters.FormatParameters : System.String { get, init }
   CalloraVoipSdk.Core.Domain.Calls.CallVideoParameters.LocalEndPoint : System.Net.IPEndPoint { get, init }
   CalloraVoipSdk.Core.Domain.Calls.CallVideoParameters.PayloadType : System.Int32 { get, init }
+  CalloraVoipSdk.Core.Domain.Calls.CallVideoParameters.ReducedSizeRtcp : System.Boolean { get, init }
   CalloraVoipSdk.Core.Domain.Calls.CallVideoParameters.RemoteEndPoint : System.Net.IPEndPoint { get, init }
   CalloraVoipSdk.Core.Domain.Calls.CallVideoParameters.RemoteSupportsNack : System.Boolean { get, init }
   CalloraVoipSdk.Core.Domain.Calls.CallVideoParameters.RemoteSupportsPli : System.Boolean { get, init }

@@ -333,6 +333,8 @@ internal static class WebRtcSessionFactory
         // never send feedback the peer did not offer. Mirrors the SIP path's CallVideoParameters derivation.
         var remoteSupportsNack = RemoteSupportsNack(remoteVideo);
         var remoteSupportsPli = RemoteSupportsPli(remoteVideo);
+        // #162 P2-3 (RFC 5506): ohne ausgehandeltes a=rtcp-rsize muss Feedback als Compound reisen.
+        var reducedSizeRtcp = remoteVideo?.ReducedSizeRtcp ?? false;
 
         // Send-side simulcast (RFC 8853) only activates for the layers the remote ANSWER confirmed as recv
         // (and only if it echoed the RID header extension, RFC 8852) — never for our offered layers alone.
@@ -362,6 +364,7 @@ internal static class WebRtcSessionFactory
                     VideoCodecName = codec.Name,
                     RemoteSupportsNack = remoteSupportsNack,
                     RemoteSupportsPli = remoteSupportsPli,
+                    ReducedSizeRtcp = reducedSizeRtcp,
                     Encodings = encodings,
                 };
             }
@@ -406,6 +409,7 @@ internal static class WebRtcSessionFactory
             VideoCodecName = codec.Name,
             RemoteSupportsNack = remoteSupportsNack,
             RemoteSupportsPli = remoteSupportsPli,
+            ReducedSizeRtcp = reducedSizeRtcp,
             RtxPayloadType = rtxPayloadType,
             RtxSsrc = rtxSsrc,
         };

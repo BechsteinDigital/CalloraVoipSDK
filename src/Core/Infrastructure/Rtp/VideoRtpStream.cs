@@ -212,7 +212,8 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
             video.RemoteSupportsNack, video.RemoteSupportsPli, _rtp.SendControlAsync,
             () => KeyFrameRequested?.Invoke(),
             OnRetransmitRequested,
-            loggerFactory.CreateLogger<VideoKeyFrameFeedback>(), _lifetimeCts.Token);
+            loggerFactory.CreateLogger<VideoKeyFrameFeedback>(), _lifetimeCts.Token,
+            video.ReducedSizeRtcp);
         _rtp.RtcpCompoundReceived += _keyFrameFeedback.OnRtcpPackets;
 
         // Transport-cc feedback (draft-holmer): when the a=extmap was negotiated for this m-line,
@@ -223,7 +224,8 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
             _transportCcSender = new TransportCcFeedbackSender(
                 new RtcpPacketCodec(), transportCcExtensionId, _rtp.LocalSsrc, _rtp.SendControlAsync,
                 Stopwatch.GetTimestamp, Stopwatch.Frequency,
-                loggerFactory.CreateLogger<TransportCcFeedbackSender>(), _lifetimeCts.Token);
+                loggerFactory.CreateLogger<TransportCcFeedbackSender>(), _lifetimeCts.Token,
+                delay: null, reducedSizeRtcp: video.ReducedSizeRtcp);
 
             // Sender side of transport-cc: record each stamped send (PacketSent, primary only) and
             // fold inbound feedback reports (ControlPacketReceived) into the congestion estimators.

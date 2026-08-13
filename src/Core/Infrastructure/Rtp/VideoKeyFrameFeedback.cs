@@ -3,6 +3,8 @@ using CalloraVoipSdk.Core.Application.Media.Rtcp.Packets;
 using CalloraVoipSdk.Core.Application.Media.Rtcp.Wire;
 using Microsoft.Extensions.Logging;
 
+using CalloraVoipSdk.Core.Application.Media.Rtcp;
+
 namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
 
 /// <summary>
@@ -20,6 +22,7 @@ internal sealed class VideoKeyFrameFeedback
 
     private readonly IRtcpPacketCodec _codec;
     private readonly uint _localSsrc;
+    private readonly bool _reducedSizeRtcp;
     private readonly bool _remoteSupportsNack;
     private readonly bool _remoteSupportsPli;
     private readonly Func<ReadOnlyMemory<byte>, CancellationToken, ValueTask> _sendControl;
@@ -47,7 +50,8 @@ internal sealed class VideoKeyFrameFeedback
         Action onKeyFrameRequested,
         Action<IReadOnlyList<ushort>> onRetransmitRequested,
         ILogger logger,
-        CancellationToken lifetime)
+        CancellationToken lifetime,
+        bool reducedSizeRtcp = true)
     {
         ArgumentNullException.ThrowIfNull(codec);
         ArgumentNullException.ThrowIfNull(sendControl);
@@ -56,6 +60,7 @@ internal sealed class VideoKeyFrameFeedback
         ArgumentNullException.ThrowIfNull(logger);
         _codec = codec;
         _localSsrc = localSsrc;
+        _reducedSizeRtcp = reducedSizeRtcp;
         _remoteSupportsNack = remoteSupportsNack;
         _remoteSupportsPli = remoteSupportsPli;
         _sendControl = sendControl;
@@ -189,7 +194,9 @@ internal sealed class VideoKeyFrameFeedback
     {
         try
         {
-            await _sendControl(_codec.Encode([feedback]), cancellationToken).ConfigureAwait(false);
+            // #162 P2-3: ohne ausgehandeltes a=rtcp-rsize wird das Feedback in ein Compound gewickelt.
+            var datagram = RtcpFeedbackFraming.Encode(_codec, feedback, _localSsrc, _reducedSizeRtcp);
+            await _sendControl(datagram, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {

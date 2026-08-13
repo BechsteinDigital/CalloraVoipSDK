@@ -98,6 +98,7 @@ internal static class BundledMediaSessionBuilder
                 VideoCodecName = video.CodecName,
                 RemoteSupportsNack = video.RemoteSupportsNack,
                 RemoteSupportsPli = video.RemoteSupportsPli,
+            ReducedSizeRtcp = video.ReducedSizeRtcp,
             };
         }
 

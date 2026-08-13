@@ -1,6 +1,8 @@
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Session;
 using Microsoft.Extensions.Logging;
 
+using CalloraVoipSdk.Core.Application.Media.Rtcp.Wire;
+
 namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
 
 /// <summary>
@@ -99,6 +101,34 @@ internal static class BundledMediaSessionComposition
     /// per-encoding, and RTX repair) are bundle-wide-distinct — the session factory owns that allocation
     /// (RFC 3550 §8.1).
     /// </summary>
+    /// <summary>
+    /// Baut die Transport-CC-Ebene des Bundles (draft-holmer), oder <see langword="null"/>, wenn die
+    /// <c>a=extmap</c> nicht ausgehandelt wurde und der Transport folglich keine transport-weite
+    /// Sequenz stempelt.
+    /// </summary>
+    /// <remarks>
+    /// #162 P2-3: Ein Bundle hat einen Transport, also auch eine Entscheidung über die RTCP-Form.
+    /// Sobald auch nur eine Sektion kein <c>a=rtcp-rsize</c> ausgehandelt hat, sendet die Ebene
+    /// Compounds — im Zweifel die Form, die jeder Empfänger annehmen muss (RFC 3550 §6.1).
+    /// </remarks>
+    public static BundledCongestionPlane? BuildCongestionPlane(
+        BundledMediaSessionOptions options,
+        BundledOutboundPipeline outbound,
+        BundledInboundPipeline inbound,
+        IRtcpPacketCodec rtcpCodec,
+        ILoggerFactory loggerFactory)
+    {
+        if (options.TransportWideCcExtensionId is not { } transportCcExtensionId)
+            return null;
+
+        var reducedSizeRtcp = options.VideoTracks.Count > 0
+                              && options.VideoTracks.All(v => v.ReducedSizeRtcp);
+
+        return new BundledCongestionPlane(
+            transportCcExtensionId, outbound, inbound, rtcpCodec, options.Audio.Ssrc, loggerFactory,
+            reducedSizeRtcp);
+    }
+
     public static BundledVideoTrack BuildVideoTrack(
         BundledMediaSessionOptions options, BundledTrackConfig video, BundledOutboundPipeline outbound, ILoggerFactory loggerFactory)
     {
