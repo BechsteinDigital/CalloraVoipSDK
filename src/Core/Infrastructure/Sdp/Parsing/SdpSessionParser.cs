@@ -83,6 +83,9 @@ internal sealed class SdpSessionParser : ISdpSessionParser
         var hasSessionName = false;
         var hasTiming = false;
 
+        // #160 P2-15: one guard for the session level; each media section carries its own.
+        var sessionSingletons = new SdpSingletonGuard();
+
         var media = new List<SdpMediaDescription>();
         MediaBuilder? current = null;
 
@@ -146,6 +149,7 @@ internal sealed class SdpSessionParser : ISdpSessionParser
                     ParseAttribute(
                         value,
                         current,
+                        sessionSingletons,
                         ref sessionDirection,
                         ref sessionGroup,
                         ref sessionIceUfrag,
@@ -197,6 +201,7 @@ internal sealed class SdpSessionParser : ISdpSessionParser
     private void ParseAttribute(
         string value,
         MediaBuilder? current,
+        SdpSingletonGuard sessionSingletons,
         ref SdpMediaDirection sessionDirection,
         ref string? sessionGroup,
         ref string? sessionIceUfrag,
@@ -210,16 +215,20 @@ internal sealed class SdpSessionParser : ISdpSessionParser
         var name = colonIndex > 0 ? value[..colonIndex] : value;
         var attrValue = colonIndex > 0 ? value[(colonIndex + 1)..] : string.Empty;
 
+        // #160 P2-15: the at-most-once attributes are guarded per level, so the meaning of the
+        // description stops depending on the order the peer wrote its lines in.
+        var singletons = current?.Singletons ?? sessionSingletons;
+
         switch (name.ToLowerInvariant())
         {
-            // --- direction ---
+            // --- direction (RFC 8866 §6.7: at most one per level) ---
             case "sendrecv":
             case "sendonly":
             case "recvonly":
             case "inactive":
             {
                 var dir = ParseDirectionToken(name);
-                if (dir.HasValue)
+                if (dir.HasValue && singletons.Accept("direction", name.ToLowerInvariant()))
                 {
                     if (current is null)
                         sessionDirection = dir.Value;
@@ -304,10 +313,15 @@ internal sealed class SdpSessionParser : ISdpSessionParser
                 current.RtcpPort = rtcpPort;
                 break;
 
-            // --- MID (RFC 5888) ---
+            // --- MID (RFC 5888) — exactly one per m-line; it is the 1:1 handle offer and answer are
+            // matched by (RFC 8829 §5.3.1), so a section with two of them has no identity at all. ---
             case "mid" when current is not null && !string.IsNullOrWhiteSpace(attrValue):
-                current.Mid = attrValue.Trim();
+            {
+                var mid = attrValue.Trim();
+                if (singletons.Accept("mid", mid))
+                    current.Mid = mid;
                 break;
+            }
 
             // --- MSID (RFC 8830): MediaStream / track identity ---
             case "msid" when current is not null:
@@ -337,19 +351,35 @@ internal sealed class SdpSessionParser : ISdpSessionParser
                 break;
 
             // --- ICE credentials (RFC 8839) ---
+            // At most one ufrag/pwd per level (RFC 8839 §5.4). They are the ICE short-term credential:
+            // two different values decide which STUN checks authenticate, so a contradiction is fatal
+            // rather than resolvable.
             case "ice-ufrag":
-                if (current is null)
-                    sessionIceUfrag = attrValue.Trim();
-                else
-                    current.IceUfrag = attrValue.Trim();
+            {
+                var ufrag = attrValue.Trim();
+                if (singletons.Accept("ice-ufrag", ufrag))
+                {
+                    if (current is null)
+                        sessionIceUfrag = ufrag;
+                    else
+                        current.IceUfrag = ufrag;
+                }
                 break;
+            }
 
             case "ice-pwd":
-                if (current is null)
-                    sessionIcePwd = attrValue.Trim();
-                else
-                    current.IcePwd = attrValue.Trim();
+            {
+                var pwd = attrValue.Trim();
+                // The value is compared but never logged or surfaced — it is a credential (K5).
+                if (singletons.Accept("ice-pwd", pwd))
+                {
+                    if (current is null)
+                        sessionIcePwd = pwd;
+                    else
+                        current.IcePwd = pwd;
+                }
                 break;
+            }
 
             case "ice-options":
                 if (current is null)
@@ -390,15 +420,21 @@ internal sealed class SdpSessionParser : ISdpSessionParser
             }
 
             // --- DTLS fingerprint (RFC 8122 / RFC 5763) ---
+            // Several fingerprint lines are legal when they name DIFFERENT hash functions — the same
+            // certificate measured more than one way (RFC 8122 §5). Two lines for the SAME function with
+            // different digests is a contradiction, and it is the one that matters: the fingerprint is
+            // the only thing authenticating the DTLS peer. Across different functions the FIRST is kept,
+            // so which certificate we will accept does not depend on line order either.
             case "fingerprint":
             {
                 var fp = SdpFingerprint.TryParse(attrValue);
-                if (fp is not null)
+                if (fp is not null
+                    && singletons.Accept($"fingerprint:{fp.Algorithm.ToLowerInvariant()}", fp.Value))
                 {
                     if (current is null)
-                        sessionFingerprint = fp;
+                        sessionFingerprint ??= fp;
                     else
-                        current.Fingerprint = fp;
+                        current.Fingerprint ??= fp;
                 }
                 break;
             }
@@ -409,11 +445,19 @@ internal sealed class SdpSessionParser : ISdpSessionParser
             // active DTLS m-line whose role nobody had actually agreed. Dropping it leaves the role unset,
             // which the DTLS layer already fails closed on.
             case "setup" when IsKnownSetupRole(attrValue):
-                if (current is null)
-                    sessionDtlsSetup = attrValue.Trim();
-                else
-                    current.DtlsSetup = attrValue.Trim();
+            {
+                // At most one per level (RFC 4145 §4). "passive" then "active" decides who runs the
+                // DTLS handshake as client — a question two peers must not answer differently.
+                var role = attrValue.Trim();
+                if (singletons.Accept("setup", role.ToLowerInvariant()))
+                {
+                    if (current is null)
+                        sessionDtlsSetup = role;
+                    else
+                        current.DtlsSetup = role;
+                }
                 break;
+            }
         }
     }
 

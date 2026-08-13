@@ -13,8 +13,16 @@ internal static class SdpSecurityInspector
     private static readonly ISdpSessionParser Parser = new SdpSessionParser();
 
     /// <summary>
-    /// Parses SDP and returns SRTP signal state for the first active audio m-line.
+    /// Parses SDP and returns the SRTP signal state across <em>all</em> active audio m-lines.
     /// </summary>
+    /// <remarks>
+    /// #160 P2-17: this used to inspect only the first active audio section, which made the answer a
+    /// property of m-line order rather than of the offer. Under BUNDLE or any multi-track offer a
+    /// second audio m-line on a plain <c>RTP/AVP</c> profile went unseen, so an offer whose first
+    /// section was <c>RTP/SAVP</c> reported "SRTP signalled" while carrying an unencrypted audio
+    /// stream beside it — enough to walk past an <c>SrtpPolicy.Required</c> guard.
+    /// The signal is now conjunctive: every active audio section must signal SRTP.
+    /// </remarks>
     public static bool TryInspectAudioSecurity(
         string? sdp,
         out bool isSrtpSignaled,
@@ -30,15 +38,20 @@ internal static class SdpSecurityInspector
         try
         {
             var parsed = Parser.Parse(sdp);
-            var audio = parsed.Media.FirstOrDefault(
-                m => m.MediaType.Equals("audio", StringComparison.OrdinalIgnoreCase)
-                     && !m.Disabled
-                     && m.Port > 0);
-            if (audio is null)
+            var audioSections = parsed.Media
+                .Where(m => m.MediaType.Equals("audio", StringComparison.OrdinalIgnoreCase)
+                            && !m.Disabled
+                            && m.Port > 0)
+                .ToArray();
+            if (audioSections.Length == 0)
                 return false;
 
-            mediaProfile = audio.Profile;
-            isSrtpSignaled = IsSrtpSignaled(parsed, audio);
+            // The profile reported back is the one that carries the decision: the first section that
+            // does NOT signal SRTP, so telemetry and the 488 reason name the weak leg rather than a
+            // secure sibling that happened to come first.
+            var firstInsecure = audioSections.FirstOrDefault(m => !IsSrtpSignaled(parsed, m));
+            isSrtpSignaled = firstInsecure is null;
+            mediaProfile = (firstInsecure ?? audioSections[0]).Profile;
             return true;
         }
         catch (Exception ex)
