@@ -309,6 +309,14 @@ internal sealed class SdpSessionParser : ISdpSessionParser
                 current.RtcpMux = true;
                 break;
 
+            // RFC 8858: the offerer opened no separate RTCP port. Read as a mux request in its own
+            // right — §4 requires it to accompany a=rtcp-mux, and an offer that carries only this one
+            // is unambiguous about what it wants (#160 P2-9).
+            case "rtcp-mux-only" when current is not null:
+                current.RtcpMuxOnly = true;
+                current.RtcpMux = true;
+                break;
+
             case "rtcp" when current is not null && int.TryParse(attrValue.Split(' ')[0], out var rtcpPort):
                 current.RtcpPort = rtcpPort;
                 break;
@@ -354,9 +362,24 @@ internal sealed class SdpSessionParser : ISdpSessionParser
             // At most one ufrag/pwd per level (RFC 8839 §5.4). They are the ICE short-term credential:
             // two different values decide which STUN checks authenticate, so a contradiction is fatal
             // rather than resolvable.
+            // #160 P2-14: the credential is validated against the grammar (RFC 8839 §5.4), not just
+            // stored. A ufrag outside 4..256 ice-chars produces STUN checks whose USERNAME can never
+            // match what the peer computes — every check fails and the call never connects, with
+            // nothing pointing back at the SDP. Rejecting the description is deliberate: merely
+            // dropping the attribute would leave an m-line that looks ICE-less and silently take the
+            // non-ICE path, which is a downgrade rather than a failure.
+            // #160 P2-14: the credential is validated, not merely stored. A ufrag outside the length
+            // bounds produces STUN checks whose USERNAME can never match what the peer computes — every
+            // check fails and the call never connects, with nothing pointing back at the SDP.
+            // Rejecting the description is deliberate: dropping only the attribute would leave an
+            // m-line that looks ICE-less and silently take the non-ICE path, a downgrade rather than a
+            // failure. libwebrtc rejects the description here as well; SIPSorcery does not look at all.
             case "ice-ufrag":
             {
                 var ufrag = attrValue.Trim();
+                if (!SdpIceGrammar.IsValidUfrag(ufrag))
+                    throw new FormatException("SDP carries an unusable ice-ufrag (RFC 8839 §5.4).");
+
                 if (singletons.Accept("ice-ufrag", ufrag))
                 {
                     if (current is null)
@@ -370,7 +393,11 @@ internal sealed class SdpSessionParser : ISdpSessionParser
             case "ice-pwd":
             {
                 var pwd = attrValue.Trim();
-                // The value is compared but never logged or surfaced — it is a credential (K5).
+                // The 22-character floor is what gives the short-term credential its entropy; a shorter
+                // one is guessable, not merely unusual. Neither the value nor its length is logged (K5).
+                if (!SdpIceGrammar.IsValidPassword(pwd))
+                    throw new FormatException("SDP carries an ice-pwd outside the RFC 8839 §5.4 grammar.");
+
                 if (singletons.Accept("ice-pwd", pwd))
                 {
                     if (current is null)

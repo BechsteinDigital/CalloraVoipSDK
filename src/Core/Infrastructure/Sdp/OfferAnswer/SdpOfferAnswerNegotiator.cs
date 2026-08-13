@@ -395,6 +395,14 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
         var ptime = ResolveAnswerPtime(offered.Ptime, offered.MaxPtime);
         var rtcpMux = offered.RtcpMux;
 
+        // #160 P2-9 (RFC 8858): the peer opened no separate RTCP port, so an answer without rtcp-mux
+        // would send RTCP where nothing listens. Declining the m-line is the honest response — it tells
+        // the peer this side cannot serve it, instead of agreeing to something neither end can use.
+        // Today this cannot trigger (rtcpMux mirrors the offer), which is exactly why it is worth
+        // stating: the day that mirroring gains a condition, the contract is already written down.
+        if (offered.RtcpMuxOnly && !rtcpMux)
+            return null;
+
         // SDES crypto (RFC 4568 §5.1.3): answer the first supported suite with our OWN key. Ignored on a
         // DTLS-keyed profile (fingerprint-keyed; any a=crypto on UDP/TLS/* must be ignored, RFC 5763 / HARD-S1).
         IReadOnlyList<SdpCryptoAttribute> crypto = [];

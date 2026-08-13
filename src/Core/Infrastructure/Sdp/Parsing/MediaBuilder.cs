@@ -35,6 +35,9 @@ internal sealed class MediaBuilder
     public int? Ptime { get; set; }
     public int? MaxPtime { get; set; }
     public bool RtcpMux { get; set; }
+
+    /// <summary>Peer accepts only multiplexed RTCP (<c>a=rtcp-mux-only</c>, RFC 8858) — #160 P2-9.</summary>
+    public bool RtcpMuxOnly { get; set; }
     public int? RtcpPort { get; set; }
     public string? Mid { get; set; }
     public SdpMsid? Msid { get; set; }
@@ -71,6 +74,7 @@ internal sealed class MediaBuilder
             Ptime = Ptime,
             MaxPtime = MaxPtime,
             RtcpMux = RtcpMux,
+            RtcpMuxOnly = RtcpMuxOnly,
             RtcpPort = RtcpPort,
             Mid = Mid,
             Msid = Msid,

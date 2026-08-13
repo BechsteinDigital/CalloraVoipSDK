@@ -20,7 +20,7 @@ public sealed class IceMediaAttachmentTriggeredCheckTests
 {
     private const string LocalUfrag = "localU";
     private const string PeerUfrag = "peerU";
-    private const string LocalPassword = "localP";
+    private const string LocalPassword = "localP0123456789abcdef";
     private static readonly IPEndPoint NominatedRemote = new(IPAddress.Loopback, 40000);
     private static readonly StunMessageCodec Codec = new();
 
@@ -36,7 +36,7 @@ public sealed class IceMediaAttachmentTriggeredCheckTests
         LocalIceUfrag = LocalUfrag,
         LocalIcePwd = LocalPassword,
         RemoteIceUfrag = PeerUfrag,
-        RemoteIcePwd = "peerP",
+        RemoteIcePwd = "peerP0123456789abcdefg",
     };
 
     // A valid inbound check targeting us: USERNAME "{our}:{their}", ICE-CONTROLLED (no conflict with

@@ -19,7 +19,7 @@ public sealed class IceConsentCheckBuilderTests
         var codec = new StunMessageCodec();
 
         var (datagram, transactionId) = IceConsentCheckBuilder.Build(
-            codec, localUfrag: "localU", remoteUfrag: "peerU", remotePassword: "peerPwd",
+            codec, localUfrag: "localU", remoteUfrag: "peerU", remotePassword: "peerPwd0123456789abcde",
             priority: 42u, controlling: true, tieBreaker: 7);
 
         var message = codec.Decode(datagram);
@@ -30,7 +30,7 @@ public sealed class IceConsentCheckBuilderTests
         Assert.Equal("peerU:localU", message.Attributes.OfType<UsernameAttribute>().Single().Value);
         Assert.Equal(42u, message.Attributes.OfType<PriorityAttribute>().Single().Value);
         Assert.Equal(7ul, message.Attributes.OfType<IceControllingAttribute>().Single().TieBreaker);
-        Assert.True(codec.VerifyIntegrity(datagram, StunKeyDerivation.ShortTermKey("peerPwd")));
+        Assert.True(codec.VerifyIntegrity(datagram, StunKeyDerivation.ShortTermKey("peerPwd0123456789abcde")));
         Assert.True(codec.VerifyFingerprint(datagram));
     }
 
@@ -40,7 +40,7 @@ public sealed class IceConsentCheckBuilderTests
         var codec = new StunMessageCodec();
 
         var (datagram, _) = IceConsentCheckBuilder.Build(
-            codec, "localU", "peerU", "peerPwd", 1u, controlling: false, tieBreaker: 3);
+            codec, "localU", "peerU", "peerPwd0123456789abcde", 1u, controlling: false, tieBreaker: 3);
 
         var message = codec.Decode(datagram)!;
         Assert.Equal(3ul, message.Attributes.OfType<IceControlledAttribute>().Single().TieBreaker);

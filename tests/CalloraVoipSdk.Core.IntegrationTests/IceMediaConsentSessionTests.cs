@@ -40,7 +40,7 @@ public sealed class IceMediaConsentSessionTests
 
         session = new IceMediaConsentSession(
             new StunMessageCodec(), SendRaw, Remote,
-            localUfrag: "localU", remoteUfrag: "peerU", remotePassword: "peerPwd",
+            localUfrag: "localU", remoteUfrag: "peerU", remotePassword: "peerPwd0123456789abcde",
             priority: 1u, controlling: true, tieBreaker: 1,
             onConsentLost: () => lost = true,
             loggerFactory: NullLoggerFactory.Instance,
@@ -69,7 +69,7 @@ public sealed class IceMediaConsentSessionTests
             new StunMessageCodec(),
             sendRaw: (_, _, _) => { Interlocked.Increment(ref checks); return ValueTask.CompletedTask; },
             Remote,
-            localUfrag: "localU", remoteUfrag: "peerU", remotePassword: "peerPwd",
+            localUfrag: "localU", remoteUfrag: "peerU", remotePassword: "peerPwd0123456789abcde",
             priority: 1u, controlling: true, tieBreaker: 1,
             onConsentLost: () => lost.TrySetResult(),
             loggerFactory: NullLoggerFactory.Instance,
@@ -111,7 +111,7 @@ public sealed class IceMediaConsentSessionTests
 
         session = new IceMediaConsentSession(
             new StunMessageCodec(), SendRaw, Remote,
-            localUfrag: "localU", remoteUfrag: "peerU", remotePassword: "peerPwd",
+            localUfrag: "localU", remoteUfrag: "peerU", remotePassword: "peerPwd0123456789abcde",
             priority: 1u, controlling: true, tieBreaker: 1,
             onConsentLost: () => { },
             loggerFactory: NullLoggerFactory.Instance,
@@ -149,7 +149,7 @@ public sealed class IceMediaConsentSessionTests
             new StunMessageCodec(),
             sendRaw: (_, _, _) => ValueTask.CompletedTask, // direct socket must not be used
             Remote,
-            localUfrag: "localU", remoteUfrag: "peerU", remotePassword: "peerPwd",
+            localUfrag: "localU", remoteUfrag: "peerU", remotePassword: "peerPwd0123456789abcde",
             priority: 1u, controlling: true, tieBreaker: 1,
             onConsentLost: () => { },
             loggerFactory: NullLoggerFactory.Instance,
@@ -195,7 +195,7 @@ public sealed class IceMediaConsentSessionTests
 
         session = new IceMediaConsentSession(
             new StunMessageCodec(), DirectSend, Remote,
-            localUfrag: "localU", remoteUfrag: "peerU", remotePassword: "peerPwd",
+            localUfrag: "localU", remoteUfrag: "peerU", remotePassword: "peerPwd0123456789abcde",
             priority: 1u, controlling: true, tieBreaker: 1,
             onConsentLost: () => { },
             loggerFactory: NullLoggerFactory.Instance,

@@ -133,7 +133,7 @@ public sealed class WebRtcPeerLoopbackTests
                     Fingerprint = counterpartCert.Fingerprint.Value,
                     Setup = "actpass",
                 },
-                Ice = new SdpIceParameters { Ufrag = "cpU", Pwd = "cppassword1234567890" },
+                Ice = new SdpIceParameters { Ufrag = "cpUa", Pwd = "cppassword123456789001" },
             }));
 
     private static BundledMediaSession BuildCounterpart(

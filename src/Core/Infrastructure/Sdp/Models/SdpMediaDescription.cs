@@ -67,6 +67,18 @@ internal sealed class SdpMediaDescription
     // RTCP
     // -------------------------------------------------------------------------
 
+    /// <summary>
+    /// Whether the peer will accept <em>only</em> multiplexed RTCP (<c>a=rtcp-mux-only</c>, RFC 8858).
+    /// </summary>
+    /// <remarks>
+    /// #160 P2-9: previously not parsed at all. It says the offerer opened no separate RTCP port, so an
+    /// answer without <c>a=rtcp-mux</c> sends RTCP where nothing is listening. RFC 8858 §4 requires the
+    /// attribute to accompany <c>a=rtcp-mux</c>; this stack also treats it as a mux request on its own,
+    /// since an offer carrying only <c>rtcp-mux-only</c> is unambiguous about what it wants and
+    /// answering it non-muxed is the one case that actually breaks.
+    /// </remarks>
+    public bool RtcpMuxOnly { get; init; }
+
     /// <summary>Whether RTP and RTCP are multiplexed on one port (<c>a=rtcp-mux</c>, RFC 5761).</summary>
     public bool RtcpMux { get; init; }
 

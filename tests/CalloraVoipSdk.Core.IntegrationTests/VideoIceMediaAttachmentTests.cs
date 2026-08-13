@@ -21,7 +21,7 @@ public sealed class VideoIceMediaAttachmentTests
 {
     private const string LocalUfrag = "localU";
     private const string PeerUfrag = "peerU";
-    private const string LocalPassword = "localP";
+    private const string LocalPassword = "localP0123456789abcdef";
     private static readonly IPEndPoint VideoRemote = new(IPAddress.Loopback, 42000);
     private static readonly StunMessageCodec Codec = new();
 
@@ -37,7 +37,7 @@ public sealed class VideoIceMediaAttachmentTests
         LocalIceUfrag = LocalUfrag,
         LocalIcePwd = LocalPassword,
         RemoteIceUfrag = PeerUfrag,
-        RemoteIcePwd = "peerP",
+        RemoteIcePwd = "peerP0123456789abcdefg",
     };
 
     [Fact]
@@ -51,7 +51,7 @@ public sealed class VideoIceMediaAttachmentTests
         Assert.Equal(LocalUfrag, view.LocalIceUfrag);
         Assert.Equal(LocalPassword, view.LocalIcePwd);
         Assert.Equal(PeerUfrag, view.RemoteIceUfrag);
-        Assert.Equal("peerP", view.RemoteIcePwd);
+        Assert.Equal("peerP0123456789abcdefg", view.RemoteIcePwd);
     }
 
     [Fact]
