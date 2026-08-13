@@ -79,6 +79,16 @@ internal sealed class SdpMediaDescription
     /// </remarks>
     public bool RtcpMuxOnly { get; init; }
 
+    /// <summary>
+    /// Whether reduced-size RTCP is negotiated for this section (<c>a=rtcp-rsize</c>, RFC 5506).
+    /// </summary>
+    /// <remarks>
+    /// #162 P2-3: without this, a feedback packet may not travel alone — RFC 3550 §6.1 requires every
+    /// RTCP datagram to be a compound starting with SR/RR and carrying a CNAME. The attribute is what
+    /// permits the single-packet form this stack already emits for transport-cc and keyframe feedback.
+    /// </remarks>
+    public bool ReducedSizeRtcp { get; init; }
+
     /// <summary>Whether RTP and RTCP are multiplexed on one port (<c>a=rtcp-mux</c>, RFC 5761).</summary>
     public bool RtcpMux { get; init; }
 

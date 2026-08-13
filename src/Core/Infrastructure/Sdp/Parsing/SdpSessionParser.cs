@@ -325,6 +325,12 @@ internal sealed class SdpSessionParser : ISdpSessionParser
             // RFC 8858: the offerer opened no separate RTCP port. Read as a mux request in its own
             // right — §4 requires it to accompany a=rtcp-mux, and an offer that carries only this one
             // is unambiguous about what it wants (#160 P2-9).
+            // RFC 5506: permits an RTCP datagram that is not a full compound. Without it every
+            // feedback packet has to be wrapped in SR/RR + SDES (RFC 3550 §6.1) — #162 P2-3.
+            case "rtcp-rsize" when current is not null:
+                current.ReducedSizeRtcp = true;
+                break;
+
             case "rtcp-mux-only" when current is not null:
                 current.RtcpMuxOnly = true;
                 current.RtcpMux = true;
