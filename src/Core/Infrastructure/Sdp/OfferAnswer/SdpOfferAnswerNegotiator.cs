@@ -148,13 +148,6 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
     private static string ResolveOfferProfile(SdpDtlsParameters? dtls, bool hasSdesCrypto) =>
         dtls is not null ? "UDP/TLS/RTP/SAVPF" : hasSdesCrypto ? "RTP/SAVP" : "RTP/AVP";
 
-    // The MID SDES header extension (RFC 9143 / RFC 8843 §9) rides every bundled m-line so the peer stamps
-    // each packet's MID on the shared transport. It carries the SAME extmap id on every m-line (the
-    // demultiplexer reads one id) — offered first so BuildOfferExtmaps assigns it id 1. Outside BUNDLE the
-    // extmaps are unchanged.
-    private static IReadOnlyList<string> BundledOfferExtmapUris(bool bundle, IReadOnlyList<string> uris) =>
-        bundle ? [RtpHeaderExtensionUris.Mid, .. uris] : uris;
-
     // Builds one audio offer m-line: the given codecs plus telephone-event fmtp, per-m-line SDES crypto, the
     // negotiated header extensions (MID first under BUNDLE), and the session-level DTLS/ICE. Shared by the
     // fixed single-audio path and the multi-track path so both emit byte-identical audio m-lines.
@@ -174,7 +167,7 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             Mid = mid,
             Msid = msid,
             Crypto = crypto,
-            Extensions = BuildOfferExtmaps(BundledOfferExtmapUris(bundle, headerExtUris)),
+            Extensions = SdpExtmapNegotiation.BuildOffer(SdpExtmapNegotiation.WithBundledMid(bundle, headerExtUris)),
             RtcpMux = rtcpMux,
             IceUfrag = ice?.Ufrag,
             IcePwd = ice?.Pwd,
@@ -199,8 +192,8 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
     {
         var (rtxCodecs, rtxFmtp) = VideoCodecCatalog.BuildRtx(codecs);
         var videoExtmapUris = simulcastSendRids.Count > 0
-            ? BundledOfferExtmapUris(bundle, [RtpHeaderExtensionUris.Rid, .. headerExtUris])
-            : BundledOfferExtmapUris(bundle, headerExtUris);
+            ? SdpExtmapNegotiation.WithBundledMid(bundle, [RtpHeaderExtensionUris.Rid, .. headerExtUris])
+            : SdpExtmapNegotiation.WithBundledMid(bundle, headerExtUris);
         var (rids, simulcastDeclaration) = BuildSimulcast(simulcastSendRids, codecs);
 
         return new SdpMediaDescription
@@ -220,7 +213,7 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             IcePwd = ice?.Pwd,
             IceOptions = ice?.Options,
             Candidates = candidates,
-            Extensions = BuildOfferExtmaps(videoExtmapUris),
+            Extensions = SdpExtmapNegotiation.BuildOffer(videoExtmapUris),
             Rids = rids,
             Simulcast = simulcastDeclaration,
             Fingerprint = dtls is not null
@@ -399,7 +392,7 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
         // offered (RFC 3264 §6.1 / RFC 5761 §5.1.1 — the answer cannot enable mux the offer did not advertise).
         var acceptedPts = new HashSet<int>(negotiated.Select(c => c.PayloadType));
         var carriedFmtp = offered.Fmtp.Where(f => acceptedPts.Contains(f.PayloadType)).ToArray();
-        var ptime = offered.Ptime;
+        var ptime = ResolveAnswerPtime(offered.Ptime, offered.MaxPtime);
         var rtcpMux = offered.RtcpMux;
 
         // SDES crypto (RFC 4568 §5.1.3): answer the first supported suite with our OWN key. Ignored on a
@@ -465,7 +458,7 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             IceOptions = ice?.Options,
             Candidates = ice?.Candidates ?? [],
             // Echo the MID SDES extension (RFC 9143) when the BUNDLE offer advertised it (no-op otherwise).
-            Extensions = BuildAnswerExtmaps(offered.Extensions, WithMidExtension([]))
+            Extensions = SdpExtmapNegotiation.BuildAnswer(offered.Extensions, SdpExtmapNegotiation.WithMid([]))
         };
 
         return new AudioAnswerNegotiation(media, negotiated, rtcpMux, remoteFp, remoteSetup, remoteCrypto, localCrypto);
@@ -682,6 +675,12 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
         var (rtxCodecs, rtxFmtp) = VideoCodecCatalog.NegotiateRtx(offered, acceptedPts);
         var carriedFmtp = offered.Fmtp.Where(f => acceptedPts.Contains(f.PayloadType));
 
+        // #160 P2-7: feedback is answered per payload type, so the set has to include the RTX repair
+        // formats we just accepted — a peer may offer feedback for those too.
+        var feedbackPts = new HashSet<int>(acceptedPts);
+        foreach (var rtx in rtxCodecs)
+            feedbackPts.Add(rtx.PayloadType);
+
         return new SdpMediaDescription
         {
             MediaType = "video",
@@ -690,7 +689,7 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             Codecs = [.. negotiated, .. rtxCodecs],
             Direction = ResolveAnswerDirection(offered.Direction, answerDirection),
             Fmtp = [.. carriedFmtp, .. rtxFmtp],
-            RtcpFeedback = VideoCodecCatalog.NegotiateFeedback(offered.RtcpFeedback),
+            RtcpFeedback = VideoCodecCatalog.NegotiateFeedback(offered.RtcpFeedback, feedbackPts),
             Mid = offered.Mid,
             Msid = localOptions.VideoMsid,
             RtcpMux = offered.RtcpMux,
@@ -705,24 +704,8 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             Candidates = video.Candidates,
             // RTP header extensions (RFC 8285 §5): echo the offered id for each URI we support,
             // dropping the rest — the answer confirms the negotiated id↔uri mapping.
-            Extensions = BuildAnswerExtmaps(offered.Extensions, WithMidExtension(video.HeaderExtensionUris))
+            Extensions = SdpExtmapNegotiation.BuildAnswer(offered.Extensions, SdpExtmapNegotiation.WithMid(video.HeaderExtensionUris))
         };
-    }
-
-    // RFC 8285 §4.2: the one-byte header form uses ids 1..14 (0 is padding, 15 is reserved).
-    private const int OneByteMaxExtensionId = 14;
-
-    // Offer: assign sequential one-byte ids to the supported extension URIs (RFC 8285 §5). Only the
-    // first 14 fit the one-byte form; any beyond that are dropped (the SDK's supported set is small).
-    private static IReadOnlyList<SdpExtmap> BuildOfferExtmaps(IReadOnlyList<string> uris)
-    {
-        if (uris.Count == 0)
-            return [];
-
-        var extmaps = new List<SdpExtmap>(Math.Min(uris.Count, OneByteMaxExtensionId));
-        for (var i = 0; i < uris.Count && i < OneByteMaxExtensionId; i++)
-            extmaps.Add(new SdpExtmap { Id = i + 1, Uri = uris[i] });
-        return extmaps;
     }
 
     // Send-side simulcast (RFC 8853): one a=rid per layer with direction "send", restricted to the primary
@@ -741,31 +724,34 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
         return (rids, new SdpSimulcast { Send = sendRids });
     }
 
-    // The answer echoes the MID SDES extension (RFC 9143) whenever the offer advertised it: adding the
-    // MID URI to the supported set makes BuildAnswerExtmaps mirror the offered id (RFC 8843 §9 — the
-    // same id the offer used on every m-line). A no-op when the offer carried no MID extension (outside
-    // BUNDLE), so non-bundle answers are unchanged.
-    private static IReadOnlyList<string> WithMidExtension(IReadOnlyList<string> supportedUris) =>
-        [RtpHeaderExtensionUris.Mid, .. supportedUris];
+    // The packetisation interval this stack actually sends at, and the range it can work with. 20 ms is
+    // the default every audio path here uses (see SdpUtilities), and 10..120 ms brackets what is usable:
+    // below 10 ms the header overhead dwarfs the payload, above 120 ms a G.711 frame no longer fits a
+    // normal MTU.
+    private const int DefaultPtimeMs = 20;
+    private const int MinPtimeMs = 10;
+    private const int MaxPtimeMs = 120;
 
-    // Answer: for each offered extmap whose URI we support, echo it with the offered id (RFC 8285
-    // §5 — the offerer owns the id assignment); unsupported extensions are dropped. Only one-byte
-    // ids are echoed, since that is the form the SDK reads/writes.
-    private static IReadOnlyList<SdpExtmap> BuildAnswerExtmaps(
-        IReadOnlyList<SdpExtmap> offered, IReadOnlyList<string> supportedUris)
+    /// <summary>
+    /// Resolves the <c>a=ptime</c> to answer with (RFC 4566 §6, RFC 3264 §6.1).
+    /// </summary>
+    /// <remarks>
+    /// #160 P2-16: the offered value was mirrored back unchecked, so <c>a=ptime:500</c> was confirmed
+    /// as agreed while the sender kept packetising at 20 ms — and the value is not decorative, it feeds
+    /// the media parameters. An answer states what this side will actually do: the peer's value when we
+    /// can honour it, our own when we cannot.
+    /// </remarks>
+    private static int? ResolveAnswerPtime(int? offeredPtime, int? offeredMaxPtime)
     {
-        if (offered.Count == 0 || supportedUris.Count == 0)
-            return [];
+        if (offeredPtime is not { } requested)
+            return null;   // nothing requested — stay silent and run at the default
 
-        var extmaps = new List<SdpExtmap>();
-        foreach (var extmap in offered)
-        {
-            if (extmap.Id is < 1 or > OneByteMaxExtensionId)
-                continue;
-            if (supportedUris.Contains(extmap.Uri, StringComparer.Ordinal))
-                extmaps.Add(new SdpExtmap { Id = extmap.Id, Uri = extmap.Uri });
-        }
-        return extmaps;
+        // maxptime is the peer's own ceiling (RFC 4566 §6); a ptime above it contradicts the same offer.
+        var ceiling = offeredMaxPtime is { } max && max is >= MinPtimeMs and <= MaxPtimeMs
+            ? Math.Min(max, MaxPtimeMs)
+            : MaxPtimeMs;
+
+        return requested >= MinPtimeMs && requested <= ceiling ? requested : DefaultPtimeMs;
     }
 
     /// <summary>
