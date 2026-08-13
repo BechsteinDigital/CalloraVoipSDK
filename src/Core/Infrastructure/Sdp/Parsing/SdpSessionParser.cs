@@ -10,6 +10,12 @@ namespace CalloraVoipSdk.Core.Infrastructure.Sdp.Parsing;
 /// </summary>
 internal sealed class SdpSessionParser : ISdpSessionParser
 {
+    // #160 P2-4: wire domains, not just wire syntax. The RTP payload type field is seven bits
+    // (RFC 3550 §5.1) and a transport port is sixteen (RFC 8866 §5.14); a value outside those ranges is
+    // not a large value, it is a value that cannot exist on the wire.
+    private const int MaxPayloadType = 127;
+    private const int MaxPort = 65535;
+
     private readonly SdpParserLimits _limits;
 
     /// <summary>Creates a parser with the given wire limits (defaults when omitted).</summary>
@@ -390,7 +396,11 @@ internal sealed class SdpSessionParser : ISdpSessionParser
             }
 
             // --- DTLS setup role (RFC 4145) ---
-            case "setup" when !string.IsNullOrWhiteSpace(attrValue):
+            // #160 P2-5: only the four roles the grammar defines. An unrecognised value used to be stored
+            // verbatim and then treated as "some role was signalled", so "a=setup:nonsense" produced an
+            // active DTLS m-line whose role nobody had actually agreed. Dropping it leaves the role unset,
+            // which the DTLS layer already fails closed on.
+            case "setup" when IsKnownSetupRole(attrValue):
                 if (current is null)
                     sessionDtlsSetup = attrValue.Trim();
                 else
@@ -398,6 +408,14 @@ internal sealed class SdpSessionParser : ISdpSessionParser
                 break;
         }
     }
+
+    // RFC 4145 §4 defines exactly these four roles; anything else is not a role we can act on.
+    private static bool IsKnownSetupRole(string value)
+        => value.Trim() is var role
+           && (role.Equals("active", StringComparison.OrdinalIgnoreCase)
+               || role.Equals("passive", StringComparison.OrdinalIgnoreCase)
+               || role.Equals("actpass", StringComparison.OrdinalIgnoreCase)
+               || role.Equals("holdconn", StringComparison.OrdinalIgnoreCase));
 
     // -------------------------------------------------------------------------
     // Media line
@@ -409,12 +427,18 @@ internal sealed class SdpSessionParser : ISdpSessionParser
         if (parts.Length < 4)
             throw new FormatException($"Invalid SDP media line: m={value}");
 
-        if (!int.TryParse(parts[1], out var port))
+        // #160 P2-4: validate the numeric wire domains rather than accepting any int. A port outside
+        // 0..65535 cannot be bound, and the value would be carried around until something downstream
+        // truncated it (RFC 8866 §5.14).
+        if (!int.TryParse(parts[1], out var port) || port is < 0 or > MaxPort)
             throw new FormatException($"Invalid SDP media port: m={value}");
 
+        // The RTP payload type field is seven bits (RFC 3550 §5.1), so 0..127. Accepting 256 here meant
+        // answering "RTP/AVP 256" and then casting it to byte further down the pipeline, where it silently
+        // became 0 — PCMU — a payload type nobody negotiated.
         var payloadTypes = parts
             .Skip(3)
-            .Select(v => int.TryParse(v, out var pt) ? pt : -1)
+            .Select(v => int.TryParse(v, out var pt) && pt is >= 0 and <= MaxPayloadType ? pt : -1)
             .Where(v => v >= 0)
             .ToArray();
 
@@ -443,11 +467,17 @@ internal sealed class SdpSessionParser : ISdpSessionParser
     {
         // Format: PT encoding-name/clock-rate[/channels]
         var parts = value.Split(' ', 2, StringSplitOptions.TrimEntries);
-        if (parts.Length < 2 || !int.TryParse(parts[0], out var payloadType))
+        // #160 P2-4: same seven-bit domain as the m-line. An rtpmap for a payload type the m-line could
+        // never carry describes a format that cannot be signalled.
+        if (parts.Length < 2
+            || !int.TryParse(parts[0], out var payloadType)
+            || payloadType is < 0 or > MaxPayloadType)
+        {
             return null;
+        }
 
         var codecParts = parts[1].Split('/', StringSplitOptions.TrimEntries);
-        if (codecParts.Length < 2 || !int.TryParse(codecParts[1], out var clockRate))
+        if (codecParts.Length < 2 || !int.TryParse(codecParts[1], out var clockRate) || clockRate <= 0)
             return null;
 
         var channels = 1;
