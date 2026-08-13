@@ -22,8 +22,22 @@ public abstract class TwoLegTransferMatrix
         await pbx.StartAsync();
         await using var bridged = await TwoLegBridgedCall.StartAsync(pbx);
 
+        // Media läuft DURCHGEHEND, nicht nur für ein Messfenster (#256). Vorher pumpte der Harness
+        // 8 Sekunden und schwieg dann, während Beratungs-Call und Transfer liefen. Überschritt diese
+        // Stille die 15 Sekunden aus MediaSupervisionOptions.InboundMediaTimeout, beendete der eigene
+        // Media-Supervisor den Callee-Call — kein BYE von der PBX, der Trace zeigt nur das reguläre
+        // BYE auf A's Beratungs-Leg. Der Test maß damit den Timeout statt den Transfer. Ein echtes
+        // Endgerät sendet durchgehend RTP; genau das tut der Loop hier.
+        await using var media = bridged.StartBidirectionalMedia();
+
         // Baseline: Media fließt auf dem originalen A↔B-Bridge.
-        await bridged.RunBidirectionalMediaAsync(TimeSpan.FromSeconds(8));
+        var baselineDeadline = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(10);
+        while ((bridged.CalleeCall.RtpStatistics?.PacketsReceived ?? 0) == 0
+               && DateTimeOffset.UtcNow < baselineDeadline)
+        {
+            await Task.Delay(100);
+        }
+
         Assert.True(bridged.CalleeCall.RtpStatistics is { PacketsReceived: > 0 }, "Kein Baseline-RTP.");
 
         // A wählt einen Beratungs-Call zur Media-Playback-Extension.
