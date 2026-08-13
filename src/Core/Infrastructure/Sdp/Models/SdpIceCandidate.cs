@@ -58,16 +58,22 @@ internal sealed class SdpIceCandidate
         if (parts.Length < 8)
             return null;
 
-        if (!int.TryParse(parts[1], out var component))
+        // #160 P2-14: every field is validated against the grammar, not merely parsed. These values go
+        // straight into the ICE agent's pairing and priority ordering — a component of 0, a priority of
+        // 0, or a type nobody can prioritise is not a large value, it is one the agent cannot act on.
+        if (!int.TryParse(parts[1], out var component) || !SdpIceGrammar.IsValidComponent(component))
             return null;
 
-        if (!long.TryParse(parts[3], out var priority))
+        if (!long.TryParse(parts[3], out var priority) || !SdpIceGrammar.IsValidPriority(priority))
             return null;
 
-        if (!int.TryParse(parts[5], out var port))
+        if (!int.TryParse(parts[5], out var port) || !SdpIceGrammar.IsValidPort(port))
             return null;
 
         if (!parts[6].Equals("typ", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        if (!SdpIceGrammar.IsValidFoundation(parts[0]) || !SdpIceGrammar.IsKnownCandidateType(parts[7]))
             return null;
 
         string? relatedAddress = null;
@@ -83,7 +89,7 @@ internal sealed class SdpIceCandidate
                 case "raddr":
                     relatedAddress = parts[i + 1];
                     break;
-                case "rport" when int.TryParse(parts[i + 1], out var rport):
+                case "rport" when int.TryParse(parts[i + 1], out var rport) && SdpIceGrammar.IsValidPort(rport):
                     relatedPort = rport;
                     break;
                 case "generation" when int.TryParse(parts[i + 1], out var gen):

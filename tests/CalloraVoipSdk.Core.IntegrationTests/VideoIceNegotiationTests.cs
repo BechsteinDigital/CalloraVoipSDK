@@ -28,7 +28,7 @@ public sealed class VideoIceNegotiationTests
     {
         var offer =
             "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\ns=peer\r\nc=IN IP4 127.0.0.1\r\nt=0 0\r\n"
-            + "a=ice-ufrag:sessU\r\na=ice-pwd:sessPwd\r\n"
+            + "a=ice-ufrag:sessU\r\na=ice-pwd:sessPwd0123456789abcde\r\n"
             + "m=audio 5002 RTP/AVP 0\r\na=rtpmap:0 PCMU/8000\r\na=sendrecv\r\n"
             + "m=video 5004 RTP/AVP 96\r\na=rtpmap:96 VP8/90000\r\n";
 
@@ -37,7 +37,7 @@ public sealed class VideoIceNegotiationTests
 
         Assert.NotNull(parameters?.Video);
         Assert.Equal("sessU", parameters!.Video!.RemoteIceUfrag);
-        Assert.Equal("sessPwd", parameters.Video.RemoteIcePwd);
+        Assert.Equal("sessPwd0123456789abcde", parameters.Video.RemoteIcePwd);
     }
 
     [Fact]
@@ -46,17 +46,17 @@ public sealed class VideoIceNegotiationTests
         // RFC 8839 §5.3: media-level ICE credentials override the session-level ones.
         var offer =
             "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\ns=peer\r\nc=IN IP4 127.0.0.1\r\nt=0 0\r\n"
-            + "a=ice-ufrag:sessU\r\na=ice-pwd:sessPwd\r\n"
+            + "a=ice-ufrag:sessU\r\na=ice-pwd:sessPwd0123456789abcde\r\n"
             + "m=audio 5002 RTP/AVP 0\r\na=rtpmap:0 PCMU/8000\r\na=sendrecv\r\n"
             + "m=video 5004 RTP/AVP 96\r\na=rtpmap:96 VP8/90000\r\n"
-            + "a=ice-ufrag:vidU\r\na=ice-pwd:vidPwd\r\n";
+            + "a=ice-ufrag:vidU\r\na=ice-pwd:vidPwd0123456789abcdef\r\n";
 
         var parameters = SdpUtilities.TryParseMediaParameters(
             offer, LocalAudio, new SdpMediaNegotiationOptions { Video = VideoOptions() });
 
         Assert.NotNull(parameters?.Video);
         Assert.Equal("vidU", parameters!.Video!.RemoteIceUfrag);
-        Assert.Equal("vidPwd", parameters.Video.RemoteIcePwd);
+        Assert.Equal("vidPwd0123456789abcdef", parameters.Video.RemoteIcePwd);
     }
 
     // ── Emission: the video m-line advertises the shared credentials ─────────────
@@ -67,12 +67,12 @@ public sealed class VideoIceNegotiationTests
         var offer = SdpUtilities.BuildDefaultSdp(LocalAudio, hold: false, new SdpMediaNegotiationOptions
         {
             Video = VideoOptions(),
-            Ice = new SdpIceNegotiationOptions { Ufrag = "offU", Pwd = "offPwd" },
+            Ice = new SdpIceNegotiationOptions { Ufrag = "offU", Pwd = "offPwd0123456789abcdef" },
         });
 
         var videoSection = offer[offer.IndexOf("m=video", StringComparison.Ordinal)..];
         Assert.Contains("a=ice-ufrag:offU", videoSection, StringComparison.Ordinal);
-        Assert.Contains("a=ice-pwd:offPwd", videoSection, StringComparison.Ordinal);
+        Assert.Contains("a=ice-pwd:offPwd0123456789abcdef", videoSection, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -80,7 +80,7 @@ public sealed class VideoIceNegotiationTests
     {
         var offer =
             "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\ns=peer\r\nc=IN IP4 127.0.0.1\r\nt=0 0\r\n"
-            + "a=ice-ufrag:peerU\r\na=ice-pwd:peerPwd\r\n"
+            + "a=ice-ufrag:peerU\r\na=ice-pwd:peerPwd0123456789abcde\r\n"
             + "m=audio 5002 RTP/AVP 0\r\na=rtpmap:0 PCMU/8000\r\na=sendrecv\r\n"
             + "m=video 5004 RTP/AVP 96\r\na=rtpmap:96 VP8/90000\r\n";
 
@@ -88,13 +88,13 @@ public sealed class VideoIceNegotiationTests
             new SdpMediaNegotiationOptions
             {
                 Video = VideoOptions(),
-                Ice = new SdpIceNegotiationOptions { Ufrag = "ansU", Pwd = "ansPwd" },
+                Ice = new SdpIceNegotiationOptions { Ufrag = "ansU", Pwd = "ansPwd0123456789abcdef" },
             });
 
         Assert.NotNull(answer);
         var videoSection = answer![answer.IndexOf("m=video", StringComparison.Ordinal)..];
         Assert.Contains("a=ice-ufrag:ansU", videoSection, StringComparison.Ordinal);
-        Assert.Contains("a=ice-pwd:ansPwd", videoSection, StringComparison.Ordinal);
+        Assert.Contains("a=ice-pwd:ansPwd0123456789abcdef", videoSection, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -103,7 +103,7 @@ public sealed class VideoIceNegotiationTests
         var offer = SdpUtilities.BuildDefaultSdp(LocalAudio, hold: false, new SdpMediaNegotiationOptions
         {
             Video = new SdpVideoNegotiationOptions { Port = 41002, Candidates = [VideoHostCandidate(41002)] },
-            Ice = new SdpIceNegotiationOptions { Ufrag = "offU", Pwd = "offPwd" },
+            Ice = new SdpIceNegotiationOptions { Ufrag = "offU", Pwd = "offPwd0123456789abcdef" },
         });
 
         var audioSection = offer[offer.IndexOf("m=audio", StringComparison.Ordinal)..offer.IndexOf("m=video", StringComparison.Ordinal)];
@@ -119,7 +119,7 @@ public sealed class VideoIceNegotiationTests
     {
         var offer =
             "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\ns=peer\r\nc=IN IP4 127.0.0.1\r\nt=0 0\r\n"
-            + "a=ice-ufrag:peerU\r\na=ice-pwd:peerPwd\r\n"
+            + "a=ice-ufrag:peerU\r\na=ice-pwd:peerPwd0123456789abcde\r\n"
             + "m=audio 5002 RTP/AVP 0\r\na=rtpmap:0 PCMU/8000\r\na=sendrecv\r\n"
             + "m=video 5004 RTP/AVP 96\r\na=rtpmap:96 VP8/90000\r\n";
 
@@ -127,7 +127,7 @@ public sealed class VideoIceNegotiationTests
             new SdpMediaNegotiationOptions
             {
                 Video = new SdpVideoNegotiationOptions { Port = 41002, Candidates = [VideoHostCandidate(41002)] },
-                Ice = new SdpIceNegotiationOptions { Ufrag = "ansU", Pwd = "ansPwd" },
+                Ice = new SdpIceNegotiationOptions { Ufrag = "ansU", Pwd = "ansPwd0123456789abcdef" },
             });
 
         Assert.NotNull(answer);
@@ -153,18 +153,18 @@ public sealed class VideoIceNegotiationTests
     public void Ice_enricher_stamps_local_credentials_and_role_onto_video()
     {
         var parameters = AudioVideoParameters(VideoWithRemoteIce());
-        var localDescription = new CallIceLocalDescription { Ufrag = "myU", Pwd = "myPwd" };
+        var localDescription = new CallIceLocalDescription { Ufrag = "myUa", Pwd = "myPwd0123456789abcdefg" };
 
         var enriched = CallMediaParametersIceEnricher.Enrich(parameters, localDescription, iceControlling: false);
 
         Assert.NotNull(enriched.Video);
         Assert.True(enriched.Video!.IceEnabled);
         Assert.False(enriched.Video.IceControlling);
-        Assert.Equal("myU", enriched.Video.LocalIceUfrag);
-        Assert.Equal("myPwd", enriched.Video.LocalIcePwd);
+        Assert.Equal("myUa", enriched.Video.LocalIceUfrag);
+        Assert.Equal("myPwd0123456789abcdefg", enriched.Video.LocalIcePwd);
         // Remote credentials resolved at parse survive the enrichment.
         Assert.Equal("peerU", enriched.Video.RemoteIceUfrag);
-        Assert.Equal("peerPwd", enriched.Video.RemoteIcePwd);
+        Assert.Equal("peerPwd0123456789abcde", enriched.Video.RemoteIcePwd);
     }
 
     [Fact]
@@ -186,7 +186,7 @@ public sealed class VideoIceNegotiationTests
         // Post-ICE-enrichment input: video already carries local + remote ICE.
         var iceEnriched = CallMediaParametersIceEnricher.Enrich(
             AudioVideoParameters(VideoWithRemoteIce()),
-            new CallIceLocalDescription { Ufrag = "myU", Pwd = "myPwd" },
+            new CallIceLocalDescription { Ufrag = "myUa", Pwd = "myPwd0123456789abcdefg" },
             iceControlling: true);
 
         var enriched = CallMediaParametersSrtpEnricher.Enrich(
@@ -196,10 +196,10 @@ public sealed class VideoIceNegotiationTests
         Assert.Equal("AES_CM_128_HMAC_SHA1_80", enriched.Video!.SrtpSuite); // SDES engaged (rebuild path)
         // ICE credentials survive the rebuild.
         Assert.True(enriched.Video.IceEnabled);
-        Assert.Equal("myU", enriched.Video.LocalIceUfrag);
-        Assert.Equal("myPwd", enriched.Video.LocalIcePwd);
+        Assert.Equal("myUa", enriched.Video.LocalIceUfrag);
+        Assert.Equal("myPwd0123456789abcdefg", enriched.Video.LocalIcePwd);
         Assert.Equal("peerU", enriched.Video.RemoteIceUfrag);
-        Assert.Equal("peerPwd", enriched.Video.RemoteIcePwd);
+        Assert.Equal("peerPwd0123456789abcde", enriched.Video.RemoteIcePwd);
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -211,7 +211,7 @@ public sealed class VideoIceNegotiationTests
         LocalEndPoint = new IPEndPoint(IPAddress.Loopback, 41002),
         RemoteEndPoint = new IPEndPoint(IPAddress.Loopback, 5004),
         RemoteIceUfrag = "peerU",
-        RemoteIcePwd = "peerPwd",
+        RemoteIcePwd = "peerPwd0123456789abcde",
     };
 
     private static CallMediaParameters AudioVideoParameters(CallVideoParameters video) => new()
@@ -222,7 +222,7 @@ public sealed class VideoIceNegotiationTests
         ClockRate = 8000,
         SamplesPerPacket = 160,
         RemoteIceUfrag = "peerU",
-        RemoteIcePwd = "peerPwd",
+        RemoteIcePwd = "peerPwd0123456789abcde",
         Video = video,
     };
 }

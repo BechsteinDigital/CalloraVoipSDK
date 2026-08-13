@@ -65,9 +65,9 @@ public sealed class CallIceAgentTests
         IceEnabled = true,
         IceControlling = controlling,
         LocalIceUfrag = "localU",
-        LocalIcePwd = "localP",
+        LocalIcePwd = "localP0123456789abcdef",
         RemoteIceUfrag = "remoteU",
-        RemoteIcePwd = "remotePassword123",
+        RemoteIcePwd = "remotePassword12301234",
         LocalIceCandidates = local,
         RemoteIceCandidates = remote,
     };
@@ -233,7 +233,7 @@ public sealed class CallIceAgentTests
         Assert.True(result.HasSelectedPair);
         Assert.Equal(123456u, probe.LastPriority);
         Assert.True(probe.LastIsControlling);
-        Assert.Equal(IceTieBreaker.Derive("localP"), probe.LastTieBreaker);
+        Assert.Equal(IceTieBreaker.Derive("localP0123456789abcdef"), probe.LastTieBreaker);
     }
 
     [Fact]
@@ -251,7 +251,7 @@ public sealed class CallIceAgentTests
 
         Assert.True(result.HasSelectedPair);
         Assert.False(probe.LastIsControlling);
-        Assert.Equal(IceTieBreaker.Derive("localP"), probe.LastTieBreaker);
+        Assert.Equal(IceTieBreaker.Derive("localP0123456789abcdef"), probe.LastTieBreaker);
     }
 
     [Fact]
