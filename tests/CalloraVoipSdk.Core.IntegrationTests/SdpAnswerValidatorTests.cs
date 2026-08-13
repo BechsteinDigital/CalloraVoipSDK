@@ -25,8 +25,10 @@ public sealed class SdpAnswerValidatorTests
         return parsed!;
     }
 
+    // The validator now returns a typed error (#160 P1-2b); these tests assert on the message, so the
+    // helper keeps handing back the text.
     private static string? Validate(string answerSdp) =>
-        SdpAnswerValidator.Validate(Parse(Offer), Parse(answerSdp));
+        SdpAnswerValidator.Validate(Parse(Offer), Parse(answerSdp))?.Message;
 
     [Fact]
     public void A_conforming_answer_is_accepted()
