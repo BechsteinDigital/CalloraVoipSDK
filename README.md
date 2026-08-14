@@ -16,7 +16,7 @@ CalloraVoipSdk is a .NET VoIP SDK (net8.0 / net9.0 / net10.0) for building softp
 It exposes a stable, developer-friendly API through `VoipClient` while keeping transport, media and device internals behind a clean facade — and opens up through a module registry for building products like AI voice agents on top.
 
 📖 **Documentation:** [bechsteindigital.github.io/callora-voip-sdk](https://bechsteindigital.github.io/callora-voip-sdk/)
-🧪 **Examples:** [`examples/`](examples) — runnable samples (BasicCalling, Dialer, Transfer, CustomAudio, VideoCalling, WebRtcPeer, WebRtcRecording, WebRtcDependencyInjection, and a browser video-call website `WebRtcVideoCall.Web`)
+🧪 **Examples:** [`examples/`](examples) — runnable samples (BasicCalling, Dialer, Transfer, CustomAudio, Switchboard, VideoCalling, WebRtcPeer, WebRtcRecording, WebRtcDependencyInjection, and a browser video-call website `WebRtcVideoCall.Web`)
 🛠️ **Maintainers:** [`MAINTAINING.md`](MAINTAINING.md) — architecture map, invariants, workflows; rules in [`ENGINEERING_RULES.md`](ENGINEERING_RULES.md)
 
 > **Project status — 4.10.** The **SIP + RTP core** is the mature, production-oriented surface:
