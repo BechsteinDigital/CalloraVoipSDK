@@ -188,8 +188,10 @@ dotnet run --project perf/CalloraVoipSdk.Core.Performance -c Release -- \
   keinem Workflow aufgerufen**; die Baseline stammt von net8/2026-04. Wer perf-relevante Änderungen
   macht, führt ihn manuell aus.
 
-`Conferencing.Performance` referenziert `src/Modules/Conferencing/…`, das es nicht (mehr) gibt —
-das Projekt baut nicht und ist bewusst nicht in der Solution. `Media.Performance` ist ein Skelett.
+Unter `perf/` liegt nur noch `CalloraVoipSdk.Core.Performance`. Die früheren Geschwister
+`Conferencing.Performance` (referenzierte ein nie existierendes `src/Modules/Conferencing/…`) und
+`Media.Performance` (Skelett, druckte nur „skeleton") sind entfernt — neue Hotpath-Messungen gehören
+als `Category=Perf`-Floor in `tests/CalloraVoipSdk.SoakTests/Perf/`, weil nur der im CI läuft.
 
 ### 3.4 Release
 
@@ -283,7 +285,8 @@ sind in 4.6.0 gefixt** — Details im [`CHANGELOG.md`](CHANGELOG.md). Was offen 
 - `InternalsVisibleTo` in `src/Core/Properties/AssemblyInfo.cs` nennt drei Assemblies, die es nicht
   (mehr) gibt: `CalloraVoipSdk.Tests`, `CalloraVoipSdk.Core.Tests`, `CalloraVoipSdk.Conferencing.Tests`.
 - Coverage wird erhoben (`--collect:"XPlat Code Coverage"`), aber ohne Schwellwert gegated.
-- `Conferencing.Performance` ist verwaist.
+- Der Perf-Gate im CI misst nur die **Senderichtung** (SRTP `Protect`); der Empfangspfad
+  (SRTP `Unprotect`, `RtpPacketCodec.Decode`, Jitterbuffer) hat keinen Floor.
 - Die FreeSWITCH-Interop-Suite (`Category=InteropFreeSwitch`) läuft lokal, ist aber **nicht** im
   PR-Gate — Regressionen fallen nur beim expliziten Lauf auf.
 
