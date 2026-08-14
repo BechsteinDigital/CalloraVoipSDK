@@ -37,6 +37,7 @@ internal sealed class SipLineChannel : ILineChannel
     private readonly bool _enableVideo;
     private readonly IReadOnlyList<string>? _preferredVideoCodecNames;
     private readonly TlsConfiguration? _lineTls;
+    private readonly TimeProvider _timeProvider;
     private readonly ILogger<SipLineChannel> _logger;
     private readonly ILogger<SipCoreCallChannel> _callChannelLogger;
     private readonly object _sync = new();
@@ -65,6 +66,11 @@ internal sealed class SipLineChannel : ILineChannel
     /// <summary>
     /// Creates a SIP line channel and wires registration and inbound signaling handlers.
     /// </summary>
+    /// <param name="timeProvider">
+    /// Clock the registration loop waits on between refreshes and retries. Defaults to
+    /// <see cref="TimeProvider.System"/>, i.e. real time. A test can pass a fake provider to run many
+    /// refresh cycles instantly instead of waiting out a real registration interval (F003).
+    /// </param>
     internal SipLineChannel(
         SipAccount account,
         string userAgent,
@@ -81,8 +87,10 @@ internal sealed class SipLineChannel : ILineChannel
         bool enableVideo = false,
         IReadOnlyList<string>? preferredVideoCodecNames = null,
         bool requireSecureSignalingForSdes = false,
-        TlsConfiguration? lineTls = null)
+        TlsConfiguration? lineTls = null,
+        TimeProvider? timeProvider = null)
     {
+        _timeProvider = timeProvider ?? TimeProvider.System;
         _dtlsOptions = dtlsOptions;
         _offerDtlsSrtp = offerDtlsSrtp && dtlsOptions is not null;
         _requireSecureSignalingForSdes = requireSecureSignalingForSdes;
@@ -572,7 +580,7 @@ internal sealed class SipLineChannel : ILineChannel
                         "SIP registration for [{User}] will refresh in {Delay}.",
                         _account.Username,
                         refreshDelay);
-                    await Task.Delay(refreshDelay, ct).ConfigureAwait(false);
+                    await Task.Delay(refreshDelay, _timeProvider, ct).ConfigureAwait(false);
                     _onState?.Invoke(LineState.Registering);
                 }
                 catch (OperationCanceledException ex)
@@ -645,7 +653,7 @@ internal sealed class SipLineChannel : ILineChannel
                         "SIP registration recovery for [{User}] scheduled in {Delay}.",
                         _account.Username,
                         recoveryDelay);
-                    await Task.Delay(recoveryDelay, ct).ConfigureAwait(false);
+                    await Task.Delay(recoveryDelay, _timeProvider, ct).ConfigureAwait(false);
                     _onState?.Invoke(LineState.Registering);
                 }
             }

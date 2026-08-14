@@ -11,6 +11,7 @@ internal sealed class SipSessionTimerManager : IDisposable
     private readonly ILogger _logger;
     private readonly Func<CancellationToken, Task<bool>> _sendRefreshAsync;
     private readonly Func<CancellationToken, Task> _onExpiredAsync;
+    private readonly TimeProvider _timeProvider;
     private readonly object _sync = new();
     private readonly CancellationTokenSource _lifecycleCts = new();
 
@@ -23,14 +24,21 @@ internal sealed class SipSessionTimerManager : IDisposable
     /// <summary>
     /// Creates a timer manager for one call session.
     /// </summary>
+    /// <param name="timeProvider">
+    /// Clock the refresh/expiry schedule waits on. Defaults to <see cref="TimeProvider.System"/>, i.e. real
+    /// time. A test can pass a fake provider to advance an RFC 4028 session interval — up to 90 minutes on the
+    /// wire — instantly, which is the only way to soak many timer cycles without waiting for them (F003).
+    /// </param>
     public SipSessionTimerManager(
         ILogger logger,
         Func<CancellationToken, Task<bool>> sendRefreshAsync,
-        Func<CancellationToken, Task> onExpiredAsync)
+        Func<CancellationToken, Task> onExpiredAsync,
+        TimeProvider? timeProvider = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _sendRefreshAsync = sendRefreshAsync ?? throw new ArgumentNullException(nameof(sendRefreshAsync));
         _onExpiredAsync = onExpiredAsync ?? throw new ArgumentNullException(nameof(onExpiredAsync));
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     /// <summary>
@@ -118,7 +126,7 @@ internal sealed class SipSessionTimerManager : IDisposable
             var delay = localRefresher
                 ? ComputeRefreshDelay(intervalSeconds)
                 : ComputeExpiryDelay(intervalSeconds);
-            await Task.Delay(delay, ct).ConfigureAwait(false);
+            await Task.Delay(delay, _timeProvider, ct).ConfigureAwait(false);
 
             if (ct.IsCancellationRequested || Volatile.Read(ref _disposed) != 0)
                 return;

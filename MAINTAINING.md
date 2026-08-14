@@ -303,13 +303,21 @@ Quellen: `docs/audit/INTEROP_SOAK_AUDIT.md` (F-Register) und die Tiefenanalyse 2
 und Relay-Adresse, Transfer-Hänger und ICE-Terminierungs-Race, G.722-Zustand, Socket-Empfangspuffer)
 sind in 4.6.0 gefixt** — Details im [`CHANGELOG.md`](CHANGELOG.md). Was offen bleibt:
 
-**Offene Register-Befunde:**
-- **F003** — keine Zeitabstraktion im Signaling (`SipLineChannel`-Refresh-Loop,
-  `SipSessionTimerManager` nutzen hart `Task.Delay`), daher kein zeitgeraffter Signaling-Soak.
-  Dokumentiert, kein Fix geplant; ein optionaler `ITimeProvider`-Seam wäre ein eigenes Paket.
-- **F004** — `RoundTripTimeMs` ist auf dem baren L2-`RtpCallMediaSession` nur ein statischer
-  Anlauf-Hint; die echte RTT-Messung (RFC 3550 §6.4.1) hängt am L3-`CallRtcpQualityMonitor`.
-  Schichtgrenze, kein Bug; ein Wächter-Test schlägt an, wenn sich das ändert.
+**Register-Befunde — alle geschlossen:**
+- **F003 ist geschlossen** — `SipLineChannel` (Refresh-Loop + Recovery-Backoff) und
+  `SipSessionTimerManager` (RFC-4028-Refresh/Expiry) nehmen jetzt einen `TimeProvider`
+  (Default `TimeProvider.System`, Produktion unverändert). Ein Test kann damit Stunden
+  Signaling-Zeit in Millisekunden fahren — `SipTimeProviderSeamTests` belegt 20 Registrierungs-
+  zyklen à 3600 s. **Beim Schreiben eigener Zeitraffer-Tests:** die Schleife armiert ihren
+  nächsten Timer erst *nach* dem Round-Trip; ein `Advance` in dieses Fenster geht ins Leere und
+  der Test hängt bis zum Timeout. Wiederholt in Schritten vorspulen (siehe `AdvanceUntil` dort),
+  statt einmal groß.
+- **F004 ist kein Defekt** — die RTT-Kette existiert vollständig und ist produktiv verdrahtet:
+  `CallMediaOrchestrator` hängt den `CallRtcpQualityMonitor` an jede Call-Media-Session, der
+  rechnet nach RFC 3550 §6.4.1 und ruft `UpdateRoundTripTimeHint`, der JitterBuffer ersetzt damit
+  seinen Seed. Belegt durch `QosMetricsTests` (RR mit LSR/DLSR → exakt 300 ms) und
+  `JitterBufferRttSeedTests`. Der statische Hint erscheint **nur** im nackten L2-Loopback ohne
+  Monitor — das hält der Wächter-Test fest, und dort gehört er auch hin.
 - **F002 ist geschlossen** — der Late-Drop-Pfad rückt den Delivered-Sequence-Cursor mit, der
   Loopback-Soak `LongCall_UnrecoverableLoss_IsZeroOnLoopback` läuft ungeskippt.
 
