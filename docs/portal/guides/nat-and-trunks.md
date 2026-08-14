@@ -74,6 +74,49 @@ var connect = await client.ConnectAsync(new SipAccount
 `InboundNumbers` lets the SDK match inbound requests addressed to your DIDs rather than a
 registered extension AOR.
 
+## Static-IP trunks that do not register
+
+Most trunks register — sipgate, easybell and Telekom CompanyFlex all take credentials, and the
+section above covers them. Some enterprise trunks instead authenticate you by **source IP**: there
+are no credentials, no registration, and the provider delivers inbound calls to an address agreed
+up front.
+
+Set `Register = false` and pin the port you agreed on:
+
+```csharp
+using var client = new VoipClient(new VoipConfiguration
+{
+    LocalSipPort = 5060            // the port the provider delivers to
+});
+
+var connect = await client.ConnectAsync(new SipAccount
+{
+    Username       = "4930123456", // AOR user-part; not used for authentication — there is none
+    SipServer      = "trunk.provider.example",
+    Register       = false,
+    InboundNumbers = new[] { "4930123456" }
+});
+
+// Ready, not Registered — this line never registers.
+Debug.Assert(connect.Line!.State == LineState.Ready);
+```
+
+Two things are easy to get wrong here:
+
+**`Register = false` is not `ReregisterOptions.Disabled`.** That one only stops *re*-registration
+after a lost binding; the initial REGISTER still goes out, which an IP-authenticated trunk does not
+expect and may reject.
+
+**The local port matters.** Without a registration nobody tells the provider where to reach you, so
+it uses the agreed address. The default (`0`) takes an ephemeral port that changes on every restart
+— fine for a registering line, unusable here. A port already in use fails at client construction
+rather than quietly landing elsewhere, because a listener on the wrong port looks healthy while
+every inbound call goes missing. For TLS use `LocalSipTlsPort` (conventionally 5061); it is a
+separate listener and cannot share the other port.
+
+Inbound admission works as it does for any trunk — `InboundNumbers` and `AcceptTrunkInbound` decide
+which calls belong to this line.
+
 ## Custom headers and caller identity
 
 Add extra headers to an outbound INVITE for trunk/PBX routing (protected dialog/transport

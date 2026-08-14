@@ -26,6 +26,32 @@ public sealed class SipLocalPortBindingTests
         return ((IPEndPoint)probe.LocalEndPoint!).Port;
     }
 
+    /// <summary>
+    /// Builds a runtime on a free port, retrying if something else claimed it first.
+    /// </summary>
+    /// <remarks>
+    /// Asking the OS for a free port and then binding it is inherently racy: the port is released before
+    /// the runtime takes it, and on a machine running the full suite in parallel another test can slip in
+    /// between. Retrying keeps the assertion about the feature rather than about timing. The tests that
+    /// assert the *failure* path do not use this — they hold the conflicting socket themselves, so there
+    /// is nothing to race against.
+    /// </remarks>
+    private static (SipTransportRuntime Runtime, int Port) OnFreePort(Func<int, SipTransportOptions> options)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            var port = FreePort();
+            try
+            {
+                return (NewRuntime(options(port)), port);
+            }
+            catch (SocketException) when (attempt < 4)
+            {
+                // Someone took it between probe and bind; try another.
+            }
+        }
+    }
+
     [Fact]
     public void The_default_still_binds_an_ephemeral_port()
     {
@@ -38,10 +64,9 @@ public sealed class SipLocalPortBindingTests
     [Fact]
     public void A_configured_port_is_the_port_the_listener_binds()
     {
-        var port = FreePort();
-        using var runtime = NewRuntime(new SipTransportOptions { LocalSipPort = port });
-
-        Assert.Equal(port, runtime.GetLocalEndPoint(SipTransportProtocol.Udp).Port);
+        var (runtime, port) = OnFreePort(p => new SipTransportOptions { LocalSipPort = p });
+        using (runtime)
+            Assert.Equal(port, runtime.GetLocalEndPoint(SipTransportProtocol.Udp).Port);
     }
 
     [Fact]
@@ -49,11 +74,12 @@ public sealed class SipLocalPortBindingTests
     {
         // UDP and TCP are separate protocols and may share the number, which is what a SIP peer expects:
         // one address, whichever transport it picks.
-        var port = FreePort();
-        using var runtime = NewRuntime(new SipTransportOptions { LocalSipPort = port });
-
-        Assert.Equal(port, runtime.GetLocalEndPoint(SipTransportProtocol.Udp).Port);
-        Assert.Equal(port, runtime.GetLocalEndPoint(SipTransportProtocol.Tcp).Port);
+        var (runtime, port) = OnFreePort(p => new SipTransportOptions { LocalSipPort = p });
+        using (runtime)
+        {
+            Assert.Equal(port, runtime.GetLocalEndPoint(SipTransportProtocol.Udp).Port);
+            Assert.Equal(port, runtime.GetLocalEndPoint(SipTransportProtocol.Tcp).Port);
+        }
     }
 
     [Fact]
@@ -74,9 +100,8 @@ public sealed class SipLocalPortBindingTests
     {
         // The same guarantee seen from the SDK side: a second client configured onto the same port is a
         // configuration error, not a silent reassignment.
-        var port = FreePort();
-        using var first = NewRuntime(new SipTransportOptions { LocalSipPort = port });
-
-        Assert.Throws<SocketException>(() => NewRuntime(new SipTransportOptions { LocalSipPort = port }));
+        var (first, port) = OnFreePort(p => new SipTransportOptions { LocalSipPort = p });
+        using (first)
+            Assert.Throws<SocketException>(() => NewRuntime(new SipTransportOptions { LocalSipPort = port }));
     }
 }
