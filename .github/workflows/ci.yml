@@ -57,6 +57,13 @@ jobs:
             TestResults/**/coverage.cobertura.xml
           if-no-files-found: warn
 
+      # Linux only: the baseline is platform-specific. Audio.Linux is dead code on Windows
+      # and Audio.Windows is dead code here, so one number cannot describe both runners.
+      # Runs after the upload so the reports are downloadable even when the gate fails.
+      - name: Coverage gate
+        if: always() && matrix.os == 'ubuntu-latest'
+        run: python3 .github/scripts/check-coverage.py
+
   interop:
     runs-on: ubuntu-latest
     steps:

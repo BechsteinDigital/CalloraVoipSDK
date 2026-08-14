@@ -193,7 +193,39 @@ Unter `perf/` liegt nur noch `CalloraVoipSdk.Core.Performance`. Die früheren Ge
 `Media.Performance` (Skelett, druckte nur „skeleton") sind entfernt — neue Hotpath-Messungen gehören
 als `Category=Perf`-Floor in `tests/CalloraVoipSdk.SoakTests/Perf/`, weil nur der im CI läuft.
 
-### 3.4 Release
+### 3.4 Coverage-Gate
+
+```bash
+# Lauf mit Coverage (exakt der CI-Filter), dann prüfen
+dotnet test CalloraVoipSdk.sln --configuration Release \
+  --filter "Category!=SoakLong&Category!=Interop&Category!=InteropFreeSwitch&Category!=BrowserInterop&Category!=Chaos&Category!=Perf&FullyQualifiedName!~ArchitectureTests" \
+  --collect:"XPlat Code Coverage" --results-directory ./TestResults
+python3 .github/scripts/check-coverage.py
+
+# Baseline bewusst neu setzen (nach echter Verbesserung — oder nach begründetem Abfall)
+python3 .github/scripts/check-coverage.py --update
+```
+
+Der Gate ist **relativ**: er vergleicht gegen `.github/line-coverage-baseline.json` und schlägt
+an, wenn die Zeilenabdeckung mehr als die dort hinterlegte Toleranz (2 Punkte) darunter fällt.
+Bewusst kein absoluter Zielwert — eine ausgedachte Zahl bestraft ehrliche Arbeit, und was zählt
+ist, ob eine Änderung die Lage **verschlechtert**. Dasselbe Muster wie bei den
+Architektur-Baselines (dürfen nur schrumpfen) und beim Perf-Gate (Boden statt Baseline). Die
+Referenz macht es genauso: Pion gatet mit `threshold: 2%` ohne Projektziel, SIPSorcery erhebt
+gar keine Coverage.
+
+Zwei Fallen:
+- Der Gate läuft **nur auf ubuntu-latest**. `Audio.Linux` ist auf Windows toter Code und
+  umgekehrt — eine Zahl kann nicht beide Runner beschreiben.
+- Ein Lauf erzeugt viele Cobertura-Reports (mehrere Testprojekte × TFMs) mit **unterschiedlichen
+  `<source>`-Basen**. Das Skript normalisiert auf den `src/`-Anteil und vereinigt zeilenweise;
+  wer stattdessen die Summen der Reports addiert, zählt dieselbe Zeile mehrfach und misst grob
+  zu niedrig.
+
+Baseline lokal nach einem **sauberen** Build erheben: liegen alte Artefakte in `bin/`, tragen
+deren PDBs Pfade verschobener Dateien und verfälschen die Zahl.
+
+### 3.5 Release
 
 1. Tag `v*` pushen (oder `packages.yml` per Dispatch mit Versions-Input starten).
 2. `packages.yml` baut, fährt das Release-Gate
@@ -206,7 +238,7 @@ als `Category=Perf`-Floor in `tests/CalloraVoipSdk.SoakTests/Perf/`, weil nur de
    auf main; `docs.yml` ist das PR-Gate für den Doku-Build.
 4. `CHANGELOG.md` pflegen; Breaking Changes im README-Abschnitt „What's new" nachziehen.
 
-### 3.5 Doku-Grenzen
+### 3.6 Doku-Grenzen
 
 - `docs/portal/` = Consumer-Doku (DocFX; `filterConfig.yml` blendet `[Obsolete]`,
   `Core.Infrastructure.*` und `Core.Application.Ports.*` aus der API-Referenz aus).
@@ -282,9 +314,10 @@ sind in 4.6.0 gefixt** — Details im [`CHANGELOG.md`](CHANGELOG.md). Was offen 
   Loopback-Soak `LongCall_UnrecoverableLoss_IsZeroOnLoopback` läuft ungeskippt.
 
 **Offene Infrastruktur-Punkte:**
-- Coverage wird erhoben (`--collect:"XPlat Code Coverage"`), aber ohne Schwellwert gegated.
 - Der Perf-Gate im CI misst nur die **Senderichtung** (SRTP `Protect`); der Empfangspfad
   (SRTP `Unprotect`, `RtpPacketCodec.Decode`, Jitterbuffer) hat keinen Floor.
+- Der Coverage-Gate misst **Zeilen**, nicht Branches — die Cobertura-Reports enthalten
+  `branch-rate`, das Skript wertet sie (noch) nicht aus.
 - Die FreeSWITCH-Interop-Suite (`Category=InteropFreeSwitch`) läuft lokal, ist aber **nicht** im
   PR-Gate — Regressionen fallen nur beim expliziten Lauf auf.
 
