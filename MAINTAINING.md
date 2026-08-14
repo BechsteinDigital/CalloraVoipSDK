@@ -280,8 +280,6 @@ sind in 4.6.0 gefixt** — Details im [`CHANGELOG.md`](CHANGELOG.md). Was offen 
   Loopback-Soak `LongCall_UnrecoverableLoss_IsZeroOnLoopback` läuft ungeskippt.
 
 **Offene Infrastruktur-Punkte:**
-- `InternalsVisibleTo` in `src/Core/Properties/AssemblyInfo.cs` nennt drei Assemblies, die es nicht
-  (mehr) gibt: `CalloraVoipSdk.Tests`, `CalloraVoipSdk.Core.Tests`, `CalloraVoipSdk.Conferencing.Tests`.
 - Coverage wird erhoben (`--collect:"XPlat Code Coverage"`), aber ohne Schwellwert gegated.
 - `Conferencing.Performance` ist verwaist.
 - Die FreeSWITCH-Interop-Suite (`Category=InteropFreeSwitch`) läuft lokal, ist aber **nicht** im
@@ -290,7 +288,9 @@ sind in 4.6.0 gefixt** — Details im [`CHANGELOG.md`](CHANGELOG.md). Was offen 
 *Erledigt seit der Tiefenanalyse:* Perf- und Chaos-Gate hängen als eigene Jobs in `ci.yml`;
 `packages.yml` filtert Long-Soaks und Interop aus dem Release-Pfad; die Interop-Abdeckung ist von
 „nur REGISTER" auf die volle Asterisk-Matrix plus Zwei-Bein-Bridge gewachsen; `EngineeringRulesTests`
-scannt `examples/`.
+scannt `examples/`; die vier `InternalsVisibleTo`-Grants auf nicht gebaute Assemblies sind entfernt
+und `InternalsVisibleToTests` hält den Zustand (die Assemblies sind unsigniert, ein Grant ist also
+nur ein Name — siehe `src/Core/Properties/AssemblyInfo.cs`).
 
 **Erklärte Scope-Grenzen (keine Bugs):** kein SCTP/Datachannel; kein TCP/TLS-TURN-Relay;
 Empfangs-Simulcast (RID-Demux) offen; kein volles ICE im SIP-Remote-Endpoint-Pfad; ICE-TCP

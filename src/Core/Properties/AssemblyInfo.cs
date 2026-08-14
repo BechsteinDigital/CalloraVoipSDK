@@ -6,8 +6,10 @@ using System.Runtime.CompilerServices;
 // consumer API small and free to evolve (the "minimal public surface — facade is the API" principle).
 //
 // The grants below are therefore an intentional, audited multi-assembly design (#17.14), not accidental
-// sprawl. Each was verified to be load-bearing — removing it fails the build — and the alternatives were
-// weighed and rejected:
+// sprawl. Each names an assembly this repository actually builds — enforced by InternalsVisibleToTests,
+// because these assemblies are unsigned and a grant is therefore nothing but a name: one pointing at an
+// assembly that does not exist can be claimed by any DLL that calls itself that (#19). The alternatives
+// were weighed and rejected:
 //   * Making the shared types public would bloat the consumer API surface (the opposite of the goal).
 //   * Duplicating them per assembly would fork the SIP/RTP/Opus implementations.
 // So the internals stay internal and are shared, narrowly, only with these first-party assemblies:
@@ -26,12 +28,8 @@ using System.Runtime.CompilerServices;
 //     interop-harness code that must exercise the internals directly; none are shipped to consumers.
 
 // ── Test / benchmark / interop-harness assemblies ────────────────────────────────────────────────
-[assembly: InternalsVisibleTo("CalloraVoipSdk.Tests")]
-[assembly: InternalsVisibleTo("CalloraVoipSdk.Core.Tests")]
 [assembly: InternalsVisibleTo("CalloraVoipSdk.Core.IntegrationTests")]
 [assembly: InternalsVisibleTo("CalloraVoipSdk.InteropTests")]
-[assembly: InternalsVisibleTo("CalloraVoipSdk.Conferencing.Tests")]
-[assembly: InternalsVisibleTo("CalloraVoipSdk.Performance")]
 [assembly: InternalsVisibleTo("CalloraVoipSdk.Core.Performance")]
 [assembly: InternalsVisibleTo("CalloraVoipSdk.InteropHarness")]
 [assembly: InternalsVisibleTo("CalloraVoipSdk.Client.Tests")]
