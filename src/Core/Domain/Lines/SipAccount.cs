@@ -27,7 +27,32 @@ public sealed class SipAccount
     /// <summary>Signaling port; <c>0</c> (default) selects the standard port for the chosen <see cref="Transport"/>.</summary>
     public int           Port             { get; init; } = 0; // 0 = default per transport
 
-    /// <summary>Requested registration lifetime in seconds; defaults to 300.</summary>
+    /// <summary>
+    /// Whether the line registers with <see cref="SipServer"/>. <see langword="true"/> by default.
+    /// </summary>
+    /// <remarks>
+    /// Set to <see langword="false"/> for an <b>IP-authenticated static-IP trunk</b>: the provider
+    /// recognises the customer by source address, no REGISTER is expected, and sending one is at best
+    /// ignored and at worst rejected. The line then never sends an initial REGISTER, reaches
+    /// <see cref="LineState.Ready"/> instead of <see cref="LineState.Registered"/>, and places outbound
+    /// calls straight at <see cref="SipServer"/> (or <see cref="OutboundProxy"/>).
+    /// <para>
+    /// Not the same as <see cref="ReregisterOptions.Disabled"/>, which only stops <i>re</i>-registration
+    /// after a lost binding — the initial REGISTER still goes out there.
+    /// </para>
+    /// <para>
+    /// Inbound still works and is governed by the usual trunk rules (<see cref="AcceptTrunkInbound"/>,
+    /// <see cref="InboundNumbers"/>). <see cref="RegistrationExpiry"/> and <see cref="Reregister"/> are
+    /// ignored in this mode. Note that the mass-market trunks (sipgate, easybell, Telekom CompanyFlex)
+    /// <i>do</i> register — leave this at the default for those.
+    /// </para>
+    /// </remarks>
+    public bool          Register         { get; init; } = true;
+
+    /// <summary>
+    /// Requested registration lifetime in seconds; defaults to 300.
+    /// Ignored when <see cref="Register"/> is <see langword="false"/>.
+    /// </summary>
     public int           RegistrationExpiry { get; init; } = 300;
 
     /// <summary>Optional outbound proxy to route signaling through instead of resolving <see cref="SipServer"/> directly.</summary>

@@ -27,6 +27,33 @@ public sealed class VoipConfiguration
     /// </summary>
     public SipTransport   DefaultTransport       { get; init; } = SipTransport.Udp;
 
+    /// <summary>
+    /// Local port the SIP listener binds for UDP and TCP. <c>0</c> (default) takes an ephemeral port.
+    /// </summary>
+    /// <remarks>
+    /// Leave this at the default for registering accounts: the registrar learns where to reach you from the
+    /// REGISTER Contact, so the port need not be fixed or known in advance.
+    /// <para>
+    /// Set it — normally to <c>5060</c> — when nobody tells the peer your address: an IP-authenticated trunk
+    /// (<see cref="Core.Domain.Lines.SipAccount.Register"/> = <see langword="false"/>) sends no REGISTER, so
+    /// the provider delivers inbound calls to a pre-agreed address. A fixed port is equally required for
+    /// static firewall or NAT rules, which an ephemeral port would invalidate on every restart.
+    /// </para>
+    /// <para>
+    /// Binding a port already in use fails at client construction with a <see cref="System.Net.Sockets.SocketException"/>
+    /// rather than silently landing elsewhere — a listener on the wrong port looks healthy while every
+    /// inbound call goes missing.
+    /// </para>
+    /// </remarks>
+    public int            LocalSipPort           { get; init; }
+
+    /// <summary>
+    /// Local port the SIP TLS listener binds. <c>0</c> (default) takes an ephemeral port; the SIP convention
+    /// is <c>5061</c> beside <c>5060</c> (RFC 3261 §19.1.2). Separate from <see cref="LocalSipPort"/> because
+    /// TLS is a second TCP listener and cannot share that port. Only relevant when TLS is configured.
+    /// </summary>
+    public int            LocalSipTlsPort        { get; init; }
+
     /// <summary>Logger factory the SDK logs through; <see langword="null"/> disables SDK logging.</summary>
     public ILoggerFactory? LoggerFactory         { get; init; }
 

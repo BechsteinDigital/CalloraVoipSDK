@@ -117,6 +117,14 @@ internal sealed class SipLineChannel : ILineChannel
             .ToList();
         _trustedRegistrars = new TrustedRegistrarResolver(registrarHosts, _logger);
 
+        // A registration-free trunk (#104) never runs the registration loop, so it never reaches the
+        // Warm() call in there. Without this the resolver would first populate on the initial inbound
+        // INVITE — and Addresses() returns empty on that first call, so the very first call would be
+        // admitted under different rules than every later one. Warming here is non-blocking and makes
+        // the trunk peer known from the start, which for an IP-authenticated trunk it always is.
+        if (!_account.Register)
+            _trustedRegistrars.Warm();
+
         _callSignalingService.IncomingInvite += HandleIncomingInvite;
         _callSignalingService.IncomingMessage += HandleIncomingMessage;
     }

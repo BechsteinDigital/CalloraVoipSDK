@@ -61,7 +61,17 @@ internal sealed class PhoneLine : IPhoneLine, IDisposable
         _channel.SetMessageHandler(HandleInboundMessage);
     }
 
-    internal void StartRegistration() =>
+    internal void StartRegistration()
+    {
+        // An IP-authenticated trunk is recognised by source address; the provider expects no REGISTER and
+        // may reject one. Go straight to the operational state instead of sending a request that would be
+        // wrong on the wire — this is the only path to LineState.Ready.
+        if (!Account.Register)
+        {
+            TransitionTo(LineState.Ready);
+            return;
+        }
+
         _channel.StartRegistration(
             TransitionTo,
             onReconnecting: attempt =>
@@ -78,6 +88,13 @@ internal sealed class PhoneLine : IPhoneLine, IDisposable
                 _lastReconnectFailure = args;
                 LineReconnectFailed?.Invoke(this, args);
             });
+    }
+
+    /// <summary>
+    /// Whether the line may place and receive calls: registered, or operational without a registration
+    /// (<see cref="SipAccount.Register"/> = <see langword="false"/>).
+    /// </summary>
+    private bool IsOperational => State is LineState.Registered or LineState.Ready;
 
     // ── IPhoneLine ────────────────────────────────────────────────────────────
     public async Task<ICall> DialAsync(
@@ -85,8 +102,11 @@ internal sealed class PhoneLine : IPhoneLine, IDisposable
     {
         options ??= DialOptions.Default;
 
-        if (State != LineState.Registered)
-            throw new InvalidOperationException($"Line [{Account.Username}] is not registered.");
+        if (!IsOperational)
+            throw new InvalidOperationException(
+                Account.Register
+                    ? $"Line [{Account.Username}] is not registered."
+                    : $"Line [{Account.Username}] is not ready (state {State}).");
 
         // Reserve a per-line call slot atomically BEFORE building the call, so N concurrent dials can
         // never all pass a stale read of the counter and overshoot the cap (increment-then-rollback).
@@ -224,10 +244,21 @@ internal sealed class PhoneLine : IPhoneLine, IDisposable
     }
 
     public Task UnregisterAsync(CancellationToken ct = default)
+    {
+        // Nothing was ever bound on a registration-free trunk, so there is nothing to remove: sending
+        // REGISTER Expires:0 would put a request on the wire that the peer never expected and that
+        // refers to a binding that does not exist. Just leave the operational state.
+        if (!Account.Register)
+        {
+            TransitionTo(LineState.Unregistered);
+            return Task.CompletedTask;
+        }
+
         // Real de-registration: stop the refresh loop AND await the REGISTER Expires:0 round-trip
         // (RFC 3261 §10.2.2), so the returned task reflects the binding removal (HARD-E1) rather than
         // completing before the de-register is even sent.
-        => _channel.StopRegistrationAsync(ct);
+        return _channel.StopRegistrationAsync(ct);
+    }
 
     // ── Inbound ───────────────────────────────────────────────────────────────
     private void HandleInbound(ICallChannel channel, string remoteParty)
