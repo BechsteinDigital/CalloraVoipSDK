@@ -119,6 +119,15 @@ dotnet build CalloraVoipSdk.sln --configuration Release
 CI baut mit `-p:CodeAnalysisTreatWarningsAsErrors=true` — lokal vor dem Push genauso bauen,
 sonst scheitert der PR an Analyzer-Warnungen.
 
+⚠️ **Dabei `--no-incremental` setzen.** Ein inkrementeller Build überspringt Projekte, die er für aktuell
+hält, und mit ihnen die CA-Analyzer — derselbe Code meldete erst „3 Fehler", beim Wiederholungslauf
+„0 Fehler", ohne dass sich etwas geändert hatte. Wer daraus „grün" schließt, übersieht genau die Regeln,
+für die das Gate existiert (konkret fast passiert bei `CA5350`, schwacher Hash-Algorithmus):
+
+```bash
+dotnet build src/Core/CalloraVoipSdk.Core.csproj -c Release -warnaserror --no-incremental
+```
+
 ### 3.2 Tests (Ebenenmodell L0–L4)
 
 ```bash
