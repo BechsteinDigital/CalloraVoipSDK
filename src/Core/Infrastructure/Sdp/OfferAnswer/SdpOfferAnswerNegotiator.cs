@@ -398,7 +398,9 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
         // Carry fmtp from the offer for accepted payload types, reflect ptime, confirm rtcp-mux only when
         // offered (RFC 3264 §6.1 / RFC 5761 §5.1.1 — the answer cannot enable mux the offer did not advertise).
         var acceptedPts = new HashSet<int>(negotiated.Select(c => c.PayloadType));
-        var carriedFmtp = offered.Fmtp.Where(f => acceptedPts.Contains(f.PayloadType)).ToArray();
+        // #275: receiver-capability parameters must not travel in a sendonly answer (RFC 6184 §8.2.2).
+        var carriedFmtp = SdpReceiverCapabilityFmtp.StripForSendOnly(
+            offered.Fmtp.Where(f => acceptedPts.Contains(f.PayloadType)), answerDirection);
         var ptime = ResolveAnswerPtime(offered.Ptime, offered.MaxPtime);
         var rtcpMux = offered.RtcpMux;
 
@@ -694,7 +696,11 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
         // RTX (RFC 4588 §8.1): echo the repair codecs the peer offered for codecs we
         // accepted, so both sides agree on the rtx payload numbering.
         var (rtxCodecs, rtxFmtp) = VideoCodecCatalog.NegotiateRtx(offered, acceptedPts);
-        var carriedFmtp = offered.Fmtp.Where(f => acceptedPts.Contains(f.PayloadType));
+        // #275: receiver-capability parameters must not travel in a sendonly answer (RFC 6184 §8.2.2).
+        // The H.264 parameters land here, so this is the site that actually matters.
+        var resolvedDirection = ResolveAnswerDirection(offered.Direction, answerDirection);
+        var carriedFmtp = SdpReceiverCapabilityFmtp.StripForSendOnly(
+            offered.Fmtp.Where(f => acceptedPts.Contains(f.PayloadType)), resolvedDirection);
 
         // #160 P2-7: feedback is answered per payload type, so the set has to include the RTX repair
         // formats we just accepted — a peer may offer feedback for those too.
@@ -708,7 +714,7 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             Port = video.Port,
             Profile = ResolveAnswerProfile(offered.Profile),
             Codecs = [.. negotiated, .. rtxCodecs],
-            Direction = ResolveAnswerDirection(offered.Direction, answerDirection),
+            Direction = resolvedDirection,
             Fmtp = [.. carriedFmtp, .. rtxFmtp],
             RtcpFeedback = VideoCodecCatalog.NegotiateFeedback(offered.RtcpFeedback, feedbackPts),
             Mid = offered.Mid,
