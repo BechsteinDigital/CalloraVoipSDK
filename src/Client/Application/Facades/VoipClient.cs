@@ -193,7 +193,8 @@ public sealed class VoipClient : IVoipClient
                     config.Tls,
                     logFactory,
                     MapTransport(config.DefaultTransport),
-                    config.SipTransportHardening.ToTransportOptions());
+                    config.SipTransportHardening.ToTransportOptions(
+                        config.LocalSipPort, config.LocalSipTlsPort));
             }
             catch (Exception ex) when (IsTransportInitializationFailure(ex))
             {

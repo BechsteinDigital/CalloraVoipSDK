@@ -123,7 +123,8 @@ internal sealed class SdkConvenienceOrchestrator : IDisposable
             var finalState = await waiter.Task.WaitAsync(linkedCts.Token).ConfigureAwait(false);
             return finalState switch
             {
-                LineState.Registered => new LineConnectOutcome(LineConnectStatus.Registered, line, finalState, null),
+                LineState.Registered or LineState.Ready =>
+                    new LineConnectOutcome(LineConnectStatus.Registered, line, finalState, null),
                 _ => new LineConnectOutcome(LineConnectStatus.Failed, line, finalState, RegistrationFailureError(failure ?? line.LastReconnectFailure)),
             };
         }
@@ -417,6 +418,10 @@ internal sealed class SdkConvenienceOrchestrator : IDisposable
 
     private static bool ShouldCompleteConnectWait(LineState state, bool failFastOnRegistrationFailed, bool hasStartedRegistering) =>
         state == LineState.Registered
+        // A registration-free trunk (SipAccount.Register = false) never reaches Registered; Ready is its
+        // successful connect outcome. Without this the wait would block until the timeout and then report
+        // Timeout for a line that is fully operational (#104).
+        || state == LineState.Ready
         // Unregistered is a wait-completing outcome ONLY once registration has actually started and then went
         // back to Unregistered (a de-registration / lost binding). The initial Unregistered, before Registering
         // was ever seen, means "not started yet" and must keep waiting for a real terminal state (#17.2).

@@ -125,6 +125,37 @@ public sealed class AsteriskContainer : IAsyncDisposable
         "type=aor\n" +
         "max_contacts=1\n";
 
+    /// <summary>
+    /// IP-authentifizierter Trunk ohne Registrierung (#104): kein <c>auth=</c>, kein <c>aors=</c> —
+    /// Asterisk ordnet Requests allein über <c>type=identify</c> der Quell-IP zu, wie ein Static-IP-Trunk
+    /// beim Provider.
+    /// </summary>
+    /// <remarks>
+    /// <b>Nur auf Anforderung</b> (<c>withIpAuthTrunk: true</c>), und das ist keine Kosmetik: alle Tests
+    /// laufen von derselben Maschine, also von derselben Quell-IP. Asterisk wertet <c>identify</c> vor der
+    /// credential-basierten Zuordnung aus, sodass ein dauerhaft aktiver Trunk-Match auch die Requests der
+    /// registrierten Endpoints 6001–6004 auf diesen Endpoint zöge — gemessen: 45 von 73 Interop-Tests
+    /// fielen aus, als er Teil der Basiskonfiguration war. Der Trunk-Test bekommt daher seinen eigenen
+    /// Container.
+    /// </remarks>
+    private const string IpAuthTrunkConf =
+        "\n" +
+        "[trunk-ip]\n" +
+        "type=endpoint\n" +
+        "context=default\n" +
+        "disallow=all\n" +
+        "allow=ulaw\n" +
+        "direct_media=no\n" +
+        "\n" +
+        "[trunk-ip]\n" +
+        "type=identify\n" +
+        "endpoint=trunk-ip\n" +
+        // Welches Bridge-Netz Testcontainers vergibt, steht nicht fest → die drei privaten Bereiche
+        // (RFC 1918). In einem Wegwerf-Container unbedenklich; beim Provider stünde hier die Kunden-IP.
+        "match=172.16.0.0/12\n" +
+        "match=10.0.0.0/8\n" +
+        "match=192.168.0.0/16\n";
+
     // Dialplan für Call-Tests. Kontext [default] passt zu context=default am Endpoint 6001.
     // Non-Happy-Path-Extensions bilden je einen definierten SIP-Fehler ab (App→SIP live verifiziert);
     // die answer-Extension beantwortet den Call und sendet aktiv Media (Milliwatt-Testton), sodass
@@ -179,7 +210,12 @@ public sealed class AsteriskContainer : IAsyncDisposable
     /// manuelle Kapazitätsläufe setzen es explizit höher, damit nicht Dockers 1024er-Default die
     /// Messung bei ungefähr 250 RTP-Calls beendet.
     /// </param>
-    public AsteriskContainer(int extraBridgePairs = 0, long? openFileLimit = null)
+    /// <param name="withIpAuthTrunk">
+    /// Fügt den IP-authentifizierten Trunk-Endpoint <c>trunk-ip</c> hinzu (#104). Standardmäßig aus, weil
+    /// sein <c>type=identify</c> sonst auch die Requests der registrierten Endpoints abfängt — siehe
+    /// <see cref="IpAuthTrunkConf"/>.
+    /// </param>
+    public AsteriskContainer(int extraBridgePairs = 0, long? openFileLimit = null, bool withIpAuthTrunk = false)
     {
         _usesBrowserSafeNetwork = IsBrowserSafeModeRequested(
             Environment.GetEnvironmentVariable(BrowserSafeModeEnvironmentVariable));
@@ -193,6 +229,8 @@ public sealed class AsteriskContainer : IAsyncDisposable
         var pjsipContent = extraBridgePairs > 0
             ? PjsipConf + BuildSoakPjsipConf(extraBridgePairs)
             : PjsipConf;
+        if (withIpAuthTrunk)
+            pjsipContent += IpAuthTrunkConf;
         var extensionsContent = extraBridgePairs > 0
             ? ExtensionsConf + BuildSoakExtensionsConf(extraBridgePairs)
             : ExtensionsConf;

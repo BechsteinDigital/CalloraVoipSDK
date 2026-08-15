@@ -8,6 +8,41 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
 
 The next line. Entries here accumulate the consumer-visible changes not yet released.
 
+Registration-free, IP-authenticated SIP trunks. Some enterprise trunks authenticate the customer by **source
+IP**: no credentials, no registration, and inbound calls delivered to an address agreed up front. That could
+not be modelled — the SDK always sent an initial REGISTER, and `ReregisterOptions.Disabled` only suppressed
+*re*-registration after a lost binding. A line can now skip REGISTER entirely and settle in a new operational
+state, and the SIP listener can bind a fixed local port so the provider has somewhere to deliver to. Purely
+additive: one enum member and three properties, nothing removed or changed in behaviour for existing
+configurations. Validated end-to-end against a real Asterisk endpoint that carries neither `auth=` nor
+`aors=` — outbound call with RTP, and an inbound call originated straight at the configured port.
+
+### Added
+
+- **`SipAccount.Register`** — `true` by default. Set to `false` for an IP-authenticated static-IP trunk: the
+  line never sends REGISTER, reaches `LineState.Ready`, and dials straight at `SipServer`/`OutboundProxy`.
+  Deregistering such a line sends nothing, because there is no binding to remove. Not the same as
+  `ReregisterOptions.Disabled`, which still sends the initial REGISTER. `RegistrationExpiry` and `Reregister`
+  are ignored in this mode; inbound admission continues to follow `AcceptTrunkInbound` / `InboundNumbers`.
+- **`LineState.Ready`** — operational without a registration. A line in this mode never reaches `Registered`,
+  and reporting it as `Unregistered` would misrepresent it as unusable. Consumers gating on "ready to dial"
+  should accept `Registered` **or** `Ready`. Appended at the end of the enum, so existing members keep their
+  numeric values.
+- **`SipAccount.Username` is no longer `required`** — a static-IP trunk may have no account user at all.
+  Addresses then take the host-only form `sip:host` (RFC 3261 §19.1.1) in From, Contact and the AOR, rather
+  than the invalid `sip:@host`. Existing code is unaffected: leaving `required` behind only removes a
+  compile-time obligation, it changes nothing for accounts that set a username.
+  **`InboundNumbers` becomes mandatory when `Username` is empty** and connecting is refused otherwise: the
+  username is what gives a line its exact 1:1 inbound match, and without it the only remaining rule is
+  "anything on our domain", so the line would answer calls meant for a sibling line on the same provider
+  domain.
+- **`VoipConfiguration.LocalSipPort` / `LocalSipTlsPort`** — fixed local bind ports for the SIP listener
+  (UDP+TCP, and TLS respectively); `0` keeps the previous ephemeral behaviour. Required when nobody tells the
+  peer your address — an IP-authenticated trunk sends no REGISTER Contact — and for static firewall or NAT
+  rules, which an ephemeral port invalidates on every restart. A port already in use throws at client
+  construction rather than silently binding elsewhere, since a listener on the wrong port looks healthy while
+  every inbound call goes missing.
+
 ## [4.10.0] - 2026-08-07
 
 Per-call outgoing-audio mute on `ICall`. The device-wide mute (`IVoipClient.SetAudioInputMuted`) silences the

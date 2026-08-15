@@ -43,11 +43,21 @@ public sealed class SipTransportHardeningConfiguration
     /// <summary>
     /// Maps this public configuration onto the internal transport options consumed by the SIP runtime.
     /// </summary>
-    internal SipTransportOptions ToTransportOptions() => new()
+    /// <param name="localSipPort">
+    /// Local UDP/TCP bind port from <see cref="VoipConfiguration.LocalSipPort"/> (0 = ephemeral). Carried
+    /// through the same options object because that is the runtime's single listener-configuration input;
+    /// it is a listener property, not a hardening limit, and lives on <see cref="VoipConfiguration"/>.
+    /// </param>
+    /// <param name="localSipTlsPort">
+    /// Local TLS bind port from <see cref="VoipConfiguration.LocalSipTlsPort"/> (0 = ephemeral).
+    /// </param>
+    internal SipTransportOptions ToTransportOptions(int localSipPort = 0, int localSipTlsPort = 0) => new()
     {
         MaxConcurrentInboundConnections = MaxConcurrentInboundConnections,
         MaxInboundConnectionsPerRemote = MaxInboundConnectionsPerRemote,
         MaxEndpointHintEntries = MaxEndpointHintEntries,
         HandshakeTimeout = HandshakeTimeout,
+        LocalSipPort = localSipPort,
+        LocalSipTlsPort = localSipTlsPort,
     };
 }

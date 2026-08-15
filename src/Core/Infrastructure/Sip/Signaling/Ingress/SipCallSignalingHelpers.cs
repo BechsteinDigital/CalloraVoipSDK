@@ -23,8 +23,9 @@ internal static class SipCallSignalingHelpers
     public static void ValidateInviteRequest(SipInviteRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        if (string.IsNullOrWhiteSpace(request.LocalUsername))
-            throw new ArgumentException("LocalUsername is required.", nameof(request));
+        // LocalUsername may be empty: an IP-authenticated trunk has no account user, and RFC 3261 §19.1.1
+        // makes the userinfo part optional, so From/Contact become "sip:host". LocalDomain stays required —
+        // without a host there is no address at all.
         if (string.IsNullOrWhiteSpace(request.LocalDomain))
             throw new ArgumentException("LocalDomain is required.", nameof(request));
         if (string.IsNullOrWhiteSpace(request.RemoteUri))

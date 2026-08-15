@@ -590,6 +590,7 @@
   CalloraVoipSdk.Core.Domain.Lines.LineId.ToString() : System.String
   CalloraVoipSdk.Core.Domain.Lines.LineId.Value : System.Guid { get, init }
   CalloraVoipSdk.Core.Domain.Lines.LineState.Failed = enum-value
+  CalloraVoipSdk.Core.Domain.Lines.LineState.Ready = enum-value
   CalloraVoipSdk.Core.Domain.Lines.LineState.Reconnecting = enum-value
   CalloraVoipSdk.Core.Domain.Lines.LineState.Registered = enum-value
   CalloraVoipSdk.Core.Domain.Lines.LineState.Registering = enum-value
@@ -620,6 +621,7 @@
   CalloraVoipSdk.Core.Domain.Lines.SipAccount.PublicMediaHost : System.String { get, init }
   CalloraVoipSdk.Core.Domain.Lines.SipAccount.PublicSipHost : System.String { get, init }
   CalloraVoipSdk.Core.Domain.Lines.SipAccount.PublicSipPort : System.Nullable<System.Int32> { get, init }
+  CalloraVoipSdk.Core.Domain.Lines.SipAccount.Register : System.Boolean { get, init }
   CalloraVoipSdk.Core.Domain.Lines.SipAccount.RegistrationExpiry : System.Int32 { get, init }
   CalloraVoipSdk.Core.Domain.Lines.SipAccount.Reregister : CalloraVoipSdk.Core.Domain.Lines.ReregisterOptions { get, init }
   CalloraVoipSdk.Core.Domain.Lines.SipAccount.SipServer : System.String { get, init }
@@ -971,6 +973,8 @@
   CalloraVoipSdk.VoipConfiguration.HangupHeldCallOnMediaSilence : System.Boolean { get, init }
   CalloraVoipSdk.VoipConfiguration.Ice : CalloraVoipSdk.IceConfiguration { get, init }
   CalloraVoipSdk.VoipConfiguration.InboundMediaTimeout : System.TimeSpan { get, init }
+  CalloraVoipSdk.VoipConfiguration.LocalSipPort : System.Int32 { get, init }
+  CalloraVoipSdk.VoipConfiguration.LocalSipTlsPort : System.Int32 { get, init }
   CalloraVoipSdk.VoipConfiguration.LoggerFactory : Microsoft.Extensions.Logging.ILoggerFactory { get, init }
   CalloraVoipSdk.VoipConfiguration.MaxConcurrentCallsPerLine : System.Int32 { get, init }
   CalloraVoipSdk.VoipConfiguration.OfferDtlsSrtp : System.Boolean { get, init }

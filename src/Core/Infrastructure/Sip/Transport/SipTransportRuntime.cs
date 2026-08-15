@@ -119,14 +119,21 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
             _defaultOutboundTlsIdentity,
             (remote, transport, payload) => HandleInboundPayloadAsync(remote, transport, payload, inboundConnectionId: null));
 
-        _udp = new UdpClient(new IPEndPoint(IPAddress.Any, 0));
+        // A configured port binds UDP and TCP to it; 0 keeps the ephemeral default. Only a peer that is
+        // never told where to reach us needs the fixed port — an IP-authenticated trunk sends no REGISTER,
+        // so the provider delivers to a pre-agreed address (#104). Binding a port already in use throws
+        // SocketException here, which is the right moment: a listener silently landing somewhere else
+        // would look healthy while every inbound call goes missing.
+        _udp = new UdpClient(new IPEndPoint(IPAddress.Any, effectiveOptions.LocalSipPort));
 
-        _tcpListener = new TcpListener(IPAddress.Any, 0);
+        _tcpListener = new TcpListener(IPAddress.Any, effectiveOptions.LocalSipPort);
         _tcpListener.Start();
 
         if (_tlsCertificate is not null)
         {
-            _tlsListener = new TcpListener(IPAddress.Any, 0);
+            // TLS is a second TCP listener, so it cannot share LocalSipPort — hence its own setting
+            // (5061 beside 5060 by SIP convention, RFC 3261 §19.1.2).
+            _tlsListener = new TcpListener(IPAddress.Any, effectiveOptions.LocalSipTlsPort);
             _tlsListener.Start();
             _logger.LogInformation("SIP TLS listener started on {EndPoint}.", _tlsListener.LocalEndpoint);
         }

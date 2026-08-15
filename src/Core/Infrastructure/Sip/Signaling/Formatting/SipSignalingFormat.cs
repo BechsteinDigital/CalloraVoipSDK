@@ -82,7 +82,13 @@ internal static class SipSignalingFormat
             _ => ";transport=udp"
         };
 
-        return $"{scheme}:{username}@{host}:{port}{transportParam}";
+        // An IP-authenticated trunk has no account user. "sip:@host:port" is not a SIP URI, and a peer that
+        // receives it in a Contact has nothing valid to route back to — Asterisk simply stops answering,
+        // which surfaces as a dial timeout rather than an error. RFC 3261 §19.1.1 makes userinfo optional,
+        // so the contact is then the host alone.
+        return string.IsNullOrWhiteSpace(username)
+            ? $"{scheme}:{host}:{port}{transportParam}"
+            : $"{scheme}:{username}@{host}:{port}{transportParam}";
     }
 
     private static string ResolveAdvertisedHost(IPEndPoint localEndPoint, string? advertisedHost) =>

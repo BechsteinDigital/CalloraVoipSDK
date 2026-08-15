@@ -26,5 +26,18 @@ public enum LineState
     /// was exceeded or the server rejected credentials (401/403).
     /// No further attempts will be made.
     /// </summary>
-    Failed
+    Failed,
+
+    /// <summary>
+    /// Operational without a registration: the line never sends REGISTER because
+    /// <see cref="SipAccount.Register"/> is <see langword="false"/> (an IP-authenticated static-IP
+    /// trunk, where the peer recognises us by source address). Calls can be placed and received.
+    /// </summary>
+    /// <remarks>
+    /// This is a steady state, not a step towards <see cref="Registered"/> — a line in this mode never
+    /// reaches that state, and <see cref="Unregistered"/> would misreport it as unusable. Consumers
+    /// gating on "line is ready to dial" must accept <see cref="Registered"/> <b>or</b> this value.
+    /// Appended at the end of the enum so the existing members keep their numeric values.
+    /// </remarks>
+    Ready
 }
