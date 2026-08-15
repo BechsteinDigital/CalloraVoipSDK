@@ -54,6 +54,7 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
     private readonly ConcurrentDictionary<string, string> _sessionTraceIds = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, string> _replacementTargets = new(StringComparer.Ordinal);
     private readonly SipMergedInviteTracker _mergedInviteTracker = new();
+    private readonly SipReplacedDialogTerminator _replacedDialogTerminator;
     private readonly IDisposable _requestSubscription;
     private readonly IDisposable _responseSubscription;
     private readonly int _maxConcurrentInboundSessions;
@@ -90,6 +91,7 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
         _logger = (loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory)))
             .CreateLogger<SipCallSignalingService>();
         _telemetry = telemetry ?? NullSipTelemetrySink.Instance;
+        _replacedDialogTerminator = new SipReplacedDialogTerminator(_telemetry, _logger);
         _identityTrustPolicy = identityTrustPolicy ?? DenyAllSipIdentityTrustPolicy.Instance;
         _userIdentityPolicy = userIdentityPolicy ?? AcceptAllSipUasUserIdentityPolicy.Instance;
         _serverTransactions = new SipServerTransactionEngine(
@@ -819,9 +821,11 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
             });
 
             if (e.NewState == SipDialogState.Established
-                && _replacementTargets.TryRemove(session.CallId, out var replacedCallId))
+                && _replacementTargets.TryRemove(session.CallId, out var replacedCallId)
+                && _sessions.TryGetValue(replacedCallId, out var replacedSession))
             {
-                _ = TerminateReplacedDialogAsync(session.CallId, replacedCallId, traceId);
+                _ = _replacedDialogTerminator.TerminateAsync(
+                    replacedSession, session.CallId, replacedCallId, traceId);
             }
 
             if (e.NewState != SipDialogState.Terminated) return;
@@ -852,44 +856,6 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
     /// <summary>
     /// Terminates one dialog that was targeted by an accepted Replaces INVITE.
     /// </summary>
-    private async Task TerminateReplacedDialogAsync(
-        string replacingCallId,
-        string replacedCallId,
-        string traceId)
-    {
-        try
-        {
-            if (!_sessions.TryGetValue(replacedCallId, out var replacedSession))
-                return;
-            if (string.Equals(replacingCallId, replacedCallId, StringComparison.Ordinal))
-                return;
-            if (replacedSession.State == SipDialogState.Terminated)
-                return;
-
-            var reason = SipReasonHeader.CreateSipStatusReason(200, "Replaced");
-            await replacedSession.HangupAsync(reason: reason).ConfigureAwait(false);
-            _telemetry.PublishEvent(new SipEventRecord
-            {
-                EventType = "sip.dialog.replaces.completed",
-                CallId = replacingCallId,
-                CorrelationId = BuildCorrelationId(replacingCallId, "REPLACES", null),
-                TraceId = traceId,
-                Attributes = new Dictionary<string, string>
-                {
-                    ["replaced_call_id"] = replacedCallId
-                }
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(
-                ex,
-                "Failed terminating replaced SIP dialog {ReplacedCallId} for replacing dialog {ReplacingCallId}.",
-                replacedCallId,
-                replacingCallId);
-        }
-    }
-
     /// <inheritdoc />
     public Task<SipSubscriptionHandle> SubscribeAsync(
         SipSubscribeRequest request,
