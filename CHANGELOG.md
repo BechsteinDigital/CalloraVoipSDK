@@ -8,6 +8,20 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
 
 The next line. Entries here accumulate the consumer-visible changes not yet released.
 
+### Changed
+
+- **DTLS-SRTP fingerprint verification is hash-agile (RFC 8122 §5).** The peer's `a=fingerprint` is now
+  verified by digesting its certificate with the hash function the peer named, instead of assuming SHA-256
+  and rejecting everything else with `unsupported_certificate` — a peer signalling SHA-384 could previously
+  not complete a handshake at all. Accepted: `sha-224`, `sha-256`, `sha-384`, `sha-512`. What the SDK *emits*
+  is unchanged (SHA-256, the function RFC 8122 requires every implementation to support).
+  `md2`, `md5` and `sha-1` are refused although the registry lists them: a fingerprint breaks on a
+  collision — an attacker mints two certificates with the same digest, signals one and presents the other —
+  and this fingerprint is the only binding between the signalled identity and the DTLS endpoint
+  (RFC 8122 §6). This is stricter than the reference stacks (libwebrtc allows SHA-1; SIPSorcery accepts
+  whatever BouncyCastle can compute, MD5 included), so a peer configured for SHA-1 now fails the handshake
+  instead of receiving a weaker binding.
+
 Registration-free, IP-authenticated SIP trunks. Some enterprise trunks authenticate the customer by **source
 IP**: no credentials, no registration, and inbound calls delivered to an address agreed up front. That could
 not be modelled — the SDK always sent an initial REGISTER, and `ReregisterOptions.Disabled` only suppressed
