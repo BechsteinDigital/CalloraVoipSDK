@@ -98,6 +98,20 @@ internal sealed class SipLineChannel : ILineChannel
         _preferredVideoCodecNames = preferredVideoCodecNames;
         _lineTls = lineTls;
         _account = account ?? throw new ArgumentNullException(nameof(account));
+
+        // An account without a user-part has no exact inbound match: TrunkInboundMatcher would fall
+        // straight through to "anything addressed to our domain", so the line would answer calls meant for
+        // a sibling line on the same provider domain. A DID whitelist restores the discrimination the
+        // username otherwise provides, so require one instead of over-accepting silently.
+        if (string.IsNullOrWhiteSpace(account.Username)
+            && account.InboundNumbers is not { Count: > 0 })
+        {
+            throw new ArgumentException(
+                "A SipAccount without a Username must set InboundNumbers: without either, the line would "
+                + "accept every inbound call addressed to its domain, including calls meant for other lines "
+                + $"on '{account.SipServer}'.",
+                nameof(account));
+        }
         _userAgent = string.IsNullOrWhiteSpace(userAgent) ? "CalloraVoipSdk/1.0" : userAgent;
         _registrationService = registrationService ?? throw new ArgumentNullException(nameof(registrationService));
         _callSignalingService = callSignalingService ?? throw new ArgumentNullException(nameof(callSignalingService));
@@ -279,7 +293,9 @@ internal sealed class SipLineChannel : ILineChannel
         ArgumentException.ThrowIfNullOrWhiteSpace(eventType);
 
         // RFC 3903: a UA publishes state for its own address-of-record (the presentity Request-URI).
-        var addressOfRecord = $"sip:{_account.Username}@{_account.SipServer}";
+        // Built through SipAddress so an account without a user-part yields "sip:host" rather than the
+        // invalid "sip:@host" (RFC 3261 §19.1.1).
+        var addressOfRecord = SipAddress.From(_account.Username, _account.SipServer).Value;
         var result = await _callSignalingService.PublishAsync(
                 new SipPublishRequest
                 {

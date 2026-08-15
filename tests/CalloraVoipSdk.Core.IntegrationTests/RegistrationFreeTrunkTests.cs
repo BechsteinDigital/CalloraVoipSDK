@@ -148,6 +148,45 @@ public sealed class RegistrationFreeTrunkTests
         Assert.Equal(6, (int)LineState.Ready);
     }
 
+    // ── Trunks without an account user ───────────────────────────────────────
+
+    [Fact]
+    public void An_address_without_a_user_part_is_the_bare_host()
+    {
+        // RFC 3261 §19.1.1: userinfo is optional. Interpolating an empty user anyway would produce
+        // "sip:@host", which is not a SIP URI and would go out on the wire as-is.
+        var address = SipAddress.From(string.Empty, "trunk.example");
+
+        Assert.Equal("sip:trunk.example", address.Value);
+        Assert.Equal(string.Empty, address.User);
+        Assert.Equal("trunk.example", address.Host);
+    }
+
+    [Fact]
+    public void A_host_only_address_parses()
+    {
+        var address = new SipAddress("sip:trunk.example");
+
+        Assert.Equal(string.Empty, address.User);
+        Assert.Equal("trunk.example", address.Host);
+    }
+
+    [Fact]
+    public void An_empty_user_part_before_an_at_sign_is_still_rejected()
+    {
+        // The loosening is "no user-part", not "any malformed address": sip:@host stays invalid.
+        Assert.Throws<ArgumentException>(() => new SipAddress("sip:@trunk.example"));
+    }
+
+    [Fact]
+    public void A_user_part_still_round_trips()
+    {
+        var address = SipAddress.From("alice", "example.com");
+
+        Assert.Equal("sip:alice@example.com", address.Value);
+        Assert.Equal("alice", address.User);
+    }
+
     private sealed class NoopCallRegistry : ICallRegistry
     {
         public void Register(Call call) { }

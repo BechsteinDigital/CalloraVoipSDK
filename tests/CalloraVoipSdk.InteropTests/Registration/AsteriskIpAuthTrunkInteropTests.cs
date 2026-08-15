@@ -145,6 +145,40 @@ public sealed class AsteriskIpAuthTrunkInteropTests
         await call.HangupAsync();
     }
 
+    [DockerRequiredFact]
+    public async Task TrunkWithoutAnAccountUser_PlacesAnOutboundCall()
+    {
+        // Der eigentliche Static-IP-Fall: gar kein Account-User. From/Contact werden dann host-only
+        // ("sip:host", RFC 3261 §19.1.1) statt "sip:@host" — dass ein echter Peer das annimmt, lässt sich
+        // nur so zeigen. InboundNumbers ist Pflicht, weil ohne User-part die 1:1-Zuordnung entfällt.
+        await using var asterisk = new AsteriskContainer(withIpAuthTrunk: true);
+        await asterisk.StartAsync();
+        using var client = NewClient(FreeUdpPort());
+
+        var connect = await client.ConnectAsync(
+            new SipAccount
+            {
+                SipServer = asterisk.ContainerIpAddress,
+                Port = 5060,
+                Transport = DomainSipTransport.Udp,
+                Register = false,
+                InboundNumbers = ["4930123456"],
+            },
+            new ConnectOptions { Timeout = TimeSpan.FromSeconds(20) });
+
+        Assert.True(connect.IsSuccess, $"Connect fehlgeschlagen: Status={connect.Status}");
+        Assert.Equal(LineState.Ready, connect.Line!.State);
+
+        var result = await client.DialAndWaitUntilConnectedAsync(
+            connect.Line!,
+            asterisk.CallTargetUri("answer"),
+            new DialWaitOptions { ConnectTimeout = TimeSpan.FromSeconds(15) });
+
+        Assert.True(result.IsSuccess, $"DialStatus: {result.Status}");
+        Assert.Equal(CallState.Connected, result.Call!.State);
+        await result.Call.HangupAsync();
+    }
+
     /// <summary>
     /// Adresse, unter der der Container die Testmaschine erreicht — das Default-Gateway seines
     /// Bridge-Netzes. Aus <c>/proc/net/route</c>, weil das Asterisk-Image kein <c>ip</c> mitbringt: die

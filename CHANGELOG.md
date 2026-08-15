@@ -28,6 +28,14 @@ configurations. Validated end-to-end against a real Asterisk endpoint that carri
   and reporting it as `Unregistered` would misrepresent it as unusable. Consumers gating on "ready to dial"
   should accept `Registered` **or** `Ready`. Appended at the end of the enum, so existing members keep their
   numeric values.
+- **`SipAccount.Username` is no longer `required`** — a static-IP trunk may have no account user at all.
+  Addresses then take the host-only form `sip:host` (RFC 3261 §19.1.1) in From, Contact and the AOR, rather
+  than the invalid `sip:@host`. Existing code is unaffected: leaving `required` behind only removes a
+  compile-time obligation, it changes nothing for accounts that set a username.
+  **`InboundNumbers` becomes mandatory when `Username` is empty** and connecting is refused otherwise: the
+  username is what gives a line its exact 1:1 inbound match, and without it the only remaining rule is
+  "anything on our domain", so the line would answer calls meant for a sibling line on the same provider
+  domain.
 - **`VoipConfiguration.LocalSipPort` / `LocalSipTlsPort`** — fixed local bind ports for the SIP listener
   (UDP+TCP, and TLS respectively); `0` keeps the previous ephemeral behaviour. Required when nobody tells the
   peer your address — an IP-authenticated trunk sends no REGISTER Contact — and for static firewall or NAT

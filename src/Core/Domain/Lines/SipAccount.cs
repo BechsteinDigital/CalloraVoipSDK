@@ -8,8 +8,20 @@ public sealed class SipAccount
     /// <summary>Human-readable caller name shown to the remote party; empty by default.</summary>
     public string        DisplayName      { get; init; } = string.Empty;
 
-    /// <summary>SIP authentication user and address user-part (required).</summary>
-    public required string Username       { get; init; }
+    /// <summary>
+    /// SIP authentication user and address user-part. Empty by default.
+    /// </summary>
+    /// <remarks>
+    /// Required in practice for every account that registers — it is the AOR user-part the registrar binds
+    /// and the name it challenges. Leave it empty only for an IP-authenticated trunk
+    /// (<see cref="Register"/> = <see langword="false"/>) that has no account user at all: addresses then
+    /// take the host-only form <c>sip:host</c> (RFC 3261 §19.1.1) instead of <c>sip:user@host</c>.
+    /// <para>
+    /// Without a user-part there is no 1:1 match for inbound calls, so <see cref="InboundNumbers"/> becomes
+    /// the only way to say which calls belong to this line — see the note there.
+    /// </para>
+    /// </remarks>
+    public string        Username         { get; init; } = string.Empty;
 
     /// <summary>
     /// SIP account password. Optional: it is only needed when the registrar challenges the
@@ -92,6 +104,12 @@ public sealed class SipAccount
     /// calls delivered by the registrar it registered to, and any number on its registered
     /// domain (trunk default). <see cref="Username"/>-only accounts are unaffected.
     /// </summary>
+    /// <remarks>
+    /// <b>Required when <see cref="Username"/> is empty.</b> The username is what gives a line its exact
+    /// 1:1 match; without it the only remaining rule is "anything on this domain", so a line would answer
+    /// every inbound call the provider sends — including those meant for a different line on the same
+    /// domain. Connecting such an account is refused rather than silently over-accepting.
+    /// </remarks>
     public IReadOnlyList<string>? InboundNumbers { get; init; }
 
     /// <summary>

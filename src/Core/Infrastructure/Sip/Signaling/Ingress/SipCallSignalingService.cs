@@ -144,7 +144,11 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
         if (!SipProtocol.TryParseSipUri(normalizedRemoteUri, out _, out _, out _))
             throw new ArgumentException($"RemoteUri must be a valid SIP URI, got '{request.RemoteUri}'.", nameof(request));
 
-        var localUri = $"sip:{request.LocalUsername}@{request.LocalDomain}";
+        // An IP-authenticated trunk has no account user, and "sip:@domain" is not a SIP URI — RFC 3261
+        // §19.1.1 makes the userinfo part optional, so the address is then simply the host.
+        var localUri = string.IsNullOrWhiteSpace(request.LocalUsername)
+            ? $"sip:{request.LocalDomain}"
+            : $"sip:{request.LocalUsername}@{request.LocalDomain}";
         var callId = SipProtocol.NewCallId();
         var localTag = SipProtocol.NewTag();
         var traceId = ResolveTraceId(callId);

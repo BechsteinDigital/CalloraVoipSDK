@@ -101,6 +101,25 @@ var connect = await client.ConnectAsync(new SipAccount
 Debug.Assert(connect.Line!.State == LineState.Ready);
 ```
 
+### No account user at all
+
+Some static-IP trunks have no user-part either. `Username` may then be left empty, and addresses take the
+host-only form `sip:trunk.provider.example` (RFC 3261 §19.1.1) instead of `sip:user@host`:
+
+```csharp
+var connect = await client.ConnectAsync(new SipAccount
+{
+    SipServer      = "trunk.provider.example",
+    Register       = false,
+    InboundNumbers = new[] { "4930123456", "4930123457" }   // required in this mode
+});
+```
+
+`InboundNumbers` is **mandatory without a username**, and connecting is refused otherwise. The username is
+what gives a line its exact 1:1 inbound match; without it the only remaining rule is "anything addressed to
+our domain", so the line would answer calls meant for a different line on the same provider domain. The DID
+whitelist restores that discrimination.
+
 Two things are easy to get wrong here:
 
 **`Register = false` is not `ReregisterOptions.Disabled`.** That one only stops *re*-registration
