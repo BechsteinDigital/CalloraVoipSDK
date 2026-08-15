@@ -150,7 +150,7 @@ Struct SipAddress  <a class="header-action link-secondary" title="View source" h
 
   <h3 id="CalloraVoipSdk_Core_Domain_Lines_SipAddress__ctor_System_String_" data-uid="CalloraVoipSdk.Core.Domain.Lines.SipAddress.#ctor(System.String)">
   SipAddress(string)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/SipAddress.cs/#L20"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/SipAddress.cs/#L28"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Parses a SIP address. A missing <code>sip:</code>/<code>sips:</code> scheme is prefixed with <code>sip:</code>.</p>
@@ -164,7 +164,10 @@ Struct SipAddress  <a class="header-action link-secondary" title="View source" h
   <h4 class="section">Parameters</h4>
   <dl class="parameters">
     <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
-    <dd><p>The address, with or without scheme; must contain <code>user@host</code>.</p>
+    <dd><p>The address, with or without scheme. The user-part is optional (RFC 3261 §19.1.1): both
+<code>sip:alice@example.com</code> and the host-only <code>sip:trunk.example</code> are valid. What stays
+invalid is an empty user-part that still carries the separator — <code>sip:@example.com</code> is not a
+SIP URI, and accepting it would put that string on the wire.</p>
 </dd>
   </dl>
 
@@ -179,7 +182,7 @@ Struct SipAddress  <a class="header-action link-secondary" title="View source" h
   <h4 class="section">Exceptions</h4>
   <dl class="parameters">
     <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
-    <dd><p><code class="paramref">value</code> is blank or has no <code>user@host</code> form.</p>
+    <dd><p><code class="paramref">value</code> is blank or has an empty user-part before an <code>@</code>.</p>
 </dd>
   </dl>
 
@@ -193,10 +196,10 @@ Struct SipAddress  <a class="header-action link-secondary" title="View source" h
 
   <h3 id="CalloraVoipSdk_Core_Domain_Lines_SipAddress_Host" data-uid="CalloraVoipSdk.Core.Domain.Lines.SipAddress.Host">
   Host
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/SipAddress.cs/#L13"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/SipAddress.cs/#L16"><i class="bi bi-code-slash"></i></a>
   </h3>
 
-  <div class="markdown level1 summary"><p>The host-part (after the <code>@</code>): the SIP domain or host.</p>
+  <div class="markdown level1 summary"><p>The host-part: the SIP domain or host.</p>
 </div>
   <div class="markdown level1 conceptual"></div>
 
@@ -225,10 +228,11 @@ Struct SipAddress  <a class="header-action link-secondary" title="View source" h
 
   <h3 id="CalloraVoipSdk_Core_Domain_Lines_SipAddress_User" data-uid="CalloraVoipSdk.Core.Domain.Lines.SipAddress.User">
   User
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/SipAddress.cs/#L10"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/SipAddress.cs/#L13"><i class="bi bi-code-slash"></i></a>
   </h3>
 
-  <div class="markdown level1 summary"><p>The user-part (before the <code>@</code>).</p>
+  <div class="markdown level1 summary"><p>The user-part (before the <code>@</code>), or empty for a host-only address such as
+<code>sip:trunk.example</code>.</p>
 </div>
   <div class="markdown level1 conceptual"></div>
 
@@ -293,10 +297,10 @@ Struct SipAddress  <a class="header-action link-secondary" title="View source" h
 
   <h3 id="CalloraVoipSdk_Core_Domain_Lines_SipAddress_From_System_String_System_String_" data-uid="CalloraVoipSdk.Core.Domain.Lines.SipAddress.From(System.String,System.String)">
   From(string, string)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/SipAddress.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/SipAddress.cs/#L55"><i class="bi bi-code-slash"></i></a>
   </h3>
 
-  <div class="markdown level1 summary"><p>Builds a <code>sip:</code> address from a user-part and host.</p>
+  <div class="markdown level1 summary"><p>Builds a <code>sip:</code> address from an optional user-part and a host.</p>
 </div>
   <div class="markdown level1 conceptual"></div>
 
@@ -307,7 +311,9 @@ Struct SipAddress  <a class="header-action link-secondary" title="View source" h
   <h4 class="section">Parameters</h4>
   <dl class="parameters">
     <dt><code>username</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
-    <dd><p>The user-part.</p>
+    <dd><p>The user-part. Empty or whitespace produces a host-only address (<code>sip:host</code>) — what an
+IP-authenticated trunk without an account user needs; interpolating it anyway would yield the
+invalid <code>sip:@host</code>.</p>
 </dd>
     <dt><code>host</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
     <dd><p>The host or SIP domain.</p>
@@ -334,7 +340,7 @@ Struct SipAddress  <a class="header-action link-secondary" title="View source" h
 
   <h3 id="CalloraVoipSdk_Core_Domain_Lines_SipAddress_ToString" data-uid="CalloraVoipSdk.Core.Domain.Lines.SipAddress.ToString">
   ToString()
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/SipAddress.cs/#L47"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/SipAddress.cs/#L59"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Returns the full SIP URI (<a class="xref" href="CalloraVoipSdk.Core.Domain.Lines.SipAddress.html#CalloraVoipSdk_Core_Domain_Lines_SipAddress_Value">Value</a>).</p>

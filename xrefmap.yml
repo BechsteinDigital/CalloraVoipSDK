@@ -6436,6 +6436,12 @@ references:
   commentId: F:CalloraVoipSdk.Core.Domain.Lines.LineState.Failed
   fullName: CalloraVoipSdk.Core.Domain.Lines.LineState.Failed
   nameWithType: LineState.Failed
+- uid: CalloraVoipSdk.Core.Domain.Lines.LineState.Ready
+  name: Ready
+  href: _api/CalloraVoipSdk.Core.Domain.Lines.LineState.html#CalloraVoipSdk_Core_Domain_Lines_LineState_Ready
+  commentId: F:CalloraVoipSdk.Core.Domain.Lines.LineState.Ready
+  fullName: CalloraVoipSdk.Core.Domain.Lines.LineState.Ready
+  nameWithType: LineState.Ready
 - uid: CalloraVoipSdk.Core.Domain.Lines.LineState.Reconnecting
   name: Reconnecting
   href: _api/CalloraVoipSdk.Core.Domain.Lines.LineState.html#CalloraVoipSdk_Core_Domain_Lines_LineState_Reconnecting
@@ -6755,6 +6761,19 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.Core.Domain.Lines.SipAccount.PublicSipPort
   nameWithType: SipAccount.PublicSipPort
+- uid: CalloraVoipSdk.Core.Domain.Lines.SipAccount.Register
+  name: Register
+  href: _api/CalloraVoipSdk.Core.Domain.Lines.SipAccount.html#CalloraVoipSdk_Core_Domain_Lines_SipAccount_Register
+  commentId: P:CalloraVoipSdk.Core.Domain.Lines.SipAccount.Register
+  fullName: CalloraVoipSdk.Core.Domain.Lines.SipAccount.Register
+  nameWithType: SipAccount.Register
+- uid: CalloraVoipSdk.Core.Domain.Lines.SipAccount.Register*
+  name: Register
+  href: _api/CalloraVoipSdk.Core.Domain.Lines.SipAccount.html#CalloraVoipSdk_Core_Domain_Lines_SipAccount_Register_
+  commentId: Overload:CalloraVoipSdk.Core.Domain.Lines.SipAccount.Register
+  isSpec: "True"
+  fullName: CalloraVoipSdk.Core.Domain.Lines.SipAccount.Register
+  nameWithType: SipAccount.Register
 - uid: CalloraVoipSdk.Core.Domain.Lines.SipAccount.RegistrationExpiry
   name: RegistrationExpiry
   href: _api/CalloraVoipSdk.Core.Domain.Lines.SipAccount.html#CalloraVoipSdk_Core_Domain_Lines_SipAccount_RegistrationExpiry
@@ -11350,6 +11369,32 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.VoipConfiguration.InboundMediaTimeout
   nameWithType: VoipConfiguration.InboundMediaTimeout
+- uid: CalloraVoipSdk.VoipConfiguration.LocalSipPort
+  name: LocalSipPort
+  href: _api/CalloraVoipSdk.VoipConfiguration.html#CalloraVoipSdk_VoipConfiguration_LocalSipPort
+  commentId: P:CalloraVoipSdk.VoipConfiguration.LocalSipPort
+  fullName: CalloraVoipSdk.VoipConfiguration.LocalSipPort
+  nameWithType: VoipConfiguration.LocalSipPort
+- uid: CalloraVoipSdk.VoipConfiguration.LocalSipPort*
+  name: LocalSipPort
+  href: _api/CalloraVoipSdk.VoipConfiguration.html#CalloraVoipSdk_VoipConfiguration_LocalSipPort_
+  commentId: Overload:CalloraVoipSdk.VoipConfiguration.LocalSipPort
+  isSpec: "True"
+  fullName: CalloraVoipSdk.VoipConfiguration.LocalSipPort
+  nameWithType: VoipConfiguration.LocalSipPort
+- uid: CalloraVoipSdk.VoipConfiguration.LocalSipTlsPort
+  name: LocalSipTlsPort
+  href: _api/CalloraVoipSdk.VoipConfiguration.html#CalloraVoipSdk_VoipConfiguration_LocalSipTlsPort
+  commentId: P:CalloraVoipSdk.VoipConfiguration.LocalSipTlsPort
+  fullName: CalloraVoipSdk.VoipConfiguration.LocalSipTlsPort
+  nameWithType: VoipConfiguration.LocalSipTlsPort
+- uid: CalloraVoipSdk.VoipConfiguration.LocalSipTlsPort*
+  name: LocalSipTlsPort
+  href: _api/CalloraVoipSdk.VoipConfiguration.html#CalloraVoipSdk_VoipConfiguration_LocalSipTlsPort_
+  commentId: Overload:CalloraVoipSdk.VoipConfiguration.LocalSipTlsPort
+  isSpec: "True"
+  fullName: CalloraVoipSdk.VoipConfiguration.LocalSipTlsPort
+  nameWithType: VoipConfiguration.LocalSipTlsPort
 - uid: CalloraVoipSdk.VoipConfiguration.LoggerFactory
   name: LoggerFactory
   href: _api/CalloraVoipSdk.VoipConfiguration.html#CalloraVoipSdk_VoipConfiguration_LoggerFactory

@@ -154,7 +154,7 @@ Class SipAccount  <a class="header-action link-secondary" title="View source" hr
 
   <h3 id="CalloraVoipSdk_Core_Domain_Lines_SipAccount_AcceptTrunkInbound" data-uid="CalloraVoipSdk.Core.Domain.Lines.SipAccount.AcceptTrunkInbound">
   AcceptTrunkInbound
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/SipAccount.cs/#L81"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/SipAccount.cs/#L124"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Whether the line accepts inbound INVITEs delivered by its registrar/proxy peer or,
@@ -192,7 +192,7 @@ own username. Ignored when <a class="xref" href="CalloraVoipSdk.Core.Domain.Line
 
   <h3 id="CalloraVoipSdk_Core_Domain_Lines_SipAccount_Address" data-uid="CalloraVoipSdk.Core.Domain.Lines.SipAccount.Address">
   Address
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/SipAccount.cs/#L90"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/SipAccount.cs/#L133"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>The account's SIP address-of-record, derived as <code>sip:Username@SipServer</code>.</p>
@@ -224,7 +224,7 @@ own username. Ignored when <a class="xref" href="CalloraVoipSdk.Core.Domain.Line
 
   <h3 id="CalloraVoipSdk_Core_Domain_Lines_SipAccount_Credentials" data-uid="CalloraVoipSdk.Core.Domain.Lines.SipAccount.Credentials">
   Credentials
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/SipAccount.cs/#L94"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/SipAccount.cs/#L137"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>The authentication credentials derived from <a class="xref" href="CalloraVoipSdk.Core.Domain.Lines.SipAccount.html#CalloraVoipSdk_Core_Domain_Lines_SipAccount_Username">Username</a> and <a class="xref" href="CalloraVoipSdk.Core.Domain.Lines.SipAccount.html#CalloraVoipSdk_Core_Domain_Lines_SipAccount_Password">Password</a>.</p>
@@ -288,7 +288,7 @@ own username. Ignored when <a class="xref" href="CalloraVoipSdk.Core.Domain.Line
 
   <h3 id="CalloraVoipSdk_Core_Domain_Lines_SipAccount_EffectivePort" data-uid="CalloraVoipSdk.Core.Domain.Lines.SipAccount.EffectivePort">
   EffectivePort
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/SipAccount.cs/#L98"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/SipAccount.cs/#L141"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>The port actually used: <a class="xref" href="CalloraVoipSdk.Core.Domain.Lines.SipAccount.html#CalloraVoipSdk_Core_Domain_Lines_SipAccount_Port">Port</a> when non-zero, otherwise the default for <a class="xref" href="CalloraVoipSdk.Core.Domain.Lines.SipAccount.html#CalloraVoipSdk_Core_Domain_Lines_SipAccount_Transport">Transport</a> (5060 UDP/TCP, 5061 TLS, 80 WS, 443 WSS).</p>
@@ -320,7 +320,7 @@ own username. Ignored when <a class="xref" href="CalloraVoipSdk.Core.Domain.Line
 
   <h3 id="CalloraVoipSdk_Core_Domain_Lines_SipAccount_InboundNumbers" data-uid="CalloraVoipSdk.Core.Domain.Lines.SipAccount.InboundNumbers">
   InboundNumbers
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/SipAccount.cs/#L70"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/SipAccount.cs/#L113"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Optional inbound number (DID) whitelist for SIP trunks. When set, the line only
@@ -349,6 +349,12 @@ domain (trunk default). <a class="xref" href="CalloraVoipSdk.Core.Domain.Lines.S
 
 
 
+  <h4 class="section" id="CalloraVoipSdk_Core_Domain_Lines_SipAccount_InboundNumbers_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>Required when <a class="xref" href="CalloraVoipSdk.Core.Domain.Lines.SipAccount.html#CalloraVoipSdk_Core_Domain_Lines_SipAccount_Username">Username</a> is empty.</b> The username is what gives a line its exact
+1:1 match; without it the only remaining rule is &quot;anything on this domain&quot;, so a line would answer
+every inbound call the provider sends — including those meant for a different line on the same
+domain. Connecting such an account is refused rather than silently over-accepting.</p>
+</div>
 
 
 
@@ -357,7 +363,7 @@ domain (trunk default). <a class="xref" href="CalloraVoipSdk.Core.Domain.Lines.S
 
   <h3 id="CalloraVoipSdk_Core_Domain_Lines_SipAccount_OutboundProxy" data-uid="CalloraVoipSdk.Core.Domain.Lines.SipAccount.OutboundProxy">
   OutboundProxy
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/SipAccount.cs/#L34"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/SipAccount.cs/#L71"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Optional outbound proxy to route signaling through instead of resolving <a class="xref" href="CalloraVoipSdk.Core.Domain.Lines.SipAccount.html#CalloraVoipSdk_Core_Domain_Lines_SipAccount_SipServer">SipServer</a> directly.</p>
@@ -389,7 +395,7 @@ domain (trunk default). <a class="xref" href="CalloraVoipSdk.Core.Domain.Lines.S
 
   <h3 id="CalloraVoipSdk_Core_Domain_Lines_SipAccount_Password" data-uid="CalloraVoipSdk.Core.Domain.Lines.SipAccount.Password">
   Password
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/SipAccount.cs/#L20"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/SipAccount.cs/#L32"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>SIP account password. Optional: it is only needed when the registrar challenges the
@@ -424,7 +430,7 @@ challenge does arrive and no password is set, registration fails with a clear er
 
   <h3 id="CalloraVoipSdk_Core_Domain_Lines_SipAccount_Port" data-uid="CalloraVoipSdk.Core.Domain.Lines.SipAccount.Port">
   Port
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/SipAccount.cs/#L28"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/SipAccount.cs/#L40"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Signaling port; <code>0</code> (default) selects the standard port for the chosen <a class="xref" href="CalloraVoipSdk.Core.Domain.Lines.SipAccount.html#CalloraVoipSdk_Core_Domain_Lines_SipAccount_Transport">Transport</a>.</p>
@@ -456,7 +462,7 @@ challenge does arrive and no password is set, registration fails with a clear er
 
   <h3 id="CalloraVoipSdk_Core_Domain_Lines_SipAccount_PublicMediaHost" data-uid="CalloraVoipSdk.Core.Domain.Lines.SipAccount.PublicMediaHost">
   PublicMediaHost
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/SipAccount.cs/#L60"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/SipAccount.cs/#L97"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Optional public IP address to force into the SDP media connection line (<code>c=</code>) and RTP
@@ -493,7 +499,7 @@ auto-resolved media address (default, unchanged behavior).</p>
 
   <h3 id="CalloraVoipSdk_Core_Domain_Lines_SipAccount_PublicSipHost" data-uid="CalloraVoipSdk.Core.Domain.Lines.SipAccount.PublicSipHost">
   PublicSipHost
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/SipAccount.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/SipAccount.cs/#L80"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Optional public host (IP or FQDN) to advertise in the REGISTER Contact and Via
@@ -529,7 +535,7 @@ keeps the local address (LAN/direct scenarios).</p>
 
   <h3 id="CalloraVoipSdk_Core_Domain_Lines_SipAccount_PublicSipPort" data-uid="CalloraVoipSdk.Core.Domain.Lines.SipAccount.PublicSipPort">
   PublicSipPort
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/SipAccount.cs/#L50"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/SipAccount.cs/#L87"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Optional public signaling port paired with <a class="xref" href="CalloraVoipSdk.Core.Domain.Lines.SipAccount.html#CalloraVoipSdk_Core_Domain_Lines_SipAccount_PublicSipHost">PublicSipHost</a>. Use when a
@@ -559,14 +565,64 @@ the local signaling port.</p>
 
 
 
+  <a id="CalloraVoipSdk_Core_Domain_Lines_SipAccount_Register_" data-uid="CalloraVoipSdk.Core.Domain.Lines.SipAccount.Register*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Lines_SipAccount_Register" data-uid="CalloraVoipSdk.Core.Domain.Lines.SipAccount.Register">
+  Register
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/SipAccount.cs/#L62"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Whether the line registers with <a class="xref" href="CalloraVoipSdk.Core.Domain.Lines.SipAccount.html#CalloraVoipSdk_Core_Domain_Lines_SipAccount_SipServer">SipServer</a>. <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a> by default.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool Register { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="CalloraVoipSdk_Core_Domain_Lines_SipAccount_Register_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Set to <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a> for an <b>IP-authenticated static-IP trunk</b>: the provider
+recognises the customer by source address, no REGISTER is expected, and sending one is at best
+ignored and at worst rejected. The line then never sends an initial REGISTER, reaches
+<a class="xref" href="CalloraVoipSdk.Core.Domain.Lines.LineState.html#CalloraVoipSdk_Core_Domain_Lines_LineState_Ready">Ready</a> instead of <a class="xref" href="CalloraVoipSdk.Core.Domain.Lines.LineState.html#CalloraVoipSdk_Core_Domain_Lines_LineState_Registered">Registered</a>, and places outbound
+calls straight at <a class="xref" href="CalloraVoipSdk.Core.Domain.Lines.SipAccount.html#CalloraVoipSdk_Core_Domain_Lines_SipAccount_SipServer">SipServer</a> (or <a class="xref" href="CalloraVoipSdk.Core.Domain.Lines.SipAccount.html#CalloraVoipSdk_Core_Domain_Lines_SipAccount_OutboundProxy">OutboundProxy</a>).</p>
+<p>
+Not the same as <a class="xref" href="CalloraVoipSdk.Core.Domain.Lines.ReregisterOptions.html#CalloraVoipSdk_Core_Domain_Lines_ReregisterOptions_Disabled">Disabled</a>, which only stops <i>re</i>-registration
+after a lost binding — the initial REGISTER still goes out there.
+</p>
+<p>
+Inbound still works and is governed by the usual trunk rules (<a class="xref" href="CalloraVoipSdk.Core.Domain.Lines.SipAccount.html#CalloraVoipSdk_Core_Domain_Lines_SipAccount_AcceptTrunkInbound">AcceptTrunkInbound</a>,
+<a class="xref" href="CalloraVoipSdk.Core.Domain.Lines.SipAccount.html#CalloraVoipSdk_Core_Domain_Lines_SipAccount_InboundNumbers">InboundNumbers</a>). <a class="xref" href="CalloraVoipSdk.Core.Domain.Lines.SipAccount.html#CalloraVoipSdk_Core_Domain_Lines_SipAccount_RegistrationExpiry">RegistrationExpiry</a> and <a class="xref" href="CalloraVoipSdk.Core.Domain.Lines.SipAccount.html#CalloraVoipSdk_Core_Domain_Lines_SipAccount_Reregister">Reregister</a> are
+ignored in this mode. Note that the mass-market trunks (sipgate, easybell, Telekom CompanyFlex)
+<i>do</i> register — leave this at the default for those.
+</p>
+</div>
+
+
+
+
   <a id="CalloraVoipSdk_Core_Domain_Lines_SipAccount_RegistrationExpiry_" data-uid="CalloraVoipSdk.Core.Domain.Lines.SipAccount.RegistrationExpiry*"></a>
 
   <h3 id="CalloraVoipSdk_Core_Domain_Lines_SipAccount_RegistrationExpiry" data-uid="CalloraVoipSdk.Core.Domain.Lines.SipAccount.RegistrationExpiry">
   RegistrationExpiry
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/SipAccount.cs/#L31"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/SipAccount.cs/#L68"><i class="bi bi-code-slash"></i></a>
   </h3>
 
-  <div class="markdown level1 summary"><p>Requested registration lifetime in seconds; defaults to 300.</p>
+  <div class="markdown level1 summary"><p>Requested registration lifetime in seconds; defaults to 300.
+Ignored when <a class="xref" href="CalloraVoipSdk.Core.Domain.Lines.SipAccount.html#CalloraVoipSdk_Core_Domain_Lines_SipAccount_Register">Register</a> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a>.</p>
 </div>
   <div class="markdown level1 conceptual"></div>
 
@@ -595,7 +651,7 @@ the local signaling port.</p>
 
   <h3 id="CalloraVoipSdk_Core_Domain_Lines_SipAccount_Reregister" data-uid="CalloraVoipSdk.Core.Domain.Lines.SipAccount.Reregister">
   Reregister
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/SipAccount.cs/#L87"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/SipAccount.cs/#L130"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Controls automatic re-registration when the SIP binding is lost.
@@ -628,7 +684,7 @@ Defaults to <a class="xref" href="CalloraVoipSdk.Core.Domain.Lines.ReregisterOpt
 
   <h3 id="CalloraVoipSdk_Core_Domain_Lines_SipAccount_SipServer" data-uid="CalloraVoipSdk.Core.Domain.Lines.SipAccount.SipServer">
   SipServer
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/SipAccount.cs/#L22"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/SipAccount.cs/#L34"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>SIP registrar host (IP or FQDN) and the account's SIP domain (required).</p>
@@ -660,7 +716,7 @@ Defaults to <a class="xref" href="CalloraVoipSdk.Core.Domain.Lines.ReregisterOpt
 
   <h3 id="CalloraVoipSdk_Core_Domain_Lines_SipAccount_Transport" data-uid="CalloraVoipSdk.Core.Domain.Lines.SipAccount.Transport">
   Transport
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/SipAccount.cs/#L25"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/SipAccount.cs/#L37"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Transport used for SIP signaling; defaults to <a class="xref" href="CalloraVoipSdk.Core.Domain.Lines.SipTransport.html#CalloraVoipSdk_Core_Domain_Lines_SipTransport_Udp">Udp</a>.</p>
@@ -692,15 +748,15 @@ Defaults to <a class="xref" href="CalloraVoipSdk.Core.Domain.Lines.ReregisterOpt
 
   <h3 id="CalloraVoipSdk_Core_Domain_Lines_SipAccount_Username" data-uid="CalloraVoipSdk.Core.Domain.Lines.SipAccount.Username">
   Username
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/SipAccount.cs/#L12"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Lines/SipAccount.cs/#L24"><i class="bi bi-code-slash"></i></a>
   </h3>
 
-  <div class="markdown level1 summary"><p>SIP authentication user and address user-part (required).</p>
+  <div class="markdown level1 summary"><p>SIP authentication user and address user-part. Empty by default.</p>
 </div>
   <div class="markdown level1 conceptual"></div>
 
   <div class="codewrapper">
-    <pre><code class="lang-csharp hljs">public required string Username { get; init; }</code></pre>
+    <pre><code class="lang-csharp hljs">public string Username { get; init; }</code></pre>
   </div>
 
 
@@ -716,6 +772,16 @@ Defaults to <a class="xref" href="CalloraVoipSdk.Core.Domain.Lines.ReregisterOpt
 
 
 
+  <h4 class="section" id="CalloraVoipSdk_Core_Domain_Lines_SipAccount_Username_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Required in practice for every account that registers — it is the AOR user-part the registrar binds
+and the name it challenges. Leave it empty only for an IP-authenticated trunk
+(<a class="xref" href="CalloraVoipSdk.Core.Domain.Lines.SipAccount.html#CalloraVoipSdk_Core_Domain_Lines_SipAccount_Register">Register</a> = <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a>) that has no account user at all: addresses then
+take the host-only form <code>sip:host</code> (RFC 3261 §19.1.1) instead of <code>sip:user@host</code>.</p>
+<p>
+Without a user-part there is no 1:1 match for inbound calls, so <a class="xref" href="CalloraVoipSdk.Core.Domain.Lines.SipAccount.html#CalloraVoipSdk_Core_Domain_Lines_SipAccount_InboundNumbers">InboundNumbers</a> becomes
+the only way to say which calls belong to this line — see the note there.
+</p>
+</div>
 
 
 

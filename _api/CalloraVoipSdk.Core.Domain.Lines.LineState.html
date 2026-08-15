@@ -123,6 +123,16 @@ Enum LineState  <a class="header-action link-secondary" title="View source" href
 was exceeded or the server rejected credentials (401/403).
 No further attempts will be made.</p>
 </dd>
+    <dt id="CalloraVoipSdk_Core_Domain_Lines_LineState_Ready"><code>Ready = 6</code></dt>
+  <dd><p>Operational without a registration: the line never sends REGISTER because
+<a class="xref" href="CalloraVoipSdk.Core.Domain.Lines.SipAccount.html#CalloraVoipSdk_Core_Domain_Lines_SipAccount_Register">Register</a> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a> (an IP-authenticated static-IP
+trunk, where the peer recognises us by source address). Calls can be placed and received.</p>
+<p>This is a steady state, not a step towards <a class="xref" href="CalloraVoipSdk.Core.Domain.Lines.LineState.html#CalloraVoipSdk_Core_Domain_Lines_LineState_Registered">Registered</a> — a line in this mode never
+reaches that state, and <a class="xref" href="CalloraVoipSdk.Core.Domain.Lines.LineState.html#CalloraVoipSdk_Core_Domain_Lines_LineState_Unregistered">Unregistered</a> would misreport it as unusable. Consumers
+gating on &quot;line is ready to dial&quot; must accept <a class="xref" href="CalloraVoipSdk.Core.Domain.Lines.LineState.html#CalloraVoipSdk_Core_Domain_Lines_LineState_Registered">Registered</a> <b>or</b> this value.
+Appended at the end of the enum so the existing members keep their numeric values.</p>
+</dd>
+  
     <dt id="CalloraVoipSdk_Core_Domain_Lines_LineState_Reconnecting"><code>Reconnecting = 3</code></dt>
   
   <dd><p>A previous registration was lost and the SDK is waiting to retry.

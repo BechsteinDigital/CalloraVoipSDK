@@ -155,7 +155,7 @@ call-lifecycle timeouts. Supplied once when constructing or registering the SDK.
 
   <h3 id="CalloraVoipSdk_VoipConfiguration_AudioDevice" data-uid="CalloraVoipSdk.VoipConfiguration.AudioDevice">
   AudioDevice
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L135"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L162"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Audio device to use for all calls.
@@ -189,7 +189,7 @@ attempts to load a platform device (Linux/Windows) at runtime.</p>
 
   <h3 id="CalloraVoipSdk_VoipConfiguration_BridgeAudioFormat" data-uid="CalloraVoipSdk.VoipConfiguration.BridgeAudioFormat">
   BridgeAudioFormat
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L161"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L188"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Audio format delivered to and expected from the media consumer (bridge/tap). When set
@@ -259,7 +259,7 @@ TCP- or TLS-only enterprise proxies.</p>
 
   <h3 id="CalloraVoipSdk_VoipConfiguration_DtlsCertificate" data-uid="CalloraVoipSdk.VoipConfiguration.DtlsCertificate">
   DtlsCertificate
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L80"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L107"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Optional DTLS-SRTP identity certificate (RFC 5763) for the media plane. <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>
@@ -297,7 +297,7 @@ non-exportable HSM keys are rejected fail-closed). The DTLS certificate is authe
 
   <h3 id="CalloraVoipSdk_VoipConfiguration_EnableAutomaticAudioDeviceSelection" data-uid="CalloraVoipSdk.VoipConfiguration.EnableAutomaticAudioDeviceSelection">
   EnableAutomaticAudioDeviceSelection
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L141"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L168"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Automatically load a platform audio device when <a class="xref" href="CalloraVoipSdk.VoipConfiguration.html#CalloraVoipSdk_VoipConfiguration_AudioDevice">AudioDevice</a>
@@ -330,7 +330,7 @@ is left at <span class="xref">CalloraVoipSdk.Core.Infrastructure.Audio.SilenceAu
 
   <h3 id="CalloraVoipSdk_VoipConfiguration_EnableVideo" data-uid="CalloraVoipSdk.VoipConfiguration.EnableVideo">
   EnableVideo
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L96"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L123"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>When <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a>, calls negotiate a video stream (WebRTC phase 2,
@@ -373,7 +373,7 @@ video m-line carries its port but no candidates, so video needs direct connectiv
 
   <h3 id="CalloraVoipSdk_VoipConfiguration_HangupHeldCallOnMediaSilence" data-uid="CalloraVoipSdk.VoipConfiguration.HangupHeldCallOnMediaSilence">
   HangupHeldCallOnMediaSilence
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L174"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L201"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Whether the inbound-media timeout also applies to on-hold calls (which legitimately
@@ -406,7 +406,7 @@ carry no inbound RTP). Default: <a href="https://learn.microsoft.com/dotnet/csha
 
   <h3 id="CalloraVoipSdk_VoipConfiguration_Ice" data-uid="CalloraVoipSdk.VoipConfiguration.Ice">
   Ice
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L109"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L136"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>ICE runtime configuration for NAT traversal and candidate-pair selection.
@@ -439,7 +439,7 @@ Disabled by default.</p>
 
   <h3 id="CalloraVoipSdk_VoipConfiguration_InboundMediaTimeout" data-uid="CalloraVoipSdk.VoipConfiguration.InboundMediaTimeout">
   InboundMediaTimeout
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L168"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L195"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Hang up a connected call whose inbound RTP has been silent this long — a NAT-safe
@@ -469,11 +469,92 @@ stops. <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.times
 
 
 
+  <a id="CalloraVoipSdk_VoipConfiguration_LocalSipPort_" data-uid="CalloraVoipSdk.VoipConfiguration.LocalSipPort*"></a>
+
+  <h3 id="CalloraVoipSdk_VoipConfiguration_LocalSipPort" data-uid="CalloraVoipSdk.VoipConfiguration.LocalSipPort">
+  LocalSipPort
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L48"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Local port the SIP listener binds for UDP and TCP. <code>0</code> (default) takes an ephemeral port.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int LocalSipPort { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="CalloraVoipSdk_VoipConfiguration_LocalSipPort_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Leave this at the default for registering accounts: the registrar learns where to reach you from the
+REGISTER Contact, so the port need not be fixed or known in advance.</p>
+<p>
+Set it — normally to <code>5060</code> — when nobody tells the peer your address: an IP-authenticated trunk
+(<a class="xref" href="CalloraVoipSdk.Core.Domain.Lines.SipAccount.html#CalloraVoipSdk_Core_Domain_Lines_SipAccount_Register">Register</a> = <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a>) sends no REGISTER, so
+the provider delivers inbound calls to a pre-agreed address. A fixed port is equally required for
+static firewall or NAT rules, which an ephemeral port would invalidate on every restart.
+</p>
+<p>
+Binding a port already in use fails at client construction with a <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.net.sockets.socketexception">SocketException</a>
+rather than silently landing elsewhere — a listener on the wrong port looks healthy while every
+inbound call goes missing.
+</p>
+</div>
+
+
+
+
+  <a id="CalloraVoipSdk_VoipConfiguration_LocalSipTlsPort_" data-uid="CalloraVoipSdk.VoipConfiguration.LocalSipTlsPort*"></a>
+
+  <h3 id="CalloraVoipSdk_VoipConfiguration_LocalSipTlsPort" data-uid="CalloraVoipSdk.VoipConfiguration.LocalSipTlsPort">
+  LocalSipTlsPort
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L55"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Local port the SIP TLS listener binds. <code>0</code> (default) takes an ephemeral port; the SIP convention
+is <code>5061</code> beside <code>5060</code> (RFC 3261 §19.1.2). Separate from <a class="xref" href="CalloraVoipSdk.VoipConfiguration.html#CalloraVoipSdk_VoipConfiguration_LocalSipPort">LocalSipPort</a> because
+TLS is a second TCP listener and cannot share that port. Only relevant when TLS is configured.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int LocalSipTlsPort { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
   <a id="CalloraVoipSdk_VoipConfiguration_LoggerFactory_" data-uid="CalloraVoipSdk.VoipConfiguration.LoggerFactory*"></a>
 
   <h3 id="CalloraVoipSdk_VoipConfiguration_LoggerFactory" data-uid="CalloraVoipSdk.VoipConfiguration.LoggerFactory">
   LoggerFactory
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L31"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L58"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Logger factory the SDK logs through; <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> disables SDK logging.</p>
@@ -505,7 +586,7 @@ stops. <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.times
 
   <h3 id="CalloraVoipSdk_VoipConfiguration_MaxConcurrentCallsPerLine" data-uid="CalloraVoipSdk.VoipConfiguration.MaxConcurrentCallsPerLine">
   MaxConcurrentCallsPerLine
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L128"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L155"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Maximum simultaneous calls per phone line. 0 = unlimited.</p>
@@ -537,7 +618,7 @@ stops. <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.times
 
   <h3 id="CalloraVoipSdk_VoipConfiguration_OfferDtlsSrtp" data-uid="CalloraVoipSdk.VoipConfiguration.OfferDtlsSrtp">
   OfferDtlsSrtp
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L59"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L86"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>When <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a>, outbound call offers advertise DTLS-SRTP keying
@@ -572,7 +653,7 @@ setting. Default: <a href="https://learn.microsoft.com/dotnet/csharp/language-re
 
   <h3 id="CalloraVoipSdk_VoipConfiguration_PreferredAudioCodecs" data-uid="CalloraVoipSdk.VoipConfiguration.PreferredAudioCodecs">
   PreferredAudioCodecs
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L153"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L180"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Ordered audio codec preference by SDP encoding name (&quot;PCMU&quot;, &quot;PCMA&quot;, &quot;G722&quot;,
@@ -611,7 +692,7 @@ offer it, negotiation fails rather than producing an audio-less answer.
 
   <h3 id="CalloraVoipSdk_VoipConfiguration_PreferredVideoCodecs" data-uid="CalloraVoipSdk.VoipConfiguration.PreferredVideoCodecs">
   PreferredVideoCodecs
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L103"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L130"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Ordered video codec preference by SDP encoding name (<code>VP8</code>, <code>H264</code>) when
@@ -645,7 +726,7 @@ offer it, negotiation fails rather than producing an audio-less answer.
 
   <h3 id="CalloraVoipSdk_VoipConfiguration_RequireSecureSignalingForSdes" data-uid="CalloraVoipSdk.VoipConfiguration.RequireSecureSignalingForSdes">
   RequireSecureSignalingForSdes
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L69"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L96"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Opt-in hard enforcement of the RFC 4568 §7 caveat (see <a class="xref" href="CalloraVoipSdk.VoipConfiguration.html#CalloraVoipSdk_VoipConfiguration_SrtpPolicy">SrtpPolicy</a>). When
@@ -682,7 +763,7 @@ use TLS/SIPS signaling or DTLS-SRTP to place calls under this policy.</p>
 
   <h3 id="CalloraVoipSdk_VoipConfiguration_SipSignalingHardening" data-uid="CalloraVoipSdk.VoipConfiguration.SipSignalingHardening">
   SipSignalingHardening
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L123"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L150"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Resource limits for the SIP signaling layer: concurrent inbound session caps (global and per-remote),
@@ -716,7 +797,7 @@ defaults match the SDK's built-in limits.</p>
 
   <h3 id="CalloraVoipSdk_VoipConfiguration_SipTransportHardening" data-uid="CalloraVoipSdk.VoipConfiguration.SipTransportHardening">
   SipTransportHardening
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L116"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L143"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Admission and slowloris limits for the inbound SIP listener (connection-oriented transports). Bounds
@@ -750,7 +831,7 @@ defaults match the SDK's built-in limits.</p>
 
   <h3 id="CalloraVoipSdk_VoipConfiguration_SrtpPolicy" data-uid="CalloraVoipSdk.VoipConfiguration.SrtpPolicy">
   SrtpPolicy
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L51"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L78"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Default media-encryption policy for calls; defaults to <a class="xref" href="CalloraVoipSdk.Core.Domain.Security.SrtpPolicy.html#CalloraVoipSdk_Core_Domain_Security_SrtpPolicy_Optional">Optional</a>.
