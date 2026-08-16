@@ -18,6 +18,13 @@ internal sealed class MediaConnection : IDisposable
     private int _disposed;
 
     /// <summary>
+    /// How long <see cref="Dispose"/> waits for the forwarding pump to stop before abandoning the drain
+    /// (#165 P2-9). Matches the SIP transport's disposal join: long enough for a sender that honours
+    /// cancellation, short enough that one which does not cannot stall a teardown.
+    /// </summary>
+    private static readonly TimeSpan PumpDrainTimeout = TimeSpan.FromSeconds(2);
+
+    /// <summary>
     /// Creates a buffered media forwarding link.
     /// </summary>
     internal MediaConnection(
@@ -112,14 +119,44 @@ internal sealed class MediaConnection : IDisposable
         _receiver.FrameReceived -= OnFrameReceived;
         _queue.Writer.TryComplete();
         _shutdownCts.Cancel();
+
+        // Bounded join (#165 P2-9), mirroring SipStreamConnection.Dispose. The pump is inside the sender's
+        // SendAsync at this point, and the sender is foreign code: it is handed the cancellation token, but a
+        // sender that ignores it — or blocks in its own I/O — must not be able to hold the whole shutdown.
+        // Waiting without a deadline made that a caller-visible hang, since Dispose runs on the teardown path.
+        bool drained;
         try
         {
-            _pumpTask.GetAwaiter().GetResult();
+            drained = _pumpTask.Wait(PumpDrainTimeout);
         }
         catch (Exception ex)
         {
+            // Wait surfaces a faulted pump as an AggregateException; the fault is observed here, not rethrown.
             _logger.LogTrace(ex, "Media forwarding pump faulted during shutdown drain.");
+            drained = true;
         }
-        _shutdownCts.Dispose();
+
+        if (drained)
+        {
+            _shutdownCts.Dispose();
+            return;
+        }
+
+        _logger.LogWarning(
+            "Media forwarding pump did not stop within {Timeout} during disposal; abandoning the drain. The " +
+            "sender is still holding a frame and ignoring cancellation.", PumpDrainTimeout);
+
+        // The pump is still using the token, so the source cannot be disposed here — it is released once the
+        // pump does end. Observing the task in the continuation keeps a late fault from going unhandled.
+        _ = _pumpTask.ContinueWith(
+            task =>
+            {
+                if (task.Exception is { } fault)
+                    _logger.LogTrace(fault, "Media forwarding pump faulted after the drain was abandoned.");
+                _shutdownCts.Dispose();
+            },
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
     }
 }

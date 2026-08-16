@@ -288,7 +288,7 @@ public sealed class VoipClient : IVoipClient
 
             // Managers are exposed through interfaces (HARD-E5); construction keeps concrete locals where a
             // manager's constructor requires the concrete peer type.
-            var callManager = new CallManager();
+            var callManager = new CallManager(logFactory.CreateLogger<CallManager>());
             Calls = callManager;
             // Re-raise with the facade as sender, not the internal manager, so subscribers to
             // VoipClient.CallStateChanged see the VoipClient they subscribed on (#18.9).
