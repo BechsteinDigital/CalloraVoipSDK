@@ -24,6 +24,10 @@ internal sealed class SipStreamConnection : IDisposable
     private readonly TimeSpan _readTimeout;
     private int _disposed;
 
+    // Guards ReleaseResources: the receive loop frees on a natural close, Dispose frees on shutdown, and
+    // whichever arrives second must not double-dispose (#158 P2-9).
+    private int _resourcesReleased;
+
     private static readonly TimeSpan DefaultReadTimeout = TimeSpan.FromMinutes(5);
 
     /// <summary>
@@ -151,31 +155,28 @@ internal sealed class SipStreamConnection : IDisposable
         }
         finally
         {
+            // #158 P2-9: a remote close used to remove the connection from the owner's dictionary and stop
+            // there — socket, stream, send gate and CTS were left to the finaliser, and since the entry was
+            // already gone, shutdown could no longer reach the instance to dispose it either. Under
+            // connection churn that is a file-descriptor leak with no upper bound.
+            //
+            // Releasing here rather than calling Dispose(): Dispose() joins this very loop, so calling it
+            // from inside would wait on itself until the join times out. ReleaseResources does the freeing
+            // without the join, and Dispose() calls it after joining — whichever path runs first wins, the
+            // other is a no-op.
             _onClosed();
+            ReleaseResources();
         }
     }
 
     /// <summary>
-    /// Stops receive loop and disposes socket and stream resources.
+    /// Frees socket, stream, send gate and cancellation source exactly once, without joining the receive
+    /// loop. Safe to call from the loop itself and from <see cref="Dispose"/>.
     /// </summary>
-    public void Dispose()
+    private void ReleaseResources()
     {
-        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        if (Interlocked.Exchange(ref _resourcesReleased, 1) != 0)
             return;
-
-        _stop.Cancel();
-        try
-        {
-            // Bounded join: a receive loop stuck in a slow frame dispatch must not block disposal indefinitely.
-            // After the timeout we proceed; disposing the stream/client below forces any pending read to fault
-            // and the loop to unwind.
-            if (!_receiveLoop.Wait(DisposeJoinTimeout))
-                _logger.LogDebug("SIP stream connection receive loop did not stop within {Timeout} during disposal.", DisposeJoinTimeout);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "SIP stream connection loop ended with exception during disposal.");
-        }
 
         try
         {
@@ -197,5 +198,40 @@ internal sealed class SipStreamConnection : IDisposable
 
         _sendGate.Dispose();
         _stop.Dispose();
+    }
+
+    /// <summary>
+    /// Stops receive loop and disposes socket and stream resources.
+    /// </summary>
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            return;
+
+        try
+        {
+            _stop.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // The receive loop already released everything on a natural close (#158 P2-9); there is
+            // nothing left to cancel and nothing to report.
+        }
+
+        try
+        {
+            // Bounded join: a receive loop stuck in a slow frame dispatch must not block disposal indefinitely.
+            // After the timeout we proceed; disposing the stream/client below forces any pending read to fault
+            // and the loop to unwind.
+            if (!_receiveLoop.Wait(DisposeJoinTimeout))
+                _logger.LogDebug("SIP stream connection receive loop did not stop within {Timeout} during disposal.", DisposeJoinTimeout);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "SIP stream connection loop ended with exception during disposal.");
+        }
+
+        // The receive loop releases these itself when the peer closes first; this call then no-ops.
+        ReleaseResources();
     }
 }

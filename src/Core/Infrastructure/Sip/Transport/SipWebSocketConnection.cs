@@ -21,6 +21,10 @@ internal sealed class SipWebSocketConnection : IDisposable
     private readonly TimeSpan _readTimeout;
     private int _disposed;
 
+    // Guards ReleaseResources: the receive loop frees on a natural close, Dispose frees on shutdown, and
+    // whichever arrives second must not double-dispose (#158 P2-9).
+    private int _resourcesReleased;
+
     private static readonly TimeSpan DefaultReadTimeout = TimeSpan.FromMinutes(5);
 
     // Cap the aggregated WS message at the size the TCP framer allows (RFC 3261 header + body), so a
@@ -155,8 +159,13 @@ internal sealed class SipWebSocketConnection : IDisposable
         }
         finally
         {
+            // #158 P2-9: same gap as on the stream path — a peer closing first left the socket, send gate
+            // and CTS to the finaliser while the owner's dictionary entry was already gone, so shutdown
+            // could not reach the instance either. Released here rather than via Dispose(), which joins
+            // this very loop and would wait on itself.
             aggregate.Dispose();
             _onClosed();
+            ReleaseResources();
         }
     }
 
@@ -166,7 +175,16 @@ internal sealed class SipWebSocketConnection : IDisposable
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
             return;
 
-        _stop.Cancel();
+        try
+        {
+            _stop.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // The receive loop already released everything on a natural close (#158 P2-9); there is
+            // nothing left to cancel and nothing to report.
+        }
+
         try
         {
             // Bounded join: a receive loop stuck in a slow frame dispatch must not block disposal indefinitely.
@@ -178,6 +196,19 @@ internal sealed class SipWebSocketConnection : IDisposable
         {
             _logger.LogDebug(ex, "SIP WebSocket loop ended with exception during disposal.");
         }
+
+        // The receive loop releases these itself when the peer closes first; this call then no-ops.
+        ReleaseResources();
+    }
+
+    /// <summary>
+    /// Aborts and frees the socket, send gate and cancellation source exactly once, without joining the
+    /// receive loop. Safe to call from the loop itself and from <see cref="Dispose"/>.
+    /// </summary>
+    private void ReleaseResources()
+    {
+        if (Interlocked.Exchange(ref _resourcesReleased, 1) != 0)
+            return;
 
         try
         {
