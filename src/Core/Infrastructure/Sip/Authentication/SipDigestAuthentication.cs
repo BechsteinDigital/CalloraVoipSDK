@@ -36,9 +36,18 @@ internal sealed class SipDigestAuthentication : ISipDigestAuthenticator
         if (!TryResolveAlgorithm(algorithm, out var baseAlgorithm, out var useSessionAlgorithm))
             return false;
 
-        var qop = parameters.TryGetValue("qop", out var qopValue)
-            ? ChooseQop(qopValue)
-            : null;
+        // #158 P2-14: a challenge that offers qop but none we support is NOT the same as a challenge
+        // without qop. Treating it as qop-less produced the RFC 2069 legacy response — no nc, no cnonce,
+        // no qop in the hash — which is weaker than what the server asked for and which a strict server
+        // rejects anyway. RFC 7616 §3.4 has the client pick one of the offered values; if it can pick
+        // none, it has no valid credentials to send.
+        string? qop = null;
+        if (parameters.TryGetValue("qop", out var qopValue) && !string.IsNullOrWhiteSpace(qopValue))
+        {
+            qop = ChooseQop(qopValue);
+            if (qop is null)
+                return false;
+        }
 
         var cnonce = SipProtocol.NewTag();
         var nc = nonceCount.ToString("x8");
@@ -122,9 +131,13 @@ internal sealed class SipDigestAuthentication : ISipDigestAuthenticator
 
     /// <summary>
     /// Chooses a supported qop mode from a server-provided qop list (RFC 7616 §3.4). Prefers <c>auth</c> (the
-    /// common, body-independent mode) and falls back to <c>auth-int</c> when the server offers only that; returns
-    /// <see langword="null"/> (legacy qop-less digest) when neither is offered.
+    /// common, body-independent mode) and falls back to <c>auth-int</c> when the server offers only that.
     /// </summary>
+    /// <returns>
+    /// The chosen mode, or <see langword="null"/> when the list contains neither. The caller treats that
+    /// <see langword="null"/> as "cannot authenticate against this challenge" — it must not fall back to the
+    /// qop-less legacy digest, because the server asked for a qop it would then not receive (#158 P2-14).
+    /// </returns>
     private static string? ChooseQop(string qop)
     {
         if (ProtocolCommonUtilities.ContainsToken(qop, "auth"))

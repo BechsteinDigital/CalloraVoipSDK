@@ -276,11 +276,14 @@ internal sealed class SipWireProtocol : ISipWireCodec
 
         if (map.TryGetValue(headerName, out var existing))
         {
-            if (headerName.Equals("Content-Length", StringComparison.OrdinalIgnoreCase))
-            {
-                map[headerName] = value;
-            }
-            else if (SipHeaderRowRules.ShouldCombineRows(headerName, existing, value))
+            // #158 P2-11: Content-Length rows are kept, not overwritten. Last-wins discarded the earlier
+            // row before TryParseContentLength could compare them, so its contradiction check — which
+            // rejects two rows with different values — never saw a second row and was dead code. With a
+            // smaller second value the parser then accepted the message and silently cut the body short:
+            // two peers reading the same bytes disagree about where the message ends, which is how request
+            // smuggling starts. Content-Length is not a comma-list header (RFC 3261 §20), so repeating it
+            // is malformed either way; keeping both rows lets the check decide instead of the parse order.
+            if (SipHeaderRowRules.ShouldCombineRows(headerName, existing, value))
             {
                 map[headerName] = $"{existing}, {value}";
             }

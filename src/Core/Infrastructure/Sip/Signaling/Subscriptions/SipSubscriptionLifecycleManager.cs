@@ -7,6 +7,26 @@ namespace CalloraVoipSdk.Core.Infrastructure.Sip.Signaling;
 /// </summary>
 internal sealed class SipSubscriptionLifecycleManager : IDisposable
 {
+    /// <summary>
+    /// Longest subscription lifetime granted, whatever the peer asks for (#158 P2-12).
+    /// </summary>
+    /// <remarks>
+    /// RFC 6665 §4.2.1 explicitly lets the notifier return a shorter Expires than requested. One hour is
+    /// far above any real refresh interval and keeps a single request from pinning a timer and a linked
+    /// CTS for days.
+    /// </remarks>
+    private const int MaxExpiresSeconds = 3600;
+
+    /// <summary>
+    /// Concurrent leases one dialog may hold (#158 P2-12).
+    /// </summary>
+    /// <remarks>
+    /// Each (event package, id) pair is its own lease with its own CTS and background delay, and without a
+    /// subscription handler every well-formed package is accepted — so the count is peer-controlled.
+    /// Thirty-two is generous for a dialog that realistically carries one or two.
+    /// </remarks>
+    private const int MaxConcurrentLeases = 32;
+
     private readonly ILogger _logger;
     private readonly Func<SipSubscriptionIdentifier, string, CancellationToken, Task> _onExpiredAsync;
     private readonly object _sync = new();
@@ -38,13 +58,24 @@ internal sealed class SipSubscriptionLifecycleManager : IDisposable
         if (requestedExpiresSeconds <= 0)
             throw new ArgumentOutOfRangeException(nameof(requestedExpiresSeconds), "requestedExpiresSeconds must be > 0.");
 
-        var effectiveExpires = requestedExpiresSeconds;
+        // #158 P2-12: the peer's Expires was taken verbatim. RFC 6665 §4.2.1 lets the notifier shorten it —
+        // and it must here, because every lease pins a linked CTS and a background delay for exactly that
+        // long. A peer asking for a year got one.
+        var effectiveExpires = Math.Min(requestedExpiresSeconds, MaxExpiresSeconds);
         SipSubscriptionLease? oldLease = null;
         SipSubscriptionLease newLease;
         lock (_sync)
         {
             if (_activeLeases.TryGetValue(identifier.Key, out oldLease))
                 _activeLeases.Remove(identifier.Key);
+            // #158 P2-12: without a handler every valid event package is accepted, and each (package, id)
+            // pair is its own lease. Refreshing an existing one is always allowed — only genuinely new
+            // leases are capped, so an established subscription can never be starved out by the limit.
+            else if (_activeLeases.Count >= MaxConcurrentLeases)
+            {
+                throw new InvalidOperationException(
+                    $"Subscription lease limit reached ({MaxConcurrentLeases}); refusing '{identifier.Key}'.");
+            }
 
             var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(_lifecycleCts.Token);
             newLease = new SipSubscriptionLease(identifier, effectiveExpires, timeoutCts);
