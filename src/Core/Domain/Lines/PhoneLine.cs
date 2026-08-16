@@ -49,6 +49,10 @@ internal sealed class PhoneLine : IPhoneLine, IDisposable
         ILoggerFactory                loggerFactory,
         Action<ICall, ICallChannel>?  onCallCreated = null)
     {
+        // Cross-property configuration checks run once, here, so a contradictory account is rejected while
+        // the caller is still holding it — not on the first retry, hours into a call (#165 P3-11).
+        account.Validate();
+
         Account         = account;
         _channel        = channel;
         _callRegistry   = callRegistry;
