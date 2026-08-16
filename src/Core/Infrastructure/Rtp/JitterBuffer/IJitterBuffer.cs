@@ -38,6 +38,15 @@ internal interface IJitterBuffer
     void UpdateRoundTripTime(double roundTripTimeMs);
 
     /// <summary>
+    /// Drops every buffered packet and forgets the stream state — sequence numbering, the playout
+    /// reference point, and the jitter estimate — so the next packet starts a fresh stream. Used when the
+    /// remote synchronisation source changes (#161 P2-6): the new source brings its own sequence and
+    /// timestamp space, which has no relation to the previous one. The adaptive delay and the RTT estimate
+    /// are kept: they describe the path, not the source.
+    /// </summary>
+    void Reset();
+
+    /// <summary>
     /// Retrieves the next packet whose scheduled playout time has arrived, or
     /// <c>null</c> if no packet is ready yet.
     /// Packets are delivered strictly in sequence-number order.

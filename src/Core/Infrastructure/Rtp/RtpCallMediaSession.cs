@@ -55,6 +55,8 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
     internal bool BridgeTranscodingActive => _bridgeTranscoder is not null;
 
     private readonly ILogger<RtpCallMediaSession> _logger;
+    // Binds this leg to one remote synchronisation source; everything downstream is single-stream (#161 P2-6).
+    private readonly RtpRemoteSourceLatch _sourceLatch;
     private readonly CancellationTokenSource _cts = new();
     private readonly InboundRtpStatistics _inboundStats = new();
     private readonly TimeSpan _playoutInterval;
@@ -136,6 +138,7 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
         DtlsMediaAttachment.EnsureDependencies(parameters, dtlsHandshaker, dtlsCertificate);
 
         _logger = loggerFactory.CreateLogger<RtpCallMediaSession>();
+        _sourceLatch = new RtpRemoteSourceLatch(_logger);
         _negotiatedPayloadType = parameters.PayloadType;
         _payloadTypeCodecMap = parameters.PayloadTypeCodecMap ?? EmptyPayloadTypeCodecMap;
         _telephoneEventPayloadType = ResolveTelephoneEventPayloadType(parameters);
@@ -242,6 +245,12 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
 
     /// <summary>Test seam: the running playout loop, so a repeated start can be proven not to replace it.</summary>
     internal Task? PlayoutLoopForTest => _playoutLoop;
+
+    /// <summary>
+    /// Inbound RTP packets dropped because they came from a synchronisation source this leg is not latched to
+    /// (#161 P2-6). Surfaced for tests and diagnostics — the drop itself is logged once, not per packet.
+    /// </summary>
+    internal long ForeignSourcePacketsDropped => _sourceLatch.DroppedPackets;
 
     /// <inheritdoc />
     public Task StartAsync(CancellationToken ct = default)
@@ -403,6 +412,13 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
 
     private void OnPacketReceived(object? sender, RtpPacket packet)
     {
+        // One leg, one remote source: a second concurrent SSRC is dropped rather than mixed into the single
+        // jitter buffer and playout cursor, while a genuine source change takes over and resets them (P2-6).
+        if (!_sourceLatch.Admit(packet.Ssrc, out var sourceChanged))
+            return;
+        if (sourceChanged)
+            ResetStreamStateForNewSource();
+
         var isTelephoneEventPacket = IsTelephoneEventPayloadType(packet.PayloadType);
         TrackInboundPayloadType(packet.PayloadType);
         _inboundStats.TrackSequence(packet.Ssrc, packet.SequenceNumber);
@@ -428,6 +444,18 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
         // schedule. Add here and TryGetNext in DrainReadyPackets must read the same jump-free source.
         var addResult = _jitterBuffer.Add(packet, MonotonicClock.Now);
         HandleJitterBufferAddResult(addResult, packet);
+    }
+
+    // Forgets everything that describes the previous source's stream so the new one starts clean: the jitter
+    // buffer's sequence/playout reference, the delivery cursor, and the concealment payload. The RTCP
+    // receiver-report bookkeeping restarts on its own (InboundRtpStatistics.TrackSequence resets on an SSRC
+    // change), and the delivery counters are cumulative for the leg by design.
+    private void ResetStreamStateForNewSource()
+    {
+        _jitterBuffer.Reset();
+        _hasLastDeliveredSequence = false;
+        _lastDeliveredPayload = Array.Empty<byte>();
+        _lastDeliveredPayloadType = -1;
     }
 
     private void OnRtcpCompoundReceived(IReadOnlyList<RtcpPacket> packets)

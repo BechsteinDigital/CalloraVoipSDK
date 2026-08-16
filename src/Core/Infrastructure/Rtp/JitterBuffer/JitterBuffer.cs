@@ -73,6 +73,22 @@ internal sealed class JitterBuffer : IJitterBuffer
     // IJitterBuffer
     // -------------------------------------------------------------------------
 
+    public void Reset()
+    {
+        lock (_sync)
+        {
+            _buffer.Clear();
+            _lastDelivered = -1;
+            _highestSeen = long.MinValue;
+            _lastSeq = 0;
+            _referenceSet = false;
+            _transitSet = false;
+            _lastRawRtpTsSet = false;
+            _jitter = 0;
+            // _currentDelayMs / _estimatedRoundTripTimeMs stay: they describe the path, not the source.
+        }
+    }
+
     public int BufferedCount
     {
         get
