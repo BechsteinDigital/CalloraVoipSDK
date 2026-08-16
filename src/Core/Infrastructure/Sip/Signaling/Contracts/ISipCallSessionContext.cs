@@ -234,6 +234,26 @@ internal interface ISipCallSessionContext
     }
 
     /// <summary>
+    /// CSeq of the most recent INVITE this UAC completed with a 2xx, or 0 when none has (#158 P2-10).
+    /// </summary>
+    /// <remarks>
+    /// A forking proxy may deliver a 2xx from another branch after the first one established the dialog, and
+    /// RFC 3261 §13.2.2.4 requires an ACK for each and a BYE for every dialog we do not keep. Matching those
+    /// late responses needs the INVITE's CSeq — which <see cref="ClearActiveInvite"/> takes away, because the
+    /// CANCEL flow must lose its target at exactly that moment. So the two are separate states: the cancel
+    /// target dies with the transaction, the identity outlives it.
+    /// </remarks>
+    int CompletedInviteCSeq { get; }
+
+    /// <summary>
+    /// Marks the INVITE with <paramref name="cseq"/> as completed by a 2xx: clears the cancel target
+    /// (HARD-C2) and keeps the CSeq as <see cref="CompletedInviteCSeq"/> so late forked 2xx responses for the
+    /// same INVITE still match (#158 P2-10). Both happen under one lock — a reader must never see the cancel
+    /// target gone while the identity is not yet published, or the fork window has a hole in it.
+    /// </summary>
+    void CompleteActiveInvite(int cseq);
+
+    /// <summary>
     /// True when one local INVITE client transaction is currently in progress.
     /// </summary>
     bool HasPendingLocalInviteTransaction { get; }

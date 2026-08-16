@@ -56,6 +56,8 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
     private bool _hasRemoteCSeq;
     internal int _activeInviteCSeq;
     internal string? _activeInviteBranch;
+    // Outlives the cancel target above — see ISipCallSessionContext.CompletedInviteCSeq (#158 P2-10).
+    internal int _completedInviteCSeq;
     private string? _remoteAssertedIdentity;
     private readonly string? _diversion;
     private readonly string? _remoteDisplayName;
