@@ -205,8 +205,10 @@ internal sealed class SipCallSessionTransactionService
             {
                 _context.RemoteTag = SipProtocol.ExtractTag(finalResponse.Response.Header("To")) ?? _context.RemoteTag;
                 // A 2xx makes the INVITE non-cancellable; clear before the ACK so a failing ACK send
-                // cannot leave a stale CANCEL target once the dialog becomes Established (HARD-C2).
-                _context.ClearActiveInvite();
+                // cannot leave a stale CANCEL target once the dialog becomes Established (HARD-C2). The CSeq
+                // is kept as the completed-INVITE identity, so a 2xx from a branch we did not select still
+                // matches and gets its ACK and BYE (#158 P2-10).
+                _context.CompleteActiveInvite(cseq);
                 await SendAckAsync(cseq, ct).ConfigureAwait(false);
 
                 if (TryConsumeCancelledInvite(cseq, out var cancelledInviteReason))

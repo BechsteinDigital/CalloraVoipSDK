@@ -92,6 +92,15 @@ internal sealed class AckTestSipCallSessionContext : ISipCallSessionContext
 
     public string? ActiveInviteBranch { get; set; }
 
+    public int CompletedInviteCSeq { get; set; }
+
+    public void CompleteActiveInvite(int cseq)
+    {
+        CompletedInviteCSeq = cseq;
+        ActiveInviteCSeq = 0;
+        ActiveInviteBranch = null;
+    }
+
     public bool HasPendingLocalInviteTransaction => ActiveInviteCSeq > 0 && !string.IsNullOrWhiteSpace(ActiveInviteBranch);
 
     public bool IsDisposed => false;

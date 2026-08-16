@@ -133,6 +133,23 @@ internal sealed class SipCallSessionContextAdapter : ISipCallSessionContext
         }
     }
 
+    public int CompletedInviteCSeq
+    {
+        get { lock (_session._sync) return _session._completedInviteCSeq; }
+    }
+
+    // Drops the cancel target and publishes the completed identity in one lock (#158 P2-10): between the two
+    // there must be no window in which a forked 2xx matches neither.
+    public void CompleteActiveInvite(int cseq)
+    {
+        lock (_session._sync)
+        {
+            _session._completedInviteCSeq = cseq;
+            _session._activeInviteCSeq = 0;
+            _session._activeInviteBranch = null;
+        }
+    }
+
     public bool HasPendingLocalInviteTransaction
     {
         get

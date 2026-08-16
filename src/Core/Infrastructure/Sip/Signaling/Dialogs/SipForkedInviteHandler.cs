@@ -201,15 +201,23 @@ internal sealed class SipForkedInviteHandler
         if (string.IsNullOrWhiteSpace(remoteTag))
             return false;
 
-        // Accept a 2xx that belongs either to the still-active INVITE transaction (a forked branch matching the
-        // active CSeq) or to the already-confirmed selected dialog. The latter — a RETRANSMITTED 2xx whose To-tag
-        // is our established remote tag — must still be ACKed (RFC 3261 §13.2.2.4) even though the active-invite
-        // state was cleared on the first 2xx; otherwise a lost initial ACK leaves the UAS retransmitting the 200 OK
-        // until it gives up and drops the call.
+        // Accept a 2xx belonging to the still-active INVITE transaction (a forked branch matching the active
+        // CSeq), to the INVITE that a 2xx already completed, or to the confirmed selected dialog.
+        //
+        // The middle case is the one a forking proxy produces (#158 P2-10): a branch we did not select answers
+        // after the first 2xx established the dialog. Its To-tag is new, so the confirmed-dialog match below
+        // does not see it, and the active CSeq is gone because a 2xx makes the INVITE non-cancellable
+        // (HARD-C2) — leaving nothing to match on, and the losing UAS retransmitting its 200 OK until it gives
+        // up with its call leg still up. RFC 3261 §13.2.2.4 wants an ACK for it and a BYE for the dialog.
+        //
+        // The last case is a RETRANSMITTED 2xx for the dialog we kept, which must still be ACKed for the same
+        // §13.2.2.4 reason: a lost initial ACK otherwise ends the call we just established.
         var matchesActiveInvite = inviteCseq == _context.ActiveInviteCSeq;
+        var matchesCompletedInvite = _context.CompletedInviteCSeq > 0
+            && inviteCseq == _context.CompletedInviteCSeq;
         var matchesConfirmedDialog = !string.IsNullOrWhiteSpace(_context.RemoteTag)
             && string.Equals(remoteTag, _context.RemoteTag, StringComparison.Ordinal);
-        if (!matchesActiveInvite && !matchesConfirmedDialog)
+        if (!matchesActiveInvite && !matchesCompletedInvite && !matchesConfirmedDialog)
             return false;
 
         return true;
