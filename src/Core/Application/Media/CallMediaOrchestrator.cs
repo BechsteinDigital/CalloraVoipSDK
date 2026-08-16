@@ -361,10 +361,46 @@ internal sealed class CallMediaOrchestrator : IDisposable
             await entry.Session.StartAsync().ConfigureAwait(false);
             await entry.QualityMonitor.StartAsync().ConfigureAwait(false);
             _logger.LogDebug("Media session started for call {CallId}.", callId);
+            return;
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to start media session for call {CallId}.", callId);
+            // The entry is installed before the start runs — deliberately, so a packet arriving the moment the
+            // socket opens finds it. But a failed start used to be a log line and nothing else (#165 P2-7): the
+            // entry stayed in _active, holding an RTP socket and RTCP loops that were never started (or, when
+            // the quality monitor was the half that failed, a session that was), with only the eventual call
+            // teardown left to reap it. A partial start is rolled back to no start at all.
+            _logger.LogWarning(ex, "Failed to start media session for call {CallId}; rolling it back.", callId);
+        }
+
+        await RollBackFailedStartAsync(callId, entry).ConfigureAwait(false);
+    }
+
+    // Removes a media entry whose start failed and releases it. Only this entry: a newer negotiation may have
+    // displaced it in the meantime (and disposed it already), so the removal is a compare-and-remove under the
+    // same lock the install takes, and the activity record goes only with a removal we actually made.
+    private async Task RollBackFailedStartAsync(CallId callId, ActiveMediaEntry entry)
+    {
+        bool removed;
+        lock (_setupSync)
+        {
+            removed = _active.TryRemove(new KeyValuePair<CallId, ActiveMediaEntry>(callId, entry));
+            if (removed)
+                _activity.TryRemove(callId, out _);
+        }
+
+        if (!removed)
+            return; // superseded; whoever displaced it owns its disposal.
+
+        UnwireSession(entry);
+        try
+        {
+            await entry.QualityMonitor.DisposeAsync().ConfigureAwait(false);
+            await entry.Session.DisposeAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Disposing the media session of call {CallId} after a failed start faulted.", callId);
         }
     }
 
