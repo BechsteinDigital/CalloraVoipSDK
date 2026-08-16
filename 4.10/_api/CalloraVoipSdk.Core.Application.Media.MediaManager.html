@@ -102,7 +102,7 @@ Class MediaManager  <a class="header-action link-secondary" title="View source" 
   <div class="markdown conceptual"></div>
 
   <div class="codewrapper">
-    <pre><code class="lang-csharp hljs">public sealed class MediaManager : IMediaManager</code></pre>
+    <pre><code class="lang-csharp hljs">public sealed class MediaManager : IMediaManager, IAsyncDisposable</code></pre>
   </div>
 
 
@@ -120,6 +120,7 @@ Class MediaManager  <a class="header-action link-secondary" title="View source" 
     <dt>Implements</dt>
     <dd>
       <div><a class="xref" href="CalloraVoipSdk.Core.Application.Media.IMediaManager.html">IMediaManager</a></div>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.iasyncdisposable">IAsyncDisposable</a></div>
     </dd>
   </dl>
 
@@ -160,7 +161,7 @@ Class MediaManager  <a class="header-action link-secondary" title="View source" 
 
   <h3 id="CalloraVoipSdk_Core_Application_Media_MediaManager_ActivePlaybacks" data-uid="CalloraVoipSdk.Core.Application.Media.MediaManager.ActivePlaybacks">
   ActivePlaybacks
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Media/MediaManager.cs/#L41"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Media/MediaManager.cs/#L42"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Active playback sessions.</p>
@@ -192,7 +193,7 @@ Class MediaManager  <a class="header-action link-secondary" title="View source" 
 
   <h3 id="CalloraVoipSdk_Core_Application_Media_MediaManager_ActiveRecordings" data-uid="CalloraVoipSdk.Core.Application.Media.MediaManager.ActiveRecordings">
   ActiveRecordings
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Media/MediaManager.cs/#L36"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Media/MediaManager.cs/#L37"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Active recording sessions.</p>
@@ -228,7 +229,7 @@ Class MediaManager  <a class="header-action link-secondary" title="View source" 
 
   <h3 id="CalloraVoipSdk_Core_Application_Media_MediaManager_CreateConnector" data-uid="CalloraVoipSdk.Core.Application.Media.MediaManager.CreateConnector">
   CreateConnector()
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Media/MediaManager.cs/#L68"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Media/MediaManager.cs/#L69"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Creates a connector for one-way or two-way media links.</p>
@@ -260,7 +261,7 @@ Class MediaManager  <a class="header-action link-secondary" title="View source" 
 
   <h3 id="CalloraVoipSdk_Core_Application_Media_MediaManager_CreateReceiver" data-uid="CalloraVoipSdk.Core.Application.Media.MediaManager.CreateReceiver">
   CreateReceiver()
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Media/MediaManager.cs/#L46"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Media/MediaManager.cs/#L47"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Creates a detached media receiver.</p>
@@ -292,7 +293,7 @@ Class MediaManager  <a class="header-action link-secondary" title="View source" 
 
   <h3 id="CalloraVoipSdk_Core_Application_Media_MediaManager_CreateSender" data-uid="CalloraVoipSdk.Core.Application.Media.MediaManager.CreateSender">
   CreateSender()
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Media/MediaManager.cs/#L51"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Media/MediaManager.cs/#L52"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Creates a detached media sender.</p>
@@ -324,7 +325,7 @@ Class MediaManager  <a class="header-action link-secondary" title="View source" 
 
   <h3 id="CalloraVoipSdk_Core_Application_Media_MediaManager_CreateVideoReceiver" data-uid="CalloraVoipSdk.Core.Application.Media.MediaManager.CreateVideoReceiver">
   CreateVideoReceiver()
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Media/MediaManager.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Media/MediaManager.cs/#L58"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Creates a detached video receiver for a call's inbound encoded video frames (transport-only;
@@ -357,7 +358,7 @@ decode with your own codec). Attach it to a call to start receiving.</p>
 
   <h3 id="CalloraVoipSdk_Core_Application_Media_MediaManager_CreateVideoSender" data-uid="CalloraVoipSdk.Core.Application.Media.MediaManager.CreateVideoSender">
   CreateVideoSender()
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Media/MediaManager.cs/#L63"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Media/MediaManager.cs/#L64"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Creates a detached video sender for a call's outbound encoded video frames (transport-only;
@@ -386,11 +387,46 @@ encode with your own codec). Attach it to a call, then push frames.</p>
 
 
 
+  <a id="CalloraVoipSdk_Core_Application_Media_MediaManager_DisposeAsync_" data-uid="CalloraVoipSdk.Core.Application.Media.MediaManager.DisposeAsync*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Application_Media_MediaManager_DisposeAsync" data-uid="CalloraVoipSdk.Core.Application.Media.MediaManager.DisposeAsync">
+  DisposeAsync()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Media/MediaManager.cs/#L374"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Shuts the manager down and tears down every session it started (#165 P2-8). A recording session owns an
+open file whose container still needs finalising and a playback session owns a running loop pushing
+frames into a call, so neither can be left to a finaliser: without this, shutting the SDK down left both
+running with nothing holding a reference to stop them. Idempotent; after it, starting a session throws.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ValueTask DisposeAsync()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.valuetask">ValueTask</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
   <a id="CalloraVoipSdk_Core_Application_Media_MediaManager_StartCallPlaybackAsync_" data-uid="CalloraVoipSdk.Core.Application.Media.MediaManager.StartCallPlaybackAsync*"></a>
 
   <h3 id="CalloraVoipSdk_Core_Application_Media_MediaManager_StartCallPlaybackAsync_CalloraVoipSdk_Core_Domain_Calls_ICall_CalloraVoipSdk_Core_Application_Media_PlaybackRequest_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Application.Media.MediaManager.StartCallPlaybackAsync(CalloraVoipSdk.Core.Domain.Calls.ICall,CalloraVoipSdk.Core.Application.Media.PlaybackRequest,System.Threading.CancellationToken)">
   StartCallPlaybackAsync(ICall, PlaybackRequest, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Media/MediaManager.cs/#L176"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Media/MediaManager.cs/#L177"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Starts playback into one active call.</p>
@@ -431,7 +467,7 @@ encode with your own codec). Attach it to a call, then push frames.</p>
 
   <h3 id="CalloraVoipSdk_Core_Application_Media_MediaManager_StartCallRecordingAsync_CalloraVoipSdk_Core_Domain_Calls_ICall_CalloraVoipSdk_Core_Application_Media_RecordingOptions_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Application.Media.MediaManager.StartCallRecordingAsync(CalloraVoipSdk.Core.Domain.Calls.ICall,CalloraVoipSdk.Core.Application.Media.RecordingOptions,System.Threading.CancellationToken)">
   StartCallRecordingAsync(ICall, RecordingOptions?, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Media/MediaManager.cs/#L73"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Media/MediaManager.cs/#L74"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Starts recording on one active call.</p>
@@ -472,7 +508,7 @@ encode with your own codec). Attach it to a call, then push frames.</p>
 
   <h3 id="CalloraVoipSdk_Core_Application_Media_MediaManager_StartConferencePlaybackAsync_CalloraVoipSdk_Core_Application_Media_IMixedMediaBus_CalloraVoipSdk_Core_Application_Media_PlaybackRequest_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Application.Media.MediaManager.StartConferencePlaybackAsync(CalloraVoipSdk.Core.Application.Media.IMixedMediaBus,CalloraVoipSdk.Core.Application.Media.PlaybackRequest,System.Threading.CancellationToken)">
   StartConferencePlaybackAsync(IMixedMediaBus, PlaybackRequest, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Media/MediaManager.cs/#L188"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Media/MediaManager.cs/#L189"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Starts playback broadcast into one active conference.</p>
@@ -513,7 +549,7 @@ encode with your own codec). Attach it to a call, then push frames.</p>
 
   <h3 id="CalloraVoipSdk_Core_Application_Media_MediaManager_StartConferenceRecordingAsync_CalloraVoipSdk_Core_Application_Media_IMixedMediaBus_CalloraVoipSdk_Core_Application_Media_RecordingOptions_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Application.Media.MediaManager.StartConferenceRecordingAsync(CalloraVoipSdk.Core.Application.Media.IMixedMediaBus,CalloraVoipSdk.Core.Application.Media.RecordingOptions,System.Threading.CancellationToken)">
   StartConferenceRecordingAsync(IMixedMediaBus, RecordingOptions?, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Media/MediaManager.cs/#L125"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Application/Media/MediaManager.cs/#L126"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Starts recording on one active conference mix bus.</p>
