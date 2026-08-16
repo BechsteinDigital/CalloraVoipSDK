@@ -201,7 +201,8 @@ public sealed class EngineeringRulesTests
         // Die uebrigen sind Dispose-/Transport-Pfade, in denen sync-over-async oft
         // legitim ist (IDisposable erlaubt kein await) — pro Eintrag durch Auditor/Reviewer
         // zu bewerten.
-        "src/Core/Application/Media/MediaConnection.cs",
+        // #165 P2-9: MediaConnection.Dispose now uses a bounded _pumpTask.Wait(timeout) instead of an
+        // unbounded GetAwaiter().GetResult(), so it is no longer a sync-over-async violation.
         // #16: Mp3TranscodingWriter no longer blocks on async in its constructor — the intermediate
         // WAV writer is now opened via the async Mp3TranscodingWriter.CreateAsync factory.
         // #13: SipStreamConnection/SipWebSocketConnection Dispose now use a bounded _receiveLoop.Wait(timeout)
