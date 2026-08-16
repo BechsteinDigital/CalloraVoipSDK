@@ -82,6 +82,7 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
     private byte _pendingDtmfToneCode;
     private ushort _pendingDtmfDurationRtpUnits;
     private bool _pendingDtmfCompleted;
+    private int _started;
     private int _disposed;
 
     /// <inheritdoc />
@@ -239,10 +240,25 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
     private void OnMediaConnectivityDegraded() => MediaConnectivityDegraded?.Invoke();
     private void OnMediaConnectivityRecovered() => MediaConnectivityRecovered?.Invoke();
 
+    /// <summary>Test seam: the running playout loop, so a repeated start can be proven not to replace it.</summary>
+    internal Task? PlayoutLoopForTest => _playoutLoop;
+
     /// <inheritdoc />
     public Task StartAsync(CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
+
+        // Idempotent, mirroring RtpSession.StartAsync and the bundle guard (HARD-C5). A second call used to
+        // start a second playout loop and overwrite _playoutLoop: the first one kept running against the same
+        // jitter buffer and the same delivery state — two threads on fields written without synchronisation —
+        // and DisposeAsync could then only ever await the last one, so the orphan ran on until cancellation.
+        // Restarting the ICE/DTLS/video attachments under a live session is disruptive in its own right, so
+        // the guard covers the whole method, not just the loop. A start after disposal is a no-op as well:
+        // _cts is disposed by then, and reading its token would throw. (A start racing a concurrent dispose
+        // is still the caller's contract — this closes the sequential cases, which is what the API promises.)
+        if (Volatile.Read(ref _disposed) != 0 || Interlocked.Exchange(ref _started, 1) != 0)
+            return Task.CompletedTask;
+
         _nextMetricsPublishAtUtc = DateTimeOffset.UtcNow.Add(_metricsPublishInterval);
 
         _ = _rtp.StartAsync(_cts.Token);
