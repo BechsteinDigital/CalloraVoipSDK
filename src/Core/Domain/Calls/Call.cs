@@ -434,8 +434,26 @@ internal sealed class Call : ICall, IDisposable
             stateChangedSnapshot = StateChanged; // snapshot before releasing lock
         }
         _logger.LogDebug("Call {Id}: {Old} → {New}", CallId, args.OldState, next);
-        stateChangedSnapshot?.Invoke(this, args);
-        if (next == CallState.Terminated) _channel.Dispose();
+
+        // K3 says a handler must not throw — but one that does must not take the call's own teardown with it
+        // (#165 P2-5). Disposing the channel is this aggregate's invariant, not a subscriber's business: before
+        // this, a throwing StateChanged handler on the Terminated transition left the channel undisposed, so the
+        // call was terminated on paper while its signaling channel stayed alive. The throw is isolated and
+        // logged at Error rather than propagated, so one bad subscriber cannot tear down the signaling thread
+        // either. (A throw still cuts the multicast short for the handlers behind it — isolating each
+        // subscriber individually is a separate change, not this invariant.)
+        try
+        {
+            stateChangedSnapshot?.Invoke(this, args);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Call {Id}: a StateChanged subscriber threw on the {New} transition.", CallId, next);
+        }
+        finally
+        {
+            if (next == CallState.Terminated) _channel.Dispose();
+        }
     }
 
     /// <summary>
