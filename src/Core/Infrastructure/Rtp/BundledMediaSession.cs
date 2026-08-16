@@ -70,10 +70,9 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     private readonly string _audioMid;
     private readonly uint _audioSsrc;
     private readonly bool _audioSendEnabled;
-    // Our local sending SSRCs mapped to the track they belong to (MID + kind), so a per-SSRC outbound quality
-    // snapshot (RTT/loss keyed per our sending SSRC) can be attributed to a stream. Audio SSRC → audio MID;
-    // each video/simulcast-encoding SSRC → video MID. Read-only after construction.
-    private readonly IReadOnlyDictionary<uint, BundledOutboundStreamIdentity> _outboundStreamIdentity;
+    // Which stream every SSRC belongs to: the outbound SSRC → (MID, kind) map behind the per-stream quality
+    // snapshot, plus the inbound clock/kind/MID registration. Follows live track mutation (#161 P2-11).
+    private readonly BundledStreamAttribution _attribution;
     // RFC 4733 telephone-event (DTMF): the negotiated event payload type on the audio track (null when the
     // peer did not offer/accept telephone-event — DTMF sends then throw) and the event clock rate used to
     // convert durations to/from RTP units (RFC 4733 §2.1: it shares the audio stream's timestamp clock).
@@ -405,7 +404,7 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         _outboundSsrcs = new BundledOutboundSsrcTracker(options.Audio.Ssrc);
         foreach (var video in options.VideoTracks)
             _outboundSsrcs.Add(video.Mid, video);
-        _outboundStreamIdentity = BundledMediaSessionComposition.BuildOutboundStreamIdentity(options);
+        _attribution = new BundledStreamAttribution(BundledMediaSessionComposition.BuildOutboundStreamIdentity(options), _receptionStats);
 
         // The live track-mutation engine (4.7.0 renegotiation). It shares _trackMutationGate (the same object, so
         // add/remove stays serialised) and reads _disposed under it via the passed predicate so a late add fails
@@ -417,7 +416,8 @@ internal sealed class BundledMediaSession : IAsyncDisposable
             () => Volatile.Read(ref _disposed) != 0,
             _router, _outbound, _video, _audioTracks, _outboundSsrcs, _deactivatedVideoTracks,
             options, loggerFactory, _audioMid,
-            _inboundEventWiring.WireVideoTrackEvents, _inboundEventWiring.RaiseAudioTrackReceivedGuarded);
+            _inboundEventWiring.WireVideoTrackEvents, _inboundEventWiring.RaiseAudioTrackReceivedGuarded,
+            _attribution);
 
         // A relay candidate wired at construction (offerer path) closes the door on a later AdoptRelay.
         _relayWired = relayBinding is not null ? 1 : 0;
@@ -796,7 +796,7 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     /// </summary>
     public IReadOnlyList<BundledStreamQuality> SnapshotStreamQuality() =>
         BundledMediaSessionComposition.FoldStreamQuality(
-            _outboundQuality.SnapshotPerSsrc(), _receptionStats.SnapshotJitterMsPerSsrc(), _outboundStreamIdentity);
+            _outboundQuality.SnapshotPerSsrc(), _receptionStats.SnapshotJitterMsPerSsrc(), _attribution.OutboundIdentity);
 
     /// <summary>
     /// Starts the shared receive loop, the ICE consent loop, and the DTLS handshake. Idempotent

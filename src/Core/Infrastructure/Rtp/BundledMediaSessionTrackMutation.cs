@@ -40,6 +40,10 @@ internal sealed class BundledMediaSessionTrackMutation
     private readonly Action<string, BundledVideoTrack, bool> _wireVideoTrackEvents;
     private readonly Action<string, RtpPacket> _raiseAudioTrackReceivedGuarded;
 
+    // Which stream every SSRC belongs to. Both of its maps used to be construction-time snapshots (#161
+    // P2-11), so a track added mid-call was invisible to the metrics; a mutation now feeds them.
+    private readonly BundledStreamAttribution _attribution;
+
     /// <summary>
     /// Creates the mutation engine over the session's collaborators. The <paramref name="gate"/> MUST be the same
     /// object the session locks for its own dispose/mutation ordering (this is a shared lock, not a new one), and
@@ -58,7 +62,8 @@ internal sealed class BundledMediaSessionTrackMutation
         ILoggerFactory loggerFactory,
         string primaryAudioMid,
         Action<string, BundledVideoTrack, bool> wireVideoTrackEvents,
-        Action<string, RtpPacket> raiseAudioTrackReceivedGuarded)
+        Action<string, RtpPacket> raiseAudioTrackReceivedGuarded,
+        BundledStreamAttribution attribution)
     {
         _gate = gate ?? throw new ArgumentNullException(nameof(gate));
         _isDisposed = isDisposed ?? throw new ArgumentNullException(nameof(isDisposed));
@@ -73,6 +78,7 @@ internal sealed class BundledMediaSessionTrackMutation
         _primaryAudioMid = primaryAudioMid ?? throw new ArgumentNullException(nameof(primaryAudioMid));
         _wireVideoTrackEvents = wireVideoTrackEvents ?? throw new ArgumentNullException(nameof(wireVideoTrackEvents));
         _raiseAudioTrackReceivedGuarded = raiseAudioTrackReceivedGuarded ?? throw new ArgumentNullException(nameof(raiseAudioTrackReceivedGuarded));
+        _attribution = attribution ?? throw new ArgumentNullException(nameof(attribution));
     }
 
     /// <summary>Adds a video track live (see <see cref="BundledMediaSession.AddVideoTrack"/>).</summary>
@@ -94,32 +100,55 @@ internal sealed class BundledMediaSessionTrackMutation
             //    rejected as an unknown MID) and, until the sink is registered below, cleanly dropped/counted.
             _router.AddKnownMid(video.Mid);
 
-            // 2. Register the outbound sender(s) for the MID (simulcast: one per a=rid encoding; plain: one, with
-            //    RTX when negotiated) — identical to the ctor path — and build the track that will be its sink.
-            //    BuildVideoTrack registers the outbound sender(s) as a side effect and returns the inbound track.
-            var track = BundledMediaSessionComposition.BuildVideoTrack(_options, video, _outbound, _loggerFactory);
-
-            // 3. Wire the track's inbound frame / key-frame events. A live-added track is never the primary, so it
-            //    fires only the mid-tagged VideoTrackFrameReceived, leaving the mid-less facade on the ctor primary.
-            _wireVideoTrackEvents(video.Mid, track, false);
-
-            // 4. Register the inbound router sink LAST, so no packet can hit a half-built track: only now can an
-            //    inbound datagram for the new MID reach a live, fully-wired track.
-            _router.RegisterTrack(video.Mid, track.OnRtpPacket);
-
-            // 5. Publish to the video set so the send API and RTCP feedback fan-out find it.
-            if (!_video.TryAdd(video.Mid, track))
+            // Every step from here on is undone if a later one throws (#161 P2-11). A rejected config used to
+            // leave the MID known and its outbound sender registered — a bundle sending on a MID that has no
+            // track, with its SSRCs claimed, so even a corrected retry failed with "already registered".
+            BundledVideoTrack? track = null;
+            try
             {
-                // Lost a race we hold the gate against — should be unreachable. Unwind the partial wiring so no
-                // orphaned sink/sender lingers, and surface it rather than leak a half-registered track.
+                // 2. Register the outbound sender(s) for the MID (simulcast: one per a=rid encoding; plain: one,
+                //    with RTX when negotiated) — identical to the ctor path — and build the track that will be
+                //    its sink. BuildVideoTrack itself is transactional: it registers nothing until the track is
+                //    built, and unwinds its own registrations if a later one fails.
+                track = BundledMediaSessionComposition.BuildVideoTrack(_options, video, _outbound, _loggerFactory);
+
+                // 3. Wire the track's inbound frame / key-frame events. A live-added track is never the primary,
+                //    so it fires only the mid-tagged VideoTrackFrameReceived, leaving the mid-less facade on the
+                //    ctor primary.
+                _wireVideoTrackEvents(video.Mid, track, false);
+
+                // 4. Register the inbound router sink LAST, so no packet can hit a half-built track: only now can
+                //    an inbound datagram for the new MID reach a live, fully-wired track.
+                _router.RegisterTrack(video.Mid, track.OnRtpPacket);
+
+                // 5. Publish to the video set so the send API and RTCP feedback fan-out find it.
+                if (!_video.TryAdd(video.Mid, track))
+                {
+                    // Lost a race we hold the gate against — should be unreachable. Surface it rather than leak
+                    // a half-registered track; the catch below unwinds everything this call did.
+                    throw new InvalidOperationException($"A video track with MID '{video.Mid}' already exists on this bundle.");
+                }
+            }
+            catch
+            {
+                // Mirrors a deactivate: inbound sink first, then the outbound sender(s), then the track object.
+                // The MID stays in the demultiplexer's known set on purpose — that is exactly the state a
+                // deactivated track leaves behind (packets for it are cleanly dropped and counted), AddKnownMid
+                // is idempotent, and a retry with a corrected config re-adds it.
                 _router.UnregisterTrack(video.Mid);
                 _outbound.UnregisterTrack(video.Mid);
-                track.Dispose();
-                throw new InvalidOperationException($"A video track with MID '{video.Mid}' already exists on this bundle.");
+                track?.Dispose();
+                throw;
             }
 
             // 6. Record the track's SSRCs as live (RFC 3550 §8.1) so a later renegotiation allocates around them.
             _outboundSsrcs.Add(video.Mid, video);
+
+            // 7. Extend the metric attribution the same way the constructor seeds it, so the new track's inbound
+            //    sources resolve their negotiated clock/kind and its outbound SSRCs are attributed to this MID.
+            //    Both maps were construction-time snapshots before, which left every live-added track's inbound
+            //    jitter on an inferred clock with an unknown kind, and its outbound RTT/loss unattributed.
+            _attribution.TrackAdded(video, BundledStreamKind.Video, BundledMediaSessionComposition.VideoRtpClockRate);
         }
     }
 
@@ -145,6 +174,9 @@ internal sealed class BundledMediaSessionTrackMutation
             // Release the track's SSRCs from the live bookkeeping so a later renegotiation may reuse them (the
             // per-SSRC SRTP context is gone with the track). No-op when the MID was already inactive (idempotent).
             _outboundSsrcs.Remove(mid);
+            // And drop the outbound metric attribution for those SSRCs: the track no longer sends, so a report
+            // block still naming one belongs to a stream that is gone.
+            _attribution.TrackRemoved(mid);
         }
     }
 
@@ -174,27 +206,39 @@ internal sealed class BundledMediaSessionTrackMutation
             //    accepted rather than rejected as unknown; until the sink exists below they are cleanly dropped.
             _router.AddKnownMid(mid);
 
-            // 2. Register the symmetric outbound sender for the MID (identical to the ctor path) so the same session
-            //    can emit on the MID over a loopback peer; there is no public N-audio send API in this slice.
-            _outbound.RegisterTrack(mid, BundledMediaSessionComposition.BuildOutboundTrack(_options, audio));
+            // Everything below unwinds as one unit if any step throws (#161 P2-11).
+            try
+            {
+                // 2. Register the symmetric outbound sender for the MID (identical to the ctor path) so the same
+                //    session can emit on the MID over a loopback peer; there is no public N-audio send API in
+                //    this slice.
+                _outbound.RegisterTrack(mid, BundledMediaSessionComposition.BuildOutboundTrack(_options, audio));
 
-            // 3. Register the inbound router sink LAST: a bare receive sink dispatching on the mid-tagged event,
-            //    guarded so a throwing subscriber never tears down the shared receive loop (K3). DTMF is NOT
-            //    reassembled for an additional audio track (stays on the primary anchor).
-            _router.RegisterTrack(mid, packet => _raiseAudioTrackReceivedGuarded(mid, packet));
+                // 3. Register the inbound router sink LAST: a bare receive sink dispatching on the mid-tagged
+                //    event, guarded so a throwing subscriber never tears down the shared receive loop (K3). DTMF
+                //    is NOT reassembled for an additional audio track (stays on the primary anchor).
+                _router.RegisterTrack(mid, packet => _raiseAudioTrackReceivedGuarded(mid, packet));
 
-            // 4. Publish the MID to the set so the accessors/send seam find it. Unwind on the (unreachable — we hold
-            //    the gate) race so no orphaned sink/sender lingers.
-            if (!_audioTracks.TryAdd(mid))
+                // 4. Publish the MID to the set so the accessors/send seam find it. The (unreachable — we hold
+                //    the gate) race surfaces as an exception, and the catch unwinds the partial wiring.
+                if (!_audioTracks.TryAdd(mid))
+                    throw new InvalidOperationException($"An audio track with MID '{mid}' already exists on this bundle.");
+            }
+            catch
             {
                 _router.UnregisterTrack(mid);
                 _outbound.UnregisterTrack(mid);
-                throw new InvalidOperationException($"An audio track with MID '{mid}' already exists on this bundle.");
+                throw;
             }
 
             // 5. Record the track's SSRC as live (RFC 3550 §8.1) so a later renegotiation allocates around it. The
             //    tracker keys per MID and reads the config's SSRC(s); an audio config contributes just its one SSRC.
             _outboundSsrcs.Add(mid, audio);
+
+            // 6. Extend the metric attribution, as the constructor does for the tracks it composes: the inbound
+            //    clock/kind/MID for this track's payload type (first registration wins — a payload type shared
+            //    with a live track keeps its existing attribution) and its outbound SSRC identity.
+            _attribution.TrackAdded(audio, BundledStreamKind.Audio, audio.ClockRate > 0 ? (uint)audio.ClockRate : 0u);
         }
     }
 
@@ -223,6 +267,8 @@ internal sealed class BundledMediaSessionTrackMutation
             // Release the track's SSRC from the live bookkeeping so a later renegotiation may reuse it. No-op when
             // the MID was already inactive (idempotent).
             _outboundSsrcs.Remove(mid);
+            // Same for the outbound metric attribution (see SetVideoTrackInactive); the inbound clock entry stays.
+            _attribution.TrackRemoved(mid);
         }
     }
 }
