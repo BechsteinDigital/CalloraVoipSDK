@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.Sockets;
 using CalloraVoipSdk.Core.Infrastructure.Common.Protocols;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Sip.Wire;
@@ -517,27 +519,39 @@ internal static class SipProtocol
             if (bracketEnd <= 1)
                 return false;
 
-            host = hostPart[1..bracketEnd];
+            // RFC 3261 §25.1: a bracketed host is an IPv6reference. Anything else between brackets is not a
+            // host, and this routine gates the ingress (#158 P3-15) — so it must not pass one through.
+            var reference = hostPart[1..bracketEnd];
+            if (!IPAddress.TryParse(reference, out var referencedAddress)
+                || referencedAddress.AddressFamily != AddressFamily.InterNetworkV6)
+            {
+                return false;
+            }
+
             if (hostPart.Length > bracketEnd + 1)
             {
                 if (hostPart[bracketEnd + 1] != ':')
                     return false;
 
-                var portText = hostPart[(bracketEnd + 2)..];
-                if (!int.TryParse(portText, out var parsedPort))
+                if (!SipUriSyntax.TryParsePort(hostPart[(bracketEnd + 2)..], out var parsedPort))
                     return false;
 
                 port = parsedPort;
             }
 
-            return !string.IsNullOrWhiteSpace(host);
+            host = reference;
+            return true;
         }
 
         var colonIndex = hostPart.LastIndexOf(':');
-        if (colonIndex > 0
-            && colonIndex < hostPart.Length - 1
-            && int.TryParse(hostPart[(colonIndex + 1)..], out var parsedPortWithHost))
+        if (colonIndex >= 0)
         {
+            // A colon in an unbracketed host part introduces the port. When what follows is not a port the URI
+            // is malformed — the previous fallback kept the whole string as the host instead, so
+            // "example.test:abc" parsed as a host of that name and travelled on into route resolution.
+            if (!SipUriSyntax.TryParsePort(hostPart[(colonIndex + 1)..], out var parsedPortWithHost))
+                return false;
+
             host = hostPart[..colonIndex];
             port = parsedPortWithHost;
         }
@@ -546,8 +560,16 @@ internal static class SipProtocol
             host = hostPart;
         }
 
-        return !string.IsNullOrWhiteSpace(host);
+        if (!SipUriSyntax.IsValidHost(host))
+        {
+            host = string.Empty;
+            port = null;
+            return false;
+        }
+
+        return true;
     }
+
 
     // -----------------------------------------------------------------------
     // §19.1.2 — Character Escaping
