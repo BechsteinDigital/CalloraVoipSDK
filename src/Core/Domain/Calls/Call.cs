@@ -13,6 +13,13 @@ internal sealed class Call : ICall, IDisposable
     private readonly ICallChannel  _channel;
     private readonly ILogger<Call> _logger;
     private readonly object        _sync   = new();
+    // Serialises the public state-changing actions against each other (#165 P2-4). Every one of them is
+    // "check, await signaling, commit", and without this two of them interleave inside the await: both pass
+    // their guard, both drive the channel, and both commit — the second one onto a state its caller never
+    // saw. Held across the whole action, so the channel round-trip is part of the critical section.
+    // NOT reentrant: a StateChanged handler must not block on another action of the same call, which the K3
+    // event contract already forbids (handlers must neither block nor throw).
+    private readonly SemaphoreSlim _actionGate = new(1, 1);
     // volatile: allows lock-free reads in State property; writes are always under _sync.
     private volatile int           _stateInt = (int)CallState.Idle;
     private CallQualitySnapshot    _qualitySnapshot = CallQualitySnapshot.CreateEmpty(DateTimeOffset.UtcNow);
@@ -130,9 +137,18 @@ internal sealed class Call : ICall, IDisposable
         if (Direction != CallDirection.Inbound)
             throw new InvalidOperationException("Only inbound calls can be accepted.");
 
-        GuardState(CallState.Ringing);
-        await _channel.AnswerAsync(ct).ConfigureAwait(false);
-        TransitionTo(CallState.Connected);
+        await _actionGate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            GuardState(CallState.Ringing);
+            await _channel.AnswerAsync(ct).ConfigureAwait(false);
+            if (CommitTransition(CallState.Ringing, CallState.Connected) == CallTransitionOutcome.Overtaken)
+                throw OvertakenDuring("Accept", CallState.Ringing);
+        }
+        finally
+        {
+            _actionGate.Release();
+        }
     }
 
     /// <summary>
@@ -142,8 +158,21 @@ internal sealed class Call : ICall, IDisposable
     {
         if (State == CallState.Terminated) return;
 
-        await _channel.HangupAsync().ConfigureAwait(false);
-        TransitionTo(CallState.Terminated);
+        await _actionGate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            // Re-checked inside the gate: another action may have terminated the call while this one waited.
+            if (State == CallState.Terminated) return;
+
+            await _channel.HangupAsync().ConfigureAwait(false);
+            // Unconditional: termination is valid from every state and is the one transition that may
+            // overtake anything else. Idempotent by the check above and by TransitionTo itself.
+            TransitionTo(CallState.Terminated);
+        }
+        finally
+        {
+            _actionGate.Release();
+        }
     }
 
     /// <summary>
@@ -151,11 +180,23 @@ internal sealed class Call : ICall, IDisposable
     /// </summary>
     public async Task HoldAsync(CancellationToken ct = default)
     {
-        GuardState(CallState.Connected);
+        await _actionGate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            GuardState(CallState.Connected);
+            await _channel.HoldAsync().ConfigureAwait(false);
+            // The call may have terminated while the re-INVITE was in flight — a remote BYE does not wait for
+            // the gate. Committing anyway reported success to the caller and raised a hold event on a
+            // terminated call (probe: hold_race_final_state=Terminated hold_events_after_termination=1).
+            if (CommitTransition(CallState.Connected, CallState.OnHold) == CallTransitionOutcome.Overtaken)
+                throw OvertakenDuring("Hold", CallState.Connected);
 
-        await _channel.HoldAsync().ConfigureAwait(false);
-        TransitionTo(CallState.OnHold);
-        RaiseHoldChanged(isOnHold: true, byRemote: false);
+            RaiseHoldChanged(isOnHold: true, byRemote: false);
+        }
+        finally
+        {
+            _actionGate.Release();
+        }
     }
 
     /// <summary>
@@ -163,11 +204,20 @@ internal sealed class Call : ICall, IDisposable
     /// </summary>
     public async Task UnholdAsync(CancellationToken ct = default)
     {
-        GuardState(CallState.OnHold);
+        await _actionGate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            GuardState(CallState.OnHold);
+            await _channel.UnholdAsync().ConfigureAwait(false);
+            if (CommitTransition(CallState.OnHold, CallState.Connected) == CallTransitionOutcome.Overtaken)
+                throw OvertakenDuring("Unhold", CallState.OnHold);
 
-        await _channel.UnholdAsync().ConfigureAwait(false);
-        TransitionTo(CallState.Connected);
-        RaiseHoldChanged(isOnHold: false, byRemote: false);
+            RaiseHoldChanged(isOnHold: false, byRemote: false);
+        }
+        finally
+        {
+            _actionGate.Release();
+        }
     }
 
     /// <inheritdoc />
@@ -267,15 +317,19 @@ internal sealed class Call : ICall, IDisposable
                 CallActionStatus.InvalidState,
                 "Reject is only valid for inbound calls.");
 
-        if (State != CallState.Ringing)
-            return CallActionResult.Failure(
-                CallActionStatus.InvalidState,
-                $"Reject requires Ringing state, current state is {State}.");
-
+        await _actionGate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
+            // Re-checked inside the gate, not before it: the state may have moved on while this call waited.
+            if (State != CallState.Ringing)
+                return CallActionResult.Failure(
+                    CallActionStatus.InvalidState,
+                    $"Reject requires Ringing state, current state is {State}.");
+
             await _channel.RejectAsync(statusCode, reasonPhrase, ct).ConfigureAwait(false);
-            TransitionTo(CallState.Terminated);
+            if (CommitTransition(CallState.Ringing, CallState.Terminated) == CallTransitionOutcome.Overtaken)
+                return OvertakenResult("Reject", CallState.Ringing);
+
             var resolvedReason = string.IsNullOrWhiteSpace(reasonPhrase)
                 ? $"Rejected with SIP status {statusCode}."
                 : reasonPhrase;
@@ -284,6 +338,10 @@ internal sealed class Call : ICall, IDisposable
         catch (Exception ex)
         {
             return HandleCallActionException("Reject", ex);
+        }
+        finally
+        {
+            _actionGate.Release();
         }
     }
 
@@ -298,20 +356,27 @@ internal sealed class Call : ICall, IDisposable
                 CallActionStatus.InvalidState,
                 "Redirect is only valid for inbound calls.");
 
-        if (State != CallState.Ringing)
-            return CallActionResult.Failure(
-                CallActionStatus.InvalidState,
-                $"Redirect requires Ringing state, current state is {State}.");
-
+        await _actionGate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
+            if (State != CallState.Ringing)
+                return CallActionResult.Failure(
+                    CallActionStatus.InvalidState,
+                    $"Redirect requires Ringing state, current state is {State}.");
+
             await _channel.RedirectAsync(contactUris, statusCode, ct).ConfigureAwait(false);
-            TransitionTo(CallState.Terminated);
+            if (CommitTransition(CallState.Ringing, CallState.Terminated) == CallTransitionOutcome.Overtaken)
+                return OvertakenResult("Redirect", CallState.Ringing);
+
             return CallActionResult.Success("Redirect sent.", statusCode);
         }
         catch (Exception ex)
         {
             return HandleCallActionException("Redirect", ex);
+        }
+        finally
+        {
+            _actionGate.Release();
         }
     }
 
@@ -408,6 +473,17 @@ internal sealed class Call : ICall, IDisposable
     /// concurrent subscribe/unsubscribe cannot cause a null-dereference or lost-wake-up.
     /// </summary>
     internal void TransitionTo(CallState next, CallTerminationReason? reason = null)
+        => CommitTransition(expected: null, next, reason);
+
+    /// <summary>
+    /// Commits a transition only if the call is still in <paramref name="expected"/> (#165 P2-4), so an action
+    /// that checked its precondition before awaiting the signaling round-trip cannot commit onto a state that
+    /// arrived while it was in flight. <see langword="null"/> means unconditional — the signaling and remote
+    /// paths, which are reporting what already happened rather than requesting it.
+    /// </summary>
+    /// <returns>What happened — see <see cref="CallTransitionOutcome"/>.</returns>
+    private CallTransitionOutcome CommitTransition(
+        CallState? expected, CallState next, CallTerminationReason? reason = null)
     {
         CallStateChangedEventArgs? args;
         CallState current;
@@ -415,13 +491,18 @@ internal sealed class Call : ICall, IDisposable
         lock (_sync)
         {
             current = (CallState)_stateInt;
-            if (current == next || current == CallState.Terminated) return;
+            // Already where the action wanted to go — the signaling callback got there first, which is the
+            // ordinary case for a peer that answers before AnswerAsync returns. That is success, not a race.
+            if (current == next) return CallTransitionOutcome.AlreadyInTargetState;
+            if (expected is { } required && current != required)
+                return CallTransitionOutcome.Overtaken;
+            if (current == CallState.Terminated) return CallTransitionOutcome.Overtaken;
             if (!CallStateRules.CanTransition(current, next))
             {
                 _logger.LogDebug(
                     "Call {Id}: ignored invalid transition {Old} → {New}",
                     CallId, current, next);
-                return;
+                return CallTransitionOutcome.Overtaken;
             }
 
             // Publish the termination reason under the same lock and before StateChanged fires, so a
@@ -454,7 +535,20 @@ internal sealed class Call : ICall, IDisposable
         {
             if (next == CallState.Terminated) _channel.Dispose();
         }
+
+        return CallTransitionOutcome.Committed;
     }
+
+    // The call left the state an action had checked while that action was talking to the peer. The signaling
+    // side of it did happen, but the state it was going to commit is no longer the one it saw, so the caller
+    // is told rather than handed a success it cannot rely on.
+    private InvalidOperationException OvertakenDuring(string action, CallState expected) =>
+        new($"{action} could not complete: the call left {expected} (now {State}) while the request was in flight.");
+
+    private CallActionResult OvertakenResult(string action, CallState expected) =>
+        CallActionResult.Failure(
+            CallActionStatus.InvalidState,
+            $"{action} could not complete: the call left {expected} (now {State}) while the request was in flight.");
 
     /// <summary>
     /// Raises DTMF events from the transport layer as domain events.
@@ -757,6 +851,10 @@ internal sealed class Call : ICall, IDisposable
     public void Dispose()
     {
         lock (_sync) { if (_disposed) return; _disposed = true; }
+        // The action gate is deliberately not disposed: an action may still be inside it, and its Release in
+        // the finally would then throw ObjectDisposedException over whatever it was doing. SemaphoreSlim only
+        // needs disposal for its AvailableWaitHandle, which this never touches. Actions arriving after
+        // disposal pass the gate and are turned away by their own state checks.
         if (State != CallState.Terminated)
         {
             // Best-effort BYE on dispose, THEN dispose the channel — never both at once. Disposing the
