@@ -58,6 +58,9 @@ internal sealed class BundledVideoTrack : IDisposable
     // the base/primary encoding that carries no RID (or arrives before its RID is latched). Each simulcast
     // RID gets its own lane in _ridLayers so interleaved SSRCs never share reorder/loss state.
     private readonly BundledVideoInboundLayer _defaultLane;
+    // The a=rid ids this peer negotiated to receive (RFC 8853), or empty when no receive simulcast was
+    // negotiated. An allowlist, not a bound: the lane cap below is the DoS bound and stays either way.
+    private readonly IReadOnlySet<string> _receiveRids;
     // Per-RID inbound lanes, built lazily on first RID sighting. A plain Dictionary — the receive path is
     // single-consumer (see the class remarks), so no concurrent map is needed; it is only ever mutated and
     // read from the bundle's single receive loop.
@@ -176,7 +179,8 @@ internal sealed class BundledVideoTrack : IDisposable
         int reorderWindowDepth,
         ILoggerFactory loggerFactory,
         byte? rtxPayloadType = null,
-        uint? rtxSsrc = null)
+        uint? rtxSsrc = null,
+        IReadOnlyList<string>? receiveRids = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(mid);
         ArgumentNullException.ThrowIfNull(loggerFactory);
@@ -187,6 +191,7 @@ internal sealed class BundledVideoTrack : IDisposable
         _codecName = codecName;
         _reorderWindowDepth = reorderWindowDepth;
         _localSsrc = localSsrc;
+        _receiveRids = ToRidSet(receiveRids);
 
         var (packetiser, depacketiser) = VideoPayloadFormat.Create(codecName);
         _defaultLane = new BundledVideoInboundLayer(rid: null, depacketiser, new VideoReorderBuffer(reorderWindowDepth));
@@ -252,7 +257,8 @@ internal sealed class BundledVideoTrack : IDisposable
         IReadOnlyList<string> rids,
         BundledOutboundPipeline outbound,
         int reorderWindowDepth,
-        ILoggerFactory loggerFactory)
+        ILoggerFactory loggerFactory,
+        IReadOnlyList<string>? receiveRids = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(mid);
         ArgumentNullException.ThrowIfNull(rids);
@@ -266,6 +272,7 @@ internal sealed class BundledVideoTrack : IDisposable
         _codecName = codecName;
         _reorderWindowDepth = reorderWindowDepth;
         _localSsrc = localSsrc;
+        _receiveRids = ToRidSet(receiveRids);
 
         // The default receive lane handles the base/RID-less inbound stream; a per-RID lane is built lazily
         // on first RID sighting (recv-side simulcast demux, RFC 8853). Each send layer gets its own packetiser
@@ -462,6 +469,18 @@ internal sealed class BundledVideoTrack : IDisposable
             return _defaultLane;
         if (_ridLayers.TryGetValue(rid, out var lane))
             return lane;
+
+        // A RID outside the negotiated receive set never gets a lane (#161 P3-15). The cap below bounds how
+        // much an unknown RID can cost; this decides whether it is entitled to anything at all. With no
+        // receive simulcast negotiated the set is empty and every RID is admitted, as before.
+        if (_receiveRids.Count > 0 && !_receiveRids.Contains(rid))
+        {
+            _logger.LogDebug(
+                "Dropping inbound video packet for rid '{Rid}' on MID {Mid}: not among the negotiated receive " +
+                "RIDs (RFC 8853).", rid, _mid);
+            return null;
+        }
+
         if (_ridLayers.Count >= MaxInboundRidLanes)
         {
             _logger.LogWarning(
@@ -548,6 +567,13 @@ internal sealed class BundledVideoTrack : IDisposable
 
         return mine ?? (IReadOnlyList<RtcpPacket>)Array.Empty<RtcpPacket>();
     }
+
+    private static IReadOnlySet<string> ToRidSet(IReadOnlyList<string>? rids)
+        => rids is null || rids.Count == 0
+            ? EmptyRidSet
+            : new HashSet<string>(rids, StringComparer.Ordinal);
+
+    private static readonly IReadOnlySet<string> EmptyRidSet = new HashSet<string>(StringComparer.Ordinal);
 
     // This track's sending SSRCs: the primary stream, plus every simulcast layer registered under this MID
     // (their SSRCs live on the outbound pipeline, not on the track). The RTX repair SSRC is deliberately not

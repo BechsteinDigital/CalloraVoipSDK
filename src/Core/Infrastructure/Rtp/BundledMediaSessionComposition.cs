@@ -148,7 +148,8 @@ internal static class BundledMediaSessionComposition
                 video.Mid, codecName, video.PayloadType, video.Ssrc,
                 video.RemoteSupportsNack, video.RemoteSupportsPli,
                 video.Encodings.Select(e => e.Rid).ToArray(),
-                outbound, options.VideoReorderDepth, loggerFactory);
+                outbound, options.VideoReorderDepth, loggerFactory,
+                receiveRids: video.ReceiveRids);
 
             var registered = new List<string?>(video.Encodings.Count);
             try
@@ -181,7 +182,9 @@ internal static class BundledMediaSessionComposition
             // the non-simulcast track only — per-encoding simulcast RTX is follow-up work. Its repair
             // SSRC is allocated bundle-wide-distinct by the factory (RFC 3550 §8.1).
             rtxPayloadType: video.RtxPayloadType,
-            rtxSsrc: video.RtxSsrc);
+            rtxSsrc: video.RtxSsrc,
+            // The negotiated inbound RID allowlist (#161 P3-15); empty admits every RID, as before.
+            receiveRids: video.ReceiveRids);
 
         try
         {
