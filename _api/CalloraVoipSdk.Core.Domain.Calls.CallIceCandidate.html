@@ -89,7 +89,7 @@
 
 
   <h1 id="CalloraVoipSdk_Core_Domain_Calls_CallIceCandidate" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallIceCandidate" class="text-break">
-Class CallIceCandidate  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallIceCandidate.cs/#L6"><i class="bi bi-code-slash"></i></a>
+Class CallIceCandidate  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallIceCandidate.cs/#L14"><i class="bi bi-code-slash"></i></a>
   </h1>
 
   <div class="facts text-secondary">
@@ -144,6 +144,14 @@ Class CallIceCandidate  <a class="header-action link-secondary" title="View sour
 
 
 
+  <h2 id="CalloraVoipSdk_Core_Domain_Calls_CallIceCandidate_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>Validated on assignment (#165 P3-12). These values are not descriptive — they are inputs to candidate
+pairing and prioritisation, where an unusable one costs a failed call with nothing pointing at the
+candidate that caused it. The bounds are the ones the SDP side already enforces on the wire
+(<code>SdpIceGrammar</code>, RFC 8839 §5.1 / RFC 8445 §5.1), so a candidate parsed off an offer or answer
+passes them by construction: this guards the objects the SDK itself and its callers build.
+The wire-grammar character classes stay on the parser — that is the trust boundary for them (K4).</p>
+</div>
 
 
   <h2 class="section" id="properties">Properties
@@ -154,7 +162,7 @@ Class CallIceCandidate  <a class="header-action link-secondary" title="View sour
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallIceCandidate_Address" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallIceCandidate.Address">
   Address
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallIceCandidate.cs/#L31"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallIceCandidate.cs/#L84"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Candidate address.</p>
@@ -179,6 +187,12 @@ Class CallIceCandidate  <a class="header-action link-secondary" title="View sour
 
 
 
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>The value is blank.</p>
+</dd>
+  </dl>
 
 
 
@@ -186,7 +200,7 @@ Class CallIceCandidate  <a class="header-action link-secondary" title="View sour
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallIceCandidate_Component" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallIceCandidate.Component">
   Component
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallIceCandidate.cs/#L16"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallIceCandidate.cs/#L35"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Candidate component identifier (1 = RTP, 2 = RTCP).</p>
@@ -211,6 +225,12 @@ Class CallIceCandidate  <a class="header-action link-secondary" title="View sour
 
 
 
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>The value is outside 1..256.</p>
+</dd>
+  </dl>
 
 
 
@@ -218,7 +238,7 @@ Class CallIceCandidate  <a class="header-action link-secondary" title="View sour
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallIceCandidate_Foundation" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallIceCandidate.Foundation">
   Foundation
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallIceCandidate.cs/#L11"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallIceCandidate.cs/#L20"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Candidate foundation identifier.</p>
@@ -243,6 +263,12 @@ Class CallIceCandidate  <a class="header-action link-secondary" title="View sour
 
 
 
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>The value is blank or longer than 32 characters.</p>
+</dd>
+  </dl>
 
 
 
@@ -250,7 +276,7 @@ Class CallIceCandidate  <a class="header-action link-secondary" title="View sour
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallIceCandidate_Generation" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallIceCandidate.Generation">
   Generation
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallIceCandidate.cs/#L56"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallIceCandidate.cs/#L147"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>ICE generation value when present.</p>
@@ -282,7 +308,7 @@ Class CallIceCandidate  <a class="header-action link-secondary" title="View sour
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallIceCandidate_NetworkId" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallIceCandidate.NetworkId">
   NetworkId
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallIceCandidate.cs/#L66"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallIceCandidate.cs/#L157"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Network-ID extension when present.</p>
@@ -314,7 +340,7 @@ Class CallIceCandidate  <a class="header-action link-secondary" title="View sour
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallIceCandidate_Port" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallIceCandidate.Port">
   Port
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallIceCandidate.cs/#L36"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallIceCandidate.cs/#L98"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Candidate port.</p>
@@ -339,6 +365,12 @@ Class CallIceCandidate  <a class="header-action link-secondary" title="View sour
 
 
 
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>The value is outside 0..65535.</p>
+</dd>
+  </dl>
 
 
 
@@ -346,7 +378,7 @@ Class CallIceCandidate  <a class="header-action link-secondary" title="View sour
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallIceCandidate_Priority" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallIceCandidate.Priority">
   Priority
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallIceCandidate.cs/#L26"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallIceCandidate.cs/#L68"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Candidate priority value.</p>
@@ -371,6 +403,12 @@ Class CallIceCandidate  <a class="header-action link-secondary" title="View sour
 
 
 
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>The value is outside 1..2^31-1.</p>
+</dd>
+  </dl>
 
 
 
@@ -378,7 +416,7 @@ Class CallIceCandidate  <a class="header-action link-secondary" title="View sour
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallIceCandidate_RelatedAddress" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallIceCandidate.RelatedAddress">
   RelatedAddress
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallIceCandidate.cs/#L46"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallIceCandidate.cs/#L128"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Related address (raddr) when present.</p>
@@ -410,7 +448,7 @@ Class CallIceCandidate  <a class="header-action link-secondary" title="View sour
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallIceCandidate_RelatedPort" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallIceCandidate.RelatedPort">
   RelatedPort
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallIceCandidate.cs/#L51"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallIceCandidate.cs/#L134"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Related port (rport) when present.</p>
@@ -435,6 +473,12 @@ Class CallIceCandidate  <a class="header-action link-secondary" title="View sour
 
 
 
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>The value is set and outside 0..65535.</p>
+</dd>
+  </dl>
 
 
 
@@ -442,7 +486,7 @@ Class CallIceCandidate  <a class="header-action link-secondary" title="View sour
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallIceCandidate_Transport" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallIceCandidate.Transport">
   Transport
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallIceCandidate.cs/#L21"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallIceCandidate.cs/#L54"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Candidate transport token (for example UDP or TCP).</p>
@@ -466,7 +510,17 @@ Class CallIceCandidate  <a class="header-action link-secondary" title="View sour
 
 
 
+  <h4 class="section" id="CalloraVoipSdk_Core_Domain_Calls_CallIceCandidate_Transport_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Not restricted to UDP/TCP on purpose, matching the parser: deployed endpoints emit <code>ssltcp</code> and
+similar, and a transport this stack cannot pair on is filtered where pairing happens.</p>
+</div>
 
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>The value is blank.</p>
+</dd>
+  </dl>
 
 
 
@@ -474,7 +528,7 @@ Class CallIceCandidate  <a class="header-action link-secondary" title="View sour
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallIceCandidate_Type" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallIceCandidate.Type">
   Type
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallIceCandidate.cs/#L41"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallIceCandidate.cs/#L113"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Candidate type token (host, srflx, prflx, relay).</p>
@@ -499,6 +553,12 @@ Class CallIceCandidate  <a class="header-action link-secondary" title="View sour
 
 
 
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>The value is not one of host, srflx, prflx, relay.</p>
+</dd>
+  </dl>
 
 
 
@@ -506,7 +566,7 @@ Class CallIceCandidate  <a class="header-action link-secondary" title="View sour
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallIceCandidate_Ufrag" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallIceCandidate.Ufrag">
   Ufrag
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallIceCandidate.cs/#L61"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallIceCandidate.cs/#L152"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Per-candidate ICE ufrag extension when present.</p>
@@ -538,7 +598,7 @@ Class CallIceCandidate  <a class="header-action link-secondary" title="View sour
 </article>
 
         <div class="contribution d-print-none">
-          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallIceCandidate.cs/#L6" class="edit-link">Edit this page</a>
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallIceCandidate.cs/#L14" class="edit-link">Edit this page</a>
         </div>
 
 

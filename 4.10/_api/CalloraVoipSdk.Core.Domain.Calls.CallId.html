@@ -186,10 +186,11 @@ Struct CallId  <a class="header-action link-secondary" title="View source" href=
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallId_Value" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallId.Value">
   Value
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallId.cs/#L6"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallId.cs/#L18"><i class="bi bi-code-slash"></i></a>
   </h3>
 
-  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 summary"><p>The underlying identifier; never <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.guid.empty">Empty</a> when constructed (#165 P3-12).</p>
+</div>
   <div class="markdown level1 conceptual"></div>
 
   <div class="codewrapper">
@@ -209,7 +210,21 @@ Struct CallId  <a class="header-action link-secondary" title="View source" href=
 
 
 
+  <h4 class="section" id="CalloraVoipSdk_Core_Domain_Calls_CallId_Value_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>The generated positional constructor took any Guid, so <code>new CallId(Guid.Empty)</code> produced an
+identifier that is not one: it keys the call registry, the media orchestrator's active map and the
+per-call SSRC bookkeeping, and every empty id collides with every other. Validating in the property
+initialiser keeps the positional shape — constructor, <code>Value</code>, <code>Deconstruct</code>, <code>with</code> —
+while closing that door. <code>default(CallId)</code> still bypasses it, as it does for every struct in the
+language; treat a default instance as &quot;no call&quot;, not as one.</p>
+</div>
 
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>The value is <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.guid.empty">Empty</a>.</p>
+</dd>
+  </dl>
 
 
 
@@ -221,7 +236,7 @@ Struct CallId  <a class="header-action link-secondary" title="View source" href=
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallId_New" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallId.New">
   New()
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallId.cs/#L10"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallId.cs/#L35"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Creates a new <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallId.html">CallId</a> backed by a freshly generated <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.guid">Guid</a>.</p>
@@ -254,7 +269,7 @@ Struct CallId  <a class="header-action link-secondary" title="View source" href=
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallId_ToString" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallId.ToString">
   ToString()
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallId.cs/#L13"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallId.cs/#L38"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Returns the underlying GUID as a string.</p>
