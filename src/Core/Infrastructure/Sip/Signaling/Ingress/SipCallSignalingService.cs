@@ -25,12 +25,6 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
     private const string DefaultInboundUserAgent = "CalloraVoipSdk/1.0";
     private static readonly TimeSpan DefaultInboundSessionTimeout = TimeSpan.FromSeconds(30);
 
-    /// <summary>
-    /// Default cap on concurrent inbound dialog sessions (#158 P1-5). A UAS creates dialog state for every
-    /// served-user INVITE before any line/trunk takes ownership; without a cap a flood of INVITEs with
-    /// distinct Call-IDs pins unbounded session state.
-    /// </summary>
-    private const int DefaultMaxConcurrentInboundSessions = 256;
     // Upper bound on distinct outbound-INVITE targets (initial + all 3xx redirects) so a 3xx carrying many
     // Contacts cannot fan out into an unbounded chain of INVITE transactions (RFC 3261 §8.1.3.4 hardening).
     private const int MaxRedirectTargets = 8;
@@ -57,9 +51,15 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
     private readonly SipReplacedDialogTerminator _replacedDialogTerminator;
     private readonly IDisposable _requestSubscription;
     private readonly IDisposable _responseSubscription;
-    private readonly int _maxConcurrentInboundSessions;
     private readonly SipInboundRingDeadlineMonitor _ringDeadline;
-    private readonly SipPerRemoteInboundSessionLimiter _perRemoteSessions;
+
+    /// <summary>
+    /// Reserves the slot behind every entry in <see cref="_sessions"/> (#158 P1-5, #279): inbound sessions are
+    /// admitted against the global and per-remote ceilings before construction, outbound ones take their slot
+    /// unconditionally. Each reservation is released exactly once by <see cref="TryUntrackSession"/> or by the
+    /// admission path that failed to reach the table.
+    /// </summary>
+    private readonly SipInboundSessionAdmission _admission;
     private int _disposed;
 
     /// <summary>
@@ -82,9 +82,7 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
     {
         var resolvedDigestAuthenticator = digestAuthenticator
             ?? throw new ArgumentNullException(nameof(digestAuthenticator));
-        _maxConcurrentInboundSessions = maxConcurrentInboundSessions is { } cap && cap > 0
-            ? cap
-            : DefaultMaxConcurrentInboundSessions;
+        _admission = new SipInboundSessionAdmission(maxConcurrentInboundSessions, maxInboundSessionsPerRemote);
         _inboundUserAgent = string.IsNullOrWhiteSpace(inboundUserAgent) ? DefaultInboundUserAgent : inboundUserAgent;
         _transport = transport ?? throw new ArgumentNullException(nameof(transport));
         _digestAuthenticator = resolvedDigestAuthenticator;
@@ -107,7 +105,6 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
         _messageService = new SipCallSignalingMessages(_transport, _digestAuthenticator, _subscribeExecutor, _logger);
         _publicationService = new SipCallSignalingPublications(_transport, _digestAuthenticator, _subscribeExecutor, _logger);
         _ringDeadline = new SipInboundRingDeadlineMonitor(_logger, inboundRingDeadline);
-        _perRemoteSessions = new SipPerRemoteInboundSessionLimiter(maxInboundSessionsPerRemote);
 
         var resolvedSdpProvider = sdpProvider ?? BuildDefaultSdpProvider();
         _sessionDependencies = new SipCallSessionDependencies
@@ -244,8 +241,15 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
                 var session = SipCallSession.CreateOutbound(
                     configuration,
                     _sessionDependencies);
+                // #279: an outbound call is never refused by the inbound ceiling, but it does occupy a slot in
+                // the same table, so it claims one unconditionally — exactly as the previous _sessions.Count
+                // check counted outbound sessions against the cap.
+                _admission.ReserveOutbound();
                 if (!_sessions.TryAdd(callId, session))
+                {
+                    _admission.ReleaseSlot();
                     throw new InvalidOperationException($"Session with Call-ID '{callId}' already exists.");
+                }
                 HookSessionLifecycle(session);
                 _sessionStartTimes[callId] = DateTimeOffset.UtcNow;
                 _sessionTraceIds[callId] = traceId;
@@ -385,14 +389,25 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
     }
 
     /// <summary>
-    /// Returns true when a thrown invalid operation represents a transport-layer transaction failure.
+    /// Removes one session from the table and releases its admission slot exactly once (#279). Every removal
+    /// path goes through here — removing an entry without releasing its slot would shrink the effective
+    /// ceiling until the service stopped admitting calls entirely.
     /// </summary>
+    private bool TryUntrackSession(string callId)
+    {
+        if (!_sessions.TryRemove(callId, out _))
+            return false;
+
+        _admission.ReleaseInbound(callId);
+        return true;
+    }
+
     /// <summary>
     /// Removes and disposes one failed outbound session attempt.
     /// </summary>
     private void CleanupFailedOutboundSession(string callId, SipCallSession session)
     {
-        _sessions.TryRemove(callId, out _);
+        TryUntrackSession(callId);
         _sessionStartTimes.TryRemove(callId, out _);
         _sessionTraceIds.TryRemove(callId, out _);
         session.Dispose();
@@ -671,13 +686,16 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
         // #158 P1-5: bound the number of concurrent inbound sessions before creating dialog state. A UAS
         // creates a session (and fires IncomingInvite) for every served-user INVITE, before any line/trunk
         // takes ownership — a flood of INVITEs with distinct Call-IDs would otherwise pin unbounded state.
-        // At the cap, answer 486 Busy Here (RFC 3261 §21.4.24) and create no session. Best-effort count check:
-        // a small overshoot under concurrent creation is acceptable for a memory-bound ceiling (see the engine).
-        if (_sessions.Count >= _maxConcurrentInboundSessions)
+        // At the cap, answer 486 Busy Here (RFC 3261 §21.4.24) and create no session. The slot is claimed here
+        // and released on every path that does not end in a tracked session (#279) — reading _sessions.Count
+        // instead would let concurrent INVITEs all observe the same free slot and admit past the ceiling.
+        var admission = _admission.TryAdmitInbound(callId, remoteEndPoint.Address);
+        if (admission != SipInboundSessionAdmissionOutcome.Admitted)
         {
             _logger.LogWarning(
-                "Inbound INVITE from {Remote} rejected: max concurrent inbound sessions ({Cap}) reached.",
-                remoteEndPoint, _maxConcurrentInboundSessions);
+                "Inbound INVITE from {Remote} rejected by session admission ({Outcome}); ceiling is {Cap} " +
+                "concurrent inbound sessions.",
+                remoteEndPoint, admission, _admission.MaxConcurrentSessions);
             _ = SendIngressResponseAsync(
                 normalizedRequest,
                 remoteEndPoint,
@@ -687,56 +705,55 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
             return;
         }
 
-        // #158 P1-5 (per-remote cap): fair-share the global inbound-session budget across source IPs so one
-        // remote cannot occupy every slot. Reserves a slot keyed by Call-ID; released on termination or a
-        // failed insert below. At the per-remote ceiling, answer 486 Busy Here and create no session.
-        if (!_perRemoteSessions.TryAdmit(callId, remoteEndPoint.Address))
+        string localTag;
+        SipCallSession session;
+        var sessionSlotCommitted = false;
+        try
         {
-            _logger.LogWarning(
-                "Inbound INVITE from {Remote} rejected: max concurrent inbound sessions per remote reached.",
-                remoteEndPoint);
-            _ = SendIngressResponseAsync(
-                normalizedRequest,
-                remoteEndPoint,
-                inboundTransport,
-                statusCode: 486,
-                reasonPhrase: "Busy Here");
-            return;
+            localTag = SipProtocol.NewTag();
+            var configuration = new SipCallSessionConfiguration
+            {
+                CallId = callId,
+                LocalUri = toUri,
+                RemoteUri = remoteUri,
+                LocalDisplayName = null,
+                PreferredIdentityUri = null,
+                AuthUsername = string.Empty,
+                AuthPassword = null,
+                UserAgent = _inboundUserAgent,
+                Timeout = DefaultInboundSessionTimeout,
+                RemoteEndPoint = remoteEndPoint,
+                SignalingTransport = inboundTransport
+            };
+            var inboundContext = new SipInboundSessionContext
+            {
+                InitialInvite = normalizedRequest,
+                LocalTag = localTag
+            };
+
+            session = SipCallSession.CreateInbound(
+                configuration,
+                inboundContext,
+                _sessionDependencies);
+
+            if (!_sessions.TryAdd(callId, session))
+            {
+                session.Dispose();
+                return;
+            }
+
+            sessionSlotCommitted = true;
+        }
+        finally
+        {
+            // #279: the reservation covers a tracked session only once the insert succeeded. Release it on
+            // every other exit — a duplicate Call-ID or a throw out of session construction — or the ceiling
+            // shrinks with each of them until the service stops admitting calls.
+            if (!sessionSlotCommitted)
+                _admission.ReleaseInbound(callId);
         }
 
-        var localTag = SipProtocol.NewTag();
         var traceId = ResolveTraceId(callId);
-        var configuration = new SipCallSessionConfiguration
-        {
-            CallId = callId,
-            LocalUri = toUri,
-            RemoteUri = remoteUri,
-            LocalDisplayName = null,
-            PreferredIdentityUri = null,
-            AuthUsername = string.Empty,
-            AuthPassword = null,
-            UserAgent = _inboundUserAgent,
-            Timeout = DefaultInboundSessionTimeout,
-            RemoteEndPoint = remoteEndPoint,
-            SignalingTransport = inboundTransport
-        };
-        var inboundContext = new SipInboundSessionContext
-        {
-            InitialInvite = normalizedRequest,
-            LocalTag = localTag
-        };
-
-        var session = SipCallSession.CreateInbound(
-            configuration,
-            inboundContext,
-            _sessionDependencies);
-
-        if (!_sessions.TryAdd(callId, session))
-        {
-            _perRemoteSessions.Release(callId);
-            session.Dispose();
-            return;
-        }
         if (!string.IsNullOrWhiteSpace(replacesTargetCallId))
             _replacementTargets[callId] = replacesTargetCallId;
 
@@ -829,10 +846,9 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
             }
 
             if (e.NewState != SipDialogState.Terminated) return;
-            _sessions.TryRemove(session.CallId, out var _);
-            // #158 P1-5 (per-remote cap): release the per-remote slot reserved at admission. No-op for outbound
-            // sessions, which are never admitted through the limiter.
-            _perRemoteSessions.Release(session.CallId);
+            // Releases the admission slot and the per-remote reservation taken at admission (#158 P1-5, #279);
+            // both are no-ops for outbound sessions, which never went through the limiter.
+            TryUntrackSession(session.CallId);
             if (_sessionStartTimes.TryRemove(session.CallId, out var startedAt))
             {
                 _telemetry.PublishCdr(new SipCdrRecord
@@ -911,7 +927,7 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
         foreach (var session in _sessions.Values)
             session.Dispose();
         _sessions.Clear();
-        _perRemoteSessions.Clear();
+        _admission.Clear();
         _sessionStartTimes.Clear();
         _sessionTraceIds.Clear();
         _replacementTargets.Clear();

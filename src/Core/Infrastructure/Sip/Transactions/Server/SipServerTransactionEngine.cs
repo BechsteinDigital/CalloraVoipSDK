@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using Microsoft.Extensions.Logging;
 using CalloraVoipSdk.Core.Infrastructure.Common.Timing;
@@ -40,6 +41,14 @@ internal sealed class SipServerTransactionEngine : ISipServerTransactionEngine
     private readonly int _maxServerTransactions;
     private readonly TimeSpan _absoluteTransactionLifetime;
     private volatile Action<SipServerTransactionKey, Exception>? _transportErrorHandler;
+
+    /// <summary>
+    /// Reserved transaction slots (#279). Tracks <see cref="_transactions"/> exactly: a slot is claimed before
+    /// the insert and released by <see cref="TryReapTransaction"/>, so admission and insert together never
+    /// exceed <see cref="_maxServerTransactions"/>. Reading <c>_transactions.Count</c> for admission would
+    /// leave a window in which concurrent registrations all observe the same free slot.
+    /// </summary>
+    private int _reservedTransactions;
     private int _disposed;
 
     /// <summary>
@@ -272,7 +281,7 @@ internal sealed class SipServerTransactionEngine : ISipServerTransactionEngine
                 "SIP server transaction retransmit transport error for {CallId} — terminating transaction.",
                 state.Key.CallId);
 
-            if (_transactions.TryRemove(state.Key, out var removed))
+            if (TryReapTransaction(state.Key, out var removed))
                 removed.Dispose();
 
             try
@@ -456,7 +465,7 @@ internal sealed class SipServerTransactionEngine : ISipServerTransactionEngine
                 retransmitKind,
                 state.Key.CallId);
 
-            if (_transactions.TryRemove(state.Key, out var removed))
+            if (TryReapTransaction(state.Key, out var removed))
                 removed.Dispose();
 
             try
@@ -600,7 +609,7 @@ internal sealed class SipServerTransactionEngine : ISipServerTransactionEngine
         if (Volatile.Read(ref _disposed) != 0)
             return;
 
-        if (_transactions.TryRemove(state.Key, out var removed))
+        if (TryReapTransaction(state.Key, out var removed))
             removed.Dispose();
     }
 
@@ -618,8 +627,9 @@ internal sealed class SipServerTransactionEngine : ISipServerTransactionEngine
         if (_transactions.TryGetValue(key, out var existing))
             return existing;
 
-        // Best-effort count check: a small overshoot under concurrent creation is acceptable for a DoS ceiling.
-        if (_transactions.Count >= _maxServerTransactions)
+        // #279: claim the slot before creating anything, so concurrent registrations cannot all observe the
+        // same free capacity and insert past the cap.
+        if (!TryReserveTransactionSlot())
         {
             _logger.LogWarning(
                 "SIP server-transaction table at capacity ({Cap}); dropping new transaction for {CallId}.",
@@ -628,9 +638,52 @@ internal sealed class SipServerTransactionEngine : ISipServerTransactionEngine
             return null;
         }
 
-        var state = _transactions.GetOrAdd(key, _ => factory());
+        var created = factory();
+        var state = _transactions.GetOrAdd(key, created);
+        if (!ReferenceEquals(state, created))
+        {
+            // A concurrent registration for the same key won the insert. Our reservation covers no entry —
+            // release it and discard the transaction we built, or the ceiling erodes with every such race.
+            Interlocked.Decrement(ref _reservedTransactions);
+            created.Dispose();
+            return state;
+        }
+
         ArmAbsoluteExpiry(state);
         return state;
+    }
+
+    /// <summary>
+    /// Claims one transaction slot, or returns <see langword="false"/> when the table is at capacity (#279).
+    /// Compare-and-swap rather than increment-then-check: a transient overshoot would make a concurrent
+    /// admission refuse against a count that was never real.
+    /// </summary>
+    private bool TryReserveTransactionSlot()
+    {
+        while (true)
+        {
+            var reserved = Volatile.Read(ref _reservedTransactions);
+            if (reserved >= _maxServerTransactions)
+                return false;
+            if (Interlocked.CompareExchange(ref _reservedTransactions, reserved + 1, reserved) == reserved)
+                return true;
+        }
+    }
+
+    /// <summary>
+    /// Removes one transaction and releases its reserved slot exactly once, returning the removed state so the
+    /// caller can dispose it (#279). Every removal path must go through here; a path that removes the entry
+    /// without releasing the slot would shrink the effective ceiling with each transaction.
+    /// </summary>
+    private bool TryReapTransaction(
+        SipServerTransactionKey key,
+        [NotNullWhen(true)] out SipServerTransactionState? removed)
+    {
+        if (!_transactions.TryRemove(key, out removed))
+            return false;
+
+        Interlocked.Decrement(ref _reservedTransactions);
+        return true;
     }
 
     /// <summary>
@@ -662,7 +715,7 @@ internal sealed class SipServerTransactionEngine : ISipServerTransactionEngine
         if (Volatile.Read(ref _disposed) != 0)
             return;
 
-        if (_transactions.TryRemove(state.Key, out var removed))
+        if (TryReapTransaction(state.Key, out var removed))
         {
             _logger.LogDebug(
                 "SIP server transaction {CallId} reaped by the absolute-expiry safety net after {Lifetime}.",
@@ -681,6 +734,7 @@ internal sealed class SipServerTransactionEngine : ISipServerTransactionEngine
         foreach (var state in _transactions.Values)
             state.Dispose();
         _transactions.Clear();
+        Interlocked.Exchange(ref _reservedTransactions, 0);
         _timerScheduler.Dispose();
     }
 }

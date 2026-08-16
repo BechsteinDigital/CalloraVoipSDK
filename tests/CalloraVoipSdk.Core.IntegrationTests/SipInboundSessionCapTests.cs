@@ -91,4 +91,30 @@ public sealed class SipInboundSessionCapTests
         await Task.Delay(100);
         Assert.DoesNotContain(486, transport.SnapshotResponses().Select(r => r.StatusCode).ToArray());
     }
+
+    [Fact]
+    public async Task Concurrent_invites_enforce_the_session_cap_atomically()
+    {
+        using var transport = new CapturingSipTransportRuntime();
+        using var service = new SipCallSignalingService(
+            transport,
+            new NoopSipDigestAuthenticator(),
+            NullLoggerFactory.Instance,
+            maxConcurrentInboundSessions: 1);
+
+        var incoming = 0;
+        service.IncomingInvite += (_, _) => Interlocked.Increment(ref incoming);
+
+        // 64 concurrent INVITEs with distinct Call-IDs against a cap of 1 (#279). Between the count check and
+        // the insert sit the per-remote admission and session construction — a wide window in which several
+        // requests observe the same free slot.
+        await Task.WhenAll(Enumerable.Range(0, 64)
+            .Select(i => Task.Run(() => transport.DeliverInboundRequest(Remote, Invite($"race-{i}"))))
+            .ToArray());
+
+        Assert.Equal(1, Volatile.Read(ref incoming));
+
+        var statuses = await WaitForStatusesAsync(transport, expectedFinal: 63);
+        Assert.Equal(63, statuses.Count(s => s == 486));
+    }
 }

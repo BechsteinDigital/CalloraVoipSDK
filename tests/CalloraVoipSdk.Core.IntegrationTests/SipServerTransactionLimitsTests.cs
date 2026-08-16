@@ -88,4 +88,74 @@ public sealed class SipServerTransactionLimitsTests
         Assert.False(retransmit.IsOverCapacity);
         Assert.Equal(2, TransactionCount(engine));
     }
+
+    [Fact]
+    public void Registration_enforces_the_transaction_cap_atomically_under_contention()
+    {
+        const int workers = 32;
+        using var transport = new CapturingSipTransportRuntime();
+        using var engine = new SipServerTransactionEngine(
+            transport,
+            NullLogger.Instance,
+            maxServerTransactions: 1);
+
+        // 32 registrations of distinct transaction keys released simultaneously against a cap of 1 (#279).
+        // The window between the count check and the insert is a few instructions wide, so the threads are
+        // started up front and released by a barrier rather than queued on the thread pool — otherwise the
+        // race is simply never scheduled and the test proves nothing.
+        var registrations = new SipServerTransactionRegistration[workers];
+        using var release = new Barrier(workers);
+        var threads = Enumerable.Range(0, workers)
+            .Select(i => new Thread(() =>
+            {
+                release.SignalAndWait();
+                registrations[i] = engine.RegisterInboundRequest(Context(), Invite(i));
+            }))
+            .ToArray();
+
+        foreach (var thread in threads)
+            thread.Start();
+        foreach (var thread in threads)
+            Assert.True(thread.Join(TimeSpan.FromSeconds(30)));
+
+        Assert.Equal(1, TransactionCount(engine));
+        Assert.Equal(1, registrations.Count(r => r.ShouldProcess));
+        Assert.Equal(workers - 1, registrations.Count(r => r.IsOverCapacity));
+    }
+
+    [Fact]
+    public void A_reaped_transaction_frees_its_slot_for_a_new_one()
+    {
+        using var transport = new CapturingSipTransportRuntime();
+        using var engine = new SipServerTransactionEngine(
+            transport,
+            NullLogger.Instance,
+            maxServerTransactions: 1);
+
+        Assert.True(engine.RegisterInboundRequest(Context(), Invite(1)).ShouldProcess);
+        Assert.True(engine.RegisterInboundRequest(Context(), Invite(2)).IsOverCapacity);
+
+        // Removing the tracked transaction must release its slot — an admission counter that only ever grows
+        // would keep refusing after the table has drained (#279).
+        RemoveAllTransactions(engine);
+        Assert.Equal(0, TransactionCount(engine));
+
+        Assert.True(engine.RegisterInboundRequest(Context(), Invite(3)).ShouldProcess);
+        Assert.Equal(1, TransactionCount(engine));
+    }
+
+    /// <summary>
+    /// Drives the engine's own removal path (absolute expiry) for every tracked transaction, so the test
+    /// observes slot release exactly as production does rather than mutating the table behind its back.
+    /// </summary>
+    private static void RemoveAllTransactions(SipServerTransactionEngine engine)
+    {
+        var field = typeof(SipServerTransactionEngine)
+            .GetField("_transactions", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var table = (IDictionary)field.GetValue(engine)!;
+        var reap = typeof(SipServerTransactionEngine)
+            .GetMethod("OnAbsoluteExpiryDue", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        foreach (var state in table.Values.Cast<object>().ToArray())
+            reap.Invoke(engine, [state]);
+    }
 }
