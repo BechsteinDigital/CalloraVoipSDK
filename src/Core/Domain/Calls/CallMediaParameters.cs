@@ -49,8 +49,21 @@ public sealed record CallMediaParameters
     /// Payload-type to codec-name mapping parsed from remote SDP for this audio m-line.
     /// Used to resolve dynamic RTP payload types (96-127) at runtime.
     /// </summary>
-    public IReadOnlyDictionary<int, string> PayloadTypeCodecMap { get; init; }
-        = new ReadOnlyDictionary<int, string>(new Dictionary<int, string>());
+    /// <remarks>
+    /// Snapshotted on assignment (#165 P3-10): IReadOnlyDictionary is a view, not a guarantee, so the caller's
+    /// own Dictionary would otherwise stay live behind it. These parameters are treated as immutable — the
+    /// enricher chain clones them with <c>with</c> (K2) and the media session reads them long after
+    /// negotiation — so a caller mutating its copy afterwards would change a call's negotiated media under it.
+    /// A <c>with</c> clone copies the field directly and does not re-snapshot, so this costs one copy per
+    /// construction, on the negotiation path only.
+    /// </remarks>
+    public IReadOnlyDictionary<int, string> PayloadTypeCodecMap
+    {
+        get => _payloadTypeCodecMap;
+        init => _payloadTypeCodecMap = Snapshot(value);
+    }
+
+    private readonly IReadOnlyDictionary<int, string> _payloadTypeCodecMap = EmptyCodecMap;
 
     /// <summary>
     /// Negotiated RTP payload type for RFC 4733 <c>telephone-event</c> DTMF.
@@ -109,12 +122,37 @@ public sealed record CallMediaParameters
     /// <summary>
     /// Local ICE candidates advertised by this SDK for the media m-line.
     /// </summary>
-    public IReadOnlyList<CallIceCandidate> LocalIceCandidates { get; init; } = [];
+    public IReadOnlyList<CallIceCandidate> LocalIceCandidates
+    {
+        get => _localIceCandidates;
+        init => _localIceCandidates = Snapshot(value);
+    }
+
+    private readonly IReadOnlyList<CallIceCandidate> _localIceCandidates = [];
 
     /// <summary>
     /// Remote ICE candidates parsed from peer SDP for the media m-line.
     /// </summary>
-    public IReadOnlyList<CallIceCandidate> RemoteIceCandidates { get; init; } = [];
+    public IReadOnlyList<CallIceCandidate> RemoteIceCandidates
+    {
+        get => _remoteIceCandidates;
+        init => _remoteIceCandidates = Snapshot(value);
+    }
+
+    private readonly IReadOnlyList<CallIceCandidate> _remoteIceCandidates = [];
+
+    private static readonly IReadOnlyDictionary<int, string> EmptyCodecMap =
+        new ReadOnlyDictionary<int, string>(new Dictionary<int, string>());
+
+    // Defensive copies (#165 P3-10). An empty input needs no allocation; anything else is copied so the
+    // caller's collection cannot change what this record reports afterwards.
+    private static IReadOnlyList<T> Snapshot<T>(IReadOnlyList<T>? value)
+        => value is null || value.Count == 0 ? [] : [.. value];
+
+    private static IReadOnlyDictionary<int, string> Snapshot(IReadOnlyDictionary<int, string>? value)
+        => value is null || value.Count == 0
+            ? EmptyCodecMap
+            : new ReadOnlyDictionary<int, string>(new Dictionary<int, string>(value));
 
     /// <summary>
     /// True when the remote SDP signaled <c>a=end-of-candidates</c>.

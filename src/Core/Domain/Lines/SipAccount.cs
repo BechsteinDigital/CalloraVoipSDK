@@ -110,7 +110,16 @@ public sealed class SipAccount
     /// every inbound call the provider sends — including those meant for a different line on the same
     /// domain. Connecting such an account is refused rather than silently over-accepting.
     /// </remarks>
-    public IReadOnlyList<string>? InboundNumbers { get; init; }
+    public IReadOnlyList<string>? InboundNumbers
+    {
+        get => _inboundNumbers;
+        // Snapshotted on assignment (#165 P3-10): the account is held for the lifetime of the line and read
+        // on every inbound INVITE, so a caller that keeps and edits its own list would change which numbers
+        // a registered line answers, long after registering it.
+        init => _inboundNumbers = value is null ? null : [.. value];
+    }
+
+    private readonly IReadOnlyList<string>? _inboundNumbers;
 
     /// <summary>
     /// Whether the line accepts inbound INVITEs delivered by its registrar/proxy peer or,
