@@ -57,6 +57,9 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
     private readonly ILogger<RtpCallMediaSession> _logger;
     // Binds this leg to one remote synchronisation source; everything downstream is single-stream (#161 P2-6).
     private readonly RtpRemoteSourceLatch _sourceLatch;
+    // RFC 4733 inbound DTMF reassembly, shared with the bundled path. Driven only by the single RTP receive
+    // loop (RtpSession fires PacketReceived sequentially), which is the confinement it relies on.
+    private readonly RtpInboundDtmfReassembler _dtmfReassembler;
     private readonly CancellationTokenSource _cts = new();
     private readonly InboundRtpStatistics _inboundStats = new();
     private readonly TimeSpan _playoutInterval;
@@ -74,16 +77,6 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
     private ushort _lastDeliveredSequence;
     private int _observedInboundPayloadType = -1;
     private int _loggedUnadvertisedInboundPayloadType;
-    // RFC 4733 inbound DTMF reassembly state. Touched only by HandleInboundTelephoneEvent,
-    // which runs solely on the single RTP receive loop (RtpSession fires PacketReceived
-    // sequentially) — no other thread reads or writes it, so no synchronization is needed.
-    // Keep it that way: any new reader from another thread must add explicit synchronization.
-    private bool _hasPendingDtmfEvent;
-    private uint _pendingDtmfSsrc;
-    private uint _pendingDtmfTimestamp;
-    private byte _pendingDtmfToneCode;
-    private ushort _pendingDtmfDurationRtpUnits;
-    private bool _pendingDtmfCompleted;
     private int _started;
     private int _disposed;
 
@@ -143,6 +136,7 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
         _payloadTypeCodecMap = parameters.PayloadTypeCodecMap ?? EmptyPayloadTypeCodecMap;
         _telephoneEventPayloadType = ResolveTelephoneEventPayloadType(parameters);
         _clockRate = Math.Max(parameters.ClockRate, 1);
+        _dtmfReassembler = new RtpInboundDtmfReassembler(_clockRate, DispatchInboundDtmf, _logger);
         _playoutInterval = ResolvePlayoutInterval(parameters, playoutInterval);
         _metricsPublishInterval = ResolveMetricsPublishInterval(metricsPublishInterval);
         _defaultFrameDurationRtpUnits = (uint)Math.Max(parameters.SamplesPerPacket, 0);
@@ -435,9 +429,13 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
             if (_hasLastDeliveredSequence)
                 AdvanceDeliveredSequence(packet.SequenceNumber);
 
-            HandleInboundTelephoneEvent(packet);
+            _dtmfReassembler.Handle(packet);
             return;
         }
+
+        // Audio keeps arriving while a lost end-of-event packet does not, so this is where a pending tone the
+        // wire will never close gets closed instead (#161 P3-16). No-op unless one is overdue.
+        _dtmfReassembler.PollTimeout();
 
         // Jitter arrival/playout are driven off a monotonic clock (not wall-clock UtcNow) so an NTP step or
         // manual system-clock change mid-call cannot corrupt the interarrival jitter estimate or the playout
@@ -894,57 +892,6 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
         }
 
         return null;
-    }
-
-    private void HandleInboundTelephoneEvent(RtpPacket packet)
-    {
-        if (!RtpTelephoneEventCodec.TryParse(
-                packet.Payload.Span,
-                out var toneCode,
-                out var endOfEvent,
-                out var durationRtpUnits))
-        {
-            _logger.LogDebug(
-                "Ignoring malformed telephone-event RTP payload from SSRC={Ssrc:X8} (payloadLength={PayloadLength}).",
-                packet.Ssrc,
-                packet.Payload.Length);
-            return;
-        }
-
-        if (toneCode > 15)
-        {
-            _logger.LogDebug(
-                "Ignoring unsupported telephone-event code {ToneCode}; supported range is 0-15.",
-                toneCode);
-            return;
-        }
-
-        var isSameEvent =
-            _hasPendingDtmfEvent &&
-            _pendingDtmfSsrc == packet.Ssrc &&
-            _pendingDtmfTimestamp == packet.Timestamp &&
-            _pendingDtmfToneCode == toneCode;
-
-        if (!isSameEvent)
-        {
-            _hasPendingDtmfEvent = true;
-            _pendingDtmfSsrc = packet.Ssrc;
-            _pendingDtmfTimestamp = packet.Timestamp;
-            _pendingDtmfToneCode = toneCode;
-            _pendingDtmfDurationRtpUnits = durationRtpUnits;
-            _pendingDtmfCompleted = false;
-        }
-        else if (durationRtpUnits > _pendingDtmfDurationRtpUnits)
-        {
-            _pendingDtmfDurationRtpUnits = durationRtpUnits;
-        }
-
-        if (!endOfEvent || _pendingDtmfCompleted)
-            return;
-
-        _pendingDtmfCompleted = true;
-        var durationMs = RtpTelephoneEventCodec.DurationRtpUnitsToMs(_pendingDtmfDurationRtpUnits, _clockRate);
-        DispatchInboundDtmf(toneCode, durationMs);
     }
 
     private void DispatchInboundDtmf(byte toneCode, int durationMs)
