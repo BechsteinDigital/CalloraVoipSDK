@@ -15,7 +15,12 @@ internal interface IRtpPacketCodec
     RtpPacket Decode(ReadOnlySpan<byte> datagram);
 
     /// <summary>
-    /// Encodes an <see cref="RtpPacket"/> to its binary wire representation.
+    /// Encodes an <see cref="RtpPacket"/> to its binary wire representation. The packet is our own model, not
+    /// wire input, so a field that does not fit the RTP header is rejected rather than normalised onto the wire
+    /// (#161 P3-14): an unsupported version, a payload type above 127, more than 15 CSRCs, or a header
+    /// extension longer than its 16-bit word count can express.
     /// </summary>
+    /// <exception cref="ArgumentException">The packet cannot be represented in an RTP header.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The payload type is outside the seven-bit field.</exception>
     byte[] Encode(RtpPacket packet);
 }

@@ -12,6 +12,15 @@ internal sealed class RtpPacketCodec : IRtpPacketCodec
     private const int MinHeaderSize = 12;
     private const byte SupportedVersion = 2;
 
+    /// <summary>Widest payload type the seven-bit PT field holds (RFC 3550 §5.1).</summary>
+    private const byte MaxPayloadType = 127;
+
+    /// <summary>Most contributing sources the four-bit CC field can count (RFC 3550 §5.1).</summary>
+    private const int MaxCsrcCount = 15;
+
+    /// <summary>Most 32-bit words the header extension's 16-bit length field can express (RFC 3550 §5.3.1).</summary>
+    private const int MaxExtensionWords = ushort.MaxValue;
+
     // -------------------------------------------------------------------------
     // Decode
     // -------------------------------------------------------------------------
@@ -110,8 +119,35 @@ internal sealed class RtpPacketCodec : IRtpPacketCodec
     {
         ArgumentNullException.ThrowIfNull(packet);
 
-        var csrcCount     = Math.Min(packet.Csrc.Count, 15);
+        // Encode's input is our own model, never wire input, so a value that does not fit the RTP header is a
+        // bug on this side — and the K4 contract that keeps Decode lenient works the other way round here.
+        // Every one of these used to be normalised away silently (#161 P3-14): a payload type above 127 lost
+        // its top bit, landing on an entirely different codec (or, at 200/201, inside the RTCP range on a muxed
+        // socket); CSRCs past the fifteenth were dropped while the surviving ones still claimed to be the whole
+        // contributing-source list; and an extension longer than the 16-bit word count can express wrapped it,
+        // making the receiver read the header length as a small number and the rest of the extension as payload.
+        if (packet.Version != SupportedVersion)
+            throw new ArgumentException(
+                $"RTP version {packet.Version} cannot be encoded; only version {SupportedVersion} is supported.",
+                nameof(packet));
+
+        if (packet.PayloadType > MaxPayloadType)
+            throw new ArgumentOutOfRangeException(
+                nameof(packet), packet.PayloadType,
+                $"RTP payload type must be 0..{MaxPayloadType} — the header field is seven bits.");
+
+        if (packet.Csrc.Count > MaxCsrcCount)
+            throw new ArgumentException(
+                $"An RTP packet carries at most {MaxCsrcCount} CSRCs (the CC field is four bits); this one has " +
+                $"{packet.Csrc.Count}.", nameof(packet));
+
+        var csrcCount     = packet.Csrc.Count;
         var extData       = packet.HeaderExtension?.Data ?? ReadOnlyMemory<byte>.Empty;
+        if (RoundUp4(extData.Length) / 4 > MaxExtensionWords)
+            throw new ArgumentException(
+                $"An RTP header extension carries at most {MaxExtensionWords} 32-bit words (RFC 3550 §5.3.1); " +
+                $"this one is {extData.Length} bytes.", nameof(packet));
+
         var extBytes      = packet.HeaderExtension is not null ? 4 + RoundUp4(extData.Length) : 0;
         var payloadLength = packet.Payload.Length;
 
