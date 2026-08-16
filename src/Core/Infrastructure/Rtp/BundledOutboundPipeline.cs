@@ -104,6 +104,17 @@ internal sealed class BundledOutboundPipeline
                 $"An outbound track is already registered for MID '{mid}'{(rid is null ? "" : $" RID '{rid}'")}.");
     }
 
+    /// <summary>
+    /// Removes exactly one registration — the non-simulcast stream (<paramref name="rid"/> null) or one
+    /// <c>a=rid</c> layer of a MID. Used to unwind a partially registered track without touching the MID's
+    /// other layers. Returns <see langword="false"/> when nothing was registered under that key.
+    /// </summary>
+    public bool UnregisterTrack(string mid, string? rid)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(mid);
+        return _tracks.TryRemove(new BundledOutboundTrackKey(mid, rid), out _);
+    }
+
     /// <summary>Removes every track (all RID layers) for a MID. Returns <see langword="false"/> when none was registered.</summary>
     public bool UnregisterTrack(string mid)
     {

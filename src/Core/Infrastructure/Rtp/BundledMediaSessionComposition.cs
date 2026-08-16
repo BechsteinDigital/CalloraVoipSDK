@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Session;
 using Microsoft.Extensions.Logging;
 
@@ -69,14 +70,19 @@ internal static class BundledMediaSessionComposition
     /// quality snapshot (RTT/loss keyed per our sending SSRC) can be attributed to a stream. Audio SSRC → audio
     /// MID; each video track's single SSRC (or each simulcast encoding's SSRC) → that track's MID. SSRCs are
     /// bundle-wide-distinct (RFC 3550 §8.1), so every entry maps cleanly across N video tracks (P2b).
+    /// <para>
+    /// Mutable and concurrent by design (#161 P2-11): a live-added track contributes its SSRCs here and a
+    /// deactivated one drops them, so the attribution follows the bundle instead of freezing at construction.
+    /// The metrics snapshot reads it while the control plane mutates it.
+    /// </para>
     /// </summary>
-    public static IReadOnlyDictionary<uint, BundledOutboundStreamIdentity> BuildOutboundStreamIdentity(
+    public static ConcurrentDictionary<uint, BundledOutboundStreamIdentity> BuildOutboundStreamIdentity(
         BundledMediaSessionOptions options)
     {
-        var map = new Dictionary<uint, BundledOutboundStreamIdentity>
-        {
-            [options.Audio.Ssrc] = new BundledOutboundStreamIdentity(options.Audio.Mid, BundledStreamKind.Audio),
-        };
+        var map = new ConcurrentDictionary<uint, BundledOutboundStreamIdentity>();
+        map[options.Audio.Ssrc] = new BundledOutboundStreamIdentity(options.Audio.Mid, BundledStreamKind.Audio);
+        foreach (var audio in options.AdditionalAudioTracks)
+            map[audio.Ssrc] = new BundledOutboundStreamIdentity(audio.Mid, BundledStreamKind.Audio);
         foreach (var video in options.VideoTracks)
         {
             if (video.Encodings.Count > 0)
@@ -93,14 +99,6 @@ internal static class BundledMediaSessionComposition
         return map;
     }
 
-    /// <summary>
-    /// Builds one video track (P2b): registers its outbound sender(s) on its MID on <paramref name="outbound"/>
-    /// and returns the <see cref="BundledVideoTrack"/> that will be the router sink for that MID. Simulcast
-    /// (RFC 8853) registers one outbound stream per <c>a=rid</c> encoding on its own SSRC with the RID stamped;
-    /// a plain track registers a single stream and wires RTX (RFC 4588) when negotiated. All SSRCs (primary,
-    /// per-encoding, and RTX repair) are bundle-wide-distinct — the session factory owns that allocation
-    /// (RFC 3550 §8.1).
-    /// </summary>
     /// <summary>
     /// Baut die Transport-CC-Ebene des Bundles (draft-holmer), oder <see langword="null"/>, wenn die
     /// <c>a=extmap</c> nicht ausgehandelt wurde und der Transport folglich keine transport-weite
@@ -135,25 +133,47 @@ internal static class BundledMediaSessionComposition
         var codecName = video.VideoCodecName
             ?? throw new ArgumentException("A video track must name its codec.", nameof(options));
 
+        // The track is built BEFORE anything is registered, and every registration this call makes is undone
+        // if a later step throws (#161 P2-11). Registering first left a live outbound sender behind whenever
+        // the track constructor rejected the config — sending on a MID with no track, holding its SSRCs and
+        // its MID key, so even a corrected retry failed with "already registered".
         if (video.Encodings.Count > 0)
         {
             // Send-side simulcast (RFC 8853): one outbound RTP stream per a=rid layer under the shared
             // MID, each on its own SSRC with the negotiated RID header extension (RFC 8852) stamped.
             var ridExtensionId = options.RidExtensionId ?? throw new ArgumentException(
                 "A simulcast video track needs a negotiated RID header-extension id.", nameof(options));
-            foreach (var encoding in video.Encodings)
-                outbound.RegisterTrack(video.Mid, encoding.Rid,
-                    BuildEncodingTrack(options, video.Mid, encoding.Ssrc, video.PayloadType, encoding.Rid, ridExtensionId));
 
-            return new BundledVideoTrack(
+            var track = new BundledVideoTrack(
                 video.Mid, codecName, video.PayloadType, video.Ssrc,
                 video.RemoteSupportsNack, video.RemoteSupportsPli,
                 video.Encodings.Select(e => e.Rid).ToArray(),
                 outbound, options.VideoReorderDepth, loggerFactory);
+
+            var registered = new List<string?>(video.Encodings.Count);
+            try
+            {
+                foreach (var encoding in video.Encodings)
+                {
+                    outbound.RegisterTrack(video.Mid, encoding.Rid,
+                        BuildEncodingTrack(options, video.Mid, encoding.Ssrc, video.PayloadType, encoding.Rid, ridExtensionId));
+                    registered.Add(encoding.Rid);
+                }
+            }
+            catch
+            {
+                // Undo exactly the layers this call registered — never a MID-wide sweep, which on the
+                // (gated, unreachable) duplicate path would tear down someone else's live registration.
+                foreach (var rid in registered)
+                    outbound.UnregisterTrack(video.Mid, rid);
+                track.Dispose();
+                throw;
+            }
+
+            return track;
         }
 
-        outbound.RegisterTrack(video.Mid, BuildOutboundTrack(options, video));
-        return new BundledVideoTrack(
+        var plain = new BundledVideoTrack(
             video.Mid, codecName, video.PayloadType, video.Ssrc,
             video.RemoteSupportsNack, video.RemoteSupportsPli,
             outbound, options.VideoReorderDepth, loggerFactory,
@@ -162,6 +182,18 @@ internal static class BundledMediaSessionComposition
             // SSRC is allocated bundle-wide-distinct by the factory (RFC 3550 §8.1).
             rtxPayloadType: video.RtxPayloadType,
             rtxSsrc: video.RtxSsrc);
+
+        try
+        {
+            outbound.RegisterTrack(video.Mid, BuildOutboundTrack(options, video));
+        }
+        catch
+        {
+            plain.Dispose();
+            throw;
+        }
+
+        return plain;
     }
 
     /// <summary>

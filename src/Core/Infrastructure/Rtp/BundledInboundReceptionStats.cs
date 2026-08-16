@@ -52,7 +52,9 @@ internal sealed class BundledInboundReceptionStats
     // first packet, so the exact negotiated clock is applied by matching the packet's payload type — the audio PT
     // seeds the audio clock, the video PT seeds 90 kHz — rather than by SSRC or by arrival order. This closes the
     // CF-004e video-first gap where the audio clock was handed to whichever source arrived first.
-    private readonly IReadOnlyDictionary<byte, BundledInboundClockDescriptor> _clockByPayloadType;
+    // Concurrent and mutable (#161 P2-11): a track added mid-call brings its payload type with it, and a source
+    // that arrives afterwards must resolve the negotiated clock/kind the same way a ctor-time track's does.
+    private readonly ConcurrentDictionary<byte, BundledInboundClockDescriptor> _clockByPayloadType;
 
     /// <summary>
     /// Creates the reception tracker.
@@ -74,9 +76,24 @@ internal sealed class BundledInboundReceptionStats
         if (maxTrackedSources <= 0)
             throw new ArgumentOutOfRangeException(nameof(maxTrackedSources), "Max tracked sources must be positive.");
         _utcNow = utcNow ?? (() => DateTimeOffset.UtcNow);
-        _clockByPayloadType = clockByPayloadType ?? new Dictionary<byte, BundledInboundClockDescriptor>();
+        _clockByPayloadType = clockByPayloadType is null
+            ? new ConcurrentDictionary<byte, BundledInboundClockDescriptor>()
+            : new ConcurrentDictionary<byte, BundledInboundClockDescriptor>(clockByPayloadType);
         _maxTrackedSources = maxTrackedSources;
     }
+
+    /// <summary>
+    /// Registers the negotiated inbound clock/kind/MID for a payload type brought in by a track added mid-call
+    /// (#161 P2-11). First registration wins, mirroring how the composed map resolves a payload type shared by
+    /// two tracks — a later track never re-points an established payload type, so an inbound source keeps the
+    /// attribution it was admitted under. Returns whether the entry was taken.
+    /// <para>
+    /// There is no counterpart for a deactivated track: the payload type may be shared with a track that is
+    /// still live, and a source already resolved under it keeps its own copy of the clock either way.
+    /// </para>
+    /// </summary>
+    public bool TryRegisterInboundClock(byte payloadType, BundledInboundClockDescriptor descriptor)
+        => _clockByPayloadType.TryAdd(payloadType, descriptor);
 
     /// <summary>
     /// Records one inbound RTP packet against its source SSRC, updating that source's sequence tracking
