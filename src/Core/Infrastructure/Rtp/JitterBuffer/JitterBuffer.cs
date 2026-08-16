@@ -273,7 +273,12 @@ internal sealed class JitterBuffer : IJitterBuffer
         }
 
         // d(i) = |transit(i) - transit(i-1)|
-        var d = (int)(transit - _lastTransitTs);
+        // The difference is a signed 32-bit RTP-clock delta, so widen it BEFORE taking the
+        // absolute value: int.MinValue has no positive counterpart in int, and the arithmetic
+        // here is unchecked, so `d = -d` would leave it negative and feed a large negative
+        // value into the running estimate. Probe: a timestamp jump of 0x80000000 produced
+        // -16,777,216 ms of "jitter" at 8 kHz, which then drove the adaptive playout delay.
+        long d = (int)(transit - _lastTransitTs);
         if (d < 0) d = -d;
 
         // J(i) = J(i-1) + (|d| - J(i-1)) / 16
