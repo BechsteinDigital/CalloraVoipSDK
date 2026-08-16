@@ -394,8 +394,14 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
 
         if (isTelephoneEventPacket)
         {
+            // A telephone-event consumes a sequence number but never enters the jitter buffer, so the
+            // cursor has to account for it or the next audio packet reads as a gap. Advance it the same
+            // forward-only way a delivery does: a reordered event arriving behind the cursor must not pull
+            // it back, which would fabricate a gap the size of the reordering and burn concealment frames
+            // on audio that was already played out (probe: event 105 pulled the cursor from 110 to 105).
+            // Still only a bump, never an establish — a leading event must not seed the cursor.
             if (_hasLastDeliveredSequence)
-                _lastDeliveredSequence = packet.SequenceNumber;
+                AdvanceDeliveredSequence(packet.SequenceNumber);
 
             HandleInboundTelephoneEvent(packet);
             return;
@@ -543,8 +549,8 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
     // Marks a sequence as accounted for and advances the delivered-sequence cursor forward only (RFC 3550 §A.1
     // signed-delta wraparound). Forward-only so that a reordered delivery arriving behind a cursor already
     // advanced by a late drop does not move the cursor backwards (which would fabricate a huge gap). The first
-    // call establishes the cursor. Called from the playout loop (delivery) and the RTP receive loop (late drop),
-    // exactly like the telephone-event cursor bump — _lastDeliveredSequence is a ushort, so the writes are atomic.
+    // call establishes the cursor. Called from the playout loop (delivery) and the RTP receive loop (late drop
+    // and the telephone-event bump) — _lastDeliveredSequence is a ushort, so the writes are atomic.
     private void AdvanceDeliveredSequence(ushort sequenceNumber)
     {
         if (!_hasLastDeliveredSequence || unchecked((short)(sequenceNumber - _lastDeliveredSequence)) > 0)
