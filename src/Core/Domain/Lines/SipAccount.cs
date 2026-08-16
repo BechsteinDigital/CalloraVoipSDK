@@ -31,13 +31,35 @@ public sealed class SipAccount
     /// </summary>
     public string        Password         { get; init; } = string.Empty;
     /// <summary>SIP registrar host (IP or FQDN) and the account's SIP domain (required).</summary>
-    public required string SipServer      { get; init; }
+    /// <exception cref="ArgumentException">The value is blank (#165 P3-11).</exception>
+    public required string SipServer
+    {
+        get => _sipServer;
+        init => _sipServer = !string.IsNullOrWhiteSpace(value)
+            ? value
+            : throw new ArgumentException(
+                "SipServer is the registrar host and SIP domain; it cannot be blank.", nameof(SipServer));
+    }
+
+    private readonly string _sipServer = string.Empty;
 
     /// <summary>Transport used for SIP signaling; defaults to <see cref="SipTransport.Udp"/>.</summary>
     public SipTransport  Transport        { get; init; } = SipTransport.Udp;
 
     /// <summary>Signaling port; <c>0</c> (default) selects the standard port for the chosen <see cref="Transport"/>.</summary>
-    public int           Port             { get; init; } = 0; // 0 = default per transport
+    /// <exception cref="ArgumentOutOfRangeException">The value is outside 0..65535 (#165 P3-11).</exception>
+    public int Port
+    {
+        get => _port;
+        // 0 = default per transport; anything else must be a real port number. Rejected here rather than at
+        // bind time, where it surfaces as a socket error with no hint at which account configured it.
+        init => _port = value is >= 0 and <= 65535
+            ? value
+            : throw new ArgumentOutOfRangeException(
+                nameof(Port), value, "A SIP port must be 0 (transport default) or 1..65535.");
+    }
+
+    private readonly int _port;
 
     /// <summary>
     /// Whether the line registers with <see cref="SipServer"/>. <see langword="true"/> by default.
@@ -65,10 +87,30 @@ public sealed class SipAccount
     /// Requested registration lifetime in seconds; defaults to 300.
     /// Ignored when <see cref="Register"/> is <see langword="false"/>.
     /// </summary>
-    public int           RegistrationExpiry { get; init; } = 300;
+    /// <exception cref="ArgumentOutOfRangeException">The value is not positive (#165 P3-11).</exception>
+    public int RegistrationExpiry
+    {
+        get => _registrationExpiry;
+        // A binding that expires immediately is not a registration; 0 is what an UNREGISTER carries.
+        init => _registrationExpiry = value > 0
+            ? value
+            : throw new ArgumentOutOfRangeException(
+                nameof(RegistrationExpiry), value, "A registration lifetime must be positive.");
+    }
+
+    private readonly int _registrationExpiry = 300;
 
     /// <summary>Optional outbound proxy to route signaling through instead of resolving <see cref="SipServer"/> directly.</summary>
-    public string?       OutboundProxy    { get; init; }
+    public string? OutboundProxy
+    {
+        get => _outboundProxy;
+        init => _outboundProxy = value is null || !string.IsNullOrWhiteSpace(value)
+            ? value
+            : throw new ArgumentException(
+                "OutboundProxy is either unset or a host; blank is neither.", nameof(OutboundProxy));
+    }
+
+    private readonly string? _outboundProxy;
 
     /// <summary>
     /// Optional public host (IP or FQDN) to advertise in the REGISTER Contact and Via
@@ -77,7 +119,16 @@ public sealed class SipAccount
     /// unroutable private LAN address and mark the line offline. <see langword="null"/>
     /// keeps the local address (LAN/direct scenarios).
     /// </summary>
-    public string?       PublicSipHost    { get; init; }
+    public string? PublicSipHost
+    {
+        get => _publicSipHost;
+        init => _publicSipHost = value is null || !string.IsNullOrWhiteSpace(value)
+            ? value
+            : throw new ArgumentException(
+                "PublicSipHost is either unset or a host; blank is neither.", nameof(PublicSipHost));
+    }
+
+    private readonly string? _publicSipHost;
 
     /// <summary>
     /// Optional public signaling port paired with <see cref="PublicSipHost"/>. Use when a
@@ -128,6 +179,14 @@ public sealed class SipAccount
     /// Defaults to <see cref="ReregisterOptions.Default"/> (unlimited retries, exponential backoff).
     /// </summary>
     public ReregisterOptions Reregister   { get; init; } = ReregisterOptions.Default;
+
+    /// <summary>
+    /// Checks what an individual property initialiser cannot see on its own (#165 P3-11) — currently the
+    /// re-registration backoff window, whose two ends are only comparable once both are set. Called when the
+    /// line that uses this account is built, so a contradictory configuration is rejected before any REGISTER
+    /// goes out instead of surfacing much later as odd retry behaviour.
+    /// </summary>
+    internal void Validate() => Reregister.Validate();
 
     /// <summary>The account's SIP address-of-record, derived as <c>sip:Username@SipServer</c>.</summary>
     public SipAddress Address =>
