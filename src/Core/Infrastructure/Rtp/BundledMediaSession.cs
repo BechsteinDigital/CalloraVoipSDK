@@ -108,10 +108,10 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     // stay on the session; this holds only the subscription plumbing both the ctor loop and AddVideoTrack share.
     private readonly BundledMediaSessionInboundEventWiring _inboundEventWiring;
 
-    // Every outbound SSRC live on the bundle right now (RFC 3550 §8.1): seeded from the ctor tracks, extended on
-    // AddVideoTrack and pruned on SetVideoTrackInactive under _trackMutationGate, so OutboundSsrcs always reflects
-    // the SSRCs in use — the seed a renegotiator allocates a new track's SSRCs against. MID-keyed internally so a
-    // deactivated track's SSRCs are released exactly (BundledVideoTrack does not expose its SSRCs).
+    // Every outbound SSRC this bundle has issued (RFC 3550 §8.1): seeded from the ctor tracks and extended on
+    // AddVideoTrack under _trackMutationGate. A deactivated track's SSRCs are RETIRED, not released — under one
+    // SRTP key an SSRC must never be issued twice (#161 P2-12) — so this is the set a renegotiation allocates
+    // around. MID-keyed internally, since BundledVideoTrack does not expose its SSRCs.
     private readonly BundledOutboundSsrcTracker _outboundSsrcs;
 
     // RFC 4733 inbound DTMF reassembly (extracted to BundledInboundDtmfReassembler). Driven only by
@@ -400,9 +400,9 @@ internal sealed class BundledMediaSession : IAsyncDisposable
             onSenderReportSent: _outboundQuality.RecordLocalSenderReport);
 
         _audioSsrc = options.Audio.Ssrc;
-        // Seed the live outbound-SSRC bookkeeping (RFC 3550 §8.1) from the ctor tracks so OutboundSsrcs reflects the
-        // SSRCs in use from the start — the seed a renegotiation allocates around.
-        _outboundSsrcs = new BundledOutboundSsrcTracker(options.Audio.Ssrc);
+        // Seed the outbound-SSRC bookkeeping (RFC 3550 §8.1) from the ctor tracks so OutboundSsrcs reflects the
+        // SSRCs issued from the start — the seed a renegotiation allocates around.
+        _outboundSsrcs = new BundledOutboundSsrcTracker(options.Audio.Ssrc, _logger);
         foreach (var video in options.VideoTracks)
             _outboundSsrcs.Add(video.Mid, video);
         _outboundStreamIdentity = BundledMediaSessionComposition.BuildOutboundStreamIdentity(options);
@@ -486,11 +486,11 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     public uint AudioSsrc => _audioSsrc;
 
     /// <summary>
-    /// A snapshot of every outbound synchronisation source live on the bundle right now (RFC 3550 §8.1): the
-    /// audio SSRC plus each active video track's primary/per-encoding and RTX SSRC(s). A renegotiator seeds its
-    /// SSRC allocation with this so a mid-call-added track's SSRCs stay distinct from every SSRC already in use —
-    /// a shared SSRC would collide the per-SSRC SRTP context (ROC/replay keyed by SSRC). The set is snapshotted
-    /// under the track-mutation gate, so it reflects a consistent point between live add/remove mutations.
+    /// A snapshot of every outbound synchronisation source this bundle has issued under its current SRTP key
+    /// (RFC 3550 §8.1): the audio SSRC, each active track's primary/per-encoding and RTX SSRC(s), and every SSRC
+    /// retired with a deactivated track. A renegotiator seeds its SSRC allocation with this, so a mid-call-added
+    /// track's SSRCs are distinct from all of them — reusing one would restart a stream's index space under a key
+    /// whose per-SSRC SRTP state is still live, sharing a keystream with the retired stream (#161 P2-12).
     /// </summary>
     public IReadOnlySet<uint> OutboundSsrcs => _outboundSsrcs.Snapshot();
 
