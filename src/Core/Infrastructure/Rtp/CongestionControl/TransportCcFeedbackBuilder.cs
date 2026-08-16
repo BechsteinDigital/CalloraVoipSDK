@@ -10,11 +10,23 @@ namespace CalloraVoipSdk.Core.Infrastructure.Rtp.CongestionControl;
 /// missing sequence numbers as not-received, and quantises arrival times into the reference time
 /// (64 ms units, measured from a shared epoch so successive feedbacks stay on one timeline) and the
 /// per-packet receive deltas (250 µs units).
+/// <para>
+/// The reference time is a signed 24-bit wire field and therefore cyclic: it repeats every
+/// 2^24 × 64 ms ≈ 12.4 days, with the positive half lasting ≈ 6.21 days. The field is wrapped into
+/// that range rather than rejected (matching libwebrtc's <c>TransportFeedback::SetBase</c>, which
+/// takes the base time modulo the wrap period), so a long-running session keeps reporting instead of
+/// failing permanently once the epoch ages out. The receive deltas stay on the unwrapped timeline, so
+/// every arrival in a report remains correctly spaced relative to the reported reference time — which
+/// is all a consumer needs, since delay gradients are formed inside one report, never across two.
+/// </para>
 /// </summary>
 internal static class TransportCcFeedbackBuilder
 {
     private const int MaxReferenceTime = 0x7FFFFF;   // signed 24-bit
     private const int MinReferenceTime = -0x800000;
+
+    /// <summary>Period of the cyclic reference-time field, in 64 ms units (2^24 ≈ 12.4 days).</summary>
+    private const long ReferenceTimeCycle = 0x1000000;
 
     // The 16-bit signed sequence unwrap can represent at most ±32767 from the anchor, so a batch may
     // span fewer than 2^15 sequence numbers; a wider span is rejected as ambiguous (and unbounded).
@@ -30,10 +42,11 @@ internal static class TransportCcFeedbackBuilder
     /// <param name="feedbackPacketCount">Monotonic per-source feedback counter (caller-owned, wraps at 8 bits).</param>
     /// <param name="epochTimestamp">
     /// Shared time origin (Stopwatch ticks) the reference time is measured from, so reference times of
-    /// successive feedbacks share one timeline. Arrivals are expected to be at or after it.
+    /// successive feedbacks share one timeline. Arrivals are expected to be at or after it; a distance
+    /// beyond the cyclic 24-bit range simply wraps.
     /// </param>
     /// <param name="ticksPerSecond">Tick frequency of the arrival timestamps (e.g. <see cref="System.Diagnostics.Stopwatch.Frequency"/>).</param>
-    /// <exception cref="ArgumentException"><paramref name="arrivals"/> is empty, or the reference time falls outside the signed 24-bit range.</exception>
+    /// <exception cref="ArgumentException"><paramref name="arrivals"/> is empty, or the batch spans more sequence numbers than the 16-bit unwrap can resolve.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="ticksPerSecond"/> is not positive.</exception>
     public static RtcpTransportFeedback Build(
         IReadOnlyList<TransportCcArrival> arrivals,
@@ -78,13 +91,17 @@ internal static class TransportCcFeedbackBuilder
 
         var baseArrivalMicros = TransportCcTime.ToMicros(earliestBySequence[baseSequence] - epochTimestamp, ticksPerSecond);
         var referenceTime = FloorDiv(baseArrivalMicros, TransportCcTime.ReferenceTimeUnitMicros);
-        if (referenceTime is < MinReferenceTime or > MaxReferenceTime)
-            throw new ArgumentException(
-                $"Reference time {referenceTime} (64 ms units) is out of the signed 24-bit range; " +
-                "the epoch is too far from the arrivals.", nameof(epochTimestamp));
+
+        // The wire field is cyclic, so fold it into the signed 24-bit range instead of failing. Rejecting
+        // it used to end transport-cc for the rest of the session: the epoch is fixed at the first arrival
+        // and never moves, so once the session passed ≈6.21 days every batch was dropped by the caller and
+        // the next one was too. Wrapping keeps the reports flowing across the boundary.
+        var wireReferenceTime = WrapReferenceTime(referenceTime);
 
         // reconstructedMicros tracks the receiver's view rebuilt from the quantised deltas, so delta
         // rounding does not drift across the report (each delta is relative to the previous rebuilt time).
+        // It stays on the UNWRAPPED timeline: the deltas then describe the same spacing the peer sees when
+        // it rebuilds them from the wrapped reference time.
         var reconstructedMicros = referenceTime * TransportCcTime.ReferenceTimeUnitMicros;
         var statuses = new RtcpTransportFeedbackStatus[maxSequence - baseSequence + 1];
         for (var sequence = baseSequence; sequence <= maxSequence; sequence++)
@@ -115,10 +132,22 @@ internal static class TransportCcFeedbackBuilder
         {
             SenderSsrc = senderSsrc,
             MediaSsrc = mediaSsrc,
-            ReferenceTimeTicks = (int)referenceTime,
+            ReferenceTimeTicks = wireReferenceTime,
             FeedbackPacketCount = feedbackPacketCount,
             Statuses = statuses,
         };
+    }
+
+    // Folds an unbounded reference time (64 ms units) into the cyclic signed 24-bit wire range, so the
+    // value crossing the positive edge continues into the negative half rather than being rejected.
+    private static int WrapReferenceTime(long referenceTime)
+    {
+        var wrapped = referenceTime % ReferenceTimeCycle; // (-2^24, 2^24)
+        if (wrapped > MaxReferenceTime)
+            wrapped -= ReferenceTimeCycle;
+        else if (wrapped < MinReferenceTime)
+            wrapped += ReferenceTimeCycle;
+        return (int)wrapped;
     }
 
     // Floor division toward negative infinity (C# integer division truncates toward zero).
