@@ -1,3 +1,5 @@
+using System.Collections.ObjectModel;
+
 namespace CalloraVoipSdk.Core.Domain.Calls;
 
 /// <summary>
@@ -29,5 +31,19 @@ public sealed class DialOptions
     public bool? UseSrtp { get; init; }
 
     /// <summary>Extra SIP headers added to the INVITE.</summary>
-    public IReadOnlyDictionary<string, string>? CustomHeaders { get; init; }
+    /// <remarks>
+    /// Snapshotted on assignment (#165 P3-10): IReadOnlyDictionary is a view over the caller's own
+    /// dictionary, which stays mutable. These options are read when the INVITE is actually built — after
+    /// the call returns — so a caller reusing and editing one options object would change the headers of a
+    /// dial it has already issued.
+    /// </remarks>
+    public IReadOnlyDictionary<string, string>? CustomHeaders
+    {
+        get => _customHeaders;
+        init => _customHeaders = value is null
+            ? null
+            : new ReadOnlyDictionary<string, string>(new Dictionary<string, string>(value));
+    }
+
+    private readonly IReadOnlyDictionary<string, string>? _customHeaders;
 }
