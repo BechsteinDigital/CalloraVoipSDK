@@ -113,10 +113,10 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     // around. MID-keyed internally, since BundledVideoTrack does not expose its SSRCs.
     private readonly BundledOutboundSsrcTracker _outboundSsrcs;
 
-    // RFC 4733 inbound DTMF reassembly (extracted to BundledInboundDtmfReassembler). Driven only by
+    // RFC 4733 inbound DTMF reassembly (extracted to RtpInboundDtmfReassembler). Driven only by
     // RaiseAudioReceived, which runs solely on the single shared receive loop, so the reassembler needs no
     // synchronization. Null when the peer did not negotiate telephone-event (no reassembly path).
-    private readonly BundledInboundDtmfReassembler? _dtmfReassembler;
+    private readonly RtpInboundDtmfReassembler? _dtmfReassembler;
     // 0 = no relay candidate wired; 1 = wired (at construction from the options factory, or later via
     // AdoptRelay). Guards against wiring the relay path twice (a second indication relay / relay candidate).
     private int _relayWired;
@@ -252,7 +252,7 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         // Inbound DTMF reassembler only when telephone-event was negotiated (RFC 4733): it fires DtmfReceived on a
         // completed tone. Driven solely by the receive loop (via RaiseAudioReceived), so it needs no locking.
         _dtmfReassembler = _telephoneEventPayloadType is not null
-            ? new BundledInboundDtmfReassembler(_telephoneEventClockRate, (tone, ms) => DtmfReceived?.Invoke(tone, ms), _logger)
+            ? new RtpInboundDtmfReassembler(_telephoneEventClockRate, (tone, ms) => DtmfReceived?.Invoke(tone, ms), _logger)
             : null;
 
         // Inbound: demux the shared socket by the negotiated m-lines' payload types, route each MID.
@@ -440,6 +440,7 @@ internal sealed class BundledMediaSession : IAsyncDisposable
             _dtmfReassembler.Handle(packet);
             return;
         }
+        _dtmfReassembler?.PollTimeout(); // closes a tone whose end-of-event packet was lost (#161 P3-16)
 
         try
         {
