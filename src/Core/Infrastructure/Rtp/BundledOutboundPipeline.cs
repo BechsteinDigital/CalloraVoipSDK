@@ -115,6 +115,24 @@ internal sealed class BundledOutboundPipeline
     }
 
     /// <summary>
+    /// Whether <paramref name="ssrc"/> is a sending SSRC of the given MID — the non-simulcast stream, or any
+    /// of that m-line's <c>a=rid</c> layers (RFC 8853). On a BUNDLE one RTCP channel carries the feedback for
+    /// every m-line, so an inbound PLI/FIR/NACK has to be routed by the media SSRC it names; this answers
+    /// "is that one of mine?" for the track that asks.
+    /// </summary>
+    public bool OwnsSsrc(string mid, uint ssrc)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(mid);
+        foreach (var entry in _tracks)
+        {
+            if (entry.Value.Ssrc == ssrc && string.Equals(entry.Key.Mid, mid, StringComparison.Ordinal))
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// Installs the shared outbound SRTP context once the DTLS-SRTP handshake has derived the key. Until
     /// then every send fails closed. The one context serves every track's SSRC under the shared key.
     /// </summary>
