@@ -242,6 +242,34 @@ public sealed class TransportCcFeedbackSenderTests
     }
 
     [Fact]
+    public void Feedback_keeps_flowing_once_the_session_outlives_the_reference_time_half_cycle()
+    {
+        // The epoch is pinned to the first arrival and never moves. The reference time is a signed
+        // 24-bit field in 64 ms units, so its positive half runs out after ≈6.21 days — after which
+        // every batch used to be dropped and transport-cc never recovered for the rest of the
+        // session (#161 P2-10). The field is cyclic, so reporting must simply continue.
+        var sent = new List<byte[]>();
+        long clock = 0;
+        var sender = Sender(sent, () => clock);
+
+        sender.OnRtpPacketReceived(Stamped(ExtId, 100, 1)); // pins the epoch at 0
+        sender.FlushForTest();
+        Assert.Single(sent);
+
+        clock = 7L * 24 * 60 * 60 * 1_000_000; // seven days later
+        sender.OnRtpPacketReceived(Stamped(ExtId, 200, 2));
+        clock += 20_000;
+        sender.OnRtpPacketReceived(Stamped(ExtId, 201, 3));
+        sender.FlushForTest();
+
+        Assert.Equal(2, sent.Count);
+        var feedback = Decode(sent[1]);
+        Assert.Equal([(ushort)200, 201], feedback.Statuses.Select(s => s.SequenceNumber).ToArray());
+        Assert.All(feedback.Statuses, s => Assert.True(s.Received));
+        Assert.Equal(80, feedback.Statuses[1].DeltaTicks); // 20 ms still reported exactly
+    }
+
+    [Fact]
     public async Task DisposeAsync_stops_the_loop()
     {
         var sender = Sender(new List<byte[]>(), () => 0,

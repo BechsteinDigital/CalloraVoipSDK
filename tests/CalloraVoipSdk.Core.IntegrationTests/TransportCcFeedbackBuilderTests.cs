@@ -97,6 +97,46 @@ public sealed class TransportCcFeedbackBuilderTests
     }
 
     [Fact]
+    public void Reference_time_past_the_positive_half_wraps_instead_of_being_rejected()
+    {
+        // Seven days after the epoch: 9,450,000 units of 64 ms, past the 8,388,607 positive limit of
+        // the signed 24-bit field. The field is cyclic, so it continues into the negative half; the
+        // batch used to be rejected outright and, with the epoch fixed for the session, every batch
+        // after it as well (#161 P2-10).
+        const long sevenDaysMicros = 7L * 24 * 60 * 60 * 1_000_000;
+        var feedback = TransportCcFeedbackBuilder.Build(
+            [Arrival(10, sevenDaysMicros), Arrival(11, sevenDaysMicros + 20_000)],
+            1, 2, 0, Epoch, MicrosecondFrequency);
+
+        Assert.Equal(9_450_000 - 0x1000000, feedback.ReferenceTimeTicks);
+        Assert.InRange(feedback.ReferenceTimeTicks, -0x800000, 0x7FFFFF);
+        // The deltas stay on the unwrapped timeline, so the 20 ms spacing is still reported exactly.
+        Assert.Equal([0, 80], feedback.Statuses.Select(s => s.DeltaTicks).ToArray());
+    }
+
+    [Fact]
+    public void Reference_time_continues_across_the_wrap_boundary_and_survives_the_wire()
+    {
+        const long unit = 64_000; // reference-time unit in µs
+
+        var atLimit = TransportCcFeedbackBuilder.Build(
+            [Arrival(1, 0x7FFFFF * unit)], 1, 2, 0, Epoch, MicrosecondFrequency);
+        var oneStepPast = TransportCcFeedbackBuilder.Build(
+            [Arrival(2, 0x800000 * unit)], 1, 2, 0, Epoch, MicrosecondFrequency);
+
+        Assert.Equal(0x7FFFFF, atLimit.ReferenceTimeTicks);
+        Assert.Equal(-0x800000, oneStepPast.ReferenceTimeTicks); // the next 64 ms step, wrapped
+
+        var wire = RtcpTransportFeedbackCodec.Encode(oneStepPast);
+        var decoded = RtcpTransportFeedbackCodec.Decode(
+            BinaryPrimitives.ReadUInt32BigEndian(wire.AsSpan(4)),
+            BinaryPrimitives.ReadUInt32BigEndian(wire.AsSpan(8)),
+            wire.AsSpan(12));
+
+        Assert.Equal(oneStepPast.ReferenceTimeTicks, decoded.ReferenceTimeTicks); // sign-extended on decode
+    }
+
+    [Fact]
     public void Empty_batch_is_rejected()
         => Assert.Throws<ArgumentException>(
             () => TransportCcFeedbackBuilder.Build([], 1, 2, 0, Epoch, MicrosecondFrequency));
