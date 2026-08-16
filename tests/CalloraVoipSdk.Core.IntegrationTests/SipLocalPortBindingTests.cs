@@ -19,11 +19,33 @@ public sealed class SipLocalPortBindingTests
         new(NullLoggerFactory.Instance, new SipWireProtocol(), null, SipTransportProtocol.Udp, null, options);
 
     /// <summary>Reserves a port, then releases it — a free port number to bind in the test.</summary>
+    /// <remarks>
+    /// The runtime binds a configured port on BOTH transports, so probing UDP alone is not enough: on
+    /// Windows a number that is free for UDP can still sit inside an excluded TCP range (Hyper-V/WinNAT
+    /// reserve thousands), and binding it then fails with WSAEACCES — "an attempt was made to access a
+    /// socket in a way forbidden by its access permissions" — rather than with "address in use". That was
+    /// a flaky failure of this class on the windows-latest runner, unrelated to what the tests assert. So
+    /// the probe claims the number on TCP as well and moves on if it cannot.
+    /// </remarks>
     private static int FreePort()
     {
-        using var probe = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-        probe.Bind(new IPEndPoint(IPAddress.Loopback, 0));
-        return ((IPEndPoint)probe.LocalEndPoint!).Port;
+        for (var attempt = 0; ; attempt++)
+        {
+            using var udp = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+            udp.Bind(new IPEndPoint(IPAddress.Loopback, 0));
+            var port = ((IPEndPoint)udp.LocalEndPoint!).Port;
+
+            try
+            {
+                using var tcp = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+                tcp.Bind(new IPEndPoint(IPAddress.Loopback, port));
+                return port;
+            }
+            catch (SocketException) when (attempt < 20)
+            {
+                // Free for UDP but not for TCP — ask for another number.
+            }
+        }
     }
 
     /// <summary>
@@ -45,9 +67,10 @@ public sealed class SipLocalPortBindingTests
             {
                 return (NewRuntime(options(port)), port);
             }
-            catch (SocketException) when (attempt < 4)
+            catch (SocketException) when (attempt < 20)
             {
-                // Someone took it between probe and bind; try another.
+                // Someone took it between probe and bind, or the number is administratively unavailable on
+                // this host for one of the two transports; try another.
             }
         }
     }
