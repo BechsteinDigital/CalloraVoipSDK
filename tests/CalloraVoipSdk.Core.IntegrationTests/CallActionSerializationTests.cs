@@ -75,6 +75,44 @@ public sealed class CallActionSerializationTests
     }
 
     [Fact]
+    public async Task An_accept_whose_signaling_reports_connected_first_still_succeeds()
+    {
+        // The ordinary Asterisk/FreeSWITCH shape: the peer's 200 OK reaches the channel and its callback
+        // moves the call to Connected before AnswerAsync returns. The action's commit then finds the call
+        // already in its target state — success, not a race, and it must not be reported as one.
+        var (call, channel) = InboundCall(gateAnswer: true);
+
+        var accept = call.AcceptAsync();
+        Assert.True(await channel.AnswerEntered.Task.WaitAsync(TimeSpan.FromSeconds(10)));
+
+        channel.RaiseStateChange(CallState.Connected);
+        channel.ReleaseAnswer();
+
+        await accept; // must not throw
+        Assert.Equal(CallState.Connected, call.State);
+    }
+
+    [Fact]
+    public async Task A_hold_whose_signaling_reports_the_hold_first_still_raises_its_event()
+    {
+        var (call, channel) = InboundCall();
+        await call.AcceptAsync();
+
+        var holdEvents = 0;
+        call.HoldStateChanged += (_, _) => Interlocked.Increment(ref holdEvents);
+
+        var hold = call.HoldAsync();
+        Assert.True(await channel.HoldEntered.Task.WaitAsync(TimeSpan.FromSeconds(10)));
+
+        channel.RaiseStateChange(CallState.OnHold);
+        channel.ReleaseHold();
+
+        await hold;
+        Assert.Equal(CallState.OnHold, call.State);
+        Assert.Equal(1, Volatile.Read(ref holdEvents)); // the caller still learns its hold took effect
+    }
+
+    [Fact]
     public async Task A_hangup_racing_an_accept_leaves_the_call_terminated_exactly_once()
     {
         var (call, channel) = InboundCall(gateAnswer: true);

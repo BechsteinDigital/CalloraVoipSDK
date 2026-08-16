@@ -142,7 +142,7 @@ internal sealed class Call : ICall, IDisposable
         {
             GuardState(CallState.Ringing);
             await _channel.AnswerAsync(ct).ConfigureAwait(false);
-            if (!TryTransitionTo(CallState.Ringing, CallState.Connected))
+            if (CommitTransition(CallState.Ringing, CallState.Connected) == CallTransitionOutcome.Overtaken)
                 throw OvertakenDuring("Accept", CallState.Ringing);
         }
         finally
@@ -188,7 +188,7 @@ internal sealed class Call : ICall, IDisposable
             // The call may have terminated while the re-INVITE was in flight — a remote BYE does not wait for
             // the gate. Committing anyway reported success to the caller and raised a hold event on a
             // terminated call (probe: hold_race_final_state=Terminated hold_events_after_termination=1).
-            if (!TryTransitionTo(CallState.Connected, CallState.OnHold))
+            if (CommitTransition(CallState.Connected, CallState.OnHold) == CallTransitionOutcome.Overtaken)
                 throw OvertakenDuring("Hold", CallState.Connected);
 
             RaiseHoldChanged(isOnHold: true, byRemote: false);
@@ -209,7 +209,7 @@ internal sealed class Call : ICall, IDisposable
         {
             GuardState(CallState.OnHold);
             await _channel.UnholdAsync().ConfigureAwait(false);
-            if (!TryTransitionTo(CallState.OnHold, CallState.Connected))
+            if (CommitTransition(CallState.OnHold, CallState.Connected) == CallTransitionOutcome.Overtaken)
                 throw OvertakenDuring("Unhold", CallState.OnHold);
 
             RaiseHoldChanged(isOnHold: false, byRemote: false);
@@ -327,7 +327,7 @@ internal sealed class Call : ICall, IDisposable
                     $"Reject requires Ringing state, current state is {State}.");
 
             await _channel.RejectAsync(statusCode, reasonPhrase, ct).ConfigureAwait(false);
-            if (!TryTransitionTo(CallState.Ringing, CallState.Terminated))
+            if (CommitTransition(CallState.Ringing, CallState.Terminated) == CallTransitionOutcome.Overtaken)
                 return OvertakenResult("Reject", CallState.Ringing);
 
             var resolvedReason = string.IsNullOrWhiteSpace(reasonPhrase)
@@ -365,7 +365,7 @@ internal sealed class Call : ICall, IDisposable
                     $"Redirect requires Ringing state, current state is {State}.");
 
             await _channel.RedirectAsync(contactUris, statusCode, ct).ConfigureAwait(false);
-            if (!TryTransitionTo(CallState.Ringing, CallState.Terminated))
+            if (CommitTransition(CallState.Ringing, CallState.Terminated) == CallTransitionOutcome.Overtaken)
                 return OvertakenResult("Redirect", CallState.Ringing);
 
             return CallActionResult.Success("Redirect sent.", statusCode);
@@ -473,7 +473,7 @@ internal sealed class Call : ICall, IDisposable
     /// concurrent subscribe/unsubscribe cannot cause a null-dereference or lost-wake-up.
     /// </summary>
     internal void TransitionTo(CallState next, CallTerminationReason? reason = null)
-        => TryTransitionTo(expected: null, next, reason);
+        => CommitTransition(expected: null, next, reason);
 
     /// <summary>
     /// Commits a transition only if the call is still in <paramref name="expected"/> (#165 P2-4), so an action
@@ -481,8 +481,9 @@ internal sealed class Call : ICall, IDisposable
     /// arrived while it was in flight. <see langword="null"/> means unconditional — the signaling and remote
     /// paths, which are reporting what already happened rather than requesting it.
     /// </summary>
-    /// <returns>Whether the transition was committed.</returns>
-    private bool TryTransitionTo(CallState? expected, CallState next, CallTerminationReason? reason = null)
+    /// <returns>What happened — see <see cref="CallTransitionOutcome"/>.</returns>
+    private CallTransitionOutcome CommitTransition(
+        CallState? expected, CallState next, CallTerminationReason? reason = null)
     {
         CallStateChangedEventArgs? args;
         CallState current;
@@ -490,15 +491,18 @@ internal sealed class Call : ICall, IDisposable
         lock (_sync)
         {
             current = (CallState)_stateInt;
+            // Already where the action wanted to go — the signaling callback got there first, which is the
+            // ordinary case for a peer that answers before AnswerAsync returns. That is success, not a race.
+            if (current == next) return CallTransitionOutcome.AlreadyInTargetState;
             if (expected is { } required && current != required)
-                return false;
-            if (current == next || current == CallState.Terminated) return false;
+                return CallTransitionOutcome.Overtaken;
+            if (current == CallState.Terminated) return CallTransitionOutcome.Overtaken;
             if (!CallStateRules.CanTransition(current, next))
             {
                 _logger.LogDebug(
                     "Call {Id}: ignored invalid transition {Old} → {New}",
                     CallId, current, next);
-                return false;
+                return CallTransitionOutcome.Overtaken;
             }
 
             // Publish the termination reason under the same lock and before StateChanged fires, so a
@@ -532,7 +536,7 @@ internal sealed class Call : ICall, IDisposable
             if (next == CallState.Terminated) _channel.Dispose();
         }
 
-        return true;
+        return CallTransitionOutcome.Committed;
     }
 
     // The call left the state an action had checked while that action was talking to the peer. The signaling
