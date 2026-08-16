@@ -44,6 +44,10 @@ internal sealed class BundledVideoTrack : IDisposable
     private readonly BundledOutboundPipeline _outbound;
     private readonly ILogger<BundledVideoTrack> _logger;
 
+    // This stream's primary outbound SSRC. Inbound RTCP feedback (PLI/FIR/NACK) names the media SSRC it is
+    // about, and on a BUNDLE that is the only way to tell which track it belongs to.
+    private readonly uint _localSsrc;
+
     // Retained so a simulcast RID lane can be built lazily with the same codec and reorder window as the
     // default lane (a browser stamps the RID extension only on the first packets of each encoding, so the
     // second/third encoding's lane is created on first sighting, not up front).
@@ -182,6 +186,7 @@ internal sealed class BundledVideoTrack : IDisposable
         _logger = loggerFactory.CreateLogger<BundledVideoTrack>();
         _codecName = codecName;
         _reorderWindowDepth = reorderWindowDepth;
+        _localSsrc = localSsrc;
 
         var (packetiser, depacketiser) = VideoPayloadFormat.Create(codecName);
         _defaultLane = new BundledVideoInboundLayer(rid: null, depacketiser, new VideoReorderBuffer(reorderWindowDepth));
@@ -260,6 +265,7 @@ internal sealed class BundledVideoTrack : IDisposable
         _logger = loggerFactory.CreateLogger<BundledVideoTrack>();
         _codecName = codecName;
         _reorderWindowDepth = reorderWindowDepth;
+        _localSsrc = localSsrc;
 
         // The default receive lane handles the base/RID-less inbound stream; a per-RID lane is built lazily
         // on first RID sighting (recv-side simulcast demux, RFC 8853). Each send layer gets its own packetiser
@@ -481,17 +487,72 @@ internal sealed class BundledVideoTrack : IDisposable
 
     /// <summary>
     /// Handles the decoded inbound RTCP compound (already SRTCP-unprotected and parsed once by the session):
-    /// a PLI or FIR anywhere in it (RFC 4585/5104) is treated as a request to send a key frame on this stream
-    /// (surfaced on <see cref="KeyFrameRequested"/>); an inbound Generic NACK is routed to the RTX retransmit
-    /// path (RFC 4588 — resent on this track's repair stream when RTX was negotiated, a no-op otherwise).
-    /// Delegates to the shared <see cref="VideoKeyFrameFeedback"/>, mirroring the single-stream video path.
-    /// Runs on the bundle receive loop.
+    /// a PLI or FIR naming one of this track's sending SSRCs (RFC 4585/5104) is treated as a request to send a
+    /// key frame on this stream (surfaced on <see cref="KeyFrameRequested"/>); an inbound Generic NACK naming
+    /// one is routed to the RTX retransmit path (RFC 4588 — resent on this track's repair stream when RTX was
+    /// negotiated, a no-op otherwise). Runs on the bundle receive loop.
+    /// <para>
+    /// The compound is filtered to this track first (#161 P2-5). On a BUNDLE the whole compound reaches every
+    /// track over the single shared RTCP channel, and the feedback handler it delegates to deliberately
+    /// ignores the media SSRC — correct for the dedicated single-stream video channel it also serves, wrong
+    /// here: a PLI for one m-line would ask every video track for a key frame, and a NACK for one would look
+    /// up its sequence numbers in another track's retransmission buffer, whose 16-bit sequence space overlaps,
+    /// resending unrelated packets as this stream's RTX.
+    /// </para>
     /// </summary>
     public void OnRtcpPackets(IReadOnlyList<RtcpPacket> packets)
     {
         ArgumentNullException.ThrowIfNull(packets);
-        _keyFrameFeedback.OnRtcpPackets(packets);
+
+        var mine = FilterToThisTrack(packets);
+        if (mine.Count > 0)
+            _keyFrameFeedback.OnRtcpPackets(mine);
     }
+
+    // Keeps the feedback messages that name one of this track's sending SSRCs and drops the rest. Everything
+    // else in the compound (SR/RR/BYE/transport-cc) is consumed by the dispatcher, never by this path, so it
+    // is left out too. Feedback naming an SSRC we do not send — including a lenient peer's 0 — is dropped:
+    // on a shared channel it cannot be attributed, and acting on it is what the finding describes.
+    private IReadOnlyList<RtcpPacket> FilterToThisTrack(IReadOnlyList<RtcpPacket> packets)
+    {
+        List<RtcpPacket>? mine = null;
+        foreach (var packet in packets)
+        {
+            bool ours;
+            switch (packet)
+            {
+                case RtcpPictureLossIndication pli:
+                    ours = OwnsMediaSsrc(pli.MediaSsrc);
+                    break;
+                case RtcpGenericNack nack:
+                    ours = OwnsMediaSsrc(nack.MediaSsrc);
+                    break;
+                // FIR names its targets in the FCI entries, not in a header field (RFC 5104 §4.3.1).
+                case RtcpFullIntraRequest fir:
+                    ours = fir.Entries.Any(entry => OwnsMediaSsrc(entry.MediaSsrc));
+                    break;
+                default:
+                    continue;
+            }
+
+            if (!ours)
+            {
+                _logger.LogTrace(
+                    "Dropping inbound RTCP feedback on MID {Mid}: it names a media SSRC this track does not send.",
+                    _mid);
+                continue;
+            }
+
+            (mine ??= new List<RtcpPacket>(packets.Count)).Add(packet);
+        }
+
+        return mine ?? (IReadOnlyList<RtcpPacket>)Array.Empty<RtcpPacket>();
+    }
+
+    // This track's sending SSRCs: the primary stream, plus every simulcast layer registered under this MID
+    // (their SSRCs live on the outbound pipeline, not on the track). The RTX repair SSRC is deliberately not
+    // included — a NACK naming the repair stream would otherwise trigger a retransmit of a retransmit.
+    private bool OwnsMediaSsrc(uint ssrc) => ssrc == _localSsrc || _outbound.OwnsSsrc(_mid, ssrc);
 
     /// <summary>
     /// Asks the peer for a fresh key frame on the app's demand (RFC 4585 §6.3.1) by sending a PLI naming the
