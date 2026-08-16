@@ -114,6 +114,7 @@
   CalloraVoipSdk.Core.Application.Media.MediaManager.CreateSender() : CalloraVoipSdk.Core.Application.Media.IMediaSender
   CalloraVoipSdk.Core.Application.Media.MediaManager.CreateVideoReceiver() : CalloraVoipSdk.Core.Application.Media.IVideoReceiver
   CalloraVoipSdk.Core.Application.Media.MediaManager.CreateVideoSender() : CalloraVoipSdk.Core.Application.Media.IVideoSender
+  CalloraVoipSdk.Core.Application.Media.MediaManager.DisposeAsync() : System.Threading.Tasks.ValueTask
   CalloraVoipSdk.Core.Application.Media.MediaManager.StartCallPlaybackAsync(CalloraVoipSdk.Core.Domain.Calls.ICall call, CalloraVoipSdk.Core.Application.Media.PlaybackRequest request, System.Threading.CancellationToken ct = default) : System.Threading.Tasks.Task<CalloraVoipSdk.Core.Application.Media.IPlaybackSession>
   CalloraVoipSdk.Core.Application.Media.MediaManager.StartCallRecordingAsync(CalloraVoipSdk.Core.Domain.Calls.ICall call, CalloraVoipSdk.Core.Application.Media.RecordingOptions options = default, System.Threading.CancellationToken ct = default) : System.Threading.Tasks.Task<CalloraVoipSdk.Core.Application.Media.IRecordingSession>
   CalloraVoipSdk.Core.Application.Media.MediaManager.StartConferencePlaybackAsync(CalloraVoipSdk.Core.Application.Media.IMixedMediaBus conference, CalloraVoipSdk.Core.Application.Media.PlaybackRequest request, System.Threading.CancellationToken ct = default) : System.Threading.Tasks.Task<CalloraVoipSdk.Core.Application.Media.IPlaybackSession>

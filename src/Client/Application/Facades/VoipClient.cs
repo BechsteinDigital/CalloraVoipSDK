@@ -817,6 +817,10 @@ public sealed class VoipClient : IVoipClient
         // byte-identical to disposing each member directly, and the _owns* guards are preserved.
         DisposeSafely(_convenienceOrchestrator);
         DisposeSafely(_mediaOrchestrator);
+        // The media manager owns the running recording/playback sessions (#165 P2-8) and releases them
+        // asynchronously; Dispose is synchronous, so the drain is fire-and-forget with its fault observed,
+        // exactly as the orchestrator releases its media sessions here.
+        DisposeSafely(Media);
         DisposeSafely(Lines);
 
         if (_ownsCallSignalingService)
@@ -841,17 +845,33 @@ public sealed class VoipClient : IVoipClient
     /// </summary>
     private void DisposeSafely(object? candidate)
     {
-        if (candidate is not IDisposable disposable)
+        if (candidate is IDisposable disposable)
+        {
+            try
+            {
+                disposable.Dispose();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Disposing {Component} during VoipClient teardown failed.", candidate.GetType().Name);
+            }
+
+            return;
+        }
+
+        // An async-only component (the media manager, #165 P2-8): Dispose is synchronous, so the teardown is
+        // started here and its fault observed on a continuation rather than blocking the caller or being
+        // dropped. Same shape as CallMediaOrchestrator.Dispose releasing its media sessions (#17.12).
+        if (candidate is not IAsyncDisposable asyncDisposable)
             return;
 
-        try
-        {
-            disposable.Dispose();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Disposing {Component} during VoipClient teardown failed.", candidate.GetType().Name);
-        }
+        var componentName = candidate.GetType().Name;
+        _ = asyncDisposable.DisposeAsync().AsTask().ContinueWith(
+            task => _logger.LogWarning(
+                task.Exception, "Disposing {Component} during VoipClient teardown failed.", componentName),
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
     }
 
     private async Task InvokeIncomingHandlerAsync(ICall call, Func<ICall, Task> handler)
