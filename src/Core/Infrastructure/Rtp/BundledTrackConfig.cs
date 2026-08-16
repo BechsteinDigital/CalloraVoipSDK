@@ -95,6 +95,14 @@ internal sealed record BundledTrackConfig
     /// payload type; only the SSRC and RID differ.
     /// </summary>
     public IReadOnlyList<BundledVideoEncoding> Encodings { get; init; } = [];
+
+    /// <summary>
+    /// The <c>a=rid</c> layer ids this peer negotiated to RECEIVE on the m-line (RFC 8853/8852) — the
+    /// allowlist for inbound RID demultiplexing (#161 P3-15, the remainder of #154). Empty means no receive
+    /// simulcast was negotiated, and inbound RIDs are then admitted as before, bounded only by the track's
+    /// lane cap: that cap is a DoS bound, not an allowlist, and the two are not substitutes.
+    /// </summary>
+    public IReadOnlyList<string> ReceiveRids { get; init; } = [];
 }
 
 /// <summary>

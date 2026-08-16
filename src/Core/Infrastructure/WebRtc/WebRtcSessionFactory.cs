@@ -366,6 +366,7 @@ internal static class WebRtcSessionFactory
                     RemoteSupportsPli = remoteSupportsPli,
                     ReducedSizeRtcp = reducedSizeRtcp,
                     Encodings = encodings,
+                    ReceiveRids = NegotiatedReceiveRids(video, remoteVideo),
                 };
             }
 
@@ -412,7 +413,42 @@ internal static class WebRtcSessionFactory
             ReducedSizeRtcp = reducedSizeRtcp,
             RtxPayloadType = rtxPayloadType,
             RtxSsrc = rtxSsrc,
+            ReceiveRids = NegotiatedReceiveRids(video, remoteVideo),
         };
+    }
+
+    /// <summary>
+    /// The <c>a=rid</c> ids this peer negotiated to RECEIVE on a video m-line: the recv RIDs in our own
+    /// description that the remote description also announces as send (RFC 8853 §5.1, RFC 8852). This is the
+    /// allowlist the track admits inbound RIDs against (#161 P3-15) — the mirror image of
+    /// <see cref="ConfirmedSimulcastRids"/>, which does the same for what we may send. Empty when no receive
+    /// simulcast was negotiated, which leaves inbound RID demux as it was.
+    /// </summary>
+    private static IReadOnlyList<string> NegotiatedReceiveRids(
+        SdpMediaDescription video, SdpMediaDescription? remoteVideo)
+    {
+        var localRecv = new List<string>();
+        if (video.Simulcast?.Recv is { } localRecvList)
+            localRecv.AddRange(localRecvList);
+        foreach (var rid in video.Rids.Where(r => r.Direction.Equals("recv", Ci)))
+        {
+            if (!localRecv.Contains(rid.Id, StringComparer.Ordinal))
+                localRecv.Add(rid.Id);
+        }
+
+        if (localRecv.Count == 0 || remoteVideo is null)
+            return [];
+
+        var remoteSend = new HashSet<string>(StringComparer.Ordinal);
+        if (remoteVideo.Simulcast?.Send is { } remoteSendList)
+            foreach (var id in remoteSendList)
+                remoteSend.Add(id);
+        foreach (var rid in remoteVideo.Rids.Where(r => r.Direction.Equals("send", Ci)))
+            remoteSend.Add(rid.Id);
+
+        // Nothing announced on the peer's side means nothing was negotiated to receive — do not turn our own
+        // offer into an allowlist, or a peer that simply does not use simulcast would have its RIDs dropped.
+        return remoteSend.Count == 0 ? [] : localRecv.Where(remoteSend.Contains).ToArray();
     }
 
     /// <summary>
