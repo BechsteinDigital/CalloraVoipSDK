@@ -26,6 +26,16 @@ namespace CalloraVoipSdk.Core.Infrastructure.Sip.Signaling;
 /// </summary>
 internal sealed class SipRegistrationService : ISipRegistrationService
 {
+    /// <summary>
+    /// Maximum 3xx hops followed for one registration attempt (#158 P2-13).
+    /// </summary>
+    /// <remarks>
+    /// RFC 3261 sets no limit, so this mirrors the long-standing HTTP convention of about five. Suppressing
+    /// duplicate targets stops cycles but not length: a registrar that answers every REGISTER with a fresh
+    /// Contact would otherwise walk the client through an unbounded chain of requests.
+    /// </remarks>
+    private const int MaxRedirects = 5;
+
     private readonly ISipTransportRuntime _transport;
     private readonly ISipDigestAuthenticator _digestAuthenticator;
     private readonly ISipClientTransactionExecutor _transactionExecutor;
@@ -35,18 +45,24 @@ internal sealed class SipRegistrationService : ISipRegistrationService
     /// <summary>
     /// Creates a registration service with injected transport/authenticator dependencies.
     /// </summary>
+    /// <param name="transactionExecutor">
+    /// Client-transaction layer. Defaults to the real <see cref="SipClientTransactionExecutor"/> over
+    /// <paramref name="transport"/>; a test injects a stub to drive specific response sequences (redirect
+    /// chains, challenges) without a socket.
+    /// </param>
     public SipRegistrationService(
         ISipTransportRuntime transport,
         ISipDigestAuthenticator digestAuthenticator,
         ILoggerFactory loggerFactory,
-        ISipTelemetrySink? telemetry = null)
+        ISipTelemetrySink? telemetry = null,
+        ISipClientTransactionExecutor? transactionExecutor = null)
     {
         _transport = transport ?? throw new ArgumentNullException(nameof(transport));
         _digestAuthenticator = digestAuthenticator ?? throw new ArgumentNullException(nameof(digestAuthenticator));
         _telemetry = telemetry ?? NullSipTelemetrySink.Instance;
         _logger = (loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory)))
             .CreateLogger<SipRegistrationService>();
-        _transactionExecutor = new SipClientTransactionExecutor(_transport, _logger);
+        _transactionExecutor = transactionExecutor ?? new SipClientTransactionExecutor(_transport, _logger);
     }
 
     /// <inheritdoc />
@@ -139,6 +155,7 @@ internal sealed class SipRegistrationService : ISipRegistrationService
         // answering stale=true must not spin this into an unbounded REGISTER loop.
         var staleRetries = 0;
         const int maxStaleRetries = 2;
+        var redirects = 0;
         string? authorizationHeader = null;
         string? authorizationHeaderName = null;
         Exception? lastTransportFailure = null;
@@ -289,8 +306,26 @@ internal sealed class SipRegistrationService : ISipRegistrationService
 
                 if (response.StatusCode is >= 300 and < 400)
                 {
+                    // #158 P2-13: bound the redirect chain. Duplicate suppression alone only stops cycles —
+                    // a registrar handing out a fresh Contact each time would walk us through an arbitrarily
+                    // long chain of REGISTERs. The stale-nonce retry right above is bounded for the same
+                    // reason; this one was not.
+                    if (++redirects > MaxRedirects)
+                    {
+                        _logger.LogWarning(
+                            "SIP registration for [{User}] exceeded {Max} redirects; giving up on this target chain.",
+                            request.Username, MaxRedirects);
+                        break;
+                    }
+
                     if (EnqueueRedirectTargets(response, pendingTargets, visitedTargets))
                     {
+                        // #158 P2-13: drop the credentials before following the redirect. A Digest response
+                        // is computed over realm, nonce, method and URI (RFC 7616 §3.4) — it is worthless to
+                        // a different authority and hands it our nonce, nc, cnonce and the response hash for
+                        // free. The new target challenges us itself if it wants authentication.
+                        authorizationHeader = null;
+                        authorizationHeaderName = null;
                         cseq++;
                         targetRetried = true;
                         break;
