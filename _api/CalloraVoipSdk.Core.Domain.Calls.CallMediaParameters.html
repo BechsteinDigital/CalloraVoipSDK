@@ -162,7 +162,7 @@ silently dropped the SDES/DTLS key material and video parameters when overriding
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_AppliedSrtpPolicy" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.AppliedSrtpPolicy">
   AppliedSrtpPolicy
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L132"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L170"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Effective SRTP policy applied to this call during offer/answer evaluation.</p>
@@ -194,7 +194,7 @@ silently dropped the SDES/DTLS key material and video parameters when overriding
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_ClockRate" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.ClockRate">
   ClockRate
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L62"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L75"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Codec clock rate in Hz (e.g. 8000 for G.711).</p>
@@ -258,7 +258,7 @@ silently dropped the SDES/DTLS key material and video parameters when overriding
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_IceControlling" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.IceControlling">
   IceControlling
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L77"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L90"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>True when this agent holds the ICE controlling role (RFC 8445 §5.1.1): the SDP offerer is
@@ -292,7 +292,7 @@ case; the infrastructure adapter sets it from the actual offer/answer direction.
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_IceEnabled" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.IceEnabled">
   IceEnabled
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L70"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L83"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>True when ICE metadata is available for this call leg and candidate checks can run.</p>
@@ -324,7 +324,7 @@ case; the infrastructure adapter sets it from the actual offer/answer direction.
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_IsDtlsNegotiated" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.IsDtlsNegotiated">
   IsDtlsNegotiated
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L179"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L217"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>True when offer/answer negotiated DTLS-SRTP keying for this leg (RFC 5763):
@@ -358,7 +358,7 @@ fail-closed until then. Mutually exclusive with SDES key material.</p>
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_IsSrtcpEncrypted" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.IsSrtcpEncrypted">
   IsSrtcpEncrypted
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L157"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L195"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>True when RTCP for this leg is encrypted and authenticated as SRTCP (RFC 3711 §3.4). SRTCP
@@ -392,7 +392,7 @@ both directions; <a href="https://learn.microsoft.com/dotnet/csharp/language-ref
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_IsSrtpNegotiated" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.IsSrtpNegotiated">
   IsSrtpNegotiated
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L137"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L175"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>True when negotiated media is SRTP according to SDP profile/attributes.</p>
@@ -456,7 +456,7 @@ both directions; <a href="https://learn.microsoft.com/dotnet/csharp/language-ref
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_LocalIceCandidates" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.LocalIceCandidates">
   LocalIceCandidates
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L112"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L125"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Local ICE candidates advertised by this SDK for the media m-line.</p>
@@ -488,7 +488,7 @@ both directions; <a href="https://learn.microsoft.com/dotnet/csharp/language-ref
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_LocalIceOptions" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.LocalIceOptions">
   LocalIceOptions
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L92"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L105"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Local ICE options attribute value.</p>
@@ -520,7 +520,7 @@ both directions; <a href="https://learn.microsoft.com/dotnet/csharp/language-ref
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_LocalIcePwd" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.LocalIcePwd">
   LocalIcePwd
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L87"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L100"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Local ICE password used for connectivity checks.</p>
@@ -552,7 +552,7 @@ both directions; <a href="https://learn.microsoft.com/dotnet/csharp/language-ref
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_LocalIceUfrag" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.LocalIceUfrag">
   LocalIceUfrag
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L82"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L95"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Local ICE username fragment used for connectivity checks.</p>
@@ -617,7 +617,7 @@ When null, the runtime derives it from <a class="xref" href="CalloraVoipSdk.Core
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_MediaProfile" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.MediaProfile">
   MediaProfile
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L127"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L165"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Negotiated media profile from the remote SDP m-line (for example <code>RTP/AVP</code> or <code>RTP/SAVP</code>).</p>
@@ -681,7 +681,7 @@ When null, the runtime derives it from <a class="xref" href="CalloraVoipSdk.Core
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_PayloadTypeCodecMap" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.PayloadTypeCodecMap">
   PayloadTypeCodecMap
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L52"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L60"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Payload-type to codec-name mapping parsed from remote SDP for this audio m-line.
@@ -706,6 +706,14 @@ Used to resolve dynamic RTP payload types (96-127) at runtime.</p>
 
 
 
+  <h4 class="section" id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_PayloadTypeCodecMap_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Snapshotted on assignment (#165 P3-10): IReadOnlyDictionary is a view, not a guarantee, so the caller's
+own Dictionary would otherwise stay live behind it. These parameters are treated as immutable — the
+enricher chain clones them with <code>with</code> (K2) and the media session reads them long after
+negotiation — so a caller mutating its copy afterwards would change a call's negotiated media under it.
+A <code>with</code> clone copies the field directly and does not re-snapshot, so this costs one copy per
+construction, on the negotiation path only.</p>
+</div>
 
 
 
@@ -746,7 +754,7 @@ Used to resolve dynamic RTP payload types (96-127) at runtime.</p>
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_RemoteIceCandidates" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.RemoteIceCandidates">
   RemoteIceCandidates
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L117"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L136"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Remote ICE candidates parsed from peer SDP for the media m-line.</p>
@@ -778,7 +786,7 @@ Used to resolve dynamic RTP payload types (96-127) at runtime.</p>
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_RemoteIceEndOfCandidates" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.RemoteIceEndOfCandidates">
   RemoteIceEndOfCandidates
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L122"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L160"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>True when the remote SDP signaled <code>a=end-of-candidates</code>.</p>
@@ -810,7 +818,7 @@ Used to resolve dynamic RTP payload types (96-127) at runtime.</p>
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_RemoteIceOptions" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.RemoteIceOptions">
   RemoteIceOptions
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L107"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L120"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Remote ICE options attribute value.</p>
@@ -842,7 +850,7 @@ Used to resolve dynamic RTP payload types (96-127) at runtime.</p>
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_RemoteIcePwd" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.RemoteIcePwd">
   RemoteIcePwd
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L102"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L115"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Remote ICE password used for connectivity checks.</p>
@@ -874,7 +882,7 @@ Used to resolve dynamic RTP payload types (96-127) at runtime.</p>
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_RemoteIceUfrag" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.RemoteIceUfrag">
   RemoteIceUfrag
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L97"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L110"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Remote ICE username fragment used for connectivity checks.</p>
@@ -971,7 +979,7 @@ When null, the runtime derives it from <a class="xref" href="CalloraVoipSdk.Core
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_SamplesPerPacket" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.SamplesPerPacket">
   SamplesPerPacket
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L65"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L78"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Number of audio samples per RTP packet (e.g. 160 for 20 ms at 8000 Hz).</p>
@@ -1003,7 +1011,7 @@ When null, the runtime derives it from <a class="xref" href="CalloraVoipSdk.Core
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_SrtpDecisionReasonCode" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.SrtpDecisionReasonCode">
   SrtpDecisionReasonCode
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L143"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L181"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Stable reason code for SRTP policy decision outcome.
@@ -1036,7 +1044,7 @@ See <a class="xref" href="CalloraVoipSdk.Core.Domain.Security.SrtpDecisionReason
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_SrtpSuite" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.SrtpSuite">
   SrtpSuite
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L150"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L188"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Negotiated SDES crypto-suite token (for example <code>AES_CM_128_HMAC_SHA1_80</code>) when SRTP
@@ -1070,7 +1078,7 @@ for audit/compliance; the value is stamped by the media-negotiation layer.</p>
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_TelephoneEventPayloadType" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.TelephoneEventPayloadType">
   TelephoneEventPayloadType
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L59"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L72"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Negotiated RTP payload type for RFC 4733 <code>telephone-event</code> DTMF.
@@ -1103,7 +1111,7 @@ Null when RTP DTMF was not negotiated for this call leg.</p>
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_Video" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.Video">
   Video
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L197"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L235"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Negotiated video parameters (WebRTC phase 2); <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> for an
@@ -1140,7 +1148,7 @@ audio-only call leg.</p>
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallMediaParameters_ToString" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters.ToString">
   ToString()
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L204"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallMediaParameters.cs/#L242"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>A diagnostic representation that deliberately allow-lists only non-secret operational fields.
