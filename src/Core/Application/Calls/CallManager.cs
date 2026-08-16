@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
 using CalloraVoipSdk.Core.Domain.Calls;
 using CalloraVoipSdk.Core.Domain.Events;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CalloraVoipSdk.Core.Application.Calls;
 
@@ -11,14 +13,14 @@ namespace CalloraVoipSdk.Core.Application.Calls;
 public sealed class CallManager : ICallRegistry, ICallManager
 {
     private readonly ConcurrentDictionary<CallId, Call> _calls = new();
+    private readonly ILogger _logger;
 
     // Explicit implementation keeps Register internal on the public CallManager surface
     // while satisfying the Domain-facing ICallRegistry abstraction.
     void ICallRegistry.Register(Call call) => Register(call);
 
-    internal CallManager()
-    {
-    }
+    /// <param name="logger">Logs subscriber faults; defaults to no logging.</param>
+    internal CallManager(ILogger<CallManager>? logger = null) => _logger = logger ?? (ILogger)NullLogger.Instance;
 
     /// <summary>Raised when a new call is registered.</summary>
     public event EventHandler<CallActivityEventArgs>?    CallAdded;
@@ -43,19 +45,37 @@ public sealed class CallManager : ICallRegistry, ICallManager
     {
         _calls[call.CallId] = call;
         call.StateChanged += OnStateChanged;
-        CallAdded?.Invoke(this, new CallActivityEventArgs(call));
+        Invoke(CallAdded, new CallActivityEventArgs(call), nameof(CallAdded));
     }
 
     private void OnStateChanged(object? _, CallStateChangedEventArgs e)
     {
-        CallStateChanged?.Invoke(this, e);
+        // Keeping a terminated call out of the registry — and unsubscribed from — is this manager's invariant,
+        // not a subscriber's business (#165 P2-5). A throwing CallStateChanged handler used to skip both, so
+        // the call stayed registered forever: it kept showing up in Find/Active, held its subscription, and
+        // counted against nothing that would ever release it. Subscriber throws are isolated and logged rather
+        // than propagated, so one bad handler cannot tear down the thread that raised the transition either.
+        Invoke(CallStateChanged, e, nameof(CallStateChanged));
 
         if (e.NewState != CallState.Terminated) return;
 
-        if (_calls.TryRemove(((Call)e.Call).CallId, out var removed))
+        if (!_calls.TryRemove(((Call)e.Call).CallId, out var removed)) return;
+
+        removed.StateChanged -= OnStateChanged;
+        Invoke(CallRemoved, new CallActivityEventArgs(removed), nameof(CallRemoved));
+    }
+
+    // Raises one aggregated event, isolating a throwing subscriber from the caller and from whatever the
+    // caller still has to do. Named so the log says which event the offending handler was on.
+    private void Invoke<TArgs>(EventHandler<TArgs>? handler, TArgs args, string eventName)
+    {
+        try
         {
-            removed.StateChanged -= OnStateChanged;
-            CallRemoved?.Invoke(this, new CallActivityEventArgs(removed));
+            handler?.Invoke(this, args);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "A {EventName} subscriber threw; the call registry continues regardless.", eventName);
         }
     }
 }
