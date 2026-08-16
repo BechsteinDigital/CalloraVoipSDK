@@ -366,7 +366,7 @@ public sealed class VoipClient : IVoipClient
                     logFactory,
                     onCallCreated: (call, callChannel) =>
                         _mediaOrchestrator.AttachCall(call, callChannel));
-            });
+            }, logFactory.CreateLogger<PhoneLineManager>());
             Lines = lineManager;
 
             // Facade as sender (see CallStateChanged above), not the inner line manager (#18.9).
