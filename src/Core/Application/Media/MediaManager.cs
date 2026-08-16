@@ -10,13 +10,14 @@ namespace CalloraVoipSdk.Core.Application.Media;
 /// <summary>
 /// Factory and orchestration entrypoint for media routing, recording and playback.
 /// </summary>
-public sealed class MediaManager : IMediaManager
+public sealed class MediaManager : IMediaManager, IAsyncDisposable
 {
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<MediaManager> _logger;
     private readonly IAudioFileCodecRegistry _audioFileCodecs;
     private readonly ConcurrentDictionary<Guid, IRecordingSession> _activeRecordings = new();
     private readonly ConcurrentDictionary<Guid, IPlaybackSession> _activePlaybacks = new();
+    private int _disposed;
 
     /// <summary>
     /// Creates a media manager instance.
@@ -324,16 +325,27 @@ public sealed class MediaManager : IMediaManager
         };
     }
 
-    private void TrackRecordingSession(IRecordingSession session)
+    // internal rather than private so the shutdown ownership (#165 P2-8) can be exercised with fake sessions,
+    // without standing up a codec registry, a file and a negotiated call for each one.
+    internal void TrackRecordingSession(IRecordingSession session)
     {
+        ThrowIfDisposed();
         _activeRecordings[session.SessionId] = session;
         session.StateChanged += OnRecordingStateChanged;
     }
 
-    private void TrackPlaybackSession(IPlaybackSession session)
+    /// <inheritdoc cref="TrackRecordingSession"/>
+    internal void TrackPlaybackSession(IPlaybackSession session)
     {
+        ThrowIfDisposed();
         _activePlaybacks[session.SessionId] = session;
         session.StateChanged += OnPlaybackStateChanged;
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (Volatile.Read(ref _disposed) != 0)
+            throw new ObjectDisposedException(nameof(MediaManager), "The media manager has been shut down.");
     }
 
     private void OnRecordingStateChanged(object? sender, MediaSessionStateChangedEventArgs args)
@@ -351,6 +363,47 @@ public sealed class MediaManager : IMediaManager
             session.SessionId,
             args.NewState,
             args.Reason);
+    }
+
+    /// <summary>
+    /// Shuts the manager down and tears down every session it started (#165 P2-8). A recording session owns an
+    /// open file whose container still needs finalising and a playback session owns a running loop pushing
+    /// frames into a call, so neither can be left to a finaliser: without this, shutting the SDK down left both
+    /// running with nothing holding a reference to stop them. Idempotent; after it, starting a session throws.
+    /// </summary>
+    public async ValueTask DisposeAsync()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            return;
+
+        foreach (var playback in _activePlaybacks.Values)
+        {
+            playback.StateChanged -= OnPlaybackStateChanged;
+            await DisposeSessionAsync(playback, "playback", playback.SessionId).ConfigureAwait(false);
+        }
+
+        foreach (var recording in _activeRecordings.Values)
+        {
+            recording.StateChanged -= OnRecordingStateChanged;
+            await DisposeSessionAsync(recording, "recording", recording.SessionId).ConfigureAwait(false);
+        }
+
+        _activePlaybacks.Clear();
+        _activeRecordings.Clear();
+    }
+
+    // One faulting session must not strand the ones behind it — the point of the drain is that everything
+    // stops, and a half-finalised recording file is exactly what this is here to avoid.
+    private async ValueTask DisposeSessionAsync(IAsyncDisposable session, string kind, Guid sessionId)
+    {
+        try
+        {
+            await session.DisposeAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Disposing {Kind} session {SessionId} during shutdown failed.", kind, sessionId);
+        }
     }
 
     private void OnPlaybackStateChanged(object? sender, MediaSessionStateChangedEventArgs args)
