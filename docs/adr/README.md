@@ -134,7 +134,7 @@ Guardrails** (see `ADR-011` for the format model).
 
 | ADR | Title | Status | Date |
 |-----|-------|--------|------|
-| [ADR-069](ADR-069-media-supervision-liveness-not-silence.md) | Media Supervision Ends Calls on Loss of Liveness, Not on Silence | Accepted | 2026-08-17 |
+| [ADR-069](ADR-069-media-supervision-liveness-not-silence.md) | Media Silence Is Reported, Not Terminated On | Accepted | 2026-08-17 |
 
 ### Audio Codecs
 

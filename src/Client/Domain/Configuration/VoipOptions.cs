@@ -93,9 +93,10 @@ public sealed class VoipOptions
 
     /// <summary>
     /// Timeout after which a connected call whose peer has stopped sending both RTP and RTCP is torn down.
-    /// See <see cref="VoipConfiguration.InboundMediaTimeout"/> for semantics. Default: 30 seconds.
+    /// See <see cref="VoipConfiguration.InboundMediaTimeout"/> for semantics and why it is off by default.
+    /// Default: <see cref="TimeSpan.Zero"/> (disabled; 30 seconds is the recommended value when enabling it).
     /// </summary>
-    public TimeSpan InboundMediaTimeout { get; set; } = TimeSpan.FromSeconds(30);
+    public TimeSpan InboundMediaTimeout { get; set; } = TimeSpan.Zero;
 
     /// <summary>
     /// Delay after which inbound media silence is reported through <c>ICall.MediaFlowChanged</c>.

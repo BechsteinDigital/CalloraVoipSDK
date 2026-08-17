@@ -39,13 +39,24 @@ public sealed class TwoLegBridgedCall : IAsyncDisposable
         CalleeCall = calleeCall;
     }
 
-    private static VoipClient NewClient(SrtpPolicy srtpPolicy, IReadOnlyList<string> codecs) =>
-        new(new VoipConfiguration
+    private static VoipClient NewClient(
+        SrtpPolicy srtpPolicy,
+        IReadOnlyList<string> codecs,
+        TimeSpan? inboundMediaTimeout = null,
+        TimeSpan? mediaSilenceNotifyAfter = null)
+    {
+        var defaults = new VoipConfiguration();
+        return new VoipClient(new VoipConfiguration
         {
             UserAgent = "CalloraInteropTest/1.0",
             SrtpPolicy = srtpPolicy,
             PreferredAudioCodecs = codecs,
+            // #261: shortened by the media-silence test so a real silence can run several multiples of the
+            // liveness timeout without stretching the run; every other test keeps the shipped defaults.
+            InboundMediaTimeout = inboundMediaTimeout ?? defaults.InboundMediaTimeout,
+            MediaSilenceNotifyAfter = mediaSilenceNotifyAfter ?? defaults.MediaSilenceNotifyAfter,
         });
+    }
 
     private static async Task<IPhoneLine> RegisterAsync(IPbxFixture pbx, VoipClient client, PbxEndpoint endpoint)
     {
@@ -70,12 +81,14 @@ public sealed class TwoLegBridgedCall : IAsyncDisposable
         PbxMediaMode mode = PbxMediaMode.Plain,
         int pairIndex = 0,
         IReadOnlyList<string>? callerCodecs = null,
-        IReadOnlyList<string>? calleeCodecs = null)
+        IReadOnlyList<string>? calleeCodecs = null,
+        TimeSpan? inboundMediaTimeout = null,
+        TimeSpan? mediaSilenceNotifyAfter = null)
     {
         var pair = pbx.BridgePair(mode, pairIndex);
         var srtp = mode == PbxMediaMode.Sdes ? SrtpPolicy.Required : SrtpPolicy.Disabled;
-        var callerClient = NewClient(srtp, callerCodecs ?? PcmuOnly);
-        var calleeClient = NewClient(srtp, calleeCodecs ?? PcmuOnly);
+        var callerClient = NewClient(srtp, callerCodecs ?? PcmuOnly, inboundMediaTimeout, mediaSilenceNotifyAfter);
+        var calleeClient = NewClient(srtp, calleeCodecs ?? PcmuOnly, inboundMediaTimeout, mediaSilenceNotifyAfter);
         try
         {
             var callerLine = await RegisterAsync(pbx, callerClient, pair.Caller);

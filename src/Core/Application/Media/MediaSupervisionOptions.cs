@@ -1,9 +1,9 @@
 namespace CalloraVoipSdk.Core.Application.Media;
 
 /// <summary>
-/// Runtime supervision thresholds for active media sessions (#261, ADR-069). Two stages: media silence is
-/// reported to the application, and only a total loss of peer liveness — no RTP <em>and</em> no RTCP — ends
-/// the call. A caller may tune both via <c>VoipConfiguration</c>.
+/// Runtime supervision thresholds for active media sessions (#261, ADR-069). Media silence is reported to
+/// the application; ending the call on a total loss of peer liveness — no RTP <em>and</em> no RTCP — is
+/// available but off by default. A caller may tune both via <c>VoipConfiguration</c>.
 /// </summary>
 internal sealed record MediaSupervisionOptions
 {
@@ -12,18 +12,20 @@ internal sealed record MediaSupervisionOptions
 
     /// <summary>
     /// Hang up a connected call that has shown no sign of life this long — neither inbound RTP nor inbound
-    /// RTCP. Behind NAT a far-end BYE may never reach us (it targets our in-dialog Contact) and everything
-    /// simply stops; this bounds how long the agent keeps talking to a dead line.
-    /// <see cref="TimeSpan.Zero"/> or negative disables the hangup. Default: 30 seconds.
+    /// RTCP. <see cref="TimeSpan.Zero"/> or negative disables the hangup, which is the
+    /// <b>default</b>: media silence is reported through <c>ICall.MediaFlowChanged</c> and the application
+    /// decides. 30 seconds is the recommended value for a deployment that wants the teardown.
     /// </summary>
     /// <remarks>
-    /// RTCP counts as liveness on purpose (#261): a peer that is alive but sending no media — silence
-    /// suppression (RFC 3389), hold, a bridge switch mid-transfer — keeps reporting on the RFC 3550 §6.2
-    /// interval. Supervising RTP alone hung such calls up while the peer was demonstrably reachable. 30 s
-    /// matches SIPSorcery's <c>NoActivityTimeout</c>; Asterisk (<c>rtp_timeout</c>) and FreeSWITCH
-    /// (<c>media_timeout</c>) default the equivalent to off, and pjsip has no built-in detection at all.
+    /// Off by default because a media-silence teardown is a heuristic without a reliable counter-signal, and
+    /// measurement says so (#261, ADR-069): against a real PBX in the media path — Asterisk and FreeSWITCH
+    /// both, verified in the interop suite — inbound RTCP stops together with the media, so nothing
+    /// distinguishes "the peer went quiet" from "the peer went away". Both of those PBXes ship their own
+    /// equivalent (<c>rtp_timeout</c>, <c>media_timeout</c>) disabled for the same reason, and pjsip has no
+    /// detection at all. A peer that is genuinely gone is still caught by the RFC 4028 session timer.
+    /// When enabled, RTCP counts as liveness: it can only ever extend the deadline, never shorten it.
     /// </remarks>
-    public TimeSpan InboundMediaTimeout { get; init; } = TimeSpan.FromSeconds(30);
+    public TimeSpan InboundMediaTimeout { get; init; } = TimeSpan.Zero;
 
     /// <summary>
     /// Report inbound media silence to the application after this long without inbound RTP, through

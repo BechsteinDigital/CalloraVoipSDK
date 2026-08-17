@@ -10,24 +10,24 @@ The next line. Entries here accumulate the consumer-visible changes not yet rele
 
 ### Changed
 
-- **Media supervision ends calls on loss of liveness, not on silence** (#261, ADR-069). A connected call was
-  torn down after **15 seconds without inbound RTP**. Silence is not evidence that the far end is gone:
-  silence suppression (RFC 3389), hold, and the bridge switch of an attended transfer all stop the media
-  while the peer keeps reporting RTCP — and the SDK hung up on it. That is what made the attended-transfer
-  interop test (#256) flake: our own supervisor ended the call while Asterisk never sent a BYE.
-  Now **inbound RTP *or* RTCP** counts as a sign of life, and the supervision runs in two stages:
-  - `ICall.MediaFlowChanged` reports media silence after `MediaSilenceNotifyAfter` (default 15 s) and again
-    when media resumes — a notification while the peer is demonstrably alive, so the application decides what
-    silence means for its use case.
-  - `InboundMediaTimeout` (default **30 s**, was 15 s) ends the call only when the peer has stopped sending
-    everything, and the termination now carries a `CallTerminationReason` saying so, distinguishable from a
-    peer BYE.
+- **Media silence no longer ends calls** (#261, ADR-069). A connected call was torn down after **15 seconds
+  without inbound RTP**. Silence is not evidence that the far end is gone — silence suppression (RFC 3389),
+  hold, and the bridge switch of an attended transfer all stop the media on a perfectly live call — and the
+  SDK hung up on it. That is what made the attended-transfer interop test (#256) flake: our own supervisor
+  ended the call while Asterisk never sent a BYE.
+  - **`ICall.MediaFlowChanged`** now reports inbound media silence after `MediaSilenceNotifyAfter`
+    (default 15 s), and again when media resumes, carrying how long the silence lasted. Your application
+    decides what silence means for its use case — prompt, escalate, hang up, or ignore.
+  - **`InboundMediaTimeout` now defaults to `TimeSpan.Zero` (off)**, was 15 s. Enable it (30 s recommended)
+    and it ends a call only when the peer has stopped sending RTP **and** RTCP, with a
+    `CallTerminationReason` that identifies it as an SDK teardown rather than a peer BYE. Held calls stay
+    exempt unless `HangupHeldCallOnMediaSilence` is set, for both local and remote hold.
 
-  **If you relied on the old behaviour**, set `InboundMediaTimeout` explicitly and note that the same number
-  now means "no RTP *and* no RTCP", so it fires less often. Held calls remain exempt unless
-  `HangupHeldCallOnMediaSilence` is set, for both local and remote hold. Calibrated against SIPSorcery
-  (30 s, RTP-or-RTCP, hold exempt, hangs up), Asterisk `rtp_timeout` and FreeSWITCH `media_timeout` (both
-  hang up, both default to off) and pjsip (no detection at all) — see ADR-069.
+  **Why off:** measured against both reference PBXes in the interop suite, inbound RTCP stops together with
+  the media (Asterisk: one report in 20 s of silence; FreeSWITCH: two), so nothing on the wire tells a quiet
+  peer from a departed one. Asterisk (`rtp_timeout`) and FreeSWITCH (`media_timeout`) ship theirs disabled
+  for the same reason, and pjsip has no such mechanism at all. A peer that is genuinely gone is still caught
+  by the RFC 4028 session timer. **If you relied on the old teardown**, set `InboundMediaTimeout` explicitly.
 - **Client-facade contracts hardened (#166 P2/P3).** Nine findings from the `src/Client` review, all
   consumer-visible:
   - **`IPeerConnection` publishes `Closed` on an explicit dispose** — exactly once. Disposing a peer

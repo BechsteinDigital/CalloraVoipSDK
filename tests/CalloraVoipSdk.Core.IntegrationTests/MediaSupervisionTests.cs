@@ -5,18 +5,22 @@ using CalloraVoipSdk.Core.Domain.Events;
 namespace CalloraVoipSdk.Core.IntegrationTests;
 
 /// <summary>
-/// L2 — #261 / ADR-069: media supervision distinguishes "no audio" from "far end gone". A peer that stops
-/// sending media but keeps reporting RTCP is alive — silence suppression (RFC 3389), hold, and the bridge
-/// switch of an attended transfer all look like this — and must be surfaced to the application, not hung up
-/// on. Only a peer that stops sending RTP <em>and</em> RTCP is treated as gone. Supervising RTP alone (the
-/// pre-#261 behaviour, 15 s) tore down live calls; the flake in #256 was our own supervisor doing exactly that
-/// while Asterisk never sent a BYE.
+/// L2 — #261 / ADR-069: media supervision reports silence and, only when a deployment asks for it, ends a
+/// call whose peer has stopped sending RTP <em>and</em> RTCP. Supervising RTP alone (the pre-#261 behaviour,
+/// 15 s, on by default) tore down live calls: the flake in #256 was our own supervisor doing exactly that
+/// while Asterisk never sent a BYE. The teardown is off by default because the interop measurement showed
+/// neither reference PBX keeps RTCP flowing during media silence, so it cannot distinguish a quiet peer from
+/// a gone one — the application gets <c>MediaFlowChanged</c> and decides.
 /// </summary>
 public sealed class MediaSupervisionTests
 {
     private static readonly DateTimeOffset T0 = new(2026, 8, 17, 12, 0, 0, TimeSpan.Zero);
 
-    private static readonly MediaSupervisionOptions Defaults = MediaSupervisionOptions.Default;
+    // The teardown is off by default (#261: measurement showed no PBX keeps RTCP flowing during media
+    // silence, so it cannot be told apart from a dead peer). These cases exercise the teardown as a
+    // deployment would have to enable it; the shipped defaults are pinned separately below.
+    private static readonly MediaSupervisionOptions Defaults =
+        MediaSupervisionOptions.Default with { InboundMediaTimeout = TimeSpan.FromSeconds(30) };
 
     // ── the defect #261 is about ─────────────────────────────────────────────────────────────
 
@@ -179,17 +183,35 @@ public sealed class MediaSupervisionTests
     }
 
     /// <summary>
-    /// The reference values this SDK is calibrated against: 30 s of no liveness before a teardown (SIPSorcery's
-    /// NoActivityTimeout is 6 × 5 s; Asterisk and FreeSWITCH default their equivalents to off; pjsip has no
-    /// built-in detection), and the silence notification strictly before it.
+    /// The shipped defaults: report media silence, never end the call on it. Measured against both reference
+    /// PBXes, inbound RTCP stops together with the media, so an enabled teardown cannot distinguish a quiet
+    /// peer from a gone one — Asterisk (<c>rtp_timeout</c>) and FreeSWITCH (<c>media_timeout</c>) ship theirs
+    /// off for the same reason, and pjsip has no detection at all.
     /// </summary>
     [Fact]
-    public void The_defaults_match_the_reference_calibration()
+    public void The_shipped_defaults_notify_and_never_hang_up()
     {
-        Assert.Equal(TimeSpan.FromSeconds(30), Defaults.InboundMediaTimeout);
-        Assert.Equal(TimeSpan.FromSeconds(15), Defaults.MediaSilenceNotifyAfter);
-        Assert.True(Defaults.MediaSilenceNotifyAfter < Defaults.InboundMediaTimeout);
-        Assert.False(Defaults.HangupHeldCallOnSilence);
+        var shipped = MediaSupervisionOptions.Default;
+
+        Assert.Equal(TimeSpan.Zero, shipped.InboundMediaTimeout);
+        Assert.Equal(TimeSpan.FromSeconds(15), shipped.MediaSilenceNotifyAfter);
+        Assert.False(shipped.HangupHeldCallOnSilence);
+    }
+
+    /// <summary>With the shipped defaults, an endless media silence is reported once and never ends the call.</summary>
+    [Fact]
+    public void With_the_shipped_defaults_endless_silence_never_ends_the_call()
+    {
+        var shipped = MediaSupervisionOptions.Default;
+        var activity = Supervised();
+        activity.Observe(Metrics(100, 1), CallState.Connected, shipped, T0);
+
+        var verdicts = new List<MediaSupervisionVerdict>();
+        for (var second = 5; second <= 300; second += 5)
+            verdicts.Add(activity.Observe(Metrics(100, 1), CallState.Connected, shipped, T0.AddSeconds(second)).Verdict);
+
+        Assert.DoesNotContain(MediaSupervisionVerdict.PeerGone, verdicts);
+        Assert.Single(verdicts, v => v == MediaSupervisionVerdict.MediaSilent);
     }
 
     // ── the public event args ────────────────────────────────────────────────────────────────
