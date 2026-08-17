@@ -39,8 +39,8 @@ public sealed class WebRtcPeerToPeerTests
         var videoAtAnswerer = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
         offerer.AudioReceived += (p, _) => audioAtOfferer.TrySetResult(p);
         answerer.AudioReceived += (p, _) => audioAtAnswerer.TrySetResult(p);
-        offerer.VideoFrameReceived += (f, _, _) => videoAtOfferer.TrySetResult(f);
-        answerer.VideoFrameReceived += (f, _, _) => videoAtAnswerer.TrySetResult(f);
+        offerer.VideoFrameReceived += frame => videoAtOfferer.TrySetResult(frame.Payload);
+        answerer.VideoFrameReceived += frame => videoAtAnswerer.TrySetResult(frame.Payload);
 
         await offerer.StartAsync();
         await answerer.StartAsync();

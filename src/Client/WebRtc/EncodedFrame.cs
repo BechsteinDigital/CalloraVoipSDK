@@ -6,14 +6,38 @@ namespace CalloraVoipSdk.WebRtc;
 /// </summary>
 public readonly struct EncodedFrame
 {
-    /// <summary>Creates an encoded frame.</summary>
+    /// <summary>Creates an encoded frame whose sender declared no layer information.</summary>
     public EncodedFrame(ReadOnlyMemory<byte> payload, uint? rtpTimestamp, bool isKeyFrame, long? presentationTimeUsec, string? rid = null)
+        : this(payload, rtpTimestamp, isKeyFrame, presentationTimeUsec, rid, spatialId: null, temporalId: null)
+    {
+    }
+
+    /// <summary>
+    /// Creates an encoded frame carrying the layer the sender declared in its Dependency Descriptor (#225).
+    /// </summary>
+    /// <param name="payload">The encoded codec payload.</param>
+    /// <param name="rtpTimestamp">The frame's RTP timestamp, or <see langword="null"/> when unstamped.</param>
+    /// <param name="isKeyFrame">Whether the frame can be decoded on its own.</param>
+    /// <param name="presentationTimeUsec">The wall-clock presentation time in microseconds, when known.</param>
+    /// <param name="rid">The frame's simulcast <c>a=rid</c>, or <see langword="null"/>.</param>
+    /// <param name="spatialId">The frame's spatial layer, or <see langword="null"/> when unknown.</param>
+    /// <param name="temporalId">The frame's temporal layer, or <see langword="null"/> when unknown.</param>
+    public EncodedFrame(
+        ReadOnlyMemory<byte> payload,
+        uint? rtpTimestamp,
+        bool isKeyFrame,
+        long? presentationTimeUsec,
+        string? rid,
+        int? spatialId,
+        int? temporalId)
     {
         Payload = payload;
         RtpTimestamp = rtpTimestamp;
         IsKeyFrame = isKeyFrame;
         PresentationTimeUsec = presentationTimeUsec;
         Rid = rid;
+        SpatialId = spatialId;
+        TemporalId = temporalId;
     }
 
     /// <summary>The encoded codec payload. Valid for the duration of the <see cref="RemoteTrack.FrameReceived"/> callback.</summary>
@@ -41,4 +65,23 @@ public readonly struct EncodedFrame
     /// stream and for audio.
     /// </summary>
     public string? Rid { get; }
+
+    /// <summary>
+    /// The frame's spatial layer from the sender's Dependency Descriptor (AV1 RTP specification §A), so a
+    /// forwarder can pick a layer without decoding — or, for an end-to-end encrypted stream, without being
+    /// able to. <see langword="null"/> when the peer did not negotiate the descriptor, the frame carried
+    /// none, or the stream was joined before the sender declared its layer structure.
+    /// </summary>
+    /// <remarks>
+    /// Independent of <see cref="Rid"/>: simulcast sends each encoding as its own stream, whereas the
+    /// descriptor describes layers <em>within</em> one stream (scalable/SVC). A peer may use either, both, or
+    /// neither.
+    /// </remarks>
+    public int? SpatialId { get; }
+
+    /// <summary>
+    /// The frame's temporal layer from the sender's Dependency Descriptor, reported under the same conditions
+    /// as <see cref="SpatialId"/>.
+    /// </summary>
+    public int? TemporalId { get; }
 }

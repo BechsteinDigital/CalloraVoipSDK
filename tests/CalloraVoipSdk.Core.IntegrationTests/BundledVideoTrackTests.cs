@@ -45,7 +45,7 @@ public sealed class BundledVideoTrackTests
 
         byte[]? received = null;
         using var receiver = VideoTrack(outbound);
-        receiver.FrameReceived += (f, _, _, _) => received = f;
+        receiver.FrameReceived += (f, _) => received = f.Payload;
         foreach (var packet in sent)
             receiver.OnRtpPacket(packet);
 
@@ -63,7 +63,7 @@ public sealed class BundledVideoTrackTests
 
         // Receiver: bundle transport → inbound pipeline routing the video MID to a receiving video track.
         using var receiverVideo = VideoTrack(OutboundOver(new DiscardSender()));
-        receiverVideo.FrameReceived += (f, _, _, _) => reassembled.TrySetResult(f);
+        receiverVideo.FrameReceived += (f, _) => reassembled.TrySetResult(f.Payload);
         await using var receiverTransport = Transport(InboundRoutingVideoTo(p => receiverVideo.OnRtpPacket(p)));
         await receiverTransport.StartAsync();
 

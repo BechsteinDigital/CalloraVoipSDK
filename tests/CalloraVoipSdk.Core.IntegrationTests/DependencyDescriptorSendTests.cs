@@ -50,7 +50,7 @@ public sealed class DependencyDescriptorSendTests
 
         using var receiver = VideoTrack(OutboundWithDescriptor());
         var claims = new List<bool>();
-        receiver.FrameReceived += (_, _, isKeyFrame, _) => claims.Add(isKeyFrame);
+        receiver.FrameReceived += (frame, _) => claims.Add(frame.IsKeyFrame);
         receiver.OnRtpPacket(packet);
 
         Assert.Equal([true], claims);

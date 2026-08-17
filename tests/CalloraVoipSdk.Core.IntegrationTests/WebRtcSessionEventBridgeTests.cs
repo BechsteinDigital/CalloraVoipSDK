@@ -23,7 +23,7 @@ public sealed class WebRtcSessionEventBridgeTests
     {
         var bridge = new WebRtcSessionEventBridge(NullLogger<WebRtcSessionEventBridgeTests>.Instance);
         await using var session = Session();
-        var layer = new List<(string Mid, string Rid, byte[] Frame, uint Ts, bool Key)>();
+        var layer = new List<(string Mid, string Rid, InboundVideoFrame Frame)>();
 
         // Wiring only registers handlers; it must accept the per-layer forward and not throw.
         var ex = Record.Exception(() => bridge.WireSession(
@@ -31,9 +31,9 @@ public sealed class WebRtcSessionEventBridgeTests
             _ => { },
             (_, _) => { },
             (_, _, _) => { },
-            (_, _, _) => { },
-            (_, _, _, _) => { },
-            (mid, rid, frame, ts, key) => layer.Add((mid, rid, frame, ts, key)),
+            _ => { },
+            (_, _) => { },
+            (mid, rid, frame) => layer.Add((mid, rid, frame)),
             () => { },
             (_, _) => { }));
 
@@ -52,8 +52,8 @@ public sealed class WebRtcSessionEventBridgeTests
             _ => { },
             (_, _) => { },
             (_, _, _) => { },
-            (_, _, _) => { },
-            (_, _, _, _) => { },
+            _ => { },
+            (_, _) => { },
             raiseVideoLayerFrameReceived: null!,
             () => { },
             (_, _) => { }));

@@ -106,6 +106,20 @@ configurations. Validated end-to-end against a real Asterisk endpoint that carri
   lost on exactly those packets. `a=extmap` now assigns ids across the full 1..255 range, still starting at 1,
   so SDP is unchanged for any peer with at most fourteen extensions. Unblocks the Dependency Descriptor
   (#225) and, through it, a media path that never reads the payload (#310).
+- **Dependency Descriptor: key-frame and layer information from the RTP header** (#225, AV1 RTP
+  specification §A). Both facts used to come out of the payload, which only works while the payload is
+  readable — an end-to-end encrypted frame (#223) makes the key-frame flag a guess about ciphertext, and a
+  forwarder that wants to drop a temporal layer has nothing to go on at all. The descriptor is negotiated
+  per m-line via `a=extmap`, written on outbound video, and read on inbound video, where it overrides the
+  payload-derived key-frame flag; a peer that does not offer the extension keeps the previous behaviour
+  unchanged.
+- **`EncodedFrame.SpatialId` and `EncodedFrame.TemporalId`** (#225) — the layer the sender put a received
+  frame on, so an SFU can choose a layer without opening the payload. `null` means unknown, not base layer:
+  the peer negotiated no descriptor, the frame carried none, or the stream was joined before the sender
+  declared its layer structure. Independent of `EncodedFrame.Rid`, which distinguishes simulcast *streams*
+  where these distinguish layers *within* one. The SDK's own sender declares one spatial and one temporal
+  layer — it does not encode video, so it knows of no ladder to describe — so between two SDK peers both
+  read `0`.
 - **Opaque video payload format for end-to-end encrypted frames** (#223, ADR-068). When a browser
   encrypts its frames before the packetiser (WebRTC Encoded Transform / SFrame, RFC 9605), the frame is
   ciphertext — and both existing video payload formats assume they may read it: H.264 fails closed on

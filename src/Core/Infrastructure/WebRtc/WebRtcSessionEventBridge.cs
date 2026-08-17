@@ -47,9 +47,9 @@ internal sealed class WebRtcSessionEventBridge
         Action<WebRtcConnectionState> transitionTo,
         Action<byte[], uint> raiseAudioReceived,
         Action<string, byte[], uint> raiseAudioTrackFrameReceived,
-        Action<byte[], uint, bool> raiseVideoFrameReceived,
-        Action<string, byte[], uint, bool> raiseVideoTrackFrameReceived,
-        Action<string, string, byte[], uint, bool> raiseVideoLayerFrameReceived,
+        Action<InboundVideoFrame> raiseVideoFrameReceived,
+        Action<string, InboundVideoFrame> raiseVideoTrackFrameReceived,
+        Action<string, string, InboundVideoFrame> raiseVideoLayerFrameReceived,
         Action raiseVideoKeyFrameRequested,
         Action<byte, int> raiseDtmfReceived)
     {
@@ -70,12 +70,12 @@ internal sealed class WebRtcSessionEventBridge
         session.AudioReceived += packet => raiseAudioReceived(packet.Payload.ToArray(), packet.Timestamp);
         // Mid-tagged inbound audio (4.7.0) → the receiver routes each frame to its remote audio track.
         session.AudioTrackFrameReceived += (mid, packet) => raiseAudioTrackFrameReceived(mid, packet.Payload.ToArray(), packet.Timestamp);
-        session.VideoFrameReceived += (frame, timestamp, isKeyFrame) => raiseVideoFrameReceived(frame, timestamp, isKeyFrame);
+        session.VideoFrameReceived += frame => raiseVideoFrameReceived(frame);
         // Mid-tagged inbound video (P2b) → the receiver routes each frame to its remote track (P2c).
-        session.VideoTrackFrameReceived += (mid, frame, timestamp, isKeyFrame) => raiseVideoTrackFrameReceived(mid, frame, timestamp, isKeyFrame);
+        session.VideoTrackFrameReceived += (mid, frame) => raiseVideoTrackFrameReceived(mid, frame);
         // Per-layer inbound video (4.7.0 recv-side simulcast, RFC 8853) → the receiver forwards each demuxed
         // encoding tagged with its a=rid; fires only for RID-tagged layers, never the primary RID-less stream.
-        session.VideoLayerFrameReceived += (mid, rid, frame, timestamp, isKeyFrame) => raiseVideoLayerFrameReceived(mid, rid, frame, timestamp, isKeyFrame);
+        session.VideoLayerFrameReceived += (mid, rid, frame) => raiseVideoLayerFrameReceived(mid, rid, frame);
         session.VideoKeyFrameRequested += () => raiseVideoKeyFrameRequested();
         session.DtmfReceived += (toneCode, durationMs) => raiseDtmfReceived(toneCode, durationMs);
     }

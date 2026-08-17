@@ -552,29 +552,36 @@ internal sealed class PeerConnection : IPeerConnection
     // Mid-tagged inbound video (P2c): route each frame to its own RemoteTrack (by MID). The peer fires this
     // for every video track (primary and added), so a single subscription covers 1+1 and N without the
     // double-delivery the untagged event would cause on the primary.
-    private void OnVideoTrackReceived(string mid, byte[] frame, uint rtpTimestamp, bool isKeyFrame)
+    private void OnVideoTrackReceived(string mid, InboundVideoFrame frame)
     {
         // The primary / RID-less stream: no simulcast layer to distinguish (RID-tagged layers arrive on the
         // separate VideoLayerFrameReceived path). After the recv-side simulcast wiring this fires only for
         // the non-simulcast frames, so frame.Rid is always null here.
-        _taps.Video(MediaDirection.Inbound, frame, rtpTimestamp, isKeyFrame, rid: null);
+        _taps.Video(MediaDirection.Inbound, frame.Payload, frame.RtpTimestamp, frame.IsKeyFrame, rid: null);
         // The remote m-line's msid for this MID (for stream grouping); null when the remote advertised none.
         var msid = _peer.RemoteVideoTracks.FirstOrDefault(t => string.Equals(t.Mid, mid, StringComparison.Ordinal))?.Msid
             ?? _peer.RemoteVideoMsid;
-        _tracks.DeliverVideoFrame(mid, StreamId(msid), msid?.TrackId, new EncodedFrame(frame, rtpTimestamp, isKeyFrame, presentationTimeUsec: null, rid: null));
+        _tracks.DeliverVideoFrame(mid, StreamId(msid), msid?.TrackId, Encoded(frame, rid: null));
     }
 
     // Mid-tagged inbound simulcast layer (4.7.0, RFC 8853): the demultiplexed encoding lands on the SAME mid
     // RemoteTrack as the primary stream — each frame is distinguished per EncodedFrame.Rid (an SFU reads
     // frame.Rid to forward the right layer). There is no per-rid RemoteTrack identity: one RemoteTrack per mid.
-    private void OnVideoLayerReceived(string mid, string rid, byte[] frame, uint rtpTimestamp, bool isKeyFrame)
+    private void OnVideoLayerReceived(string mid, string rid, InboundVideoFrame frame)
     {
-        _taps.Video(MediaDirection.Inbound, frame, rtpTimestamp, isKeyFrame, rid: rid);
+        _taps.Video(MediaDirection.Inbound, frame.Payload, frame.RtpTimestamp, frame.IsKeyFrame, rid: rid);
         // The remote m-line's msid for this MID (for stream grouping); null when the remote advertised none.
         var msid = _peer.RemoteVideoTracks.FirstOrDefault(t => string.Equals(t.Mid, mid, StringComparison.Ordinal))?.Msid
             ?? _peer.RemoteVideoMsid;
-        _tracks.DeliverVideoFrame(mid, StreamId(msid), msid?.TrackId, new EncodedFrame(frame, rtpTimestamp, isKeyFrame, presentationTimeUsec: null, rid: rid));
+        _tracks.DeliverVideoFrame(mid, StreamId(msid), msid?.TrackId, Encoded(frame, rid));
     }
+
+    // The Core-internal inbound frame as the SDK surface sees it. The Dependency Descriptor's layer ids
+    // (#225) travel with it so a forwarder can pick a layer without opening the payload — null on a peer that
+    // did not negotiate the extension, where the frame looks exactly as it did before.
+    private static EncodedFrame Encoded(InboundVideoFrame frame, string? rid) =>
+        new(frame.Payload, frame.RtpTimestamp, frame.IsKeyFrame, presentationTimeUsec: null, rid,
+            frame.SpatialId, frame.TemporalId);
 
     // RFC 8830: a stream id of "-" means the track belongs to no MediaStream.
     private static string? StreamId(SdpMsid? msid)

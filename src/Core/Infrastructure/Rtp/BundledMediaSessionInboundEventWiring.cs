@@ -15,9 +15,9 @@ namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
 /// </summary>
 internal sealed class BundledMediaSessionInboundEventWiring
 {
-    private readonly Action<byte[], uint, bool> _raiseVideoFrame;
-    private readonly Action<string, byte[], uint, bool> _raiseVideoTrack;
-    private readonly Action<string, string, byte[], uint, bool> _raiseVideoLayer;
+    private readonly Action<InboundVideoFrame> _raiseVideoFrame;
+    private readonly Action<string, InboundVideoFrame> _raiseVideoTrack;
+    private readonly Action<string, string, InboundVideoFrame> _raiseVideoLayer;
     private readonly Action _raiseKeyFrameRequested;
     private readonly Action<string, RtpPacket> _raiseAudioTrack;
     private readonly ILogger _logger;
@@ -34,9 +34,9 @@ internal sealed class BundledMediaSessionInboundEventWiring
     /// <param name="raiseAudioTrack">Raises the mid-tagged <c>AudioTrackFrameReceived</c> event.</param>
     /// <param name="logger">Logs (and suppresses) a throwing additional-audio subscriber so the shared receive loop survives (K3).</param>
     public BundledMediaSessionInboundEventWiring(
-        Action<byte[], uint, bool> raiseVideoFrame,
-        Action<string, byte[], uint, bool> raiseVideoTrack,
-        Action<string, string, byte[], uint, bool> raiseVideoLayer,
+        Action<InboundVideoFrame> raiseVideoFrame,
+        Action<string, InboundVideoFrame> raiseVideoTrack,
+        Action<string, string, InboundVideoFrame> raiseVideoLayer,
         Action raiseKeyFrameRequested,
         Action<string, RtpPacket> raiseAudioTrack,
         ILogger logger)
@@ -62,19 +62,19 @@ internal sealed class BundledMediaSessionInboundEventWiring
     /// <param name="isPrimary">Whether this is the primary (ctor-first) track — only it drives the mid-less facade.</param>
     public void WireVideoTrackEvents(string mid, BundledVideoTrack track, bool isPrimary)
     {
-        track.FrameReceived += (frame, timestamp, isKeyFrame, rid) =>
+        track.FrameReceived += (frame, rid) =>
         {
             if (rid is not null)
             {
                 // A demultiplexed simulcast layer (RFC 8853): surface it ONLY on the per-layer event, so a layer
                 // frame is delivered exactly once and never also on the RID-less surfaces.
-                _raiseVideoLayer(mid, rid, frame, timestamp, isKeyFrame);
+                _raiseVideoLayer(mid, rid, frame);
                 return;
             }
 
             if (isPrimary)
-                _raiseVideoFrame(frame, timestamp, isKeyFrame);
-            _raiseVideoTrack(mid, frame, timestamp, isKeyFrame);
+                _raiseVideoFrame(frame);
+            _raiseVideoTrack(mid, frame);
         };
         track.KeyFrameRequested += () => _raiseKeyFrameRequested();
     }

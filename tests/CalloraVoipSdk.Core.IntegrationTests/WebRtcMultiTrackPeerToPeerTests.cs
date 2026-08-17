@@ -38,9 +38,9 @@ public sealed class WebRtcMultiTrackPeerToPeerTests
         // Capture, per inbound MID at the answerer, the first frame the track was routed with.
         var byMid = new Dictionary<string, byte[]>(StringComparer.Ordinal);
         var sync = new object();
-        answerer.VideoTrackFrameReceived += (mid, frame, _, _) =>
+        answerer.VideoTrackFrameReceived += (mid, frame) =>
         {
-            lock (sync) byMid.TryAdd(mid, frame);
+            lock (sync) byMid.TryAdd(mid, frame.Payload);
         };
 
         await offerer.StartAsync();
@@ -102,7 +102,7 @@ public sealed class WebRtcMultiTrackPeerToPeerTests
         // The answerer must have this offerer's MID "2" SSRC before it can name it in a PLI — capture it by
         // receiving a frame on that track at the offerer (both peers send on MID "2").
         var offererGotMid2 = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        offerer.VideoTrackFrameReceived += (mid, _, _, _) => { if (mid == "2") offererGotMid2.TrySetResult(); };
+        offerer.VideoTrackFrameReceived += (mid, _) => { if (mid == "2") offererGotMid2.TrySetResult(); };
 
         await offerer.StartAsync();
         await answerer.StartAsync();

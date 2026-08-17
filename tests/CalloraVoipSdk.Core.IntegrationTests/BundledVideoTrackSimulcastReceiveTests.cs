@@ -27,7 +27,7 @@ public sealed class BundledVideoTrackSimulcastReceiveTests
     {
         using var track = SimulcastReceiveTrack();
         var received = new List<(string? Rid, byte[] Frame)>();
-        track.FrameReceived += (frame, _, _, rid) => received.Add((rid, frame));
+        track.FrameReceived += (frame, rid) => received.Add((rid, frame.Payload));
 
         // Two single-packet keyframes on distinct SSRCs, one per encoding, interleaved.
         var high = Frame(seq: 1000, marker: true, payloadByte: 0xAA);
@@ -50,7 +50,7 @@ public sealed class BundledVideoTrackSimulcastReceiveTests
         // resolved rid. Here we drive the resolved rid directly (the router's job is covered separately).
         using var track = SimulcastReceiveTrack();
         var received = new List<(string? Rid, byte[] Frame)>();
-        track.FrameReceived += (frame, _, _, rid) => received.Add((rid, frame));
+        track.FrameReceived += (frame, rid) => received.Add((rid, frame.Payload));
 
         track.OnRtpPacket(Packet(ssrc: 0x1111, seq: 1000, marker: true, payload: new byte[] { 0x01 }), rid: "h");
         track.OnRtpPacket(Packet(ssrc: 0x1111, seq: 1001, marker: true, payload: new byte[] { 0x02 }), rid: "h");
@@ -72,7 +72,7 @@ public sealed class BundledVideoTrackSimulcastReceiveTests
             "video", "VP8", VideoPayloadType, VideoSsrc, remoteSupportsNack: false, remoteSupportsPli: false,
             new[] { "h", "l" }, Outbound(), reorderWindowDepth: 1, NullLoggerFactory.Instance);
         var received = new List<(string? Rid, byte[] Frame)>();
-        track.FrameReceived += (frame, _, _, rid) => received.Add((rid, frame));
+        track.FrameReceived += (frame, rid) => received.Add((rid, frame.Payload));
 
         // "l" opens a keyframe; "h" opens a frame (no marker) then leaves seq 1001 missing and sends 1002+1003 —
         // two packets held behind the gap exceed the depth-1 window, so the buffer skips the gap and releases
@@ -100,7 +100,7 @@ public sealed class BundledVideoTrackSimulcastReceiveTests
     {
         using var track = NonSimulcastTrack();
         var received = new List<(string? Rid, byte[] Frame)>();
-        track.FrameReceived += (frame, _, _, rid) => received.Add((rid, frame));
+        track.FrameReceived += (frame, rid) => received.Add((rid, frame.Payload));
 
         track.OnRtpPacket(Packet(ssrc: VideoSsrc, seq: 1000, marker: true, payload: new byte[] { 0x7F }));
 
