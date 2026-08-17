@@ -37,6 +37,24 @@ public sealed class CalloraWebRtcBuilder
     }
 
     /// <summary>
+    /// Enables video negotiation for end-to-end encrypted frames: the app encrypts each frame before handing it
+    /// over (WebRTC Encoded Transform / SFrame, RFC 9605) and the SDK never reads the content (#223, ADR-068).
+    /// Sets <see cref="WebRtcOptions.EnableVideo"/> and <see cref="WebRtcOptions.OpaqueVideoFrames"/>, and — when
+    /// <paramref name="codecs"/> is non-empty — the ordered codec preference, exactly as <see cref="WithVideo"/>.
+    /// </summary>
+    /// <remarks>
+    /// Key-frame detection is off on this path (the flag is always <see langword="false"/> — "unknown", not
+    /// "no"), and the opaque H.264 framing is not what a browser emits: see
+    /// <see cref="WebRtcConfiguration.OpaqueVideoFrames"/> for the full semantics and interop scope.
+    /// </remarks>
+    public CalloraWebRtcBuilder WithOpaqueVideo(params string[] codecs)
+    {
+        WithVideo(codecs);
+        _services.PostConfigure<WebRtcOptions>(options => options.OpaqueVideoFrames = true);
+        return this;
+    }
+
+    /// <summary>
     /// Pins the DTLS-SRTP identity certificate used for every peer (ECDSA P-256 with an exportable
     /// private key); see <see cref="WebRtcOptions.DtlsCertificate"/>.
     /// </summary>

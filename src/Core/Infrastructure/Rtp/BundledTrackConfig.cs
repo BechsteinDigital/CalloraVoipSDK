@@ -51,6 +51,16 @@ internal sealed record BundledTrackConfig
     public string? VideoCodecName { get; init; }
 
     /// <summary>
+    /// True when this video m-line carries frames whose content the SDK must not read — end-to-end encrypted
+    /// media (WebRTC Encoded Transform / SFrame, RFC 9605), where the frame is ciphertext (#223, ADR-068). The
+    /// track then uses <see cref="Packetisation.VideoPayloadFormat.CreateOpaque"/>: both halves work from the RTP
+    /// framing alone, never interpret the frame, and make no key-frame claim about it. Ignored for an audio
+    /// m-line; defaults to <see langword="false"/>, which keeps the clear-media payload format (including its
+    /// key-frame detection) byte-for-byte unchanged.
+    /// </summary>
+    public bool OpaqueVideoFrames { get; init; }
+
+    /// <summary>
     /// True when the peer advertised Generic NACK (<c>a=rtcp-fb:* nack</c>, RFC 4585) for this video
     /// m-line: the track may report detected inbound loss so the peer can retransmit. Ignored for an
     /// audio m-line; defaults to <see langword="false"/> so feedback the peer did not offer is never sent.

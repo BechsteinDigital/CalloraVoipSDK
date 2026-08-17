@@ -34,6 +34,7 @@ internal static class WebRtcOptionsMapping
             EnableVideo = options.EnableVideo,
             UseStableNumericMediaIds = options.UseStableNumericMediaIds,
             VideoCodecs = options.VideoCodecs,
+            OpaqueVideoFrames = options.OpaqueVideoFrames,
             SimulcastLayers = options.SimulcastLayers,
             IceServers = options.IceServers,
             DtlsCertificate = options.DtlsCertificate,

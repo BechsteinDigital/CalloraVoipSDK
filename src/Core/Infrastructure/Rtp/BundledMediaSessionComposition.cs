@@ -149,7 +149,10 @@ internal static class BundledMediaSessionComposition
                 video.RemoteSupportsNack, video.RemoteSupportsPli,
                 video.Encodings.Select(e => e.Rid).ToArray(),
                 outbound, options.VideoReorderDepth, loggerFactory,
-                receiveRids: video.ReceiveRids);
+                receiveRids: video.ReceiveRids,
+                // End-to-end encrypted frames: resolve the opaque payload format instead of the clear-media one
+                // (#223, ADR-068) — for every simulcast layer and receive lane of this track.
+                opaqueFrames: video.OpaqueVideoFrames);
 
             var registered = new List<string?>(video.Encodings.Count);
             try
@@ -184,7 +187,10 @@ internal static class BundledMediaSessionComposition
             rtxPayloadType: video.RtxPayloadType,
             rtxSsrc: video.RtxSsrc,
             // The negotiated inbound RID allowlist (#161 P3-15); empty admits every RID, as before.
-            receiveRids: video.ReceiveRids);
+            receiveRids: video.ReceiveRids,
+            // End-to-end encrypted frames: resolve the opaque payload format instead of the clear-media one
+            // (#223, ADR-068), so neither half of this track reads the frame.
+            opaqueFrames: video.OpaqueVideoFrames);
 
         try
         {

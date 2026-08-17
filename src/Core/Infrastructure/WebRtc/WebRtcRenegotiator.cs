@@ -37,12 +37,24 @@ internal sealed class WebRtcRenegotiator
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<WebRtcRenegotiator> _logger;
 
+    // The owning peer's opaque-video-frames policy (#223, ADR-068). Held for the renegotiator's lifetime because
+    // it is a peer-level transport policy that no re-offer can change: a track ADDED mid-call must get the same
+    // payload format as the tracks built at session time, or renegotiation would quietly hand an end-to-end
+    // encrypted peer a clear-media track that reads ciphertext.
+    private readonly bool _opaqueVideoFrames;
+
     /// <summary>Creates a renegotiator that logs via <paramref name="loggerFactory"/>.</summary>
+    /// <param name="loggerFactory">Builds the diagnostic logger for the diff.</param>
+    /// <param name="opaqueVideoFrames">
+    /// The owning peer's <see cref="WebRtcPeerOptions.OpaqueVideoFrames"/> policy, stamped onto every video track
+    /// this renegotiator adds so a mid-call track matches the session's existing ones.
+    /// </param>
     /// <exception cref="ArgumentNullException"><paramref name="loggerFactory"/> is <see langword="null"/>.</exception>
-    public WebRtcRenegotiator(ILoggerFactory loggerFactory)
+    public WebRtcRenegotiator(ILoggerFactory loggerFactory, bool opaqueVideoFrames)
     {
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
         _logger = loggerFactory.CreateLogger<WebRtcRenegotiator>();
+        _opaqueVideoFrames = opaqueVideoFrames;
     }
 
     /// <summary>
@@ -157,7 +169,7 @@ internal sealed class WebRtcRenegotiator
             // SSRCs distinct from usedSsrcs (which starts at the live session SSRCs) and grows the pool, so two
             // tracks added in one diff never collide either (RFC 3550 §8.1).
             var config = WebRtcSessionFactory.TryBuildVideoTrack(
-                localVideo, newRemoteDescription, usedSsrcs, _loggerFactory);
+                localVideo, newRemoteDescription, usedSsrcs, _loggerFactory, _opaqueVideoFrames);
             if (config is null)
                 continue;
 

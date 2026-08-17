@@ -77,10 +77,16 @@ configurations. Validated end-to-end against a real Asterisk endpoint that carri
   byte-identical for arbitrary content. Neither pair claims a key frame — that signal belongs in a
   plaintext RTP header extension (Dependency Descriptor), which is follow-up work.
   The clear-media paths are unchanged, including their key-frame detection.
-  **Two limits, deliberately stated:** the opaque pair is currently reachable only through the internal
-  `VideoPayloadFormat.CreateOpaque` — the public switch on `WebRtcPeerOptions`/`VideoTrackOptions` is a
-  separate slice — and the H.264 framing is self-consistent between SDK endpoints and through a relay,
-  not validated against a browser (which keeps NAL headers in the clear instead; see ADR-068).
+  **One limit, deliberately stated:** the H.264 framing is self-consistent between SDK endpoints and
+  through a relay, but is not validated against a browser (which keeps NAL headers in the clear instead;
+  see ADR-068), so do not enable it for a browser peer.
+- **`WebRtcConfiguration.OpaqueVideoFrames`** — the switch that selects the opaque format (#223, ADR-068),
+  with `WebRtcOptions.OpaqueVideoFrames` on the DI path and `CalloraWebRtcBuilder.WithOpaqueVideo(...)`
+  fluently (video on plus opacity, otherwise identical to `WithVideo`). Default off, so no existing media
+  path changes. Scoped to the peer, not the individual track: it covers every video track of that peer,
+  including one added later by a renegotiation — the compliance requirement it serves covers the whole
+  session, and SDP carries no per-m-line attribute to derive it from. With the switch on,
+  `EncodedFrame.IsKeyFrame` is always `false` and means "unknown", not "no".
 - **`SipAccount.Register`** — `true` by default. Set to `false` for an IP-authenticated static-IP trunk: the
   line never sends REGISTER, reaches `LineState.Ready`, and dials straight at `SipServer`/`OutboundProxy`.
   Deregistering such a line sends nothing, because there is no binding to remove. Not the same as

@@ -61,6 +61,28 @@ public sealed class WebRtcConfiguration
     }
 
     /// <summary>
+    /// Treats this peer's video frames as opaque: the app encrypts them end to end before handing them over
+    /// (WebRTC Encoded Transform / SFrame, RFC 9605), so the SDK must never read the content. Default
+    /// <see langword="false"/> keeps the clear-media payload format, which parses the frame to detect key frames.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// With the switch on, both halves of the video payload format work from the RTP framing alone: the frame is
+    /// carried and reassembled verbatim, and <see cref="EncodedFrame.IsKeyFrame"/> is always
+    /// <see langword="false"/> — "unknown", not "no", until the key-frame signal moves into a plaintext header
+    /// extension (#223 follow-up). This is what makes "the provider cannot see the content" a property of the
+    /// code rather than of its intentions (Anlage 31b BMV-Ä § 2 Abs. 3/4).
+    /// </para>
+    /// <para>
+    /// Interop scope, stated rather than assumed: the opaque H.264 framing is self-consistent between two SDK
+    /// endpoints and through a relay that forwards payloads untouched. It is <b>not</b> what a browser emits — a
+    /// browser transform keeps the NAL headers in the clear — so do not enable it for a browser peer. See
+    /// ADR-068.
+    /// </para>
+    /// </remarks>
+    public bool OpaqueVideoFrames { get; init; }
+
+    /// <summary>
     /// Send-side simulcast layers to offer (RFC 8853), by <c>a=rid</c> id in send order, e.g.
     /// <c>["hi", "mid", "lo"]</c>. Empty (default) offers a single video stream. When set, the app sends
     /// each layer's encoded frames via <see cref="IPeerConnection.SendVideoFrameAsync(string, System.ReadOnlyMemory{byte}, uint, System.Threading.CancellationToken)"/>

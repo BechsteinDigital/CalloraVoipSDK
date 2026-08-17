@@ -34,7 +34,7 @@ public sealed class WebRtcRenegotiatorTests
 
         // Re-offer adds a SECOND video m-line (MID "2"); the answer accepts both.
         var (reOffer, reAnswer) = Exchange(videoMids: ["1", "2"]);
-        var renegotiator = new WebRtcRenegotiator(NullLoggerFactory.Instance);
+        var renegotiator = new WebRtcRenegotiator(NullLoggerFactory.Instance, opaqueVideoFrames: false);
 
         var diff = renegotiator.ComputeDiff(session, reAnswer, reOffer);
 
@@ -50,6 +50,29 @@ public sealed class WebRtcRenegotiatorTests
         Assert.Contains(added.Ssrc, session.OutboundSsrcs);
     }
 
+    /// <summary>
+    /// #223 / ADR-068: a track added mid-call inherits the owning peer's opaque-video-frames policy. The policy is
+    /// not in the SDP, so it cannot be re-derived from the re-offer — the renegotiator holds it for the peer's
+    /// lifetime. Without this, an end-to-end encrypted peer would get a clear-media track on renegotiation, whose
+    /// depacketiser reads ciphertext as codec syntax.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Diff_gives_an_added_video_track_the_peers_opaque_frame_policy(bool opaque)
+    {
+        var (offer, answer) = Exchange(videoMids: ["1"]);
+        await using var session = BuildSession(offer, answer);
+
+        var (reOffer, reAnswer) = Exchange(videoMids: ["1", "2"]);
+        var renegotiator = new WebRtcRenegotiator(NullLoggerFactory.Instance, opaqueVideoFrames: opaque);
+
+        var diff = renegotiator.ComputeDiff(session, reAnswer, reOffer);
+
+        var added = Assert.Single(diff.TracksToAdd);
+        Assert.Equal(opaque, added.OpaqueVideoFrames);
+    }
+
     [Fact]
     public async Task Diff_deactivates_a_video_track_the_re_offer_dropped()
     {
@@ -60,7 +83,7 @@ public sealed class WebRtcRenegotiatorTests
 
         // Re-offer keeps only "1" (drops "2"); the answer mirrors it.
         var (reOffer, reAnswer) = Exchange(videoMids: ["1"]);
-        var renegotiator = new WebRtcRenegotiator(NullLoggerFactory.Instance);
+        var renegotiator = new WebRtcRenegotiator(NullLoggerFactory.Instance, opaqueVideoFrames: false);
 
         var diff = renegotiator.ComputeDiff(session, reAnswer, reOffer);
 
@@ -79,7 +102,7 @@ public sealed class WebRtcRenegotiatorTests
         await using var session = BuildSession(offer, answer);
 
         var (reOffer, reAnswer) = Exchange(videoMids: ["1"]);
-        var diff = new WebRtcRenegotiator(NullLoggerFactory.Instance).ComputeDiff(session, reAnswer, reOffer);
+        var diff = new WebRtcRenegotiator(NullLoggerFactory.Instance, opaqueVideoFrames: false).ComputeDiff(session, reAnswer, reOffer);
 
         Assert.True(diff.IsEmpty);
     }
@@ -92,7 +115,7 @@ public sealed class WebRtcRenegotiatorTests
 
         // Re-offer rotates the remote (offer) ICE ufrag → an ICE restart the track-diff path does not support.
         var (reOffer, reAnswer) = Exchange(videoMids: ["1"], offerUfrag: "restartedUfrag");
-        var renegotiator = new WebRtcRenegotiator(NullLoggerFactory.Instance);
+        var renegotiator = new WebRtcRenegotiator(NullLoggerFactory.Instance, opaqueVideoFrames: false);
 
         var ex = Assert.Throws<InvalidOperationException>(() => renegotiator.ComputeDiff(session, reAnswer, reOffer));
         Assert.Contains("ICE restart", ex.Message, StringComparison.Ordinal);
@@ -110,7 +133,7 @@ public sealed class WebRtcRenegotiatorTests
 
         // Re-offer adds a SECOND audio m-line (MID "1"); both sides send-recv, so it is an inbound additional track.
         var (reOffer, reAnswer) = AudioExchange(audioMids: ["0", "1"]);
-        var renegotiator = new WebRtcRenegotiator(NullLoggerFactory.Instance);
+        var renegotiator = new WebRtcRenegotiator(NullLoggerFactory.Instance, opaqueVideoFrames: false);
 
         var diff = renegotiator.ComputeDiff(session, reAnswer, reOffer);
 
@@ -139,7 +162,7 @@ public sealed class WebRtcRenegotiatorTests
         var (reOffer, reAnswer) = AudioExchange(
             audioMids: ["0", "1"],
             additionalDirection: SdpMediaDirection.SendOnly);
-        var renegotiator = new WebRtcRenegotiator(NullLoggerFactory.Instance);
+        var renegotiator = new WebRtcRenegotiator(NullLoggerFactory.Instance, opaqueVideoFrames: false);
 
         var diff = renegotiator.ComputeDiff(session, reOffer, reAnswer);
 
@@ -160,7 +183,7 @@ public sealed class WebRtcRenegotiatorTests
 
         // Re-offer keeps only the anchor "0" (drops the additional "1").
         var (reOffer, reAnswer) = AudioExchange(audioMids: ["0"]);
-        var renegotiator = new WebRtcRenegotiator(NullLoggerFactory.Instance);
+        var renegotiator = new WebRtcRenegotiator(NullLoggerFactory.Instance, opaqueVideoFrames: false);
 
         var diff = renegotiator.ComputeDiff(session, reAnswer, reOffer);
 
@@ -183,7 +206,7 @@ public sealed class WebRtcRenegotiatorTests
         // A re-offer that drops EVERY audio m-line except the anchor "0" must deactivate the two additional tracks
         // but NEVER the anchor — the anchor is not in AudioMids, so it can never appear in the deactivate list.
         var (reOffer, reAnswer) = AudioExchange(audioMids: ["0"]);
-        var renegotiator = new WebRtcRenegotiator(NullLoggerFactory.Instance);
+        var renegotiator = new WebRtcRenegotiator(NullLoggerFactory.Instance, opaqueVideoFrames: false);
 
         var diff = renegotiator.ComputeDiff(session, reAnswer, reOffer);
 
