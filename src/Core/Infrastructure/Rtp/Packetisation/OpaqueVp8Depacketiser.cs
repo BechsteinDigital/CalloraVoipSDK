@@ -1,27 +1,42 @@
 namespace CalloraVoipSdk.Core.Infrastructure.Rtp.Packetisation;
 
 /// <summary>
-/// VP8 RTP depacketiser (RFC 7741): strips the payload descriptor — including the
-/// optional extension fields peers commonly send (picture ID, TL0PICIDX, TID/KEYIDX,
-/// §4.2) — and reassembles the encoded frame. A frame must open with an S=1/PID=0
-/// packet; anything else while no frame is assembling is discarded (lost frame start).
-/// An S=1/PID=0 packet arriving mid-frame restarts assembly (libwebrtc behaviour: the
-/// partial frame is dropped, the new one assembles cleanly).
+/// VP8 RTP depacketiser for frames the SDK must not read (#223): it reassembles from the payload descriptor
+/// alone (RFC 7741 §4.2) and never touches a byte of the frame data behind it.
 /// </summary>
-internal sealed class Vp8Depacketiser : IVideoDepacketiser
+/// <remarks>
+/// <para>
+/// The difference to <see cref="Vp8Depacketiser"/> is one thing and it is the point: that one derives the
+/// key-frame flag from the VP8 payload header (RFC 7741 §4.3 → RFC 6386 §9.1), which is the first byte of the
+/// <em>frame</em>. Under WebRTC Encoded Transform / SFrame (RFC 9605) that byte is ciphertext, so the flag
+/// becomes noise — wrong key-frame detection, PLI storms, participants without a picture. This implementation
+/// reports <c>isKeyFrame: false</c> unconditionally instead of guessing: the flag belongs in a plaintext RTP
+/// header extension (Dependency Descriptor), which is the follow-up work #223 points at.
+/// </para>
+/// <para>
+/// The descriptor stays readable because a sender generates it from encoder metadata, not by parsing the frame
+/// — that is what makes descriptor-only reassembly possible at all, and it is the same property a real E2EE
+/// sender relies on (Jitsi leaves the first 3/10 payload bytes in the clear for exactly this reason; libwebrtc's
+/// frame cryptor keeps per-codec "unencrypted header bytes"). This depacketiser needs none of them.
+/// </para>
+/// <para>
+/// Stateful per stream and <b>not thread-safe</b>, with the same reassembly cap and discard semantics as the
+/// non-opaque path (K4).
+/// </para>
+/// </remarks>
+internal sealed class OpaqueVp8Depacketiser : IVideoDepacketiser
 {
-    // Above this retained capacity the reassembly buffer is released on Reset so a single large frame
-    // cannot permanently pin memory per track/RID lane; a typical coded frame is well under this.
+    // Above this retained capacity the reassembly buffer is released on Reset so a single large frame cannot
+    // permanently pin memory per track/RID lane.
     private const int RetainCapacityBytes = 256 * 1024;
 
     private readonly MemoryStream _frame = new();
     private readonly int _maxFrameBytes;
     private bool _frameActive;
-    private bool _isKeyFrame;
     private uint _timestamp;
 
     /// <summary>Creates the depacketiser with a hard reassembly cap (K4).</summary>
-    public Vp8Depacketiser(int maxFrameBytes = VideoPayloadFormat.DefaultMaxEncodedFrameBytes)
+    public OpaqueVp8Depacketiser(int maxFrameBytes = VideoPayloadFormat.DefaultMaxEncodedFrameBytes)
     {
         if (maxFrameBytes <= 0)
             throw new ArgumentOutOfRangeException(nameof(maxFrameBytes), "Max frame size must be positive.");
@@ -35,13 +50,13 @@ internal sealed class Vp8Depacketiser : IVideoDepacketiser
     public long OversizedFrameDiscardCount { get; private set; }
 
     /// <inheritdoc />
+    /// <remarks><paramref name="isKeyFrame"/> is always <see langword="false"/> — see the type remarks.</remarks>
     public bool TryProcess(ReadOnlyMemory<byte> rtpPayload, uint rtpTimestamp, bool marker, out byte[]? frame, out bool isKeyFrame)
     {
         frame = null;
         isKeyFrame = false;
 
-        // Frame boundary without a marker (markerless senders): never merge the half
-        // frame into the next one.
+        // Frame boundary without a marker (markerless senders): never merge the half frame into the next one.
         if (rtpTimestamp != _timestamp)
         {
             Reset();
@@ -57,9 +72,6 @@ internal sealed class Vp8Depacketiser : IVideoDepacketiser
         {
             _frame.SetLength(0);
             _frameActive = true;
-            // First byte of the VP8 payload header (RFC 7741 §4.3 → RFC 6386 §9.1): bit 0
-            // is P (inverse key-frame flag); P=0 marks a key frame.
-            _isKeyFrame = (payload[headerLength] & 0x01) == 0;
         }
         else if (!_frameActive)
         {
@@ -67,8 +79,7 @@ internal sealed class Vp8Depacketiser : IVideoDepacketiser
             return false; // continuation of a frame whose start we never saw — drop
         }
 
-        // K4: bound reassembly. A same-timestamp run with no marker cannot grow past the cap — over it the
-        // whole frame under assembly is discarded (Reset), so it never pins memory or desyncs the next frame.
+        // K4: bound reassembly. A same-timestamp run with no marker cannot grow past the cap.
         if (_frame.Length + (payload.Length - headerLength) > _maxFrameBytes)
         {
             OversizedFrameDiscardCount++;
@@ -81,7 +92,6 @@ internal sealed class Vp8Depacketiser : IVideoDepacketiser
             return false;
 
         frame = _frame.ToArray();
-        isKeyFrame = _isKeyFrame;
         _frame.SetLength(0);
         _frameActive = false;
         return frame.Length > 0;
@@ -95,7 +105,6 @@ internal sealed class Vp8Depacketiser : IVideoDepacketiser
         if (_frame.Capacity > RetainCapacityBytes)
             _frame.Capacity = 0;
         _frameActive = false;
-        _isKeyFrame = false;
     }
 
     private bool Discard()
