@@ -18,8 +18,7 @@ namespace CalloraVoipSdk.Hosting;
 public sealed class TurnServerHost : ITurnServerHost
 {
     private readonly CoreTurnServer _server;
-    private int _started;
-    private int _disposed;
+    private readonly ServerHostLifecycle _lifecycle = new();
 
     /// <summary>Builds and binds the server from <paramref name="configuration"/>. The socket is bound here, so
     /// <see cref="LocalEndPoint"/> is valid before <see cref="Start"/>.</summary>
@@ -58,17 +57,12 @@ public sealed class TurnServerHost : ITurnServerHost
     public IPEndPoint LocalEndPoint => _server.LocalEndPoint;
 
     /// <inheritdoc />
-    public void Start()
-    {
-        if (Interlocked.Exchange(ref _started, 1) != 0 || Volatile.Read(ref _disposed) != 0)
-            return;
-        _server.Start();
-    }
+    public void Start() => _lifecycle.Start(_server.Start, this);
 
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
-        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        if (!_lifecycle.TryBeginDispose())
             return;
         await _server.DisposeAsync().ConfigureAwait(false);
     }
