@@ -31,6 +31,11 @@ public static class WebRtcServiceCollectionExtensions
             services.Configure(configure);
         }
 
+        // #166 P2-8: a host that pre-registers its own IWebRtcClient (a fake, or a decorator) keeps that
+        // registration through TryAddSingleton — so the concrete alias must not be layered on top of it, where
+        // it would resolve the foreign implementation and fail the cast at resolution time.
+        var hostOwnsClient = services.Any(descriptor => descriptor.ServiceType == typeof(IWebRtcClient));
+
         services.TryAddSingleton<IWebRtcClient>(sp =>
         {
             var options = sp.GetRequiredService<IOptions<WebRtcOptions>>().Value;
@@ -40,7 +45,10 @@ public static class WebRtcServiceCollectionExtensions
             return new WebRtcClient(options.ToConfiguration(loggerFactory), sp);
         });
 
-        services.TryAddSingleton(sp => (WebRtcClient)sp.GetRequiredService<IWebRtcClient>());
+        if (!hostOwnsClient)
+        {
+            services.TryAddSingleton(ConcreteFacadeAlias.Resolve<IWebRtcClient, WebRtcClient>);
+        }
 
         return new CalloraWebRtcBuilder(services);
     }
