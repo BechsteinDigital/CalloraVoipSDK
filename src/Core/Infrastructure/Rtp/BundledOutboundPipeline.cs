@@ -263,10 +263,13 @@ internal sealed class BundledOutboundPipeline
         byte payloadType,
         uint timestamp,
         string? rid = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        ReadOnlyMemory<byte> dependencyDescriptor = default)
     {
         var track = ResolveTrack(mid, rid);
-        return SendCoreAsync(mid, track, payload, marker, payloadType, timestampOverride: timestamp, advanceTimestamp: false, cancellationToken);
+        return SendCoreAsync(
+            mid, track, payload, marker, payloadType, timestampOverride: timestamp, advanceTimestamp: false,
+            cancellationToken, dependencyDescriptor);
     }
 
     /// <summary>
@@ -360,7 +363,8 @@ internal sealed class BundledOutboundPipeline
         byte payloadType,
         uint? timestampOverride,
         bool advanceTimestamp,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ReadOnlyMemory<byte> dependencyDescriptor = default)
     {
         // Fail closed before building anything: a BUNDLE transport is DTLS-SRTP only and must never
         // emit plaintext RTP. Checked first so the track's sequence cursor is not consumed on a drop.
@@ -380,7 +384,8 @@ internal sealed class BundledOutboundPipeline
             ? unchecked((ushort)Interlocked.Increment(ref _transportCcSequence))
             : null;
 
-        var packet = track.BuildPacket(payload, marker, payloadType, timestampOverride, advanceTimestamp, transportCcSequence);
+        var packet = track.BuildPacket(
+            payload, marker, payloadType, timestampOverride, advanceTimestamp, transportCcSequence, dependencyDescriptor);
         var datagram = _codec.Encode(packet);
 
         try

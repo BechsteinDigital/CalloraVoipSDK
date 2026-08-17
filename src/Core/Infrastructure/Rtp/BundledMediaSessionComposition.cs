@@ -161,7 +161,9 @@ internal static class BundledMediaSessionComposition
                 foreach (var encoding in video.Encodings)
                 {
                     outbound.RegisterTrack(video.Mid, encoding.Rid,
-                        BuildEncodingTrack(options, video.Mid, encoding.Ssrc, video.PayloadType, encoding.Rid, ridExtensionId));
+                        BuildEncodingTrack(
+                            options, video.Mid, encoding.Ssrc, video.PayloadType, encoding.Rid, ridExtensionId,
+                            video.DependencyDescriptorExtensionId));
                     registered.Add(encoding.Rid);
                 }
             }
@@ -215,7 +217,9 @@ internal static class BundledMediaSessionComposition
     /// </summary>
     public static BundledOutboundTrack BuildOutboundTrack(BundledMediaSessionOptions options, BundledTrackConfig track) =>
         new(track.Ssrc, track.PayloadType, track.SamplesPerPacket,
-            new RtpOutboundHeaderExtensionStamper(options.TransportWideCcExtensionId, options.MidExtensionId, track.Mid),
+            new RtpOutboundHeaderExtensionStamper(
+                options.TransportWideCcExtensionId, options.MidExtensionId, track.Mid,
+                dependencyDescriptorExtensionId: track.DependencyDescriptorExtensionId),
             options.InitialSequenceNumber, options.InitialTimestamp,
             clockRate: track.VideoCodecName is null ? (uint)Math.Max(0, track.ClockRate) : VideoRtpClockRate);
 
@@ -318,10 +322,12 @@ internal static class BundledMediaSessionComposition
     // that marks every packet with the MID and this encoding's RID (RFC 8852). Video packets carry an
     // explicit frame timestamp, so the timestamp cursor never advances (samplesPerPacket: 0).
     private static BundledOutboundTrack BuildEncodingTrack(
-        BundledMediaSessionOptions options, string mid, uint ssrc, byte payloadType, string rid, byte ridExtensionId) =>
+        BundledMediaSessionOptions options, string mid, uint ssrc, byte payloadType, string rid, byte ridExtensionId,
+        byte? dependencyDescriptorExtensionId = null) =>
         new(ssrc, payloadType, samplesPerPacket: 0,
             new RtpOutboundHeaderExtensionStamper(
-                options.TransportWideCcExtensionId, options.MidExtensionId, mid, ridExtensionId, rid),
+                options.TransportWideCcExtensionId, options.MidExtensionId, mid, ridExtensionId, rid,
+                dependencyDescriptorExtensionId),
             options.InitialSequenceNumber, options.InitialTimestamp,
             clockRate: VideoRtpClockRate);
 }

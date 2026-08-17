@@ -1,3 +1,4 @@
+using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packetisation;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
@@ -21,6 +22,13 @@ internal sealed class BundledVideoSendEncoding(string? rid, byte payloadType, IV
 
     /// <summary>Serialises whole-frame sends on this encoding's RTP stream.</summary>
     public SemaphoreSlim SendSync { get; } = new(1, 1);
+
+    /// <summary>
+    /// Writes this encoding's Dependency Descriptors (#225). Per encoding, not per track: a simulcast layer is
+    /// its own RTP stream with its own frame numbering, and sharing a writer would interleave two streams'
+    /// counters. Guarded by <see cref="SendSync"/> like the packetiser next to it.
+    /// </summary>
+    public DependencyDescriptorWriter Descriptors { get; } = new();
 
     /// <inheritdoc />
     public void Dispose() => SendSync.Dispose();

@@ -386,11 +386,15 @@ internal sealed class BundledVideoTrack : IDisposable
     /// RFC 7741 §4.1: the marker bit closes the frame on the last payload).
     /// </summary>
     /// <exception cref="InvalidOperationException">This is a simulcast track — send with a rid instead.</exception>
-    public Task SendFrameAsync(ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken ct = default)
+    public Task SendFrameAsync(
+        ReadOnlyMemory<byte> encodedFrame,
+        uint rtpTimestamp,
+        CancellationToken ct = default,
+        bool? isKeyFrame = null)
     {
         if (_single is not { } single)
             throw new InvalidOperationException("This is a simulcast video track; send with a rid via SendFrameAsync(rid, …).");
-        return SendOnEncodingAsync(single, encodedFrame, rtpTimestamp, ct);
+        return SendOnEncodingAsync(single, encodedFrame, rtpTimestamp, isKeyFrame, ct);
     }
 
     /// <summary>
@@ -398,15 +402,25 @@ internal sealed class BundledVideoTrack : IDisposable
     /// stream (RFC 8853), stamping the RID per packet. Layers send independently.
     /// </summary>
     /// <exception cref="ArgumentException">No encoding is configured for <paramref name="rid"/>.</exception>
-    public Task SendFrameAsync(string rid, ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken ct = default)
+    public Task SendFrameAsync(
+        string rid,
+        ReadOnlyMemory<byte> encodedFrame,
+        uint rtpTimestamp,
+        CancellationToken ct = default,
+        bool? isKeyFrame = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(rid);
         if (!_layers.TryGetValue(rid, out var encoding))
             throw new ArgumentException($"No simulcast encoding is configured for rid '{rid}'.", nameof(rid));
-        return SendOnEncodingAsync(encoding, encodedFrame, rtpTimestamp, ct);
+        return SendOnEncodingAsync(encoding, encodedFrame, rtpTimestamp, isKeyFrame, ct);
     }
 
-    private async Task SendOnEncodingAsync(BundledVideoSendEncoding encoding, ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken ct)
+    private async Task SendOnEncodingAsync(
+        BundledVideoSendEncoding encoding,
+        ReadOnlyMemory<byte> encodedFrame,
+        uint rtpTimestamp,
+        bool? isKeyFrame,
+        CancellationToken ct)
     {
         var payloads = encoding.Packetiser.Packetise(encodedFrame, MaxRtpPayloadSize);
 
@@ -415,10 +429,27 @@ internal sealed class BundledVideoTrack : IDisposable
         await encoding.SendSync.WaitAsync(ct).ConfigureAwait(false);
         try
         {
+            // Dependency Descriptor (#225): written only when the peer negotiated the extension AND the caller
+            // said whether this is a key frame. Without that answer the SDK has nothing truthful to declare —
+            // it does not encode, and for an opaque frame (#223) it cannot look — so it stamps no descriptor
+            // rather than asserting a template the frame may not match.
+            var writeDescriptor = _dependencyDescriptorId is not null && isKeyFrame is not null;
+            var frameNumber = writeDescriptor ? encoding.Descriptors.NextFrame() : (ushort)0;
+
+            var first = true;
             foreach (var payload in payloads)
+            {
+                var descriptor = writeDescriptor
+                    ? encoding.Descriptors.Write(
+                        isKeyFrame!.Value, startOfFrame: first, endOfFrame: payload.IsLastOfFrame, frameNumber)
+                    : null;
+                first = false;
+
                 await _outbound.SendTimestampedAsync(
-                        _mid, payload.Payload, payload.IsLastOfFrame, encoding.PayloadType, rtpTimestamp, encoding.Rid, ct)
+                        _mid, payload.Payload, payload.IsLastOfFrame, encoding.PayloadType, rtpTimestamp,
+                        encoding.Rid, ct, descriptor ?? default(ReadOnlyMemory<byte>))
                     .ConfigureAwait(false);
+            }
         }
         finally
         {

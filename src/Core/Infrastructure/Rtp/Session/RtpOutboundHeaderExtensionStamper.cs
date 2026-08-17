@@ -22,6 +22,11 @@ internal sealed class RtpOutboundHeaderExtensionStamper
     private readonly RtpExtension? _constantOnlyExtension;
     private readonly bool _transportCcFitsOneByte;
 
+    // The negotiated Dependency Descriptor id (#225), or null when the peer did not accept the extension.
+    // Its element is per packet — the descriptor differs by frame boundary — so it never joins the
+    // pre-built constant extension below.
+    private readonly byte? _dependencyDescriptorId;
+
     /// <summary>
     /// Creates the stamper from the negotiated extension ids. MID is stamped only when both
     /// <paramref name="midExtensionId"/> and a non-empty <paramref name="mid"/> are supplied; RID likewise
@@ -33,9 +38,11 @@ internal sealed class RtpOutboundHeaderExtensionStamper
         byte? midExtensionId,
         string? mid,
         byte? ridExtensionId = null,
-        string? rid = null)
+        string? rid = null,
+        byte? dependencyDescriptorExtensionId = null)
     {
         _transportCcId = transportWideCcExtensionId;
+        _dependencyDescriptorId = dependencyDescriptorExtensionId;
 
         var constants = new List<RtpHeaderExtensionElement>(2);
         if (midExtensionId is { } midId && !string.IsNullOrEmpty(mid))
@@ -52,36 +59,52 @@ internal sealed class RtpOutboundHeaderExtensionStamper
             || ccId <= OneByteRtpHeaderExtensions.MaxId;
     }
 
-    /// <summary>Whether this stamper adds any header extension at all (transport-cc and/or MID/RID negotiated).</summary>
-    public bool StampsAnything => _transportCcId is not null || _constantElements.Length > 0;
+    /// <summary>Whether this stamper adds any header extension at all (transport-cc, MID/RID, or descriptor).</summary>
+    public bool StampsAnything =>
+        _transportCcId is not null || _constantElements.Length > 0 || _dependencyDescriptorId is not null;
 
     /// <summary>
     /// Builds the header extension for one outgoing packet. <paramref name="transportCcSequence"/> is the
     /// transport-wide counter to stamp, or <see langword="null"/> when transport-cc is not stamped on this
     /// packet. Returns <see langword="null"/> when there is nothing to stamp.
     /// </summary>
-    public RtpExtension? Build(ushort? transportCcSequence)
+    /// <param name="dependencyDescriptor">
+    /// The Dependency Descriptor bytes for this packet (#225), or empty when the extension was not
+    /// negotiated or the caller has nothing to declare about the frame. Per packet, because the descriptor
+    /// carries this packet's frame-boundary flags.
+    /// </param>
+    public RtpExtension? Build(ushort? transportCcSequence, ReadOnlyMemory<byte> dependencyDescriptor = default)
     {
+        var descriptor = _dependencyDescriptorId is { } ddId && !dependencyDescriptor.IsEmpty
+            ? new RtpHeaderExtensionElement(ddId, dependencyDescriptor)
+            : (RtpHeaderExtensionElement?)null;
+
         var transportCc = _transportCcId is { } tcId && transportCcSequence is { } ccSeq
             ? OneByteRtpHeaderExtensions.TransportSequenceNumber(tcId, ccSeq)
             : (RtpHeaderExtensionElement?)null;
 
-        if (_constantElements.Length > 0)
+        if (_constantElements.Length > 0 || descriptor is not null)
         {
             // BUNDLE / simulcast path: the constant MID (and RID) elements always, plus transport-cc when
             // present. The constants re-use their pre-built elements; the combined form is rebuilt per
             // packet because the counter changes.
-            if (transportCc is not { } tc)
+            if (transportCc is not { } tc && descriptor is null)
                 return _constantOnlyExtension;
 
-            var combined = new RtpHeaderExtensionElement[_constantElements.Length + 1];
+            var extra = (transportCc is null ? 0 : 1) + (descriptor is null ? 0 : 1);
+            var combined = new RtpHeaderExtensionElement[_constantElements.Length + extra];
             Array.Copy(_constantElements, combined, _constantElements.Length);
-            combined[^1] = tc;
+            var next = _constantElements.Length;
+            if (descriptor is { } dd)
+                combined[next++] = dd;
+            if (transportCc is { } tcc)
+                combined[next] = tcc;
             return RtpHeaderExtensions.Encode(combined);
         }
 
         if (_transportCcId is not { } id || transportCcSequence is not { } seq)
             return null;
+
 
         // Non-BUNDLE path (all current calls): transport-cc alone. The direct writer is one-byte only, so
         // a negotiated id above 14 takes the general encoder instead (#224); with an id that fits, the
