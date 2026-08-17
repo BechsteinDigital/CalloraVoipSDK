@@ -54,6 +54,9 @@ internal sealed class BundledVideoTrack : IDisposable
     private readonly string _codecName;
     private readonly int _reorderWindowDepth;
 
+    // The negotiated Dependency Descriptor extension id (#225), or null when the peer did not accept it.
+    private readonly byte? _dependencyDescriptorId;
+
     // #223/ADR-068: this track's frames are end-to-end encrypted (WebRTC Encoded Transform / SFrame, RFC 9605),
     // so no half of the payload format may read the frame. Retained because a lazily-built simulcast RID lane
     // resolves its own depacketiser later and must resolve the SAME policy — a lane that fell back to the
@@ -193,11 +196,13 @@ internal sealed class BundledVideoTrack : IDisposable
         byte? rtxPayloadType = null,
         uint? rtxSsrc = null,
         IReadOnlyList<string>? receiveRids = null,
-        bool opaqueFrames = false)
+        bool opaqueFrames = false,
+        byte? dependencyDescriptorExtensionId = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(mid);
         ArgumentNullException.ThrowIfNull(loggerFactory);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(reorderWindowDepth);
+        _dependencyDescriptorId = dependencyDescriptorExtensionId;
         _mid = mid;
         _outbound = outbound ?? throw new ArgumentNullException(nameof(outbound));
         _logger = loggerFactory.CreateLogger<BundledVideoTrack>();
@@ -279,10 +284,12 @@ internal sealed class BundledVideoTrack : IDisposable
         int reorderWindowDepth,
         ILoggerFactory loggerFactory,
         IReadOnlyList<string>? receiveRids = null,
-        bool opaqueFrames = false)
+        bool opaqueFrames = false,
+        byte? dependencyDescriptorExtensionId = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(mid);
         ArgumentNullException.ThrowIfNull(rids);
+        _dependencyDescriptorId = dependencyDescriptorExtensionId;
         ArgumentNullException.ThrowIfNull(loggerFactory);
         if (rids.Count == 0)
             throw new ArgumentException("A simulcast video track needs at least one rid.", nameof(rids));
@@ -631,8 +638,25 @@ internal sealed class BundledVideoTrack : IDisposable
         lane.LastDeliveredSequence = packet.SequenceNumber;
         lane.HasDelivered = true;
 
+        // Dependency Descriptor (#225), when the peer negotiated it: the key frame comes from the RTP header
+        // rather than the payload. Read before reassembly because the descriptor rides on
+        // each packet while the facts belong to the frame — the one starting the frame is the one that
+        // describes it.
+        if (TryReadDescriptor(lane, packet, out var descriptor)
+            && (descriptor.StartOfFrame || lane.PendingDescriptor is null))
+        {
+            lane.PendingDescriptor = descriptor;
+        }
+
         if (!lane.Depacketiser.TryProcess(packet.Payload, packet.Timestamp, packet.Marker, out var frame, out var isKeyFrame))
             return;
+
+        // The descriptor wins where it exists: for an end-to-end encrypted stream the payload-derived flag is
+        // a guess about ciphertext (#223), and even in the clear the sender knows better than the parser does.
+        var frameDescriptor = lane.PendingDescriptor;
+        lane.PendingDescriptor = null;
+        if (frameDescriptor is { } fromHeader)
+            isKeyFrame = fromHeader.IsKeyFrame;
 
         Interlocked.Increment(ref _framesReceived);
         if (isKeyFrame)
@@ -648,6 +672,22 @@ internal sealed class BundledVideoTrack : IDisposable
         {
             _logger.LogError(ex, "Unhandled exception in bundled video FrameReceived handler.");
         }
+    }
+
+    // Parses the Dependency Descriptor from a packet's header extension, in whichever RFC 8285 wire form it
+    // arrived (#224 — the descriptor is what needed the two-byte one). Null when the extension was not
+    // negotiated, is absent from this packet, or is malformed; the caller then keeps the payload-derived flag.
+    private bool TryReadDescriptor(
+        BundledVideoInboundLayer lane, RtpPacket packet, out DependencyDescriptor descriptor)
+    {
+        descriptor = default;
+        if (_dependencyDescriptorId is not { } id)
+            return false;
+        if (!RtpHeaderExtensions.TryFindValue(packet.HeaderExtension, id, out var value))
+            return false;
+
+        // The reader is the lane's: each simulcast encoding is its own stream with its own template structure.
+        return lane.Descriptors.TryParse(value, out descriptor);
     }
 
     /// <summary>

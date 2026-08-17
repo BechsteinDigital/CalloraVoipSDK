@@ -381,6 +381,7 @@ internal static class WebRtcSessionFactory
                     Encodings = encodings,
                     ReceiveRids = NegotiatedReceiveRids(video, remoteVideo),
                     OpaqueVideoFrames = opaqueVideoFrames,
+                    DependencyDescriptorExtensionId = DependencyDescriptorExtensionId(video),
                 };
             }
 
@@ -429,6 +430,7 @@ internal static class WebRtcSessionFactory
             RtxSsrc = rtxSsrc,
             ReceiveRids = NegotiatedReceiveRids(video, remoteVideo),
             OpaqueVideoFrames = opaqueVideoFrames,
+            DependencyDescriptorExtensionId = DependencyDescriptorExtensionId(video),
         };
     }
 
@@ -609,6 +611,17 @@ internal static class WebRtcSessionFactory
         var tcc = media?.Extensions.FirstOrDefault(
             e => string.Equals(e.Uri, RtpHeaderExtensionUris.TransportWideCc, StringComparison.Ordinal));
         return tcc is not null && tcc.Id is >= 1 and <= 14 ? (byte)tcc.Id : null;
+    }
+
+    // The negotiated Dependency Descriptor header-extension id on a media section (#225), or null when the
+    // peer did not accept it. Read from our own (local) description like the other extension ids. Unlike
+    // those, the full RFC 8285 id range is accepted: the descriptor is what pushed the SDK to the two-byte
+    // form (#224), so restricting it to the one-byte range here would defeat the point.
+    private static byte? DependencyDescriptorExtensionId(SdpMediaDescription? media)
+    {
+        var descriptor = media?.Extensions.FirstOrDefault(
+            e => string.Equals(e.Uri, RtpHeaderExtensionUris.DependencyDescriptor, StringComparison.Ordinal));
+        return descriptor is not null && descriptor.Id is >= 1 and <= 255 ? (byte)descriptor.Id : null;
     }
 
     // Local DTLS role from both a=setup values (RFC 4145 §4 / RFC 5763 §5): a concrete local role wins;

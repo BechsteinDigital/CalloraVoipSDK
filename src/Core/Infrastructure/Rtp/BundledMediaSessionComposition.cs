@@ -152,7 +152,8 @@ internal static class BundledMediaSessionComposition
                 receiveRids: video.ReceiveRids,
                 // End-to-end encrypted frames: resolve the opaque payload format instead of the clear-media one
                 // (#223, ADR-068) — for every simulcast layer and receive lane of this track.
-                opaqueFrames: video.OpaqueVideoFrames);
+                opaqueFrames: video.OpaqueVideoFrames,
+                dependencyDescriptorExtensionId: video.DependencyDescriptorExtensionId);
 
             var registered = new List<string?>(video.Encodings.Count);
             try
@@ -190,7 +191,9 @@ internal static class BundledMediaSessionComposition
             receiveRids: video.ReceiveRids,
             // End-to-end encrypted frames: resolve the opaque payload format instead of the clear-media one
             // (#223, ADR-068), so neither half of this track reads the frame.
-            opaqueFrames: video.OpaqueVideoFrames);
+            opaqueFrames: video.OpaqueVideoFrames,
+            // Key frame and layer from the RTP header when the peer negotiated the descriptor (#225).
+            dependencyDescriptorExtensionId: video.DependencyDescriptorExtensionId);
 
         try
         {
