@@ -153,6 +153,29 @@ public sealed class OpaqueVideoSwitchTests
         Assert.Equal([true], clearClaims);    // and the clear path is unchanged
     }
 
+    /// <summary>
+    /// #310 / ADR-071: the opaque path's <c>false</c> always meant "unknown", and now says so. Reporting it
+    /// as an ordinary negative is what let a consumer mistake "nobody answered" for "not a key frame".
+    /// </summary>
+    [Fact]
+    public void An_opaque_lane_reports_the_key_frame_source_as_unknown()
+    {
+        using var opaqueTrack = SimulcastTrack("VP8", opaqueFrames: true);
+        var opaque = new List<(bool IsKeyFrame, VideoKeyFrameSource Source)>();
+        opaqueTrack.FrameReceived += (frame, _) => opaque.Add((frame.IsKeyFrame, frame.KeyFrameSource));
+
+        using var clearTrack = SimulcastTrack("VP8", opaqueFrames: false);
+        var clear = new List<(bool IsKeyFrame, VideoKeyFrameSource Source)>();
+        clearTrack.FrameReceived += (frame, _) => clear.Add((frame.IsKeyFrame, frame.KeyFrameSource));
+
+        var packet = Vp8Packet(ssrc: 0x1111, seq: 1000, frameByte: 0x00);
+        opaqueTrack.OnRtpPacket(packet, rid: "h");
+        clearTrack.OnRtpPacket(packet, rid: "h");
+
+        Assert.Equal([(false, VideoKeyFrameSource.Unknown)], opaque);
+        Assert.Equal([(true, VideoKeyFrameSource.Payload)], clear);
+    }
+
     // ── harness ──────────────────────────────────────────────────────────────────────────────
 
     private static BundledVideoTrack VideoTrack(BundledOutboundPipeline outbound, string codec, bool opaqueFrames) =>

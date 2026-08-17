@@ -691,6 +691,15 @@ internal sealed class BundledVideoTrack : IDisposable
         if (frameDescriptor is { } fromHeader)
             isKeyFrame = fromHeader.IsKeyFrame;
 
+        // Which of the two answered, surfaced rather than merged away (#310): the header's holds under
+        // end-to-end encryption, the payload's only as far as the sender left bytes readable, and a
+        // payload format that reads nothing answers "unknown" — which is not the same as "no".
+        var keyFrameSource = frameDescriptor is not null
+            ? VideoKeyFrameSource.RtpHeaderExtension
+            : lane.Depacketiser.DerivesKeyFrameFromPayload
+                ? VideoKeyFrameSource.Payload
+                : VideoKeyFrameSource.Unknown;
+
         Interlocked.Increment(ref _framesReceived);
         if (isKeyFrame)
         {
@@ -701,7 +710,8 @@ internal sealed class BundledVideoTrack : IDisposable
         {
             FrameReceived?.Invoke(
                 new InboundVideoFrame(
-                    frame!, packet.Timestamp, isKeyFrame, frameDescriptor?.SpatialId, frameDescriptor?.TemporalId),
+                    frame!, packet.Timestamp, isKeyFrame,
+                    frameDescriptor?.SpatialId, frameDescriptor?.TemporalId, keyFrameSource),
                 lane.Rid);
         }
         catch (Exception ex)

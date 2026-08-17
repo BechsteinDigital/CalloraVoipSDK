@@ -44,6 +44,10 @@ internal sealed class OpaqueVp8Depacketiser : IVideoDepacketiser
     }
 
     /// <inheritdoc />
+    /// <remarks>Never reads the payload, so it never claims a key frame (#223, #310).</remarks>
+    public bool DerivesKeyFrameFromPayload => false;
+
+    /// <inheritdoc />
     public long DiscardedPacketCount { get; private set; }
 
     /// <inheritdoc />

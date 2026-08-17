@@ -28,13 +28,13 @@ public sealed class WebRtcVideoLayerInformationTests
 
         var aConnected = Connected(a);
         var bConnected = Connected(b);
-        var arrived = new TaskCompletionSource<(int? Spatial, int? Temporal, bool IsKeyFrame)>(
+        var arrived = new TaskCompletionSource<(int? Spatial, int? Temporal, bool IsKeyFrame, KeyFrameSource Source)>(
             TaskCreationOptions.RunContinuationsAsynchronously);
         b.TrackReceived += (_, track) =>
         {
             if (track.Kind == TrackKind.Video)
                 track.FrameReceived += (_, frame) =>
-                    arrived.TrySetResult((frame.SpatialId, frame.TemporalId, frame.IsKeyFrame));
+                    arrived.TrySetResult((frame.SpatialId, frame.TemporalId, frame.IsKeyFrame, frame.KeyFrameSource));
         };
 
         var offer = a.CreateOffer();
@@ -60,6 +60,8 @@ public sealed class WebRtcVideoLayerInformationTests
         Assert.Equal(0, received.Spatial);
         Assert.Equal(0, received.Temporal);
         Assert.True(received.IsKeyFrame);
+        // #310: and the frame says where that flag came from — the header, not a payload guess.
+        Assert.Equal(KeyFrameSource.RtpHeaderExtension, received.Source);
     }
 
     // ── harness ──────────────────────────────────────────────────────────────────────────────

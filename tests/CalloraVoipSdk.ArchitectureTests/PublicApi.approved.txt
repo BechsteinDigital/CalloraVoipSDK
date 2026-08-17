@@ -1030,8 +1030,9 @@
   CalloraVoipSdk.WebRtc.DtmfTone.ToneCode : System.Byte { get, init }
   CalloraVoipSdk.WebRtc.DtmfTone.ToString() : System.String
   CalloraVoipSdk.WebRtc.EncodedFrame..ctor(System.ReadOnlyMemory<System.Byte> payload, System.Nullable<System.UInt32> rtpTimestamp, System.Boolean isKeyFrame, System.Nullable<System.Int64> presentationTimeUsec, System.String rid = default)
-  CalloraVoipSdk.WebRtc.EncodedFrame..ctor(System.ReadOnlyMemory<System.Byte> payload, System.Nullable<System.UInt32> rtpTimestamp, System.Boolean isKeyFrame, System.Nullable<System.Int64> presentationTimeUsec, System.String rid, System.Nullable<System.Int32> spatialId, System.Nullable<System.Int32> temporalId)
+  CalloraVoipSdk.WebRtc.EncodedFrame..ctor(System.ReadOnlyMemory<System.Byte> payload, System.Nullable<System.UInt32> rtpTimestamp, System.Boolean isKeyFrame, System.Nullable<System.Int64> presentationTimeUsec, System.String rid, System.Nullable<System.Int32> spatialId, System.Nullable<System.Int32> temporalId, CalloraVoipSdk.WebRtc.KeyFrameSource keyFrameSource = default)
   CalloraVoipSdk.WebRtc.EncodedFrame.IsKeyFrame : System.Boolean { get }
+  CalloraVoipSdk.WebRtc.EncodedFrame.KeyFrameSource : CalloraVoipSdk.WebRtc.KeyFrameSource { get }
   CalloraVoipSdk.WebRtc.EncodedFrame.Payload : System.ReadOnlyMemory<System.Byte> { get }
   CalloraVoipSdk.WebRtc.EncodedFrame.PresentationTimeUsec : System.Nullable<System.Int64> { get }
   CalloraVoipSdk.WebRtc.EncodedFrame.Rid : System.String { get }
@@ -1098,6 +1099,9 @@
   CalloraVoipSdk.WebRtc.IWebRtcTrickleSignaling.ReceiveCandidateAsync(System.Threading.CancellationToken cancellationToken = default) : System.Threading.Tasks.Task<System.String>
   CalloraVoipSdk.WebRtc.IWebRtcTrickleSignaling.SendCandidateAsync(System.String candidate, System.Threading.CancellationToken cancellationToken = default) : System.Threading.Tasks.Task
   CalloraVoipSdk.WebRtc.IWebRtcTrickleSignaling.SendEndOfCandidatesAsync(System.Threading.CancellationToken cancellationToken = default) : System.Threading.Tasks.Task
+  CalloraVoipSdk.WebRtc.KeyFrameSource.Payload = enum-value
+  CalloraVoipSdk.WebRtc.KeyFrameSource.RtpHeaderExtension = enum-value
+  CalloraVoipSdk.WebRtc.KeyFrameSource.Unknown = enum-value
   CalloraVoipSdk.WebRtc.MediaDirection.Inbound = enum-value
   CalloraVoipSdk.WebRtc.MediaDirection.Outbound = enum-value
   CalloraVoipSdk.WebRtc.PeerConnectionState.Closed = enum-value
@@ -1321,6 +1325,7 @@ TYPE enum CalloraVoipSdk.DialStatus
 TYPE enum CalloraVoipSdk.IceServerType
 TYPE enum CalloraVoipSdk.IceTransport
 TYPE enum CalloraVoipSdk.SipTransport
+TYPE enum CalloraVoipSdk.WebRtc.KeyFrameSource
 TYPE enum CalloraVoipSdk.WebRtc.MediaDirection
 TYPE enum CalloraVoipSdk.WebRtc.PeerConnectionState
 TYPE enum CalloraVoipSdk.WebRtc.SignalingState
