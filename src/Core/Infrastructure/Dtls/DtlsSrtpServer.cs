@@ -15,12 +15,17 @@ internal sealed class DtlsSrtpServer : DefaultTlsServer
     // servable — the DefaultTlsServer defaults would happily pick an RSA suite and then
     // die with internal_error when asked for RSA signer credentials. AES-128-GCM first:
     // the WebRTC/libwebrtc default.
+    //
+    // AEAD only (#229). A CBC suite was offered alongside these and never chosen: every browser
+    // negotiates one of the three above. Offering it bought nothing and cost an answer in every
+    // security review — Anlage 31b BMV-Ä has the DTLS handshake assessed against BSI TR-02102,
+    // where AES-CBC with SHA-256 in TLS is not what one wants to have to defend. What is not
+    // offered cannot be negotiated.
     private static readonly int[] EcdsaCipherSuites =
     {
         CipherSuite.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
         CipherSuite.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
         CipherSuite.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
-        CipherSuite.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256,
     };
 
     private readonly TlsCrypto _crypto;
