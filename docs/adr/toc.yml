@@ -90,6 +90,8 @@
       href: ADR-035-rtx-retransmission-mechanics.md
     - name: "ADR-070: Two-Byte RTP Header Extensions and Form Selection by Need"
       href: ADR-070-two-byte-rtp-header-extensions.md
+    - name: "ADR-071: What the Clear-Media Video Path Reads, and Which of It Survives Partial Encryption"
+      href: ADR-071-payload-reads-under-partial-encryption.md
 - name: "RTCP, Feedback, Congestion & Timing"
   items:
     - name: "ADR-036: RTCP Wire Codec — Feedback/XR Framing and Tolerant Compound Decode"

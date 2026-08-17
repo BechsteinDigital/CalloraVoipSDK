@@ -100,6 +100,7 @@ Guardrails** (see `ADR-011` for the format model).
 | [ADR-034](ADR-034-secondary-stream-and-onebyte-header-extensions.md) | Secondary-Stream Transport and RFC 8285 One-Byte Header Extensions | Accepted | 2026-07-14 |
 | [ADR-035](ADR-035-rtx-retransmission-mechanics.md) | RTX Retransmission Mechanics — OSN Encapsulation and the Retransmit Buffer | Accepted | 2026-07-14 |
 | [ADR-070](ADR-070-two-byte-rtp-header-extensions.md) | Two-Byte RTP Header Extensions and Form Selection by Need | Accepted | 2026-08-17 |
+| [ADR-071](ADR-071-payload-reads-under-partial-encryption.md) | What the Clear-Media Video Path Reads, and Which of It Survives Partial Encryption | Accepted | 2026-08-17 |
 
 ### RTCP, Feedback, Congestion Control & Timing
 

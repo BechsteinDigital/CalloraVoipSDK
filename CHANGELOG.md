@@ -113,6 +113,15 @@ configurations. Validated end-to-end against a real Asterisk endpoint that carri
   per m-line via `a=extmap`, written on outbound video, and read on inbound video, where it overrides the
   payload-derived key-frame flag; a peer that does not offer the extension keeps the previous behaviour
   unchanged.
+- **`EncodedFrame.KeyFrameSource`** (#310, ADR-071) — where `IsKeyFrame` came from: the sender's Dependency
+  Descriptor (`RtpHeaderExtension`), the depacketiser's reading of the payload (`Payload`), or nothing at all
+  (`Unknown`). It matters because the two sources do not survive end-to-end encryption equally well. An
+  inventory of every payload byte the clear-media path reads is in ADR-071; the short version is that H.264's
+  key-frame detection holds even for an encrypting sender — it reads only NAL headers and packetiser-written
+  framing, which every shipping implementation leaves in the clear — while VP8's single frame byte does not.
+  No reference stack (libwebrtc, mediasoup, LiveKit, Pion) reports this distinction; they hand out a merged
+  boolean. A forwarder built on this SDK can require a header-derived flag and treat the rest as unknown.
+  Nothing changes for a session in the clear: the payload is still read and still believed.
 - **`EncodedFrame.SpatialId` and `EncodedFrame.TemporalId`** (#225) — the layer the sender put a received
   frame on, so an SFU can choose a layer without opening the payload. `null` means unknown, not base layer:
   the peer negotiated no descriptor, the frame carried none, or the stream was joined before the sender
@@ -138,8 +147,11 @@ configurations. Validated end-to-end against a real Asterisk endpoint that carri
   fluently (video on plus opacity, otherwise identical to `WithVideo`). Default off, so no existing media
   path changes. Scoped to the peer, not the individual track: it covers every video track of that peer,
   including one added later by a renegotiation — the compliance requirement it serves covers the whole
-  session, and SDP carries no per-m-line attribute to derive it from. With the switch on,
-  `EncodedFrame.IsKeyFrame` is always `false` and means "unknown", not "no".
+  session, and SDP carries no per-m-line attribute to derive it from. With the switch on and **no**
+  Dependency Descriptor negotiated, `EncodedFrame.IsKeyFrame` is `false` and means "unknown", not "no" —
+  which `EncodedFrame.KeyFrameSource` now says outright instead of leaving it to this paragraph. With the
+  descriptor negotiated, even an opaque session gets a real key-frame flag: that one is written before the
+  encryption.
 - **`SipAccount.Register`** — `true` by default. Set to `false` for an IP-authenticated static-IP trunk: the
   line never sends REGISTER, reaches `LineState.Ready`, and dials straight at `SipServer`/`OutboundProxy`.
   Deregistering such a line sends nothing, because there is no binding to remove. Not the same as

@@ -581,7 +581,12 @@ internal sealed class PeerConnection : IPeerConnection
     // did not negotiate the extension, where the frame looks exactly as it did before.
     private static EncodedFrame Encoded(InboundVideoFrame frame, string? rid) =>
         new(frame.Payload, frame.RtpTimestamp, frame.IsKeyFrame, presentationTimeUsec: null, rid,
-            frame.SpatialId, frame.TemporalId);
+            frame.SpatialId, frame.TemporalId, frame.KeyFrameSource switch
+            {
+                VideoKeyFrameSource.RtpHeaderExtension => KeyFrameSource.RtpHeaderExtension,
+                VideoKeyFrameSource.Payload => KeyFrameSource.Payload,
+                _ => KeyFrameSource.Unknown,
+            });
 
     // RFC 8830: a stream id of "-" means the track belongs to no MediaStream.
     private static string? StreamId(SdpMsid? msid)

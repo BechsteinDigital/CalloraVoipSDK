@@ -33,6 +33,15 @@ internal interface IVideoDepacketiser
     bool TryProcess(ReadOnlyMemory<byte> rtpPayload, uint rtpTimestamp, bool marker, out byte[]? frame, out bool isKeyFrame);
 
     /// <summary>
+    /// Whether this depacketiser derives <c>isKeyFrame</c> by reading the payload (#310). A payload-derived
+    /// answer is only as trustworthy as the payload is readable: a sender that encrypts the frame end to end
+    /// (RFC 9605) may leave the bytes it reads as ciphertext, and then the flag is a coin toss rather than an
+    /// answer. <see langword="false"/> marks a depacketiser that never claims one, so the receive path can
+    /// report the difference instead of hiding it.
+    /// </summary>
+    bool DerivesKeyFrameFromPayload { get; }
+
+    /// <summary>
     /// Discards any frame under assembly — call on RTP sequence gaps so a fragment of a
     /// lost frame is never glued to the next one.
     /// </summary>

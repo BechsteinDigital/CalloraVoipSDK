@@ -22,6 +22,7 @@ public readonly struct EncodedFrame
     /// <param name="rid">The frame's simulcast <c>a=rid</c>, or <see langword="null"/>.</param>
     /// <param name="spatialId">The frame's spatial layer, or <see langword="null"/> when unknown.</param>
     /// <param name="temporalId">The frame's temporal layer, or <see langword="null"/> when unknown.</param>
+    /// <param name="keyFrameSource">Where <paramref name="isKeyFrame"/> came from.</param>
     public EncodedFrame(
         ReadOnlyMemory<byte> payload,
         uint? rtpTimestamp,
@@ -29,7 +30,8 @@ public readonly struct EncodedFrame
         long? presentationTimeUsec,
         string? rid,
         int? spatialId,
-        int? temporalId)
+        int? temporalId,
+        KeyFrameSource keyFrameSource = KeyFrameSource.Unknown)
     {
         Payload = payload;
         RtpTimestamp = rtpTimestamp;
@@ -38,6 +40,7 @@ public readonly struct EncodedFrame
         Rid = rid;
         SpatialId = spatialId;
         TemporalId = temporalId;
+        KeyFrameSource = keyFrameSource;
     }
 
     /// <summary>The encoded codec payload. Valid for the duration of the <see cref="RemoteTrack.FrameReceived"/> callback.</summary>
@@ -50,8 +53,19 @@ public readonly struct EncodedFrame
     /// </summary>
     public uint? RtpTimestamp { get; }
 
-    /// <summary>Whether this is a key/intra frame. Always <see langword="false"/> for audio.</summary>
+    /// <summary>
+    /// Whether this is a key/intra frame. Always <see langword="false"/> for audio. Read it together with
+    /// <see cref="KeyFrameSource"/>: <see langword="false"/> from
+    /// <see cref="WebRtc.KeyFrameSource.Unknown"/> means nobody answered, not that the answer was no.
+    /// </summary>
     public bool IsKeyFrame { get; }
+
+    /// <summary>
+    /// Where <see cref="IsKeyFrame"/> came from, so a forwarder can decide how far to trust it — the RTP
+    /// header extension holds under end-to-end encryption, a payload-derived answer only holds as far as the
+    /// payload is readable.
+    /// </summary>
+    public KeyFrameSource KeyFrameSource { get; }
 
     /// <summary>
     /// The wall-clock presentation time in microseconds for lip-sync across tracks, when known;

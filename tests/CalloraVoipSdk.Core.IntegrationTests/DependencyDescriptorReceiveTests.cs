@@ -168,6 +168,74 @@ public sealed class DependencyDescriptorReceiveTests
         Assert.Equal([((int?)null, (int?)null)], layers);
     }
 
+    /// <summary>
+    /// #310: the flag says where it came from. With a descriptor the answer is the sender's own and holds
+    /// whatever the payload contains; without one it was read out of the payload, which for an encrypting
+    /// sender may be ciphertext (ADR-071). A consumer that must not guess needs to tell those apart.
+    /// </summary>
+    [Fact]
+    public void A_descriptor_derived_flag_reports_the_header_as_its_source()
+    {
+        using var track = VideoTrack(DescriptorExtId);
+        var sources = new List<VideoKeyFrameSource>();
+        track.FrameReceived += (frame, _) => sources.Add(frame.KeyFrameSource);
+
+        track.OnRtpPacket(Packet(seq: 100, frameByte: 0x01, descriptor: KeyFrameDescriptor(frameNumber: 0)));
+
+        Assert.Equal([VideoKeyFrameSource.RtpHeaderExtension], sources);
+    }
+
+    [Fact]
+    public void A_payload_derived_flag_reports_the_payload_as_its_source()
+    {
+        using var track = VideoTrack(dependencyDescriptorExtensionId: null);
+        var sources = new List<VideoKeyFrameSource>();
+        track.FrameReceived += (frame, _) => sources.Add(frame.KeyFrameSource);
+
+        track.OnRtpPacket(Packet(seq: 100, frameByte: 0x00, descriptor: null));
+
+        Assert.Equal([VideoKeyFrameSource.Payload], sources);
+    }
+
+    /// <summary>
+    /// A negotiated extension is not the same as a descriptor on the frame: a packet that carries none falls
+    /// back to the payload, and must say so rather than keep claiming the header.
+    /// </summary>
+    [Fact]
+    public void A_frame_without_a_descriptor_reports_the_payload_even_when_the_extension_is_negotiated()
+    {
+        using var track = VideoTrack(DescriptorExtId);
+        var sources = new List<VideoKeyFrameSource>();
+        track.FrameReceived += (frame, _) => sources.Add(frame.KeyFrameSource);
+
+        track.OnRtpPacket(Packet(seq: 100, frameByte: 0x01, descriptor: KeyFrameDescriptor(frameNumber: 0)));
+        track.OnRtpPacket(Packet(seq: 101, frameByte: 0x00, descriptor: null));
+
+        Assert.Equal([VideoKeyFrameSource.RtpHeaderExtension, VideoKeyFrameSource.Payload], sources);
+    }
+
+    /// <summary>
+    /// The correction #225 made possible and #310 makes visible: an <em>opaque</em> session — payload
+    /// ciphertext, nothing to parse — still gets a real key-frame flag when the peer negotiated the
+    /// descriptor, because that one is written before the encryption. Until #225 the answer there was
+    /// "always false, meaning unknown", and the documentation said so; that is no longer the whole truth.
+    /// </summary>
+    [Fact]
+    public void An_opaque_stream_still_gets_a_key_frame_flag_from_the_descriptor()
+    {
+        using var track = new BundledVideoTrack(
+            "video", "VP8", VideoPayloadType, VideoSsrc, remoteSupportsNack: false, remoteSupportsPli: false,
+            Outbound(), ReorderDepth, NullLoggerFactory.Instance,
+            opaqueFrames: true, dependencyDescriptorExtensionId: DescriptorExtId);
+        var claims = new List<(bool IsKeyFrame, VideoKeyFrameSource Source)>();
+        track.FrameReceived += (frame, _) => claims.Add((frame.IsKeyFrame, frame.KeyFrameSource));
+
+        // The payload is ciphertext as far as the SDK is concerned; only the header speaks.
+        track.OnRtpPacket(Packet(seq: 100, frameByte: 0x01, descriptor: KeyFrameDescriptor(frameNumber: 0)));
+
+        Assert.Equal([(true, VideoKeyFrameSource.RtpHeaderExtension)], claims);
+    }
+
     // ── harness ──────────────────────────────────────────────────────────────────────────────
 
     private static BundledVideoTrack VideoTrack(byte? dependencyDescriptorExtensionId) =>

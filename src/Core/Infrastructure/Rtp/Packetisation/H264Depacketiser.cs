@@ -37,6 +37,10 @@ internal sealed class H264Depacketiser : IVideoDepacketiser
     }
 
     /// <inheritdoc />
+    /// <remarks>Reads the payload, so the answer is only as readable as the payload is (#310).</remarks>
+    public bool DerivesKeyFrameFromPayload => true;
+
+    /// <inheritdoc />
     public long DiscardedPacketCount { get; private set; }
 
     /// <inheritdoc />
