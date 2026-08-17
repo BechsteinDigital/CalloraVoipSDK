@@ -351,7 +351,7 @@ See <a class="xref" href="CalloraVoipSdk.VoipConfiguration.html#CalloraVoipSdk_V
 
   <h3 id="CalloraVoipSdk_VoipOptions_HangupHeldCallOnMediaSilence" data-uid="CalloraVoipSdk.VoipOptions.HangupHeldCallOnMediaSilence">
   HangupHeldCallOnMediaSilence
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipOptions.cs/#L110"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipOptions.cs/#L111"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Hang up a held call when its peer goes entirely quiet.
@@ -416,11 +416,12 @@ See <a class="xref" href="CalloraVoipSdk.VoipConfiguration.html#CalloraVoipSdk_V
 
   <h3 id="CalloraVoipSdk_VoipOptions_InboundMediaTimeout" data-uid="CalloraVoipSdk.VoipOptions.InboundMediaTimeout">
   InboundMediaTimeout
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipOptions.cs/#L98"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipOptions.cs/#L99"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Timeout after which a connected call whose peer has stopped sending both RTP and RTCP is torn down.
-See <a class="xref" href="CalloraVoipSdk.VoipConfiguration.html#CalloraVoipSdk_VoipConfiguration_InboundMediaTimeout">InboundMediaTimeout</a> for semantics. Default: 30 seconds.</p>
+See <a class="xref" href="CalloraVoipSdk.VoipConfiguration.html#CalloraVoipSdk_VoipConfiguration_InboundMediaTimeout">InboundMediaTimeout</a> for semantics and why it is off by default.
+Default: <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.timespan.zero">Zero</a> (disabled; 30 seconds is the recommended value when enabling it).</p>
 </div>
   <div class="markdown level1 conceptual"></div>
 
@@ -513,7 +514,7 @@ See <a class="xref" href="CalloraVoipSdk.VoipConfiguration.html#CalloraVoipSdk_V
 
   <h3 id="CalloraVoipSdk_VoipOptions_MediaSilenceNotifyAfter" data-uid="CalloraVoipSdk.VoipOptions.MediaSilenceNotifyAfter">
   MediaSilenceNotifyAfter
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipOptions.cs/#L104"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipOptions.cs/#L105"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Delay after which inbound media silence is reported through <code>ICall.MediaFlowChanged</code>.

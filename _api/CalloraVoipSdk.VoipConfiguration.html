@@ -373,7 +373,7 @@ video m-line carries its port but no candidates, so video needs direct connectiv
 
   <h3 id="CalloraVoipSdk_VoipConfiguration_HangupHeldCallOnMediaSilence" data-uid="CalloraVoipSdk.VoipConfiguration.HangupHeldCallOnMediaSilence">
   HangupHeldCallOnMediaSilence
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L216"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L224"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Whether the liveness timeout also applies to on-hold calls (which legitimately carry no inbound
@@ -439,13 +439,13 @@ Disabled by default.</p>
 
   <h3 id="CalloraVoipSdk_VoipConfiguration_InboundMediaTimeout" data-uid="CalloraVoipSdk.VoipConfiguration.InboundMediaTimeout">
   InboundMediaTimeout
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L203"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L211"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Hang up a connected call that has shown no sign of life this long — neither inbound RTP nor
-inbound RTCP. The NAT-safe fallback for when a far-end BYE never reaches our in-dialog Contact
-and everything simply stops. <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.timespan.zero">Zero</a> disables the hangup.
-Default: 30 seconds.</p>
+inbound RTCP. <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.timespan.zero">Zero</a> (the <b>default</b>) disables the hangup: media silence is
+reported through <code>ICall.MediaFlowChanged</code> and the application decides what to do about it.
+30 seconds is the recommended value if you want the SDK to end such calls itself.</p>
 </div>
   <div class="markdown level1 conceptual"></div>
 
@@ -467,11 +467,19 @@ Default: 30 seconds.</p>
 
 
   <h4 class="section" id="CalloraVoipSdk_VoipConfiguration_InboundMediaTimeout_remarks">Remarks</h4>
-  <div class="markdown level1 remarks"><p>Media silence alone does not end a call (#261): a peer using silence suppression (RFC 3389), a peer on
-hold, and a peer mid-bridge-switch during a transfer all stop sending media while continuing to report
-RTCP. Those are surfaced through <code>ICall.MediaFlowChanged</code> after
-<a class="xref" href="CalloraVoipSdk.VoipConfiguration.html#CalloraVoipSdk_VoipConfiguration_MediaSilenceNotifyAfter">MediaSilenceNotifyAfter</a> instead, and the application decides what they mean. Only a peer
-that stops sending everything is treated as gone.</p>
+  <div class="markdown level1 remarks"><p>
+Off by default because the teardown is a heuristic and the measurement says so (#261, ADR-069): with a
+PBX in the media path — verified against both Asterisk and FreeSWITCH — inbound RTCP stops together
+with the media, so nothing on the wire distinguishes "the peer went quiet" (silence suppression per
+RFC 3389, hold, a bridge switch during a transfer) from "the peer went away". Asterisk
+(<code>rtp_timeout</code>) and FreeSWITCH (<code>media_timeout</code>) ship theirs disabled for the same reason.
+A peer that is genuinely gone is still caught by the RFC 4028 session timer.
+</p>
+<p>
+When you do enable it, inbound RTCP counts as a sign of life alongside RTP — it can only extend the
+deadline, never shorten it — and held calls stay exempt unless
+<a class="xref" href="CalloraVoipSdk.VoipConfiguration.html#CalloraVoipSdk_VoipConfiguration_HangupHeldCallOnMediaSilence">HangupHeldCallOnMediaSilence</a> is set.
+</p>
 </div>
 
 
@@ -626,7 +634,7 @@ TLS is a second TCP listener and cannot share that port. Only relevant when TLS 
 
   <h3 id="CalloraVoipSdk_VoipConfiguration_MediaSilenceNotifyAfter" data-uid="CalloraVoipSdk.VoipConfiguration.MediaSilenceNotifyAfter">
   MediaSilenceNotifyAfter
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L210"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Domain/Configuration/VoipConfiguration.cs/#L218"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Report inbound media silence through <code>ICall.MediaFlowChanged</code> after this long without inbound

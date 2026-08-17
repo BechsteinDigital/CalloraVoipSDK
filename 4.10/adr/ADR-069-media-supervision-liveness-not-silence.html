@@ -2,9 +2,9 @@
 <html>
   <head>
     <meta charset="utf-8">
-      <title>ADR-069: Media Supervision Ends Calls on Loss of Liveness, Not on Silence | CalloraVoipSdk </title>
+      <title>ADR-069: Media Silence Is Reported, Not Terminated On | CalloraVoipSdk </title>
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <meta name="title" content="ADR-069: Media Supervision Ends Calls on Loss of Liveness, Not on Silence | CalloraVoipSdk ">
+      <meta name="title" content="ADR-069: Media Silence Is Reported, Not Terminated On | CalloraVoipSdk ">
       
       
       <link rel="icon" href="../favicon.ico">
@@ -85,7 +85,7 @@
         </div>
 
         <article data-uid="">
-<h1 id="adr-069-media-supervision-ends-calls-on-loss-of-liveness-not-on-silence">ADR-069: Media Supervision Ends Calls on Loss of Liveness, Not on Silence</h1>
+<h1 id="adr-069-media-silence-is-reported-not-terminated-on">ADR-069: Media Silence Is Reported, Not Terminated On</h1>
 
 <p>Status: Accepted
 Date: 2026-08-17</p>
@@ -166,34 +166,72 @@ parity-or-better with the reference implementations.</p>
 <p>Two corrections to the assumptions in #261 came out of this. First, <strong>terminating is not the outlier</strong>:
 SIPSorcery's user agent — our comparable layer, not the bare <code>RTPSession</code> underneath it — calls <code>Hangup()</code>
 on timeout, and Asterisk and FreeSWITCH hang up too when enabled. Second, the actual outliers were the
-threshold (15 s against everyone else's 30 s or off) and, decisively, <strong>what resets the clock</strong>: SIPSorcery
-counts RTP <em>or RTCP</em>, and we counted RTP alone. A peer in any of the three situations above keeps reporting
-RTCP on the RFC 3550 §6.2 interval, so it was demonstrably alive the whole time we were declaring it dead.</p>
+threshold (15 s against everyone else's 30 s or off) and <strong>what resets the clock</strong>: SIPSorcery counts RTP
+<em>or RTCP</em>, and we counted RTP alone.</p>
+<h3 id="what-the-measurement-then-showed">What the measurement then showed</h3>
+<p>The obvious repair — count RTCP as liveness, on the assumption that a peer which is alive keeps reporting on
+the RFC 3550 §6.2 interval — was tested against both reference PBXes before being believed, in
+<code>TwoLegTransferMatrix</code>: bridge two SDK legs through the PBX, stop sending, and sample the callee's inbound
+RTCP counter every two seconds through 20 s of silence.</p>
+<table>
+<thead>
+<tr>
+<th>PBX</th>
+<th>inbound RTCP during 20 s of media silence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Asterisk 22 (<code>direct_media=no</code>)</td>
+<td><code>rtcp_rx</code> 0 → <strong>1</strong> after ~4 s, then frozen for the rest</td>
+</tr>
+<tr>
+<td>FreeSWITCH (<code>direct_media</code> off)</td>
+<td><code>rtcp_rx</code> 0 → <strong>2</strong> by ~8 s, then frozen for the rest</td>
+</tr>
+</tbody>
+</table>
+<p><strong>The assumption is false with a PBX in the media path.</strong> As a relay with nothing to forward, neither
+Asterisk nor FreeSWITCH keeps an RTCP beacon running; both go quiet on both planes. RTCP is a reliable
+liveness signal only against an endpoint that reports unconditionally — SIPSorcery does, which is why the
+rule works in <em>its</em> topology and not in ours. In the same runs our supervisor hung up a demonstrably live
+call (Asterisk: callee terminated locally after 8 s; FreeSWITCH: caller first, then the PBX cleared the
+callee with <code>NORMAL_CLEARING</code>).</p>
+<p>So there is no signal on the wire that separates &quot;the peer went quiet&quot; from &quot;the peer went away&quot;. That is
+the fact this decision has to be built on — and it is precisely why Asterisk and FreeSWITCH ship their own
+equivalents disabled.</p>
 <h2 id="decision">Decision</h2>
-<p>Supervision measures <strong>liveness</strong>, and silence becomes information for the application rather than a verdict.</p>
+<p><strong>Media silence is reported to the application; it does not end calls.</strong> The teardown remains available, on
+loss of liveness rather than of media, and is off by default.</p>
 <ol>
-<li><p><strong>Liveness is inbound RTP or inbound RTCP.</strong> Either one proves the far end is present and routable.
+<li><p><strong>Report, don't terminate — the shipped default.</strong> Media silence for <code>MediaSilenceNotifyAfter</code>
+(default 15 s) raises <code>ICall.MediaFlowChanged</code>, and again when media resumes, carrying the length of the
+silence that ended. <code>InboundMediaTimeout</code> defaults to <code>TimeSpan.Zero</code> (off). This is parity with Asterisk
+and FreeSWITCH, which disable their equivalents, and it is the only defensible default given the
+measurement: without a liveness beacon, any threshold ends live calls, and this one demonstrably did.</p>
+</li>
+<li><p><strong>The application decides, which the references do not offer.</strong> SIPSorcery's app learns nothing until the
+call is already gone; Asterisk's and FreeSWITCH's operators get a hangup cause after the fact. An SDK
+consumer is told <em>while the call is still up</em> and can play a prompt, escalate, end the call on its own
+policy, or ignore it. That is the &quot;better, not merely equal&quot; part of this decision.</p>
+</li>
+<li><p><strong>When enabled, liveness is inbound RTP or inbound RTCP.</strong> Either one proves the far end is present.
 <code>CallMediaRuntimeMetrics</code> gained <code>RtcpPacketsReceived</code> for this; <code>RtpCallMediaSession</code> counts inbound
-compounds before the fan-out, so a throwing subscriber cannot make a live peer look dead.</p>
-</li>
-<li><p><strong>Two stages.</strong> Media silence for <code>MediaSilenceNotifyAfter</code> (default 15 s) raises
-<code>ICall.MediaFlowChanged</code> and does nothing else; loss of liveness for <code>InboundMediaTimeout</code> (default 30 s)
-ends the call. The event fires again when media resumes, carrying the length of the silence that ended.</p>
-</li>
-<li><p><strong>Beyond the references, deliberately.</strong> SIPSorcery's application learns nothing until the call is already
-gone. Ours is told while the peer is still alive and can act on its own policy — play a prompt, escalate to
-an agent, end the call sooner than the SDK would, or ignore it. That is the &quot;better, not merely equal&quot; part
-of this decision; everything else here is parity.</p>
+compounds before the fan-out, so a throwing subscriber cannot make a live peer look dead. RTCP can only
+extend the deadline, never shorten it — worth having even though the measurement shows a PBX will not
+supply it.</p>
 </li>
 <li><p><strong>The teardown carries a reason.</strong> A media-timeout hangup sets a <code>CallTerminationReason</code>
 (<code>Failed</code>/<code>Local</code>, &quot;Media timeout: no inbound RTP or RTCP from the far end&quot;), so a consumer can tell an
 SDK-initiated teardown from a peer BYE on <code>CallStateChangedEventArgs.TerminationReason</code>. FreeSWITCH makes
-the same distinction with its <code>MEDIA_TIMEOUT</code> cause; SIPSorcery does not.</p>
+the same distinction with its <code>MEDIA_TIMEOUT</code> cause; SIPSorcery does not. This required parking the reason
+before the BYE: the channel reports <code>Terminated</code> from inside its own <code>HangupAsync</code> with only the generic
+locally-terminated reason it can derive from SIP, so a reason passed after that call reached an
+already-terminated aggregate and was dropped.</p>
 </li>
-<li><p><strong>On by default, unlike Asterisk and FreeSWITCH.</strong> For a PBX with an administrator watching, off is a
-defensible default. For an SDK whose calls sit behind NAT and whose consumers will not build their own
-dead-line detection, leaving zombie calls up is the worse failure. The threshold and both stages are
-configurable, including off.</p>
+<li><p><strong>A dead peer is still caught, on the signalling plane.</strong> RFC 4028 session timers (ADR-023, default
+1800 s) end a dialog whose peer stopped refreshing. Slower than a media timeout, but it is evidence rather
+than a heuristic — and it is what pjsip relies on, having no media-timeout mechanism at all.</p>
 </li>
 <li><p><strong>Hold stays exempt</strong> (<code>HangupHeldCallOnSilence</code>, default false), covering both local hold and remote hold
 — <code>Call.HandleRemoteHoldChanged</code> moves the call to <code>OnHold</code> as well, so the exemption applies to a peer
@@ -207,22 +245,23 @@ parameter, so every threshold, exemption and once-only guarantee is pinned by a 
 </ol>
 <h2 id="consequences">Consequences</h2>
 <ul>
-<li>The class of false teardowns that produced #256 is gone: a peer that reports RTCP is never hung up, at any
-silence length. The interop flake's product cause is removed, not just its test symptom.</li>
-<li><strong>Consumer-visible default change:</strong> calls that would previously have been torn down after 15 s of media
-silence now survive as long as the peer keeps reporting. Deployments that relied on the old aggressive
-teardown must set <code>InboundMediaTimeout</code> explicitly — and should be aware it now means &quot;no RTP <em>and</em> no
-RTCP&quot;, so it will fire less often than the same number did before.</li>
+<li>The class of false teardowns that produced #256 is gone by default: the SDK no longer ends a call because
+media stopped. Pinned end to end in <code>TwoLegTransferMatrix</code> against both PBXes — 20 s of silence, the call
+survives, the silence and its end are reported, and the transfer afterwards still delivers media.</li>
+<li><strong>Consumer-visible default change:</strong> <code>InboundMediaTimeout</code> goes from 15 s to <code>TimeSpan.Zero</code> (off). A
+deployment that wants the teardown sets it explicitly — 30 s is the recommended value — and gets the
+liveness semantics, not the old media-silence one, so the same number fires less often than before.</li>
 <li>New public API: <code>ICall.MediaFlowChanged</code> and <code>CallMediaFlowChangedEventArgs</code>, plus
 <code>VoipConfiguration.MediaSilenceNotifyAfter</code> / <code>VoipOptions.MediaSilenceNotifyAfter</code>. Recorded in
 <code>PublicApi.approved.txt</code> (ADR-006 §4).</li>
-<li><code>MediaSilenceNotifyAfter</code> must be shorter than <code>InboundMediaTimeout</code>; the options validator rejects the
-inverted configuration rather than accepting a warning that could never fire.</li>
-<li><strong>Not changed:</strong> RTCP is liveness evidence, not a quality signal, here. A call where RTCP flows and media
-does not is still a broken call — it is simply the application's decision what to do about it, which is the
-point of the event.</li>
-<li><strong>Not covered:</strong> ICE consent freshness (RFC 7675) would be a third, cryptographically authenticated
-liveness source, but per ADR-041 it is built and unwired on the SIP path, so it is not consulted here.</li>
+<li><code>MediaSilenceNotifyAfter</code> must be shorter than <code>InboundMediaTimeout</code> when both are enabled; the options
+validator rejects the inverted configuration rather than accepting a warning that could never fire.</li>
+<li><strong>The NAT case the old default served is now the application's to handle.</strong> A far-end BYE lost behind NAT
+leaves a call up until the session timer expires. <code>MediaFlowChanged</code> is the signal to act on; a deployment
+that prefers the old automatic teardown enables it with one setting.</li>
+<li><strong>Not covered:</strong> ICE consent freshness (RFC 7675) would be a cryptographically authenticated liveness
+source, and unlike RTCP a peer must answer it. Per ADR-041 it is built but unwired on the SIP path — wiring
+it would make a media-timeout teardown evidence-based rather than heuristic, and is the natural follow-up.</li>
 </ul>
 <h2 id="references">References</h2>
 <ul>
