@@ -682,6 +682,16 @@
     },
     {
       "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-068-opaque-video-payload-format.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-068-opaque-video-payload-format.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
       "source_relative_path": "docs/adr/README.md",
       "output": {
         ".html": {
