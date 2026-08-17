@@ -702,6 +702,16 @@
     },
     {
       "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-070-two-byte-rtp-header-extensions.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-070-two-byte-rtp-header-extensions.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
       "source_relative_path": "docs/adr/README.md",
       "output": {
         ".html": {
