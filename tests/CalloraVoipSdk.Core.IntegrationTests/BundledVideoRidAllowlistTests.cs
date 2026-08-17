@@ -45,7 +45,7 @@ public sealed class BundledVideoRidAllowlistTests
     {
         using var track = Track(["h", "l"]);
         var received = new List<string?>();
-        track.FrameReceived += (_, _, _, rid) => received.Add(rid);
+        track.FrameReceived += (_, rid) => received.Add(rid);
 
         track.OnRtpPacket(Packet(0x1111, 1000, 0xAA), rid: "h");
         track.OnRtpPacket(Packet(0x3333, 2000, 0xCC), rid: "x"); // never negotiated
@@ -59,7 +59,7 @@ public sealed class BundledVideoRidAllowlistTests
     {
         using var track = Track(["h"]);
         var received = new List<string?>();
-        track.FrameReceived += (_, _, _, rid) => received.Add(rid);
+        track.FrameReceived += (_, rid) => received.Add(rid);
 
         // Far more distinct RIDs than the lane cap: with an allowlist none of them is entitled to a lane, so
         // the cap is never the thing doing the work — and the negotiated encoding still gets through after.
@@ -76,7 +76,7 @@ public sealed class BundledVideoRidAllowlistTests
     {
         using var track = Track(receiveRids: null);
         var received = new List<string?>();
-        track.FrameReceived += (_, _, _, rid) => received.Add(rid);
+        track.FrameReceived += (_, rid) => received.Add(rid);
 
         track.OnRtpPacket(Packet(0x1111, 1000, 0xAA), rid: "h");
         track.OnRtpPacket(Packet(0x3333, 2000, 0xCC), rid: "x");
@@ -89,7 +89,7 @@ public sealed class BundledVideoRidAllowlistTests
     {
         using var track = Track(["h"]);
         var received = new List<string?>();
-        track.FrameReceived += (_, _, _, rid) => received.Add(rid);
+        track.FrameReceived += (_, rid) => received.Add(rid);
 
         // A non-simulcast sender stamps no RID at all; that stream is not something an allowlist may drop.
         track.OnRtpPacket(Packet(0x4444, 500, 0xEE), rid: null);

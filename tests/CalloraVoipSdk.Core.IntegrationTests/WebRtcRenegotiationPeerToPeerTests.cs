@@ -40,17 +40,17 @@ public sealed class WebRtcRenegotiationPeerToPeerTests
         var primaryFrames = new List<byte[]>();
         var byMid = new Dictionary<string, List<byte[]>>(StringComparer.Ordinal);
         var sync = new object();
-        answerer.VideoFrameReceived += (frame, _, _) =>
+        answerer.VideoFrameReceived += frame =>
         {
-            lock (sync) primaryFrames.Add(frame);
+            lock (sync) primaryFrames.Add(frame.Payload);
         };
-        answerer.VideoTrackFrameReceived += (mid, frame, _, _) =>
+        answerer.VideoTrackFrameReceived += (mid, frame) =>
         {
             lock (sync)
             {
                 if (!byMid.TryGetValue(mid, out var frames))
                     byMid[mid] = frames = [];
-                frames.Add(frame);
+                frames.Add(frame.Payload);
             }
         };
 

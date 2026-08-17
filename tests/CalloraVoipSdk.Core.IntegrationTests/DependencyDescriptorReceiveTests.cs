@@ -35,7 +35,7 @@ public sealed class DependencyDescriptorReceiveTests
     {
         using var track = VideoTrack(DescriptorExtId);
         var claims = new List<bool>();
-        track.FrameReceived += (_, _, isKeyFrame, _) => claims.Add(isKeyFrame);
+        track.FrameReceived += (frame, _) => claims.Add(frame.IsKeyFrame);
 
         // Descriptor: key frame. Payload: P bit set → the clear-media VP8 depacketiser calls it a delta.
         track.OnRtpPacket(Packet(seq: 100, frameByte: 0x01, descriptor: KeyFrameDescriptor(frameNumber: 0)));
@@ -50,7 +50,7 @@ public sealed class DependencyDescriptorReceiveTests
     {
         using var track = VideoTrack(DescriptorExtId);
         var claims = new List<bool>();
-        track.FrameReceived += (_, _, isKeyFrame, _) => claims.Add(isKeyFrame);
+        track.FrameReceived += (frame, _) => claims.Add(frame.IsKeyFrame);
 
         // The key frame first, so the reader retains the template structure the delta below refers to.
         track.OnRtpPacket(Packet(seq: 100, frameByte: 0x01, descriptor: KeyFrameDescriptor(frameNumber: 0)));
@@ -71,7 +71,7 @@ public sealed class DependencyDescriptorReceiveTests
     {
         using var track = VideoTrack(dependencyDescriptorExtensionId: null);
         var claims = new List<bool>();
-        track.FrameReceived += (_, _, isKeyFrame, _) => claims.Add(isKeyFrame);
+        track.FrameReceived += (frame, _) => claims.Add(frame.IsKeyFrame);
 
         // A descriptor is on the wire, but nothing negotiated it — it must be ignored, not guessed at.
         track.OnRtpPacket(Packet(seq: 100, frameByte: 0x00, descriptor: DeltaDescriptor(frameNumber: 7)));
@@ -88,7 +88,7 @@ public sealed class DependencyDescriptorReceiveTests
     {
         using var track = VideoTrack(DescriptorExtId);
         var claims = new List<bool>();
-        track.FrameReceived += (_, _, isKeyFrame, _) => claims.Add(isKeyFrame);
+        track.FrameReceived += (frame, _) => claims.Add(frame.IsKeyFrame);
 
         track.OnRtpPacket(Packet(seq: 100, frameByte: 0x01, descriptor: KeyFrameDescriptor(frameNumber: 0)));
         track.OnRtpPacket(Packet(seq: 101, frameByte: 0x00, descriptor: null));
@@ -105,7 +105,7 @@ public sealed class DependencyDescriptorReceiveTests
     {
         using var track = SimulcastTrack(DescriptorExtId);
         var claims = new List<(string? Rid, bool IsKeyFrame)>();
-        track.FrameReceived += (_, _, isKeyFrame, rid) => claims.Add((rid, isKeyFrame));
+        track.FrameReceived += (frame, rid) => claims.Add((rid, frame.IsKeyFrame));
 
         // "h" starts its sequence; "l" has not been seen at all yet, so its delta cannot resolve a template
         // and must not inherit "h"'s structure.
@@ -113,6 +113,59 @@ public sealed class DependencyDescriptorReceiveTests
         track.OnRtpPacket(Packet(seq: 40, frameByte: 0x01, descriptor: DeltaDescriptor(0), ssrc: 0x2222), rid: "l");
 
         Assert.Equal([("h", true), ("l", false)], claims);
+    }
+
+    /// <summary>
+    /// The other half of what the descriptor is for: the layer a frame sits on travels with it, so a forwarder
+    /// can drop the top temporal layer without decoding — or, for an encrypted stream, without being able to.
+    /// The structure below declares two temporal layers, which is the only way to tell a reported layer from a
+    /// hard-coded zero.
+    /// </summary>
+    [Fact]
+    public void The_frame_carries_the_layer_the_descriptor_puts_it_on()
+    {
+        using var track = VideoTrack(DescriptorExtId);
+        var layers = new List<(int? Spatial, int? Temporal)>();
+        track.FrameReceived += (frame, _) => layers.Add((frame.SpatialId, frame.TemporalId));
+
+        // The key frame declares the L1T2 structure and rides on template 0 (spatial 0, temporal 0)…
+        track.OnRtpPacket(Packet(seq: 100, frameByte: 0x01, descriptor: TwoTemporalLayerStructure(templateId: 0, frameNumber: 0)));
+        // …the delta names template 1, which that structure puts on temporal layer 1.
+        track.OnRtpPacket(Packet(seq: 101, frameByte: 0x01, descriptor: MandatoryOnly(templateId: 1, frameNumber: 1)));
+
+        Assert.Equal([(0, 0), (0, 1)], layers);
+    }
+
+    /// <summary>
+    /// Unknown is reported as unknown. A peer that never negotiated the extension yields no layer information
+    /// rather than a plausible-looking zero — an SFU must be able to tell "base layer" from "no idea".
+    /// </summary>
+    [Fact]
+    public void Without_a_descriptor_the_layer_is_unknown_rather_than_zero()
+    {
+        using var track = VideoTrack(dependencyDescriptorExtensionId: null);
+        var layers = new List<(int? Spatial, int? Temporal)>();
+        track.FrameReceived += (frame, _) => layers.Add((frame.SpatialId, frame.TemporalId));
+
+        track.OnRtpPacket(Packet(seq: 100, frameByte: 0x00, descriptor: null));
+
+        Assert.Equal([((int?)null, (int?)null)], layers);
+    }
+
+    /// <summary>
+    /// Joining mid-sequence: the mandatory fields parse, but no structure has been seen, so the template
+    /// resolves to nothing and the layer stays unknown instead of being guessed at.
+    /// </summary>
+    [Fact]
+    public void A_frame_whose_structure_was_never_seen_reports_an_unknown_layer()
+    {
+        using var track = VideoTrack(DescriptorExtId);
+        var layers = new List<(int? Spatial, int? Temporal)>();
+        track.FrameReceived += (frame, _) => layers.Add((frame.SpatialId, frame.TemporalId));
+
+        track.OnRtpPacket(Packet(seq: 100, frameByte: 0x00, descriptor: MandatoryOnly(templateId: 1, frameNumber: 9)));
+
+        Assert.Equal([((int?)null, (int?)null)], layers);
     }
 
     // ── harness ──────────────────────────────────────────────────────────────────────────────
@@ -135,6 +188,58 @@ public sealed class DependencyDescriptorReceiveTests
 
     private static byte[] DeltaDescriptor(ushort frameNumber) =>
         new DependencyDescriptorWriter().Write(isKeyFrame: false, startOfFrame: true, endOfFrame: true, frameNumber);
+
+    // The SDK's own writer only ever declares L1T1 — it does not encode video, so it knows of no layer ladder
+    // to describe. A scalable sender does, and that is the case worth testing, so the structure here is
+    // hand-written: two templates on one spatial layer, the second on temporal layer 1
+    // (AV1 RTP specification §A.8, template_dependency_structure()).
+    private static byte[] TwoTemporalLayerStructure(int templateId, ushort frameNumber)
+    {
+        var writer = new RtpBitWriter(16);
+        WriteMandatoryFields(ref writer, templateId, frameNumber);
+
+        writer.WriteFlag(true);            // template_dependency_structure_present_flag
+        writer.WriteFlag(false);           // active_decode_targets_present_flag
+        writer.WriteFlag(false);           // custom_dtis_flag
+        writer.WriteFlag(false);           // custom_fdiffs_flag
+        writer.WriteFlag(false);           // custom_chains_flag
+
+        writer.Write(0, 6);                // template_id_offset
+        writer.Write(0, 5);                // dt_cnt_minus_one → one decode target
+
+        // template_layers(): template 0 at T0, then next_layer_idc = 1 → the next template is T1; then stop.
+        writer.Write(1, 2);
+        writer.Write(3, 2);
+
+        writer.Write(2, 2);                // template_dtis: Switch for both templates
+        writer.Write(2, 2);
+
+        writer.WriteFlag(false);           // template 0 depends on nothing
+        writer.WriteFlag(true);            // template 1 depends on one earlier frame…
+        writer.Write(0, 4);                // …at distance 1
+        writer.WriteFlag(false);
+
+        writer.WriteNonSymmetric(0, 2);    // chain_cnt = 0
+        writer.WriteFlag(false);           // resolutions_present_flag
+
+        return writer.ToArray();
+    }
+
+    // A delta frame's descriptor: the three mandatory bytes, naming a template of the retained structure.
+    private static byte[] MandatoryOnly(int templateId, ushort frameNumber)
+    {
+        var writer = new RtpBitWriter(3);
+        WriteMandatoryFields(ref writer, templateId, frameNumber);
+        return writer.ToArray();
+    }
+
+    private static void WriteMandatoryFields(ref RtpBitWriter writer, int templateId, ushort frameNumber)
+    {
+        writer.WriteFlag(true);            // start_of_frame
+        writer.WriteFlag(true);            // end_of_frame
+        writer.Write((uint)templateId, 6);
+        writer.Write(frameNumber, 16);
+    }
 
     // A single-packet VP8 frame: the 1-byte payload descriptor (RFC 7741 §4.2, S=1) plus one frame byte
     // whose low bit is the P flag — 0x00 reads as a key frame in the clear-media format, 0x01 as a delta.

@@ -72,7 +72,7 @@ public sealed class BundledMediaSessionTests
         var audio = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
         var video = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
         server.AudioReceived += p => audio.TrySetResult(p.Payload.ToArray());
-        server.VideoFrameReceived += (f, _, _) => video.TrySetResult(f);
+        server.VideoFrameReceived += frame => video.TrySetResult(frame.Payload);
 
         await server.StartAsync();
         await client.StartAsync();
@@ -144,10 +144,10 @@ public sealed class BundledMediaSessionTests
         // frame under "scr" (or vice versa) — the per-MID content assertion below catches it.
         var cam = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
         var scr = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
-        server.VideoTrackFrameReceived += (mid, frame, _, _) =>
+        server.VideoTrackFrameReceived += (mid, frame) =>
         {
-            if (mid == "cam") cam.TrySetResult(frame);
-            else if (mid == "scr") scr.TrySetResult(frame);
+            if (mid == "cam") cam.TrySetResult(frame.Payload);
+            else if (mid == "scr") scr.TrySetResult(frame.Payload);
         };
 
         await server.StartAsync();
@@ -496,7 +496,7 @@ public sealed class BundledMediaSessionTests
 
         var camCount = 0;
         var scrCount = 0;
-        server.VideoTrackFrameReceived += (mid, _, _, _) =>
+        server.VideoTrackFrameReceived += (mid, _) =>
         {
             if (mid == "cam") Interlocked.Increment(ref camCount);
             else if (mid == "scr") Interlocked.Increment(ref scrCount);
@@ -592,7 +592,7 @@ public sealed class BundledMediaSessionTests
 
         var video1Frames = 0;
         var video2Frames = 0;
-        server.VideoTrackFrameReceived += (mid, _, _, _) =>
+        server.VideoTrackFrameReceived += (mid, _) =>
         {
             if (mid == "video") Interlocked.Increment(ref video1Frames);
             else if (mid == "vid2") Interlocked.Increment(ref video2Frames);
@@ -668,7 +668,7 @@ public sealed class BundledMediaSessionTests
 
         var camFrames = 0;
         var scrFrames = 0;
-        server.VideoTrackFrameReceived += (mid, _, _, _) =>
+        server.VideoTrackFrameReceived += (mid, _) =>
         {
             if (mid == "cam") Interlocked.Increment(ref camFrames);
             else if (mid == "scr") Interlocked.Increment(ref scrFrames);
@@ -748,7 +748,7 @@ public sealed class BundledMediaSessionTests
         await using var serverLease = server;
 
         var camFrames = 0;
-        server.VideoTrackFrameReceived += (mid, _, _, _) =>
+        server.VideoTrackFrameReceived += (mid, _) =>
         {
             if (mid == "cam") Interlocked.Increment(ref camFrames);
         };

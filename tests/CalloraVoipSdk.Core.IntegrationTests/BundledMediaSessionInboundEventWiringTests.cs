@@ -86,9 +86,9 @@ public sealed class BundledMediaSessionInboundEventWiringTests
     {
         var sink = new Sink();
         var wiring = new BundledMediaSessionInboundEventWiring(
-            (frame, _, _) => sink.PrimaryFrame.Add(frame),
-            (mid, frame, _, _) => sink.Track.Add((mid, frame)),
-            (mid, rid, frame, _, _) => sink.Layer.Add((mid, rid, frame)),
+            frame => sink.PrimaryFrame.Add(frame.Payload),
+            (mid, frame) => sink.Track.Add((mid, frame.Payload)),
+            (mid, rid, frame) => sink.Layer.Add((mid, rid, frame.Payload)),
             () => sink.KeyFrameRequested++,
             (_, _) => { },
             NullLogger<BundledMediaSessionInboundEventWiringTests>.Instance);

@@ -120,11 +120,11 @@ internal sealed class BundledVideoTrack : IDisposable
     private long _framesDropped;
 
     /// <summary>
-    /// Raised with a reassembled encoded frame, its RTP timestamp, whether it is a key frame, and the
-    /// simulcast <c>a=rid</c> the frame belongs to (RFC 8853) — <see langword="null"/> for the default
-    /// (non-simulcast, or base RID-less) stream.
+    /// Raised with a reassembled encoded frame — payload, RTP timestamp, key-frame flag and, where the peer
+    /// negotiated the Dependency Descriptor (#225), its layer — and the simulcast <c>a=rid</c> the frame
+    /// belongs to (RFC 8853), <see langword="null"/> for the default (non-simulcast, or base RID-less) stream.
     /// </summary>
-    public event Action<byte[], uint, bool, string?>? FrameReceived;
+    public event Action<InboundVideoFrame, string?>? FrameReceived;
 
     /// <summary>
     /// Raised when the peer requests a key frame via an inbound PLI/FIR (RFC 4585/5104); the app should
@@ -684,6 +684,8 @@ internal sealed class BundledVideoTrack : IDisposable
 
         // The descriptor wins where it exists: for an end-to-end encrypted stream the payload-derived flag is
         // a guess about ciphertext (#223), and even in the clear the sender knows better than the parser does.
+        // Its layer information rides along on the same reasoning — a forwarder choosing a layer must not have
+        // to open the payload to learn which one it holds.
         var frameDescriptor = lane.PendingDescriptor;
         lane.PendingDescriptor = null;
         if (frameDescriptor is { } fromHeader)
@@ -697,7 +699,10 @@ internal sealed class BundledVideoTrack : IDisposable
 
         try
         {
-            FrameReceived?.Invoke(frame!, packet.Timestamp, isKeyFrame, lane.Rid);
+            FrameReceived?.Invoke(
+                new InboundVideoFrame(
+                    frame!, packet.Timestamp, isKeyFrame, frameDescriptor?.SpatialId, frameDescriptor?.TemporalId),
+                lane.Rid);
         }
         catch (Exception ex)
         {

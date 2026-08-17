@@ -130,22 +130,21 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     /// </summary>
     public event Action<string, byte[], uint>? AudioTrackFrameReceived;
 
-    /// <summary>Raised with each reassembled inbound video frame (frame, RTP timestamp, is-key-frame).</summary>
-    public event Action<byte[], uint, bool>? VideoFrameReceived;
+    /// <summary>Raised with each reassembled inbound video frame.</summary>
+    public event Action<InboundVideoFrame>? VideoFrameReceived;
 
     /// <summary>
-    /// Raised per reassembled inbound video frame tagged with its track MID (P2c) — MID, frame, RTP timestamp,
-    /// is-key-frame — so the receiver routes a frame to the right <see cref="WebRtc.RemoteTrack"/> when several
-    /// remote video m-lines share the bundle.
+    /// Raised per reassembled inbound video frame tagged with its track MID (P2c), so the receiver routes a
+    /// frame to the right <see cref="WebRtc.RemoteTrack"/> when several remote video m-lines share the bundle.
     /// </summary>
-    public event Action<string, byte[], uint, bool>? VideoTrackFrameReceived;
+    public event Action<string, InboundVideoFrame>? VideoTrackFrameReceived;
 
     /// <summary>
     /// Raised per reassembled inbound simulcast-layer frame (4.7.0, RFC 8853/8852) — MID, the layer's
-    /// <c>a=rid</c>, frame, RTP timestamp, is-key-frame — the recv-side simulcast / SFU-forwarding surface. Fires
+    /// <c>a=rid</c>, and the frame — the recv-side simulcast / SFU-forwarding surface. Fires
     /// <em>only</em> for RID-tagged layers, never the primary RID-less stream (on <see cref="VideoTrackFrameReceived"/>).
     /// </summary>
-    public event Action<string, string, byte[], uint, bool>? VideoLayerFrameReceived;
+    public event Action<string, string, InboundVideoFrame>? VideoLayerFrameReceived;
 
     /// <summary>
     /// Raised when the peer requests a key frame via an inbound PLI/FIR (RFC 4585/5104); the app should
@@ -868,9 +867,9 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             TransitionTo,
             (payload, rtpTimestamp) => AudioReceived?.Invoke(payload, rtpTimestamp),
             (mid, payload, rtpTimestamp) => AudioTrackFrameReceived?.Invoke(mid, payload, rtpTimestamp),
-            (frame, timestamp, isKeyFrame) => VideoFrameReceived?.Invoke(frame, timestamp, isKeyFrame),
-            (mid, frame, timestamp, isKeyFrame) => VideoTrackFrameReceived?.Invoke(mid, frame, timestamp, isKeyFrame),
-            (mid, rid, frame, timestamp, isKeyFrame) => VideoLayerFrameReceived?.Invoke(mid, rid, frame, timestamp, isKeyFrame),
+            frame => VideoFrameReceived?.Invoke(frame),
+            (mid, frame) => VideoTrackFrameReceived?.Invoke(mid, frame),
+            (mid, rid, frame) => VideoLayerFrameReceived?.Invoke(mid, rid, frame),
             () => VideoKeyFrameRequested?.Invoke(),
             (toneCode, durationMs) => DtmfReceived?.Invoke(toneCode, durationMs));
         // Fan the session's transport-cc recommended-bitrate revisions onto the peer's reactive surface (4.7.0).

@@ -168,29 +168,29 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     public event Action<byte, int>? DtmfReceived;
 
     /// <summary>
-    /// Raised with each reassembled inbound video frame on the <em>primary</em> video track (frame, RTP
-    /// timestamp, is-key-frame). Backward-compatible with the pre-P2b single-video path: with exactly one
-    /// video track this fires for that track's frames; with several it fires only for the primary (first)
-    /// track. Use <see cref="VideoTrackFrameReceived"/> to receive every track's frames tagged with its MID.
+    /// Raised with each reassembled inbound video frame on the <em>primary</em> video track. Backward-compatible
+    /// with the pre-P2b single-video path: with exactly one video track this fires for that track's frames; with
+    /// several it fires only for the primary (first) track. Use <see cref="VideoTrackFrameReceived"/> to receive
+    /// every track's frames tagged with its MID.
     /// </summary>
-    public event Action<byte[], uint, bool>? VideoFrameReceived;
+    public event Action<InboundVideoFrame>? VideoFrameReceived;
 
     /// <summary>
     /// Raised with each reassembled inbound video frame on any video track (P2b), tagged with the MID of the
-    /// track it arrived on (MID, frame, RTP timestamp, is-key-frame). Fires for every video track — the way to
-    /// tell N video tracks apart on the inbound path. Runs on the shared receive loop.
+    /// track it arrived on. Fires for every video track — the way to tell N video tracks apart on the inbound
+    /// path. Runs on the shared receive loop.
     /// </summary>
-    public event Action<string, byte[], uint, bool>? VideoTrackFrameReceived;
+    public event Action<string, InboundVideoFrame>? VideoTrackFrameReceived;
 
     /// <summary>
-    /// Raised with each reassembled inbound video frame that belongs to a specific simulcast layer
-    /// (RFC 8853): the m-line MID, the layer's <c>a=rid</c> (RFC 8852), the encoded frame, its RTP
-    /// timestamp, and whether it is a key frame. The Core recv-side surface for SFU forwarding — one event
-    /// per demultiplexed encoding. Fires <em>only</em> for RID-tagged layers, never for the primary/default
+    /// Raised with each reassembled inbound video frame that belongs to a specific simulcast layer (RFC 8853):
+    /// the m-line MID, the layer's <c>a=rid</c> (RFC 8852), and the frame — including the Dependency Descriptor's
+    /// layer information where the peer negotiated it (#225). The Core recv-side surface for SFU forwarding — one
+    /// event per demultiplexed encoding. Fires <em>only</em> for RID-tagged layers, never for the primary/default
     /// (RID-less) stream, which continues to surface on <see cref="VideoFrameReceived"/> /
     /// <see cref="VideoTrackFrameReceived"/>. Runs on the shared receive loop.
     /// </summary>
-    internal event Action<string, string, byte[], uint, bool>? VideoLayerFrameReceived;
+    internal event Action<string, string, InboundVideoFrame>? VideoLayerFrameReceived;
 
     /// <summary>
     /// Raised when the peer requests a key frame via an inbound PLI/FIR (RFC 4585/5104) on the video track;
@@ -243,9 +243,9 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         // lives in a collaborator to keep this file under the size limit (R3); the events stay on this session (they
         // can only be invoked from here), so it is handed thin raise delegates that null-conditionally invoke each.
         _inboundEventWiring = new BundledMediaSessionInboundEventWiring(
-            (frame, timestamp, isKeyFrame) => VideoFrameReceived?.Invoke(frame, timestamp, isKeyFrame),
-            (mid, frame, timestamp, isKeyFrame) => VideoTrackFrameReceived?.Invoke(mid, frame, timestamp, isKeyFrame),
-            (mid, rid, frame, timestamp, isKeyFrame) => VideoLayerFrameReceived?.Invoke(mid, rid, frame, timestamp, isKeyFrame),
+            frame => VideoFrameReceived?.Invoke(frame),
+            (mid, frame) => VideoTrackFrameReceived?.Invoke(mid, frame),
+            (mid, rid, frame) => VideoLayerFrameReceived?.Invoke(mid, rid, frame),
             () => VideoKeyFrameRequested?.Invoke(),
             (mid, packet) => AudioTrackFrameReceived?.Invoke(mid, packet),
             _logger);

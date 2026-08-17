@@ -96,7 +96,7 @@ public sealed class OpaqueVideoSwitchTests
         byte[]? received = null;
         var keyFrameClaims = new List<bool>();
         using var receiver = VideoTrack(OutboundOver(new DiscardSender()), "H264", opaqueFrames: true);
-        receiver.FrameReceived += (f, _, isKeyFrame, _) => { received = f; keyFrameClaims.Add(isKeyFrame); };
+        receiver.FrameReceived += (f, _) => { received = f.Payload; keyFrameClaims.Add(f.IsKeyFrame); };
         foreach (var packet in sent)
             receiver.OnRtpPacket(packet);
 
@@ -137,11 +137,11 @@ public sealed class OpaqueVideoSwitchTests
     {
         using var opaqueTrack = SimulcastTrack("VP8", opaqueFrames: true);
         var opaqueClaims = new List<bool>();
-        opaqueTrack.FrameReceived += (_, _, isKeyFrame, _) => opaqueClaims.Add(isKeyFrame);
+        opaqueTrack.FrameReceived += (frame, _) => opaqueClaims.Add(frame.IsKeyFrame);
 
         using var clearTrack = SimulcastTrack("VP8", opaqueFrames: false);
         var clearClaims = new List<bool>();
-        clearTrack.FrameReceived += (_, _, isKeyFrame, _) => clearClaims.Add(isKeyFrame);
+        clearTrack.FrameReceived += (frame, _) => clearClaims.Add(frame.IsKeyFrame);
 
         // 0x00 as the frame's first byte = P bit clear = a key frame to the clear-media VP8 depacketiser
         // (RFC 7741 §4.3 → RFC 6386 §9.1). Under encryption that byte is ciphertext, so the claim is a coin flip.
