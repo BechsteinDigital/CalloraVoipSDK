@@ -85,6 +85,15 @@ configurations. Validated end-to-end against a real Asterisk endpoint that carri
 
 ### Added
 
+- **RFC 8285 two-byte header extensions** (#224, ADR-070). The SDK knew only the one-byte form — profile
+  `0xBEDE`, ids 1..14, values 1..16 bytes — which cannot carry an id above 14, a value longer than 16 bytes,
+  or an empty value. The two-byte form (§4.3) is now encoded and parsed, the send side picks the form from
+  what the elements need (one-byte while everything fits, as the RFC prescribes), and the receive side reads
+  whichever arrives. That last part matters beyond the new feature: a peer that needs the two-byte form for
+  one extension writes *all* of that packet's elements in it, so transport-cc, MID and RID were previously
+  lost on exactly those packets. `a=extmap` now assigns ids across the full 1..255 range, still starting at 1,
+  so SDP is unchanged for any peer with at most fourteen extensions. Unblocks the Dependency Descriptor
+  (#225) and, through it, a media path that never reads the payload (#310).
 - **Opaque video payload format for end-to-end encrypted frames** (#223, ADR-068). When a browser
   encrypts its frames before the packetiser (WebRTC Encoded Transform / SFrame, RFC 9605), the frame is
   ciphertext — and both existing video payload formats assume they may read it: H.264 fails closed on

@@ -91,12 +91,11 @@ public sealed class VideoExtmapNegotiationTests
     }
 
     [Theory]
-    [InlineData(0)]   // padding id
-    [InlineData(15)]  // reserved id
-    public void Answer_drops_a_supported_uri_offered_with_a_non_one_byte_id(int id)
+    [InlineData(0)]    // padding in both wire forms — never an element id
+    [InlineData(256)]  // beyond the 8-bit id field of RFC 8285 §4.3
+    public void Answer_drops_a_supported_uri_offered_with_an_id_outside_rfc_8285(int id)
     {
-        // Even when the URI is supported, an id outside the one-byte range 1..14 cannot be carried
-        // in the one-byte header form, so it is not echoed.
+        // Even when the URI is supported, an id that no RFC 8285 wire form can carry is not echoed.
         var offer = VideoOfferWithExtmaps($"a=extmap:{id} {TransportCc}\r\n");
 
         var answer = SdpUtilities.TryBuildNegotiatedAnswer(offer, LocalAudio, hold: false,
@@ -107,6 +106,32 @@ public sealed class VideoExtmapNegotiationTests
 
         Assert.NotNull(answer);
         Assert.DoesNotContain("a=extmap", answer!, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// #224: an id above the one-byte range is answerable now. It used to be dropped because the SDK could
+    /// only write the one-byte form (ids 1..14); with the two-byte form implemented (ADR-070), packets
+    /// carrying such an id are simply written in that form, so refusing the offer would discard a usable
+    /// extension. Ids 15 and 16 are the boundary: 15 is reserved only in the one-byte form, not as an
+    /// extmap id.
+    /// </summary>
+    [Theory]
+    [InlineData(15)]
+    [InlineData(16)]
+    [InlineData(255)]
+    public void Answer_echoes_a_supported_uri_offered_with_a_two_byte_id(int id)
+    {
+        var offer = VideoOfferWithExtmaps($"a=extmap:{id} {TransportCc}\r\n");
+
+        var answer = SdpUtilities.TryBuildNegotiatedAnswer(offer, LocalAudio, hold: false,
+            new SdpMediaNegotiationOptions
+            {
+                Video = new SdpVideoNegotiationOptions { Port = 41002, HeaderExtensionUris = [TransportCc] },
+            });
+
+        Assert.NotNull(answer);
+        var videoSection = answer![answer.IndexOf("m=video", StringComparison.Ordinal)..];
+        Assert.Contains($"a=extmap:{id} {TransportCc}", videoSection, StringComparison.Ordinal);
     }
 
     [Fact]

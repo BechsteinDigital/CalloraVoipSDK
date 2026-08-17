@@ -88,6 +88,8 @@
       href: ADR-034-secondary-stream-and-onebyte-header-extensions.md
     - name: "ADR-035: RTX Retransmission Mechanics — OSN Encapsulation and the Retransmit Buffer"
       href: ADR-035-rtx-retransmission-mechanics.md
+    - name: "ADR-070: Two-Byte RTP Header Extensions and Form Selection by Need"
+      href: ADR-070-two-byte-rtp-header-extensions.md
 - name: "RTCP, Feedback, Congestion & Timing"
   items:
     - name: "ADR-036: RTCP Wire Codec — Feedback/XR Framing and Tolerant Compound Decode"

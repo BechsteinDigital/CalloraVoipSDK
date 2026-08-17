@@ -56,39 +56,11 @@ internal static class RtpRidHeaderExtension
     public static bool TryRead(RtpExtension? extension, byte id, out string rid)
     {
         rid = string.Empty;
-        if (extension is null || extension.Profile != OneByteRtpHeaderExtensions.Profile)
+        if (!RtpHeaderExtensions.TryFindValue(extension, id, out var value) || value.Length == 0)
             return false;
 
-        var data = extension.Data.Span;
-        var offset = 0;
-        while (offset < data.Length)
-        {
-            var header = data[offset];
-            if (header == 0) // padding
-            {
-                offset++;
-                continue;
-            }
-
-            var elementId = (byte)(header >> 4);
-            if (elementId == 15) // reserved: stop parsing
-                break;
-
-            var length = (header & 0x0F) + 1;
-            offset++;
-            if (offset + length > data.Length) // truncated trailing element
-                break;
-
-            if (elementId == id)
-            {
-                rid = Encoding.ASCII.GetString(data.Slice(offset, length));
-                return true;
-            }
-
-            offset += length;
-        }
-
-        return false;
+        rid = Encoding.ASCII.GetString(value);
+        return true;
     }
 
     private static byte[] EncodeValue(string rid)

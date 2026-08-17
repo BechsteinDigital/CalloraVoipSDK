@@ -20,6 +20,7 @@ internal sealed class RtpOutboundHeaderExtensionStamper
     private readonly byte? _transportCcId;
     private readonly RtpHeaderExtensionElement[] _constantElements; // MID then RID, in wire order
     private readonly RtpExtension? _constantOnlyExtension;
+    private readonly bool _transportCcFitsOneByte;
 
     /// <summary>
     /// Creates the stamper from the negotiated extension ids. MID is stamped only when both
@@ -43,7 +44,12 @@ internal sealed class RtpOutboundHeaderExtensionStamper
             constants.Add(RtpRidHeaderExtension.Element(ridId, rid));
 
         _constantElements = [.. constants];
-        _constantOnlyExtension = constants.Count > 0 ? OneByteRtpHeaderExtensions.Encode(constants) : null;
+        _constantOnlyExtension = constants.Count > 0 ? RtpHeaderExtensions.Encode(constants) : null;
+
+        // Whether the transport-cc id alone still fits the one-byte form. Decides whether the
+        // per-packet fast path below may be taken (#224); with a negotiated id above 14 it may not.
+        _transportCcFitsOneByte = transportWideCcExtensionId is not { } ccId
+            || ccId <= OneByteRtpHeaderExtensions.MaxId;
     }
 
     /// <summary>Whether this stamper adds any header extension at all (transport-cc and/or MID/RID negotiated).</summary>
@@ -71,12 +77,17 @@ internal sealed class RtpOutboundHeaderExtensionStamper
             var combined = new RtpHeaderExtensionElement[_constantElements.Length + 1];
             Array.Copy(_constantElements, combined, _constantElements.Length);
             combined[^1] = tc;
-            return OneByteRtpHeaderExtensions.Encode(combined);
+            return RtpHeaderExtensions.Encode(combined);
         }
 
-        // Non-BUNDLE path (all current calls): transport-cc alone or nothing — byte-identical to before.
-        return _transportCcId is { } id && transportCcSequence is { } seq
+        if (_transportCcId is not { } id || transportCcSequence is not { } seq)
+            return null;
+
+        // Non-BUNDLE path (all current calls): transport-cc alone. The direct writer is one-byte only, so
+        // a negotiated id above 14 takes the general encoder instead (#224); with an id that fits, the
+        // bytes are unchanged.
+        return _transportCcFitsOneByte
             ? OneByteRtpHeaderExtensions.EncodeTransportSequenceNumber(id, seq)
-            : null;
+            : RtpHeaderExtensions.Encode([OneByteRtpHeaderExtensions.TransportSequenceNumber(id, seq)]);
     }
 }

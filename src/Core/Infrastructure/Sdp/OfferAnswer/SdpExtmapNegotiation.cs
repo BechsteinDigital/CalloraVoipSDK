@@ -16,20 +16,27 @@ internal static class SdpExtmapNegotiation
     // RFC 8285 §4.2: the one-byte header form uses ids 1..14 (0 is padding, 15 is reserved).
     private const int OneByteMaxExtensionId = 14;
 
+    // RFC 8285 §4.3: the two-byte form uses ids 1..255 (0 is padding). Ids beyond the one-byte range are
+    // usable because the SDK now writes and reads that form (#224).
+    private const int MaxExtensionId = 255;
+
     /// <summary>
-    /// Offer: assigns sequential one-byte ids to the supported extension URIs (RFC 8285 §5).
+    /// Offer: assigns sequential ids to the supported extension URIs (RFC 8285 §5).
     /// </summary>
     /// <remarks>
-    /// Only the first 14 fit the one-byte form; any beyond that are dropped (the SDK's supported set
-    /// is small).
+    /// Ids are handed out from 1 upwards, so the first fourteen land in the one-byte range and the SDP is
+    /// unchanged for any peer with at most that many extensions — which is every one today. Beyond that the
+    /// assignment continues into the two-byte range (#224) rather than dropping extensions on the floor;
+    /// packets carrying such an id are then written in the two-byte form automatically. Ids above 255 do
+    /// not exist in RFC 8285, so a longer list is still truncated.
     /// </remarks>
     public static IReadOnlyList<SdpExtmap> BuildOffer(IReadOnlyList<string> uris)
     {
         if (uris.Count == 0)
             return [];
 
-        var extmaps = new List<SdpExtmap>(Math.Min(uris.Count, OneByteMaxExtensionId));
-        for (var i = 0; i < uris.Count && i < OneByteMaxExtensionId; i++)
+        var extmaps = new List<SdpExtmap>(Math.Min(uris.Count, MaxExtensionId));
+        for (var i = 0; i < uris.Count && i < MaxExtensionId; i++)
             extmaps.Add(new SdpExtmap { Id = i + 1, Uri = uris[i] });
         return extmaps;
     }
@@ -65,7 +72,8 @@ internal static class SdpExtmapNegotiation
     /// echoing both would confirm an ambiguity as if it were a negotiation. The first mapping wins;
     /// any later one colliding on either side is dropped.
     ///
-    /// Only one-byte ids are echoed, since that is the form the SDK reads and writes.
+    /// Ids across the full RFC 8285 range are echoed (#224): the SDK reads and writes both wire forms, so
+    /// an offer that assigns an id above 14 is answerable rather than something to drop.
     /// </remarks>
     public static IReadOnlyList<SdpExtmap> BuildAnswer(
         IReadOnlyList<SdpExtmap> offered,
@@ -80,7 +88,7 @@ internal static class SdpExtmapNegotiation
 
         foreach (var extmap in offered)
         {
-            if (extmap.Id is < 1 or > OneByteMaxExtensionId)
+            if (extmap.Id is < 1 or > MaxExtensionId)
                 continue;
             if (!supportedUris.Contains(extmap.Uri, StringComparer.Ordinal))
                 continue;
