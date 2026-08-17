@@ -58,7 +58,8 @@ public sealed class VoipClient : IVoipClient
     // Application layer so TlsConfiguration never crosses into the Domain PhoneLineManager (rule R1).
     private readonly ConcurrentDictionary<SipAccount, TlsConfiguration> _lineTlsByAccount =
         new(ReferenceEqualityComparer.Instance);
-    private int _runtimeStarted;
+    // Started/stopping/stopped, so an aborted shutdown stays resumable (#166 P2-9).
+    private readonly RuntimeLifecycleState _runtime = new();
     private int _disposed;
 
     /// <summary>
@@ -405,7 +406,7 @@ public sealed class VoipClient : IVoipClient
         ThrowIfDisposed();
         ct.ThrowIfCancellationRequested();
 
-        if (Interlocked.Exchange(ref _runtimeStarted, 1) == 0)
+        if (_runtime.TryStart())
         {
             _logger.LogInformation("CalloraVoipSdk runtime started.");
         }
@@ -413,52 +414,73 @@ public sealed class VoipClient : IVoipClient
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Hangs up the active calls and unregisters the registered lines. Resumable: if the shutdown is cancelled
+    /// or a teardown step throws, the runtime stays marked as started, so calling it again resumes the teardown
+    /// from what is still up instead of returning immediately (#166 P2-9). A no-op once it has completed.
+    /// </summary>
     internal async Task StopRuntimeAsync(CancellationToken ct = default)
     {
         ThrowIfDisposed();
         ct.ThrowIfCancellationRequested();
 
-        if (Interlocked.Exchange(ref _runtimeStarted, 0) == 0)
+        // Claim the shutdown. Nothing to do when the runtime never started, already stopped, or another
+        // shutdown is in flight and owns the teardown.
+        if (!_runtime.TryBeginShutdown())
         {
             return;
         }
 
-        foreach (var call in Calls.Active)
+        try
         {
-            if (call.State == CallState.Terminated)
+            foreach (var call in Calls.Active)
             {
-                continue;
+                if (call.State == CallState.Terminated)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    await call.HangupAsync(ct).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Hangup failed during runtime shutdown for call {CallId}.", call.CallId);
+                }
             }
 
-            try
+            foreach (var line in Lines.All.ToList())
             {
-                await call.HangupAsync(ct).ConfigureAwait(false);
+                try
+                {
+                    await Lines.UnregisterAsync(line.LineId, ct).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Unregister failed during runtime shutdown for line {LineId}.", line.LineId);
+                }
             }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Hangup failed during runtime shutdown for call {CallId}.", call.CallId);
-            }
+        }
+        catch
+        {
+            // Give the shutdown back so it stays resumable: a cancelled host stop must not leave a runtime
+            // marked as stopped while calls are still up and lines are still registered. Both loops re-read
+            // the live sets, so the retry only touches what actually remains.
+            _runtime.AbortShutdown();
+            _logger.LogWarning("CalloraVoipSdk runtime shutdown was aborted; the runtime stays resumable.");
+            throw;
         }
 
-        foreach (var line in Lines.All.ToList())
-        {
-            try
-            {
-                await Lines.UnregisterAsync(line.LineId, ct).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Unregister failed during runtime shutdown for line {LineId}.", line.LineId);
-            }
-        }
+        _runtime.CompleteShutdown();
     }
 
     /// <summary>
@@ -807,7 +829,7 @@ public sealed class VoipClient : IVoipClient
     public void Dispose()
     {
         // Claim disposal atomically so two concurrent Dispose() callers cannot both run the teardown
-        // (double-dispose of orchestrators/transport/audio); mirrors the _runtimeStarted guard (HARD-C4).
+        // (double-dispose of orchestrators/transport/audio); mirrors the runtime-state guard (HARD-C4).
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
             return;
 
