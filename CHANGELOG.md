@@ -67,6 +67,20 @@ configurations. Validated end-to-end against a real Asterisk endpoint that carri
 
 ### Added
 
+- **Opaque video payload format for end-to-end encrypted frames** (#223, ADR-068). When a browser
+  encrypts its frames before the packetiser (WebRTC Encoded Transform / SFrame, RFC 9605), the frame is
+  ciphertext — and both existing video payload formats assume they may read it: H.264 fails closed on
+  NAL-type dispatch (no picture at all), and VP8 took its key-frame flag from what is now a random byte.
+  A second payload-format pair works from the RTP framing alone and never interprets the frame: VP8 keeps
+  its packetiser (already content-blind) and gains a descriptor-only depacketiser; H.264 gets a pair that
+  synthesises the NAL header RFC 6184 requires and carries the frame verbatim as FU-A, so a round trip is
+  byte-identical for arbitrary content. Neither pair claims a key frame — that signal belongs in a
+  plaintext RTP header extension (Dependency Descriptor), which is follow-up work.
+  The clear-media paths are unchanged, including their key-frame detection.
+  **Two limits, deliberately stated:** the opaque pair is currently reachable only through the internal
+  `VideoPayloadFormat.CreateOpaque` — the public switch on `WebRtcPeerOptions`/`VideoTrackOptions` is a
+  separate slice — and the H.264 framing is self-consistent between SDK endpoints and through a relay,
+  not validated against a browser (which keeps NAL headers in the clear instead; see ADR-068).
 - **`SipAccount.Register`** — `true` by default. Set to `false` for an IP-authenticated static-IP trunk: the
   line never sends REGISTER, reaches `LineState.Ready`, and dials straight at `SipServer`/`OutboundProxy`.
   Deregistering such a line sends nothing, because there is no binding to remove. Not the same as

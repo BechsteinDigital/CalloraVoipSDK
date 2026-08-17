@@ -128,6 +128,7 @@ Guardrails** (see `ADR-011` for the format model).
 | [ADR-046](ADR-046-video-media-security-sdes-dtls.md) | Video Media Security — Per-m-line SDES, RTX Keying, DTLS Precedence | Accepted | 2026-07-14 |
 | [ADR-047](ADR-047-video-ice-media-layer-and-candidates.md) | Video ICE — Per-5-tuple Media Layer, Shared Credentials, Full Candidate Gathering | Accepted | 2026-07-14 |
 | [ADR-048](ADR-048-video-media-stream-and-channel-activation.md) | Video Media Stream and SIP Channel Activation | Accepted | 2026-07-14 |
+| [ADR-068](ADR-068-opaque-video-payload-format.md) | Opaque Video Payload Format for End-to-End Encrypted Frames | Accepted | 2026-08-17 |
 
 ### Audio Codecs
 

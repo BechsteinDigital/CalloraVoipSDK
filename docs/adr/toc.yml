@@ -124,6 +124,8 @@
       href: ADR-047-video-ice-media-layer-and-candidates.md
     - name: "ADR-048: Video Media Stream and SIP Channel Activation"
       href: ADR-048-video-media-stream-and-channel-activation.md
+    - name: "ADR-068: Opaque Video Payload Format for End-to-End Encrypted Frames"
+      href: ADR-068-opaque-video-payload-format.md
 - name: "Audio Codecs"
   items:
     - name: "ADR-049: Opus Audio Codec Integration via Concentus (Managed Encode/Decode)"
