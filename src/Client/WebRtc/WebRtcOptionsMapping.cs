@@ -16,6 +16,13 @@ internal static class WebRtcOptionsMapping
     /// one. Every configurable option is carried across; unset options fall through to the
     /// configuration's own defaults.
     /// </summary>
+    /// <remarks>
+    /// The collection assignments below hand over the mutable options lists, which the configuration
+    /// snapshots on assignment — so a host that keeps mutating its <see cref="WebRtcOptions"/> after the
+    /// client was built cannot reach into that client's configuration (#166 P2-7). The same assignment
+    /// rejects an ICE-server entry the facade cannot use, so this path fails as loudly as the DI builder.
+    /// </remarks>
+    /// <exception cref="ArgumentException">An ICE-server entry is unusable (a TURN entry on a non-UDP transport).</exception>
     public static WebRtcConfiguration ToConfiguration(this WebRtcOptions options, ILoggerFactory? loggerFactory)
     {
         ArgumentNullException.ThrowIfNull(options);

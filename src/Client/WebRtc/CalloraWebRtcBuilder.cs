@@ -114,11 +114,11 @@ public sealed class CalloraWebRtcBuilder
         foreach (var server in servers)
         {
             ArgumentNullException.ThrowIfNull(server);
-            if (server.Type == IceServerType.Turn && server.Transport != IceTransport.Udp)
+            // The shared rule (#166 P2-7), so this door, the options validator and WebRtcConfiguration cannot
+            // drift into accepting what the others reject.
+            if (WebRtcIceServerPolicy.IsUnsupportedTurnTransport(server))
                 throw new ArgumentException(
-                    $"TURN server '{server.Host}' uses transport '{server.Transport}'; only UDP TURN is supported " +
-                    "for WebRTC relay gathering. Use IceTransport.Udp.",
-                    nameof(servers));
+                    WebRtcIceServerPolicy.UnsupportedTurnTransportMessage(server), nameof(servers));
         }
 
         _services.PostConfigure<WebRtcOptions>(options => options.IceServers = [.. options.IceServers, .. servers]);
