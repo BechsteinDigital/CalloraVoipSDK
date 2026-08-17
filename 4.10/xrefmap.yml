@@ -12477,6 +12477,15 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.WebRtc.IPeerConnection.SendDtmfAsync
   nameWithType: IPeerConnection.SendDtmfAsync
+- uid: CalloraVoipSdk.WebRtc.IPeerConnection.SendVideoFrameAsync(System.ReadOnlyMemory{System.Byte},System.UInt32,System.Boolean,System.Threading.CancellationToken)
+  name: SendVideoFrameAsync(ReadOnlyMemory<byte>, uint, bool, CancellationToken)
+  href: _api/CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_SendVideoFrameAsync_System_ReadOnlyMemory_System_Byte__System_UInt32_System_Boolean_System_Threading_CancellationToken_
+  commentId: M:CalloraVoipSdk.WebRtc.IPeerConnection.SendVideoFrameAsync(System.ReadOnlyMemory{System.Byte},System.UInt32,System.Boolean,System.Threading.CancellationToken)
+  name.vb: SendVideoFrameAsync(ReadOnlyMemory(Of Byte), UInteger, Boolean, CancellationToken)
+  fullName: CalloraVoipSdk.WebRtc.IPeerConnection.SendVideoFrameAsync(System.ReadOnlyMemory<byte>, uint, bool, System.Threading.CancellationToken)
+  fullName.vb: CalloraVoipSdk.WebRtc.IPeerConnection.SendVideoFrameAsync(System.ReadOnlyMemory(Of Byte), UInteger, Boolean, System.Threading.CancellationToken)
+  nameWithType: IPeerConnection.SendVideoFrameAsync(ReadOnlyMemory<byte>, uint, bool, CancellationToken)
+  nameWithType.vb: IPeerConnection.SendVideoFrameAsync(ReadOnlyMemory(Of Byte), UInteger, Boolean, CancellationToken)
 - uid: CalloraVoipSdk.WebRtc.IPeerConnection.SendVideoFrameAsync(System.ReadOnlyMemory{System.Byte},System.UInt32,System.Threading.CancellationToken)
   name: SendVideoFrameAsync(ReadOnlyMemory<byte>, uint, CancellationToken)
   href: _api/CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_SendVideoFrameAsync_System_ReadOnlyMemory_System_Byte__System_UInt32_System_Threading_CancellationToken_
@@ -12486,6 +12495,15 @@ references:
   fullName.vb: CalloraVoipSdk.WebRtc.IPeerConnection.SendVideoFrameAsync(System.ReadOnlyMemory(Of Byte), UInteger, System.Threading.CancellationToken)
   nameWithType: IPeerConnection.SendVideoFrameAsync(ReadOnlyMemory<byte>, uint, CancellationToken)
   nameWithType.vb: IPeerConnection.SendVideoFrameAsync(ReadOnlyMemory(Of Byte), UInteger, CancellationToken)
+- uid: CalloraVoipSdk.WebRtc.IPeerConnection.SendVideoFrameAsync(System.String,System.ReadOnlyMemory{System.Byte},System.UInt32,System.Boolean,System.Threading.CancellationToken)
+  name: SendVideoFrameAsync(string, ReadOnlyMemory<byte>, uint, bool, CancellationToken)
+  href: _api/CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_SendVideoFrameAsync_System_String_System_ReadOnlyMemory_System_Byte__System_UInt32_System_Boolean_System_Threading_CancellationToken_
+  commentId: M:CalloraVoipSdk.WebRtc.IPeerConnection.SendVideoFrameAsync(System.String,System.ReadOnlyMemory{System.Byte},System.UInt32,System.Boolean,System.Threading.CancellationToken)
+  name.vb: SendVideoFrameAsync(String, ReadOnlyMemory(Of Byte), UInteger, Boolean, CancellationToken)
+  fullName: CalloraVoipSdk.WebRtc.IPeerConnection.SendVideoFrameAsync(string, System.ReadOnlyMemory<byte>, uint, bool, System.Threading.CancellationToken)
+  fullName.vb: CalloraVoipSdk.WebRtc.IPeerConnection.SendVideoFrameAsync(String, System.ReadOnlyMemory(Of Byte), UInteger, Boolean, System.Threading.CancellationToken)
+  nameWithType: IPeerConnection.SendVideoFrameAsync(string, ReadOnlyMemory<byte>, uint, bool, CancellationToken)
+  nameWithType.vb: IPeerConnection.SendVideoFrameAsync(String, ReadOnlyMemory(Of Byte), UInteger, Boolean, CancellationToken)
 - uid: CalloraVoipSdk.WebRtc.IPeerConnection.SendVideoFrameAsync(System.String,System.ReadOnlyMemory{System.Byte},System.UInt32,System.Threading.CancellationToken)
   name: SendVideoFrameAsync(string, ReadOnlyMemory<byte>, uint, CancellationToken)
   href: _api/CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_SendVideoFrameAsync_System_String_System_ReadOnlyMemory_System_Byte__System_UInt32_System_Threading_CancellationToken_
