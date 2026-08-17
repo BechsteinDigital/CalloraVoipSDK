@@ -10,12 +10,18 @@ The next line. Entries here accumulate the consumer-visible changes not yet rele
 
 ### Changed
 
-- **The DTLS-SRTP handshake offers AEAD cipher suites only** (#229). The server-side list also carried
-  `TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256` next to AES-128-GCM, AES-256-GCM and ChaCha20-Poly1305. No
-  browser ever selected it — they all negotiate one of the AEAD suites — so it contributed nothing except a
-  question to answer in every security review: Anlage 31b BMV-Ä has the handshake assessed against BSI
-  TR-02102. What is not offered cannot be negotiated. A peer that supports *only* CBC can no longer complete
-  a handshake; no WebRTC endpoint is in that position.
+- **The DTLS-SRTP handshake offers AEAD cipher suites only** (#229, #323). Both roles are covered.
+  - **Server:** the offered list also carried `TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256` next to AES-128-GCM,
+    AES-256-GCM and ChaCha20-Poly1305. No browser ever selected it — they all negotiate one of the AEAD
+    suites — so it contributed nothing except a question to answer in every security review: Anlage 31b
+    BMV-Ä has the handshake assessed against BSI TR-02102. What is not offered cannot be negotiated. A peer
+    that supports *only* CBC can no longer complete a handshake; no WebRTC endpoint is in that position.
+  - **Client:** in the DTLS client role (`a=setup:passive` on the peer) the SDK inherited BouncyCastle's
+    default list. Measured off the wire, that carried **eight AES-CBC suites — four of them with SHA-1** —
+    plus static-RSA key exchange without forward secrecy. The CBC suites are filtered out; the ECDHE_RSA and
+    DHE_RSA families stay, so a peer with an RSA certificate (RFC 8827 permits one) still completes a
+    handshake. A test pins the remaining list off a real ClientHello, so a BouncyCastle update cannot widen
+    it unnoticed.
 - **Media silence no longer ends calls** (#261, ADR-069). A connected call was torn down after **15 seconds
   without inbound RTP**. Silence is not evidence that the far end is gone — silence suppression (RFC 3389),
   hold, and the bridge switch of an attended transfer all stop the media on a perfectly live call — and the

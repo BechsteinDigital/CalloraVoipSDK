@@ -34,6 +34,27 @@ internal sealed class DtlsSrtpClient : DefaultTlsClient
     public DtlsSrtpNegotiatedKeys? NegotiatedKeys { get; private set; }
 
     /// <inheritdoc />
+    // AEAD only (#323, follow-up to #229). BouncyCastle's DefaultTlsClient advertises a broad legacy list —
+    // measured off the wire, our ClientHello carried eight AES-CBC suites, four of them with SHA-1, plus
+    // static-RSA key exchange without forward secrecy. None of it is reachable in practice (the peer picks,
+    // and every WebRTC endpoint picks AEAD), but Anlage 31b BMV-Ä has the handshake assessed against BSI
+    // TR-02102, and what is not offered needs no defending.
+    //
+    // Filtered, not replaced: the base list is kept minus the CBC suites, so the RSA and DHE families survive.
+    // Pinning the three ECDHE_ECDSA suites of the server side here instead would refuse every peer with an
+    // RSA certificate, which RFC 8827 explicitly permits — a hardening that breaks interop is not one.
+    protected override int[] GetSupportedCipherSuites() =>
+        [.. base.GetSupportedCipherSuites().Where(suite => !IsCbc(suite))];
+
+    // The AES-CBC suites of the TLS registry that BouncyCastle's default list can contribute (RFC 5246 §A.5,
+    // RFC 5289, RFC 8422). Matched by value: the constants live in several BouncyCastle enums, and a literal
+    // table is what the wire test asserts against.
+    private static bool IsCbc(int cipherSuite) => cipherSuite is
+        0xC023 or 0xC024 or 0xC009 or 0xC00A or   // ECDHE_ECDSA
+        0xC027 or 0xC028 or 0xC013 or 0xC014 or   // ECDHE_RSA
+        0x0067 or 0x006B or 0x0033 or 0x0039 or   // DHE_RSA
+        0x003C or 0x003D or 0x002F or 0x0035;     // RSA
+
     protected override ProtocolVersion[] GetSupportedVersions() => ProtocolVersion.DTLSv12.Only();
 
     /// <summary>
