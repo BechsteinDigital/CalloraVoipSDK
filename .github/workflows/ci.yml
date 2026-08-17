@@ -157,7 +157,10 @@ jobs:
   browser-interop:
     runs-on: ubuntu-latest
     # Video (VP8) decode kann unter CI-CPU-Druck bis ~90 s je Test brauchen; großzügiger Job-Puffer.
-    timeout-minutes: 15
+    # 20 statt 15, seit Install-Schritte einen Retry haben: der Normalfall bleibt bei ~40 s, aber ein
+    # einmal hängender Mirror soll den Retry noch bezahlen können, statt den Job kurz vor den Tests zu
+    # kappen. Die Schritt-Timeouts sind die eigentliche Grenze — dieser Wert ist nur das Dach.
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -178,10 +181,56 @@ jobs:
       - name: Build
         run: dotnet build CalloraVoipSdk.sln --configuration Release --no-restore
 
-      - name: Install Playwright Chromium + Firefox + system deps
-        # Befüllt ~/.cache/ms-playwright/{chromium,firefox}-* (wo BrowserEngine die Browser der Matrix sucht);
-        # --with-deps installiert die headless-Ubuntu-Pakete (libnss3/libgbm1/... via apt) für beide Motoren.
-        run: pwsh tests/CalloraVoipSdk.BrowserInteropTests/bin/Release/net10.0/playwright.ps1 install chromium firefox --with-deps
+      - name: apt-Netzwerkwartezeiten begrenzen
+        # Ohne das wartet apt unbegrenzt auf einen zähen Mirror. Gemessen am 2026-08-17 (Runs 32068834396
+        # und 32071229687): archive.ubuntu.com lieferte die erste InRelease erst nach 38 s und blieb danach
+        # zwölf Minuten stehen — bis das Job-Budget aufgebraucht war. apt liest apt.conf.d, also gelten die
+        # Grenzen auch für das apt-get, das Playwright selbst startet.
+        run: |
+          sudo tee /etc/apt/apt.conf.d/99-ci-timeouts >/dev/null <<'CONF'
+          Acquire::Retries "3";
+          Acquire::http::Timeout "20";
+          Acquire::https::Timeout "20";
+          CONF
+
+      - name: Playwright-Systemabhängigkeiten (apt)
+        # Getrennt vom Browser-Download (vorher ein --with-deps-Aufruf), damit im Log sofort sichtbar ist,
+        # welche Hälfte klemmt — die Messung oben war nur deshalb möglich, weil apt zufällig zuerst lief.
+        # Jeder Versuch ist hart begrenzt: ein hängendes apt kostet 100 s und einen Retry, nicht den Job.
+        timeout-minutes: 6
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          set -uo pipefail
+          for attempt in 1 2; do
+            if timeout --signal=TERM --kill-after=15s 100s \
+                 pwsh tests/CalloraVoipSdk.BrowserInteropTests/bin/Release/net10.0/playwright.ps1 \
+                 install-deps chromium firefox; then
+              exit 0
+            fi
+            echo "::warning::apt-Versuch $attempt hing oder schlug fehl — Retry"
+            # Ein abgeschossener Versuch kann apt/dpkg mit gehaltenem Lock hinterlassen; sonst scheitert
+            # der Retry am Lock statt am eigentlichen Problem.
+            sudo pkill -TERM -f 'apt-get|dpkg' || true
+            sleep 5
+          done
+          exit 1
+
+      - name: Playwright-Browser (Chromium + Firefox)
+        # Befüllt ~/.cache/ms-playwright/{chromium,firefox}-* (wo BrowserEngine die Browser der Matrix sucht).
+        timeout-minutes: 6
+        run: |
+          set -uo pipefail
+          for attempt in 1 2; do
+            if timeout --signal=TERM --kill-after=15s 150s \
+                 pwsh tests/CalloraVoipSdk.BrowserInteropTests/bin/Release/net10.0/playwright.ps1 \
+                 install chromium firefox; then
+              exit 0
+            fi
+            echo "::warning::Browser-Download-Versuch $attempt hing oder schlug fehl — Retry"
+            sleep 5
+          done
+          exit 1
 
       - name: Browser interop tests (Playwright/headless Chrome + Firefox)
         # Bisher lokal-first aus dem Haupt-Gate (Category!=BrowserInterop); hier als eigener Linux-Job
