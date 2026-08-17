@@ -72,6 +72,99 @@ public sealed class WebRtcRecordingTests
         Assert.Equal(1, sink.CompletedCount);
     }
 
+    /// <summary>
+    /// #166 P2-5: stopping is one shared operation. A second stop must not report success while the first
+    /// flush is still running — it joins that flush and returns only once the sink is actually complete.
+    /// </summary>
+    [Fact]
+    public async Task A_second_stop_joins_the_in_flight_flush_instead_of_reporting_success_early()
+    {
+        var peer = new RecordingFakePeer();
+        var sink = new GatedSink();
+        var recording = new WebRtcRecorder().Start(peer, sink);
+
+        var first = recording.StopAsync();
+        var second = recording.StopAsync();
+        var third = recording.DisposeAsync().AsTask();
+
+        // The flush is parked inside CompleteAsync: no caller may claim the recording is stopped yet.
+        await sink.Entered.Task;
+        Assert.False(first.IsCompleted);
+        Assert.False(second.IsCompleted);
+        Assert.False(third.IsCompleted);
+
+        sink.Release();
+
+        await Task.WhenAll(first, second, third);
+        Assert.Equal(1, sink.CompletedCount);
+    }
+
+    /// <summary>
+    /// #166 P2-5: a failed flush must not latch the handle. Before the fix the stopped flag was set first, so
+    /// after a throwing CompleteAsync every later stop/dispose was a permanent no-op and the media was lost.
+    /// </summary>
+    [Fact]
+    public async Task A_failed_stop_stays_retryable()
+    {
+        var peer = new RecordingFakePeer();
+        var sink = new FailingOnceSink();
+        var recording = new WebRtcRecorder().Start(peer, sink);
+
+        await Assert.ThrowsAsync<IOException>(() => recording.StopAsync());
+        Assert.Equal(0, sink.CompletedCount);
+
+        await recording.StopAsync();     // the retry actually re-runs the flush
+        Assert.Equal(1, sink.CompletedCount);
+
+        await recording.StopAsync();     // and is idempotent again from here on
+        await recording.DisposeAsync();
+        Assert.Equal(1, sink.CompletedCount);
+    }
+
+    // A sink whose CompleteAsync parks until released, so a test can observe the window in which the first
+    // stop is flushing and a second stop arrives.
+    private sealed class GatedSink : IEncodedMediaSink
+    {
+        private readonly TaskCompletionSource _gate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public int CompletedCount { get; private set; }
+
+        public void Write(in RecordedFrame frame)
+        {
+        }
+
+        public async ValueTask CompleteAsync(CancellationToken cancellationToken = default)
+        {
+            Entered.TrySetResult();
+            await _gate.Task;
+            CompletedCount++;
+        }
+
+        public void Release() => _gate.TrySetResult();
+    }
+
+    // Fails the first flush, succeeds afterwards — the retry path of a failed stop.
+    private sealed class FailingOnceSink : IEncodedMediaSink
+    {
+        private int _attempts;
+
+        public int CompletedCount { get; private set; }
+
+        public void Write(in RecordedFrame frame)
+        {
+        }
+
+        public ValueTask CompleteAsync(CancellationToken cancellationToken = default)
+        {
+            if (++_attempts == 1)
+                throw new IOException("flush-boom");
+
+            CompletedCount++;
+            return ValueTask.CompletedTask;
+        }
+    }
+
     private sealed class CollectingSink : IEncodedMediaSink
     {
         public List<RecordedFrame> Frames { get; } = [];

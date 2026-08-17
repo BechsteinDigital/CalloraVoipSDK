@@ -10,6 +10,40 @@ The next line. Entries here accumulate the consumer-visible changes not yet rele
 
 ### Changed
 
+- **Client-facade contracts hardened (#166 P2/P3).** Nine findings from the `src/Client` review, all
+  consumer-visible:
+  - **`IPeerConnection` publishes `Closed` on an explicit dispose** — exactly once. Disposing a peer
+    yourself previously flipped `State` to `Closed` without ever raising `ConnectionStateChanged`, so an
+    app-side UI or per-connection state was never released. Subscribers that treat the terminal transition as
+    idempotent need no change; subscribers that only listened for a remote close now see the local one too.
+  - **`IWebRtcRecording.StopAsync` is one shared operation.** A concurrent stop joins the in-flight flush and
+    returns when the sink is actually complete, instead of reporting success mid-flush; a failed flush leaves
+    the recording stoppable rather than latching every later stop into a silent no-op.
+  - **`WebRtcConfiguration` is immutable in fact.** Every collection property snapshots the list it is given
+    (and rejects `null`), so a caller's later mutation — including of the `WebRtcOptions` instance the DI path
+    maps from — no longer reaches a running client.
+  - **A TURN entry on TCP/TLS is rejected at every door.** Previously only the DI builder refused it, while
+    direct construction and `IOptions` accepted it and then silently gathered no relay candidate. Now
+    `WebRtcConfiguration`, `WebRtcOptionsValidator` and the builder agree. The TCP/TLS relay data path itself
+    remains unimplemented (#155).
+  - **Overriding `IVoipClient`/`IWebRtcClient` in the container works.** The concrete `VoipClient`/`WebRtcClient`
+    alias is only registered when the SDK owns the interface registration; pre-registering a fake no longer
+    produces an `InvalidCastException` at resolution time. Where the alias genuinely cannot be satisfied it
+    reports an actionable error instead of a bare cast failure.
+  - **An aborted hosted shutdown is resumable.** A cancelled `StopAsync` no longer marks the runtime as
+    stopped while calls are still up and lines still registered; a retry resumes the teardown.
+  - **`ConnectAsync` always returns.** The remote-candidate pump is still cancelled and awaited, but the wait
+    is bounded (5 s) and the pump is then abandoned, so a trickle channel that ignores its cancellation token
+    can no longer park the connect task on an already-connected peer.
+  - **`IStunServerHost.Start` / `ITurnServerHost.Start`**: a failing start is no longer committed (the host
+    stays startable), and starting a **disposed** host now throws `ObjectDisposedException` instead of being a
+    silent no-op — the previously documented no-op is gone.
+  - **`IModuleRegistry.Register` / `IWebRtcModuleRegistry.Register` throw `ObjectDisposedException` after the
+    owning client was disposed**, rather than attaching a module to a torn-down client. Resolution keeps working.
+  - **One event contract for the public facades**: every facade event is raised per subscriber, a subscriber
+    fault is logged and never propagated into the SDK path, and one throwing handler no longer keeps the later
+    ones from running. Per-frame `RemoteTrack.FrameReceived` keeps a single guarded invocation (no per-frame
+    allocation); use an `IMediaTap` when several consumers need per-consumer isolation there.
 - **DTLS-SRTP fingerprint verification is hash-agile (RFC 8122 §5).** The peer's `a=fingerprint` is now
   verified by digesting its certificate with the hash function the peer named, instead of assuming SHA-256
   and rejecting everything else with `unsupported_certificate` — a peer signalling SHA-384 could previously

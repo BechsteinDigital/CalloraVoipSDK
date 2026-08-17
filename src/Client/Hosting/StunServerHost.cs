@@ -17,8 +17,7 @@ public sealed class StunServerHost : IStunServerHost
     private readonly StunServer _server;
     private readonly IStunMessageCodec _codec;
     private readonly ILoggerFactory _loggerFactory;
-    private int _started;
-    private int _disposed;
+    private readonly ServerHostLifecycle _lifecycle = new();
 
     /// <summary>Builds and binds the server from <paramref name="configuration"/>. The socket is bound here, so
     /// <see cref="LocalEndPoint"/> is valid before <see cref="Start"/>.</summary>
@@ -49,16 +48,15 @@ public sealed class StunServerHost : IStunServerHost
 
     /// <inheritdoc />
     public void Start()
-    {
-        if (Interlocked.Exchange(ref _started, 1) != 0 || Volatile.Read(ref _disposed) != 0)
-            return;
-        _server.Start(new StunBindingRequestHandler(_codec, _loggerFactory.CreateLogger<StunBindingRequestHandler>()));
-    }
+        => _lifecycle.Start(
+            () => _server.Start(
+                new StunBindingRequestHandler(_codec, _loggerFactory.CreateLogger<StunBindingRequestHandler>())),
+            this);
 
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
-        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        if (!_lifecycle.TryBeginDispose())
             return;
         await _server.DisposeAsync().ConfigureAwait(false);
     }

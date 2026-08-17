@@ -11,8 +11,10 @@ public interface IModuleRegistry
     /// Registers one module instance. The <see cref="IVoipClientModule.OnAttached"/> hook runs
     /// first; the module only becomes resolvable after the hook completed, so consumers never
     /// observe a partially initialized module. When multiple registered modules satisfy the same
-    /// contract, resolution returns the first registered match.
+    /// contract, resolution returns the first registered match. Registration closes once the owning client has
+    /// been disposed — a module must not attach itself to a torn-down client (#166 P3-13).
     /// </summary>
+    /// <exception cref="ObjectDisposedException">The owning client has been disposed.</exception>
     void Register(IVoipClientModule module);
 
     /// <summary>

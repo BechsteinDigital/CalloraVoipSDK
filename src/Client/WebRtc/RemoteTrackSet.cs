@@ -1,3 +1,6 @@
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+
 namespace CalloraVoipSdk.WebRtc;
 
 /// <summary>
@@ -30,6 +33,7 @@ internal sealed class RemoteTrackSet
 
     private readonly object _sync = new();
     private readonly Action<RemoteTrack> _onTrackReceived;
+    private readonly ILogger _logger;
     // Audio tracks keyed by MID (empty string for the primary/anchor addressed via the mid-less path), so N remote
     // audio m-lines (4.7.0) materialise N distinct tracks and each inbound frame routes to its own track.
     private readonly Dictionary<string, RemoteTrack> _audio = new(StringComparer.Ordinal);
@@ -37,10 +41,16 @@ internal sealed class RemoteTrackSet
     // materialise N distinct tracks and each inbound frame routes to its own track.
     private readonly Dictionary<string, RemoteTrack> _video = new(StringComparer.Ordinal);
 
-    public RemoteTrackSet(Action<RemoteTrack> onTrackReceived)
+    /// <param name="onTrackReceived">Raises the facade's track-received event for a newly materialised track.</param>
+    /// <param name="logger">
+    /// Logs a throwing <see cref="RemoteTrack.FrameReceived"/> subscriber instead of letting it break the media
+    /// receive loop (#166 P3-14). Null uses no logging, for tests that only assert the projection.
+    /// </param>
+    public RemoteTrackSet(Action<RemoteTrack> onTrackReceived, ILogger? logger = null)
     {
         ArgumentNullException.ThrowIfNull(onTrackReceived);
         _onTrackReceived = onTrackReceived;
+        _logger = logger ?? NullLogger.Instance;
     }
 
     /// <summary>
@@ -61,7 +71,7 @@ internal sealed class RemoteTrackSet
                 // reoffer flood of new MIDs cannot grow retention without limit. Its frames are dropped.
                 if (_audio.Count >= MaxTracksPerKind)
                     return null;
-                existing = new RemoteTrack(TrackKind.Audio, streamId, trackId, mid);
+                existing = new RemoteTrack(TrackKind.Audio, streamId, trackId, mid, _logger);
                 _audio[key] = existing;
                 created = existing;
             }
@@ -88,7 +98,7 @@ internal sealed class RemoteTrackSet
                 // reoffer flood of new MIDs cannot grow retention without limit. Its frames are dropped.
                 if (_video.Count >= MaxTracksPerKind)
                     return null;
-                existing = new RemoteTrack(TrackKind.Video, streamId, trackId, mid);
+                existing = new RemoteTrack(TrackKind.Video, streamId, trackId, mid, _logger);
                 _video[key] = existing;
                 created = existing;
             }

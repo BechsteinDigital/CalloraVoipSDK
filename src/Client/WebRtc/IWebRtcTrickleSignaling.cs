@@ -4,7 +4,7 @@ namespace CalloraVoipSdk.WebRtc;
 /// Extends <see cref="IWebRtcSignaling"/> with out-of-band ICE candidate trickle (RFC 8838): alongside the
 /// offer/answer, the SDK sends each locally gathered candidate as it is discovered and applies remote
 /// candidates as they arrive, rather than relying only on the candidates the SDP carried. When an app
-/// supplies this on <see cref="WebRtcPeerConnectionExtensions.ConnectAsync"/>, the SDK gathers
+/// supplies this on <see cref="WebRtcPeerConnectionExtensions.ConnectAsync(IPeerConnection, IWebRtcSignaling, WebRtcRole, System.Threading.CancellationToken)"/>, the SDK gathers
 /// server-reflexive candidates and runs the trickle exchange; a plain <see cref="IWebRtcSignaling"/> stays
 /// SDP-only. Candidate strings are RFC 8829 <c>candidate:…</c> lines — the wire form browsers exchange
 /// verbatim, so no conversion is needed at the app boundary.

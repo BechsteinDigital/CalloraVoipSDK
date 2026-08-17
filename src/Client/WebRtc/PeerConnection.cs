@@ -18,9 +18,13 @@ namespace CalloraVoipSdk.WebRtc;
 internal sealed class PeerConnection : IPeerConnection
 {
     private readonly WebRtcPeerConnection _peer;
+    private readonly ILogger _logger;
     private readonly RemoteTrackSet _tracks;
     private readonly MediaTapSet _taps;
     private readonly Action<IPeerConnection>? _onDisposed;
+    // Latches the terminal Closed transition so it is published exactly once (#166 P2-6), whether it comes
+    // from the inner peer's own teardown transition or from the dispose fallback.
+    private int _closedPublished;
     // The client's default video codecs (config VideoCodecs) for a track added without explicit codecs.
     private readonly IReadOnlyList<string> _defaultVideoCodecs;
     // The client's default audio codecs (config AudioCodecs) for an added audio track without explicit codecs.
@@ -52,10 +56,11 @@ internal sealed class PeerConnection : IPeerConnection
         ArgumentNullException.ThrowIfNull(peer);
         ArgumentNullException.ThrowIfNull(logger);
         _peer = peer;
+        _logger = logger;
         _onDisposed = onDisposed;
         _defaultVideoCodecs = defaultVideoCodecs ?? [];
         _defaultAudioCodecs = defaultAudioCodecs ?? [];
-        _tracks = new RemoteTrackSet(RaiseTrackReceived);
+        _tracks = new RemoteTrackSet(RaiseTrackReceived, logger);
         _taps = new MediaTapSet(logger);
         _peer.ConnectionStateChanged += OnInternalStateChanged;
         _peer.SignalingStateChanged += OnInternalSignalingStateChanged;
@@ -367,10 +372,14 @@ internal sealed class PeerConnection : IPeerConnection
     public ValueTask<bool> RequestVideoKeyFrameAsync(string mid, CancellationToken cancellationToken = default)
         => _peer.RequestVideoKeyFrameAsync(mid, cancellationToken);
 
+    /// <summary>
+    /// Closes the peer and publishes the terminal <see cref="PeerConnectionState.Closed"/> transition to
+    /// <see cref="ConnectionStateChanged"/> exactly once, then untracks from the owning client. Idempotent.
+    /// </summary>
     public async ValueTask DisposeAsync()
     {
-        _peer.ConnectionStateChanged -= OnInternalStateChanged;
-        _peer.SignalingStateChanged -= OnInternalSignalingStateChanged;
+        // The media/track fan-out detaches first: no frame, candidate, DTMF digit or bitrate hint should
+        // surface once teardown has begun.
         _peer.AudioReceived -= OnAudioReceived;
         _peer.AudioTrackFrameReceived -= OnAudioTrackReceived;
         _peer.VideoTrackFrameReceived -= OnVideoTrackReceived;
@@ -381,13 +390,32 @@ internal sealed class PeerConnection : IPeerConnection
         _peer.RecommendedBitrateChanged -= OnRecommendedBitrateChanged;
         try
         {
+            // #166 P2-6: the two state handlers stay attached ACROSS the inner teardown. The peer raises its
+            // terminal Closed transition inside DisposeAsync (RFC 8829 §4.1.3), and detaching first — as this
+            // did before — swallowed exactly the transition the app needs to see to release its own state.
             await _peer.DisposeAsync().ConfigureAwait(false);
         }
         finally
         {
+            _peer.ConnectionStateChanged -= OnInternalStateChanged;
+            _peer.SignalingStateChanged -= OnInternalSignalingStateChanged;
+            // The peer normally raised Closed above; publish it here when it did not (it was already closed,
+            // or its teardown faulted before the transition) so the terminal state is never missing either.
+            PublishClosedOnce();
             // Untrack from the peer manager even if the inner dispose throws, so a failed teardown
             // never leaves a dead peer registered.
             _onDisposed?.Invoke(this);
+        }
+    }
+
+    // The dispose-time fallback for the terminal transition. The raise itself isolates every subscriber
+    // (SdkEventDispatch), so a throwing handler can neither mask an inner dispose failure nor skip the
+    // untracking that follows.
+    private void PublishClosedOnce()
+    {
+        if (Interlocked.Exchange(ref _closedPublished, 1) == 0)
+        {
+            RaiseConnectionState(PeerConnectionState.Closed);
         }
     }
 
@@ -415,30 +443,41 @@ internal sealed class PeerConnection : IPeerConnection
 
     private void OnInternalStateChanged(WebRtcConnectionState state)
     {
+        var mapped = Map(state);
+        // Closed is terminal and is published exactly once (#166 P2-6): whichever of the peer's own transition
+        // and the dispose fallback arrives first wins, the other is dropped.
+        if (mapped == PeerConnectionState.Closed && Interlocked.Exchange(ref _closedPublished, 1) != 0)
+            return;
+
+        RaiseConnectionState(mapped);
+    }
+
+    private void RaiseConnectionState(PeerConnectionState state)
+    {
         EventHandler<PeerConnectionState>? handler;
         lock (_eventSync) handler = _connectionStateChanged;
-        handler?.Invoke(this, Map(state));
+        SdkEventDispatch.Raise(handler, this, state, _logger, nameof(ConnectionStateChanged));
     }
 
     private void OnInternalSignalingStateChanged(WebRtcSignalingState state)
     {
         EventHandler<SignalingState>? handler;
         lock (_eventSync) handler = _signalingStateChanged;
-        handler?.Invoke(this, MapSignaling(state));
+        SdkEventDispatch.Raise(handler, this, MapSignaling(state), _logger, nameof(SignalingStateChanged));
     }
 
     private void OnLocalIceCandidate(string candidate)
     {
         EventHandler<string>? handler;
         lock (_eventSync) handler = _localIceCandidateDiscovered;
-        handler?.Invoke(this, candidate);
+        SdkEventDispatch.Raise(handler, this, candidate, _logger, nameof(LocalIceCandidateDiscovered));
     }
 
     private void OnDtmfReceived(byte toneCode, int durationMs)
     {
         EventHandler<DtmfTone>? handler;
         lock (_eventSync) handler = _dtmfReceived;
-        handler?.Invoke(this, new DtmfTone(toneCode, durationMs));
+        SdkEventDispatch.Raise(handler, this, new DtmfTone(toneCode, durationMs), _logger, nameof(DtmfReceived));
     }
 
     // Send-side feedback (RFC 4585/5104): the peer asked for a key frame. Surfaced as a top-level event
@@ -447,7 +486,7 @@ internal sealed class PeerConnection : IPeerConnection
     {
         EventHandler? handler;
         lock (_eventSync) handler = _videoKeyFrameRequested;
-        handler?.Invoke(this, EventArgs.Empty);
+        SdkEventDispatch.Raise(handler, this, _logger, nameof(VideoKeyFrameRequested));
     }
 
     // The SDK revised its recommended send bitrate for this peer (transport-cc). Surfaced as a
@@ -457,7 +496,8 @@ internal sealed class PeerConnection : IPeerConnection
     {
         EventHandler<BitrateRecommendation>? handler;
         lock (_eventSync) handler = _recommendedBitrateChanged;
-        handler?.Invoke(this, new BitrateRecommendation(bitrateBps, quality));
+        SdkEventDispatch.Raise(
+            handler, this, new BitrateRecommendation(bitrateBps, quality), _logger, nameof(RecommendedBitrateChanged));
     }
 
     // Snapshotted TrackReceived fire path used by the RemoteTrackSet when a remote track materialises.
@@ -465,7 +505,7 @@ internal sealed class PeerConnection : IPeerConnection
     {
         EventHandler<RemoteTrack>? handler;
         lock (_eventSync) handler = _trackReceived;
-        handler?.Invoke(this, track);
+        SdkEventDispatch.Raise(handler, this, track, _logger, nameof(TrackReceived));
     }
 
     // Inbound media is projected onto the W3C track model via the RemoteTrackSet: the remote a=msid names

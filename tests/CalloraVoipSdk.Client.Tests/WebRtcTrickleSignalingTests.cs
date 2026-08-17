@@ -44,6 +44,38 @@ public sealed class WebRtcTrickleSignalingTests
         Assert.Empty(peer.AppliedCandidates);
     }
 
+    /// <summary>
+    /// #166 P2-11: a trickle channel that ignores its cancellation token must not hang ConnectAsync. The
+    /// finally block awaited the pump unconditionally, so an app-side signalling bug parked the public Connect
+    /// task forever on a peer that had already reached Connected. The drain is bounded now.
+    /// </summary>
+    [Fact]
+    public async Task A_non_cooperative_pump_does_not_block_the_connect_from_returning()
+    {
+        var peer = new TricklePeer();
+        var signalling = new NonCooperativeTrickleSignalling(
+            "REMOTE-ANSWER", "candidate:REMOTE-1 1 udp 100 127.0.0.1 40000 typ host");
+
+        try
+        {
+            // The pump never observes cancellation; with a short drain grace period the connect still returns.
+            var connect = peer.ConnectAsync(signalling, WebRtcRole.Offerer, TimeSpan.FromMilliseconds(50), CancellationToken.None);
+
+            await connect.WaitAsync(TimeSpan.FromSeconds(10));
+
+            Assert.True(peer.Started);
+
+            // The pump is parked inside the app's channel — the SDK abandoned it instead of awaiting it, which
+            // is the whole point: the connect above returned regardless.
+            await signalling.Blocked.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.False(signalling.PumpResumed);
+        }
+        finally
+        {
+            signalling.ReleasePump();
+        }
+    }
+
     // ── fakes ──────────────────────────────────────────────────────────────────
 
     private sealed class TricklePeer : IPeerConnection
@@ -168,5 +200,40 @@ public sealed class WebRtcTrickleSignalingTests
     {
         public Task SendDescriptionAsync(string sdp, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<string> ReceiveDescriptionAsync(CancellationToken cancellationToken = default) => Task.FromResult(remoteAnswer);
+    }
+
+    // A channel that violates the trickle contract: its receive loop parks on a gate and never looks at the
+    // cancellation token. Released by the test at the end so the background pump does not outlive the run.
+    private sealed class NonCooperativeTrickleSignalling(string remoteAnswer, string remoteCandidate) : IWebRtcTrickleSignaling
+    {
+        private readonly TaskCompletionSource _gate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _remoteDelivered;
+
+        /// <summary>Completes once the receive loop has parked on the gate, ignoring its token.</summary>
+        public TaskCompletionSource Blocked { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        /// <summary>Whether the parked receive call ever returned (it must not have, while the gate is shut).</summary>
+        public bool PumpResumed { get; private set; }
+
+        public Task SendDescriptionAsync(string sdp, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task<string> ReceiveDescriptionAsync(CancellationToken cancellationToken = default) => Task.FromResult(remoteAnswer);
+
+        public Task SendCandidateAsync(string candidate, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public async Task<string?> ReceiveCandidateAsync(CancellationToken cancellationToken = default)
+        {
+            if (Interlocked.Exchange(ref _remoteDelivered, 1) == 0)
+                return remoteCandidate;
+
+            Blocked.TrySetResult();
+            await _gate.Task.ConfigureAwait(false);   // note: cancellationToken deliberately ignored
+            PumpResumed = true;
+            return null;
+        }
+
+        public Task SendEndOfCandidatesAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public void ReleasePump() => _gate.TrySetResult();
     }
 }

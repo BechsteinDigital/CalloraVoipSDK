@@ -60,6 +60,35 @@ public sealed class WebRtcModuleRegistryTests
         Assert.Throws<ArgumentNullException>(() => rtc.Modules.Register(null!));
     }
 
+    /// <summary>
+    /// #166 P3-13: registration must close with the owner. Attaching to a disposed client would hand the module
+    /// a client that can no longer create peers, and leave it registered in a dead owner.
+    /// </summary>
+    [Fact]
+    public async Task Register_after_the_owning_client_was_disposed_is_refused()
+    {
+        var rtc = new WebRtcClient();
+        var registry = rtc.Modules;
+        await rtc.DisposeAsync();
+
+        var module = new FakeWebRtcModule();
+        Assert.Throws<ObjectDisposedException>(() => registry.Register(module));
+        Assert.Null(module.AttachedClient);
+        Assert.False(registry.TryGet<IFakeWebRtcFeature>(out _));
+    }
+
+    [Fact]
+    public async Task Modules_registered_before_disposal_stay_resolvable_during_the_teardown()
+    {
+        var rtc = new WebRtcClient();
+        var module = new FakeWebRtcModule();
+        rtc.Modules.Register(module);
+
+        await rtc.DisposeAsync();
+
+        Assert.Same(module, rtc.Modules.Get<IFakeWebRtcFeature>());
+    }
+
     [Fact]
     public async Task DI_registered_modules_are_auto_attached_to_the_client()
     {

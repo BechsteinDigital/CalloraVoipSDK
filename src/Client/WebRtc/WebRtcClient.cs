@@ -155,6 +155,10 @@ public sealed class WebRtcClient : IWebRtcClient
             return;
         }
 
+        // Close module registration before the peers go away (#166 P3-13): a module attaching now would wire
+        // itself to a client that can no longer create peers. Registered modules stay resolvable meanwhile.
+        _modules.MarkOwnerDisposed();
+
         // Drain the live set and gate further tracking atomically, so a peer created concurrently with this
         // teardown is either in this snapshot (disposed here) or rejected by TryTrack — never leaked (#166 P1-1).
         Exception? firstFailure = null;

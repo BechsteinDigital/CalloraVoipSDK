@@ -25,6 +25,12 @@ public static class ServiceCollectionExtensions
             services.Configure(configure);
         }
 
+        // #166 P2-8: a host may bring its own IVoipClient — a fake in a test, or a decorator. TryAddSingleton
+        // keeps that registration, so the concrete alias below must not be added on top of it: it would resolve
+        // the foreign implementation and fail the cast, turning the facade's documented mockability into an
+        // InvalidCastException at resolution time.
+        var hostOwnsClient = services.Any(descriptor => descriptor.ServiceType == typeof(IVoipClient));
+
         services.TryAddSingleton<IVoipClient>(sp =>
         {
             var options = sp.GetRequiredService<IOptions<VoipOptions>>().Value;
@@ -33,7 +39,14 @@ public static class ServiceCollectionExtensions
             return new VoipClient(options.ToConfiguration(loggerFactory), sp);
         });
 
-        services.TryAddSingleton(sp => (VoipClient)sp.GetRequiredService<IVoipClient>());
+        if (!hostOwnsClient)
+        {
+            // Same instance as the interface registration; only registered while the SDK owns that
+            // registration. An override that arrives AFTER this call still wins for IVoipClient, so the alias
+            // reports an actionable error rather than an InvalidCastException.
+            services.TryAddSingleton(ConcreteFacadeAlias.Resolve<IVoipClient, VoipClient>);
+        }
+
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, CalloraHostedService>());
 
         return new CalloraBuilder(services);

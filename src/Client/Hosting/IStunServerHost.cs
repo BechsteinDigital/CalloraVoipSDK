@@ -14,7 +14,10 @@ public interface IStunServerHost : IAsyncDisposable
     IPEndPoint LocalEndPoint { get; }
 
     /// <summary>
-    /// Starts answering STUN Binding requests. Idempotent — a second call, or a call after disposal, is a no-op.
+    /// Starts answering STUN Binding requests. Idempotent — a second call on a started server is a no-op. A
+    /// start that fails is not committed, so the host stays startable and a retry runs it again; starting a
+    /// disposed host throws rather than pretending to serve (#166 P3-12).
     /// </summary>
+    /// <exception cref="ObjectDisposedException">The host has been disposed.</exception>
     void Start();
 }

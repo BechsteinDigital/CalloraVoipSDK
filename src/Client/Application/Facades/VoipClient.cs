@@ -58,7 +58,8 @@ public sealed class VoipClient : IVoipClient
     // Application layer so TlsConfiguration never crosses into the Domain PhoneLineManager (rule R1).
     private readonly ConcurrentDictionary<SipAccount, TlsConfiguration> _lineTlsByAccount =
         new(ReferenceEqualityComparer.Instance);
-    private int _runtimeStarted;
+    // Started/stopping/stopped, so an aborted shutdown stays resumable (#166 P2-9).
+    private readonly RuntimeLifecycleState _runtime = new();
     private int _disposed;
 
     /// <summary>
@@ -209,7 +210,7 @@ public sealed class VoipClient : IVoipClient
                 ResolveService<ISipTelemetrySink>(services)
                 ?? NullSipTelemetrySink.Instance,
                 _logger);
-            TelemetryManager = new TelemetryManager(telemetry);
+            TelemetryManager = new TelemetryManager(telemetry, logFactory.CreateLogger<TelemetryManager>());
 
             var resolvedRegistrationService = ResolveService<ISipRegistrationService>(services);
             if (resolvedRegistrationService is null)
@@ -291,8 +292,11 @@ public sealed class VoipClient : IVoipClient
             var callManager = new CallManager(logFactory.CreateLogger<CallManager>());
             Calls = callManager;
             // Re-raise with the facade as sender, not the internal manager, so subscribers to
-            // VoipClient.CallStateChanged see the VoipClient they subscribed on (#18.9).
-            callManager.CallStateChanged += (_, e) => CallStateChanged?.Invoke(this, e);
+            // VoipClient.CallStateChanged see the VoipClient they subscribed on (#18.9). Raised through the
+            // shared dispatch (#166 P3-14): a throwing app handler is isolated per subscriber and never
+            // reaches the SIP path this fires from.
+            callManager.CallStateChanged += (_, e) =>
+                SdkEventDispatch.Raise(CallStateChanged, this, e, _logger, nameof(CallStateChanged));
 
             var audioFileCodecs = ResolveService<IAudioFileCodecRegistry>(services)
                 ?? new AudioFileCodecRegistry(logFactory);
@@ -369,9 +373,12 @@ public sealed class VoipClient : IVoipClient
             }, logFactory.CreateLogger<PhoneLineManager>());
             Lines = lineManager;
 
-            // Facade as sender (see CallStateChanged above), not the inner line manager (#18.9).
-            Lines.IncomingCall += (_, e) => IncomingCall?.Invoke(this, e);
-            Lines.IncomingMessage += (_, e) => IncomingMessage?.Invoke(this, e);
+            // Facade as sender (see CallStateChanged above), not the inner line manager (#18.9); same shared
+            // event dispatch, so an app handler cannot break the inbound INVITE/MESSAGE path (#166 P3-14).
+            Lines.IncomingCall += (_, e) =>
+                SdkEventDispatch.Raise(IncomingCall, this, e, _logger, nameof(IncomingCall));
+            Lines.IncomingMessage += (_, e) =>
+                SdkEventDispatch.Raise(IncomingMessage, this, e, _logger, nameof(IncomingMessage));
 
             // Video is transport-only: the SDK ships no codec, so the video device is optional and resolved
             // purely from DI (no platform-factory fallback like audio). When absent, AttachDefaultVideoAsync
@@ -405,7 +412,7 @@ public sealed class VoipClient : IVoipClient
         ThrowIfDisposed();
         ct.ThrowIfCancellationRequested();
 
-        if (Interlocked.Exchange(ref _runtimeStarted, 1) == 0)
+        if (_runtime.TryStart())
         {
             _logger.LogInformation("CalloraVoipSdk runtime started.");
         }
@@ -413,52 +420,73 @@ public sealed class VoipClient : IVoipClient
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Hangs up the active calls and unregisters the registered lines. Resumable: if the shutdown is cancelled
+    /// or a teardown step throws, the runtime stays marked as started, so calling it again resumes the teardown
+    /// from what is still up instead of returning immediately (#166 P2-9). A no-op once it has completed.
+    /// </summary>
     internal async Task StopRuntimeAsync(CancellationToken ct = default)
     {
         ThrowIfDisposed();
         ct.ThrowIfCancellationRequested();
 
-        if (Interlocked.Exchange(ref _runtimeStarted, 0) == 0)
+        // Claim the shutdown. Nothing to do when the runtime never started, already stopped, or another
+        // shutdown is in flight and owns the teardown.
+        if (!_runtime.TryBeginShutdown())
         {
             return;
         }
 
-        foreach (var call in Calls.Active)
+        try
         {
-            if (call.State == CallState.Terminated)
+            foreach (var call in Calls.Active)
             {
-                continue;
+                if (call.State == CallState.Terminated)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    await call.HangupAsync(ct).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Hangup failed during runtime shutdown for call {CallId}.", call.CallId);
+                }
             }
 
-            try
+            foreach (var line in Lines.All.ToList())
             {
-                await call.HangupAsync(ct).ConfigureAwait(false);
+                try
+                {
+                    await Lines.UnregisterAsync(line.LineId, ct).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Unregister failed during runtime shutdown for line {LineId}.", line.LineId);
+                }
             }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Hangup failed during runtime shutdown for call {CallId}.", call.CallId);
-            }
+        }
+        catch
+        {
+            // Give the shutdown back so it stays resumable: a cancelled host stop must not leave a runtime
+            // marked as stopped while calls are still up and lines are still registered. Both loops re-read
+            // the live sets, so the retry only touches what actually remains.
+            _runtime.AbortShutdown();
+            _logger.LogWarning("CalloraVoipSdk runtime shutdown was aborted; the runtime stays resumable.");
+            throw;
         }
 
-        foreach (var line in Lines.All.ToList())
-        {
-            try
-            {
-                await Lines.UnregisterAsync(line.LineId, ct).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Unregister failed during runtime shutdown for line {LineId}.", line.LineId);
-            }
-        }
+        _runtime.CompleteShutdown();
     }
 
     /// <summary>
@@ -807,9 +835,14 @@ public sealed class VoipClient : IVoipClient
     public void Dispose()
     {
         // Claim disposal atomically so two concurrent Dispose() callers cannot both run the teardown
-        // (double-dispose of orchestrators/transport/audio); mirrors the _runtimeStarted guard (HARD-C4).
+        // (double-dispose of orchestrators/transport/audio); mirrors the runtime-state guard (HARD-C4).
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
             return;
+
+        // Close module registration before anything is torn down (#166 P3-13), so a module cannot attach itself
+        // to a client whose transport, lines and media are going away. Null-tolerant for the failed-constructor
+        // path below; already registered modules stay resolvable during the teardown.
+        (Modules as ModuleRegistry)?.MarkOwnerDisposed();
 
         // Null-tolerant: Dispose() also runs from a failed constructor (see the ctor's catch), where an
         // early throw can leave later fields unassigned. DisposeSafely no-ops on null, so partial init
