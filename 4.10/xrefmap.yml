@@ -5264,6 +5264,12 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.Core.Domain.Calls.ICall.LocalParty
   nameWithType: ICall.LocalParty
+- uid: CalloraVoipSdk.Core.Domain.Calls.ICall.MediaFlowChanged
+  name: MediaFlowChanged
+  href: _api/CalloraVoipSdk.Core.Domain.Calls.ICall.html#CalloraVoipSdk_Core_Domain_Calls_ICall_MediaFlowChanged
+  commentId: E:CalloraVoipSdk.Core.Domain.Calls.ICall.MediaFlowChanged
+  fullName: CalloraVoipSdk.Core.Domain.Calls.ICall.MediaFlowChanged
+  nameWithType: ICall.MediaFlowChanged
 - uid: CalloraVoipSdk.Core.Domain.Calls.ICall.MediaParameters
   name: MediaParameters
   href: _api/CalloraVoipSdk.Core.Domain.Calls.ICall.html#CalloraVoipSdk_Core_Domain_Calls_ICall_MediaParameters
@@ -5747,6 +5753,51 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.Core.Domain.Events.CallIceConnectionStateChangedEventArgs.OldState
   nameWithType: CallIceConnectionStateChangedEventArgs.OldState
+- uid: CalloraVoipSdk.Core.Domain.Events.CallMediaFlowChangedEventArgs
+  name: CallMediaFlowChangedEventArgs
+  href: _api/CalloraVoipSdk.Core.Domain.Events.CallMediaFlowChangedEventArgs.html
+  commentId: T:CalloraVoipSdk.Core.Domain.Events.CallMediaFlowChangedEventArgs
+  fullName: CalloraVoipSdk.Core.Domain.Events.CallMediaFlowChangedEventArgs
+  nameWithType: CallMediaFlowChangedEventArgs
+- uid: CalloraVoipSdk.Core.Domain.Events.CallMediaFlowChangedEventArgs.Call
+  name: Call
+  href: _api/CalloraVoipSdk.Core.Domain.Events.CallMediaFlowChangedEventArgs.html#CalloraVoipSdk_Core_Domain_Events_CallMediaFlowChangedEventArgs_Call
+  commentId: P:CalloraVoipSdk.Core.Domain.Events.CallMediaFlowChangedEventArgs.Call
+  fullName: CalloraVoipSdk.Core.Domain.Events.CallMediaFlowChangedEventArgs.Call
+  nameWithType: CallMediaFlowChangedEventArgs.Call
+- uid: CalloraVoipSdk.Core.Domain.Events.CallMediaFlowChangedEventArgs.Call*
+  name: Call
+  href: _api/CalloraVoipSdk.Core.Domain.Events.CallMediaFlowChangedEventArgs.html#CalloraVoipSdk_Core_Domain_Events_CallMediaFlowChangedEventArgs_Call_
+  commentId: Overload:CalloraVoipSdk.Core.Domain.Events.CallMediaFlowChangedEventArgs.Call
+  isSpec: "True"
+  fullName: CalloraVoipSdk.Core.Domain.Events.CallMediaFlowChangedEventArgs.Call
+  nameWithType: CallMediaFlowChangedEventArgs.Call
+- uid: CalloraVoipSdk.Core.Domain.Events.CallMediaFlowChangedEventArgs.InboundMediaFlowing
+  name: InboundMediaFlowing
+  href: _api/CalloraVoipSdk.Core.Domain.Events.CallMediaFlowChangedEventArgs.html#CalloraVoipSdk_Core_Domain_Events_CallMediaFlowChangedEventArgs_InboundMediaFlowing
+  commentId: P:CalloraVoipSdk.Core.Domain.Events.CallMediaFlowChangedEventArgs.InboundMediaFlowing
+  fullName: CalloraVoipSdk.Core.Domain.Events.CallMediaFlowChangedEventArgs.InboundMediaFlowing
+  nameWithType: CallMediaFlowChangedEventArgs.InboundMediaFlowing
+- uid: CalloraVoipSdk.Core.Domain.Events.CallMediaFlowChangedEventArgs.InboundMediaFlowing*
+  name: InboundMediaFlowing
+  href: _api/CalloraVoipSdk.Core.Domain.Events.CallMediaFlowChangedEventArgs.html#CalloraVoipSdk_Core_Domain_Events_CallMediaFlowChangedEventArgs_InboundMediaFlowing_
+  commentId: Overload:CalloraVoipSdk.Core.Domain.Events.CallMediaFlowChangedEventArgs.InboundMediaFlowing
+  isSpec: "True"
+  fullName: CalloraVoipSdk.Core.Domain.Events.CallMediaFlowChangedEventArgs.InboundMediaFlowing
+  nameWithType: CallMediaFlowChangedEventArgs.InboundMediaFlowing
+- uid: CalloraVoipSdk.Core.Domain.Events.CallMediaFlowChangedEventArgs.SilenceDuration
+  name: SilenceDuration
+  href: _api/CalloraVoipSdk.Core.Domain.Events.CallMediaFlowChangedEventArgs.html#CalloraVoipSdk_Core_Domain_Events_CallMediaFlowChangedEventArgs_SilenceDuration
+  commentId: P:CalloraVoipSdk.Core.Domain.Events.CallMediaFlowChangedEventArgs.SilenceDuration
+  fullName: CalloraVoipSdk.Core.Domain.Events.CallMediaFlowChangedEventArgs.SilenceDuration
+  nameWithType: CallMediaFlowChangedEventArgs.SilenceDuration
+- uid: CalloraVoipSdk.Core.Domain.Events.CallMediaFlowChangedEventArgs.SilenceDuration*
+  name: SilenceDuration
+  href: _api/CalloraVoipSdk.Core.Domain.Events.CallMediaFlowChangedEventArgs.html#CalloraVoipSdk_Core_Domain_Events_CallMediaFlowChangedEventArgs_SilenceDuration_
+  commentId: Overload:CalloraVoipSdk.Core.Domain.Events.CallMediaFlowChangedEventArgs.SilenceDuration
+  isSpec: "True"
+  fullName: CalloraVoipSdk.Core.Domain.Events.CallMediaFlowChangedEventArgs.SilenceDuration
+  nameWithType: CallMediaFlowChangedEventArgs.SilenceDuration
 - uid: CalloraVoipSdk.Core.Domain.Events.CallQualitySnapshotChangedEventArgs
   name: CallQualitySnapshotChangedEventArgs
   href: _api/CalloraVoipSdk.Core.Domain.Events.CallQualitySnapshotChangedEventArgs.html
@@ -11450,6 +11501,19 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.VoipConfiguration.MaxConcurrentCallsPerLine
   nameWithType: VoipConfiguration.MaxConcurrentCallsPerLine
+- uid: CalloraVoipSdk.VoipConfiguration.MediaSilenceNotifyAfter
+  name: MediaSilenceNotifyAfter
+  href: _api/CalloraVoipSdk.VoipConfiguration.html#CalloraVoipSdk_VoipConfiguration_MediaSilenceNotifyAfter
+  commentId: P:CalloraVoipSdk.VoipConfiguration.MediaSilenceNotifyAfter
+  fullName: CalloraVoipSdk.VoipConfiguration.MediaSilenceNotifyAfter
+  nameWithType: VoipConfiguration.MediaSilenceNotifyAfter
+- uid: CalloraVoipSdk.VoipConfiguration.MediaSilenceNotifyAfter*
+  name: MediaSilenceNotifyAfter
+  href: _api/CalloraVoipSdk.VoipConfiguration.html#CalloraVoipSdk_VoipConfiguration_MediaSilenceNotifyAfter_
+  commentId: Overload:CalloraVoipSdk.VoipConfiguration.MediaSilenceNotifyAfter
+  isSpec: "True"
+  fullName: CalloraVoipSdk.VoipConfiguration.MediaSilenceNotifyAfter
+  nameWithType: VoipConfiguration.MediaSilenceNotifyAfter
 - uid: CalloraVoipSdk.VoipConfiguration.OfferDtlsSrtp
   name: OfferDtlsSrtp
   href: _api/CalloraVoipSdk.VoipConfiguration.html#CalloraVoipSdk_VoipConfiguration_OfferDtlsSrtp
@@ -11716,6 +11780,19 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.VoipOptions.MaxConcurrentCallsPerLine
   nameWithType: VoipOptions.MaxConcurrentCallsPerLine
+- uid: CalloraVoipSdk.VoipOptions.MediaSilenceNotifyAfter
+  name: MediaSilenceNotifyAfter
+  href: _api/CalloraVoipSdk.VoipOptions.html#CalloraVoipSdk_VoipOptions_MediaSilenceNotifyAfter
+  commentId: P:CalloraVoipSdk.VoipOptions.MediaSilenceNotifyAfter
+  fullName: CalloraVoipSdk.VoipOptions.MediaSilenceNotifyAfter
+  nameWithType: VoipOptions.MediaSilenceNotifyAfter
+- uid: CalloraVoipSdk.VoipOptions.MediaSilenceNotifyAfter*
+  name: MediaSilenceNotifyAfter
+  href: _api/CalloraVoipSdk.VoipOptions.html#CalloraVoipSdk_VoipOptions_MediaSilenceNotifyAfter_
+  commentId: Overload:CalloraVoipSdk.VoipOptions.MediaSilenceNotifyAfter
+  isSpec: "True"
+  fullName: CalloraVoipSdk.VoipOptions.MediaSilenceNotifyAfter
+  nameWithType: VoipOptions.MediaSilenceNotifyAfter
 - uid: CalloraVoipSdk.VoipOptions.OfferDtlsSrtp
   name: OfferDtlsSrtp
   href: _api/CalloraVoipSdk.VoipOptions.html#CalloraVoipSdk_VoipOptions_OfferDtlsSrtp

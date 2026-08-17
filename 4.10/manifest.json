@@ -692,6 +692,16 @@
     },
     {
       "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-069-media-supervision-liveness-not-silence.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-069-media-supervision-liveness-not-silence.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
       "source_relative_path": "docs/adr/README.md",
       "output": {
         ".html": {
@@ -1734,6 +1744,20 @@
       "IsMRef": true,
       "Title": "CalloraVoipSdk.Core.Domain.Events.CallIceConnectionStateChangedEventArgs",
       "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Events.CallIceConnectionStateChangedEventArgs.yml\" sourcestartlinenumber=\"1\">Payload for the call <code>IceConnectionStateChanged</code> event: a running change of the ICE transport\nstate after establishment (for example <xref href=\"CalloraVoipSdk.Core.Domain.Calls.CallIceState.Connected\" data-throw-if-not-resolved=\"false\"></xref> →\n<xref href=\"CalloraVoipSdk.Core.Domain.Calls.CallIceState.Disconnected\" data-throw-if-not-resolved=\"false\"></xref> on RFC 7675 consent loss). Complements the one-shot\n<xref href=\"CalloraVoipSdk.Core.Domain.Calls.ICall.IceSnapshot\" data-throw-if-not-resolved=\"false\"></xref>, which only reports the final establishment state.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.Core.Domain.Events.CallMediaFlowChangedEventArgs.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.Core.Domain.Events.CallMediaFlowChangedEventArgs.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.Core.Domain.Events.CallMediaFlowChangedEventArgs",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.Core.Domain.Events.CallMediaFlowChangedEventArgs.yml\" sourcestartlinenumber=\"1\">Event arguments for a change in inbound media flow on a call (#261, ADR-069): media went silent while the\npeer is still demonstrably alive, or it resumed.</p>\n"
     },
     {
       "type": "ManagedReference",
