@@ -12052,6 +12052,15 @@ references:
   fullName.vb: CalloraVoipSdk.WebRtc.EncodedFrame.New(System.ReadOnlyMemory(Of Byte), UInteger?, Boolean, Long?, String)
   nameWithType: EncodedFrame.EncodedFrame(ReadOnlyMemory<byte>, uint?, bool, long?, string?)
   nameWithType.vb: EncodedFrame.New(ReadOnlyMemory(Of Byte), UInteger?, Boolean, Long?, String)
+- uid: CalloraVoipSdk.WebRtc.EncodedFrame.#ctor(System.ReadOnlyMemory{System.Byte},System.Nullable{System.UInt32},System.Boolean,System.Nullable{System.Int64},System.String,System.Nullable{System.Int32},System.Nullable{System.Int32})
+  name: EncodedFrame(ReadOnlyMemory<byte>, uint?, bool, long?, string?, int?, int?)
+  href: _api/CalloraVoipSdk.WebRtc.EncodedFrame.html#CalloraVoipSdk_WebRtc_EncodedFrame__ctor_System_ReadOnlyMemory_System_Byte__System_Nullable_System_UInt32__System_Boolean_System_Nullable_System_Int64__System_String_System_Nullable_System_Int32__System_Nullable_System_Int32__
+  commentId: M:CalloraVoipSdk.WebRtc.EncodedFrame.#ctor(System.ReadOnlyMemory{System.Byte},System.Nullable{System.UInt32},System.Boolean,System.Nullable{System.Int64},System.String,System.Nullable{System.Int32},System.Nullable{System.Int32})
+  name.vb: New(ReadOnlyMemory(Of Byte), UInteger?, Boolean, Long?, String, Integer?, Integer?)
+  fullName: CalloraVoipSdk.WebRtc.EncodedFrame.EncodedFrame(System.ReadOnlyMemory<byte>, uint?, bool, long?, string?, int?, int?)
+  fullName.vb: CalloraVoipSdk.WebRtc.EncodedFrame.New(System.ReadOnlyMemory(Of Byte), UInteger?, Boolean, Long?, String, Integer?, Integer?)
+  nameWithType: EncodedFrame.EncodedFrame(ReadOnlyMemory<byte>, uint?, bool, long?, string?, int?, int?)
+  nameWithType.vb: EncodedFrame.New(ReadOnlyMemory(Of Byte), UInteger?, Boolean, Long?, String, Integer?, Integer?)
 - uid: CalloraVoipSdk.WebRtc.EncodedFrame.#ctor*
   name: EncodedFrame
   href: _api/CalloraVoipSdk.WebRtc.EncodedFrame.html#CalloraVoipSdk_WebRtc_EncodedFrame__ctor_
@@ -12127,6 +12136,32 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.WebRtc.EncodedFrame.RtpTimestamp
   nameWithType: EncodedFrame.RtpTimestamp
+- uid: CalloraVoipSdk.WebRtc.EncodedFrame.SpatialId
+  name: SpatialId
+  href: _api/CalloraVoipSdk.WebRtc.EncodedFrame.html#CalloraVoipSdk_WebRtc_EncodedFrame_SpatialId
+  commentId: P:CalloraVoipSdk.WebRtc.EncodedFrame.SpatialId
+  fullName: CalloraVoipSdk.WebRtc.EncodedFrame.SpatialId
+  nameWithType: EncodedFrame.SpatialId
+- uid: CalloraVoipSdk.WebRtc.EncodedFrame.SpatialId*
+  name: SpatialId
+  href: _api/CalloraVoipSdk.WebRtc.EncodedFrame.html#CalloraVoipSdk_WebRtc_EncodedFrame_SpatialId_
+  commentId: Overload:CalloraVoipSdk.WebRtc.EncodedFrame.SpatialId
+  isSpec: "True"
+  fullName: CalloraVoipSdk.WebRtc.EncodedFrame.SpatialId
+  nameWithType: EncodedFrame.SpatialId
+- uid: CalloraVoipSdk.WebRtc.EncodedFrame.TemporalId
+  name: TemporalId
+  href: _api/CalloraVoipSdk.WebRtc.EncodedFrame.html#CalloraVoipSdk_WebRtc_EncodedFrame_TemporalId
+  commentId: P:CalloraVoipSdk.WebRtc.EncodedFrame.TemporalId
+  fullName: CalloraVoipSdk.WebRtc.EncodedFrame.TemporalId
+  nameWithType: EncodedFrame.TemporalId
+- uid: CalloraVoipSdk.WebRtc.EncodedFrame.TemporalId*
+  name: TemporalId
+  href: _api/CalloraVoipSdk.WebRtc.EncodedFrame.html#CalloraVoipSdk_WebRtc_EncodedFrame_TemporalId_
+  commentId: Overload:CalloraVoipSdk.WebRtc.EncodedFrame.TemporalId
+  isSpec: "True"
+  fullName: CalloraVoipSdk.WebRtc.EncodedFrame.TemporalId
+  nameWithType: EncodedFrame.TemporalId
 - uid: CalloraVoipSdk.WebRtc.IAudioTrack
   name: IAudioTrack
   href: _api/CalloraVoipSdk.WebRtc.IAudioTrack.html
