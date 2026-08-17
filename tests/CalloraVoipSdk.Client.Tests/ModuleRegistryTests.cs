@@ -120,6 +120,36 @@ public sealed class ModuleRegistryTests
         Assert.Throws<ArgumentNullException>(() => client.Modules.Register(null!));
     }
 
+    /// <summary>
+    /// #166 P3-13: the only barrier used to be the null check, so a module could attach itself to a disposed
+    /// client — wiring to torn-down transport, lines and media — and then stay registered in that dead owner.
+    /// </summary>
+    [Fact]
+    public void Register_after_the_owning_client_was_disposed_is_refused()
+    {
+        var client = new VoipClient(TestConfiguration());
+        var registry = client.Modules;
+        client.Dispose();
+
+        var module = new FakeFeatureModule();
+        Assert.Throws<ObjectDisposedException>(() => registry.Register(module));
+        Assert.Null(module.AttachedClient);          // the attach hook never ran
+        Assert.False(registry.TryGet<IFakeFeature>(out _));
+    }
+
+    [Fact]
+    public void Modules_registered_before_disposal_stay_resolvable_during_the_teardown()
+    {
+        var client = new VoipClient(TestConfiguration());
+        var module = new FakeFeatureModule();
+        client.Modules.Register(module);
+
+        client.Dispose();
+
+        // Resolution is not closed off — a teardown path may still need to reach its modules.
+        Assert.Same(module, client.Modules.Get<IFakeFeature>());
+    }
+
     [Fact]
     public async Task Parallel_resolution_is_thread_safe()
     {

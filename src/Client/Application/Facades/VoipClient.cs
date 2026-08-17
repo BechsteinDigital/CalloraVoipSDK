@@ -833,6 +833,11 @@ public sealed class VoipClient : IVoipClient
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
             return;
 
+        // Close module registration before anything is torn down (#166 P3-13), so a module cannot attach itself
+        // to a client whose transport, lines and media are going away. Null-tolerant for the failed-constructor
+        // path below; already registered modules stay resolvable during the teardown.
+        (Modules as ModuleRegistry)?.MarkOwnerDisposed();
+
         // Null-tolerant: Dispose() also runs from a failed constructor (see the ctor's catch), where an
         // early throw can leave later fields unassigned. DisposeSafely no-ops on null, so partial init
         // still releases everything already built. In the normal path all fields are set, so behaviour is
