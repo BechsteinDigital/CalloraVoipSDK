@@ -112,6 +112,13 @@ laufen über `with`-Klone, nie über Handkopien (HARD-R5).
 - Domain-/SDK-Events feuern synchron auf SDK-Threads (SIP-Signaling bzw. Media/RTCP);
   Handler dürfen weder blockieren noch werfen. Event-Dispatch snapshotted den Delegaten
   **innerhalb** des Locks; Invocation läuft außerhalb.
+- Ein werfender Subscriber ist trotzdem einzukalkulieren: Der Fan-out der öffentlichen
+  Client-Fassaden läuft über `SdkEventDispatch` — pro Subscriber isoliert, Fault geloggt, nie in
+  den SDK-Pfad propagiert, und ein werfender Subscriber blockiert die folgenden nicht
+  (#166 P1-3 → P3-14). Einzige bewusste Abweichung: Per-Frame-Events auf dem Medien-Hotpath
+  (`RemoteTrack.FrameReceived`) nutzen `RaiseOnMediaPath` — eine geschützte Invocation ohne
+  Invocation-List-Walk, damit pro Frame nichts allokiert wird; Mehr-Consumer-Isolation liefert
+  dort der Tap-Fan-out (`IMediaTap`).
 - Auf dem Medien-Hotpath: keine Locks über Fremdcode, keine Allokationen, wo vermeidbar
   (HARD-F1), bounded Buffer mit Drop-Oldest statt unbegrenzter Queues (HARD-F4),
   Copy-on-write-Arrays für Tap-/Listener-Listen.

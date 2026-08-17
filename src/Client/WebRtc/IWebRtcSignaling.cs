@@ -1,7 +1,7 @@
 namespace CalloraVoipSdk.WebRtc;
 
 /// <summary>
-/// The app-owned signalling channel the SDK drives during <see cref="WebRtcPeerConnectionExtensions.ConnectAsync"/>:
+/// The app-owned signalling channel the SDK drives during <see cref="WebRtcPeerConnectionExtensions.ConnectAsync(IPeerConnection, IWebRtcSignaling, WebRtcRole, System.Threading.CancellationToken)"/>:
 /// a bidirectional transport (WebSocket, HTTP long-poll, Callora signalling, …) that carries SDP
 /// descriptions between the two peers. The SDK stays signalling-neutral — it only sends and receives SDP
 /// through this contract; the app decides how the bytes travel.

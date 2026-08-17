@@ -2,7 +2,7 @@ namespace CalloraVoipSdk.WebRtc;
 
 /// <summary>
 /// The negotiation role a peer takes in the SDK-driven handshake
-/// (<see cref="WebRtcPeerConnectionExtensions.ConnectAsync"/>).
+/// (<see cref="WebRtcPeerConnectionExtensions.ConnectAsync(IPeerConnection, IWebRtcSignaling, WebRtcRole, System.Threading.CancellationToken)"/>).
 /// </summary>
 public enum WebRtcRole
 {

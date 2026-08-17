@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Logging;
+
 namespace CalloraVoipSdk.WebRtc;
 
 /// <summary>
@@ -12,12 +14,15 @@ namespace CalloraVoipSdk.WebRtc;
 /// </remarks>
 public sealed class RemoteTrack
 {
-    internal RemoteTrack(TrackKind kind, string? streamId, string? trackId, string? mid)
+    private readonly ILogger _logger;
+
+    internal RemoteTrack(TrackKind kind, string? streamId, string? trackId, string? mid, ILogger logger)
     {
         Kind = kind;
         StreamId = streamId;
         TrackId = trackId;
         Mid = mid;
+        _logger = logger;
     }
 
     /// <summary>The media kind of this track.</summary>
@@ -36,8 +41,14 @@ public sealed class RemoteTrack
     /// <summary>The remote per-track id (a=msid appdata), or <see langword="null"/> when the remote advertised none.</summary>
     public string? TrackId { get; }
 
-    /// <summary>Raised with each encoded frame received on this track.</summary>
+    /// <summary>
+    /// Raised with each encoded frame received on this track. Fires on the SDK's media receive loop: the
+    /// handler must not block, and a fault in it is logged and swallowed rather than breaking the receive loop
+    /// (#166 P3-14). Being a per-frame event, the fan-out is one guarded invocation rather than per subscriber —
+    /// attach an <see cref="IMediaTap"/> when several independent consumers need per-consumer isolation.
+    /// </summary>
     public event EventHandler<EncodedFrame>? FrameReceived;
 
-    internal void RaiseFrame(EncodedFrame frame) => FrameReceived?.Invoke(this, frame);
+    internal void RaiseFrame(EncodedFrame frame)
+        => SdkEventDispatch.RaiseOnMediaPath(FrameReceived, this, frame, _logger, nameof(FrameReceived));
 }

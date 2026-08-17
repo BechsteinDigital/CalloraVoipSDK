@@ -210,7 +210,7 @@ public sealed class VoipClient : IVoipClient
                 ResolveService<ISipTelemetrySink>(services)
                 ?? NullSipTelemetrySink.Instance,
                 _logger);
-            TelemetryManager = new TelemetryManager(telemetry);
+            TelemetryManager = new TelemetryManager(telemetry, logFactory.CreateLogger<TelemetryManager>());
 
             var resolvedRegistrationService = ResolveService<ISipRegistrationService>(services);
             if (resolvedRegistrationService is null)
@@ -292,8 +292,11 @@ public sealed class VoipClient : IVoipClient
             var callManager = new CallManager(logFactory.CreateLogger<CallManager>());
             Calls = callManager;
             // Re-raise with the facade as sender, not the internal manager, so subscribers to
-            // VoipClient.CallStateChanged see the VoipClient they subscribed on (#18.9).
-            callManager.CallStateChanged += (_, e) => CallStateChanged?.Invoke(this, e);
+            // VoipClient.CallStateChanged see the VoipClient they subscribed on (#18.9). Raised through the
+            // shared dispatch (#166 P3-14): a throwing app handler is isolated per subscriber and never
+            // reaches the SIP path this fires from.
+            callManager.CallStateChanged += (_, e) =>
+                SdkEventDispatch.Raise(CallStateChanged, this, e, _logger, nameof(CallStateChanged));
 
             var audioFileCodecs = ResolveService<IAudioFileCodecRegistry>(services)
                 ?? new AudioFileCodecRegistry(logFactory);
@@ -370,9 +373,12 @@ public sealed class VoipClient : IVoipClient
             }, logFactory.CreateLogger<PhoneLineManager>());
             Lines = lineManager;
 
-            // Facade as sender (see CallStateChanged above), not the inner line manager (#18.9).
-            Lines.IncomingCall += (_, e) => IncomingCall?.Invoke(this, e);
-            Lines.IncomingMessage += (_, e) => IncomingMessage?.Invoke(this, e);
+            // Facade as sender (see CallStateChanged above), not the inner line manager (#18.9); same shared
+            // event dispatch, so an app handler cannot break the inbound INVITE/MESSAGE path (#166 P3-14).
+            Lines.IncomingCall += (_, e) =>
+                SdkEventDispatch.Raise(IncomingCall, this, e, _logger, nameof(IncomingCall));
+            Lines.IncomingMessage += (_, e) =>
+                SdkEventDispatch.Raise(IncomingMessage, this, e, _logger, nameof(IncomingMessage));
 
             // Video is transport-only: the SDK ships no codec, so the video device is optional and resolved
             // purely from DI (no platform-factory fallback like audio). When absent, AttachDefaultVideoAsync

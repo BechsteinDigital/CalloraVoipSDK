@@ -60,7 +60,7 @@ internal sealed class PeerConnection : IPeerConnection
         _onDisposed = onDisposed;
         _defaultVideoCodecs = defaultVideoCodecs ?? [];
         _defaultAudioCodecs = defaultAudioCodecs ?? [];
-        _tracks = new RemoteTrackSet(RaiseTrackReceived);
+        _tracks = new RemoteTrackSet(RaiseTrackReceived, logger);
         _taps = new MediaTapSet(logger);
         _peer.ConnectionStateChanged += OnInternalStateChanged;
         _peer.SignalingStateChanged += OnInternalSignalingStateChanged;
@@ -408,22 +408,14 @@ internal sealed class PeerConnection : IPeerConnection
         }
     }
 
-    // The dispose-time fallback for the terminal transition. Isolated: a throwing subscriber must neither mask
-    // an inner dispose failure nor skip the untracking that follows (K3 — handlers must not throw; one that
-    // does is logged, not propagated).
+    // The dispose-time fallback for the terminal transition. The raise itself isolates every subscriber
+    // (SdkEventDispatch), so a throwing handler can neither mask an inner dispose failure nor skip the
+    // untracking that follows.
     private void PublishClosedOnce()
     {
-        if (Interlocked.Exchange(ref _closedPublished, 1) != 0)
-            return;
-
-        try
+        if (Interlocked.Exchange(ref _closedPublished, 1) == 0)
         {
             RaiseConnectionState(PeerConnectionState.Closed);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(
-                ex, "A ConnectionStateChanged subscriber threw on the terminal Closed transition during peer dispose.");
         }
     }
 
@@ -464,28 +456,28 @@ internal sealed class PeerConnection : IPeerConnection
     {
         EventHandler<PeerConnectionState>? handler;
         lock (_eventSync) handler = _connectionStateChanged;
-        handler?.Invoke(this, state);
+        SdkEventDispatch.Raise(handler, this, state, _logger, nameof(ConnectionStateChanged));
     }
 
     private void OnInternalSignalingStateChanged(WebRtcSignalingState state)
     {
         EventHandler<SignalingState>? handler;
         lock (_eventSync) handler = _signalingStateChanged;
-        handler?.Invoke(this, MapSignaling(state));
+        SdkEventDispatch.Raise(handler, this, MapSignaling(state), _logger, nameof(SignalingStateChanged));
     }
 
     private void OnLocalIceCandidate(string candidate)
     {
         EventHandler<string>? handler;
         lock (_eventSync) handler = _localIceCandidateDiscovered;
-        handler?.Invoke(this, candidate);
+        SdkEventDispatch.Raise(handler, this, candidate, _logger, nameof(LocalIceCandidateDiscovered));
     }
 
     private void OnDtmfReceived(byte toneCode, int durationMs)
     {
         EventHandler<DtmfTone>? handler;
         lock (_eventSync) handler = _dtmfReceived;
-        handler?.Invoke(this, new DtmfTone(toneCode, durationMs));
+        SdkEventDispatch.Raise(handler, this, new DtmfTone(toneCode, durationMs), _logger, nameof(DtmfReceived));
     }
 
     // Send-side feedback (RFC 4585/5104): the peer asked for a key frame. Surfaced as a top-level event
@@ -494,7 +486,7 @@ internal sealed class PeerConnection : IPeerConnection
     {
         EventHandler? handler;
         lock (_eventSync) handler = _videoKeyFrameRequested;
-        handler?.Invoke(this, EventArgs.Empty);
+        SdkEventDispatch.Raise(handler, this, _logger, nameof(VideoKeyFrameRequested));
     }
 
     // The SDK revised its recommended send bitrate for this peer (transport-cc). Surfaced as a
@@ -504,7 +496,8 @@ internal sealed class PeerConnection : IPeerConnection
     {
         EventHandler<BitrateRecommendation>? handler;
         lock (_eventSync) handler = _recommendedBitrateChanged;
-        handler?.Invoke(this, new BitrateRecommendation(bitrateBps, quality));
+        SdkEventDispatch.Raise(
+            handler, this, new BitrateRecommendation(bitrateBps, quality), _logger, nameof(RecommendedBitrateChanged));
     }
 
     // Snapshotted TrackReceived fire path used by the RemoteTrackSet when a remote track materialises.
@@ -512,7 +505,7 @@ internal sealed class PeerConnection : IPeerConnection
     {
         EventHandler<RemoteTrack>? handler;
         lock (_eventSync) handler = _trackReceived;
-        handler?.Invoke(this, track);
+        SdkEventDispatch.Raise(handler, this, track, _logger, nameof(TrackReceived));
     }
 
     // Inbound media is projected onto the W3C track model via the RemoteTrackSet: the remote a=msid names

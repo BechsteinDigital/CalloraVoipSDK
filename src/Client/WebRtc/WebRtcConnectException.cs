@@ -1,7 +1,7 @@
 namespace CalloraVoipSdk.WebRtc;
 
 /// <summary>
-/// Thrown by <see cref="WebRtcPeerConnectionExtensions.ConnectAsync"/> when the peer connection fails to
+/// Thrown by <see cref="WebRtcPeerConnectionExtensions.ConnectAsync(IPeerConnection, IWebRtcSignaling, WebRtcRole, System.Threading.CancellationToken)"/> when the peer connection fails to
 /// establish — the connection reached <see cref="PeerConnectionState.Failed"/> or was closed during
 /// negotiation (ICE or DTLS-SRTP did not complete).
 /// </summary>

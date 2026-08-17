@@ -8,11 +8,17 @@ namespace CalloraVoipSdk;
 /// </summary>
 public sealed class TelemetryManager : ITelemetryManager
 {
-    internal TelemetryManager(ClientTelemetrySink sink)
+    internal TelemetryManager(ClientTelemetrySink sink, ILogger logger)
     {
-        sink.EventPublished += record => EventPublished?.Invoke(this, record);
-        sink.MetricPublished += record => MetricPublished?.Invoke(this, record);
-        sink.CdrPublished += record => CdrPublished?.Invoke(this, record);
+        // #166 P3-14: the sink isolates each of ITS subscribers, and this manager is exactly one of them — so
+        // without the shared dispatch here, one throwing app handler still blocked every later handler on the
+        // same telemetry event. Same contract as everywhere else now: per subscriber, logged, never propagated.
+        sink.EventPublished += record =>
+            SdkEventDispatch.Raise(EventPublished, this, record, logger, nameof(EventPublished));
+        sink.MetricPublished += record =>
+            SdkEventDispatch.Raise(MetricPublished, this, record, logger, nameof(MetricPublished));
+        sink.CdrPublished += record =>
+            SdkEventDispatch.Raise(CdrPublished, this, record, logger, nameof(CdrPublished));
     }
 
     /// <summary>
@@ -47,7 +53,9 @@ internal sealed class ClientTelemetrySink(ISipTelemetrySink inner, ILogger logge
     /// #166 P1-3: telemetry must never steer the SIP service path. Core publishes these records from inside
     /// REGISTER/INVITE/cleanup steps, so a faulty monitoring sink or a throwing app subscriber must be isolated
     /// — its fault is logged and swallowed rather than propagated back into signalling — and one throwing
-    /// subscriber must not block the others (each delegate in the invocation list is invoked independently).
+    /// subscriber must not block the others. The subscriber fan-out is the SDK-wide event contract
+    /// (<see cref="SdkEventDispatch"/>, #166 P3-14); only the inner sink is guarded separately, because it is
+    /// the host's monitoring pipeline rather than an event subscriber.
     /// </summary>
     private void Publish<T>(T record, Action<T> innerSink, Action<T>? subscribers)
     {
@@ -60,19 +68,6 @@ internal sealed class ClientTelemetrySink(ISipTelemetrySink inner, ILogger logge
             logger.LogWarning(ex, "Telemetry sink threw for a {RecordType} record; ignored so signalling is unaffected.", typeof(T).Name);
         }
 
-        if (subscribers is null)
-            return;
-
-        foreach (var handler in subscribers.GetInvocationList())
-        {
-            try
-            {
-                ((Action<T>)handler)(record);
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Telemetry subscriber threw for a {RecordType} record; ignored so later subscribers still run.", typeof(T).Name);
-            }
-        }
+        SdkEventDispatch.Raise(subscribers, record, logger, $"telemetry {typeof(T).Name}");
     }
 }
