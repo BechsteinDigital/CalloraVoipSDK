@@ -142,22 +142,18 @@ internal static class OneByteRtpHeaderExtensions
     }
 
     /// <summary>
-    /// Reads the transport-wide sequence number carried under the negotiated <paramref name="id"/>
-    /// from an incoming packet's header extension (the receive-side counterpart to
-    /// <see cref="TransportSequenceNumber"/>). Returns <see langword="false"/> when the extension is
-    /// absent, is not the <c>0xBEDE</c> profile, carries no element with that id, or that element is
-    /// not the expected two bytes — the caller then treats the packet as unstamped.
+    /// Finds the value carried under <paramref name="id"/> without allocating — the per-packet receive
+    /// path. Same lenient rules as <see cref="Parse"/>: padding is skipped, identifier 15 stops the scan,
+    /// and a truncated tail ends it. Returns <see langword="false"/> when the extension is not the
+    /// <c>0xBEDE</c> profile or carries no element with that id. The returned span points into
+    /// <paramref name="extension"/>'s buffer and is only valid while it is.
     /// </summary>
-    public static bool TryReadTransportSequenceNumber(
-        RtpExtension? extension, byte id, out ushort sequenceNumber)
+    public static bool TryFindValue(RtpExtension extension, byte id, out ReadOnlySpan<byte> value)
     {
-        sequenceNumber = 0;
+        value = default;
         if (extension is null || extension.Profile != Profile)
             return false;
 
-        // Inline scan (same lenient rules as Parse: skip padding, stop at id 15, tolerate a
-        // truncated tail) with an early exit on the matched id — no list or per-element copy, so
-        // this stays allocation-free on the per-packet receive path.
         var data = extension.Data.Span;
         var offset = 0;
         while (offset < data.Length)
@@ -180,10 +176,7 @@ internal static class OneByteRtpHeaderExtensions
 
             if (elementId == id)
             {
-                if (length != 2)
-                    return false;
-
-                sequenceNumber = BinaryPrimitives.ReadUInt16BigEndian(data.Slice(offset, length));
+                value = data.Slice(offset, length);
                 return true;
             }
 
@@ -191,5 +184,28 @@ internal static class OneByteRtpHeaderExtensions
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Reads the transport-wide sequence number carried under the negotiated <paramref name="id"/>
+    /// from an incoming packet's header extension (the receive-side counterpart to
+    /// <see cref="TransportSequenceNumber"/>). Returns <see langword="false"/> when the extension is
+    /// absent, carries no element with that id, or that element is not the expected two bytes — the
+    /// caller then treats the packet as unstamped.
+    /// </summary>
+    /// <remarks>
+    /// Reads either wire form (#224): a peer that needs the two-byte form for some other extension puts
+    /// every element of that packet in it, transport-cc included, so gating on <c>0xBEDE</c> would drop
+    /// the congestion feedback for exactly those packets.
+    /// </remarks>
+    public static bool TryReadTransportSequenceNumber(
+        RtpExtension? extension, byte id, out ushort sequenceNumber)
+    {
+        sequenceNumber = 0;
+        if (!RtpHeaderExtensions.TryFindValue(extension, id, out var value) || value.Length != 2)
+            return false;
+
+        sequenceNumber = BinaryPrimitives.ReadUInt16BigEndian(value);
+        return true;
     }
 }

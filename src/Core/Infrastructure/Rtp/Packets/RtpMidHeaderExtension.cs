@@ -48,47 +48,23 @@ internal static class RtpMidHeaderExtension
 
     /// <summary>
     /// Reads the MID carried under the negotiated <paramref name="id"/> from an inbound packet's header
-    /// extension. Allocation-free scan (same lenient RFC 8285 rules as
-    /// <see cref="OneByteRtpHeaderExtensions"/>: skip padding, stop at id 15, tolerate a truncated tail)
-    /// with an early exit on the matched id. Returns <see langword="false"/> when the extension is
-    /// absent, is not the <c>0xBEDE</c> profile, or carries no element with that id.
+    /// extension, in either RFC 8285 wire form (#224). Allocation-free scan up to the ASCII decode of the
+    /// matched value. Returns <see langword="false"/> when the extension is absent, carries neither known
+    /// profile, or has no element with that id.
     /// </summary>
+    /// <remarks>
+    /// Reading both forms matters for BUNDLE routing specifically: a peer that needs the two-byte form for
+    /// any extension on a packet puts all of them in it, MID included. Gating on <c>0xBEDE</c> would leave
+    /// exactly those packets unroutable until an SSRC latches.
+    /// </remarks>
     public static bool TryRead(RtpExtension? extension, byte id, out string mid)
     {
         mid = string.Empty;
-        if (extension is null || extension.Profile != OneByteRtpHeaderExtensions.Profile)
+        if (!RtpHeaderExtensions.TryFindValue(extension, id, out var value) || value.Length == 0)
             return false;
 
-        var data = extension.Data.Span;
-        var offset = 0;
-        while (offset < data.Length)
-        {
-            var header = data[offset];
-            if (header == 0) // padding
-            {
-                offset++;
-                continue;
-            }
-
-            var elementId = (byte)(header >> 4);
-            if (elementId == 15) // reserved: stop parsing
-                break;
-
-            var length = (header & 0x0F) + 1;
-            offset++;
-            if (offset + length > data.Length) // truncated trailing element
-                break;
-
-            if (elementId == id)
-            {
-                mid = Encoding.ASCII.GetString(data.Slice(offset, length));
-                return true;
-            }
-
-            offset += length;
-        }
-
-        return false;
+        mid = Encoding.ASCII.GetString(value);
+        return true;
     }
 
     private static byte[] EncodeValue(string mid)
