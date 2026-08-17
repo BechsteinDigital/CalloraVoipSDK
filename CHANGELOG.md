@@ -10,6 +10,24 @@ The next line. Entries here accumulate the consumer-visible changes not yet rele
 
 ### Changed
 
+- **Media supervision ends calls on loss of liveness, not on silence** (#261, ADR-069). A connected call was
+  torn down after **15 seconds without inbound RTP**. Silence is not evidence that the far end is gone:
+  silence suppression (RFC 3389), hold, and the bridge switch of an attended transfer all stop the media
+  while the peer keeps reporting RTCP — and the SDK hung up on it. That is what made the attended-transfer
+  interop test (#256) flake: our own supervisor ended the call while Asterisk never sent a BYE.
+  Now **inbound RTP *or* RTCP** counts as a sign of life, and the supervision runs in two stages:
+  - `ICall.MediaFlowChanged` reports media silence after `MediaSilenceNotifyAfter` (default 15 s) and again
+    when media resumes — a notification while the peer is demonstrably alive, so the application decides what
+    silence means for its use case.
+  - `InboundMediaTimeout` (default **30 s**, was 15 s) ends the call only when the peer has stopped sending
+    everything, and the termination now carries a `CallTerminationReason` saying so, distinguishable from a
+    peer BYE.
+
+  **If you relied on the old behaviour**, set `InboundMediaTimeout` explicitly and note that the same number
+  now means "no RTP *and* no RTCP", so it fires less often. Held calls remain exempt unless
+  `HangupHeldCallOnMediaSilence` is set, for both local and remote hold. Calibrated against SIPSorcery
+  (30 s, RTP-or-RTCP, hold exempt, hangs up), Asterisk `rtp_timeout` and FreeSWITCH `media_timeout` (both
+  hang up, both default to off) and pjsip (no detection at all) — see ADR-069.
 - **Client-facade contracts hardened (#166 P2/P3).** Nine findings from the `src/Client` review, all
   consumer-visible:
   - **`IPeerConnection` publishes `Closed` on an explicit dispose** — exactly once. Disposing a peer

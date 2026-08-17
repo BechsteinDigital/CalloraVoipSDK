@@ -336,6 +336,7 @@ public sealed class VoipClient : IVoipClient
             var mediaSupervision = new MediaSupervisionOptions
             {
                 InboundMediaTimeout = config.InboundMediaTimeout,
+                MediaSilenceNotifyAfter = config.MediaSilenceNotifyAfter,
                 HangupHeldCallOnSilence = config.HangupHeldCallOnMediaSilence
             };
             _mediaOrchestrator = new CallMediaOrchestrator(

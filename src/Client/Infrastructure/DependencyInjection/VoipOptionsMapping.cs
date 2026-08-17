@@ -38,6 +38,7 @@ internal static class VoipOptionsMapping
             PreferredVideoCodecs = options.PreferredVideoCodecs,
             BridgeAudioFormat = options.BridgeAudioFormat,
             InboundMediaTimeout = options.InboundMediaTimeout,
+            MediaSilenceNotifyAfter = options.MediaSilenceNotifyAfter,
             HangupHeldCallOnMediaSilence = options.HangupHeldCallOnMediaSilence
         };
     }

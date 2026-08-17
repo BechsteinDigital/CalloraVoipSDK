@@ -32,6 +32,23 @@ public sealed class VoipOptionsValidator : IValidateOptions<VoipOptions>
                 $"VoipOptions.InboundMediaTimeout must be >= 0 (TimeSpan.Zero disables it), got {options.InboundMediaTimeout}.");
         }
 
+        if (options.MediaSilenceNotifyAfter < TimeSpan.Zero)
+        {
+            failures.Add(
+                $"VoipOptions.MediaSilenceNotifyAfter must be >= 0 (TimeSpan.Zero disables it), got {options.MediaSilenceNotifyAfter}.");
+        }
+
+        // The notification is the early warning for the teardown, so it has to come first. Configured the
+        // other way round it would only ever fire after the call was already gone — silently useless (#261).
+        if (options.MediaSilenceNotifyAfter > TimeSpan.Zero
+            && options.InboundMediaTimeout > TimeSpan.Zero
+            && options.MediaSilenceNotifyAfter >= options.InboundMediaTimeout)
+        {
+            failures.Add(
+                $"VoipOptions.MediaSilenceNotifyAfter ({options.MediaSilenceNotifyAfter}) must be less than "
+                + $"InboundMediaTimeout ({options.InboundMediaTimeout}); it is the warning that precedes the teardown.");
+        }
+
         if (options.Ice.ConnectivityCheckTimeout <= TimeSpan.Zero)
         {
             failures.Add(

@@ -130,6 +130,12 @@ Guardrails** (see `ADR-011` for the format model).
 | [ADR-048](ADR-048-video-media-stream-and-channel-activation.md) | Video Media Stream and SIP Channel Activation | Accepted | 2026-07-14 |
 | [ADR-068](ADR-068-opaque-video-payload-format.md) | Opaque Video Payload Format for End-to-End Encrypted Frames | Accepted | 2026-08-17 |
 
+### Media Supervision
+
+| ADR | Title | Status | Date |
+|-----|-------|--------|------|
+| [ADR-069](ADR-069-media-supervision-liveness-not-silence.md) | Media Supervision Ends Calls on Loss of Liveness, Not on Silence | Accepted | 2026-08-17 |
+
 ### Audio Codecs
 
 | ADR | Title | Status | Date |

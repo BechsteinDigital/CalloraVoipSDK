@@ -92,46 +92,66 @@ internal sealed class CallMediaOrchestrator : IDisposable
     }
 
     /// <summary>
-    /// Hangs up a connected call whose inbound RTP has gone silent past
-    /// <see cref="MediaSupervisionOptions.InboundMediaTimeout"/> — a NAT-safe fallback when a
-    /// far-end BYE never reaches our in-dialog Contact. Disabled when the timeout is
-    /// non-positive; on-hold calls are exempt unless explicitly configured. Fires at most
-    /// once per call.
+    /// Supervises a connected call's inbound media in two stages (#261, ADR-069).
+    /// <para>
+    /// Stage 1 — <b>media silence</b>: no inbound RTP for
+    /// <see cref="MediaSupervisionOptions.MediaSilenceNotifyAfter"/> raises <c>ICall.MediaFlowChanged</c> and
+    /// nothing else. Silence alone is not evidence of a dead peer: silence suppression (RFC 3389), hold, and
+    /// the bridge switch of a transfer all produce it while the far end keeps reporting RTCP.
+    /// </para>
+    /// <para>
+    /// Stage 2 — <b>loss of liveness</b>: no inbound RTP <em>and</em> no inbound RTCP for
+    /// <see cref="MediaSupervisionOptions.InboundMediaTimeout"/> ends the call — the NAT-safe fallback for a
+    /// far-end BYE that never reaches our in-dialog Contact. Fires at most once per call, carries a
+    /// termination reason so a consumer can tell it from a peer BYE, and is disabled by a non-positive
+    /// timeout. On-hold calls are exempt from stage 2 unless explicitly configured.
+    /// </para>
     /// </summary>
     private void CheckInboundMediaActivity(CallId callId, CallMediaRuntimeMetrics metrics)
     {
-        var timeout = _supervision.InboundMediaTimeout;
-        if (timeout <= TimeSpan.Zero)
-            return;
-
         if (!_activity.TryGetValue(callId, out var activity))
             return;
 
-        if (metrics.PacketsReceived > activity.LastReceived)
+        var outcome = activity.Observe(metrics, activity.Call.State, _supervision, DateTimeOffset.UtcNow);
+        if (outcome.Verdict == MediaSupervisionVerdict.None)
+            return;
+
+        if (activity.Call is not Domain.Calls.Call sdkCall)
+            return;
+
+        switch (outcome.Verdict)
         {
-            activity.LastReceived = metrics.PacketsReceived;
-            activity.LastActivityUtc = DateTimeOffset.UtcNow;
-            return;
+            case MediaSupervisionVerdict.MediaSilent:
+                _logger.LogInformation(
+                    "Call {CallId}: no inbound media for {Silence}s while the peer is still reporting — "
+                    + "surfacing media silence to the application.", callId, outcome.SilenceDuration.TotalSeconds);
+                sdkCall.ReportMediaFlowChanged(inboundMediaFlowing: false, outcome.SilenceDuration);
+                break;
+
+            case MediaSupervisionVerdict.MediaResumed:
+                _logger.LogInformation(
+                    "Call {CallId}: inbound media resumed after {Silence}s of silence.",
+                    callId, outcome.SilenceDuration.TotalSeconds);
+                sdkCall.ReportMediaFlowChanged(inboundMediaFlowing: true, outcome.SilenceDuration);
+                break;
+
+            case MediaSupervisionVerdict.PeerGone:
+                _logger.LogInformation(
+                    "Call {CallId}: no inbound RTP or RTCP for {Timeout}s — hanging up (far-end gone, BYE not received).",
+                    callId, _supervision.InboundMediaTimeout.TotalSeconds);
+                _ = sdkCall.HangupAsync(MediaTimeoutReason);
+                break;
         }
-
-        // A held call legitimately carries no inbound RTP; only supervise it when configured.
-        var supervisedState = activity.Call.State is CallState.Connected
-            || (_supervision.HangupHeldCallOnSilence && activity.Call.State is CallState.OnHold);
-
-        // No new inbound RTP: only act once media was flowing and the call is still supervised.
-        if (activity.LastReceived == 0
-            || DateTimeOffset.UtcNow - activity.LastActivityUtc < timeout
-            || !supervisedState)
-            return;
-
-        if (Interlocked.Exchange(ref activity.HungUp, 1) != 0)
-            return;
-
-        _logger.LogInformation(
-            "Call {CallId}: no inbound RTP for {Timeout}s — hanging up (far-end likely gone, BYE not received).",
-            callId, timeout.TotalSeconds);
-        _ = activity.Call.HangupAsync();
     }
+
+    // The termination reason an SDK-initiated media-timeout teardown carries, so a consumer can tell it apart
+    // from a peer BYE (FreeSWITCH surfaces the same distinction as its MEDIA_TIMEOUT hangup cause).
+    private static readonly CallTerminationReason MediaTimeoutReason = new()
+    {
+        Category = CallTerminationCategory.Failed,
+        TerminatedBy = CallTerminatedBy.Local,
+        ReasonPhrase = "Media timeout: no inbound RTP or RTCP from the far end.",
+    };
 
     // ──────────────────────────────────────────────────────────────────────────
     // Private helpers
@@ -332,7 +352,7 @@ internal sealed class CallMediaOrchestrator : IDisposable
 
             _active.TryRemove(call.CallId, out displaced); // prior session on re-INVITE
             _active[call.CallId] = entry;
-            _activity[call.CallId] = new MediaActivity { Call = call, LastActivityUtc = DateTimeOffset.UtcNow };
+            _activity[call.CallId] = new MediaActivity { Call = call, StartedUtc = DateTimeOffset.UtcNow };
         }
 
         if (displaced is not null)

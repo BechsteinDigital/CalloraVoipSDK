@@ -204,6 +204,20 @@ public interface ICall
     /// </summary>
     event EventHandler<CallIceConnectionStateChangedEventArgs>? IceConnectionStateChanged;
 
+    /// <summary>
+    /// Raised when inbound media goes silent on a connected call, and again when it resumes (#261, ADR-069).
+    /// Fires on a media/RTCP thread, not the signaling thread. Not buffered.
+    /// </summary>
+    /// <remarks>
+    /// This is a notification, not a teardown: it fires while the peer is still demonstrably alive (RTCP keeps
+    /// arriving), which is the normal state during silence suppression (RFC 3389), hold, and the bridge switch
+    /// of a transfer. The application decides what silence means for its use case — play a prompt, escalate,
+    /// end the call — long before the SDK's own liveness timeout would. A peer that stops sending
+    /// <em>everything</em> is a separate matter and ends the call with a
+    /// <see cref="CallTerminationReason"/> that says so.
+    /// </remarks>
+    event EventHandler<CallMediaFlowChangedEventArgs>? MediaFlowChanged;
+
     // ── Actions ───────────────────────────────────────────────────────────────
 
     /// <summary>

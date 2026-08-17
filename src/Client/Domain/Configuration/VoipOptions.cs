@@ -92,13 +92,19 @@ public sealed class VoipOptions
     public BridgeAudioFormat BridgeAudioFormat { get; set; } = BridgeAudioFormat.Passthrough;
 
     /// <summary>
-    /// Timeout after which an answered call that never receives inbound media is torn down.
-    /// See <see cref="VoipConfiguration.InboundMediaTimeout"/> for semantics.
+    /// Timeout after which a connected call whose peer has stopped sending both RTP and RTCP is torn down.
+    /// See <see cref="VoipConfiguration.InboundMediaTimeout"/> for semantics. Default: 30 seconds.
     /// </summary>
-    public TimeSpan InboundMediaTimeout { get; set; } = TimeSpan.FromSeconds(15);
+    public TimeSpan InboundMediaTimeout { get; set; } = TimeSpan.FromSeconds(30);
 
     /// <summary>
-    /// Hang up a held call when its media goes silent.
+    /// Delay after which inbound media silence is reported through <c>ICall.MediaFlowChanged</c>.
+    /// See <see cref="VoipConfiguration.MediaSilenceNotifyAfter"/> for semantics. Default: 15 seconds.
+    /// </summary>
+    public TimeSpan MediaSilenceNotifyAfter { get; set; } = TimeSpan.FromSeconds(15);
+
+    /// <summary>
+    /// Hang up a held call when its peer goes entirely quiet.
     /// See <see cref="VoipConfiguration.HangupHeldCallOnMediaSilence"/> for semantics.
     /// </summary>
     public bool HangupHeldCallOnMediaSilence { get; set; }

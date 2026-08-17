@@ -55,6 +55,10 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
     internal bool BridgeTranscodingActive => _bridgeTranscoder is not null;
 
     private readonly ILogger<RtpCallMediaSession> _logger;
+
+    // Inbound RTCP compounds seen on this session (#261). Read through Interlocked with the counter it is
+    // reported next to, so the supervision sees a monotonic count from any thread.
+    private long _rtcpPacketsReceived;
     // Binds this leg to one remote synchronisation source; everything downstream is single-stream (#161 P2-6).
     private readonly RtpRemoteSourceLatch _sourceLatch;
     // RFC 4733 inbound DTMF reassembly, shared with the bundled path. Driven only by the single RTP receive
@@ -458,6 +462,10 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
 
     private void OnRtcpCompoundReceived(IReadOnlyList<RtcpPacket> packets)
     {
+        // Liveness evidence for the media supervision (#261): counted before the fan-out so a throwing
+        // subscriber cannot make a live peer look dead.
+        Interlocked.Increment(ref _rtcpPacketsReceived);
+
         try
         {
             RtcpCompoundReceived?.Invoke(packets);
@@ -792,7 +800,8 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
             bufferedPackets: _jitterBuffer.BufferedCount,
             estimatedJitterMs: _jitterBuffer.EstimatedJitterMs,
             adaptiveDelayMs: _jitterBuffer.CurrentDelayMs,
-            estimatedRoundTripTimeMs: _jitterBuffer.EstimatedRoundTripTimeMs);
+            estimatedRoundTripTimeMs: _jitterBuffer.EstimatedRoundTripTimeMs,
+            rtcpPacketsReceived: Interlocked.Read(ref _rtcpPacketsReceived));
     }
 
 

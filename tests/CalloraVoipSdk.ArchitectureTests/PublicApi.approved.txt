@@ -502,6 +502,7 @@
   CalloraVoipSdk.Core.Domain.Calls.ICall.IsMuted : System.Boolean { get }
   CalloraVoipSdk.Core.Domain.Calls.ICall.Line : CalloraVoipSdk.Core.Domain.Lines.IPhoneLine { get }
   CalloraVoipSdk.Core.Domain.Calls.ICall.LocalParty : System.String { get }
+  CalloraVoipSdk.Core.Domain.Calls.ICall.MediaFlowChanged : event System.EventHandler<CalloraVoipSdk.Core.Domain.Events.CallMediaFlowChangedEventArgs>
   CalloraVoipSdk.Core.Domain.Calls.ICall.MediaParameters : CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters { get }
   CalloraVoipSdk.Core.Domain.Calls.ICall.MuteAsync(System.Boolean muted, System.Threading.CancellationToken ct = default) : System.Threading.Tasks.Task
   CalloraVoipSdk.Core.Domain.Calls.ICall.QualitySnapshot : CalloraVoipSdk.Core.Domain.Calls.CallQualitySnapshot { get }
@@ -538,6 +539,9 @@
   CalloraVoipSdk.Core.Domain.Events.CallIceConnectionStateChangedEventArgs.Call : CalloraVoipSdk.Core.Domain.Calls.ICall { get }
   CalloraVoipSdk.Core.Domain.Events.CallIceConnectionStateChangedEventArgs.NewState : CalloraVoipSdk.Core.Domain.Calls.CallIceState { get }
   CalloraVoipSdk.Core.Domain.Events.CallIceConnectionStateChangedEventArgs.OldState : CalloraVoipSdk.Core.Domain.Calls.CallIceState { get }
+  CalloraVoipSdk.Core.Domain.Events.CallMediaFlowChangedEventArgs.Call : CalloraVoipSdk.Core.Domain.Calls.ICall { get }
+  CalloraVoipSdk.Core.Domain.Events.CallMediaFlowChangedEventArgs.InboundMediaFlowing : System.Boolean { get }
+  CalloraVoipSdk.Core.Domain.Events.CallMediaFlowChangedEventArgs.SilenceDuration : System.TimeSpan { get }
   CalloraVoipSdk.Core.Domain.Events.CallQualitySnapshotChangedEventArgs.Call : CalloraVoipSdk.Core.Domain.Calls.ICall { get }
   CalloraVoipSdk.Core.Domain.Events.CallQualitySnapshotChangedEventArgs.Snapshot : CalloraVoipSdk.Core.Domain.Calls.CallQualitySnapshot { get }
   CalloraVoipSdk.Core.Domain.Events.CallStateChangedEventArgs.Call : CalloraVoipSdk.Core.Domain.Calls.ICall { get }
@@ -979,6 +983,7 @@
   CalloraVoipSdk.VoipConfiguration.LocalSipTlsPort : System.Int32 { get, init }
   CalloraVoipSdk.VoipConfiguration.LoggerFactory : Microsoft.Extensions.Logging.ILoggerFactory { get, init }
   CalloraVoipSdk.VoipConfiguration.MaxConcurrentCallsPerLine : System.Int32 { get, init }
+  CalloraVoipSdk.VoipConfiguration.MediaSilenceNotifyAfter : System.TimeSpan { get, init }
   CalloraVoipSdk.VoipConfiguration.OfferDtlsSrtp : System.Boolean { get, init }
   CalloraVoipSdk.VoipConfiguration.PreferredAudioCodecs : System.Collections.Generic.IReadOnlyList<System.String> { get, init }
   CalloraVoipSdk.VoipConfiguration.PreferredVideoCodecs : System.Collections.Generic.IReadOnlyList<System.String> { get, init }
@@ -1001,6 +1006,7 @@
   CalloraVoipSdk.VoipOptions.InboundMediaTimeout : System.TimeSpan { get, set }
   CalloraVoipSdk.VoipOptions.LoggerFactory : Microsoft.Extensions.Logging.ILoggerFactory { get, set }
   CalloraVoipSdk.VoipOptions.MaxConcurrentCallsPerLine : System.Int32 { get, set }
+  CalloraVoipSdk.VoipOptions.MediaSilenceNotifyAfter : System.TimeSpan { get, set }
   CalloraVoipSdk.VoipOptions.OfferDtlsSrtp : System.Boolean { get, set }
   CalloraVoipSdk.VoipOptions.PreferredAudioCodecs : System.Collections.Generic.IReadOnlyList<System.String> { get, set }
   CalloraVoipSdk.VoipOptions.PreferredVideoCodecs : System.Collections.Generic.IReadOnlyList<System.String> { get, set }
@@ -1225,6 +1231,7 @@ TYPE class CalloraVoipSdk.Core.Domain.Calls.CallVideoParameters
 TYPE class CalloraVoipSdk.Core.Domain.Calls.DialOptions
 TYPE class CalloraVoipSdk.Core.Domain.Events.CallActivityEventArgs
 TYPE class CalloraVoipSdk.Core.Domain.Events.CallIceConnectionStateChangedEventArgs
+TYPE class CalloraVoipSdk.Core.Domain.Events.CallMediaFlowChangedEventArgs
 TYPE class CalloraVoipSdk.Core.Domain.Events.CallQualitySnapshotChangedEventArgs
 TYPE class CalloraVoipSdk.Core.Domain.Events.CallStateChangedEventArgs
 TYPE class CalloraVoipSdk.Core.Domain.Events.DtmfReceivedEventArgs

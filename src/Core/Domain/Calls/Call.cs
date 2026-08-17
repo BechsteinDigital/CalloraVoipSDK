@@ -104,6 +104,9 @@ internal sealed class Call : ICall, IDisposable
     /// <inheritdoc />
     public event EventHandler<CallQualitySnapshotChangedEventArgs>? QualitySnapshotChanged;
 
+    /// <inheritdoc />
+    public event EventHandler<CallMediaFlowChangedEventArgs>? MediaFlowChanged;
+
     /// <summary>
     /// Creates a call aggregate and wires transport callbacks.
     /// </summary>
@@ -154,7 +157,15 @@ internal sealed class Call : ICall, IDisposable
     /// <summary>
     /// Hangs up the call and transitions to Terminated.
     /// </summary>
-    public async Task HangupAsync(CancellationToken ct = default)
+    public Task HangupAsync(CancellationToken ct = default) => HangupAsync(reason: null, ct);
+
+    /// <summary>
+    /// Hangs up the call carrying an explicit termination reason, so a consumer can tell an SDK-initiated
+    /// teardown (a supervision timeout, #261) apart from a peer BYE on
+    /// <see cref="CallStateChangedEventArgs.TerminationReason"/>. A <see langword="null"/> reason is the
+    /// public <see cref="HangupAsync(CancellationToken)"/> behaviour.
+    /// </summary>
+    internal async Task HangupAsync(CallTerminationReason? reason, CancellationToken ct = default)
     {
         if (State == CallState.Terminated) return;
 
@@ -167,7 +178,7 @@ internal sealed class Call : ICall, IDisposable
             await _channel.HangupAsync().ConfigureAwait(false);
             // Unconditional: termination is valid from every state and is the one transition that may
             // overtake anything else. Idempotent by the check above and by TransitionTo itself.
-            TransitionTo(CallState.Terminated);
+            TransitionTo(CallState.Terminated, reason);
         }
         finally
         {
@@ -746,6 +757,21 @@ internal sealed class Call : ICall, IDisposable
             snapshotChangedHandler = QualitySnapshotChanged; // snapshot before releasing lock
         }
         snapshotChangedHandler?.Invoke(this, new CallQualitySnapshotChangedEventArgs(snapshot, this));
+    }
+
+    /// <summary>
+    /// Reports a change in inbound media flow and emits <see cref="MediaFlowChanged"/> (#261, ADR-069).
+    /// The handler is snapshotted inside the lock to prevent races with concurrent subscribe/unsubscribe (K3).
+    /// Called by application media supervision on transitions only, never per metrics tick.
+    /// </summary>
+    internal void ReportMediaFlowChanged(bool inboundMediaFlowing, TimeSpan silenceDuration)
+    {
+        EventHandler<CallMediaFlowChangedEventArgs>? mediaFlowHandler;
+        lock (_sync)
+        {
+            mediaFlowHandler = MediaFlowChanged; // snapshot before releasing lock
+        }
+        mediaFlowHandler?.Invoke(this, new CallMediaFlowChangedEventArgs(inboundMediaFlowing, silenceDuration, this));
     }
 
     /// <summary>
