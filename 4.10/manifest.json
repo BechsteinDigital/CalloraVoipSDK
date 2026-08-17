@@ -712,6 +712,16 @@
     },
     {
       "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-071-payload-reads-under-partial-encryption.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-071-payload-reads-under-partial-encryption.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
       "source_relative_path": "docs/adr/README.md",
       "output": {
         ".html": {
@@ -3224,6 +3234,20 @@
       "IsMRef": true,
       "Title": "CalloraVoipSdk.WebRtc.IWebRtcTrickleSignaling",
       "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.WebRtc.IWebRtcTrickleSignaling.yml\" sourcestartlinenumber=\"1\">Extends <xref href=\"CalloraVoipSdk.WebRtc.IWebRtcSignaling\" data-throw-if-not-resolved=\"false\"></xref> with out-of-band ICE candidate trickle (RFC 8838): alongside the\noffer/answer, the SDK sends each locally gathered candidate as it is discovered and applies remote\ncandidates as they arrive, rather than relying only on the candidates the SDP carried. When an app\nsupplies this on <xref href=\"CalloraVoipSdk.WebRtc.WebRtcPeerConnectionExtensions.ConnectAsync(CalloraVoipSdk.WebRtc.IPeerConnection%2cCalloraVoipSdk.WebRtc.IWebRtcSignaling%2cCalloraVoipSdk.WebRtc.WebRtcRole%2cSystem.Threading.CancellationToken)\" data-throw-if-not-resolved=\"false\"></xref>, the SDK gathers\nserver-reflexive candidates and runs the trickle exchange; a plain <xref href=\"CalloraVoipSdk.WebRtc.IWebRtcSignaling\" data-throw-if-not-resolved=\"false\"></xref> stays\nSDP-only. Candidate strings are RFC 8829 <code>candidate:…</code> lines — the wire form browsers exchange\nverbatim, so no conversion is needed at the app boundary.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/portal/_api/CalloraVoipSdk.WebRtc.KeyFrameSource.yml",
+      "output": {
+        ".html": {
+          "relative_path": "_api/CalloraVoipSdk.WebRtc.KeyFrameSource.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "CalloraVoipSdk.WebRtc.KeyFrameSource",
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.WebRtc.KeyFrameSource.yml\" sourcestartlinenumber=\"1\">Where <xref href=\"CalloraVoipSdk.WebRtc.EncodedFrame.IsKeyFrame\" data-throw-if-not-resolved=\"false\"></xref> came from. Two sources answer that question, and they do not\nsurvive end-to-end encryption equally well — a forwarder that needs to trust the flag needs to know which\none it got.</p>\n"
     },
     {
       "type": "ManagedReference",

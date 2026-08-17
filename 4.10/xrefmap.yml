@@ -12052,15 +12052,15 @@ references:
   fullName.vb: CalloraVoipSdk.WebRtc.EncodedFrame.New(System.ReadOnlyMemory(Of Byte), UInteger?, Boolean, Long?, String)
   nameWithType: EncodedFrame.EncodedFrame(ReadOnlyMemory<byte>, uint?, bool, long?, string?)
   nameWithType.vb: EncodedFrame.New(ReadOnlyMemory(Of Byte), UInteger?, Boolean, Long?, String)
-- uid: CalloraVoipSdk.WebRtc.EncodedFrame.#ctor(System.ReadOnlyMemory{System.Byte},System.Nullable{System.UInt32},System.Boolean,System.Nullable{System.Int64},System.String,System.Nullable{System.Int32},System.Nullable{System.Int32})
-  name: EncodedFrame(ReadOnlyMemory<byte>, uint?, bool, long?, string?, int?, int?)
-  href: _api/CalloraVoipSdk.WebRtc.EncodedFrame.html#CalloraVoipSdk_WebRtc_EncodedFrame__ctor_System_ReadOnlyMemory_System_Byte__System_Nullable_System_UInt32__System_Boolean_System_Nullable_System_Int64__System_String_System_Nullable_System_Int32__System_Nullable_System_Int32__
-  commentId: M:CalloraVoipSdk.WebRtc.EncodedFrame.#ctor(System.ReadOnlyMemory{System.Byte},System.Nullable{System.UInt32},System.Boolean,System.Nullable{System.Int64},System.String,System.Nullable{System.Int32},System.Nullable{System.Int32})
-  name.vb: New(ReadOnlyMemory(Of Byte), UInteger?, Boolean, Long?, String, Integer?, Integer?)
-  fullName: CalloraVoipSdk.WebRtc.EncodedFrame.EncodedFrame(System.ReadOnlyMemory<byte>, uint?, bool, long?, string?, int?, int?)
-  fullName.vb: CalloraVoipSdk.WebRtc.EncodedFrame.New(System.ReadOnlyMemory(Of Byte), UInteger?, Boolean, Long?, String, Integer?, Integer?)
-  nameWithType: EncodedFrame.EncodedFrame(ReadOnlyMemory<byte>, uint?, bool, long?, string?, int?, int?)
-  nameWithType.vb: EncodedFrame.New(ReadOnlyMemory(Of Byte), UInteger?, Boolean, Long?, String, Integer?, Integer?)
+- uid: CalloraVoipSdk.WebRtc.EncodedFrame.#ctor(System.ReadOnlyMemory{System.Byte},System.Nullable{System.UInt32},System.Boolean,System.Nullable{System.Int64},System.String,System.Nullable{System.Int32},System.Nullable{System.Int32},CalloraVoipSdk.WebRtc.KeyFrameSource)
+  name: EncodedFrame(ReadOnlyMemory<byte>, uint?, bool, long?, string?, int?, int?, KeyFrameSource)
+  href: _api/CalloraVoipSdk.WebRtc.EncodedFrame.html#CalloraVoipSdk_WebRtc_EncodedFrame__ctor_System_ReadOnlyMemory_System_Byte__System_Nullable_System_UInt32__System_Boolean_System_Nullable_System_Int64__System_String_System_Nullable_System_Int32__System_Nullable_System_Int32__CalloraVoipSdk_WebRtc_KeyFrameSource_
+  commentId: M:CalloraVoipSdk.WebRtc.EncodedFrame.#ctor(System.ReadOnlyMemory{System.Byte},System.Nullable{System.UInt32},System.Boolean,System.Nullable{System.Int64},System.String,System.Nullable{System.Int32},System.Nullable{System.Int32},CalloraVoipSdk.WebRtc.KeyFrameSource)
+  name.vb: New(ReadOnlyMemory(Of Byte), UInteger?, Boolean, Long?, String, Integer?, Integer?, KeyFrameSource)
+  fullName: CalloraVoipSdk.WebRtc.EncodedFrame.EncodedFrame(System.ReadOnlyMemory<byte>, uint?, bool, long?, string?, int?, int?, CalloraVoipSdk.WebRtc.KeyFrameSource)
+  fullName.vb: CalloraVoipSdk.WebRtc.EncodedFrame.New(System.ReadOnlyMemory(Of Byte), UInteger?, Boolean, Long?, String, Integer?, Integer?, CalloraVoipSdk.WebRtc.KeyFrameSource)
+  nameWithType: EncodedFrame.EncodedFrame(ReadOnlyMemory<byte>, uint?, bool, long?, string?, int?, int?, KeyFrameSource)
+  nameWithType.vb: EncodedFrame.New(ReadOnlyMemory(Of Byte), UInteger?, Boolean, Long?, String, Integer?, Integer?, KeyFrameSource)
 - uid: CalloraVoipSdk.WebRtc.EncodedFrame.#ctor*
   name: EncodedFrame
   href: _api/CalloraVoipSdk.WebRtc.EncodedFrame.html#CalloraVoipSdk_WebRtc_EncodedFrame__ctor_
@@ -12084,6 +12084,19 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.WebRtc.EncodedFrame.IsKeyFrame
   nameWithType: EncodedFrame.IsKeyFrame
+- uid: CalloraVoipSdk.WebRtc.EncodedFrame.KeyFrameSource
+  name: KeyFrameSource
+  href: _api/CalloraVoipSdk.WebRtc.EncodedFrame.html#CalloraVoipSdk_WebRtc_EncodedFrame_KeyFrameSource
+  commentId: P:CalloraVoipSdk.WebRtc.EncodedFrame.KeyFrameSource
+  fullName: CalloraVoipSdk.WebRtc.EncodedFrame.KeyFrameSource
+  nameWithType: EncodedFrame.KeyFrameSource
+- uid: CalloraVoipSdk.WebRtc.EncodedFrame.KeyFrameSource*
+  name: KeyFrameSource
+  href: _api/CalloraVoipSdk.WebRtc.EncodedFrame.html#CalloraVoipSdk_WebRtc_EncodedFrame_KeyFrameSource_
+  commentId: Overload:CalloraVoipSdk.WebRtc.EncodedFrame.KeyFrameSource
+  isSpec: "True"
+  fullName: CalloraVoipSdk.WebRtc.EncodedFrame.KeyFrameSource
+  nameWithType: EncodedFrame.KeyFrameSource
 - uid: CalloraVoipSdk.WebRtc.EncodedFrame.Payload
   name: Payload
   href: _api/CalloraVoipSdk.WebRtc.EncodedFrame.html#CalloraVoipSdk_WebRtc_EncodedFrame_Payload
@@ -12979,6 +12992,30 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.WebRtc.IWebRtcTrickleSignaling.SendEndOfCandidatesAsync
   nameWithType: IWebRtcTrickleSignaling.SendEndOfCandidatesAsync
+- uid: CalloraVoipSdk.WebRtc.KeyFrameSource
+  name: KeyFrameSource
+  href: _api/CalloraVoipSdk.WebRtc.KeyFrameSource.html
+  commentId: T:CalloraVoipSdk.WebRtc.KeyFrameSource
+  fullName: CalloraVoipSdk.WebRtc.KeyFrameSource
+  nameWithType: KeyFrameSource
+- uid: CalloraVoipSdk.WebRtc.KeyFrameSource.Payload
+  name: Payload
+  href: _api/CalloraVoipSdk.WebRtc.KeyFrameSource.html#CalloraVoipSdk_WebRtc_KeyFrameSource_Payload
+  commentId: F:CalloraVoipSdk.WebRtc.KeyFrameSource.Payload
+  fullName: CalloraVoipSdk.WebRtc.KeyFrameSource.Payload
+  nameWithType: KeyFrameSource.Payload
+- uid: CalloraVoipSdk.WebRtc.KeyFrameSource.RtpHeaderExtension
+  name: RtpHeaderExtension
+  href: _api/CalloraVoipSdk.WebRtc.KeyFrameSource.html#CalloraVoipSdk_WebRtc_KeyFrameSource_RtpHeaderExtension
+  commentId: F:CalloraVoipSdk.WebRtc.KeyFrameSource.RtpHeaderExtension
+  fullName: CalloraVoipSdk.WebRtc.KeyFrameSource.RtpHeaderExtension
+  nameWithType: KeyFrameSource.RtpHeaderExtension
+- uid: CalloraVoipSdk.WebRtc.KeyFrameSource.Unknown
+  name: Unknown
+  href: _api/CalloraVoipSdk.WebRtc.KeyFrameSource.html#CalloraVoipSdk_WebRtc_KeyFrameSource_Unknown
+  commentId: F:CalloraVoipSdk.WebRtc.KeyFrameSource.Unknown
+  fullName: CalloraVoipSdk.WebRtc.KeyFrameSource.Unknown
+  nameWithType: KeyFrameSource.Unknown
 - uid: CalloraVoipSdk.WebRtc.MediaDirection
   name: MediaDirection
   href: _api/CalloraVoipSdk.WebRtc.MediaDirection.html
