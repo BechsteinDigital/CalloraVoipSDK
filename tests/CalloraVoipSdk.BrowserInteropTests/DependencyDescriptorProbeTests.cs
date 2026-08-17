@@ -13,10 +13,12 @@ namespace CalloraVoipSdk.BrowserInteropTests;
 /// what comes back in the answer, and let the result decide how much of #225 is reachable.
 /// </summary>
 /// <remarks>
-/// Deliberately a probe, not a gate: it reports the browser's answer rather than asserting a shape. It runs
-/// under the existing BrowserInterop category so it is opt-in like the rest of the browser matrix.
+/// Deliberately a probe, not a gate — and therefore <b>outside</b> the <c>BrowserInterop</c> category the CI
+/// job runs. It asserts what a third party does, so leaving it in the gate would let a Chrome release that
+/// drops the extension fail unrelated pull requests. Run it on demand:
+/// <c>dotnet test --filter "Category=BrowserProbe"</c>.
 /// </remarks>
-[Trait("Category", "BrowserInterop")]
+[Trait("Category", "BrowserProbe")]
 public sealed class DependencyDescriptorProbeTests
 {
     private const string DependencyDescriptorUri =

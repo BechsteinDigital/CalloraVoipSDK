@@ -9,8 +9,13 @@ namespace CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
 /// This is what makes a forwarder — and this SDK's own receive path — independent of the payload: for an
 /// end-to-end encrypted stream (#223) the payload is ciphertext, so the key-frame flag derived from it is
 /// worthless, while the descriptor is written by the sender before encryption and stays readable.
+/// <para>
+/// A struct on purpose: one of these is produced for every inbound video packet that carries the extension,
+/// and the media hot path allocates nothing it can avoid (K3). Only <see cref="Structure"/> is a reference,
+/// and a sender emits that at the start of a coded video sequence — on key frames, not per packet.
+/// </para>
 /// </remarks>
-internal sealed record DependencyDescriptor
+internal readonly record struct DependencyDescriptor
 {
     /// <summary>Whether this packet carries the first byte of its frame.</summary>
     public required bool StartOfFrame { get; init; }

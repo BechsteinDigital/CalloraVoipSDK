@@ -34,10 +34,14 @@ internal sealed class DependencyDescriptorReader
     /// Parses one descriptor. Returns <see langword="false"/> when the extension is too short to hold the
     /// mandatory fields or is malformed beyond them — the caller then treats the packet as carrying no
     /// descriptor and falls back to whatever the payload can tell it.
+    /// <para>
+    /// Allocation-free for the common case (K3): the result is a struct, and only a descriptor that declares
+    /// a new template structure — a key frame — allocates, for the structure itself.
+    /// </para>
     /// </summary>
-    public bool TryParse(ReadOnlySpan<byte> data, out DependencyDescriptor? descriptor)
+    public bool TryParse(ReadOnlySpan<byte> data, out DependencyDescriptor descriptor)
     {
-        descriptor = null;
+        descriptor = default;
         if (data.Length < MandatoryFieldBytes)
             return false;
 
@@ -72,7 +76,14 @@ internal sealed class DependencyDescriptorReader
             // The per-frame overrides (custom dtis/fdiffs/chains) change dependency detail this SDK does not
             // act on — it forwards frames whole and never drops one by decode target. They are skipped rather
             // than parsed, which is safe because they are the last fields of the descriptor: nothing this
-            // reader still needs sits behind them. Layer and key-frame information come from the template.
+            // reader still needs sits behind them.
+            //
+            // Limitation, stated rather than hidden: with custom_fdiffs_flag set, the frame overrides its
+            // template's dependencies, so FrameDependencyCount below reports the TEMPLATE's count and not the
+            // frame's. IsKeyFrame consults it, but only as a corroborating check behind structure presence —
+            // and a sender that declares a new structure is starting a coded video sequence, which is the
+            // authoritative signal. Parsing the overrides is follow-up work if a layer-selecting forwarder
+            // ever needs frame-exact dependencies.
             _ = customDtis;
             _ = customFdiffs;
             _ = customChains;

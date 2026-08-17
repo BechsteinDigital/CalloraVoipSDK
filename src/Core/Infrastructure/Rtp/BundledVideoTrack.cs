@@ -638,13 +638,15 @@ internal sealed class BundledVideoTrack : IDisposable
         lane.LastDeliveredSequence = packet.SequenceNumber;
         lane.HasDelivered = true;
 
-        // Dependency Descriptor (#225), when the peer negotiated it: the key frame and the layer come from
-        // the RTP header rather than the payload. Read before reassembly because the descriptor rides on
+        // Dependency Descriptor (#225), when the peer negotiated it: the key frame comes from the RTP header
+        // rather than the payload. Read before reassembly because the descriptor rides on
         // each packet while the facts belong to the frame — the one starting the frame is the one that
         // describes it.
-        var descriptor = ReadDescriptor(lane, packet);
-        if (descriptor is not null && (descriptor.StartOfFrame || lane.PendingDescriptor is null))
+        if (TryReadDescriptor(lane, packet, out var descriptor)
+            && (descriptor.StartOfFrame || lane.PendingDescriptor is null))
+        {
             lane.PendingDescriptor = descriptor;
+        }
 
         if (!lane.Depacketiser.TryProcess(packet.Payload, packet.Timestamp, packet.Marker, out var frame, out var isKeyFrame))
             return;
@@ -653,8 +655,8 @@ internal sealed class BundledVideoTrack : IDisposable
         // a guess about ciphertext (#223), and even in the clear the sender knows better than the parser does.
         var frameDescriptor = lane.PendingDescriptor;
         lane.PendingDescriptor = null;
-        if (frameDescriptor is not null)
-            isKeyFrame = frameDescriptor.IsKeyFrame;
+        if (frameDescriptor is { } fromHeader)
+            isKeyFrame = fromHeader.IsKeyFrame;
 
         Interlocked.Increment(ref _framesReceived);
         if (isKeyFrame)
@@ -675,15 +677,17 @@ internal sealed class BundledVideoTrack : IDisposable
     // Parses the Dependency Descriptor from a packet's header extension, in whichever RFC 8285 wire form it
     // arrived (#224 — the descriptor is what needed the two-byte one). Null when the extension was not
     // negotiated, is absent from this packet, or is malformed; the caller then keeps the payload-derived flag.
-    private DependencyDescriptor? ReadDescriptor(BundledVideoInboundLayer lane, RtpPacket packet)
+    private bool TryReadDescriptor(
+        BundledVideoInboundLayer lane, RtpPacket packet, out DependencyDescriptor descriptor)
     {
+        descriptor = default;
         if (_dependencyDescriptorId is not { } id)
-            return null;
+            return false;
         if (!RtpHeaderExtensions.TryFindValue(packet.HeaderExtension, id, out var value))
-            return null;
+            return false;
 
         // The reader is the lane's: each simulcast encoding is its own stream with its own template structure.
-        return lane.Descriptors.TryParse(value, out var descriptor) ? descriptor : null;
+        return lane.Descriptors.TryParse(value, out descriptor);
     }
 
     /// <summary>
