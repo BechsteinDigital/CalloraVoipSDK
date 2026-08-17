@@ -27,6 +27,7 @@ public sealed class VoipOptionsMappingTests
             PreferredVideoCodecs = ["VP8", "H264"],
             BridgeAudioFormat = BridgeAudioFormat.Pcmu,
             InboundMediaTimeout = TimeSpan.FromSeconds(42),
+            MediaSilenceNotifyAfter = TimeSpan.FromSeconds(7),
             HangupHeldCallOnMediaSilence = true,
             DtlsCertificate = dtlsCertificate,
         };
@@ -38,6 +39,7 @@ public sealed class VoipOptionsMappingTests
         Assert.Equal(["VP8", "H264"], config.PreferredVideoCodecs);
         Assert.Equal(BridgeAudioFormat.Pcmu, config.BridgeAudioFormat);
         Assert.Equal(TimeSpan.FromSeconds(42), config.InboundMediaTimeout);
+        Assert.Equal(TimeSpan.FromSeconds(7), config.MediaSilenceNotifyAfter);
         Assert.True(config.HangupHeldCallOnMediaSilence);
         Assert.Same(dtlsCertificate, config.DtlsCertificate);
     }
@@ -54,6 +56,7 @@ public sealed class VoipOptionsMappingTests
         Assert.Null(config.DtlsCertificate);
         Assert.Equal(configurationDefaults.BridgeAudioFormat, config.BridgeAudioFormat);
         Assert.Equal(configurationDefaults.InboundMediaTimeout, config.InboundMediaTimeout);
+        Assert.Equal(configurationDefaults.MediaSilenceNotifyAfter, config.MediaSilenceNotifyAfter);
         Assert.False(config.HangupHeldCallOnMediaSilence);
     }
 }

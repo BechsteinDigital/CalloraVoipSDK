@@ -22,8 +22,10 @@ internal readonly record struct CallMediaRuntimeMetrics
         int bufferedPackets,
         double estimatedJitterMs,
         double adaptiveDelayMs,
-        double estimatedRoundTripTimeMs)
+        double estimatedRoundTripTimeMs,
+        long rtcpPacketsReceived = 0)
     {
+        RtcpPacketsReceived = rtcpPacketsReceived;
         CapturedAtUtc = capturedAtUtc;
         PacketsReceived = packetsReceived;
         PacketsQueued = packetsQueued;
@@ -44,6 +46,14 @@ internal readonly record struct CallMediaRuntimeMetrics
 
     /// <summary>Total count of RTP packets observed from the network.</summary>
     public long PacketsReceived { get; }
+
+    /// <summary>
+    /// Total count of inbound RTCP compounds observed from the network (#261). Together with
+    /// <see cref="PacketsReceived"/> this is the peer's liveness evidence: a peer that is alive but sending no
+    /// media — silence suppression (RFC 3389), hold, a bridge switch mid-transfer — keeps reporting RTCP on the
+    /// RFC 3550 §6.2 interval, so media silence and a dead far end are distinguishable rather than conflated.
+    /// </summary>
+    public long RtcpPacketsReceived { get; }
 
     /// <summary>Total count of packets accepted by the jitter buffer queue.</summary>
     public long PacketsQueued { get; }

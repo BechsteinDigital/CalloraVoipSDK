@@ -188,15 +188,30 @@ public sealed class VoipConfiguration
     public BridgeAudioFormat BridgeAudioFormat { get; init; } = BridgeAudioFormat.Passthrough;
 
     /// <summary>
-    /// Hang up a connected call whose inbound RTP has been silent this long — a NAT-safe
-    /// fallback for when a far-end BYE never reaches our in-dialog Contact and the media just
-    /// stops. <see cref="TimeSpan.Zero"/> disables the check. Default: 15 seconds.
+    /// Hang up a connected call that has shown no sign of life this long — neither inbound RTP nor
+    /// inbound RTCP. The NAT-safe fallback for when a far-end BYE never reaches our in-dialog Contact
+    /// and everything simply stops. <see cref="TimeSpan.Zero"/> disables the hangup.
+    /// Default: 30 seconds.
     /// </summary>
-    public TimeSpan InboundMediaTimeout { get; init; } = TimeSpan.FromSeconds(15);
+    /// <remarks>
+    /// Media silence alone does not end a call (#261): a peer using silence suppression (RFC 3389), a peer on
+    /// hold, and a peer mid-bridge-switch during a transfer all stop sending media while continuing to report
+    /// RTCP. Those are surfaced through <c>ICall.MediaFlowChanged</c> after
+    /// <see cref="MediaSilenceNotifyAfter"/> instead, and the application decides what they mean. Only a peer
+    /// that stops sending everything is treated as gone.
+    /// </remarks>
+    public TimeSpan InboundMediaTimeout { get; init; } = TimeSpan.FromSeconds(30);
 
     /// <summary>
-    /// Whether the inbound-media timeout also applies to on-hold calls (which legitimately
-    /// carry no inbound RTP). Default: <see langword="false"/> (held calls are not torn down).
+    /// Report inbound media silence through <c>ICall.MediaFlowChanged</c> after this long without inbound
+    /// RTP — a notification, never a teardown. <see cref="TimeSpan.Zero"/> disables the notification.
+    /// Default: 15 seconds.
+    /// </summary>
+    public TimeSpan MediaSilenceNotifyAfter { get; init; } = TimeSpan.FromSeconds(15);
+
+    /// <summary>
+    /// Whether the liveness timeout also applies to on-hold calls (which legitimately carry no inbound
+    /// media). Default: <see langword="false"/> (held calls are not torn down).
     /// </summary>
     public bool HangupHeldCallOnMediaSilence { get; init; }
 }

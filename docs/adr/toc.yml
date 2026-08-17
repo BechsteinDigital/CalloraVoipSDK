@@ -132,6 +132,10 @@
       href: ADR-049-opus-codec-integration-concentus.md
     - name: "ADR-050: Bridge Audio Transcoding — Wire Codec ↔ µ-law Tap"
       href: ADR-050-bridge-audio-transcoding-opus-mulaw.md
+- name: "Media Supervision"
+  items:
+    - name: "ADR-069: Media Supervision Ends Calls on Loss of Liveness, Not on Silence"
+      href: ADR-069-media-supervision-liveness-not-silence.md
 - name: "Concurrency & QoS"
   items:
     - name: "ADR-051: Event-Dispatch and Object-Lifecycle Concurrency Contract"

@@ -109,6 +109,8 @@ internal sealed class FakeCall : ICall
     public event EventHandler<CallQualitySnapshotChangedEventArgs>? QualitySnapshotChanged { add { } remove { } }
     public event EventHandler<CallIceConnectionStateChangedEventArgs>? IceConnectionStateChanged { add { } remove { } }
 
+    public event EventHandler<CallMediaFlowChangedEventArgs>? MediaFlowChanged { add { } remove { } }
+
     public CallDirection Direction => throw new NotImplementedException();
     public string RemoteParty => throw new NotImplementedException();
     public DateTimeOffset StartedAt => throw new NotImplementedException();
