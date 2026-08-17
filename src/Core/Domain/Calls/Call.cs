@@ -29,6 +29,10 @@ internal sealed class Call : ICall, IDisposable
     private long?                  _recommendedVideoBitrateBps;
     private NetworkQuality?        _videoNetworkQuality;
     private CallTerminationReason? _terminationReason;
+
+    // The reason an SDK-initiated teardown wants published, parked before the BYE goes out because the
+    // channel terminates the call from inside its own HangupAsync (#261). Guarded by _sync.
+    private CallTerminationReason? _pendingLocalReason;
     private bool                   _disposed;
 
     /// <inheritdoc />
@@ -175,10 +179,24 @@ internal sealed class Call : ICall, IDisposable
             // Re-checked inside the gate: another action may have terminated the call while this one waited.
             if (State == CallState.Terminated) return;
 
-            await _channel.HangupAsync().ConfigureAwait(false);
-            // Unconditional: termination is valid from every state and is the one transition that may
-            // overtake anything else. Idempotent by the check above and by TransitionTo itself.
-            TransitionTo(CallState.Terminated, reason);
+            // Parked before the BYE: the channel reports Terminated from inside HangupAsync, so this is the
+            // only point at which a specific reason can still reach the transition (#261).
+            if (reason is not null)
+                lock (_sync) _pendingLocalReason = reason;
+
+            try
+            {
+                await _channel.HangupAsync().ConfigureAwait(false);
+                // Unconditional: termination is valid from every state and is the one transition that may
+                // overtake anything else. Idempotent by the check above and by TransitionTo itself.
+                TransitionTo(CallState.Terminated, reason);
+            }
+            finally
+            {
+                // Never leave a stale reason parked for a later, unrelated teardown — a failed BYE must not
+                // relabel the next termination.
+                lock (_sync) _pendingLocalReason = null;
+            }
         }
         finally
         {
@@ -518,8 +536,16 @@ internal sealed class Call : ICall, IDisposable
 
             // Publish the termination reason under the same lock and before StateChanged fires, so a
             // handler reading TerminationReason on the Terminated transition always sees it set (K3).
-            var terminationReason = next == CallState.Terminated ? reason : null;
-            if (next == CallState.Terminated) _terminationReason = terminationReason;
+            // A parked local reason wins: an SDK-initiated teardown sends its BYE through the channel, and
+            // the channel reports Terminated from inside that call with only the generic "we hung up"
+            // reason it can derive from SIP (no status, no phrase). Passing the specific reason after the
+            // channel call would arrive at an already-terminated call and be dropped (#261).
+            var terminationReason = next == CallState.Terminated ? _pendingLocalReason ?? reason : null;
+            if (next == CallState.Terminated)
+            {
+                _terminationReason = terminationReason;
+                _pendingLocalReason = null;
+            }
 
             args               = new CallStateChangedEventArgs(current, next, this, terminationReason);
             _stateInt          = (int)next;

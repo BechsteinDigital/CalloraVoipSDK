@@ -134,7 +134,7 @@
       href: ADR-050-bridge-audio-transcoding-opus-mulaw.md
 - name: "Media Supervision"
   items:
-    - name: "ADR-069: Media Supervision Ends Calls on Loss of Liveness, Not on Silence"
+    - name: "ADR-069: Media Silence Is Reported, Not Terminated On"
       href: ADR-069-media-supervision-liveness-not-silence.md
 - name: "Concurrency & QoS"
   items:

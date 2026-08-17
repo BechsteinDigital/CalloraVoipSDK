@@ -189,18 +189,26 @@ public sealed class VoipConfiguration
 
     /// <summary>
     /// Hang up a connected call that has shown no sign of life this long — neither inbound RTP nor
-    /// inbound RTCP. The NAT-safe fallback for when a far-end BYE never reaches our in-dialog Contact
-    /// and everything simply stops. <see cref="TimeSpan.Zero"/> disables the hangup.
-    /// Default: 30 seconds.
+    /// inbound RTCP. <see cref="TimeSpan.Zero"/> (the <b>default</b>) disables the hangup: media silence is
+    /// reported through <c>ICall.MediaFlowChanged</c> and the application decides what to do about it.
+    /// 30 seconds is the recommended value if you want the SDK to end such calls itself.
     /// </summary>
     /// <remarks>
-    /// Media silence alone does not end a call (#261): a peer using silence suppression (RFC 3389), a peer on
-    /// hold, and a peer mid-bridge-switch during a transfer all stop sending media while continuing to report
-    /// RTCP. Those are surfaced through <c>ICall.MediaFlowChanged</c> after
-    /// <see cref="MediaSilenceNotifyAfter"/> instead, and the application decides what they mean. Only a peer
-    /// that stops sending everything is treated as gone.
+    /// <para>
+    /// Off by default because the teardown is a heuristic and the measurement says so (#261, ADR-069): with a
+    /// PBX in the media path — verified against both Asterisk and FreeSWITCH — inbound RTCP stops together
+    /// with the media, so nothing on the wire distinguishes "the peer went quiet" (silence suppression per
+    /// RFC 3389, hold, a bridge switch during a transfer) from "the peer went away". Asterisk
+    /// (<c>rtp_timeout</c>) and FreeSWITCH (<c>media_timeout</c>) ship theirs disabled for the same reason.
+    /// A peer that is genuinely gone is still caught by the RFC 4028 session timer.
+    /// </para>
+    /// <para>
+    /// When you do enable it, inbound RTCP counts as a sign of life alongside RTP — it can only extend the
+    /// deadline, never shorten it — and held calls stay exempt unless
+    /// <see cref="HangupHeldCallOnMediaSilence"/> is set.
+    /// </para>
     /// </remarks>
-    public TimeSpan InboundMediaTimeout { get; init; } = TimeSpan.FromSeconds(30);
+    public TimeSpan InboundMediaTimeout { get; init; } = TimeSpan.Zero;
 
     /// <summary>
     /// Report inbound media silence through <c>ICall.MediaFlowChanged</c> after this long without inbound
