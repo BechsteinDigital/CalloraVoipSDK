@@ -353,6 +353,14 @@ internal sealed class PeerConnection : IPeerConnection
         return _peer.SendVideoFrameAsync(encodedFrame, rtpTimestamp, cancellationToken);
     }
 
+    /// <inheritdoc />
+    public Task SendVideoFrameAsync(
+        ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, bool isKeyFrame, CancellationToken cancellationToken = default)
+    {
+        _taps.Video(MediaDirection.Outbound, encodedFrame, rtpTimestamp, isKeyFrame, rid: null);
+        return _peer.SendVideoFrameAsync(encodedFrame, rtpTimestamp, cancellationToken, isKeyFrame);
+    }
+
     public Task SendVideoFrameAsync(string rid, ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default)
     {
         // A blank rid on the simulcast overload would reach the tap as a layer id indistinguishable from the
@@ -361,6 +369,15 @@ internal sealed class PeerConnection : IPeerConnection
         // Tag the outbound tap with the simulcast layer id so a recorder/analytics can separate the layers.
         _taps.Video(MediaDirection.Outbound, encodedFrame, rtpTimestamp, isKeyFrame: false, rid: rid);
         return _peer.SendVideoFrameAsync(rid, encodedFrame, rtpTimestamp, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task SendVideoFrameAsync(
+        string rid, ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, bool isKeyFrame,
+        CancellationToken cancellationToken = default)
+    {
+        _taps.Video(MediaDirection.Outbound, encodedFrame, rtpTimestamp, isKeyFrame, rid);
+        return _peer.SendVideoFrameAsync(rid, encodedFrame, rtpTimestamp, cancellationToken, isKeyFrame);
     }
 
     public Task SendDtmfAsync(byte toneCode, int durationMs = 160, CancellationToken cancellationToken = default)

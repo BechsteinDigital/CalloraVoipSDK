@@ -735,8 +735,9 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     /// <summary>Packetises and sends one encoded video frame on the peer's (primary) video track.</summary>
     /// <exception cref="InvalidOperationException">No BUNDLE media session, or the bundle has no video track.</exception>
     /// <exception cref="ObjectDisposedException">The peer is disposing or disposed.</exception>
-    public Task SendVideoFrameAsync(ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default)
-        => _sendLease.SendViaLeaseAsync(s => s.SendVideoFrameAsync(encodedFrame, rtpTimestamp, cancellationToken));
+    public Task SendVideoFrameAsync(
+        ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default, bool? isKeyFrame = null)
+        => _sendLease.SendViaLeaseAsync(s => s.SendVideoFrameAsync(encodedFrame, rtpTimestamp, cancellationToken, isKeyFrame));
 
     /// <summary>
     /// Packetises and sends one encoded video frame on a simulcast <paramref name="rid"/> layer (RFC 8853); the
@@ -745,8 +746,8 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     /// <exception cref="InvalidOperationException">No BUNDLE media session, or the bundle has no video track.</exception>
     /// <exception cref="ArgumentException">No encoding is configured for <paramref name="rid"/>.</exception>
     /// <exception cref="ObjectDisposedException">The peer is disposing or disposed.</exception>
-    public Task SendVideoFrameAsync(string rid, ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default)
-        => _sendLease.SendViaLeaseAsync(s => s.SendVideoFrameAsync(rid, encodedFrame, rtpTimestamp, cancellationToken));
+    public Task SendVideoFrameAsync(string rid, ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default, bool? isKeyFrame = null)
+        => _sendLease.SendViaLeaseAsync(s => s.SendVideoFrameAsync(rid, encodedFrame, rtpTimestamp, cancellationToken, isKeyFrame));
 
     /// <summary>
     /// Packetises and sends one encoded video frame on the video track identified by <paramref name="mid"/> (P2c

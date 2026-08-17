@@ -185,7 +185,8 @@ internal sealed class BundledOutboundTrack
         byte payloadType,
         uint? timestampOverride,
         bool advanceTimestamp,
-        ushort? transportCcSequence = null)
+        ushort? transportCcSequence = null,
+        ReadOnlyMemory<byte> dependencyDescriptor = default)
     {
         lock (_sendSync)
         {
@@ -207,7 +208,7 @@ internal sealed class BundledOutboundTrack
                 // Stamp MID (and, when negotiated, the transport-wide-cc sequence) before SRTP: RFC 3711
                 // authenticates but does not encrypt the header extension, so the peer reads the MID in the
                 // clear to demux and the transport-wide sequence to build congestion feedback.
-                HeaderExtension = _stamper.Build(transportCcSequence),
+                HeaderExtension = _stamper.Build(transportCcSequence, dependencyDescriptor),
             };
         }
     }

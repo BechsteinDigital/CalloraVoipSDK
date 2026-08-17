@@ -896,17 +896,17 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     /// to target a specific MID.
     /// </summary>
     /// <exception cref="InvalidOperationException">This bundle has no video track, or the primary is simulcast.</exception>
-    public Task SendVideoFrameAsync(ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default)
+    public Task SendVideoFrameAsync(ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default, bool? isKeyFrame = null)
         => _video.Primary is { } video
-            ? video.SendFrameAsync(encodedFrame, rtpTimestamp, cancellationToken)
+            ? video.SendFrameAsync(encodedFrame, rtpTimestamp, cancellationToken, isKeyFrame)
             : throw new InvalidOperationException("This bundle has no video track.");
 
     /// <summary>Packetises and sends one encoded video frame on the primary track's simulcast <paramref name="rid"/> layer (RFC 8853).</summary>
     /// <exception cref="InvalidOperationException">This bundle has no video track.</exception>
     /// <exception cref="ArgumentException">No encoding is configured for <paramref name="rid"/>.</exception>
-    public Task SendVideoFrameAsync(string rid, ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default)
+    public Task SendVideoFrameAsync(string rid, ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default, bool? isKeyFrame = null)
         => _video.Primary is { } video
-            ? video.SendFrameAsync(rid, encodedFrame, rtpTimestamp, cancellationToken)
+            ? video.SendFrameAsync(rid, encodedFrame, rtpTimestamp, cancellationToken, isKeyFrame)
             : throw new InvalidOperationException("This bundle has no video track.");
 
     /// <summary>

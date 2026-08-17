@@ -164,6 +164,27 @@ public interface IPeerConnection : IAsyncDisposable
     Task SendVideoFrameAsync(ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Sends one encoded video frame and declares whether it is a key frame, so the SDK can put that fact in
+    /// the RTP header as a Dependency Descriptor (#225) instead of leaving a receiver to parse it out of the
+    /// payload.
+    /// </summary>
+    /// <remarks>
+    /// Use this whenever you know — you always do, since you encoded the frame — and especially with
+    /// <see cref="WebRtcConfiguration.OpaqueVideoFrames"/>: an encrypted payload carries no readable key-frame
+    /// signal at all, so without this the information is simply lost. The descriptor is written only when the
+    /// peer negotiated the extension; otherwise this behaves exactly like the overload without the flag.
+    /// </remarks>
+    /// <param name="encodedFrame">The encoded frame.</param>
+    /// <param name="rtpTimestamp">The frame's RTP timestamp (RFC 3550 §5.1).</param>
+    /// <param name="isKeyFrame">Whether the frame can be decoded on its own.</param>
+    /// <param name="cancellationToken">Cancels the send.</param>
+    Task SendVideoFrameAsync(
+        ReadOnlyMemory<byte> encodedFrame,
+        uint rtpTimestamp,
+        bool isKeyFrame,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Sends one out-of-band DTMF tone (RFC 4733 telephone-event) on the peer's audio track. A no-op is not
     /// possible: telephone-event must have been negotiated, otherwise this throws. The tone is streamed as an
     /// event burst on the audio stream's RTP clock, suppressed until the DTLS handshake keys the transport.
@@ -181,6 +202,24 @@ public interface IPeerConnection : IAsyncDisposable
     /// its own resolution/bitrate and calls this once per layer per frame.
     /// </summary>
     Task SendVideoFrameAsync(string rid, ReadOnlyMemory<byte> encodedFrame, uint rtpTimestamp, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Sends one encoded video frame on a simulcast <paramref name="rid"/> layer (RFC 8853) and declares
+    /// whether it is a key frame — the per-layer counterpart to
+    /// <see cref="SendVideoFrameAsync(ReadOnlyMemory{byte}, uint, bool, System.Threading.CancellationToken)"/>.
+    /// Each layer numbers its frames independently, as they are independent RTP streams.
+    /// </summary>
+    /// <param name="rid">The simulcast layer's <c>a=rid</c> id.</param>
+    /// <param name="encodedFrame">The encoded frame.</param>
+    /// <param name="rtpTimestamp">The frame's RTP timestamp (RFC 3550 §5.1).</param>
+    /// <param name="isKeyFrame">Whether the frame can be decoded on its own.</param>
+    /// <param name="cancellationToken">Cancels the send.</param>
+    Task SendVideoFrameAsync(
+        string rid,
+        ReadOnlyMemory<byte> encodedFrame,
+        uint rtpTimestamp,
+        bool isKeyFrame,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Asks the peer to send a fresh video key frame (RFC 4585 §6.3.1 PLI). This is the receiving side's

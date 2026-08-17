@@ -1062,7 +1062,9 @@
   CalloraVoipSdk.WebRtc.IPeerConnection.RequestVideoKeyFrameAsync(System.Threading.CancellationToken cancellationToken = default) : System.Threading.Tasks.ValueTask<System.Boolean>
   CalloraVoipSdk.WebRtc.IPeerConnection.SendAudioAsync(System.ReadOnlyMemory<System.Byte> payload, System.Threading.CancellationToken cancellationToken = default) : System.Threading.Tasks.ValueTask
   CalloraVoipSdk.WebRtc.IPeerConnection.SendDtmfAsync(System.Byte toneCode, System.Int32 durationMs = default, System.Threading.CancellationToken cancellationToken = default) : System.Threading.Tasks.Task
+  CalloraVoipSdk.WebRtc.IPeerConnection.SendVideoFrameAsync(System.ReadOnlyMemory<System.Byte> encodedFrame, System.UInt32 rtpTimestamp, System.Boolean isKeyFrame, System.Threading.CancellationToken cancellationToken = default) : System.Threading.Tasks.Task
   CalloraVoipSdk.WebRtc.IPeerConnection.SendVideoFrameAsync(System.ReadOnlyMemory<System.Byte> encodedFrame, System.UInt32 rtpTimestamp, System.Threading.CancellationToken cancellationToken = default) : System.Threading.Tasks.Task
+  CalloraVoipSdk.WebRtc.IPeerConnection.SendVideoFrameAsync(System.String rid, System.ReadOnlyMemory<System.Byte> encodedFrame, System.UInt32 rtpTimestamp, System.Boolean isKeyFrame, System.Threading.CancellationToken cancellationToken = default) : System.Threading.Tasks.Task
   CalloraVoipSdk.WebRtc.IPeerConnection.SendVideoFrameAsync(System.String rid, System.ReadOnlyMemory<System.Byte> encodedFrame, System.UInt32 rtpTimestamp, System.Threading.CancellationToken cancellationToken = default) : System.Threading.Tasks.Task
   CalloraVoipSdk.WebRtc.IPeerConnection.SetRemoteDescriptionAsync(System.String remoteSdp, System.Threading.CancellationToken cancellationToken = default) : System.Threading.Tasks.Task<System.String>
   CalloraVoipSdk.WebRtc.IPeerConnection.SignalingState : CalloraVoipSdk.WebRtc.SignalingState { get }
