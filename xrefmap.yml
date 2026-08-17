@@ -7663,6 +7663,22 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.DependencyInjection.CalloraWebRtcBuilder.WithLoggerFactory
   nameWithType: CalloraWebRtcBuilder.WithLoggerFactory
+- uid: CalloraVoipSdk.DependencyInjection.CalloraWebRtcBuilder.WithOpaqueVideo(System.String[])
+  name: WithOpaqueVideo(params string[])
+  href: _api/CalloraVoipSdk.DependencyInjection.CalloraWebRtcBuilder.html#CalloraVoipSdk_DependencyInjection_CalloraWebRtcBuilder_WithOpaqueVideo_System_String___
+  commentId: M:CalloraVoipSdk.DependencyInjection.CalloraWebRtcBuilder.WithOpaqueVideo(System.String[])
+  name.vb: WithOpaqueVideo(ParamArray String())
+  fullName: CalloraVoipSdk.DependencyInjection.CalloraWebRtcBuilder.WithOpaqueVideo(params string[])
+  fullName.vb: CalloraVoipSdk.DependencyInjection.CalloraWebRtcBuilder.WithOpaqueVideo(ParamArray String())
+  nameWithType: CalloraWebRtcBuilder.WithOpaqueVideo(params string[])
+  nameWithType.vb: CalloraWebRtcBuilder.WithOpaqueVideo(ParamArray String())
+- uid: CalloraVoipSdk.DependencyInjection.CalloraWebRtcBuilder.WithOpaqueVideo*
+  name: WithOpaqueVideo
+  href: _api/CalloraVoipSdk.DependencyInjection.CalloraWebRtcBuilder.html#CalloraVoipSdk_DependencyInjection_CalloraWebRtcBuilder_WithOpaqueVideo_
+  commentId: Overload:CalloraVoipSdk.DependencyInjection.CalloraWebRtcBuilder.WithOpaqueVideo
+  isSpec: "True"
+  fullName: CalloraVoipSdk.DependencyInjection.CalloraWebRtcBuilder.WithOpaqueVideo
+  nameWithType: CalloraWebRtcBuilder.WithOpaqueVideo
 - uid: CalloraVoipSdk.DependencyInjection.CalloraWebRtcBuilder.WithStunServer(System.String,System.Nullable{System.Int32})
   name: WithStunServer(string, int?)
   href: _api/CalloraVoipSdk.DependencyInjection.CalloraWebRtcBuilder.html#CalloraVoipSdk_DependencyInjection_CalloraWebRtcBuilder_WithStunServer_System_String_System_Nullable_System_Int32__
@@ -13357,6 +13373,19 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.WebRtc.WebRtcConfiguration.LoggerFactory
   nameWithType: WebRtcConfiguration.LoggerFactory
+- uid: CalloraVoipSdk.WebRtc.WebRtcConfiguration.OpaqueVideoFrames
+  name: OpaqueVideoFrames
+  href: _api/CalloraVoipSdk.WebRtc.WebRtcConfiguration.html#CalloraVoipSdk_WebRtc_WebRtcConfiguration_OpaqueVideoFrames
+  commentId: P:CalloraVoipSdk.WebRtc.WebRtcConfiguration.OpaqueVideoFrames
+  fullName: CalloraVoipSdk.WebRtc.WebRtcConfiguration.OpaqueVideoFrames
+  nameWithType: WebRtcConfiguration.OpaqueVideoFrames
+- uid: CalloraVoipSdk.WebRtc.WebRtcConfiguration.OpaqueVideoFrames*
+  name: OpaqueVideoFrames
+  href: _api/CalloraVoipSdk.WebRtc.WebRtcConfiguration.html#CalloraVoipSdk_WebRtc_WebRtcConfiguration_OpaqueVideoFrames_
+  commentId: Overload:CalloraVoipSdk.WebRtc.WebRtcConfiguration.OpaqueVideoFrames
+  isSpec: "True"
+  fullName: CalloraVoipSdk.WebRtc.WebRtcConfiguration.OpaqueVideoFrames
+  nameWithType: WebRtcConfiguration.OpaqueVideoFrames
 - uid: CalloraVoipSdk.WebRtc.WebRtcConfiguration.SimulcastLayers
   name: SimulcastLayers
   href: _api/CalloraVoipSdk.WebRtc.WebRtcConfiguration.html#CalloraVoipSdk_WebRtc_WebRtcConfiguration_SimulcastLayers
@@ -13598,6 +13627,19 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.WebRtc.WebRtcOptions.LoggerFactory
   nameWithType: WebRtcOptions.LoggerFactory
+- uid: CalloraVoipSdk.WebRtc.WebRtcOptions.OpaqueVideoFrames
+  name: OpaqueVideoFrames
+  href: _api/CalloraVoipSdk.WebRtc.WebRtcOptions.html#CalloraVoipSdk_WebRtc_WebRtcOptions_OpaqueVideoFrames
+  commentId: P:CalloraVoipSdk.WebRtc.WebRtcOptions.OpaqueVideoFrames
+  fullName: CalloraVoipSdk.WebRtc.WebRtcOptions.OpaqueVideoFrames
+  nameWithType: WebRtcOptions.OpaqueVideoFrames
+- uid: CalloraVoipSdk.WebRtc.WebRtcOptions.OpaqueVideoFrames*
+  name: OpaqueVideoFrames
+  href: _api/CalloraVoipSdk.WebRtc.WebRtcOptions.html#CalloraVoipSdk_WebRtc_WebRtcOptions_OpaqueVideoFrames_
+  commentId: Overload:CalloraVoipSdk.WebRtc.WebRtcOptions.OpaqueVideoFrames
+  isSpec: "True"
+  fullName: CalloraVoipSdk.WebRtc.WebRtcOptions.OpaqueVideoFrames
+  nameWithType: WebRtcOptions.OpaqueVideoFrames
 - uid: CalloraVoipSdk.WebRtc.WebRtcOptions.SimulcastLayers
   name: SimulcastLayers
   href: _api/CalloraVoipSdk.WebRtc.WebRtcOptions.html#CalloraVoipSdk_WebRtc_WebRtcOptions_SimulcastLayers

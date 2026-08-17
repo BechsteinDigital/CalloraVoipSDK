@@ -156,7 +156,7 @@ and by <a class="xref" href="CalloraVoipSdk.DependencyInjection.CalloraBuilder.h
 
   <h3 id="CalloraVoipSdk_DependencyInjection_CalloraWebRtcBuilder_WithDtlsCertificate_System_Security_Cryptography_X509Certificates_X509Certificate2_" data-uid="CalloraVoipSdk.DependencyInjection.CalloraWebRtcBuilder.WithDtlsCertificate(System.Security.Cryptography.X509Certificates.X509Certificate2)">
   WithDtlsCertificate(X509Certificate2)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/CalloraWebRtcBuilder.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/CalloraWebRtcBuilder.cs/#L61"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Pins the DTLS-SRTP identity certificate used for every peer (ECDSA P-256 with an exportable
@@ -194,7 +194,7 @@ private key); see <a class="xref" href="CalloraVoipSdk.WebRtc.WebRtcOptions.html
 
   <h3 id="CalloraVoipSdk_DependencyInjection_CalloraWebRtcBuilder_WithIceServers_CalloraVoipSdk_IceServerConfiguration___" data-uid="CalloraVoipSdk.DependencyInjection.CalloraWebRtcBuilder.WithIceServers(CalloraVoipSdk.IceServerConfiguration[])">
   WithIceServers(params IceServerConfiguration[])
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/CalloraWebRtcBuilder.cs/#L111"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/CalloraWebRtcBuilder.cs/#L129"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Adds one or more fully-specified ICE servers (STUN/TURN), accumulating with any already configured.
@@ -239,7 +239,7 @@ A TURN entry with a non-UDP transport is rejected — only UDP TURN is supported
 
   <h3 id="CalloraVoipSdk_DependencyInjection_CalloraWebRtcBuilder_WithLoggerFactory_Microsoft_Extensions_Logging_ILoggerFactory_" data-uid="CalloraVoipSdk.DependencyInjection.CalloraWebRtcBuilder.WithLoggerFactory(Microsoft.Extensions.Logging.ILoggerFactory)">
   WithLoggerFactory(ILoggerFactory)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/CalloraWebRtcBuilder.cs/#L51"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/CalloraWebRtcBuilder.cs/#L69"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Overrides the logger factory used for WebRTC diagnostics.</p>
@@ -272,11 +272,56 @@ A TURN entry with a non-UDP transport is rejected — only UDP TURN is supported
 
 
 
+  <a id="CalloraVoipSdk_DependencyInjection_CalloraWebRtcBuilder_WithOpaqueVideo_" data-uid="CalloraVoipSdk.DependencyInjection.CalloraWebRtcBuilder.WithOpaqueVideo*"></a>
+
+  <h3 id="CalloraVoipSdk_DependencyInjection_CalloraWebRtcBuilder_WithOpaqueVideo_System_String___" data-uid="CalloraVoipSdk.DependencyInjection.CalloraWebRtcBuilder.WithOpaqueVideo(System.String[])">
+  WithOpaqueVideo(params string[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/CalloraWebRtcBuilder.cs/#L50"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Enables video negotiation for end-to-end encrypted frames: the app encrypts each frame before handing it
+over (WebRTC Encoded Transform / SFrame, RFC 9605) and the SDK never reads the content (#223, ADR-068).
+Sets <a class="xref" href="CalloraVoipSdk.WebRtc.WebRtcOptions.html#CalloraVoipSdk_WebRtc_WebRtcOptions_EnableVideo">EnableVideo</a> and <a class="xref" href="CalloraVoipSdk.WebRtc.WebRtcOptions.html#CalloraVoipSdk_WebRtc_WebRtcOptions_OpaqueVideoFrames">OpaqueVideoFrames</a>, and — when
+<code class="paramref">codecs</code> is non-empty — the ordered codec preference, exactly as <a class="xref" href="CalloraVoipSdk.DependencyInjection.CalloraWebRtcBuilder.html#CalloraVoipSdk_DependencyInjection_CalloraWebRtcBuilder_WithVideo_System_String___">WithVideo(params string[])</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public CalloraWebRtcBuilder WithOpaqueVideo(params string[] codecs)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>codecs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="CalloraVoipSdk.DependencyInjection.CalloraWebRtcBuilder.html">CalloraWebRtcBuilder</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="CalloraVoipSdk_DependencyInjection_CalloraWebRtcBuilder_WithOpaqueVideo_System_String____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Key-frame detection is off on this path (the flag is always <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a> — &quot;unknown&quot;, not
+&quot;no&quot;), and the opaque H.264 framing is not what a browser emits: see
+<a class="xref" href="CalloraVoipSdk.WebRtc.WebRtcConfiguration.html#CalloraVoipSdk_WebRtc_WebRtcConfiguration_OpaqueVideoFrames">OpaqueVideoFrames</a> for the full semantics and interop scope.</p>
+</div>
+
+
+
+
   <a id="CalloraVoipSdk_DependencyInjection_CalloraWebRtcBuilder_WithStunServer_" data-uid="CalloraVoipSdk.DependencyInjection.CalloraWebRtcBuilder.WithStunServer*"></a>
 
   <h3 id="CalloraVoipSdk_DependencyInjection_CalloraWebRtcBuilder_WithStunServer_System_String_System_Nullable_System_Int32__" data-uid="CalloraVoipSdk.DependencyInjection.CalloraWebRtcBuilder.WithStunServer(System.String,System.Nullable{System.Int32})">
   WithStunServer(string, int?)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/CalloraWebRtcBuilder.cs/#L64"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/CalloraWebRtcBuilder.cs/#L82"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Adds a STUN server for server-reflexive (srflx) candidate gathering (RFC 8445). Accumulates with any
@@ -318,7 +363,7 @@ servers already configured; see <a class="xref" href="CalloraVoipSdk.WebRtc.WebR
 
   <h3 id="CalloraVoipSdk_DependencyInjection_CalloraWebRtcBuilder_WithTurnServer_System_String_System_String_System_String_System_Nullable_System_Int32__CalloraVoipSdk_IceTransport_" data-uid="CalloraVoipSdk.DependencyInjection.CalloraWebRtcBuilder.WithTurnServer(System.String,System.String,System.String,System.Nullable{System.Int32},CalloraVoipSdk.IceTransport)">
   WithTurnServer(string, string, string, int?, IceTransport)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/CalloraWebRtcBuilder.cs/#L83"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/CalloraWebRtcBuilder.cs/#L101"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Adds a TURN server for relay candidate gathering (RFC 8656), with the long-term credentials the

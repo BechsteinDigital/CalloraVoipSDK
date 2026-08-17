@@ -89,7 +89,7 @@
 
 
   <h1 id="CalloraVoipSdk_WebRtc_VideoTrackOptions" data-uid="CalloraVoipSdk.WebRtc.VideoTrackOptions" class="text-break">
-Class VideoTrackOptions  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/VideoTrackOptions.cs/#L10"><i class="bi bi-code-slash"></i></a>
+Class VideoTrackOptions  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/VideoTrackOptions.cs/#L17"><i class="bi bi-code-slash"></i></a>
   </h1>
 
   <div class="facts text-secondary">
@@ -148,6 +148,13 @@ field is optional — <code>new VideoTrackOptions()</code> yields a send-recv tr
 
 
 
+  <h2 id="CalloraVoipSdk_WebRtc_VideoTrackOptions_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>Opaque (end-to-end encrypted) frames are deliberately <em>not</em> a per-track option: the switch is
+<a class="xref" href="CalloraVoipSdk.WebRtc.WebRtcConfiguration.html#CalloraVoipSdk_WebRtc_WebRtcConfiguration_OpaqueVideoFrames">OpaqueVideoFrames</a> and applies to the whole peer, including tracks added
+here at runtime (#223, ADR-068). SDP carries no per-m-line attribute for it, so a per-track choice would need
+a policy channel of its own through the session factory and the renegotiator — and the requirement it serves
+covers the entire session, not one stream.</p>
+</div>
 
 
   <h2 class="section" id="properties">Properties
@@ -158,7 +165,7 @@ field is optional — <code>new VideoTrackOptions()</code> yields a send-recv tr
 
   <h3 id="CalloraVoipSdk_WebRtc_VideoTrackOptions_Codecs" data-uid="CalloraVoipSdk.WebRtc.VideoTrackOptions.Codecs">
   Codecs
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/VideoTrackOptions.cs/#L20"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/VideoTrackOptions.cs/#L27"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Video codecs to offer on this track, by name (<code>H264</code>, <code>VP8</code>). <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> (the
@@ -192,7 +199,7 @@ rejected when the track is added.</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_VideoTrackOptions_Direction" data-uid="CalloraVoipSdk.WebRtc.VideoTrackOptions.Direction">
   Direction
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/VideoTrackOptions.cs/#L13"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/VideoTrackOptions.cs/#L20"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>The negotiated direction of the track's m-line (RFC 3264). Defaults to <a class="xref" href="CalloraVoipSdk.WebRtc.TrackDirection.html#CalloraVoipSdk_WebRtc_TrackDirection_SendRecv">SendRecv</a>.</p>
@@ -224,7 +231,7 @@ rejected when the track is added.</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_VideoTrackOptions_SimulcastSendRids" data-uid="CalloraVoipSdk.WebRtc.VideoTrackOptions.SimulcastSendRids">
   SimulcastSendRids
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/VideoTrackOptions.cs/#L27"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/VideoTrackOptions.cs/#L34"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Send-side simulcast layer ids for this track (RFC 8853), advertised as <code>a=rid … send</code> plus
@@ -258,7 +265,7 @@ rejected when the track is added.</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_VideoTrackOptions_StreamId" data-uid="CalloraVoipSdk.WebRtc.VideoTrackOptions.StreamId">
   StreamId
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/VideoTrackOptions.cs/#L34"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/VideoTrackOptions.cs/#L41"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>The WebRTC MediaStream id this track belongs to (<code>a=msid</code> stream id, RFC 8830).
@@ -292,7 +299,7 @@ stream id are grouped as one remote MediaStream on the receiver.</p>
 </article>
 
         <div class="contribution d-print-none">
-          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/VideoTrackOptions.cs/#L10" class="edit-link">Edit this page</a>
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/VideoTrackOptions.cs/#L17" class="edit-link">Edit this page</a>
         </div>
 
 

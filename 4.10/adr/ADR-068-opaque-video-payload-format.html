@@ -163,6 +163,22 @@ on the existing ones. For a requirement phrased as &quot;the provider <em>cannot
 auditor should be able to establish that by reading the type, not by tracing which value a boolean
 had at runtime.</p>
 </li>
+<li><p><strong>The switch is scoped to the peer, not the track.</strong> <code>WebRtcConfiguration.OpaqueVideoFrames</code> (and
+its <code>WebRtcOptions</code> / <code>CalloraWebRtcBuilder.WithOpaqueVideo</code> siblings) selects the format for every
+video track of that peer — those built at session time and those a later renegotiation adds. Two
+reasons, both decisive. The requirement covers the whole session, not one stream: &quot;the provider
+cannot see the content&quot; is not a per-m-line property. And SDP carries no attribute for it, so the
+policy cannot be re-derived from the descriptions the session factory works from — a per-track
+choice would need its own non-SDP channel through the factory, the renegotiator and the
+added-track path, for a case (one encrypted and one clear video stream on one peer) that the
+driver does not have. <code>VideoTrackOptions</code> therefore documents the peer-level switch instead of
+duplicating it.</p>
+</li>
+<li><p><strong>No default on the internal seam.</strong> <code>WebRtcSessionFactory.TryBuildVideoTrack</code> takes the policy as
+a required parameter and <code>WebRtcRenegotiator</code> takes it in its constructor. A defaulted parameter
+would let a future caller silently hand an end-to-end encrypted peer a clear-media track — the
+exact defect this ADR removes — so forgetting to thread it is a compile error instead.</p>
+</li>
 </ol>
 <h3 id="interop-scope-stated-rather-than-assumed">Interop scope, stated rather than assumed</h3>
 <p>The opaque H.264 framing is self-consistent between two SDK endpoints and through a relay that
@@ -177,15 +193,13 @@ byte of the frame is read, interpreted or altered in either direction.</li>
 <li>The clear-media paths are byte-for-byte unchanged, including key-frame detection.</li>
 <li>Key-frame-derived statistics are zero on an opaque stream until the Dependency Descriptor work
 lands. Consumers that gate on <code>isKeyFrame</code> must treat &quot;false&quot; as &quot;unknown&quot; there.</li>
-<li><strong>Not delivered by this ADR:</strong> the public switch that selects the pair
-(<code>WebRtcPeerOptions</code> / <code>VideoTrackOptions</code>, acceptance criterion 4 of #223). The WebRTC session
-factory builds its track configs purely from the SDP descriptions, so threading a transport policy
-into it touches a central signature plus the renegotiator and the added-track mutation path — its
-own slice, its own review. Until then the opaque pair is reachable through
-<code>VideoPayloadFormat.CreateOpaque</code> only.</li>
-<li><code>PublicAPI.Unshipped</code> (also named in criterion 4) does not exist in this repository — there are no
-<code>PublicAPI.*.txt</code> files and no <code>Microsoft.CodeAnalysis.PublicApiAnalyzers</code> reference. The
-equivalent record is this ADR plus the <code>CHANGELOG.md</code> entry.</li>
+<li>The switch is reachable from all three configuration levels the facade offers (direct
+<code>WebRtcConfiguration</code>, DI <code>WebRtcOptions</code>, fluent builder) and defaults to off, so no existing
+app's media path changes under it.</li>
+<li>The public-API record criterion 4 asks for is the repository's <code>PublicApi.approved.txt</code> baseline
+(ADR-006 §4, enforced by <code>PublicApiSurfaceTests</code>), updated in the same commit — three added public
+members and nothing else. There is no <code>PublicAPI.Unshipped</code> file or <code>PublicApiAnalyzers</code> reference
+here; the approval baseline is this repository's form of the same gate.</li>
 </ul>
 <h2 id="references">References</h2>
 <ul>

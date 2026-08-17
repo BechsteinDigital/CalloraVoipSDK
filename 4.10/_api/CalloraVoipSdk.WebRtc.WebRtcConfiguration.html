@@ -202,7 +202,7 @@ options and builder paths agree instead of one failing fast and the others accep
 
   <h3 id="CalloraVoipSdk_WebRtc_WebRtcConfiguration_DtlsCertificate" data-uid="CalloraVoipSdk.WebRtc.WebRtcConfiguration.DtlsCertificate">
   DtlsCertificate
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcConfiguration.cs/#L114"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcConfiguration.cs/#L136"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>DTLS-SRTP identity for the peer's certificate/fingerprint (must carry an exportable ECDSA P-256
@@ -268,7 +268,7 @@ privacy default.</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_WebRtcConfiguration_IceServers" data-uid="CalloraVoipSdk.WebRtc.WebRtcConfiguration.IceServers">
   IceServers
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcConfiguration.cs/#L89"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcConfiguration.cs/#L111"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>STUN/TURN servers for gathering server-reflexive and relay ICE candidates (RFC 8445 §5.1.1). Empty
@@ -350,7 +350,7 @@ ICE for remote reachability arrive in a later slice — see ADR-012.)</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_WebRtcConfiguration_LoggerFactory" data-uid="CalloraVoipSdk.WebRtc.WebRtcConfiguration.LoggerFactory">
   LoggerFactory
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcConfiguration.cs/#L117"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcConfiguration.cs/#L139"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Logger factory for diagnostics; <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> disables logging.</p>
@@ -378,11 +378,60 @@ ICE for remote reachability arrive in a later slice — see ADR-012.)</p>
 
 
 
+  <a id="CalloraVoipSdk_WebRtc_WebRtcConfiguration_OpaqueVideoFrames_" data-uid="CalloraVoipSdk.WebRtc.WebRtcConfiguration.OpaqueVideoFrames*"></a>
+
+  <h3 id="CalloraVoipSdk_WebRtc_WebRtcConfiguration_OpaqueVideoFrames" data-uid="CalloraVoipSdk.WebRtc.WebRtcConfiguration.OpaqueVideoFrames">
+  OpaqueVideoFrames
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcConfiguration.cs/#L83"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Treats this peer's video frames as opaque: the app encrypts them end to end before handing them over
+(WebRTC Encoded Transform / SFrame, RFC 9605), so the SDK must never read the content. Default
+<a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a> keeps the clear-media payload format, which parses the frame to detect key frames.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool OpaqueVideoFrames { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="CalloraVoipSdk_WebRtc_WebRtcConfiguration_OpaqueVideoFrames_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+With the switch on, both halves of the video payload format work from the RTP framing alone: the frame is
+carried and reassembled verbatim, and <a class="xref" href="CalloraVoipSdk.WebRtc.EncodedFrame.html#CalloraVoipSdk_WebRtc_EncodedFrame_IsKeyFrame">IsKeyFrame</a> is always
+<a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a> — "unknown", not "no", until the key-frame signal moves into a plaintext header
+extension (#223 follow-up). This is what makes "the provider cannot see the content" a property of the
+code rather than of its intentions (Anlage 31b BMV-Ä § 2 Abs. 3/4).
+</p>
+<p>
+Interop scope, stated rather than assumed: the opaque H.264 framing is self-consistent between two SDK
+endpoints and through a relay that forwards payloads untouched. It is <b>not</b> what a browser emits — a
+browser transform keeps the NAL headers in the clear — so do not enable it for a browser peer. See
+ADR-068.
+</p>
+</div>
+
+
+
+
   <a id="CalloraVoipSdk_WebRtc_WebRtcConfiguration_SimulcastLayers_" data-uid="CalloraVoipSdk.WebRtc.WebRtcConfiguration.SimulcastLayers*"></a>
 
   <h3 id="CalloraVoipSdk_WebRtc_WebRtcConfiguration_SimulcastLayers" data-uid="CalloraVoipSdk.WebRtc.WebRtcConfiguration.SimulcastLayers">
   SimulcastLayers
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcConfiguration.cs/#L71"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcConfiguration.cs/#L93"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Send-side simulcast layers to offer (RFC 8853), by <code>a=rid</code> id in send order, e.g.
