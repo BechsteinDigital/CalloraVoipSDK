@@ -27,7 +27,7 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
     private readonly SipCallSessionInboundService _inboundService;
     private readonly SipCallSessionContextAdapter _context;
     private readonly SipReliableProvisionalManager _reliableProvisionalManager;
-    private readonly SipSessionTimerManager _sessionTimerManager;
+    private readonly SipCallSessionTimers _sessionTimers;
     internal readonly SipDialogManager _dialogManager = new();
     private readonly bool _isInbound;
     internal readonly string _localDisplayName;
@@ -152,10 +152,16 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
         _transactionService = new SipCallSessionTransactionService(_context, _headerService);
         _inboundService = new SipCallSessionInboundService(_context, _headerService);
         _reliableProvisionalManager = new SipReliableProvisionalManager(_logger);
-        _sessionTimerManager = new SipSessionTimerManager(
-            _logger,
-            SendSessionRefreshAsync,
-            HandleSessionTimerExpiredAsync);
+        _sessionTimers = new SipCallSessionTimers(
+            _operationGate,
+            () => Volatile.Read(ref _disposed) != 0,
+            () => State,
+            _transactionService.SendSessionRefreshUpdateAsync,
+            token => _transactionService.SendByeAsync(token),
+            TransitionTo,
+            ReleaseOperationGateSafe,
+            CallId,
+            _logger);
         if (_initialInvite is not null)
         {
             // For inbound sessions, the INVITE body is the remote SDP offer.
@@ -804,7 +810,7 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
             "SIP session {CallId}: {Old} -> {New}{Reason}", CallId, old, next,
             effectiveTerminationReason is { } r ? $" (reason: {r.Protocol} {r.Cause} {r.Text})" : string.Empty);
         if (next == SipDialogState.Terminated)
-            _sessionTimerManager.Stop();
+            _sessionTimers.Stop();
         StateChanged?.Invoke(this, new SipDialogStateChangedEventArgs(old, next, effectiveTerminationReason));
     }
     /// <summary>
@@ -831,49 +837,10 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
     internal void RaiseNotifyReceived(string eventType, string subscriptionState, bool isTerminated, string? contentType, string? body)
         => _eventDispatcher.RaiseNotifyReceived(NotifyReceived, this, eventType, subscriptionState, isTerminated, contentType, body, CallId);
     /// <summary>
-    /// Applies negotiated session timer values when Session-Expires is available.
+    /// Applies negotiated session timer values when Session-Expires is available (RFC 4028).
     /// </summary>
     internal void ApplySessionTimerNegotiation(string? sessionExpiresHeader, bool localIsRequester)
-    {
-        if (!SipSessionTimerPolicy.TryResolveNegotiation(
-                sessionExpiresHeader,
-                localIsRequester,
-                out var intervalSeconds,
-                out var localIsRefresher))
-        {
-            return;
-        }
-        _sessionTimerManager.ApplyNegotiation(intervalSeconds, localIsRefresher);
-    }
-    /// <summary>
-    /// Sends one in-dialog UPDATE refresh attempt for local-refresher session timers.
-    /// </summary>
-    private async Task<bool> SendSessionRefreshAsync(CancellationToken ct)
-        => await SipCallSessionUtilities.SendSessionRefreshAsync(
-                _operationGate,
-                () => Volatile.Read(ref _disposed) != 0,
-                () => State,
-                _transactionService.SendSessionRefreshUpdateAsync,
-                ReleaseOperationGateSafe,
-                CallId,
-                _logger,
-                ct)
-            .ConfigureAwait(false);
-    /// <summary>
-    /// Handles negotiated session timeout by terminating the dialog.
-    /// </summary>
-    private async Task HandleSessionTimerExpiredAsync(CancellationToken ct)
-        => await SipCallSessionUtilities.HandleSessionTimerExpiredAsync(
-                _operationGate,
-                () => Volatile.Read(ref _disposed) != 0,
-                () => State,
-                token => _transactionService.SendByeAsync(token),
-                TransitionTo,
-                ReleaseOperationGateSafe,
-                CallId,
-                _logger,
-                ct)
-            .ConfigureAwait(false);
+        => _sessionTimers.ApplyNegotiation(sessionExpiresHeader, localIsRequester);
     private async Task<bool> SendReliableProvisionalAndWaitForPrackAsync(
         SipRequest invite,
         string localTag,
@@ -927,7 +894,7 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
         _shutdownCts.Cancel();
         _reliableProvisionalManager.Dispose();
-        _sessionTimerManager.Dispose();
+        _sessionTimers.Dispose();
         _inboundService.Dispose();
         _operationGate.Dispose();
     }
