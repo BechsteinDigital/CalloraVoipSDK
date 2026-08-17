@@ -1,4 +1,5 @@
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packetisation;
+using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
 
@@ -38,6 +39,20 @@ internal sealed class BundledVideoInboundLayer
 
     /// <summary>Arrival-order loss detection for this lane's SSRC — never shared, or SSRCs alias into phantom gaps.</summary>
     public VideoArrivalLossTracker ArrivalLoss { get; } = new();
+
+    /// <summary>
+    /// The lane's Dependency Descriptor reader (#225). Stateful per stream — the template structure arrives
+    /// only on key frames and every later frame references it — and per lane, because simulcast encodings are
+    /// independent streams with their own structures.
+    /// </summary>
+    public DependencyDescriptorReader Descriptors { get; } = new();
+
+    /// <summary>
+    /// The descriptor seen on the packet that started the frame currently being reassembled, or null when
+    /// this stream carries no descriptors. Held because the key-frame and layer facts belong to the frame,
+    /// while the descriptor rides on each of its packets; it is consumed when the frame completes.
+    /// </summary>
+    public DependencyDescriptor? PendingDescriptor { get; set; }
 
     /// <summary>Whether at least one packet has been delivered in order on this lane.</summary>
     public bool HasDelivered { get; set; }

@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using CalloraVoipSdk.Core.Application.Ports.Connectivity;
+using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
 using CalloraVoipSdk.Core.Infrastructure.Dtls;
 using CalloraVoipSdk.Core.Infrastructure.Sdp;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Models;
@@ -87,6 +88,11 @@ public sealed class WebRtcClient : IWebRtcClient
                         Port = _config.LocalEndPoint.Port,
                         Codecs = ResolveVideoCodecs(_config.VideoCodecs),
                         SimulcastSendRids = _config.SimulcastLayers,
+                        // Offer the Dependency Descriptor (#225): key-frame and layer information belongs in
+                        // the header, not in a payload we may not be allowed to read (#223). Offering it is
+                        // free — a peer that does not support it simply omits it from the answer, and the
+                        // receive path then falls back to deriving the flag from the payload.
+                        HeaderExtensionUris = [RtpHeaderExtensionUris.DependencyDescriptor],
                     }
                 ]
                 : [],

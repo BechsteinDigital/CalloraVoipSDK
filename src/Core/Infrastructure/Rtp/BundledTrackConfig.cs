@@ -51,6 +51,15 @@ internal sealed record BundledTrackConfig
     public string? VideoCodecName { get; init; }
 
     /// <summary>
+    /// The negotiated <c>a=extmap</c> id of the Dependency Descriptor (AV1 RTP specification §A, #225) on
+    /// this video m-line, or <see langword="null"/> when the peer did not accept it. When present the track
+    /// reads the key frame and the spatial/temporal layer out of the RTP header instead of the payload — the
+    /// only source that survives end-to-end encryption (#223) — and stamps one on its own outbound frames.
+    /// Ignored for an audio m-line.
+    /// </summary>
+    public byte? DependencyDescriptorExtensionId { get; init; }
+
+    /// <summary>
     /// True when this video m-line carries frames whose content the SDK must not read — end-to-end encrypted
     /// media (WebRTC Encoded Transform / SFrame, RFC 9605), where the frame is ciphertext (#223, ADR-068). The
     /// track then uses <see cref="Packetisation.VideoPayloadFormat.CreateOpaque"/>: both halves work from the RTP

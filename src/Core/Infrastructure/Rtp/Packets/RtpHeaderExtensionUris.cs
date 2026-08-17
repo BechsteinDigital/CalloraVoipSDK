@@ -33,4 +33,14 @@ internal static class RtpHeaderExtensionUris
     /// URN browsers/libwebrtc negotiate via <c>a=extmap</c>; the resolver matches it Ordinal.
     /// </summary>
     internal const string Rid = "urn:ietf:params:rtp-hdrext:sdes:rtp-stream-id";
+
+    /// <summary>
+    /// Dependency Descriptor (AV1 RTP specification §4.2) — per-frame key-frame and layer information in
+    /// the RTP header instead of the payload (#225). It is the only way to answer "is this a key frame"
+    /// and "which spatial/temporal layer is this" for a stream whose payload is end-to-end encrypted
+    /// (#223), and what a forwarder needs to select a layer without decoding. Codec-agnostic by design,
+    /// so browsers negotiate it across codecs, not only for AV1. Matched Ordinal, as the other URIs are.
+    /// </summary>
+    internal const string DependencyDescriptor =
+        "https://aomediacodec.github.io/av1-rtp-spec/#dependency-descriptor-rtp-header-extension";
 }
