@@ -699,6 +699,7 @@
   CalloraVoipSdk.DependencyInjection.CalloraWebRtcBuilder.WithDtlsCertificate(System.Security.Cryptography.X509Certificates.X509Certificate2 certificate) : CalloraVoipSdk.DependencyInjection.CalloraWebRtcBuilder
   CalloraVoipSdk.DependencyInjection.CalloraWebRtcBuilder.WithIceServers(CalloraVoipSdk.IceServerConfiguration[] servers) : CalloraVoipSdk.DependencyInjection.CalloraWebRtcBuilder
   CalloraVoipSdk.DependencyInjection.CalloraWebRtcBuilder.WithLoggerFactory(Microsoft.Extensions.Logging.ILoggerFactory loggerFactory) : CalloraVoipSdk.DependencyInjection.CalloraWebRtcBuilder
+  CalloraVoipSdk.DependencyInjection.CalloraWebRtcBuilder.WithOpaqueVideo(System.String[] codecs) : CalloraVoipSdk.DependencyInjection.CalloraWebRtcBuilder
   CalloraVoipSdk.DependencyInjection.CalloraWebRtcBuilder.WithStunServer(System.String host, System.Nullable<System.Int32> port = default) : CalloraVoipSdk.DependencyInjection.CalloraWebRtcBuilder
   CalloraVoipSdk.DependencyInjection.CalloraWebRtcBuilder.WithTurnServer(System.String host, System.String username, System.String password, System.Nullable<System.Int32> port = default, CalloraVoipSdk.IceTransport transport = default) : CalloraVoipSdk.DependencyInjection.CalloraWebRtcBuilder
   CalloraVoipSdk.DependencyInjection.CalloraWebRtcBuilder.WithVideo(System.String[] codecs) : CalloraVoipSdk.DependencyInjection.CalloraWebRtcBuilder
@@ -1133,6 +1134,7 @@
   CalloraVoipSdk.WebRtc.WebRtcConfiguration.IceServers : System.Collections.Generic.IReadOnlyList<CalloraVoipSdk.IceServerConfiguration> { get, init }
   CalloraVoipSdk.WebRtc.WebRtcConfiguration.LocalEndPoint : System.Net.IPEndPoint { get, init }
   CalloraVoipSdk.WebRtc.WebRtcConfiguration.LoggerFactory : Microsoft.Extensions.Logging.ILoggerFactory { get, init }
+  CalloraVoipSdk.WebRtc.WebRtcConfiguration.OpaqueVideoFrames : System.Boolean { get, init }
   CalloraVoipSdk.WebRtc.WebRtcConfiguration.SimulcastLayers : System.Collections.Generic.IReadOnlyList<System.String> { get, init }
   CalloraVoipSdk.WebRtc.WebRtcConfiguration.UseStableNumericMediaIds : System.Boolean { get, init }
   CalloraVoipSdk.WebRtc.WebRtcConfiguration.VideoCodecs : System.Collections.Generic.IReadOnlyList<System.String> { get, init }
@@ -1152,6 +1154,7 @@
   CalloraVoipSdk.WebRtc.WebRtcOptions.IceServers : System.Collections.Generic.IReadOnlyList<CalloraVoipSdk.IceServerConfiguration> { get, set }
   CalloraVoipSdk.WebRtc.WebRtcOptions.LocalEndPoint : System.Net.IPEndPoint { get, set }
   CalloraVoipSdk.WebRtc.WebRtcOptions.LoggerFactory : Microsoft.Extensions.Logging.ILoggerFactory { get, set }
+  CalloraVoipSdk.WebRtc.WebRtcOptions.OpaqueVideoFrames : System.Boolean { get, set }
   CalloraVoipSdk.WebRtc.WebRtcOptions.SimulcastLayers : System.Collections.Generic.IReadOnlyList<System.String> { get, set }
   CalloraVoipSdk.WebRtc.WebRtcOptions.UseStableNumericMediaIds : System.Boolean { get, set }
   CalloraVoipSdk.WebRtc.WebRtcOptions.VideoCodecs : System.Collections.Generic.IReadOnlyList<System.String> { get, set }

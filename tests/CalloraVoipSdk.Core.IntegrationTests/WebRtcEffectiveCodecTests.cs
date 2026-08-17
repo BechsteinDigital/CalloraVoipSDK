@@ -81,7 +81,7 @@ public sealed class WebRtcEffectiveCodecTests
         var localVideo = offer.Media.First(m => m.MediaType == "video");
 
         var config = WebRtcSessionFactory.TryBuildVideoTrack(
-            localVideo, answer, new HashSet<uint>(), NullLoggerFactory.Instance);
+            localVideo, answer, new HashSet<uint>(), NullLoggerFactory.Instance, opaqueVideoFrames: false);
 
         Assert.NotNull(config);
         Assert.Equal(97, config!.PayloadType); // H264 (accepted), not 96 (VP8, first offered)

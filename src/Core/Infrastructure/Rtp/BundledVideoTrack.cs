@@ -54,6 +54,12 @@ internal sealed class BundledVideoTrack : IDisposable
     private readonly string _codecName;
     private readonly int _reorderWindowDepth;
 
+    // #223/ADR-068: this track's frames are end-to-end encrypted (WebRTC Encoded Transform / SFrame, RFC 9605),
+    // so no half of the payload format may read the frame. Retained because a lazily-built simulcast RID lane
+    // resolves its own depacketiser later and must resolve the SAME policy — a lane that fell back to the
+    // clear-media pair would reintroduce exactly the payload dependency this flag removes.
+    private readonly bool _opaqueFrames;
+
     // The default inbound lane (RID null): the non-simulcast single stream, and — on a simulcast receive —
     // the base/primary encoding that carries no RID (or arrives before its RID is latched). Each simulcast
     // RID gets its own lane in _ridLayers so interleaved SSRCs never share reorder/loss state.
@@ -168,6 +174,12 @@ internal sealed class BundledVideoTrack : IDisposable
     /// RFC 3550 §8.1). When <see langword="null"/> the track picks a repair SSRC distinct from
     /// <paramref name="localSsrc"/> only — the fallback for callers that do not own the bundle SSRC set.
     /// </param>
+    /// <param name="receiveRids">The <c>a=rid</c> allowlist for inbound demultiplexing, or null/empty for none.</param>
+    /// <param name="opaqueFrames">
+    /// True when this track's frames are end-to-end encrypted and must not be interpreted (#223, ADR-068): the
+    /// track then resolves the opaque payload-format pair, which works from the RTP framing alone and makes no
+    /// key-frame claim. Default <see langword="false"/> keeps the clear-media pair and its key-frame detection.
+    /// </param>
     public BundledVideoTrack(
         string mid,
         string codecName,
@@ -180,7 +192,8 @@ internal sealed class BundledVideoTrack : IDisposable
         ILoggerFactory loggerFactory,
         byte? rtxPayloadType = null,
         uint? rtxSsrc = null,
-        IReadOnlyList<string>? receiveRids = null)
+        IReadOnlyList<string>? receiveRids = null,
+        bool opaqueFrames = false)
     {
         ArgumentException.ThrowIfNullOrEmpty(mid);
         ArgumentNullException.ThrowIfNull(loggerFactory);
@@ -192,8 +205,9 @@ internal sealed class BundledVideoTrack : IDisposable
         _reorderWindowDepth = reorderWindowDepth;
         _localSsrc = localSsrc;
         _receiveRids = ToRidSet(receiveRids);
+        _opaqueFrames = opaqueFrames;
 
-        var (packetiser, depacketiser) = VideoPayloadFormat.Create(codecName);
+        var (packetiser, depacketiser) = CreatePayloadFormat(codecName, opaqueFrames);
         _defaultLane = new BundledVideoInboundLayer(rid: null, depacketiser, new VideoReorderBuffer(reorderWindowDepth));
         _single = new BundledVideoSendEncoding(rid: null, payloadType, packetiser);
         _layers = new Dictionary<string, BundledVideoSendEncoding>(StringComparer.Ordinal);
@@ -247,6 +261,12 @@ internal sealed class BundledVideoTrack : IDisposable
     /// <param name="outbound">The bundle's outbound pipeline (RTP sends and the SRTCP-protected RTCP send path).</param>
     /// <param name="reorderWindowDepth">The inbound reorder window depth in packets.</param>
     /// <param name="loggerFactory">Builds the loggers for the track and its feedback path.</param>
+    /// <param name="receiveRids">The <c>a=rid</c> allowlist for inbound demultiplexing, or null/empty for none.</param>
+    /// <param name="opaqueFrames">
+    /// True when this track's frames are end-to-end encrypted and must not be interpreted (#223, ADR-068). Every
+    /// send layer and every receive lane — including a lane built lazily on first RID sighting — then resolves the
+    /// opaque payload-format pair. Default <see langword="false"/> keeps the clear-media pair.
+    /// </param>
     public BundledVideoTrack(
         string mid,
         string codecName,
@@ -258,7 +278,8 @@ internal sealed class BundledVideoTrack : IDisposable
         BundledOutboundPipeline outbound,
         int reorderWindowDepth,
         ILoggerFactory loggerFactory,
-        IReadOnlyList<string>? receiveRids = null)
+        IReadOnlyList<string>? receiveRids = null,
+        bool opaqueFrames = false)
     {
         ArgumentException.ThrowIfNullOrEmpty(mid);
         ArgumentNullException.ThrowIfNull(rids);
@@ -273,18 +294,19 @@ internal sealed class BundledVideoTrack : IDisposable
         _reorderWindowDepth = reorderWindowDepth;
         _localSsrc = localSsrc;
         _receiveRids = ToRidSet(receiveRids);
+        _opaqueFrames = opaqueFrames;
 
         // The default receive lane handles the base/RID-less inbound stream; a per-RID lane is built lazily
         // on first RID sighting (recv-side simulcast demux, RFC 8853). Each send layer gets its own packetiser
         // (the packetiser is stateful, so layers must not share one).
         _defaultLane = new BundledVideoInboundLayer(
-            rid: null, VideoPayloadFormat.Create(codecName).Depacketiser, new VideoReorderBuffer(reorderWindowDepth));
+            rid: null, CreatePayloadFormat(codecName, opaqueFrames).Depacketiser, new VideoReorderBuffer(reorderWindowDepth));
 
         var layers = new Dictionary<string, BundledVideoSendEncoding>(rids.Count, StringComparer.Ordinal);
         foreach (var rid in rids)
         {
             ArgumentException.ThrowIfNullOrEmpty(rid);
-            if (!layers.TryAdd(rid, new BundledVideoSendEncoding(rid, payloadType, VideoPayloadFormat.Create(codecName).Packetiser)))
+            if (!layers.TryAdd(rid, new BundledVideoSendEncoding(rid, payloadType, CreatePayloadFormat(codecName, opaqueFrames).Packetiser)))
                 throw new ArgumentException($"Duplicate simulcast rid '{rid}'.", nameof(rids));
         }
         _layers = layers;
@@ -489,10 +511,17 @@ internal sealed class BundledVideoTrack : IDisposable
             return null;
         }
         lane = new BundledVideoInboundLayer(
-            rid, VideoPayloadFormat.Create(_codecName).Depacketiser, new VideoReorderBuffer(_reorderWindowDepth));
+            rid, CreatePayloadFormat(_codecName, _opaqueFrames).Depacketiser, new VideoReorderBuffer(_reorderWindowDepth));
         _ridLayers[rid] = lane;
         return lane;
     }
+
+    // The payload-format pair for this track: the clear-media one (which reads the frame to detect key frames)
+    // or the opaque one for end-to-end encrypted frames, which works from the RTP framing alone (#223, ADR-068).
+    // One place, so every send layer and receive lane of a track resolves the same policy.
+    private static (IVideoPacketiser Packetiser, IVideoDepacketiser Depacketiser) CreatePayloadFormat(
+        string codecName, bool opaqueFrames) =>
+        opaqueFrames ? VideoPayloadFormat.CreateOpaque(codecName) : VideoPayloadFormat.Create(codecName);
 
     // Feeds one video packet (freshly received or RTX-recovered) through the given lane's reorder window toward
     // its depacketiser. The window releases in ascending sequence order (letting a late retransmit slot into its

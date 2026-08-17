@@ -35,6 +35,13 @@ public sealed class WebRtcOptions
     /// <summary>Video codecs to offer when <see cref="EnableVideo"/> is set. See <see cref="WebRtcConfiguration.VideoCodecs"/>. Default: H264.</summary>
     public IReadOnlyList<string> VideoCodecs { get; set; } = ["H264"];
 
+    /// <summary>
+    /// Treats this peer's video frames as end-to-end encrypted and never reads their content (#223, ADR-068).
+    /// See <see cref="WebRtcConfiguration.OpaqueVideoFrames"/> for the semantics and the interop scope.
+    /// Default: <see langword="false"/>.
+    /// </summary>
+    public bool OpaqueVideoFrames { get; set; }
+
     /// <summary>Send-side simulcast layers to offer, by <c>a=rid</c> id. See <see cref="WebRtcConfiguration.SimulcastLayers"/>. Default: none.</summary>
     public IReadOnlyList<string> SimulcastLayers { get; set; } = [];
 

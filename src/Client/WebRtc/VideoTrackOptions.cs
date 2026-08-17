@@ -7,6 +7,13 @@ namespace CalloraVoipSdk.WebRtc;
 /// <see cref="WebRtcConfiguration.VideoCodecs"/>, matching the parameterless
 /// <see cref="IPeerConnection.AddVideoTrack()"/> happy path.
 /// </summary>
+/// <remarks>
+/// Opaque (end-to-end encrypted) frames are deliberately <em>not</em> a per-track option: the switch is
+/// <see cref="WebRtcConfiguration.OpaqueVideoFrames"/> and applies to the whole peer, including tracks added
+/// here at runtime (#223, ADR-068). SDP carries no per-m-line attribute for it, so a per-track choice would need
+/// a policy channel of its own through the session factory and the renegotiator — and the requirement it serves
+/// covers the entire session, not one stream.
+/// </remarks>
 public sealed class VideoTrackOptions
 {
     /// <summary>The negotiated direction of the track's m-line (RFC 3264). Defaults to <see cref="TrackDirection.SendRecv"/>.</summary>

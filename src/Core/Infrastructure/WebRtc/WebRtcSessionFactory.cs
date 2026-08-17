@@ -181,7 +181,8 @@ internal static class WebRtcSessionFactory
         var localVideoSections = localDescription.Media.Where(m => m.MediaType.Equals("video", Ci)).ToArray();
         foreach (var localVideoSection in localVideoSections)
         {
-            var videoTrack = TryBuildVideoTrack(localVideoSection, remoteDescription, usedSsrcs, loggerFactory);
+            var videoTrack = TryBuildVideoTrack(
+                localVideoSection, remoteDescription, usedSsrcs, loggerFactory, options.OpaqueVideoFrames);
             if (videoTrack is not null)
                 videoTracks.Add(videoTrack);
         }
@@ -290,11 +291,23 @@ internal static class WebRtcSessionFactory
     /// <c>BundledMediaSession.AddVideoTrack</c>, so the added track's SSRCs stay distinct from the running ones.
     /// </para>
     /// </summary>
+    /// <param name="video">The local video m-line to build a track for.</param>
+    /// <param name="remoteDescription">The peer's description, paired to <paramref name="video"/> by MID.</param>
+    /// <param name="usedSsrcs">Every SSRC already issued on this bundle; grown by the SSRCs this call allocates.</param>
+    /// <param name="loggerFactory">Builds the diagnostic logger for the negotiation decisions.</param>
+    /// <param name="opaqueVideoFrames">
+    /// The peer's opaque-video-frames policy (<see cref="WebRtcPeerOptions.OpaqueVideoFrames"/>, #223/ADR-068),
+    /// stamped onto the built config: it is a transport policy of the peer, not something the SDP carries, so it
+    /// is passed in rather than derived from the descriptions. Deliberately without a default — a caller that
+    /// forgot to thread it would silently hand an end-to-end encrypted peer a clear-media track, which is the
+    /// defect this switch exists to prevent.
+    /// </param>
     internal static BundledTrackConfig? TryBuildVideoTrack(
         SdpMediaDescription video,
         SdpSessionDescription remoteDescription,
         ISet<uint> usedSsrcs,
-        ILoggerFactory loggerFactory)
+        ILoggerFactory loggerFactory,
+        bool opaqueVideoFrames)
     {
         // Gated by the MID (grouped into the bundle), not the placeholder port under ICE.
         if (string.IsNullOrEmpty(video.Mid))
@@ -367,6 +380,7 @@ internal static class WebRtcSessionFactory
                     ReducedSizeRtcp = reducedSizeRtcp,
                     Encodings = encodings,
                     ReceiveRids = NegotiatedReceiveRids(video, remoteVideo),
+                    OpaqueVideoFrames = opaqueVideoFrames,
                 };
             }
 
@@ -414,6 +428,7 @@ internal static class WebRtcSessionFactory
             RtxPayloadType = rtxPayloadType,
             RtxSsrc = rtxSsrc,
             ReceiveRids = NegotiatedReceiveRids(video, remoteVideo),
+            OpaqueVideoFrames = opaqueVideoFrames,
         };
     }
 

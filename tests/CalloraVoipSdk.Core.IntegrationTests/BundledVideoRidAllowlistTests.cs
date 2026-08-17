@@ -115,7 +115,8 @@ public sealed class BundledVideoRidAllowlistTests
             "a=rid:h send\r\na=rid:l send\r\na=simulcast:send h;l\r\n");
 
         var config = WebRtcSessionFactory.TryBuildVideoTrack(
-            local.Media.First(m => m.MediaType == "video"), remote, new HashSet<uint>(), NullLoggerFactory.Instance);
+            local.Media.First(m => m.MediaType == "video"), remote, new HashSet<uint>(), NullLoggerFactory.Instance,
+            opaqueVideoFrames: false);
 
         Assert.NotNull(config);
         Assert.Equal(["h", "l"], config!.ReceiveRids);
@@ -136,7 +137,8 @@ public sealed class BundledVideoRidAllowlistTests
             "m=video 6002 UDP/TLS/RTP/SAVPF 96\r\na=rtpmap:96 VP8/90000\r\na=mid:1\r\na=sendrecv\r\n");
 
         var config = WebRtcSessionFactory.TryBuildVideoTrack(
-            local.Media.First(m => m.MediaType == "video"), remote, new HashSet<uint>(), NullLoggerFactory.Instance);
+            local.Media.First(m => m.MediaType == "video"), remote, new HashSet<uint>(), NullLoggerFactory.Instance,
+            opaqueVideoFrames: false);
 
         Assert.NotNull(config);
         Assert.Empty(config!.ReceiveRids);

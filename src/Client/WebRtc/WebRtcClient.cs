@@ -91,6 +91,9 @@ public sealed class WebRtcClient : IWebRtcClient
                 ]
                 : [],
             UseStableNumericMediaIds = _config.UseStableNumericMediaIds,
+            // End-to-end encrypted video (#223, ADR-068): a peer-wide transport policy, so it reaches every video
+            // track the session builds now and every one a later renegotiation adds.
+            OpaqueVideoFrames = _config.OpaqueVideoFrames,
             Dtls = new SdpDtlsParameters
             {
                 Algorithm = certificate.Fingerprint.Algorithm,

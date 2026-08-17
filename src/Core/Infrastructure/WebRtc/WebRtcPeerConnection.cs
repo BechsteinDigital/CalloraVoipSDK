@@ -203,7 +203,8 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         _logger = loggerFactory.CreateLogger<WebRtcPeerConnection>();
         _hostCandidateProvider = hostCandidateProvider ?? new SystemWebRtcHostCandidateProvider(
             loggerFactory.CreateLogger<SystemWebRtcHostCandidateProvider>());
-        _renegotiator = new WebRtcRenegotiator(_loggerFactory);
+        // Peer-lifetime opaque-video policy, captured once so a renegotiated track matches (#223, ADR-068).
+        _renegotiator = new WebRtcRenegotiator(_loggerFactory, _options.OpaqueVideoFrames);
         _relayAllocation = new WebRtcRelayAllocationStore(_loggerFactory);
         // The config primary video count (0 or 1) is fixed for the peer's lifetime, so the added-track set can do
         // the numeric-MID arithmetic without re-reading _options; it captures it once here.
