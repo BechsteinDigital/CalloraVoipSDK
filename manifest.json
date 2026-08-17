@@ -3319,7 +3319,7 @@
       "Uid": null,
       "IsMRef": true,
       "Title": "CalloraVoipSdk.WebRtc.WebRtcConfiguration",
-      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.WebRtc.WebRtcConfiguration.yml\" sourcestartlinenumber=\"1\">Immutable configuration for a <xref href=\"CalloraVoipSdk.WebRtc.WebRtcClient\" data-throw-if-not-resolved=\"false\"></xref> (the direct-construction surface; the\nDI/options path adds a mutable counterpart in a later slice). All fields are optional — a\nzero-config <code>new WebRtcClient()</code> binds an ephemeral loopback endpoint, offers Opus audio, and\nuses a fresh per-peer DTLS identity.</p>\n"
+      "Summary": "<p sourcefile=\"docs/portal/_api/CalloraVoipSdk.WebRtc.WebRtcConfiguration.yml\" sourcestartlinenumber=\"1\">Immutable configuration for a <xref href=\"CalloraVoipSdk.WebRtc.WebRtcClient\" data-throw-if-not-resolved=\"false\"></xref> (the direct-construction surface; the\nDI/options path projects <xref href=\"CalloraVoipSdk.WebRtc.WebRtcOptions\" data-throw-if-not-resolved=\"false\"></xref> onto it). All fields are optional — a\nzero-config <code>new WebRtcClient()</code> binds an ephemeral loopback endpoint, offers Opus audio, and\nuses a fresh per-peer DTLS identity.</p>\n"
     },
     {
       "type": "ManagedReference",

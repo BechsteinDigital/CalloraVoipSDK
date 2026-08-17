@@ -125,7 +125,7 @@ Interface IWebRtcModuleRegistry  <a class="header-action link-secondary" title="
 
   <h3 id="CalloraVoipSdk_WebRtc_IWebRtcModuleRegistry_Get__1" data-uid="CalloraVoipSdk.WebRtc.IWebRtcModuleRegistry.Get``1">
   Get&lt;T&gt;()
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IWebRtcModuleRegistry.cs/#L17"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IWebRtcModuleRegistry.cs/#L19"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Resolves the first registered module implementing <code class="typeparamref">T</code>.</p>
@@ -168,12 +168,13 @@ Interface IWebRtcModuleRegistry  <a class="header-action link-secondary" title="
 
   <h3 id="CalloraVoipSdk_WebRtc_IWebRtcModuleRegistry_Register_CalloraVoipSdk_WebRtc_IWebRtcClientModule_" data-uid="CalloraVoipSdk.WebRtc.IWebRtcModuleRegistry.Register(CalloraVoipSdk.WebRtc.IWebRtcClientModule)">
   Register(IWebRtcClientModule)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IWebRtcModuleRegistry.cs/#L13"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IWebRtcModuleRegistry.cs/#L15"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Registers one module instance. The <a class="xref" href="CalloraVoipSdk.WebRtc.IWebRtcClientModule.html#CalloraVoipSdk_WebRtc_IWebRtcClientModule_OnAttached_CalloraVoipSdk_WebRtc_IWebRtcClient_">OnAttached(IWebRtcClient)</a> hook runs first, so
 the module only becomes resolvable after it completed. When multiple registered modules satisfy the
-same contract, resolution returns the first registered match.</p>
+same contract, resolution returns the first registered match. Registration closes once the owning
+client has been disposed — a module must not attach itself to a torn-down client (#166 P3-13).</p>
 </div>
   <div class="markdown level1 conceptual"></div>
 
@@ -195,6 +196,12 @@ same contract, resolution returns the first registered match.</p>
 
 
 
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.objectdisposedexception">ObjectDisposedException</a></dt>
+    <dd><p>The owning client has been disposed.</p>
+</dd>
+  </dl>
 
 
 
@@ -202,7 +209,7 @@ same contract, resolution returns the first registered match.</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_IWebRtcModuleRegistry_TryGet__1___0__" data-uid="CalloraVoipSdk.WebRtc.IWebRtcModuleRegistry.TryGet``1(``0@)">
   TryGet&lt;T&gt;(out T)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IWebRtcModuleRegistry.cs/#L20"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IWebRtcModuleRegistry.cs/#L22"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Attempts to resolve the first registered module implementing <code class="typeparamref">T</code>.</p>

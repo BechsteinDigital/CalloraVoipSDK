@@ -89,7 +89,7 @@
 
 
   <h1 id="CalloraVoipSdk_WebRtc_RemoteTrack" data-uid="CalloraVoipSdk.WebRtc.RemoteTrack" class="text-break">
-Class RemoteTrack  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/RemoteTrack.cs/#L13"><i class="bi bi-code-slash"></i></a>
+Class RemoteTrack  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/RemoteTrack.cs/#L15"><i class="bi bi-code-slash"></i></a>
   </h1>
 
   <div class="facts text-secondary">
@@ -161,7 +161,7 @@ audio to a voice bot). See ADR-012.</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_RemoteTrack_Kind" data-uid="CalloraVoipSdk.WebRtc.RemoteTrack.Kind">
   Kind
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/RemoteTrack.cs/#L24"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/RemoteTrack.cs/#L29"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>The media kind of this track.</p>
@@ -193,7 +193,7 @@ audio to a voice bot). See ADR-012.</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_RemoteTrack_Mid" data-uid="CalloraVoipSdk.WebRtc.RemoteTrack.Mid">
   Mid
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/RemoteTrack.cs/#L31"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/RemoteTrack.cs/#L36"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>The remote m-line's MID (<code>a=mid</code>, RFC 5888) this track was received on, or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>
@@ -227,7 +227,7 @@ distinguishes them (P2c).</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_RemoteTrack_StreamId" data-uid="CalloraVoipSdk.WebRtc.RemoteTrack.StreamId">
   StreamId
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/RemoteTrack.cs/#L34"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/RemoteTrack.cs/#L39"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>The remote MediaStream id (a=msid stream id), or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> when the remote advertised none.</p>
@@ -259,7 +259,7 @@ distinguishes them (P2c).</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_RemoteTrack_TrackId" data-uid="CalloraVoipSdk.WebRtc.RemoteTrack.TrackId">
   TrackId
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/RemoteTrack.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/RemoteTrack.cs/#L42"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>The remote per-track id (a=msid appdata), or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> when the remote advertised none.</p>
@@ -294,10 +294,13 @@ distinguishes them (P2c).</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_RemoteTrack_FrameReceived" data-uid="CalloraVoipSdk.WebRtc.RemoteTrack.FrameReceived">
   FrameReceived
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/RemoteTrack.cs/#L40"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/RemoteTrack.cs/#L50"><i class="bi bi-code-slash"></i></a>
   </h3>
 
-  <div class="markdown level1 summary"><p>Raised with each encoded frame received on this track.</p>
+  <div class="markdown level1 summary"><p>Raised with each encoded frame received on this track. Fires on the SDK's media receive loop: the
+handler must not block, and a fault in it is logged and swallowed rather than breaking the receive loop
+(#166 P3-14). Being a per-frame event, the fan-out is one guarded invocation rather than per subscriber —
+attach an <a class="xref" href="CalloraVoipSdk.WebRtc.IMediaTap.html">IMediaTap</a> when several independent consumers need per-consumer isolation.</p>
 </div>
   <div class="markdown level1 conceptual"></div>
 
@@ -326,7 +329,7 @@ distinguishes them (P2c).</p>
 </article>
 
         <div class="contribution d-print-none">
-          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/RemoteTrack.cs/#L13" class="edit-link">Edit this page</a>
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/RemoteTrack.cs/#L15" class="edit-link">Edit this page</a>
         </div>
 
 

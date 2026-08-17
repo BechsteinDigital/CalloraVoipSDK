@@ -173,10 +173,12 @@ for server-reflexive discovery run an <a class="xref" href="CalloraVoipSdk.Hosti
 
   <h3 id="CalloraVoipSdk_Hosting_ITurnServerHost_Start" data-uid="CalloraVoipSdk.Hosting.ITurnServerHost.Start">
   Start()
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Hosting/ITurnServerHost.cs/#L21"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Hosting/ITurnServerHost.cs/#L24"><i class="bi bi-code-slash"></i></a>
   </h3>
 
-  <div class="markdown level1 summary"><p>Starts the server's listen loop. Idempotent — a second call, or a call after disposal, is a no-op.</p>
+  <div class="markdown level1 summary"><p>Starts the server's listen loop. Idempotent — a second call on a started server is a no-op. A start
+that fails is not committed, so the host stays startable and a retry runs it again; starting a disposed
+host throws rather than pretending to serve (#166 P3-12).</p>
 </div>
   <div class="markdown level1 conceptual"></div>
 
@@ -193,6 +195,12 @@ for server-reflexive discovery run an <a class="xref" href="CalloraVoipSdk.Hosti
 
 
 
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.objectdisposedexception">ObjectDisposedException</a></dt>
+    <dd><p>The host has been disposed.</p>
+</dd>
+  </dl>
 
 
 

@@ -164,7 +164,7 @@ an internal implementation detail, reached only through this facade.</p>
 
   <h3 id="CalloraVoipSdk_Hosting_TurnServerHost__ctor_CalloraVoipSdk_Hosting_TurnServerHostConfiguration_" data-uid="CalloraVoipSdk.Hosting.TurnServerHost.#ctor(CalloraVoipSdk.Hosting.TurnServerHostConfiguration)">
   TurnServerHost(TurnServerHostConfiguration)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Hosting/TurnServerHost.cs/#L27"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Hosting/TurnServerHost.cs/#L26"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Builds and binds the server from <code class="paramref">configuration</code>. The socket is bound here, so
@@ -207,7 +207,7 @@ an internal implementation detail, reached only through this facade.</p>
 
   <h3 id="CalloraVoipSdk_Hosting_TurnServerHost_LocalEndPoint" data-uid="CalloraVoipSdk.Hosting.TurnServerHost.LocalEndPoint">
   LocalEndPoint
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Hosting/TurnServerHost.cs/#L58"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Hosting/TurnServerHost.cs/#L57"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>The endpoint the server is bound to (the actual port after an ephemeral <code>:0</code> bind).</p>
@@ -243,7 +243,7 @@ an internal implementation detail, reached only through this facade.</p>
 
   <h3 id="CalloraVoipSdk_Hosting_TurnServerHost_DisposeAsync" data-uid="CalloraVoipSdk.Hosting.TurnServerHost.DisposeAsync">
   DisposeAsync()
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Hosting/TurnServerHost.cs/#L69"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Hosting/TurnServerHost.cs/#L63"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resources asynchronously.</p>
@@ -276,10 +276,12 @@ an internal implementation detail, reached only through this facade.</p>
 
   <h3 id="CalloraVoipSdk_Hosting_TurnServerHost_Start" data-uid="CalloraVoipSdk.Hosting.TurnServerHost.Start">
   Start()
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Hosting/TurnServerHost.cs/#L61"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/Hosting/TurnServerHost.cs/#L60"><i class="bi bi-code-slash"></i></a>
   </h3>
 
-  <div class="markdown level1 summary"><p>Starts the server's listen loop. Idempotent — a second call, or a call after disposal, is a no-op.</p>
+  <div class="markdown level1 summary"><p>Starts the server's listen loop. Idempotent — a second call on a started server is a no-op. A start
+that fails is not committed, so the host stays startable and a retry runs it again; starting a disposed
+host throws rather than pretending to serve (#166 P3-12).</p>
 </div>
   <div class="markdown level1 conceptual"></div>
 
@@ -296,6 +298,12 @@ an internal implementation detail, reached only through this facade.</p>
 
 
 
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.objectdisposedexception">ObjectDisposedException</a></dt>
+    <dd><p>The host has been disposed.</p>
+</dd>
+  </dl>
 
 
 

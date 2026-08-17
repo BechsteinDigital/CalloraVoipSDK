@@ -130,7 +130,7 @@ fresh per-peer DTLS identity. See ADR-012 for the four-level design and the mana
     <dl class="jumplist">
       <dt><a class="xref" href="CalloraVoipSdk.WebRtc.WebRtcConfiguration.html">WebRtcConfiguration</a></dt>
       <dd><p>Immutable configuration for a <a class="xref" href="CalloraVoipSdk.WebRtc.WebRtcClient.html">WebRtcClient</a> (the direct-construction surface; the
-DI/options path adds a mutable counterpart in a later slice). All fields are optional — a
+DI/options path projects <a class="xref" href="CalloraVoipSdk.WebRtc.WebRtcOptions.html">WebRtcOptions</a> onto it). All fields are optional — a
 zero-config <code>new WebRtcClient()</code> binds an ephemeral loopback endpoint, offers Opus audio, and
 uses a fresh per-peer DTLS identity.</p>
 </dd>
