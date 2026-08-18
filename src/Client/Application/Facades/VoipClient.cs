@@ -278,7 +278,12 @@ public sealed class VoipClient : IVoipClient
                     inboundRingDeadline: config.SipSignalingHardening.InboundRingDeadline,
                     maxInboundSessionsPerRemote: config.SipSignalingHardening.MaxInboundSessionsPerRemote,
                     maxServerTransactions: config.SipSignalingHardening.MaxServerTransactions,
-                    absoluteServerTransactionLifetime: config.SipSignalingHardening.AbsoluteServerTransactionLifetime);
+                    absoluteServerTransactionLifetime: config.SipSignalingHardening.AbsoluteServerTransactionLifetime,
+                    // No served-user list means no policy to apply, so inbound requests are accepted as before;
+                    // a configured list makes an unserved Request-URI a 404 (RFC 3261 §8.2.2.1).
+                    userIdentityPolicy: config.SipSignalingHardening.ServedUserAors.Count > 0
+                        ? new ServedUserSipIdentityPolicy(config.SipSignalingHardening.ServedUserAors)
+                        : null);
                 _ownsCallSignalingService = true;
             }
             else

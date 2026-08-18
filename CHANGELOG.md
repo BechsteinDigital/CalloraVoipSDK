@@ -10,6 +10,27 @@ The next line. Entries here accumulate the consumer-visible changes not yet rele
 
 ### Changed
 
+- **SIP URI comparison (RFC 3261 §19.1.4) was wrong in five of the ten cases the RFC itself lists** (#285).
+  `SipProtocol.SipUriEqual` was recorded as compliant, but had no caller, no test, and two of the rules exactly
+  inverted:
+  - **Omitted is not the same as explicitly default.** `sip:bob@biloxi.com` and `sip:bob@biloxi.com:5060` were
+    treated as equal, as were `sip:bob@biloxi.com` and `sip:bob@biloxi.com;transport=udp`. The RFC lists both
+    pairs as *not* equivalent — a URI that omits the component stays free to resolve elsewhere.
+  - **Unknown parameters on one side must be ignored**, not disqualify. `sip:carol@chicago.com` and
+    `sip:carol@chicago.com;newparam=5` were treated as different addresses.
+  - Percent-escapes of unreserved characters were not normalised, so `sip:%61lice@atlanta.com` did not match
+    `sip:alice@atlanta.com`.
+
+  All ten of the RFC's worked example pairs are now pinned as tests.
+
+- **A UAS can be told which users it serves** (RFC 3261 §8.2.2.1). The new
+  **`SipSignalingHardeningConfiguration.ServedUserAors`** lists the addresses-of-record this endpoint answers
+  for; an inbound request whose Request-URI matches none of them is answered `404 Not Found` before any dialog
+  state is created. Empty (the default) accepts every inbound request, exactly as before.
+
+  Matching uses the corrected §19.1.4 comparison, so `sip:alice@Example.COM` matches `sip:alice@example.com` —
+  but `sip:alice@example.com:5060` does **not** match `sip:alice@example.com`. List the form your peers send.
+
 - **A WebRTC peer survives an ICE restart instead of having to be rebuilt** (#226, ADR-072). A re-offer that
   rotated the peer's ICE credentials on the transport-anchoring m-line used to be rejected with *"dispose this
   peer and create a new one"*. That is the re-offer a browser sends when its network changes — WLAN to mobile,

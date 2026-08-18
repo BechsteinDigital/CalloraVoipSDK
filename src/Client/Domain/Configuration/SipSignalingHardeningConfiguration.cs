@@ -42,4 +42,21 @@ public sealed class SipSignalingHardeningConfiguration
     /// linger forever. Chosen above the longest legitimate transaction lifetime. Default 300 seconds.
     /// </summary>
     public TimeSpan AbsoluteServerTransactionLifetime { get; init; } = TimeSpan.FromSeconds(300);
+
+    /// <summary>
+    /// The addresses-of-record this UAS answers for. When set, an inbound request whose Request-URI matches none
+    /// of them is answered <c>404 Not Found</c> (RFC 3261 §8.2.2.1) before any dialog state is created.
+    /// <para>
+    /// Matching is a full RFC 3261 §19.1.4 URI comparison, not a string comparison, so
+    /// <c>sip:alice@Example.COM</c> matches <c>sip:alice@example.com</c> — while
+    /// <c>sip:alice@example.com:5060</c> does <b>not</b> match <c>sip:alice@example.com</c>, because a URI that
+    /// omits a defaulted component is not the same address as one that states it. List the form your peers
+    /// actually send.
+    /// </para>
+    /// <para>
+    /// Empty (the default) accepts every inbound request — the behaviour of a UAS with no served-user list to
+    /// check against, and the behaviour of this SDK before the option existed.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<string> ServedUserAors { get; init; } = [];
 }

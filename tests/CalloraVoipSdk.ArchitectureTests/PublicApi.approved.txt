@@ -915,6 +915,7 @@
   CalloraVoipSdk.SipSignalingHardeningConfiguration.MaxConcurrentInboundSessions : System.Int32 { get, init }
   CalloraVoipSdk.SipSignalingHardeningConfiguration.MaxInboundSessionsPerRemote : System.Int32 { get, init }
   CalloraVoipSdk.SipSignalingHardeningConfiguration.MaxServerTransactions : System.Int32 { get, init }
+  CalloraVoipSdk.SipSignalingHardeningConfiguration.ServedUserAors : System.Collections.Generic.IReadOnlyList<System.String> { get, init }
   CalloraVoipSdk.SipTransport.Tcp = enum-value
   CalloraVoipSdk.SipTransport.Tls = enum-value
   CalloraVoipSdk.SipTransport.Udp = enum-value
