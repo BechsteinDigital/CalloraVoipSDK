@@ -1,8 +1,9 @@
 # ADR-073: Stream Relay Transport (TURN over TCP/TLS ChannelData)
 
-Status: Proposed
+Status: Accepted
 Date: 2026-08-18
 Related: #240 (acceptance criterion 1), ADR-054, ADR-056, ADR-011, ADR-009
+Ratified: 2026-08-18 (User) — three decisions and the slice plan accepted; reconnect = fail-and-renominate.
 
 ## Context
 
