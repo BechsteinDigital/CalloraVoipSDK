@@ -64,8 +64,12 @@ public sealed class ConcurrentLoopbackSoakTests
             samples, s => s.ManagedBytes, maxSlopePerSample: 60_000, "ManagedBytes");
         Assert.False(managed.HasDrift, managed.Detail);
 
-        var privateMemory = TrendAssertions.NoUpwardSlope(
-            samples, s => s.PrivateMemoryBytes, maxSlopePerSample: 2_000_000, "PrivateMemoryBytes");
+        // Absolutes Wachstum statt Steigung (#283). Doppelte Grenze wie in den seriellen Soaks, wie schon
+        // bei der Steigung: Bursty-Concurrency committet mehr. Gemessen lokal: Median-Wachstum 2 MB, während
+        // der letzte Einzelwert 41 MB über dem Start lag — genau der Ausreißer, den der Median-Vergleich
+        // wegnimmt und ein Endpunkt-Vergleich als Leck gemeldet hätte.
+        var privateMemory = TrendAssertions.NoAbsoluteGrowth(
+            samples, s => s.PrivateMemoryBytes, maxGrowth: 128_000_000, "PrivateMemoryBytes");
         Assert.False(privateMemory.HasDrift, privateMemory.Detail);
 
         var threads = ResourcePlateauAssertions.WithinPlateau(

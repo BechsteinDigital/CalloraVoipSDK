@@ -118,6 +118,58 @@ public static class TrendAssertions
         return new TrendResult(hasDrift, detail);
     }
 
+    /// <summary>
+    /// Prüft, ob die Metrik zwischen Anfang und Ende der Reihe um mehr als <paramref name="maxGrowth"/>
+    /// gewachsen ist — Median des ersten gegen Median des letzten Fünftels, damit ein einzelner Ausreißer
+    /// am Rand die Aussage nicht kippt.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Für Metriken gedacht, die einen einmaligen Sockelaufbau tragen: der Prozess-Commit
+    /// (<c>PrivateMemoryBytes</c>) wächst in Stufen, wenn Laufzeit, GC-Heap oder ThreadPool nachlegen, und
+    /// gibt sie nicht zurück. Gemessene Reihe eines grünen Laufs, MB über dem Startwert:
+    /// <c>0 0 0,1 0,2 0,6 0,6 0,7 2,0 2,9 5,2 5,2 5,3 5,3 5,3 7,4 7,4 7,4 7,4</c> — Stufen, dann flach.
+    /// </para>
+    /// <para>
+    /// Eine Steigungsgrenze ist dafür die falsche Einheit: sie <em>ist</em> eine Gesamtwachstumsgrenze, die
+    /// ihre eigene Höhe verschweigt und mit der Abtastrate wandert. 1 MB/Sample über 18 Samples heißt
+    /// „höchstens 18 MB"; dieselben 24 MB über 36 Samples kämen unbeanstandet durch. Genau daran kippte das
+    /// Chaos-Gate (#283): auf CI wuchs der Commit um 23,5 bzw. 24,1 MB, also über die versteckte Grenze,
+    /// während lokal 7,4 MB anfielen — identischer Commit, beide Ergebnisse. Eine explizite Obergrenze sagt,
+    /// was sie prüft.
+    /// </para>
+    /// <para>
+    /// Die Aussage ist damit bewusst schwächer und ehrlicher: <b>grobe</b> Lecks werden gefangen (etwas, das
+    /// pro Iteration nachlegt, sprengt jede sinnvolle Obergrenze), ein schleichendes natives Leck unterhalb
+    /// der Grenze nicht. Die scharfen Leck-Detektoren bleiben <c>ManagedBytes</c>, <c>ThreadCount</c> und
+    /// <c>SocketDescriptorCount</c>: die müssen deterministisch zurückgehen und behalten ihre enge Steigung.
+    /// </para>
+    /// </remarks>
+    /// <param name="samples">Chronologische Messreihe (mindestens 2 Werte).</param>
+    /// <param name="selector">Extrahiert die zu prüfende Metrik.</param>
+    /// <param name="maxGrowth">Erlaubtes absolutes Wachstum in Metrik-Einheiten.</param>
+    /// <param name="metricName">Anzeigename der Metrik für die Begründung.</param>
+    public static TrendResult NoAbsoluteGrowth(
+        IReadOnlyList<ResourceSample> samples,
+        Func<ResourceSample, double> selector,
+        double maxGrowth,
+        string metricName)
+    {
+        if (samples.Count < 2)
+            return new TrendResult(false, $"{metricName}: zu wenige Samples ({samples.Count}).");
+
+        var bucket = Math.Max(1, samples.Count / 5);
+        var start = MedianOfDouble(samples.Take(bucket).Select(selector));
+        var end = MedianOfDouble(samples.Skip(samples.Count - bucket).Select(selector));
+
+        var growth = end - start;
+        var hasDrift = growth > maxGrowth;
+        var detail =
+            $"{metricName}: Start≈{start:F0}, Ende≈{end:F0}, Wachstum={growth:F0} " +
+            $"(max {maxGrowth:F0}) über {samples.Count} Samples → {(hasDrift ? "DRIFT" : "stabil")}.";
+        return new TrendResult(hasDrift, detail);
+    }
+
     /// <summary>Ordinary-Least-Squares-Steigung über x = 0..n-1. Liefert 0 bei &lt; 2 Werten.</summary>
     public static double LeastSquaresSlope(IReadOnlyList<double> ys)
     {
