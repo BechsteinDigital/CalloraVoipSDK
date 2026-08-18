@@ -48,13 +48,18 @@ public sealed class ChurnUnderFaultChaosTests
             },
             resourceSeries: samples));
 
-        // Managed heap settles fast → tight bound. Private/native memory carries a small runtime commit ramp
-        // → looser bound; catches gross native leaks (unfreed socket buffers). Thresholds mirror the proven
-        // RtpMediaLeakSoakTests bounds.
+        // Managed heap settles fast and must come back down → tight slope bound. This is the sharp leak
+        // detector, together with the thread and socket counts below.
         var managed = TrendAssertions.NoUpwardSlope(samples, s => s.ManagedBytes, 20_000, "ManagedBytes");
         Assert.False(managed.HasDrift, managed.Detail);
 
-        var privateMemory = TrendAssertions.NoUpwardSlope(samples, s => s.PrivateMemoryBytes, 1_000_000, "PrivateMemoryBytes");
+        // Private memory is judged on total growth, not on a slope (#283). A slope cap is a total-growth cap
+        // that hides its own height: 1 MB/sample over 18 samples means "at most 18 MB", which is below what a
+        // CI runner commits for the runtime, the GC heap and the ThreadPool — measured 23.5 and 24.1 MB there
+        // against 7.4 MB locally, hence red and green on the same commit. This cap is explicit and roughly
+        // 2.5x the worst growth measured on CI; anything that actually leaks per iteration blows past it.
+        var privateMemory = TrendAssertions.NoAbsoluteGrowth(
+            samples, s => s.PrivateMemoryBytes, maxGrowth: 64_000_000, "PrivateMemoryBytes");
         Assert.False(privateMemory.HasDrift, privateMemory.Detail);
 
         var threads = TrendAssertions.NoUpwardSlope(samples, s => s.ThreadCount, 0.5, "ThreadCount");

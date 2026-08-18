@@ -62,8 +62,11 @@ public sealed class RtpMediaLeakSoakTests
             samples, s => s.ManagedBytes, maxSlopePerSample: 20_000, "ManagedBytes");
         Assert.False(managed.HasDrift, managed.Detail);
 
-        var privateMemory = TrendAssertions.NoUpwardSlope(
-            samples, s => s.PrivateMemoryBytes, maxSlopePerSample: 1_000_000, "PrivateMemoryBytes");
+        // Absolutes Wachstum statt Steigung — siehe TrendAssertions.NoAbsoluteGrowth und #283: eine
+        // Steigungsgrenze ist hier eine versteckte Gesamtgrenze, die mit der Abtastrate wandert. Dieselbe
+        // Grenze wie im Chaos-Gate, das dieses Muster von hier übernommen hatte.
+        var privateMemory = TrendAssertions.NoAbsoluteGrowth(
+            samples, s => s.PrivateMemoryBytes, maxGrowth: 64_000_000, "PrivateMemoryBytes");
         Assert.False(privateMemory.HasDrift, privateMemory.Detail);
 
         // WorkingSet wird erfasst (geht in das P2-Messreihen-Artefakt), aber nicht scharf gewertet:
