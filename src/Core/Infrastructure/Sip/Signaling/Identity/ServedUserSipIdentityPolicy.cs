@@ -46,7 +46,7 @@ internal sealed class ServedUserSipIdentityPolicy : ISipUasUserIdentityPolicy
 
         foreach (var aor in _servedAors)
         {
-            if (SipProtocol.SipUriEqual(aor, requestUri))
+            if (SipUriProtocol.SipUriEqual(aor, requestUri))
                 return true;
         }
 

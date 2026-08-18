@@ -52,6 +52,10 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
     private readonly IDisposable _requestSubscription;
     private readonly IDisposable _responseSubscription;
     private readonly SipInboundRingDeadlineMonitor _ringDeadline;
+    // Accepting a brand-new inbound INVITE — the gates that turn it away and the session creation past them
+    // (extracted, #285). The dispatch above decides whether to look at a request at all; this decides whether
+    // this endpoint takes the call.
+    private readonly SipInboundInviteAcceptance _inviteAcceptance;
 
     /// <summary>
     /// Reserves the slot behind every entry in <see cref="_sessions"/> (#158 P1-5, #279): inbound sessions are
@@ -116,6 +120,21 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
             IdentityTrustPolicy = _identityTrustPolicy,
             SdpProvider = resolvedSdpProvider,
         };
+
+        // After _sessionDependencies: the acceptance captures it to build each inbound session.
+        _inviteAcceptance = new SipInboundInviteAcceptance(
+            _sessions, _sessionStartTimes, _sessionTraceIds, _replacementTargets,
+            _userIdentityPolicy, _admission, _ringDeadline, _telemetry, _sessionDependencies,
+            _inboundUserAgent, DefaultInboundSessionTimeout, _logger,
+            new SipInboundInviteAcceptanceHost(
+                // A lambda, not the method group: the sender carries an optional headers parameter that no
+                // acceptance path uses, and none of them should acquire the option by accident.
+                (request, endPoint, transport, statusCode, reasonPhrase) =>
+                    SendIngressResponseAsync(request, endPoint, transport, statusCode, reasonPhrase),
+                ResolveTraceId,
+                BuildCorrelationId,
+                HookSessionLifecycle,
+                session => IncomingInvite?.Invoke(this, new SipIncomingInviteEventArgs(session))));
 
         _requestSubscription = _transport.SubscribeRequests(HandleInboundRequest);
         _responseSubscription = _transport.SubscribeResponses(HandleInboundResponse);
@@ -628,161 +647,7 @@ internal sealed class SipCallSignalingService : ISipCallSignalingService
         if (!string.Equals(normalizedRequest.Method, "INVITE", StringComparison.Ordinal))
             return;
 
-        var toTag = SipProtocol.ExtractTag(normalizedRequest.Header("To"));
-        if (!string.IsNullOrWhiteSpace(toTag))
-            return;
-
-        string? replacesTargetCallId = null;
-        var replacesHeader = normalizedRequest.Header("Replaces");
-        if (!string.IsNullOrWhiteSpace(replacesHeader))
-        {
-            if (!SipReplacesHeaderValue.TryParse(replacesHeader, out var replaces))
-            {
-                _ = SendIngressResponseAsync(
-                    normalizedRequest,
-                    remoteEndPoint,
-                    inboundTransport,
-                    statusCode: 400,
-                    reasonPhrase: "Bad Request");
-                return;
-            }
-
-            if (!_sessions.TryGetValue(replaces!.CallId, out var replacesTargetSession)
-                || !replacesTargetSession.MatchesReplacesTarget(replaces))
-            {
-                _ = SendIngressResponseAsync(
-                    normalizedRequest,
-                    remoteEndPoint,
-                    inboundTransport,
-                    statusCode: 481,
-                    reasonPhrase: "Call/Transaction Does Not Exist");
-                return;
-            }
-
-            replacesTargetCallId = replaces.CallId;
-        }
-
-        var remoteUri = SipProtocol.ExtractUriFromNameAddr(normalizedRequest.Header("From"));
-        var toUri = SipProtocol.ExtractUriFromNameAddr(normalizedRequest.Header("To"));
-        if (string.IsNullOrWhiteSpace(remoteUri) || string.IsNullOrWhiteSpace(toUri))
-            return;
-
-        // DESIGN DECISION (#13): inbound requests are authorised by served-user + identity-trust/peer matching
-        // (trunk IP, TrustedRegistrarAddresses), NOT by issuing a 401/407 digest challenge to the peer. This suits
-        // the trusted-trunk / peered-registrar deployment model. Adding UAS-side digest challenge of inbound
-        // requests is a deliberate, separate feature decision, not an oversight.
-        // RFC 3261 §8.2.2.1: Reject INVITE to unknown users with 404 Not Found.
-        if (!_userIdentityPolicy.IsServedUser(normalizedRequest.RequestUri))
-        {
-            _ = SendIngressResponseAsync(
-                normalizedRequest,
-                remoteEndPoint,
-                inboundTransport,
-                statusCode: 404,
-                reasonPhrase: "Not Found");
-            return;
-        }
-
-        // #158 P1-5: bound the number of concurrent inbound sessions before creating dialog state. A UAS
-        // creates a session (and fires IncomingInvite) for every served-user INVITE, before any line/trunk
-        // takes ownership — a flood of INVITEs with distinct Call-IDs would otherwise pin unbounded state.
-        // At the cap, answer 486 Busy Here (RFC 3261 §21.4.24) and create no session. The slot is claimed here
-        // and released on every path that does not end in a tracked session (#279) — reading _sessions.Count
-        // instead would let concurrent INVITEs all observe the same free slot and admit past the ceiling.
-        var admission = _admission.TryAdmitInbound(callId, remoteEndPoint.Address);
-        if (admission != SipInboundSessionAdmissionOutcome.Admitted)
-        {
-            _logger.LogWarning(
-                "Inbound INVITE from {Remote} rejected by session admission ({Outcome}); ceiling is {Cap} " +
-                "concurrent inbound sessions.",
-                remoteEndPoint, admission, _admission.MaxConcurrentSessions);
-            _ = SendIngressResponseAsync(
-                normalizedRequest,
-                remoteEndPoint,
-                inboundTransport,
-                statusCode: 486,
-                reasonPhrase: "Busy Here");
-            return;
-        }
-
-        string localTag;
-        SipCallSession session;
-        var sessionSlotCommitted = false;
-        try
-        {
-            localTag = SipProtocol.NewTag();
-            var configuration = new SipCallSessionConfiguration
-            {
-                CallId = callId,
-                LocalUri = toUri,
-                RemoteUri = remoteUri,
-                LocalDisplayName = null,
-                PreferredIdentityUri = null,
-                AuthUsername = string.Empty,
-                AuthPassword = null,
-                UserAgent = _inboundUserAgent,
-                Timeout = DefaultInboundSessionTimeout,
-                RemoteEndPoint = remoteEndPoint,
-                SignalingTransport = inboundTransport
-            };
-            var inboundContext = new SipInboundSessionContext
-            {
-                InitialInvite = normalizedRequest,
-                LocalTag = localTag
-            };
-
-            session = SipCallSession.CreateInbound(
-                configuration,
-                inboundContext,
-                _sessionDependencies);
-
-            if (!_sessions.TryAdd(callId, session))
-            {
-                session.Dispose();
-                return;
-            }
-
-            sessionSlotCommitted = true;
-        }
-        finally
-        {
-            // #279: the reservation covers a tracked session only once the insert succeeded. Release it on
-            // every other exit — a duplicate Call-ID or a throw out of session construction — or the ceiling
-            // shrinks with each of them until the service stops admitting calls.
-            if (!sessionSlotCommitted)
-                _admission.ReleaseInbound(callId);
-        }
-
-        var traceId = ResolveTraceId(callId);
-        if (!string.IsNullOrWhiteSpace(replacesTargetCallId))
-            _replacementTargets[callId] = replacesTargetCallId;
-
-        HookSessionLifecycle(session);
-        _sessionStartTimes[callId] = DateTimeOffset.UtcNow;
-        _sessionTraceIds[callId] = traceId;
-        // #158 P1-5 (ring deadline): bound how long this session may sit in Ringing without an answer. Started
-        // before IncomingInvite so a consumer that answers/rejects synchronously cancels it via the lifecycle
-        // hook below; on expiry the monitor rejects 480, which drives the session to Terminated and cleanup.
-        _ringDeadline.Track(session);
-        var inboundAttributes = new Dictionary<string, string>
-        {
-            ["remote_uri"] = remoteUri,
-            ["local_uri"] = toUri
-        };
-        if (!string.IsNullOrWhiteSpace(session.RemoteAssertedIdentity))
-            inboundAttributes["remote_asserted_identity"] = session.RemoteAssertedIdentity!;
-        if (!string.IsNullOrWhiteSpace(replacesTargetCallId))
-            inboundAttributes["replaces_call_id"] = replacesTargetCallId;
-
-        _telemetry.PublishEvent(new SipEventRecord
-        {
-            EventType = "sip.dialog.inbound_invite.received",
-            CallId = callId,
-            CorrelationId = BuildCorrelationId(callId, "INVITE", localTag),
-            TraceId = traceId,
-            Attributes = inboundAttributes
-        });
-        IncomingInvite?.Invoke(this, new SipIncomingInviteEventArgs(session));
+        _inviteAcceptance.Accept(normalizedRequest, callId, remoteEndPoint, inboundTransport);
     }
 
     /// <summary>
