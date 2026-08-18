@@ -117,6 +117,11 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     // RaiseAudioReceived, which runs solely on the single shared receive loop, so the reassembler needs no
     // synchronization. Null when the peer did not negotiate telephone-event (no reassembly path).
     private readonly RtpInboundDtmfReassembler? _dtmfReassembler;
+    // The ICE view currently in force. Mutable because an ICE restart (RFC 8445 §9) rotates the credentials and
+    // replaces the agent; volatile because a renegotiator reads it off the signalling thread while a restart
+    // publishes from another. Only the credentials are read back — the agent owns the rest.
+    private volatile IceMediaParameters _iceParameters;
+
     // The bundle's TURN relay data path (RFC 8656): the wiring claim, the allocation keepalive, the one-shot
     // switch onto ChannelData when a relay pair wins ICE, and its teardown order. Extracted so the session does
     // not carry that whole lifecycle inline; a session without a relay allocation just holds an inert one.
@@ -400,6 +405,9 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         // The relay data path: wired here when the offerer already gathered a TURN allocation, otherwise open for
         // a later AdoptRelay (the answerer, which gathers after the session exists).
         _relay = new BundledRelayDataPath(_transport, relayBinding, _logger);
+
+        // The ICE view the agent above was built with; RestartIceAsync replaces both together.
+        _iceParameters = options.Ice;
     }
 
     // Dispatches inbound audio to subscribers on the receive loop; a throwing subscriber must not tear
@@ -452,11 +460,49 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     public IPEndPoint LocalEndPoint => _transport.LocalEndPoint;
 
     /// <summary>
-    /// The remote peer's ICE username fragment the shared transport was built with (RFC 8839), or null when the
-    /// exchange carried no remote ICE credentials. A renegotiator compares it against a re-offer's ufrag to detect
-    /// an ICE restart (RFC 8829 §5.3.1), which the live track-diff path does not support.
+    /// The remote peer's ICE username fragment currently in force (RFC 8839), or null when the exchange carried no
+    /// remote ICE credentials. A renegotiator compares it against a re-offer's ufrag to detect an ICE restart
+    /// (RFC 8829 §5.3.1). Reflects the running agent, so it follows a <see cref="RestartIceAsync"/> — reading it
+    /// from the construction-time options would report a restart against every later re-offer.
     /// </summary>
-    public string? RemoteIceUfrag => _options.Ice.RemoteIceUfrag;
+    public string? RemoteIceUfrag => _iceParameters.RemoteIceUfrag;
+
+    /// <summary>
+    /// The remote peer's ICE password currently in force (RFC 8839), or null when the exchange carried no remote
+    /// ICE credentials. Paired with <see cref="RemoteIceUfrag"/> because a restart may rotate either
+    /// (RFC 8445 §9.1.1.1).
+    /// </summary>
+    public string? RemoteIcePwd => _iceParameters.RemoteIcePwd;
+
+    /// <summary>
+    /// Restarts ICE on the running session (RFC 8445 §9, RFC 8839 §5.4): the agent is replaced with one built from
+    /// <paramref name="parameters"/> — rotated credentials, the re-offer's remote candidates, a fresh check list —
+    /// and connectivity checks run again over the same socket.
+    /// <para>
+    /// Nothing above ICE is rebuilt: the transport, its socket, the DTLS association and every per-SSRC SRTP
+    /// context survive, so tracks keep their keys and their sequence/index space. That is what a restart means to a
+    /// peer — the path is re-selected, the session is not renegotiated.
+    /// </para>
+    /// <para>
+    /// The transport's send target is deliberately left alone. RFC 8445 §9 keeps media on the previously selected
+    /// pair until a new one is selected, so a peer that rotated its credentials because it changed networks keeps
+    /// receiving on the old path for as long as that path still works, instead of losing media the moment the
+    /// re-offer arrives. The new agent re-points the transport itself when it nominates a pair.
+    /// </para>
+    /// </summary>
+    /// <param name="parameters">The new ICE view: rotated credentials, role, remote endpoint and candidates.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="parameters"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ObjectDisposedException">The session has been disposed.</exception>
+    public async Task RestartIceAsync(IceMediaParameters parameters)
+    {
+        ArgumentNullException.ThrowIfNull(parameters);
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+
+        await _ice.RestartIceAsync(parameters).ConfigureAwait(false);
+        // Publish only after the swap succeeded, so a failed restart does not leave the session claiming
+        // credentials no agent is answering with — which would make the next re-offer look like no restart at all.
+        _iceParameters = parameters;
+    }
 
     /// <summary>The local audio track's synchronisation source.</summary>
     public uint AudioSsrc => _audioSsrc;
