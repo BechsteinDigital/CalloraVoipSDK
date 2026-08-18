@@ -19,6 +19,7 @@ internal sealed class BundledMediaSessionInboundEventWiring
     private readonly Action<string, InboundVideoFrame> _raiseVideoTrack;
     private readonly Action<string, string, InboundVideoFrame> _raiseVideoLayer;
     private readonly Action _raiseKeyFrameRequested;
+    private readonly Action<string, VideoKeyFrameRequest> _raiseKeyFrameRequestedForStream;
     private readonly Action<string, RtpPacket> _raiseAudioTrack;
     private readonly ILogger _logger;
 
@@ -31,6 +32,7 @@ internal sealed class BundledMediaSessionInboundEventWiring
     /// <param name="raiseVideoTrack">Raises the mid-tagged <c>VideoTrackFrameReceived</c> event.</param>
     /// <param name="raiseVideoLayer">Raises the per-layer <c>VideoLayerFrameReceived</c> event (mid, rid).</param>
     /// <param name="raiseKeyFrameRequested">Raises the <c>VideoKeyFrameRequested</c> event.</param>
+    /// <param name="raiseKeyFrameRequestedForStream">Raises the attributed <c>VideoTrackKeyFrameRequested</c> event (mid, request).</param>
     /// <param name="raiseAudioTrack">Raises the mid-tagged <c>AudioTrackFrameReceived</c> event.</param>
     /// <param name="logger">Logs (and suppresses) a throwing additional-audio subscriber so the shared receive loop survives (K3).</param>
     public BundledMediaSessionInboundEventWiring(
@@ -38,6 +40,7 @@ internal sealed class BundledMediaSessionInboundEventWiring
         Action<string, InboundVideoFrame> raiseVideoTrack,
         Action<string, string, InboundVideoFrame> raiseVideoLayer,
         Action raiseKeyFrameRequested,
+        Action<string, VideoKeyFrameRequest> raiseKeyFrameRequestedForStream,
         Action<string, RtpPacket> raiseAudioTrack,
         ILogger logger)
     {
@@ -45,6 +48,8 @@ internal sealed class BundledMediaSessionInboundEventWiring
         _raiseVideoTrack = raiseVideoTrack ?? throw new ArgumentNullException(nameof(raiseVideoTrack));
         _raiseVideoLayer = raiseVideoLayer ?? throw new ArgumentNullException(nameof(raiseVideoLayer));
         _raiseKeyFrameRequested = raiseKeyFrameRequested ?? throw new ArgumentNullException(nameof(raiseKeyFrameRequested));
+        _raiseKeyFrameRequestedForStream = raiseKeyFrameRequestedForStream
+            ?? throw new ArgumentNullException(nameof(raiseKeyFrameRequestedForStream));
         _raiseAudioTrack = raiseAudioTrack ?? throw new ArgumentNullException(nameof(raiseAudioTrack));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
@@ -76,7 +81,10 @@ internal sealed class BundledMediaSessionInboundEventWiring
                 _raiseVideoFrame(frame);
             _raiseVideoTrack(mid, frame);
         };
+        // The bare event stays for the single-track consumer; the attributed one carries the MID and the
+        // stream the peer actually named, which is what a forwarder needs to ask the right source (#227).
         track.KeyFrameRequested += () => _raiseKeyFrameRequested();
+        track.KeyFrameRequestedForStream += request => _raiseKeyFrameRequestedForStream(mid, request);
     }
 
     /// <summary>

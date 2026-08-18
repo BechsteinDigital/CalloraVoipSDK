@@ -209,6 +209,7 @@ public sealed class WebRtcRecordingTests
         public event EventHandler<string>? LocalIceCandidateDiscovered { add { } remove { } }
         public event EventHandler<DtmfTone>? DtmfReceived { add { } remove { } }
         public event EventHandler? VideoKeyFrameRequested { add { } remove { } }
+        public event EventHandler<KeyFrameRequest>? VideoTrackKeyFrameRequested { add { } remove { } }
         public event EventHandler<BitrateRecommendation>? RecommendedBitrateChanged { add { } remove { } }
         public long? RecommendedOutgoingBitrateBps => null;
         public string CreateOffer() => string.Empty;

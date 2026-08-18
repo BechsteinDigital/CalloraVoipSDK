@@ -1,3 +1,4 @@
+using CalloraVoipSdk.Core.Application.Media.Rtcp.Packets;
 using CalloraVoipSdk.Core.Infrastructure.Rtp;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Packets;
 using CalloraVoipSdk.Core.Infrastructure.Rtp.Wire;
@@ -72,6 +73,23 @@ public sealed class BundledMediaSessionInboundEventWiringTests
         Assert.Empty(sink.Layer);
     }
 
+    [Fact]
+    public void A_key_frame_request_reaches_the_session_tagged_with_the_mid_it_arrived_on()
+    {
+        // The mid is what a forwarding layer keys its upstream sources by, so it has to survive the hop from
+        // the track to the session; the track alone knows which m-line it is (#227).
+        var (wiring, sink) = Wiring();
+        using var track = NonSimulcastTrack();
+        wiring.WireVideoTrackEvents("scr", track, isPrimary: false);
+
+        track.OnRtcpPackets([new RtcpPictureLossIndication { SenderSsrc = 0xD0D0D0D0, MediaSsrc = VideoSsrc }]);
+
+        var attributed = Assert.Single(sink.KeyFrameStream);
+        Assert.Equal("scr", attributed.Mid);
+        Assert.Equal(VideoSsrc, attributed.Request.MediaSsrc);
+        Assert.Equal(1, sink.KeyFrameRequested);   // the mid-less surface still fires alongside it
+    }
+
     // ── harness ──────────────────────────────────────────────────────────────────────────────
 
     private sealed class Sink
@@ -80,6 +98,7 @@ public sealed class BundledMediaSessionInboundEventWiringTests
         public List<(string Mid, byte[] Frame)> Track { get; } = [];
         public List<(string Mid, string Rid, byte[] Frame)> Layer { get; } = [];
         public int KeyFrameRequested;
+        public List<(string Mid, VideoKeyFrameRequest Request)> KeyFrameStream { get; } = [];
     }
 
     private static (BundledMediaSessionInboundEventWiring Wiring, Sink Sink) Wiring()
@@ -90,6 +109,7 @@ public sealed class BundledMediaSessionInboundEventWiringTests
             (mid, frame) => sink.Track.Add((mid, frame.Payload)),
             (mid, rid, frame) => sink.Layer.Add((mid, rid, frame.Payload)),
             () => sink.KeyFrameRequested++,
+            (mid, request) => sink.KeyFrameStream.Add((mid, request)),
             (_, _) => { },
             NullLogger<BundledMediaSessionInboundEventWiringTests>.Instance);
         return (wiring, sink);

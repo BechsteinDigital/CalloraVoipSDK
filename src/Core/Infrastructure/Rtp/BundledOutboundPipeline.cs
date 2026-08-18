@@ -144,6 +144,30 @@ internal sealed class BundledOutboundPipeline
     }
 
     /// <summary>
+    /// Resolves one of this MID's sending SSRCs to the <c>a=rid</c> layer it carries (RFC 8853), so inbound
+    /// feedback naming that SSRC can be attributed to the encoding it is about rather than to the m-line as a
+    /// whole. <see langword="false"/> when the SSRC is not one of this MID's.
+    /// </summary>
+    /// <param name="mid">The m-line the caller believes the SSRC belongs to.</param>
+    /// <param name="ssrc">The media SSRC an inbound PLI/FIR/NACK named.</param>
+    /// <param name="rid">The layer's rid, or <see langword="null"/> for a stream that is not simulcasting.</param>
+    public bool TryResolveSendingSsrc(string mid, uint ssrc, out string? rid)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(mid);
+        foreach (var entry in _tracks)
+        {
+            if (entry.Value.Ssrc == ssrc && string.Equals(entry.Key.Mid, mid, StringComparison.Ordinal))
+            {
+                rid = entry.Key.Rid;
+                return true;
+            }
+        }
+
+        rid = null;
+        return false;
+    }
+
+    /// <summary>
     /// Installs the shared outbound SRTP context once the DTLS-SRTP handshake has derived the key. Until
     /// then every send fails closed. The one context serves every track's SSRC under the shared key.
     /// </summary>

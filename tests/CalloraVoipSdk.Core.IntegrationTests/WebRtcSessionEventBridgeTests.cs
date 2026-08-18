@@ -35,6 +35,7 @@ public sealed class WebRtcSessionEventBridgeTests
             (_, _) => { },
             (mid, rid, frame) => layer.Add((mid, rid, frame)),
             () => { },
+            (_, _) => { },
             (_, _) => { }));
 
         Assert.Null(ex);
@@ -56,6 +57,7 @@ public sealed class WebRtcSessionEventBridgeTests
             (_, _) => { },
             raiseVideoLayerFrameReceived: null!,
             () => { },
+            (_, _) => { },
             (_, _) => { }));
     }
 

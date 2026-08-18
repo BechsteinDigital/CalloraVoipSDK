@@ -1079,6 +1079,7 @@
   CalloraVoipSdk.WebRtc.IPeerConnection.State : CalloraVoipSdk.WebRtc.PeerConnectionState { get }
   CalloraVoipSdk.WebRtc.IPeerConnection.TrackReceived : event System.EventHandler<CalloraVoipSdk.WebRtc.RemoteTrack>
   CalloraVoipSdk.WebRtc.IPeerConnection.VideoKeyFrameRequested : event System.EventHandler
+  CalloraVoipSdk.WebRtc.IPeerConnection.VideoTrackKeyFrameRequested : event System.EventHandler<CalloraVoipSdk.WebRtc.KeyFrameRequest>
   CalloraVoipSdk.WebRtc.IPeerConnectionManager.Active : System.Collections.Generic.IReadOnlyList<CalloraVoipSdk.WebRtc.IPeerConnection> { get }
   CalloraVoipSdk.WebRtc.IPeerConnectionManager.Count : System.Int32 { get }
   CalloraVoipSdk.WebRtc.IVideoTrack.Direction : CalloraVoipSdk.WebRtc.TrackDirection { get }
@@ -1101,6 +1102,15 @@
   CalloraVoipSdk.WebRtc.IWebRtcTrickleSignaling.ReceiveCandidateAsync(System.Threading.CancellationToken cancellationToken = default) : System.Threading.Tasks.Task<System.String>
   CalloraVoipSdk.WebRtc.IWebRtcTrickleSignaling.SendCandidateAsync(System.String candidate, System.Threading.CancellationToken cancellationToken = default) : System.Threading.Tasks.Task
   CalloraVoipSdk.WebRtc.IWebRtcTrickleSignaling.SendEndOfCandidatesAsync(System.Threading.CancellationToken cancellationToken = default) : System.Threading.Tasks.Task
+  CalloraVoipSdk.WebRtc.KeyFrameRequest..ctor(System.String Mid, System.UInt32 MediaSsrc, System.String Rid)
+  CalloraVoipSdk.WebRtc.KeyFrameRequest.Deconstruct(out System.String Mid, out System.UInt32 MediaSsrc, out System.String Rid) : System.Void
+  CalloraVoipSdk.WebRtc.KeyFrameRequest.Equals(CalloraVoipSdk.WebRtc.KeyFrameRequest other) : System.Boolean
+  CalloraVoipSdk.WebRtc.KeyFrameRequest.Equals(System.Object obj) : System.Boolean
+  CalloraVoipSdk.WebRtc.KeyFrameRequest.GetHashCode() : System.Int32
+  CalloraVoipSdk.WebRtc.KeyFrameRequest.MediaSsrc : System.UInt32 { get, init }
+  CalloraVoipSdk.WebRtc.KeyFrameRequest.Mid : System.String { get, init }
+  CalloraVoipSdk.WebRtc.KeyFrameRequest.Rid : System.String { get, init }
+  CalloraVoipSdk.WebRtc.KeyFrameRequest.ToString() : System.String
   CalloraVoipSdk.WebRtc.KeyFrameSource.Payload = enum-value
   CalloraVoipSdk.WebRtc.KeyFrameSource.RtpHeaderExtension = enum-value
   CalloraVoipSdk.WebRtc.KeyFrameSource.Unknown = enum-value
@@ -1393,6 +1403,7 @@ TYPE record struct CalloraVoipSdk.Core.Domain.Calls.DtmfTone
 TYPE record struct CalloraVoipSdk.Core.Domain.Lines.LineId
 TYPE record struct CalloraVoipSdk.Core.Domain.Lines.SipAddress
 TYPE record struct CalloraVoipSdk.WebRtc.DtmfTone
+TYPE record struct CalloraVoipSdk.WebRtc.KeyFrameRequest
 TYPE struct CalloraVoipSdk.WebRtc.BitrateRecommendation
 TYPE struct CalloraVoipSdk.WebRtc.EncodedFrame
 TYPE struct CalloraVoipSdk.WebRtc.RecordedFrame

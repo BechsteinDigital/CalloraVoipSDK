@@ -26,7 +26,7 @@ internal sealed class VideoKeyFrameFeedback
     private readonly bool _remoteSupportsNack;
     private readonly bool _remoteSupportsPli;
     private readonly Func<ReadOnlyMemory<byte>, CancellationToken, ValueTask> _sendControl;
-    private readonly Action _onKeyFrameRequested;
+    private readonly Action<uint> _onKeyFrameRequested;
     private readonly Action<IReadOnlyList<ushort>> _onRetransmitRequested;
     private readonly ILogger _logger;
     private readonly CancellationToken _lifetime;
@@ -47,7 +47,7 @@ internal sealed class VideoKeyFrameFeedback
         bool remoteSupportsNack,
         bool remoteSupportsPli,
         Func<ReadOnlyMemory<byte>, CancellationToken, ValueTask> sendControl,
-        Action onKeyFrameRequested,
+        Action<uint> onKeyFrameRequested,
         Action<IReadOnlyList<ushort>> onRetransmitRequested,
         ILogger logger,
         CancellationToken lifetime,
@@ -78,20 +78,24 @@ internal sealed class VideoKeyFrameFeedback
     {
         ArgumentNullException.ThrowIfNull(packets);
 
-        // A dedicated single-stream video RTCP channel: any PLI/FIR here means "send a
-        // keyframe", regardless of the media SSRC a lenient peer may have set.
-        if (packets.Any(p => p is RtcpPictureLossIndication or RtcpFullIntraRequest))
+        // Any PLI/FIR here means "send a keyframe". The media SSRC it names is carried through rather than
+        // discarded: on a bundled channel the caller has already filtered the compound to this track, and a
+        // forwarding layer still needs to know WHICH of our streams was asked for — the whole point of #227.
+        // A lenient peer that sets no usable SSRC yields 0, which is honest: unattributed, not misattributed.
+        if (FirstKeyFrameRequestSsrc(packets) is { } namedSsrc)
         {
-            _logger.LogDebug("Received a video keyframe request (PLI/FIR).");
+            _logger.LogDebug("Received a video keyframe request (PLI/FIR) naming media SSRC {Ssrc}.", namedSsrc);
             try
             {
-                _onKeyFrameRequested();
+                _onKeyFrameRequested(namedSsrc);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Unhandled exception in video KeyFrameRequested handler.");
             }
         }
+
+        // (see FirstKeyFrameRequestSsrc below)
 
         // A Generic NACK names packets the peer lost — hand them to the retransmit path
         // (RFC 4588 RTX). The consumer resends whatever is still in its send buffer.
@@ -233,5 +237,26 @@ internal sealed class VideoKeyFrameFeedback
         }
 
         return entries;
+    }
+
+    // The media SSRC of the first key-frame request in the compound. PLI names it in the packet header
+    // (RFC 4585 §6.3.1); FIR names its targets in the FCI entries instead (RFC 5104 §4.3.1), so the first
+    // entry's SSRC is the one to report. Null when the compound holds no key-frame request at all.
+    private static uint? FirstKeyFrameRequestSsrc(IReadOnlyList<RtcpPacket> packets)
+    {
+        foreach (var packet in packets)
+        {
+            switch (packet)
+            {
+                case RtcpPictureLossIndication pli:
+                    return pli.MediaSsrc;
+                case RtcpFullIntraRequest { Entries.Count: > 0 } fir:
+                    return fir.Entries[0].MediaSsrc;
+                case RtcpFullIntraRequest:
+                    return 0u;   // a FIR with no entries names nothing; unattributed rather than misattributed
+            }
+        }
+
+        return null;
     }
 }

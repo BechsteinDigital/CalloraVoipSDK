@@ -181,6 +181,18 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     /// </summary>
     public event Action? VideoKeyFrameRequested;
 
+    /// <summary>
+    /// Raised when the peer asks for a key frame on a specific outbound video stream (#227): the track's MID
+    /// and the media SSRC the PLI/FIR named, with its <c>a=rid</c> layer when the m-line is simulcasting.
+    /// Fires alongside <see cref="VideoKeyFrameRequested"/>, which stays mid-less for the single-track case.
+    /// </summary>
+    /// <remarks>
+    /// A forwarding layer needs the attribution: a downstream request it cannot attribute leaves asking every
+    /// upstream source as the only safe move, so one receiver's decoder reset becomes a key frame from all of
+    /// them — precisely when the link is already struggling, since that is what made the receiver ask.
+    /// </remarks>
+    public event Action<string, VideoKeyFrameRequest>? VideoTrackKeyFrameRequested;
+
     /// <summary>Raised when the shared DTLS handshake fails — media stays blocked (fail closed).</summary>
     public event Action? HandshakeFailed;
 
@@ -230,6 +242,7 @@ internal sealed class BundledMediaSession : IAsyncDisposable
             (mid, frame) => VideoTrackFrameReceived?.Invoke(mid, frame),
             (mid, rid, frame) => VideoLayerFrameReceived?.Invoke(mid, rid, frame),
             () => VideoKeyFrameRequested?.Invoke(),
+            (mid, request) => VideoTrackKeyFrameRequested?.Invoke(mid, request),
             (mid, packet) => AudioTrackFrameReceived?.Invoke(mid, packet),
             _logger);
         // Inbound DTMF reassembler only when telephone-event was negotiated (RFC 4733): it fires DtmfReceived on a
