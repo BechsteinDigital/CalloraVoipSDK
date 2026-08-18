@@ -28,23 +28,15 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
     private readonly SipCallSessionContextAdapter _context;
     private readonly SipReliableProvisionalManager _reliableProvisionalManager;
     private readonly SipCallSessionTimers _sessionTimers;
+    // The final response to an inbound INVITE — accept, reject, or redirect (extracted, #285). It holds the
+    // operation gate for the whole of each response; the dialog state stays here, behind the host delegates.
+    private readonly SipInboundInviteResponder _inviteResponder;
     internal readonly SipDialogManager _dialogManager = new();
     private readonly bool _isInbound;
-    internal readonly string _localDisplayName;
-    internal readonly string? _preferredIdentityUri;
-    internal readonly string? _privacyHeader;
-    internal readonly string? _requireHeader;
-    internal readonly string? _proxyRequireHeader;
-    internal readonly string? _referredBy;
-    internal readonly IReadOnlyDictionary<string, string>? _customHeaders;
-    internal readonly string _authUsername;
-    internal readonly string? _authPassword;
-    internal readonly string _userAgent;
-    internal readonly string _initialRequestUri;
-    internal readonly IReadOnlyList<string> _initialRouteSet;
-    internal readonly SipTransportProtocol _signalingTransport;
-    internal readonly CalloraVoipSdk.Core.Application.Ports.Security.TlsConfiguration? _lineTls;
-    internal readonly TimeSpan _timeout;
+    // The immutable per-dialog configuration, held as the object it arrives as rather than destructured into a
+    // field per value. Fifteen copies were fifteen chances to drift, and the two values that need normalising
+    // (display name, initial Request-URI) now carry their rule with them instead of at each call site.
+    internal readonly SipCallSessionConfiguration _config;
     internal readonly SipRequest? _initialInvite;
     internal IPEndPoint _remoteEndPoint;
     internal string? _advertisedPublicHost;
@@ -118,23 +110,7 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
         CallId = configuration.CallId;
         LocalUri = configuration.LocalUri;
         RemoteUri = configuration.RemoteUri;
-        _localDisplayName = configuration.LocalDisplayName ?? string.Empty;
-        _preferredIdentityUri = configuration.PreferredIdentityUri;
-        _privacyHeader = configuration.PrivacyHeader;
-        _requireHeader = configuration.RequireHeader;
-        _proxyRequireHeader = configuration.ProxyRequireHeader;
-        _referredBy = configuration.ReferredBy;
-        _customHeaders = configuration.CustomHeaders;
-        _authUsername = configuration.AuthUsername;
-        _authPassword = configuration.AuthPassword;
-        _userAgent = configuration.UserAgent;
-        _initialRequestUri = string.IsNullOrWhiteSpace(configuration.InitialRequestUri)
-            ? configuration.RemoteUri
-            : configuration.InitialRequestUri!;
-        _initialRouteSet = configuration.InitialRouteSet;
-        _signalingTransport = configuration.SignalingTransport;
-        _lineTls = configuration.LineTls;
-        _timeout = configuration.Timeout;
+        _config = configuration;
         _remoteEndPoint = configuration.RemoteEndPoint;
         _initialInvite = initialization.InitialInvite;
         _localTag = initialization.LocalTag;
@@ -162,6 +138,19 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
             ReleaseOperationGateSafe,
             CallId,
             _logger);
+        _inviteResponder = new SipInboundInviteResponder(
+            _operationGate, _headerService, _serverTransactions, _config,
+            new SipInboundInviteResponderHost(
+                ThrowIfDisposed,
+                ReleaseOperationGateSafe,
+                () => State,
+                () => _isInbound,
+                () => _initialInvite,
+                () => { lock (_sync) return _localTag; },
+                () => _remoteEndPoint,
+                TransitionTo,
+                ApplySessionTimerNegotiation,
+                SendReliableProvisionalAndWaitForPrackAsync));
         if (_initialInvite is not null)
         {
             // For inbound sessions, the INVITE body is the remote SDP offer.
@@ -228,7 +217,7 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
     }
     /// <inheritdoc />
     public System.Net.IPEndPoint LocalSignalingEndPoint =>
-        _transport.GetLocalEndPoint(_signalingTransport);
+        _transport.GetLocalEndPoint(_config.SignalingTransport);
     /// <inheritdoc />
     public System.Net.IPEndPoint? RemoteSignalingEndPoint
     {
@@ -284,7 +273,7 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
                 throw new InvalidOperationException($"Dialog must be Idle, current state is {State}.");
             lock (_sync) _localTag = localTag;
             TransitionTo(SipDialogState.Inviting);
-            var localEndPoint = _transport.GetLocalEndPoint(_signalingTransport);
+            var localEndPoint = _transport.GetLocalEndPoint(_config.SignalingTransport);
             body = sessionDescription ?? _sdpProvider.BuildOffer(localEndPoint, false);
         }
         finally
@@ -302,143 +291,7 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
             .ConfigureAwait(false);
     }
     /// <inheritdoc />
-    public async Task AnswerAsync(
-        string? sessionDescription = null,
-        CancellationToken ct = default)
-    {
-        ThrowIfDisposed();
-        if (!_isInbound)
-            throw new InvalidOperationException("Only inbound sessions can be answered.");
-        await _operationGate.WaitAsync(ct).ConfigureAwait(false);
-        try
-        {
-            if (State != SipDialogState.Ringing)
-                throw new InvalidOperationException($"Dialog must be Ringing, current state is {State}.");
-            if (_initialInvite is null)
-                throw new InvalidOperationException("Inbound INVITE context is missing.");
-            if (string.IsNullOrWhiteSpace(_localTag))
-                throw new InvalidOperationException("Local tag is missing.");
-            if (!SipRequireOptionPolicy.TryValidateInviteRequireHeader(
-                    _initialInvite.Header("Require"),
-                    out var unsupportedHeaderValue))
-            {
-                var unsupportedHeaders = _headerService.CreateResponseHeadersFromRequest(
-                    _initialInvite,
-                    _localTag,
-                    includeContentType: false);
-                unsupportedHeaders["Unsupported"] = unsupportedHeaderValue;
-                await _serverTransactions.SendResponseAsync(
-                        _initialInvite,
-                        _remoteEndPoint,
-                        _signalingTransport,
-                        statusCode: 420,
-                        reasonPhrase: "Bad Extension",
-                        unsupportedHeaders,
-                        body: null,
-                        ct)
-                    .ConfigureAwait(false);
-                TransitionTo(SipDialogState.Terminated);
-                return;
-            }
-            if (SipCallSessionUtilities.ShouldUseReliableProvisional(_initialInvite))
-            {
-                var prackAcknowledged = await SendReliableProvisionalAndWaitForPrackAsync(
-                        _initialInvite,
-                        _localTag,
-                        ct)
-                    .ConfigureAwait(false);
-                if (!prackAcknowledged)
-                {
-                    TransitionTo(SipDialogState.Terminated);
-                    return;
-                }
-            }
-            if (!SipSessionTimerPolicy.TryValidateInboundRequest(
-                    _initialInvite,
-                    out var timerRejectionCode,
-                    out var timerRejectionReasonPhrase,
-                    out var normalizedSessionExpires))
-            {
-                var timerRejectHeaders = _headerService.CreateResponseHeadersFromRequest(_initialInvite, _localTag, includeContentType: false);
-                if (timerRejectionCode == 422)
-                    SipSessionTimerPolicy.ApplyTooSmallResponseHeaders(timerRejectHeaders);
-                await _serverTransactions.SendResponseAsync(
-                        _initialInvite,
-                        _remoteEndPoint,
-                        _signalingTransport,
-                        statusCode: timerRejectionCode,
-                        reasonPhrase: timerRejectionReasonPhrase,
-                        timerRejectHeaders,
-                        body: null,
-                        ct)
-                    .ConfigureAwait(false);
-                TransitionTo(SipDialogState.Terminated);
-                return;
-            }
-            var body = sessionDescription;
-            var headers = _headerService.CreateResponseHeadersFromRequest(_initialInvite, _localTag, includeContentType: !string.IsNullOrWhiteSpace(body));
-            SipSessionTimerPolicy.ApplyResponseHeaders(headers, normalizedSessionExpires);
-            await _serverTransactions.SendResponseAsync(
-                    _initialInvite,
-                    _remoteEndPoint,
-                    _signalingTransport,
-                    statusCode: 200,
-                    reasonPhrase: "OK",
-                    headers,
-                    body,
-                    ct)
-                .ConfigureAwait(false);
-            ApplySessionTimerNegotiation(
-                headers.TryGetValue("Session-Expires", out var sessionExpires) ? sessionExpires : null,
-                localIsRequester: false);
-            TransitionTo(SipDialogState.Established);
-        }
-        finally
-        {
-            ReleaseOperationGateSafe();
-        }
-    }
     /// <inheritdoc />
-    public async Task RejectAsync(
-        int statusCode = 486,
-        string? reasonPhrase = null,
-        CancellationToken ct = default)
-    {
-        ThrowIfDisposed();
-        if (statusCode < 400 || statusCode > 699)
-            throw new ArgumentOutOfRangeException(nameof(statusCode), statusCode, "Rejection status code must be 4xx, 5xx, or 6xx.");
-        await _operationGate.WaitAsync(ct).ConfigureAwait(false);
-        try
-        {
-            if (!_isInbound || State != SipDialogState.Ringing)
-                throw new InvalidOperationException(
-                    $"RejectAsync is only valid for inbound dialogs in Ringing state; current state is {State}.");
-            if (_initialInvite is null || string.IsNullOrWhiteSpace(_localTag))
-                throw new InvalidOperationException("Inbound INVITE context is missing.");
-            var phrase = string.IsNullOrWhiteSpace(reasonPhrase)
-                ? SipCallSessionUtilities.ResolveDefaultReasonPhrase(statusCode)
-                : reasonPhrase;
-            var rejectHeaders = _headerService.CreateResponseHeadersFromRequest(
-                _initialInvite, _localTag, includeContentType: false);
-            await _serverTransactions.SendResponseAsync(
-                    _initialInvite,
-                    _remoteEndPoint,
-                    _signalingTransport,
-                    statusCode,
-                    phrase,
-                    rejectHeaders,
-                    body: null,
-                    ct)
-                .ConfigureAwait(false);
-            TransitionTo(
-                SipDialogState.Terminated,
-                SipReasonHeader.CreateSipStatusReason(statusCode, phrase));
-        }
-        finally
-        {
-            ReleaseOperationGateSafe();
-        }
-    }
     /// <inheritdoc />
     public async Task HangupAsync(
         CancellationToken ct = default,
@@ -462,7 +315,7 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
                     await _serverTransactions.SendResponseAsync(
                             _initialInvite,
                             _remoteEndPoint,
-                            _signalingTransport,
+                            _config.SignalingTransport,
                             statusCode: 486,
                             reasonPhrase: "Busy Here",
                             rejectHeaders,
@@ -506,63 +359,6 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
         }
     }
     /// <inheritdoc />
-    public async Task RedirectAsync(
-        IReadOnlyList<string> contactUris,
-        int statusCode = 302,
-        CancellationToken ct = default)
-    {
-        ThrowIfDisposed();
-        if (contactUris is null || contactUris.Count == 0)
-            throw new ArgumentException("At least one Contact URI is required for redirect.", nameof(contactUris));
-        if (statusCode < 300 || statusCode > 399)
-            throw new ArgumentOutOfRangeException(nameof(statusCode), statusCode, "Redirect status code must be 3xx (300–399).");
-        await _operationGate.WaitAsync(ct).ConfigureAwait(false);
-        try
-        {
-            if (State == SipDialogState.Terminated) return;
-            if (!_isInbound || State != SipDialogState.Ringing)
-                throw new InvalidOperationException(
-                    $"RedirectAsync is only valid for inbound dialogs in Ringing state; current state is {State}.");
-            if (_initialInvite is null || string.IsNullOrWhiteSpace(_localTag))
-                throw new InvalidOperationException("Inbound INVITE context is missing.");
-            // RFC 3261 §8.3: Build 3xx response from inbound INVITE.
-            // Record-Route MUST NOT be forwarded in a redirect response (§8.3).
-            // Contact header carries the redirect targets, NOT the local contact.
-            var redirectHeaders = _headerService.CreateResponseHeadersFromRequest(
-                _initialInvite,
-                _localTag,
-                includeContentType: false);
-            redirectHeaders.Remove("Record-Route");
-            redirectHeaders["Contact"] = string.Join(", ",
-                contactUris.Select(u => u.Contains('<') ? u : $"<{u}>"));
-            var reasonPhrase = statusCode switch
-            {
-                300 => "Multiple Choices",
-                301 => "Moved Permanently",
-                302 => "Moved Temporarily",
-                305 => "Use Proxy",
-                380 => "Alternative Service",
-                _ => "Redirect"
-            };
-            await _serverTransactions.SendResponseAsync(
-                    _initialInvite,
-                    _remoteEndPoint,
-                    _signalingTransport,
-                    statusCode,
-                    reasonPhrase,
-                    redirectHeaders,
-                    body: null,
-                    ct)
-                .ConfigureAwait(false);
-            TransitionTo(
-                SipDialogState.Terminated,
-                SipReasonHeader.CreateSipStatusReason(statusCode, reasonPhrase));
-        }
-        finally
-        {
-            ReleaseOperationGateSafe();
-        }
-    }
     /// <inheritdoc />
     public Task HoldAsync(string? sessionDescription = null, CancellationToken ct = default) =>
         SendReInviteAsync(SipDialogState.Established, sessionDescription, holdOffer: true, SipDialogState.OnHold, ct);
@@ -841,6 +637,18 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
     /// </summary>
     internal void ApplySessionTimerNegotiation(string? sessionExpiresHeader, bool localIsRequester)
         => _sessionTimers.ApplyNegotiation(sessionExpiresHeader, localIsRequester);
+    /// <inheritdoc />
+    public Task AnswerAsync(string? sessionDescription = null, CancellationToken ct = default)
+        => _inviteResponder.AnswerAsync(sessionDescription, ct);
+
+    /// <inheritdoc />
+    public Task RejectAsync(int statusCode = 486, string? reasonPhrase = null, CancellationToken ct = default)
+        => _inviteResponder.RejectAsync(statusCode, reasonPhrase, ct);
+
+    /// <inheritdoc />
+    public Task RedirectAsync(IReadOnlyList<string> contactUris, int statusCode = 302, CancellationToken ct = default)
+        => _inviteResponder.RedirectAsync(contactUris, statusCode, ct);
+
     private async Task<bool> SendReliableProvisionalAndWaitForPrackAsync(
         SipRequest invite,
         string localTag,
@@ -855,9 +663,9 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
                     HeaderService = _headerService,
                     ServerTransactions = _serverTransactions,
                     RemoteEndPoint = _remoteEndPoint,
-                    SignalingTransport = _signalingTransport,
+                    SignalingTransport = _config.SignalingTransport,
                     Logger = _logger,
-                    Timeout = _timeout,
+                    Timeout = _config.Timeout,
                     ReliableProvisionalT1 = ReliableProvisionalT1,
                     ReliableProvisionalT2 = ReliableProvisionalT2
                 },
@@ -957,7 +765,7 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
         IPEndPoint remoteEndPoint)
         => SipCallSessionUtilities.ApplyRemoteAssertedIdentity(
             _identityTrustPolicy,
-            _signalingTransport,
+            _config.SignalingTransport,
             _sync,
             ref _remoteAssertedIdentity,
             assertedIdentityHeader,
