@@ -83,7 +83,6 @@ public sealed class ComplianceMatrixEvidenceTests
     // off by naming the covering test in the row (or by writing one), then delete the line.
     private static readonly string[] UnnamedByAnyTestBaseline =
     [
-        "18.4 :: SendPayloadAsync",
     ];
 
     /// <summary>
