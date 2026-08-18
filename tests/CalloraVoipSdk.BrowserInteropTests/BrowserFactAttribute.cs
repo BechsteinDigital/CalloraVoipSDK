@@ -23,5 +23,21 @@ public sealed class ChromiumFactAttribute() : BrowserFactAttribute(BrowserEngine
 /// <summary>Interop-Test gegen headless Firefox (übersprungen, wenn nicht installiert).</summary>
 public sealed class FirefoxFactAttribute() : BrowserFactAttribute(BrowserEngine.Firefox);
 
+/// <summary>
+/// Wie <see cref="BrowserFactAttribute"/>, aber für parametrisierte Läufe — dieselbe Skip-Entscheidung zur
+/// Discovery-Zeit, damit ein fehlender Browser auch bei einer Theory sauber als „skipped" erscheint.
+/// </summary>
+public abstract class BrowserTheoryAttribute : TheoryAttribute
+{
+    protected BrowserTheoryAttribute(BrowserEngine engine)
+    {
+        if (!engine.IsAvailable)
+            Skip = $"{engine.Name} nicht im Playwright-Cache (~/.cache/ms-playwright/{engine.Name}-*) — Interop-Test übersprungen.";
+    }
+}
+
+/// <summary>Parametrisierter Interop-Test gegen headless Chromium (übersprungen, wenn nicht installiert).</summary>
+public sealed class ChromiumTheoryAttribute() : BrowserTheoryAttribute(BrowserEngine.Chromium);
+
 /// <summary>Interop-Test gegen headless WebKit (übersprungen, wenn nicht installiert).</summary>
 public sealed class WebKitFactAttribute() : BrowserFactAttribute(BrowserEngine.WebKit);
