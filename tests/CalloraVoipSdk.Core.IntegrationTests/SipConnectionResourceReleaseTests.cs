@@ -113,7 +113,26 @@ public sealed class SipConnectionResourceReleaseTests
     /// </summary>
     private static async Task AssertReleasedAsync(SipStreamConnection connection)
     {
-        await Assert.ThrowsAnyAsync<Exception>(
-            () => connection.SendAsync("OPTIONS sip:x SIP/2.0\r\n\r\n"u8.ToArray(), CancellationToken.None));
+        // The release runs slightly after onClosed fires (the receive loop signals the close, then the finally
+        // frees the resources), and a first TCP write after a peer close can still buffer rather than fault.
+        // So poll the observable consequence -- a send that fails once the resources are gone -- to a deadline,
+        // rather than asserting the very first call throws. A single-shot assertion here raced that ordering
+        // and flaked under CI load.
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+        while (DateTime.UtcNow < deadline)
+        {
+            try
+            {
+                await connection.SendAsync("OPTIONS sip:x SIP/2.0\r\n\r\n"u8.ToArray(), CancellationToken.None);
+            }
+            catch
+            {
+                return;   // the send failed — resources are released, which is the whole claim
+            }
+
+            await Task.Delay(20);
+        }
+
+        Assert.Fail("The connection kept accepting sends after a remote close — its resources were not released.");
     }
 }
