@@ -456,6 +456,13 @@ internal static class WebRtcSessionFactory
         if (localRecv.Count == 0 || remoteVideo is null)
             return [];
 
+        // RFC 8852: the peer must have echoed the RID header extension, or it cannot tag the layers it sends
+        // and we cannot demux them — so a send confirmation without the extension admits nothing. Mirrors the
+        // same guard on the send side (ConfirmedSimulcastRids). Before recv offers existed this path never
+        // resolved, so the missing guard only became reachable once an offer could ask recv (#317).
+        if (RidExtensionId(remoteVideo) is null)
+            return [];
+
         var remoteSend = new HashSet<string>(StringComparer.Ordinal);
         if (remoteVideo.Simulcast?.Send is { } remoteSendList)
             foreach (var id in remoteSendList)

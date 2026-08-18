@@ -164,6 +164,13 @@ internal sealed class BundledVideoTrack : IDisposable
     /// <summary>The configured simulcast <c>a=rid</c> layer ids (empty for a non-simulcast track).</summary>
     public IReadOnlyCollection<string> SendRids => _layers.Keys.ToArray();
 
+    /// <summary>
+    /// The <c>a=rid</c> layer ids negotiated to RECEIVE on this track (RFC 8853 §5.3): the recv RIDs this side
+    /// offered that the peer confirmed as send. Empty when no receive simulcast was negotiated. This is the
+    /// allowlist inbound RIDs are admitted against, surfaced so a consumer knows which layers to expect.
+    /// </summary>
+    public IReadOnlyCollection<string> ReceiveRids => _receiveRids.ToArray();
+
     /// <summary>Builds a non-simulcast video track (one RTP stream on the video MID).</summary>
     /// <param name="mid">The video m-line's MID token.</param>
     /// <param name="codecName">The negotiated video codec ("H264"/"VP8").</param>

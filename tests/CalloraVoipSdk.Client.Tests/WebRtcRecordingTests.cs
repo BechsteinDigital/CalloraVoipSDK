@@ -203,6 +203,7 @@ public sealed class WebRtcRecordingTests
         public SignalingState SignalingState => SignalingState.Stable;
         public string? LocalDescription => null;
         public IPEndPoint? LocalMediaEndPoint => null;
+        public IReadOnlyList<string> NegotiatedReceiveSimulcastRids => [];
         public event EventHandler<PeerConnectionState>? ConnectionStateChanged { add { } remove { } }
         public event EventHandler<SignalingState>? SignalingStateChanged { add { } remove { } }
         public event EventHandler<RemoteTrack>? TrackReceived { add { } remove { } }

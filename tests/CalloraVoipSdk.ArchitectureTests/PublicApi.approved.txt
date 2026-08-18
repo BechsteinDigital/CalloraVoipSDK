@@ -1062,6 +1062,7 @@
   CalloraVoipSdk.WebRtc.IPeerConnection.LocalDescription : System.String { get }
   CalloraVoipSdk.WebRtc.IPeerConnection.LocalIceCandidateDiscovered : event System.EventHandler<System.String>
   CalloraVoipSdk.WebRtc.IPeerConnection.LocalMediaEndPoint : System.Net.IPEndPoint { get }
+  CalloraVoipSdk.WebRtc.IPeerConnection.NegotiatedReceiveSimulcastRids : System.Collections.Generic.IReadOnlyList<System.String> { get }
   CalloraVoipSdk.WebRtc.IPeerConnection.RecommendedBitrateChanged : event System.EventHandler<CalloraVoipSdk.WebRtc.BitrateRecommendation>
   CalloraVoipSdk.WebRtc.IPeerConnection.RecommendedOutgoingBitrateBps : System.Nullable<System.Int64> { get }
   CalloraVoipSdk.WebRtc.IPeerConnection.RequestVideoKeyFrameAsync(System.String mid, System.Threading.CancellationToken cancellationToken = default) : System.Threading.Tasks.ValueTask<System.Boolean>

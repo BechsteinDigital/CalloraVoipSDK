@@ -90,6 +90,7 @@ internal sealed class PeerConnection : IPeerConnection
     public SignalingState SignalingState => MapSignaling(_peer.SignalingState);
     public string? LocalDescription => _peer.LocalDescription;
     public IPEndPoint? LocalMediaEndPoint => _peer.LocalMediaEndPoint;
+    public IReadOnlyList<string> NegotiatedReceiveSimulcastRids => _peer.NegotiatedReceiveSimulcastRids;
     public long? RecommendedOutgoingBitrateBps => _peer.RecommendedOutgoingBitrateBps;
 
     public event EventHandler<PeerConnectionState>? ConnectionStateChanged

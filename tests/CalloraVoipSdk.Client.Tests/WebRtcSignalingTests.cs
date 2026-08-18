@@ -105,6 +105,7 @@ public sealed class WebRtcSignalingTests
         public SignalingState SignalingState { get; private set; } = SignalingState.Stable;
         public string? LocalDescription => "OFFER";
         public IPEndPoint? LocalMediaEndPoint => null;
+        public IReadOnlyList<string> NegotiatedReceiveSimulcastRids => [];
 
         public event EventHandler<PeerConnectionState>? ConnectionStateChanged;
         public event EventHandler<SignalingState>? SignalingStateChanged { add { } remove { } }

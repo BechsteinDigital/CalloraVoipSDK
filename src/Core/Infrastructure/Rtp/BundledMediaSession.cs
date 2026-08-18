@@ -529,6 +529,13 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     /// <summary>The primary video track's simulcast <c>a=rid</c> layer ids, or empty when not simulcasting.</summary>
     public IReadOnlyCollection<string> VideoSendRids => _video.Primary?.SendRids ?? [];
 
+    /// <summary>
+    /// The primary video track's negotiated receive-simulcast <c>a=rid</c> layer ids (RFC 8853 §5.3): what
+    /// this side offered to receive and the peer confirmed it will send. Empty when no receive simulcast was
+    /// negotiated. Mirrors <see cref="VideoSendRids"/> for the receive direction.
+    /// </summary>
+    public IReadOnlyCollection<string> VideoReceiveRids => _video.Primary?.ReceiveRids ?? [];
+
     /// <summary>The remote media endpoint the shared transport sends to, or null before one is set.</summary>
     public IPEndPoint? RemoteEndPoint => _transport.RemoteEndPoint;
 
