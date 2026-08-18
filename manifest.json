@@ -732,6 +732,16 @@
     },
     {
       "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-073-stream-relay-transport-tcp-tls.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-073-stream-relay-transport-tcp-tls.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
       "source_relative_path": "docs/adr/README.md",
       "output": {
         ".html": {
