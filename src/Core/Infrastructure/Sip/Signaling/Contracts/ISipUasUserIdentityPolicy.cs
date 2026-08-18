@@ -7,8 +7,10 @@ namespace CalloraVoipSdk.Core.Infrastructure.Sip.Signaling;
 /// decide if it services the addressed user. If the user is not known, the UAS
 /// MUST respond with 404 Not Found.
 ///
-/// Implementations are injected via dependency injection and replace the default
-/// <see cref="AcceptAllSipUasUserIdentityPolicy"/> which accepts every inbound INVITE.
+/// The default is <see cref="AcceptAllSipUasUserIdentityPolicy"/>, which accepts every inbound request.
+/// Configuring served addresses-of-record selects <see cref="ServedUserSipIdentityPolicy"/> instead, which
+/// matches the Request-URI with a full RFC 3261 §19.1.4 URI comparison. This interface is internal: the
+/// selection is made from configuration, not by injecting a consumer implementation.
 /// </summary>
 internal interface ISipUasUserIdentityPolicy
 {

@@ -655,22 +655,25 @@ internal static class SipProtocol
         if (!TryDecomposeSipUri(uriA, out var a) || !TryDecomposeSipUri(uriB, out var b))
             return string.Equals(uriA.Trim(), uriB.Trim(), StringComparison.OrdinalIgnoreCase);
 
-        // Scheme: case-insensitive; sip ≠ sips
+        // Scheme: case-insensitive; sip ≠ sips (a cleartext identity must never match a TLS-required one).
         if (!string.Equals(a.Scheme, b.Scheme, StringComparison.OrdinalIgnoreCase))
             return false;
 
-        // User: case-sensitive; for user=phone normalize visual separators
-        var userA = a.User;
-        var userB = b.User;
+        // User (with password, as decomposed): case-sensitive, but a percent-escape of an unreserved character
+        // is equivalent to the character itself (§19.1.4 "Characters other than those in the reserved set are
+        // equivalent to their ""HEX HEX encoding"). Only unreserved escapes are decoded — decoding a reserved
+        // character would change what the component means, not just how it is written.
+        var userA = NormalizeUnreservedEscapes(a.User);
+        var userB = NormalizeUnreservedEscapes(b.User);
         var userParamA = GetUriParam(a.Params, "user");
         var userParamB = GetUriParam(b.Params, "user");
-        var isPhone = string.Equals(userParamA, "phone", StringComparison.OrdinalIgnoreCase)
-                   || string.Equals(userParamB, "phone", StringComparison.OrdinalIgnoreCase);
-        if (isPhone)
+        if (string.Equals(userParamA, "phone", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(userParamB, "phone", StringComparison.OrdinalIgnoreCase))
         {
-            userA = NormalizePhoneUser(userA);
-            userB = NormalizePhoneUser(userB);
-            if (!string.Equals(userA, userB, StringComparison.OrdinalIgnoreCase))
+            // user=phone: the user part is a telephone-subscriber, whose visual separators carry no meaning
+            // (RFC 3966 §3). Beyond §19.1.4 proper, but comparing +49-30-1 against +49301 as different numbers
+            // would be wrong in every direction that matters.
+            if (!string.Equals(NormalizePhoneUser(userA), NormalizePhoneUser(userB), StringComparison.OrdinalIgnoreCase))
                 return false;
         }
         else if (!string.Equals(userA, userB, StringComparison.Ordinal))
@@ -678,57 +681,83 @@ internal static class SipProtocol
             return false;
         }
 
-        // Host: case-insensitive
+        // Host: case-insensitive.
         if (!string.Equals(a.Host, b.Host, StringComparison.OrdinalIgnoreCase))
             return false;
 
-        // Port: resolve scheme default
-        var defaultPort = string.Equals(a.Scheme, "sips", StringComparison.OrdinalIgnoreCase) ? 5061 : 5060;
-        var portA = a.Port ?? defaultPort;
-        var portB = b.Port ?? defaultPort;
-        if (portA != portB)
+        // Port: compared as stated, NOT resolved to the scheme default. §19.1.4 is explicit and lists it as a
+        // worked example — "sip:bob@biloxi.com" and "sip:bob@biloxi.com:5060" are NOT equivalent, because the
+        // one that omits the port can still resolve elsewhere. Defaulting both to 5060 would equate an identity
+        // that is pinned to a port with one that is not.
+        if (a.Port != b.Port)
             return false;
 
-        // Transport: default is "udp" (RFC 3261 §19.1.4 example: transport=udp ≡ absent)
-        var transportA = GetUriParam(a.Params, "transport") ?? "udp";
-        var transportB = GetUriParam(b.Params, "transport") ?? "udp";
-        if (!string.Equals(transportA, transportB, StringComparison.OrdinalIgnoreCase))
-            return false;
-
-        // Known parameters without a default: absent ≠ any explicit value
-        foreach (var name in new[] { "maddr", "ttl", "user", "method" })
+        // Parameters present in BOTH must match; presence on only one side is decided per parameter below.
+        // Comparison is case-insensitive for names and values (§19.1.4: only the userinfo is case-sensitive).
+        foreach (var name in OneSidedSignificantUriParams)
         {
-            var pA = GetUriParam(a.Params, name);
-            var pB = GetUriParam(b.Params, name);
-            if (!string.Equals(pA, pB, StringComparison.OrdinalIgnoreCase))
+            // transport, user, ttl, method and maddr change how the URI resolves, so stating one is never the
+            // same as leaving it out — even when the stated value is the default (§19.1.4, and its
+            // "sip:bob@biloxi.com" vs "sip:bob@biloxi.com;transport=udp" example).
+            if (!string.Equals(GetUriParam(a.Params, name), GetUriParam(b.Params, name), StringComparison.OrdinalIgnoreCase))
                 return false;
         }
 
-        // lr: boolean parameter — presence matters, value does not
-        var lrA = GetUriParam(a.Params, "lr") is not null;
-        var lrB = GetUriParam(b.Params, "lr") is not null;
-        if (lrA != lrB) return false;
-
-        // Unknown parameters: any parameter on one side but not the other → not equal
-        // (RFC 3261 §19.1.4: "A URI that includes an unknown parameter MUST NOT be less
-        //  specific than one without that parameter.")
-        var knownNames = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase)
-            { "transport", "maddr", "ttl", "user", "method", "lr" };
-        var unknownA = ParseUnknownUriParams(a.Params, knownNames);
-        var unknownB = ParseUnknownUriParams(b.Params, knownNames);
-        if (unknownA.Count != unknownB.Count) return false;
-        foreach (var kv in unknownA)
+        // Every other parameter — including ones this stack does not know — matters only when BOTH URIs carry
+        // it. "All other uri-parameters appearing in only one URI are ignored when comparing the URIs": that is
+        // what makes "sip:carol@chicago.com" equivalent to "sip:carol@chicago.com;newparam=5".
+        var otherA = ParseUnknownUriParams(a.Params, OneSidedSignificantUriParams);
+        var otherB = ParseUnknownUriParams(b.Params, OneSidedSignificantUriParams);
+        foreach (var parameter in otherA)
         {
-            if (!unknownB.TryGetValue(kv.Key, out var bVal)) return false;
-            if (!string.Equals(kv.Value, bVal, StringComparison.OrdinalIgnoreCase)) return false;
+            if (otherB.TryGetValue(parameter.Key, out var valueB)
+                && !string.Equals(parameter.Value, valueB, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
         }
 
-        // URI headers — each header present in either URI must match
-        if (!SipUriHeadersEqual(a.Headers, b.Headers))
-            return false;
-
-        return true;
+        // URI headers are never ignored: one present in either URI must be present in both and match.
+        return SipUriHeadersEqual(a.Headers, b.Headers);
     }
+
+    // The uri-parameters whose mere presence is significant (RFC 3261 §19.1.4): each one changes how the URI
+    // resolves, so a URI that states it never matches one that omits it. Every other parameter is ignored when
+    // it appears on one side only.
+    private static readonly System.Collections.Generic.HashSet<string> OneSidedSignificantUriParams =
+        new(StringComparer.OrdinalIgnoreCase) { "transport", "user", "ttl", "method", "maddr" };
+
+    // Decodes the percent-escapes that stand for UNRESERVED characters (RFC 3261 §25.1: alphanum / mark), which
+    // §19.1.4 declares equivalent to the character itself. Escapes of reserved characters are left alone: "%40"
+    // is not an "@" for comparison purposes, it is an at-sign inside a component.
+    private static string NormalizeUnreservedEscapes(string? value)
+    {
+        if (string.IsNullOrEmpty(value) || !value.Contains('%', StringComparison.Ordinal))
+            return value ?? string.Empty;
+
+        var builder = new System.Text.StringBuilder(value.Length);
+        for (var i = 0; i < value.Length; i++)
+        {
+            if (value[i] == '%' && i + 2 < value.Length
+                && Uri.IsHexDigit(value[i + 1]) && Uri.IsHexDigit(value[i + 2]))
+            {
+                var decoded = (char)Convert.ToInt32(value.Substring(i + 1, 2), 16);
+                if (IsUnreserved(decoded))
+                {
+                    builder.Append(decoded);
+                    i += 2;
+                    continue;
+                }
+            }
+
+            builder.Append(value[i]);
+        }
+
+        return builder.ToString();
+    }
+
+    private static bool IsUnreserved(char c) =>
+        char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.' or '!' or '~' or '*' or '\'' or '(' or ')';
 
     /// <summary>
     /// Decomposes a SIP/SIPS URI (or name-addr) into its components.
