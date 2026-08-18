@@ -19,7 +19,7 @@ public sealed class SipUriEncodingTests
     [InlineData("a-b_c.d!e~f*g'h(i)j", "a-b_c.d!e~f*g'h(i)j")]   // mark: never escaped
     [InlineData("a&b=c+d$e,f;g?h/i", "a&b=c+d$e,f;g?h/i")]       // user-unreserved: never escaped
     public void Characters_allowed_in_a_user_part_are_left_alone(string user, string expected)
-        => Assert.Equal(expected, SipProtocol.SipUriEncodeUser(user));
+        => Assert.Equal(expected, SipUriProtocol.SipUriEncodeUser(user));
 
     [Theory]
     [InlineData("a@b", "a%40b")]      // "@" would end the user part
@@ -28,29 +28,29 @@ public sealed class SipUriEncodingTests
     [InlineData("a%b", "a%25b")]      // the escape character itself must be escaped
     [InlineData("a#b", "a%23b")]
     public void Characters_that_would_change_the_uri_structure_are_escaped(string user, string expected)
-        => Assert.Equal(expected, SipProtocol.SipUriEncodeUser(user));
+        => Assert.Equal(expected, SipUriProtocol.SipUriEncodeUser(user));
 
     [Fact]
     public void Non_ascii_is_escaped_as_utf8_octets()
     {
         // "ä" is U+00E4 → UTF-8 C3 A4. Escaping per octet is what §19.1.2 requires; escaping per char would
         // produce something no peer could decode back.
-        Assert.Equal("%C3%A4", SipProtocol.SipUriEncodeUser("ä"));
+        Assert.Equal("%C3%A4", SipUriProtocol.SipUriEncodeUser("ä"));
     }
 
     [Fact]
     public void Encoding_is_reversible_by_the_decoder()
     {
         foreach (var user in new[] { "alice", "a@b", "a b", "a%b", "ä", "a&b=c" })
-            Assert.Equal(user, SipProtocol.SipUriDecodeUser(SipProtocol.SipUriEncodeUser(user)));
+            Assert.Equal(user, SipUriProtocol.SipUriDecodeUser(SipUriProtocol.SipUriEncodeUser(user)));
     }
 
     [Fact]
     public void An_empty_or_absent_user_encodes_to_nothing()
     {
-        Assert.Equal(string.Empty, SipProtocol.SipUriEncodeUser(null));
-        Assert.Equal(string.Empty, SipProtocol.SipUriEncodeUser(""));
-        Assert.Equal(string.Empty, SipProtocol.SipUriDecodeUser(null));
+        Assert.Equal(string.Empty, SipUriProtocol.SipUriEncodeUser(null));
+        Assert.Equal(string.Empty, SipUriProtocol.SipUriEncodeUser(""));
+        Assert.Equal(string.Empty, SipUriProtocol.SipUriDecodeUser(null));
     }
 
     // RFC 3261 §19.1.6 / RFC 3966: a tel URI maps to a SIP URI whose user part is the number, carrying
@@ -66,7 +66,7 @@ public sealed class SipUriEncodingTests
     [InlineData("tel:+4930123456;phone-context=+49", "sip:+4930123456@example.com;user=phone")]
     public void A_tel_uri_maps_to_a_sip_uri(string telUri, string expected)
     {
-        Assert.True(SipProtocol.TryTelUriToSipUri(telUri, "example.com", out var sipUri));
+        Assert.True(SipUriProtocol.TryTelUriToSipUri(telUri, "example.com", out var sipUri));
         Assert.Equal(expected, sipUri);
     }
 
@@ -77,9 +77,9 @@ public sealed class SipUriEncodingTests
     [InlineData("")]
     [InlineData(null)]
     public void A_non_tel_or_empty_uri_does_not_map(string? telUri)
-        => Assert.False(SipProtocol.TryTelUriToSipUri(telUri, "example.com", out _));
+        => Assert.False(SipUriProtocol.TryTelUriToSipUri(telUri, "example.com", out _));
 
     [Fact]
     public void A_missing_domain_does_not_map()
-        => Assert.False(SipProtocol.TryTelUriToSipUri("tel:+4930123456", "", out _));
+        => Assert.False(SipUriProtocol.TryTelUriToSipUri("tel:+4930123456", "", out _));
 }

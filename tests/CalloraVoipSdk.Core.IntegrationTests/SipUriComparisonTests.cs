@@ -47,25 +47,25 @@ public sealed class SipUriComparisonTests
     [MemberData(nameof(Equivalent))]
     public void Rfc3261_equivalent_uris_compare_equal(string uriA, string uriB, string why)
     {
-        Assert.True(SipProtocol.SipUriEqual(uriA, uriB), $"RFC 3261 §19.1.4: '{uriA}' ≡ '{uriB}' — {why}.");
-        Assert.True(SipProtocol.SipUriEqual(uriB, uriA), $"comparison must be symmetric — {why}.");
+        Assert.True(SipUriProtocol.SipUriEqual(uriA, uriB), $"RFC 3261 §19.1.4: '{uriA}' ≡ '{uriB}' — {why}.");
+        Assert.True(SipUriProtocol.SipUriEqual(uriB, uriA), $"comparison must be symmetric — {why}.");
     }
 
     [Theory]
     [MemberData(nameof(NotEquivalent))]
     public void Rfc3261_non_equivalent_uris_compare_unequal(string uriA, string uriB, string why)
     {
-        Assert.False(SipProtocol.SipUriEqual(uriA, uriB), $"RFC 3261 §19.1.4: '{uriA}' ≠ '{uriB}' — {why}.");
-        Assert.False(SipProtocol.SipUriEqual(uriB, uriA), $"comparison must be symmetric — {why}.");
+        Assert.False(SipUriProtocol.SipUriEqual(uriA, uriB), $"RFC 3261 §19.1.4: '{uriA}' ≠ '{uriB}' — {why}.");
+        Assert.False(SipUriProtocol.SipUriEqual(uriB, uriA), $"comparison must be symmetric — {why}.");
     }
 
     [Fact]
     public void A_uri_equals_itself_and_null_equals_only_null()
     {
-        Assert.True(SipProtocol.SipUriEqual("sip:alice@atlanta.com", "sip:alice@atlanta.com"));
-        Assert.True(SipProtocol.SipUriEqual(null, null));
-        Assert.False(SipProtocol.SipUriEqual(null, "sip:alice@atlanta.com"));
-        Assert.False(SipProtocol.SipUriEqual("sip:alice@atlanta.com", null));
+        Assert.True(SipUriProtocol.SipUriEqual("sip:alice@atlanta.com", "sip:alice@atlanta.com"));
+        Assert.True(SipUriProtocol.SipUriEqual(null, null));
+        Assert.False(SipUriProtocol.SipUriEqual(null, "sip:alice@atlanta.com"));
+        Assert.False(SipUriProtocol.SipUriEqual("sip:alice@atlanta.com", null));
     }
 
     [Fact]
@@ -73,6 +73,6 @@ public sealed class SipUriComparisonTests
     {
         // Not from the RFC's example list, but §19.1 is explicit that the schemes are distinct — and treating
         // them as equal would let a TLS-required identity be matched by a cleartext one.
-        Assert.False(SipProtocol.SipUriEqual("sip:alice@atlanta.com", "sips:alice@atlanta.com"));
+        Assert.False(SipUriProtocol.SipUriEqual("sip:alice@atlanta.com", "sips:alice@atlanta.com"));
     }
 }
