@@ -12478,6 +12478,19 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.WebRtc.IPeerConnection.LocalMediaEndPoint
   nameWithType: IPeerConnection.LocalMediaEndPoint
+- uid: CalloraVoipSdk.WebRtc.IPeerConnection.NegotiatedReceiveSimulcastRids
+  name: NegotiatedReceiveSimulcastRids
+  href: _api/CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_NegotiatedReceiveSimulcastRids
+  commentId: P:CalloraVoipSdk.WebRtc.IPeerConnection.NegotiatedReceiveSimulcastRids
+  fullName: CalloraVoipSdk.WebRtc.IPeerConnection.NegotiatedReceiveSimulcastRids
+  nameWithType: IPeerConnection.NegotiatedReceiveSimulcastRids
+- uid: CalloraVoipSdk.WebRtc.IPeerConnection.NegotiatedReceiveSimulcastRids*
+  name: NegotiatedReceiveSimulcastRids
+  href: _api/CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_NegotiatedReceiveSimulcastRids_
+  commentId: Overload:CalloraVoipSdk.WebRtc.IPeerConnection.NegotiatedReceiveSimulcastRids
+  isSpec: "True"
+  fullName: CalloraVoipSdk.WebRtc.IPeerConnection.NegotiatedReceiveSimulcastRids
+  nameWithType: IPeerConnection.NegotiatedReceiveSimulcastRids
 - uid: CalloraVoipSdk.WebRtc.IPeerConnection.RecommendedBitrateChanged
   name: RecommendedBitrateChanged
   href: _api/CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_RecommendedBitrateChanged
