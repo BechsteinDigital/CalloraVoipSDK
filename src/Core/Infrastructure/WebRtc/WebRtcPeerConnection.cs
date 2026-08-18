@@ -66,23 +66,17 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     private readonly WebRtcAddedTrackSet _addedTracks;
     // The transport half of the lifecycle (extracted, sharing _sync so its serialisation is unchanged).
     private readonly WebRtcConnectionStateMachine _connectionState;
-    // The RFC 8829 §4.1.3 signalling state (offer/answer half of the lifecycle), separate from the ICE/DTLS
-    // transport state. Guarded by _sync; transitioned via TransitionSignalingTo (event fired outside the lock).
-    private WebRtcSignalingState _signalingState = WebRtcSignalingState.Stable;
-    private string? _remoteDescription;
-    private SdpMsid? _remoteAudioMsid;
-    private SdpMsid? _remoteVideoMsid;
-    private bool _hasRemoteAudio;
-    private bool _hasRemoteVideo;
-    // Every remote video m-line the peer will send on (P2c: N tracks), in remote m-line order, each with its
-    // MID and a=msid. Empty until a remote description is applied. Guarded by _sync.
-    private IReadOnlyList<RemoteVideoTrackInfo> _remoteVideoTracks = [];
-    // Every ADDITIONAL remote audio m-line the peer will send on (4.7.0: N audio tracks beyond the primary anchor),
-    // each with its MID and a=msid. Empty until a remote description is applied (and for a single-audio remote);
-    // the primary audio is surfaced via the mid-less audio path. Guarded by _sync.
-    private IReadOnlyList<RemoteAudioTrackInfo> _remoteAudioTracks = [];
-    private string? _localDescription;
-    private SdpSessionDescription? _localOfferModel;
+    // The RFC 8829 §4.1.3 offer/answer half of the lifecycle — the signalling state and the two descriptions that
+    // move with it, with each legal transition named and guarded (extracted; shares _sync, so a transition still
+    // commits atomically with the session and inventory writes around it). Separate from the transport state.
+    private readonly WebRtcNegotiationState _negotiation;
+    // The RFC 8829 offer/answer choreography, extracted: it owns the sequence, the peer owns the state it moves.
+    private readonly WebRtcOfferAnswerCycle _offerAnswer;
+    // The remote-track facts derived from the applied remote description (a=msid identities, has-audio/has-video,
+    // the per-m-line sending inventory). Held as the one immutable record the deriver returns rather than
+    // destructured into six fields: swapping one reference under _sync means a reader can never observe a
+    // half-updated inventory — six separate writes could be read between any two of them. Guarded by _sync.
+    private WebRtcRemoteMediaInventory? _remoteInventory;
     private BundledMediaSession? _session;
     private readonly SendDrainGate _sendGate = new();
     // Runs each media send / key-frame request under the drain lease (HARD-C6). Lock-free: it reads the live
@@ -224,6 +218,23 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         // The send-lease runner reads the live session under _sync via this snapshot delegate; the lock stays here.
         _sendLease = new WebRtcSendLease(_sendGate, () => { lock (_sync) { return _session; } });
         _mediaSocket = new WebRtcMediaSocketOwner(_sync, _options.LocalEndPoint);
+        _negotiation = new WebRtcNegotiationState(_sync);
+        // The RFC 8829 offer/answer choreography (extracted). Everything guarded stays here, behind the delegates
+        // below — each takes _sync itself, so the cycle never holds peer state, only drives it.
+        _offerAnswer = new WebRtcOfferAnswerCycle(
+            _negotiation, _negotiator, _parser, _serializer, _options.AudioCodecs, _renegotiator, _logger,
+            new WebRtcOfferAnswerHost(
+                SnapshotSession: () => { lock (_sync) { return (_session, _started); } },
+                EnsureLocalEndPoint: () => _mediaSocket.EnsureBound(),
+                MediaOptions: MediaOptions,
+                BuildSession: (remote, local, iceControlling) => WebRtcSessionFactory.TryCreate(
+                    remote, local, _options, _handshaker, _certificate, _loggerFactory, _mediaSocket.Socket,
+                    iceControlling, _relayAllocation.BuildOfferFactory()),
+                CommitSession: CommitSession,
+                OnSessionBuilt: OnSessionBuilt,
+                TransitionTo: TransitionTo,
+                RaiseSignalingState: RaiseSignalingState,
+                EmitLocalHosts: local => _candidateEmitter.EmitLocalHosts(_hostCandidateProvider.GetHostEndPoints(local))));
         // Shares _sync so the transport state keeps its original serialisation; the event raise (snapshot-and-
         // invoke, throwing handler logged not propagated) stays with the bridge and runs outside the lock.
         _connectionState = new WebRtcConnectionStateMachine(
@@ -234,22 +245,13 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     public WebRtcConnectionState State => _connectionState.Current;
 
     /// <summary>The current RFC 8829 §4.1.3 signalling state (offer/answer half of the lifecycle).</summary>
-    public WebRtcSignalingState SignalingState
-    {
-        get { lock (_sync) { return _signalingState; } }
-    }
+    public WebRtcSignalingState SignalingState => _negotiation.Current;
 
     /// <summary>The applied remote SDP offer, or null before <see cref="SetRemoteDescriptionAsync"/>.</summary>
-    public string? RemoteDescription
-    {
-        get { lock (_sync) { return _remoteDescription; } }
-    }
+    public string? RemoteDescription => _negotiation.RemoteDescription;
 
     /// <summary>The generated local SDP answer, or null before <see cref="SetRemoteDescriptionAsync"/>.</summary>
-    public string? LocalDescription
-    {
-        get { lock (_sync) { return _localDescription; } }
-    }
+    public string? LocalDescription => _negotiation.LocalDescription;
 
     /// <summary>
     /// The bound local media endpoint. Early-bind binds the media socket at <see cref="CreateOffer"/> /
@@ -283,13 +285,13 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     /// </summary>
     public SdpMsid? RemoteAudioMsid
     {
-        get { lock (_sync) { return _remoteAudioMsid; } }
+        get { lock (_sync) { return _remoteInventory?.AudioMsid; } }
     }
 
     /// <summary>The remote peer's video-track identity (a=msid), or null. See <see cref="RemoteAudioMsid"/>.</summary>
     public SdpMsid? RemoteVideoMsid
     {
-        get { lock (_sync) { return _remoteVideoMsid; } }
+        get { lock (_sync) { return _remoteInventory?.VideoMsid; } }
     }
 
     /// <summary>
@@ -299,7 +301,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     /// </summary>
     public IReadOnlyList<RemoteVideoTrackInfo> RemoteVideoTracks
     {
-        get { lock (_sync) { return _remoteVideoTracks; } }
+        get { lock (_sync) { return _remoteInventory?.VideoTracks ?? []; } }
     }
 
     /// <summary>
@@ -309,7 +311,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     /// </summary>
     public IReadOnlyList<RemoteAudioTrackInfo> RemoteAudioTracks
     {
-        get { lock (_sync) { return _remoteAudioTracks; } }
+        get { lock (_sync) { return _remoteInventory?.AudioTracks ?? []; } }
     }
 
     /// <summary>
@@ -318,13 +320,13 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     /// </summary>
     public bool HasRemoteAudio
     {
-        get { lock (_sync) { return _hasRemoteAudio; } }
+        get { lock (_sync) { return _remoteInventory?.HasRemoteAudio ?? false; } }
     }
 
     /// <summary>Whether the applied remote description contains a video media line. See <see cref="HasRemoteAudio"/>.</summary>
     public bool HasRemoteVideo
     {
-        get { lock (_sync) { return _hasRemoteVideo; } }
+        get { lock (_sync) { return _remoteInventory?.HasRemoteVideo ?? false; } }
     }
 
     /// <summary>Cumulative transport counters for the media session, or null before a session is built.</summary>
@@ -387,13 +389,10 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     public string AddAudioTrack(WebRtcAddedAudioTrack track)
     {
         ArgumentNullException.ThrowIfNull(track);
-        // The closed guard reads the _sync-guarded signalling state; the added-track set is self-locking, so the
-        // record itself happens outside _sync (the set interacts with no other peer state — see WebRtcAddedTrackSet).
-        lock (_sync)
-        {
-            if (_signalingState == WebRtcSignalingState.Closed)
-                throw new InvalidOperationException("Cannot add an audio track after the peer is closed.");
-        }
+        // The closed guard reads the signalling state under its gate; the added-track set is self-locking, so the
+        // record itself happens outside it (the set interacts with no other peer state — see WebRtcAddedTrackSet).
+        if (_negotiation.Current == WebRtcSignalingState.Closed)
+            throw new InvalidOperationException("Cannot add an audio track after the peer is closed.");
 
         return _addedTracks.AddAudio(track);
     }
@@ -415,11 +414,8 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     public string AddVideoTrack(WebRtcAddedVideoTrack track)
     {
         ArgumentNullException.ThrowIfNull(track);
-        lock (_sync)
-        {
-            if (_signalingState == WebRtcSignalingState.Closed)
-                throw new InvalidOperationException("Cannot add a video track after the peer is closed.");
-        }
+        if (_negotiation.Current == WebRtcSignalingState.Closed)
+            throw new InvalidOperationException("Cannot add a video track after the peer is closed.");
 
         return _addedTracks.AddVideo(track);
     }
@@ -440,23 +436,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         var offerModel = _negotiator.CreateOffer(
             local, _options.AudioCodecs, SdpMediaDirection.SendRecv, MediaOptions(local));
         var offerSdp = _serializer.Serialize(offerModel);
-        bool enteredHaveLocalOffer;
-        lock (_sync)
-        {
-            // RFC 8829 §4.1.3: createOffer + setLocalDescription is valid from stable (first offer) and is
-            // idempotent from have-local-offer (re-offer before any answer replaces the pending offer, state
-            // unchanged). Any other state (a remote offer is pending, or the peer is closed) is an invalid
-            // transition and fails loudly rather than silently overwriting negotiation state.
-            if (_signalingState is not (WebRtcSignalingState.Stable or WebRtcSignalingState.HaveLocalOffer))
-                throw new InvalidOperationException(
-                    $"Cannot create an offer in signalling state '{_signalingState}': an offer is valid only " +
-                    "from Stable or HaveLocalOffer (RFC 8829 §4.1.3).");
-
-            _localOfferModel = offerModel;
-            _localDescription = offerSdp;
-            enteredHaveLocalOffer = _signalingState == WebRtcSignalingState.Stable;
-            _signalingState = WebRtcSignalingState.HaveLocalOffer;
-        }
+        var enteredHaveLocalOffer = _negotiation.EnterHaveLocalOffer(offerModel, offerSdp);
 
         // Only the Stable → HaveLocalOffer edge is a transition; a re-offer within HaveLocalOffer fires no event.
         if (enteredHaveLocalOffer)
@@ -497,226 +477,8 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     /// <exception cref="ArgumentException">The remote description is missing or not valid SDP.</exception>
     /// <exception cref="InvalidOperationException">As the answerer, no answer could be negotiated.</exception>
     public Task<string> SetRemoteDescriptionAsync(string remoteSdp, CancellationToken cancellationToken = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(remoteSdp);
-        cancellationToken.ThrowIfCancellationRequested();
+        => _offerAnswer.ApplyRemoteAsync(remoteSdp, cancellationToken);
 
-        // Untrusted remote SDP over the public SetRemoteDescription path (no SIP transport body cap):
-        // the capped, non-throwing parser rejects an over-limit or malformed body as a controlled failure.
-        if (!_parser.TryParse(remoteSdp, out var remote))
-            throw new ArgumentException("The remote description is not valid SDP.", nameof(remoteSdp));
-
-        SdpSessionDescription pendingOffer;
-        string? pendingLocalDescription;
-        bool renegotiate;
-        lock (_sync)
-        {
-            // A second offer/answer cycle on a running session is renegotiation (RFC 8829 P3b-3): keep the
-            // shared transport/DTLS/ICE/SRTP and apply only the video-track diff (an ICE restart is rejected
-            // there). Decided under the lock; the diff apply is dispatched below, outside it (K3).
-            renegotiate = _session is not null;
-
-            // A session that was already started but never built (StartAsync on a non-bundle exchange) has no
-            // renegotiation path — the diff needs a live session. Fail loudly rather than rebuild mid-flight.
-            if (!renegotiate && _started)
-                throw new InvalidOperationException(
-                    "Cannot apply a remote description after StartAsync without a media session; " +
-                    "dispose this peer and create a new one.");
-        }
-
-        if (renegotiate)
-            return RenegotiateAsync(remoteSdp, remote);
-
-        lock (_sync)
-        {
-            // RFC 8829 §4.1.3: setRemoteDescription is valid from HaveLocalOffer (offerer applies the answer)
-            // or Stable (answerer applies the offer); HaveRemoteOffer/Closed are invalid transitions.
-            if (_signalingState is not (WebRtcSignalingState.Stable or WebRtcSignalingState.HaveLocalOffer))
-                throw new InvalidOperationException(
-                    $"Cannot apply a remote description in signalling state '{_signalingState}' (RFC 8829 §4.1.3).");
-
-            // Capture the offerer state as one snapshot under the gate (HARD-C6): the local offer model is the
-            // offerer/answerer discriminator the session build uses, kept consistent with the transport path.
-            pendingOffer = _localOfferModel!;
-            pendingLocalDescription = _localDescription;
-
-            // Answerer (no local offer): enter HaveRemoteOffer now so the two-transition path is observable
-            // (the event fires below, outside the lock); the offerer stays in HaveLocalOffer until applied.
-            if (pendingOffer is null)
-                _signalingState = WebRtcSignalingState.HaveRemoteOffer;
-        }
-
-        // Answerer's first transition: fire outside the lock (K3). A negotiation failure below still leaves the
-        // peer in HaveRemoteOffer, mirroring W3C where a failed createAnswer does not roll signalling back.
-        if (pendingOffer is null)
-            RaiseSignalingState(WebRtcSignalingState.HaveRemoteOffer);
-
-        SdpSessionDescription localModel;
-        string localSdp;
-        IPEndPoint? answererLocal = null;
-        if (pendingOffer is not null)
-        {
-            // Offerer: the remote description is the answer. Fail closed unless it is a valid RFC 3264 §6
-            // response to our offer, before building any transport or track (P1-b).
-            if (SdpAnswerValidator.Validate(pendingOffer, remote) is { } answerViolation)
-            {
-                TransitionTo(WebRtcConnectionState.Failed);
-                throw new InvalidOperationException($"Remote answer is not a valid response to the local offer: {answerViolation}");
-            }
-
-            localModel = pendingOffer;
-            localSdp = pendingLocalDescription!;
-        }
-        else
-        {
-            // Answerer: the remote description is the offer; negotiate our answer.
-            var local = _mediaSocket.EnsureBound();
-            answererLocal = local;
-            var result = _negotiator.NegotiateAnswer(
-                remote, local, _options.AudioCodecs, SdpMediaDirection.SendRecv, MediaOptions(local));
-            if (!result.Success || result.Answer is null)
-            {
-                TransitionTo(WebRtcConnectionState.Failed);
-                throw new InvalidOperationException("Could not negotiate an answer for the remote description.");
-            }
-
-            localModel = result.Answer;
-            localSdp = _serializer.Serialize(result.Answer);
-        }
-
-        // Build the shared DTLS-SRTP/BUNDLE media transport from both descriptions; a non-bundle exchange
-        // yields no session (logged; StartAsync surfaces it). The offerer holds the ICE controlling role
-        // (RFC 8445 §6.1.1); a relay ICE local candidate rides the socket only when a TURN allocation was
-        // already gathered on it (the answerer adopts its allocation later — a follow-up).
-        var session = WebRtcSessionFactory.TryCreate(
-            remote, localModel, _options, _handshaker, _certificate, _loggerFactory, _mediaSocket.Socket,
-            iceControlling: pendingOffer is not null,
-            relayIceBindingFactory: _relayAllocation.BuildOfferFactory());
-        if (session is null)
-            _logger.LogWarning("The remote description did not negotiate a BUNDLE media session; no transport was built.");
-
-        lock (_sync)
-        {
-            _remoteDescription = remoteSdp;
-            _localDescription = localSdp;
-            _session = session;
-            // The transport now owns the pre-bound socket (if a session was built); DisposeAsync must not
-            // dispose it again.
-            _mediaSocket.MarkHandedOver(session is not null);
-            // Retain the remote track identity (a=msid) so the receiver can group inbound tracks by the
-            // remote MediaStream (the W3C RTCTrackEvent.streams semantics).
-            ApplyRemoteInventory(remote);
-            // Both roles settle to Stable now the exchange is complete: the offerer from HaveLocalOffer (answer
-            // applied) and the answerer from HaveRemoteOffer (answer produced) — RFC 8829 §4.1.3. The event is
-            // fired below, outside the lock (K3).
-            _signalingState = WebRtcSignalingState.Stable;
-        }
-
-        // Publish _session before wiring its event handlers, so a state-transition callback can never
-        // fire against a peer that has not yet recorded the session it belongs to (HARD-C6).
-        if (session is not null)
-        {
-            WireSession(session);
-            // Hand the session to the trickle receiver: it drains the candidates buffered before the session
-            // existed and routes later ones live, under its own gate so none is lost (RFC 8838).
-            _trickleIce.AttachSession(session);
-        }
-
-        TransitionTo(WebRtcConnectionState.Connecting);
-        RaiseSignalingState(WebRtcSignalingState.Stable);
-        if (answererLocal is not null)
-            _candidateEmitter.EmitLocalHosts(_hostCandidateProvider.GetHostEndPoints(answererLocal));
-        return Task.FromResult(localSdp);
-    }
-
-    // Applies a second offer/answer cycle to the running session as a video-track diff (RFC 8829 renegotiation,
-    // P3b-3): no transport/DTLS/ICE/SRTP rebuild — only AddVideoTrack / SetVideoTrackInactive on the live session.
-    // The signalling state runs the same RFC 8829 §4.1.3 transitions as the first cycle (offerer:
-    // HaveLocalOffer → Stable; answerer: Stable → HaveRemoteOffer → Stable), but the discriminator is the current
-    // signalling state, not "was a local offer created" (that stays set after cycle 1): HaveLocalOffer means a fresh
-    // re-offer was created here and this remote is its answer; Stable means this remote is a new offer to answer.
-    private async Task<string> RenegotiateAsync(string remoteSdp, SdpSessionDescription remote)
-    {
-        bool isAnswerer;
-        BundledMediaSession session;
-        SdpSessionDescription newLocalModel;
-        string newLocalSdp;
-        lock (_sync)
-        {
-            session = _session!;
-
-            // RFC 8829 §4.1.3: a re-offer is applied from HaveLocalOffer (offerer, our re-offer's answer) or from
-            // Stable (answerer, a new remote offer). Any other state is an invalid transition.
-            if (_signalingState is not (WebRtcSignalingState.Stable or WebRtcSignalingState.HaveLocalOffer))
-                throw new InvalidOperationException(
-                    $"Cannot apply a remote description in signalling state '{_signalingState}' (RFC 8829 §4.1.3).");
-
-            isAnswerer = _signalingState == WebRtcSignalingState.Stable;
-            // Offerer: our re-offer (already produced by CreateOffer) is the local description and the remote is its
-            // answer. Answerer: negotiate below; enter HaveRemoteOffer so the two-transition answerer path is
-            // observable (the event fires outside the lock).
-            newLocalModel = _localOfferModel!;
-            newLocalSdp = _localDescription!;
-            if (isAnswerer)
-                _signalingState = WebRtcSignalingState.HaveRemoteOffer;
-        }
-
-        // Compute + apply the video-track diff on the live session — outside _sync, since AddVideoTrack /
-        // SetVideoTrackInactive take the session's own track-mutation gate (K3). The renegotiator rejects an ICE
-        // restart (a rotated remote ICE ufrag). A failure leaves the running tracks untouched and the caller sees it.
-        IPEndPoint? answererLocal = null;
-        if (isAnswerer)
-        {
-            RaiseSignalingState(WebRtcSignalingState.HaveRemoteOffer);
-            answererLocal = _mediaSocket.EnsureBound();
-            try
-            {
-                newLocalModel = await _renegotiator.NegotiateAnswerAndApplyAsync(
-                    session, remote,
-                    new WebRtcRenegotiationAnswerContext(_negotiator, answererLocal, _options.AudioCodecs, () => MediaOptions(answererLocal)));
-            }
-            catch
-            {
-                // A failed re-answer throws before any track mutation (running session intact), but would strand
-                // the peer in HaveRemoteOffer (both the entry guard and CreateOffer reject that). Roll signalling
-                // back to Stable so a later attempt is possible, then re-throw (not swallowed).
-                lock (_sync)
-                    _signalingState = WebRtcSignalingState.Stable;
-                RaiseSignalingState(WebRtcSignalingState.Stable);
-                throw;
-            }
-            newLocalSdp = _serializer.Serialize(newLocalModel);
-        }
-        else
-        {
-            // P1-b: a re-answer gets the same RFC 3264 §6 validation; a bad one rolls signalling back to
-            // Stable (the live session stays intact) and throws, mirroring the answerer failure path.
-            if (SdpAnswerValidator.Validate(newLocalModel, remote) is { } reViolation)
-            {
-                lock (_sync) _signalingState = WebRtcSignalingState.Stable;
-                RaiseSignalingState(WebRtcSignalingState.Stable);
-                throw new InvalidOperationException($"Remote re-answer is not a valid response to the local re-offer: {reViolation}");
-            }
-
-            await _renegotiator.ApplyReAnswerAsync(session, newLocalModel, remote);
-        }
-
-        lock (_sync)
-        {
-            _remoteDescription = remoteSdp;
-            _localDescription = newLocalSdp;
-            // Refresh the remote track identity/inventory from the new description (P2c: the receiver re-materialises
-            // its remote tracks from this). The transport is unchanged; only the advertised track set moved.
-            ApplyRemoteInventory(remote);
-            // Both roles settle to Stable now the re-exchange is complete (RFC 8829 §4.1.3).
-            _signalingState = WebRtcSignalingState.Stable;
-        }
-
-        RaiseSignalingState(WebRtcSignalingState.Stable);
-        if (answererLocal is not null)
-            _candidateEmitter.EmitLocalHosts(_hostCandidateProvider.GetHostEndPoints(answererLocal));
-        return newLocalSdp;
-    }
 
     /// <summary>
     /// Starts the shared transport: the receive loop, the ICE consent loop, and the DTLS handshake.
@@ -895,6 +657,34 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     // Wires the built session's transport-lifecycle and inbound-media events onto this peer via the event bridge.
     // The peer supplies the raise delegates (null-conditional invoke of THIS peer's events); TransitionTo, which
     // owns the _sync-guarded connection state, stays here and is passed as a delegate.
+    // Commits a completed exchange as one atomic step, so nothing can observe a peer that is Stable but has no
+    // session (or the reverse). On a renegotiation the session is the one already live and only the inventory and
+    // the descriptions move; the hand-over flag is already true and re-asserting it is a no-op.
+    private void CommitSession(
+        BundledMediaSession? session, SdpSessionDescription remote, string remoteSdp, string localSdp)
+    {
+        lock (_sync)
+        {
+            _session = session;
+            // The transport now owns the pre-bound socket (if a session was built); DisposeAsync must not
+            // dispose it again.
+            _mediaSocket.MarkHandedOver(session is not null);
+            // Retain the remote track identity (a=msid) so the receiver can group inbound tracks by the
+            // remote MediaStream (the W3C RTCTrackEvent.streams semantics).
+            _remoteInventory = WebRtcRemoteMediaInventory.FromRemoteDescription(remote);
+            _negotiation.SettleStable(remoteSdp, localSdp);
+        }
+    }
+
+    // Runs once a newly built session has been published: its events are wired first, then it is handed to the
+    // trickle receiver, which drains the candidates buffered before it existed and routes later ones live
+    // (RFC 8838) under its own gate so none is lost.
+    private void OnSessionBuilt(BundledMediaSession session)
+    {
+        WireSession(session);
+        _trickleIce.AttachSession(session);
+    }
+
     private void WireSession(BundledMediaSession session)
     {
         _sessionEvents.WireSession(
@@ -928,21 +718,6 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             _mediaStreamId,
             _audioTrackId,
             _videoTrackId);
-
-    // Records the remote track facts (a=msid identity, has-audio/has-video, the per-m-line sending video
-    // inventory, derived by WebRtcRemoteMediaInventory) from a newly-applied remote description, so the receiver
-    // materialises its remote tracks from it. Shared by the first cycle and renegotiation. The CALLER MUST hold
-    // _sync (it writes the guarded fields directly); it never re-locks.
-    private void ApplyRemoteInventory(SdpSessionDescription remote)
-    {
-        var inventory = WebRtcRemoteMediaInventory.FromRemoteDescription(remote);
-        _hasRemoteAudio = inventory.HasRemoteAudio;
-        _hasRemoteVideo = inventory.HasRemoteVideo;
-        _remoteAudioMsid = inventory.AudioMsid;
-        _remoteVideoMsid = inventory.VideoMsid;
-        _remoteAudioTracks = inventory.AudioTracks;
-        _remoteVideoTracks = inventory.VideoTracks;
-    }
 
     private void TransitionTo(WebRtcConnectionState next) => _connectionState.TransitionTo(next);
 
@@ -978,8 +753,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             orphanSocket = _mediaSocket.TakeOrphan();
             // Signalling terminates at Closed (RFC 8829 §4.1.3), idempotent across a double dispose. The event
             // is fired below, outside the lock (K3).
-            signalingClosed = _signalingState != WebRtcSignalingState.Closed;
-            _signalingState = WebRtcSignalingState.Closed;
+            signalingClosed = _negotiation.Close();
         }
 
         TransitionTo(WebRtcConnectionState.Closed);
