@@ -21,6 +21,19 @@ Breaking changes after adoption must be intentional, documented and detectable b
 - Removing or renaming a public type/member is breaking.
 - Changing method signatures, parameter types/order, return type, or behavior-contract in incompatible form is breaking.
 - Tightening nullability in a way that invalidates existing consumer code is treated as breaking.
+- **Adding a member to a public interface is additive, not breaking.** The SDK's public interfaces
+  (`IVoipClient`, `ICall`, `IPeerConnection`, …) are *consumption* contracts: consumers call them, and a new
+  member never invalidates calling code. The SDK does **not** guarantee these interfaces stay stable for
+  *external implementers* — a party that implements one adds the new member, the same edit the in-repo test
+  doubles make in the same PR. This is why the surface gate (§4) classifies an added member as additive.
+  - Precedent (consistent since before this clause): `ICall` gained four members in 4.9.0 as an explicitly
+    "purely additive minor with no breaking change", and `IPeerConnection` gained `TrackReceived`,
+    `SignalingStateChanged`, `DtmfReceived`, `RecommendedBitrateChanged`, and `VideoTrackKeyFrameRequested` (#227)
+    the same way. Every CHANGELOG entry marked breaking is a removal, rename, or namespace move — never an
+    addition.
+  - Event members specifically **cannot** carry a safe default implementation: a default `add`/`remove` would
+    silently swallow subscriptions. That is the concrete reason external implementation of these interfaces is
+    outside the stability contract rather than something a default member papers over.
 
 3. Deprecation workflow
 - Preferred path: mark old API with `[Obsolete(..., false)]` first.
