@@ -13,7 +13,7 @@ namespace CalloraVoipSdk.Core.Infrastructure.Sip.Routing;
 /// </summary>
 internal sealed class SipDnsRouteResolver : ISipRouteResolver
 {
-    private readonly LookupClient _lookupClient;
+    private readonly IDnsQuery _lookupClient;
     private readonly ILogger<SipDnsRouteResolver> _logger;
     private readonly Func<int, int> _nextInt;
 
@@ -34,10 +34,13 @@ internal sealed class SipDnsRouteResolver : ISipRouteResolver
     }
 
     /// <summary>
-    /// Creates a resolver with explicit lookup client dependency.
+    /// Creates a resolver with an explicit lookup dependency. Typed as <see cref="IDnsQuery"/> rather than the
+    /// concrete <c>LookupClient</c> so the RFC 3263 chain can be driven from canned responses: the ordering
+    /// rules (NAPTR service preference, SRV priority/weight) are the part worth pinning, and against live DNS
+    /// they are whatever the zone happens to say today.
     /// </summary>
     public SipDnsRouteResolver(
-        LookupClient lookupClient,
+        IDnsQuery lookupClient,
         ILoggerFactory loggerFactory,
         Func<int, int>? nextInt = null)
     {

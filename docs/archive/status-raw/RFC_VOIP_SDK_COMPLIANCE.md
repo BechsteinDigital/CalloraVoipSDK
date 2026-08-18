@@ -107,7 +107,7 @@ wenn auch die jeweiligen Update-RFCs berücksichtigt sind.
 | 8.1.1.8 | Contact | Ja | Erledigt | RFC 5627 (GRUU), RFC 5626 (Outbound/reg-id) | INVITE trägt genau einen Contact; SIPS-Contact-Erzwingung. `SipCallSessionHeaderService.cs` |
 | 8.1.1.9 | Supported and Require | Ja | Erledigt | – | Require/Proxy-Require; 420-Retry mit token-basiertem Filtering. `SipRequireOptionPolicy.cs` |
 | 8.1.1.10 | Additional Message Components | Ja | Erledigt | RFC 4028 (Session-Timer), RFC 3323 (Privacy) | UAC erzeugt methodenspezifische Komponenten. |
-| 8.1.2 | Sending the Request | Ja | Erledigt | RFC 3263 (DNS-Lookup), RFC 5626 (Flow-Token) | UAC sendet über RFC 3263-Kandidatenlisten, Failover, Redirect-Zielverfolgung. `SipDnsRouteResolver.cs` |
+| 8.1.2 | Sending the Request | Ja | Erledigt | RFC 3263 (DNS-Lookup), RFC 5626 (Flow-Token) | UAC sendet über RFC 3263-Kandidatenlisten, Failover, Redirect-Zielverfolgung. `SipDnsRouteResolver.cs` — Kandidatenbildung belegt durch `SipDnsRouteResolverRfc3263Tests` |
 | 8.1.3 | Processing Responses | Ja | Erledigt | – | §8.1.3.1–8.1.3.5 implementiert. `SipClientTransactionExecutor.cs` |
 | 8.1.3.1 | Transaction Layer Errors | Ja | Erledigt | – | 408/503-Synthese bei Timeout/Transportversagen. |
 | 8.1.3.2 | Unrecognized Responses | Ja | Erledigt | – | Normalisierung auf Klassen-x00 / 183. |
@@ -141,7 +141,7 @@ wenn auch die jeweiligen Update-RFCs berücksichtigt sind.
 | 10.2.3 | Fetching Bindings | Nein | **Erledigt** | – | `FetchBindingsAsync` sendet REGISTER ohne Contact; Bindungen aus 200-OK-Contact in `RegisteredBindings` geparst. |
 | 10.2.4 | Refreshing Bindings | Nein | **Erledigt** | – | Call-ID-Persistenz via `ExistingCallId`/`StartCSeq`; `SipLineChannel` bewahrt Call-ID + CSeq über Refresh-Zyklen. `NextCSeq` im Result. |
 | 10.2.5 | Setting the Internal Clock | Nein | Teilweise | – | Date-Header aus 200 OK nicht ausgewertet (kein RTP-Zeitstempel-Sync erforderlich auf UAC-Seite). |
-| 10.2.6 | Discovering a Registrar | Nein | **Erledigt** | RFC 3263 (DNS-basierte Registrar-Ermittlung) | DNS-Routing via `SipDnsRouteResolver.cs`; Route-Candidates; SIPS-Scheme-Erkennung. |
+| 10.2.6 | Discovering a Registrar | Nein | **Erledigt** | RFC 3263 (DNS-basierte Registrar-Ermittlung) | DNS-Routing via `SipDnsRouteResolver.cs`; Route-Candidates; SIPS-Scheme-Erkennung. Belegt durch `SipDnsRouteResolverRfc3263Tests`. |
 | 10.2.7 | Transmitting a Request | Nein | **Erledigt** | – | `SipClientTransactionExecutor`; Timeout-Handling; Retry für mehrere Route-Kandidaten. |
 | 10.2.8 | Error Responses | Nein | **Erledigt** | – | 401/407 Digest-Retry; 423 Min-Expires; 3xx Redirect; 413/415/416 Fallback; Telemetrie-Events. |
 | 10.3 | Processing REGISTER Requests | Nein | N/A | – | UAS/Registrar-Seite: SDK ist ein User Agent, kein Registrar — Out-of-Scope. |
@@ -213,7 +213,7 @@ wenn auch die jeweiligen Update-RFCs berücksichtigt sind.
 | 19.1.2 | Character Escaping Requirements | Nein | **Erledigt** | – | `SipUriProtocol.SipUriEncodeUser` / `SipUriDecodeUser`: RFC-konforme Percent-Encoding/Decoding für User-Info-Teil. Belegt durch `SipUriEncodingTests` (§25.1-Zeichenklassen, UTF-8-Oktett-Escaping, Round-Trip). |
 | 19.1.3 | Example SIP and SIPS URIs | - | N/A | – | Beispielabschnitt. |
 | 19.1.4 | URI Comparison | Nein | **Erledigt** | – | `SipUriProtocol.SipUriEqual`, angewandt von `ServedUserSipIdentityPolicy` (§8.2.2.1). Schema/Host case-insensitiv, User case-sensitiv inkl. Unreserved-Escape-Normalisierung; Port und `transport` werden **wie angegeben** verglichen (weggelassen ≠ explizit Default); `user`/`ttl`/`method`/`maddr` einseitig ⇒ ungleich, alle übrigen Parameter einseitig ⇒ ignoriert; URI-Header vollständig. Belegt durch `SipUriComparisonTests` gegen die zehn Beispielpaare aus §19.1.4. **Korrektur 2026-08-18:** die vorige Fassung war als erledigt geführt, verletzte aber fünf dieser zehn Beispiele (Port- und transport-Defaults wurden aufgelöst, unbekannte Parameter zählten einseitig, Escapes wurden nicht normalisiert) und hatte keinen Aufrufer und keinen Test. |
-| 19.1.5 | Forming Requests from a URI | Nein | **Erledigt** | – | `TryParseSipUri` + `InferTransport` + DNS-Auflösung via `SipDnsRouteResolver`; Transport-Parameter aus URI ausgewertet. |
+| 19.1.5 | Forming Requests from a URI | Nein | **Erledigt** | – | `TryParseSipUri` + DNS-Auflösung via `SipDnsRouteResolver` — belegt durch `SipDnsRouteResolverRfc3263Tests` (NAPTR-Order entscheidet, Service-Feld bestimmt den Transport, SIPS+D2T→TLS); Transport-Parameter aus URI ausgewertet. |
 | 19.1.6 | Relating SIP URIs and tel URLs | Nein | **Erledigt** | RFC 3966 (The tel URI) | `SipUriProtocol.TryTelUriToSipUri`: `tel:+1-800-…` → `sip:+1800…@domain;user=phone`; visuelle Trennzeichen normalisiert; phone-context-Parameter entfernt. Belegt durch `SipUriEncodingTests` (RFC-3966-visual-separator, phone-context, Negativfälle). |
 | 19.2 | Option Tags | Nein | **Erledigt** | – | `SipRequireOptionPolicy` — belegt durch `SipViaReflectionAndEscalationTests` (unterstützte Tags akzeptiert, unbekannte einzeln und dedupliziert im Unsupported-Header, fehlender Header kein Verstoß): Require-Validierung mit Supported={100rel, timer, replaces}; 420+Unsupported bei unbekannten Tags; Supported-Header gesetzt. |
 | 19.3 | Tags | Nein | **Erledigt** | – | `SipProtocol.NewTag()` → GUID-basiert (global unique, cryptographically random per RFC §19.3); From-Tag (UAC) / To-Tag (UAS) korrekt gesetzt; Dialog-Matching über From/To-Tags. |
@@ -281,7 +281,7 @@ wenn auch die jeweiligen Update-RFCs berücksichtigt sind.
 | 26.1.4 | Tearing Down Sessions | Nein | **Erledigt** | – | Dialog-Matching (Call-ID + From-tag + To-tag) in `SipDialogManager`; BYE/re-INVITE nur im etablierten Dialog erlaubt. |
 | 26.1.5 | Denial of Service and Amplification | Nein | **Erledigt** | – | Max-Forwards-Validierung (483 Too Many Hops); Loop-Detection via branch-Prefix; **max. Nachrichtengröße 65 536 Bytes** in `SipWireProtocol` (DoS-Guard). Tests in `SipSection26SecurityTests.cs`. |
 | 26.2.1 | Transport and Network Layer Security | Nein | **Erledigt** | RFC 5246, RFC 8446 | TLS 1.2/1.3 via `TlsConfiguration.cs`; SRTP-Policy enum (Disabled/Optional/Required); UDP/TCP/TLS/WS/WSS alle unterstützt. |
-| 26.2.2 | SIPS URI Scheme | Nein | **Erledigt** | – | `SipProtocol.IsSipsUri()`; `InferTransport` erzwingt TLS für `sips:`; DNS NAPTR SIPS+D2T/SIPS+D2W in `SipDnsRouteResolver`. |
+| 26.2.2 | SIPS URI Scheme | Nein | **Erledigt** | – | `SipProtocol.IsSipsUri()`; `InferTransport` erzwingt TLS für `sips:`; DNS NAPTR SIPS+D2T/SIPS+D2W in `SipDnsRouteResolver` — belegt durch `SipDnsRouteResolverRfc3263Tests` (SIPS+D2T ergibt TLS auf 5061; ein reines TLS-Angebot wird für eine Klartext-Anfrage nicht verwendet). |
 | 26.2.3 | HTTP Authentication | Nein | **Erledigt** | RFC 7616 | Vollständige Digest-Implementierung: MD5, MD5-SESS, SHA-256, SHA-256-SESS, SHA-512-256, SHA-512-256-SESS, qop=auth. Algorithmus-Präferenz per RFC 7616. |
 | 26.2.4 | S/MIME | Nein | Out-of-Scope | – | Out-of-Scope (siehe §23). |
 | 26.3–26.3.2.4 | Implementing Security Mechanisms | Nein | Teilweise | – | Registration (26.3.2.1): Digest Auth; DoS (26.3.2.4): Max-Forwards + Loop-Detection + Message-Size-Limit. Inter-domain und Peer-to-Peer via TLS. |
@@ -322,7 +322,7 @@ wenn auch die jeweiligen Update-RFCs berücksichtigt sind.
 
 | RFC | Titel | Priorität | Status SDK | Implementierungsdetail |
 |---|---|---|---|---|
-| RFC 3263 | Locating SIP Servers (DNS für SIP) | Must Have | **Erledigt** | NAPTR→SRV→A/AAAA, Transport-Selektion, priority/weight-Sortierung. `SipDnsRouteResolver.cs` via DnsClient 1.8.0 |
+| RFC 3263 | Locating SIP Servers (DNS für SIP) | Must Have | **Erledigt** | NAPTR→SRV→A/AAAA, Transport-Selektion, priority/weight-Sortierung. `SipDnsRouteResolver.cs` via DnsClient 1.8.0 — belegt durch `SipDnsRouteResolverRfc3263Tests` (ganze Kette aus konservierten Antworten, inkl. Durchfallen auf SRV bzw. A) |
 | RFC 3264 | An Offer/Answer Model with SDP | Must Have | **Erledigt** | Codec-Selektion, Direction, BUNDLE/MID-Carry-through, rtcp-mux, SDES-Crypto, DTLS-Profil. `SdpOfferAnswerNegotiator.cs`. Vollständige Abdeckung in Teil 4 (SDP). |
 | RFC 3311 | The SIP UPDATE Method | Must Have | **Erledigt** | UPDATE gesendet (Hold/Unhold, Session-Timer-Refresh) und empfangen; im Supported-Header; 2xx-Handling und Glare-Schutz (491). `SipCallSessionTransactionService.cs` |
 | RFC 3326 | The Reason Header Field for SIP | Should Have | **Erledigt** | RFC 3326 Format: protocol/value/cause/text. `SipReasonHeader.cs`; BYE/CANCEL mit Reason-Header |
@@ -532,7 +532,7 @@ wenn auch die jeweiligen Update-RFCs berücksichtigt sind.
 
 | RFC | Titel | Priorität | Status SDK | Implementierungsdetail |
 |---|---|---|---|---|
-| RFC 3263 | Locating SIP Servers | Must Have | **Erledigt** | NAPTR→SRV→A/AAAA; Kandidaten nach priority/weight sortiert; Fehler-Fallback. `SipDnsRouteResolver.cs` via DnsClient 1.8.0 |
+| RFC 3263 | Locating SIP Servers | Must Have | **Erledigt** | NAPTR→SRV→A/AAAA; Kandidaten nach priority/weight sortiert; Fehler-Fallback. `SipDnsRouteResolver.cs` via DnsClient 1.8.0 — belegt durch `SipDnsRouteResolverRfc3263Tests` (SRV-Priority ordnet aufsteigend) |
 | RFC 2782 | A DNS RR for Specifying the Location of Services (SRV) | Must Have | **Erledigt** | SRV: _sip._udp, _sip._tcp, _sips._tcp; priority/weight. Via DnsClient |
 | RFC 3403 | DDDS Part Three: The DNS Database (NAPTR) | Must Have | **Erledigt** | NAPTR-Lookup: E2U+sip, SIP+D2U. Via DnsClient |
 | RFC 3596 | DNS Extensions to Support IPv6 (AAAA Records) | Must Have | **Erledigt** | AAAA via DnsClient; IPv4-first-Ordering |
