@@ -35,7 +35,7 @@ public sealed class BrowserInteropSignalingBridge : IAsyncDisposable
 
     private readonly HttpListener _listener = new();
     private readonly string _htmlBody;
-    private readonly int _port;
+    private int _port;
     private readonly CancellationTokenSource _cts = new();
     private WebSocket? _socket;
     private readonly TaskCompletionSource _socketReady = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -47,7 +47,13 @@ public sealed class BrowserInteropSignalingBridge : IAsyncDisposable
     public BrowserInteropSignalingBridge(string htmlBody)
     {
         _htmlBody = htmlBody;
-        _port = FreeTcpPort();
+        BindPrefix(FreeTcpPort());
+    }
+
+    private void BindPrefix(int port)
+    {
+        _port = port;
+        _listener.Prefixes.Clear();
         _listener.Prefixes.Add($"http://127.0.0.1:{_port}/");
     }
 
@@ -59,7 +65,24 @@ public sealed class BrowserInteropSignalingBridge : IAsyncDisposable
 
     public Task StartAsync()
     {
-        _listener.Start();
+        // FreeTcpPort probes a port, closes the probe, then HttpListener binds it — a TOCTOU window in which
+        // another test (or the OS) can claim the port, surfacing as "Address already in use". It is a race, not
+        // a persistent conflict, so a fresh port on a fresh attempt clears it. The repo already treats a bind
+        // race as the caller's job to retry (see SipTransportRuntimeUtilities.AllocateEphemeralPort).
+        const int attempts = 8;
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                _listener.Start();
+                break;
+            }
+            catch (HttpListenerException) when (attempt < attempts)
+            {
+                BindPrefix(FreeTcpPort());
+            }
+        }
+
         _accept = Task.Run(AcceptLoopAsync);
         return Task.CompletedTask;
     }

@@ -13,7 +13,7 @@ public abstract class BrowserFactAttribute : FactAttribute
     protected BrowserFactAttribute(BrowserEngine engine)
     {
         if (!engine.IsAvailable)
-            Skip = $"{engine.Name} nicht im Playwright-Cache (~/.cache/ms-playwright/{engine.Name}-*) — Interop-Test übersprungen.";
+            Skip = $"{engine.Name} nicht im Playwright-Cache (PLAYWRIGHT_BROWSERS_PATH oder ~/.cache/ms-playwright) — Interop-Test übersprungen.";
     }
 }
 
@@ -32,7 +32,7 @@ public abstract class BrowserTheoryAttribute : TheoryAttribute
     protected BrowserTheoryAttribute(BrowserEngine engine)
     {
         if (!engine.IsAvailable)
-            Skip = $"{engine.Name} nicht im Playwright-Cache (~/.cache/ms-playwright/{engine.Name}-*) — Interop-Test übersprungen.";
+            Skip = $"{engine.Name} nicht im Playwright-Cache (PLAYWRIGHT_BROWSERS_PATH oder ~/.cache/ms-playwright) — Interop-Test übersprungen.";
     }
 }
 

@@ -13,20 +13,20 @@ namespace CalloraVoipSdk.BrowserInteropTests;
 public sealed class BrowserEngine
 {
     private readonly string _cachePrefix;
-    private readonly string[] _executableRelativePath;
+    private readonly string[][] _executableRelativePaths;
     private readonly Func<IPlaywright, IBrowserType> _type;
     private readonly Func<string, BrowserTypeLaunchOptions> _options;
 
     private BrowserEngine(
         string name,
         string cachePrefix,
-        string[] executableRelativePath,
+        string[][] executableRelativePaths,
         Func<IPlaywright, IBrowserType> type,
         Func<string, BrowserTypeLaunchOptions> options)
     {
         Name = name;
         _cachePrefix = cachePrefix;
-        _executableRelativePath = executableRelativePath;
+        _executableRelativePaths = executableRelativePaths;
         _type = type;
         _options = options;
     }
@@ -55,17 +55,37 @@ public sealed class BrowserEngine
 
     private string? ResolveExecutable()
     {
-        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        var root = Path.Combine(home, ".cache", "ms-playwright");
+        var root = BrowsersRoot();
         if (!Directory.Exists(root)) return null;
 
-        // Neueste <prefix>-<rev>/… (höchste Revision zuerst).
+        // Neueste <prefix>-<rev>/… (höchste Revision zuerst). Innerhalb einer Revision werden mehrere
+        // Kandidat-Layouts probiert, weil Playwright den Chromium-Ordner zwischen Versionen umbenannt hat
+        // (chrome-linux ↔ chrome-linux64) — ohne das führt ein Layout-Unterschied im offiziellen Container
+        // zu einem stillen Skip statt zu einem Lauf.
         foreach (var dir in Directory.GetDirectories(root, _cachePrefix + "-*").OrderByDescending(d => d))
         {
-            var exe = Path.Combine([dir, .. _executableRelativePath]);
-            if (File.Exists(exe)) return exe;
+            foreach (var relative in _executableRelativePaths)
+            {
+                var exe = Path.Combine([dir, .. relative]);
+                if (File.Exists(exe)) return exe;
+            }
         }
         return null;
+    }
+
+    /// <summary>
+    /// Wurzel des Playwright-Browser-Caches: die von <c>PLAYWRIGHT_BROWSERS_PATH</c> gesetzte, sonst der
+    /// per-User-Standardcache. Der offizielle Playwright-Container setzt die Variable auf <c>/ms-playwright</c>
+    /// und liefert die Browser dort vorinstalliert, sodass die CI keinen apt-Download mehr braucht.
+    /// </summary>
+    private static string BrowsersRoot()
+    {
+        var configured = Environment.GetEnvironmentVariable("PLAYWRIGHT_BROWSERS_PATH");
+        if (!string.IsNullOrWhiteSpace(configured))
+            return configured;
+
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        return Path.Combine(home, ".cache", "ms-playwright");
     }
 
     // ---------------------------------------------------------------------
@@ -73,12 +93,17 @@ public sealed class BrowserEngine
     // ---------------------------------------------------------------------
 
     public static readonly BrowserEngine Chromium = new(
-        "chromium", "chromium", ["chrome-linux64", "chrome"],
+        "chromium", "chromium", [["chrome-linux64", "chrome"], ["chrome-linux", "chrome"]],
         pw => pw.Chromium,
         exe => new BrowserTypeLaunchOptions
         {
             Headless = true,
             ExecutablePath = exe,
+            // Ohne das crasht Chromium als root ("Running as root without --no-sandbox is not supported") —
+            // genau der Fall im offiziellen Playwright-Container, der als root läuft. ChromiumSandbox=false
+            // lässt Playwright --no-sandbox durchreichen; für ein Test-Harness mit synthetischer Media ohne
+            // Wirkung, und lokal (non-root) verhaltensneutral.
+            ChromiumSandbox = false,
             Args =
             [
                 "--use-fake-device-for-media-stream",            // synthetischer Audio/Video-Stream (kein Mikrofon)
@@ -89,7 +114,7 @@ public sealed class BrowserEngine
         });
 
     public static readonly BrowserEngine Firefox = new(
-        "firefox", "firefox", ["firefox", "firefox"],
+        "firefox", "firefox", [["firefox", "firefox"]],
         pw => pw.Firefox,
         exe => new BrowserTypeLaunchOptions
         {
@@ -110,7 +135,7 @@ public sealed class BrowserEngine
         });
 
     public static readonly BrowserEngine WebKit = new(
-        "webkit", "webkit", ["pw_run.sh"],
+        "webkit", "webkit", [["pw_run.sh"]],
         pw => pw.Webkit,
         exe => new BrowserTypeLaunchOptions
         {
