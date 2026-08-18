@@ -12375,6 +12375,19 @@ references:
   commentId: E:CalloraVoipSdk.WebRtc.IPeerConnection.ConnectionStateChanged
   fullName: CalloraVoipSdk.WebRtc.IPeerConnection.ConnectionStateChanged
   nameWithType: IPeerConnection.ConnectionStateChanged
+- uid: CalloraVoipSdk.WebRtc.IPeerConnection.CreateIceRestartOfferAsync(System.Threading.CancellationToken)
+  name: CreateIceRestartOfferAsync(CancellationToken)
+  href: _api/CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_CreateIceRestartOfferAsync_System_Threading_CancellationToken_
+  commentId: M:CalloraVoipSdk.WebRtc.IPeerConnection.CreateIceRestartOfferAsync(System.Threading.CancellationToken)
+  fullName: CalloraVoipSdk.WebRtc.IPeerConnection.CreateIceRestartOfferAsync(System.Threading.CancellationToken)
+  nameWithType: IPeerConnection.CreateIceRestartOfferAsync(CancellationToken)
+- uid: CalloraVoipSdk.WebRtc.IPeerConnection.CreateIceRestartOfferAsync*
+  name: CreateIceRestartOfferAsync
+  href: _api/CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_CreateIceRestartOfferAsync_
+  commentId: Overload:CalloraVoipSdk.WebRtc.IPeerConnection.CreateIceRestartOfferAsync
+  isSpec: "True"
+  fullName: CalloraVoipSdk.WebRtc.IPeerConnection.CreateIceRestartOfferAsync
+  nameWithType: IPeerConnection.CreateIceRestartOfferAsync
 - uid: CalloraVoipSdk.WebRtc.IPeerConnection.CreateOffer
   name: CreateOffer()
   href: _api/CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_CreateOffer

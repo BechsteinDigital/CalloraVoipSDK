@@ -722,6 +722,16 @@
     },
     {
       "type": "Conceptual",
+      "source_relative_path": "docs/adr/ADR-072-ice-restart-replaces-the-agent-not-the-transport.md",
+      "output": {
+        ".html": {
+          "relative_path": "adr/ADR-072-ice-restart-replaces-the-agent-not-the-transport.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
       "source_relative_path": "docs/adr/README.md",
       "output": {
         ".html": {

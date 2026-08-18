@@ -207,7 +207,7 @@ WebRTC facade, mirroring the SIP <code>ICall</code>.</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_IPeerConnection_RecommendedOutgoingBitrateBps" data-uid="CalloraVoipSdk.WebRtc.IPeerConnection.RecommendedOutgoingBitrateBps">
   RecommendedOutgoingBitrateBps
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IPeerConnection.cs/#L272"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IPeerConnection.cs/#L295"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>The SDK's current recommended outbound send bitrate to this peer in bits per second (transport-cc,
@@ -412,7 +412,7 @@ primary-anchor semantics and the mid-call renegotiation behaviour.</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_IPeerConnection_AddIceCandidateAsync_System_String_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.WebRtc.IPeerConnection.AddIceCandidateAsync(System.String,System.Threading.CancellationToken)">
   AddIceCandidateAsync(string, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IPeerConnection.cs/#L134"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IPeerConnection.cs/#L157"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Applies a remote ICE candidate that trickled in out-of-band (RFC 8838), as an RFC 8829
@@ -549,7 +549,7 @@ MediaStream it belongs to (see <a class="xref" href="CalloraVoipSdk.WebRtc.Video
 
   <h3 id="CalloraVoipSdk_WebRtc_IPeerConnection_AttachMediaTap_CalloraVoipSdk_WebRtc_IMediaTap_" data-uid="CalloraVoipSdk.WebRtc.IPeerConnection.AttachMediaTap(CalloraVoipSdk.WebRtc.IMediaTap)">
   AttachMediaTap(IMediaTap)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IPeerConnection.cs/#L256"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IPeerConnection.cs/#L279"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Attaches an <a class="xref" href="CalloraVoipSdk.WebRtc.IMediaTap.html">IMediaTap</a> that observes the encoded media flowing through this peer in both
@@ -580,6 +580,67 @@ directions (L3 recording/analytics/AI seam). Dispose the returned handle to deta
 
 
 
+
+
+
+  <a id="CalloraVoipSdk_WebRtc_IPeerConnection_CreateIceRestartOfferAsync_" data-uid="CalloraVoipSdk.WebRtc.IPeerConnection.CreateIceRestartOfferAsync*"></a>
+
+  <h3 id="CalloraVoipSdk_WebRtc_IPeerConnection_CreateIceRestartOfferAsync_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.WebRtc.IPeerConnection.CreateIceRestartOfferAsync(System.Threading.CancellationToken)">
+  CreateIceRestartOfferAsync(CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IPeerConnection.cs/#L149"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Produces an offer that asks the far side to restart ICE (RFC 8445 §9) — the equivalent of the browser's
+<code>createOffer({ iceRestart: true })</code>. Use it when connectivity has degraded or the local network
+changed: connectivity checks run again over the same transport, so the DTLS session and the media keys
+survive and the call is not rebuilt.</p>
+<p>
+This peer's ICE credentials are rotated and its agent restarted <em>before</em> the offer is produced, so
+the returned SDP announces a restart already in effect here — signal it to the far side as usual. Before
+the first <a class="xref" href="CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_SetRemoteDescriptionAsync_System_String_System_Threading_CancellationToken_">SetRemoteDescriptionAsync(string, CancellationToken)</a> it behaves exactly like <a class="xref" href="CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_CreateOffer">CreateOffer()</a>.
+</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task&lt;string&gt; CreateIceRestartOfferAsync(CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Cancels before any state is touched.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>The offer SDP to signal out.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="CalloraVoipSdk_WebRtc_IPeerConnection_CreateIceRestartOfferAsync_System_Threading_CancellationToken__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Defaulted rather than required so that adding it does not break an existing implementation of this
+interface (a test double, say) — the same additive pattern this SDK uses elsewhere when an interface grows
+a capability. The SDK's own peer implements it.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>The peer is closed, or a remote offer is pending (RFC 8829 §4.1.3).</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.notsupportedexception">NotSupportedException</a></dt>
+    <dd><p>A custom implementation of this interface does not provide it.</p>
+</dd>
+  </dl>
 
 
 
@@ -619,7 +680,7 @@ directions (L3 recording/analytics/AI seam). Dispose the returned handle to deta
 
   <h3 id="CalloraVoipSdk_WebRtc_IPeerConnection_GatherCandidatesAsync_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.WebRtc.IPeerConnection.GatherCandidatesAsync(System.Threading.CancellationToken)">
   GatherCandidatesAsync(CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IPeerConnection.cs/#L150"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IPeerConnection.cs/#L173"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Gathers server-reflexive ICE candidates (RFC 8445 §5.1.1) from the configured STUN servers, each
@@ -661,7 +722,7 @@ address equals the host candidate; redundant-candidate pruning (RFC 8445 §5.4) 
 
   <h3 id="CalloraVoipSdk_WebRtc_IPeerConnection_GetStats" data-uid="CalloraVoipSdk.WebRtc.IPeerConnection.GetStats">
   GetStats()
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IPeerConnection.cs/#L262"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IPeerConnection.cs/#L285"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Takes a statistics snapshot for this peer (the SDK's <code>getStats</code>). Bitrates are derived per call,
@@ -694,7 +755,7 @@ so poll periodically (e.g. once per second) for meaningful rate values.</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_IPeerConnection_RequestVideoKeyFrameAsync_System_String_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.WebRtc.IPeerConnection.RequestVideoKeyFrameAsync(System.String,System.Threading.CancellationToken)">
   RequestVideoKeyFrameAsync(string, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IPeerConnection.cs/#L250"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IPeerConnection.cs/#L273"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Asks the peer to send a fresh video key frame on the track identified by <code class="paramref">mid</code> (RFC 4585
@@ -748,7 +809,7 @@ PLI was sent. Safe to call from any thread and after disposal (a no-op).</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_IPeerConnection_RequestVideoKeyFrameAsync_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.WebRtc.IPeerConnection.RequestVideoKeyFrameAsync(System.Threading.CancellationToken)">
   RequestVideoKeyFrameAsync(CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IPeerConnection.cs/#L235"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IPeerConnection.cs/#L258"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Asks the peer to send a fresh video key frame (RFC 4585 §6.3.1 PLI). This is the receiving side's
@@ -793,7 +854,7 @@ call from any thread and after disposal (a no-op).</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_IPeerConnection_SendAudioAsync_System_ReadOnlyMemory_System_Byte__System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.WebRtc.IPeerConnection.SendAudioAsync(System.ReadOnlyMemory{System.Byte},System.Threading.CancellationToken)">
   SendAudioAsync(ReadOnlyMemory&lt;byte&gt;, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IPeerConnection.cs/#L161"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IPeerConnection.cs/#L184"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Sends one already-encoded audio RTP payload on the peer's audio track. A no-op when the negotiated
@@ -835,7 +896,7 @@ audio is still received, but nothing is streamed to a remote that will not recei
 
   <h3 id="CalloraVoipSdk_WebRtc_IPeerConnection_SendDtmfAsync_System_Byte_System_Int32_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.WebRtc.IPeerConnection.SendDtmfAsync(System.Byte,System.Int32,System.Threading.CancellationToken)">
   SendDtmfAsync(byte, int, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IPeerConnection.cs/#L197"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IPeerConnection.cs/#L220"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Sends one out-of-band DTMF tone (RFC 4733 telephone-event) on the peer's audio track. A no-op is not
@@ -890,7 +951,7 @@ event burst on the audio stream's RTP clock, suppressed until the DTLS handshake
 
   <h3 id="CalloraVoipSdk_WebRtc_IPeerConnection_SendVideoFrameAsync_System_ReadOnlyMemory_System_Byte__System_UInt32_System_Boolean_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.WebRtc.IPeerConnection.SendVideoFrameAsync(System.ReadOnlyMemory{System.Byte},System.UInt32,System.Boolean,System.Threading.CancellationToken)">
   SendVideoFrameAsync(ReadOnlyMemory&lt;byte&gt;, uint, bool, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IPeerConnection.cs/#L181"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IPeerConnection.cs/#L204"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Sends one encoded video frame and declares whether it is a key frame, so the SDK can put that fact in
@@ -945,7 +1006,7 @@ peer negotiated the extension; otherwise this behaves exactly like the overload 
 
   <h3 id="CalloraVoipSdk_WebRtc_IPeerConnection_SendVideoFrameAsync_System_ReadOnlyMemory_System_Byte__System_UInt32_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.WebRtc.IPeerConnection.SendVideoFrameAsync(System.ReadOnlyMemory{System.Byte},System.UInt32,System.Threading.CancellationToken)">
   SendVideoFrameAsync(ReadOnlyMemory&lt;byte&gt;, uint, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IPeerConnection.cs/#L164"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IPeerConnection.cs/#L187"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Packetises and sends one already-encoded video frame on the peer's video track.</p>
@@ -986,7 +1047,7 @@ peer negotiated the extension; otherwise this behaves exactly like the overload 
 
   <h3 id="CalloraVoipSdk_WebRtc_IPeerConnection_SendVideoFrameAsync_System_String_System_ReadOnlyMemory_System_Byte__System_UInt32_System_Boolean_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.WebRtc.IPeerConnection.SendVideoFrameAsync(System.String,System.ReadOnlyMemory{System.Byte},System.UInt32,System.Boolean,System.Threading.CancellationToken)">
   SendVideoFrameAsync(string, ReadOnlyMemory&lt;byte&gt;, uint, bool, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IPeerConnection.cs/#L217"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IPeerConnection.cs/#L240"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Sends one encoded video frame on a simulcast <code class="paramref">rid</code> layer (RFC 8853) and declares
@@ -1039,7 +1100,7 @@ Each layer numbers its frames independently, as they are independent RTP streams
 
   <h3 id="CalloraVoipSdk_WebRtc_IPeerConnection_SendVideoFrameAsync_System_String_System_ReadOnlyMemory_System_Byte__System_UInt32_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.WebRtc.IPeerConnection.SendVideoFrameAsync(System.String,System.ReadOnlyMemory{System.Byte},System.UInt32,System.Threading.CancellationToken)">
   SendVideoFrameAsync(string, ReadOnlyMemory&lt;byte&gt;, uint, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IPeerConnection.cs/#L204"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IPeerConnection.cs/#L227"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Packetises and sends one already-encoded video frame on a simulcast <code class="paramref">rid</code> layer
@@ -1084,7 +1145,7 @@ its own resolution/bitrate and calls this once per layer per frame.</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_IPeerConnection_SetRemoteDescriptionAsync_System_String_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.WebRtc.IPeerConnection.SetRemoteDescriptionAsync(System.String,System.Threading.CancellationToken)">
   SetRemoteDescriptionAsync(string, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IPeerConnection.cs/#L140"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IPeerConnection.cs/#L163"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Applies a remote SDP. When this peer is the answerer, returns the local answer SDP to signal back;
@@ -1124,7 +1185,7 @@ when it is the offerer applying the peer's answer, returns the local offer uncha
 
   <h3 id="CalloraVoipSdk_WebRtc_IPeerConnection_StartAsync_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.WebRtc.IPeerConnection.StartAsync(System.Threading.CancellationToken)">
   StartAsync(CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IPeerConnection.cs/#L153"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IPeerConnection.cs/#L176"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Starts the media transport (ICE connectivity, DTLS handshake, receive loop).</p>
@@ -1263,7 +1324,7 @@ are configured.</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_IPeerConnection_RecommendedBitrateChanged" data-uid="CalloraVoipSdk.WebRtc.IPeerConnection.RecommendedBitrateChanged">
   RecommendedBitrateChanged
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IPeerConnection.cs/#L282"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/IPeerConnection.cs/#L305"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Raised whenever the SDK revises its recommended send bitrate to this peer (transport-cc),
