@@ -83,23 +83,14 @@ public sealed class ComplianceMatrixEvidenceTests
     // off by naming the covering test in the row (or by writing one), then delete the line.
     private static readonly string[] UnnamedByAnyTestBaseline =
     [
-        "10.2 :: InstanceId",
         "11 :: HandleOptionsAsync",
         "13.3.1.4 :: SipServerTransactionEngine.ArmInviteSuccessRetransmit",
-        "18.1.1 :: EscalateViaTransportToTcp",
         "18.4 :: SendPayloadAsync",
-        "19.1.1 :: GetUriParam",
-        "19.1.1 :: InferTransport",
         "19.1.5 :: InferTransport",
         "19.1.5 :: SipDnsRouteResolver",
-        "19.2 :: SipRequireOptionPolicy",
         "26.1.2 :: SipTransportRuntime.InferTransport",
         "26.2.2 :: InferTransport",
         "26.2.2 :: SipDnsRouteResolver",
-        "8.1.1.7 :: SipProtocol.ReflectViaRport",
-        "8.2.2.1 :: ISipUasUserIdentityPolicy",
-        "RFC 3551 :: SdpUtilities.DefaultCodecs",
-        "RFC 4488 :: SupportedOptionTags",
         "RFC 6062 :: OpenTcpDataConnectionAsync",
         "RFC 6062 :: TurnTcpDataConnectionFactory",
         "RFC 6062 :: TurnTcpPassiveConnectionService",
