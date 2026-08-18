@@ -192,14 +192,49 @@ parsing breaks under generic payload encryption.</p>
 </ol>
 <h2 id="consequences">Consequences</h2>
 <ul>
-<li>A forwarder built on the SDK can implement &quot;trust only header-derived key frames&quot; — no reference stack
-exposes enough to do that today; they report a merged boolean.</li>
-<li>The claim &quot;with <code>OpaqueVideoFrames</code> on, <code>IsKeyFrame</code> is always false&quot; is retired from the changelog. It was
-true before #225 and misleading after it.</li>
-<li>What remains open is the interop half of #310: H.264 receive from a browser using Encoded Transform, and a
-gate test that exercises it. This ADR deliberately does not predict that result — the last two assumptions
-about browser behaviour in this area (#261, and Chromium's descriptor on VP8 in #225) both came out against
-the expectation when finally measured.</li>
+<li><p>A forwarder built on the SDK can implement &quot;trust only header-derived key frames&quot; — no reference stack
+exposes enough to do that today; they report a merged boolean.</p>
+</li>
+<li><p>The claim &quot;with <code>OpaqueVideoFrames</code> on, <code>IsKeyFrame</code> is always false&quot; is retired from the changelog. It was
+true before #225 and misleading after it.</p>
+</li>
+<li><p>The interop half of #310 has since been <strong>measured</strong>, and it confirms the table above rather than the fear
+behind the ticket. A Chromium sender with an Encoded Transform installed, encrypting everything past a
+codec-appropriate clear prefix (start code + NAL header, as libwebrtc's frame cryptor does for H.264):</p>
+<table>
+<thead>
+<tr>
+<th>Clear prefix</th>
+<th>Frames the browser encrypted</th>
+<th>RTP packets we received</th>
+<th>Frames we reassembled</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Jitsi's, VP8-tuned (key 10 / delta 3)</td>
+<td>796</td>
+<td><strong>4</strong></td>
+<td>1</td>
+</tr>
+<tr>
+<td>H.264-aware (key 16 / delta 8)</td>
+<td>26</td>
+<td>57</td>
+<td><strong>30</strong></td>
+</tr>
+</tbody>
+</table>
+<p>With a codec-appropriate prefix the SDK reassembles the stream completely and keeps the key-frame signal.
+With the VP8-tuned prefix the failure is on the <strong>sender's</strong> side of the wire: three clear bytes do not
+cover an Annex-B start code, so the browser's own packetiser stops emitting — four packets for 796 frames,
+meaning nothing ever reached our depacketiser to be discarded. Neither case is a limit of this SDK.</p>
+</li>
+<li><p>One thing the measurement changed about the premise: for a Chromium peer the key-frame flag never depends
+on the payload at all. Chromium writes the Dependency Descriptor on the <strong>H.264</strong> m-line too, not only on
+VP8, so every frame in those runs reported <code>KeyFrameSource.RtpHeaderExtension</code>. The payload-derived path
+remains what answers for peers that do not offer the extension.</p>
+</li>
 </ul>
 
 </article>
