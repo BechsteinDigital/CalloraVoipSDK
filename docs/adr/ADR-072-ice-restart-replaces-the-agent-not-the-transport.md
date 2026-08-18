@@ -54,11 +54,27 @@ media on the previously selected pair until a new one is selected. A peer that r
 it changed networks keeps receiving on the old path for as long as that path still works, instead of losing
 media the moment the re-offer arrives. The new agent re-points the transport itself when it nominates.
 
-### 3. Only the answerer rotates its own credentials
+### 3. Whoever signals the restart rotates first
 
-RFC 8445 §9.1.1.1 requires the answerer to a restart offer to generate new credentials too, and the answer must
-carry them — so the rotation happens *before* the answer is negotiated. As the offerer we do not rotate: our
-re-offer already advertised our credentials and the peer is checking against those.
+RFC 8445 §9.1.1.1 requires new credentials on both sides. Which side rotates when follows from who is speaking:
+
+- **Answering a restart offer:** rotate *before* negotiating the answer, because the answer has to carry the new
+  credentials — the peer authenticates against what our answer says.
+- **Initiating one** (`CreateIceRestartOfferAsync`, the W3C `createOffer({iceRestart: true})`): rotate *before*
+  producing the offer, and restart the agent at the same moment. Deferring the agent restart until the answer
+  arrives would be a bug, not an optimisation: the peer starts checking against the credentials our offer
+  advertises as soon as it processes that offer — a signalling round trip earlier — and an agent still holding
+  the old password would reject those checks (§7.3.1.1). A peer that marks pairs failed on a 401 would abandon
+  the restart we asked for. Restarting with (new local, current remote) is a fully working state meanwhile: the
+  peer's new-credential checks authenticate, and our outbound checks still carry the password its pre-restart
+  agent expects. When the answer then rotates the remote half, the ordinary detection path restarts once more to
+  adopt it.
+- **Applying a re-answer that rotates:** adopt the peer's new credentials; ours stay as our re-offer advertised
+  them.
+
+Rotation and the description that announces it are produced together in one call, so an application cannot end
+up having rotated without sending the offer that tells the peer — which would leave the peer checking against
+credentials nobody honours.
 
 ### 4. The role is carried over
 
@@ -78,20 +94,31 @@ The peer moves back to `Connecting`. A network change that killed consent has us
 are untouched, so media resumes on the re-selected path without a second handshake and without the stream index
 spaces restarting under a live key.
 
-**Continuing media is not evidence that the restart worked.** This is worth stating because it shaped the tests.
+**Neither continuing media nor a rotated ufrag is evidence that the restart worked.** This is worth stating
+because it shaped the tests, and the trap appears twice.
+
 Once a pair is latched and SRTP is keyed, RTP keeps flowing whatever ICE does — verified by mutation: a build
-that rotates the credentials but never swaps the agent still passes a media-only assertion. The evidence that
-ICE actually moved is on the wire: after the restart the peer answers connectivity checks authenticated with the
-rotated credentials and no longer answers the retired ones. Both are asserted against a real connected peer.
+that rotates the credentials but never swaps the agent still passes a media-only assertion. One layer up, the
+ufrag in a locally produced restart offer is read from the renegotiator's credential state, so the same
+never-restarts build still emits a fresh-looking offer while the live socket answers with the old password —
+precisely the failure that would strand the far side.
 
-**Local initiation is not covered.** Everything beneath it now exists, but nothing yet rotates our credentials in
-a locally created re-offer, so this SDK can adopt a restart the far side signals and cannot signal one itself
-(the W3C equivalent is `createOffer({iceRestart: true})`). Tracked as follow-up work.
+The evidence in both directions is therefore taken on the wire, against a real connected peer: after a restart
+the peer answers connectivity checks authenticated with the credentials now in force and no longer answers the
+retired ones. Those are the assertions that die under the mutations; the SDP-level ones survive them, which is
+why they are not left to carry the claim alone.
 
-**Two files were extracted to make room.** `BundledMediaSession` and `WebRtcPeerConnection` were both at the
-1000-line limit. The relay data path moved out of the session (`BundledRelayDataPath`) and the connection-state
-machine out of the peer (`WebRtcConnectionStateMachine`), the latter sharing the peer's lock so its
-serialisation is unchanged.
+**The public surface grew by one member**, `IPeerConnection.CreateIceRestartOfferAsync`. It is a *defaulted*
+interface member that throws `NotSupportedException`, so adding it does not break an existing implementation of
+the interface (a consumer's test double) — the same additive pattern used elsewhere in this SDK when an interface
+gains a capability. The API-surface baseline records it.
+
+**Three collaborators were extracted to make room.** `BundledMediaSession` and `WebRtcPeerConnection` were both
+at the 1000-line limit. The relay data path moved out of the session (`BundledRelayDataPath`); the
+connection-state machine (`WebRtcConnectionStateMachine`) and the media-socket ownership across its one hand-over
+to the transport (`WebRtcMediaSocketOwner`) moved out of the peer. Both peer collaborators share the peer's lock,
+so their serialisation is unchanged. `WebRtcPeerConnection` is back at exactly 1000 lines and is now essentially
+all public API plus documentation — the next change to it needs a structural split, not another small extraction.
 
 ## References
 

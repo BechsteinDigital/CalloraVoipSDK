@@ -104,6 +104,51 @@ public sealed class WebRtcPeerConnectionTests
         Assert.Equal(IceUfragOf(firstAnswer), IceUfragOf(secondAnswer));
     }
 
+    /// <summary>
+    /// #226, local initiation: <c>CreateIceRestartOfferAsync</c> rotates this peer's ICE credentials and restarts
+    /// its agent before producing the offer, so the offer is what tells the far side. The rotation and the offer
+    /// are produced together on purpose — an app cannot rotate without sending the offer that announces it.
+    /// </summary>
+    [Fact]
+    public async Task An_ice_restart_offer_rotates_our_credentials_on_the_running_peer()
+    {
+        await using var peer = Peer(Pcmu);
+        var firstAnswer = await peer.SetRemoteDescriptionAsync(WebRtcOffer());
+        var mediaPort = peer.LocalMediaEndPoint!.Port;
+        var beforeUfrag = IceUfragOf(firstAnswer);
+
+        var restartOffer = await peer.CreateIceRestartOfferAsync();
+
+        Assert.NotEqual(beforeUfrag, IceUfragOf(restartOffer));       // RFC 8445 §9.1.1.1
+        Assert.Equal(mediaPort, peer.LocalMediaEndPoint!.Port);       // same 5-tuple: no transport rebuild
+        Assert.Equal(WebRtcSignalingState.HaveLocalOffer, peer.SignalingState);
+        Assert.Equal(WebRtcConnectionState.Connecting, peer.State);
+    }
+
+    [Fact]
+    public async Task A_plain_re_offer_does_not_rotate_our_credentials()
+    {
+        // The discriminator: only the restart offer rotates. A plain re-offer must keep the credentials the far
+        // side is already checking against, or every mid-call track change would silently restart ICE.
+        await using var peer = Peer(Pcmu);
+        var firstAnswer = await peer.SetRemoteDescriptionAsync(WebRtcOffer());
+
+        Assert.Equal(IceUfragOf(firstAnswer), IceUfragOf(peer.CreateOffer()));
+    }
+
+    [Fact]
+    public async Task An_ice_restart_offer_before_a_session_exists_is_a_plain_offer()
+    {
+        // Nothing to restart yet: a first offer's credentials are new anyway, and rotating would only churn the
+        // configured pair — with no agent to apply them to.
+        await using var peer = Peer(Pcmu);
+
+        var offer = await peer.CreateIceRestartOfferAsync();
+
+        Assert.Equal("localU", IceUfragOf(offer));
+        Assert.Equal(WebRtcSignalingState.HaveLocalOffer, peer.SignalingState);
+    }
+
     private static string? IceUfragOf(string sdp) =>
         new SdpSessionParser().Parse(sdp).Media.First(m => m.MediaType == "audio").IceUfrag;
 

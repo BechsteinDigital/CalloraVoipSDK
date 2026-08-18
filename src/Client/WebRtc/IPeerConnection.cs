@@ -127,6 +127,29 @@ public interface IPeerConnection : IAsyncDisposable
     string CreateOffer();
 
     /// <summary>
+    /// Produces an offer that asks the far side to restart ICE (RFC 8445 §9) — the equivalent of the browser's
+    /// <c>createOffer({ iceRestart: true })</c>. Use it when connectivity has degraded or the local network
+    /// changed: connectivity checks run again over the same transport, so the DTLS session and the media keys
+    /// survive and the call is not rebuilt.
+    /// <para>
+    /// This peer's ICE credentials are rotated and its agent restarted <em>before</em> the offer is produced, so
+    /// the returned SDP announces a restart already in effect here — signal it to the far side as usual. Before
+    /// the first <see cref="SetRemoteDescriptionAsync"/> it behaves exactly like <see cref="CreateOffer"/>.
+    /// </para>
+    /// </summary>
+    /// <param name="cancellationToken">Cancels before any state is touched.</param>
+    /// <returns>The offer SDP to signal out.</returns>
+    /// <exception cref="InvalidOperationException">The peer is closed, or a remote offer is pending (RFC 8829 §4.1.3).</exception>
+    /// <exception cref="NotSupportedException">A custom implementation of this interface does not provide it.</exception>
+    /// <remarks>
+    /// Defaulted rather than required so that adding it does not break an existing implementation of this
+    /// interface (a test double, say) — the same additive pattern this SDK uses elsewhere when an interface grows
+    /// a capability. The SDK's own peer implements it.
+    /// </remarks>
+    Task<string> CreateIceRestartOfferAsync(CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("This peer connection does not support initiating an ICE restart.");
+
+    /// <summary>
     /// Applies a remote ICE candidate that trickled in out-of-band (RFC 8838), as an RFC 8829
     /// <c>candidate:</c> line. The highest-priority component-1 UDP candidate becomes the send target;
     /// a malformed or unusable candidate is ignored.

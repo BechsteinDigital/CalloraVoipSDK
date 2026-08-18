@@ -481,6 +481,34 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     public bool IceControlling => _iceParameters.IceControlling;
 
     /// <summary>
+    /// Restarts ICE with rotated <em>local</em> credentials only (RFC 8445 §9.1.1.1) — the half an agent applies
+    /// when it <em>initiates</em> a restart, before it knows what the peer will answer with. Everything else about
+    /// the ICE view is carried over unchanged: the remote credentials, endpoint and candidate list, and the role.
+    /// </summary>
+    /// <remarks>
+    /// Applied at offer time rather than deferred to the answer, because the peer starts authenticating its checks
+    /// against the credentials our offer advertises as soon as it processes that offer — which is a signalling
+    /// round trip before the answer reaches us. An agent still holding the old local password would reject those
+    /// checks (RFC 8445 §7.3.1.1), and a peer that marks pairs failed on a 401 would give up on the restart we
+    /// asked for. Restarting with (new local, current remote) is a fully working state in the meantime: the peer's
+    /// new-credential checks authenticate, and our outbound checks still carry the remote password its pre-restart
+    /// agent expects.
+    /// </remarks>
+    /// <param name="localIceUfrag">The freshly generated local username fragment.</param>
+    /// <param name="localIcePwd">The freshly generated local password.</param>
+    /// <exception cref="ArgumentException">Either credential is null or empty.</exception>
+    /// <exception cref="ObjectDisposedException">The session has been disposed.</exception>
+    public Task RestartLocalIceAsync(string localIceUfrag, string localIcePwd)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(localIceUfrag);
+        ArgumentException.ThrowIfNullOrEmpty(localIcePwd);
+
+        // `with` copies the whole record, so the remote candidate list — which the caller cannot see and must not
+        // lose — survives verbatim alongside the remote credentials, endpoint and role.
+        return RestartIceAsync(_iceParameters with { LocalIceUfrag = localIceUfrag, LocalIcePwd = localIcePwd });
+    }
+
+    /// <summary>
     /// Restarts ICE on the running session (RFC 8445 §9, RFC 8839 §5.4): the agent is replaced with one built from
     /// <paramref name="parameters"/> — rotated credentials, the re-offer's remote candidates, a fresh check list —
     /// and connectivity checks run again over the same socket.

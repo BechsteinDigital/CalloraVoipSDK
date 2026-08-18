@@ -153,6 +153,53 @@ public sealed class WebRtcIceRestartLoopbackTests
             "Die zurückgezogenen Credentials dürfen nach dem Restart nicht mehr beantwortet werden.");
     }
 
+    /// <summary>
+    /// #226, local initiation. Same trap as above, one layer up: a rotated ufrag in the <em>offer</em> proves
+    /// nothing on its own — it is read from the renegotiator's credential state, so a build that rotates but never
+    /// restarts the agent still produces a fresh-looking offer while the live socket keeps answering with the old
+    /// password. That is the failure that would strand the far side, because it starts checking against the offer's
+    /// credentials as soon as it processes it. So this asserts on the wire: after
+    /// <c>CreateIceRestartOfferAsync</c>, the peer's real media socket answers checks authenticated with the
+    /// credentials the offer advertises.
+    /// </summary>
+    [Fact]
+    public async Task A_locally_initiated_restart_makes_the_live_socket_answer_the_offered_credentials()
+    {
+        var peerCert = DtlsCertificate.GenerateEcdsaP256();
+        var counterpartCert = DtlsCertificate.GenerateEcdsaP256();
+
+        var (peer, counterpart, _) = await ConnectPairAsync(peerCert, counterpartCert);
+        await using var peerLease = peer;
+        await using var counterpartLease = counterpart;
+
+        await peer.StartAsync();
+        await counterpart.StartAsync();
+
+        var restartOffer = await peer.CreateIceRestartOfferAsync();
+        var offered = new SdpSessionParser().Parse(restartOffer)
+            .Media.First(m => m.MediaType.Equals("audio", StringComparison.OrdinalIgnoreCase));
+        Assert.NotEqual(PeerUfrag, offered.IceUfrag);
+
+        using var probe = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        var codec = new StunMessageCodec();
+
+        var (check, transaction) = IceConsentCheckBuilder.Build(
+            codec, localUfrag: CounterpartUfrag, remoteUfrag: offered.IceUfrag!,
+            remotePassword: offered.IcePwd!, priority: 12345u, controlling: true, tieBreaker: 42);
+        await probe.SendAsync(check, peer.LocalMediaEndPoint!);
+        Assert.True(
+            await AwaitSuccessResponseAsync(probe, codec, transaction, TimeSpan.FromSeconds(5)),
+            "Der Peer muss die Credentials beantworten, die sein eigenes Restart-Offer ankündigt.");
+
+        var (stale, staleTransaction) = IceConsentCheckBuilder.Build(
+            codec, localUfrag: CounterpartUfrag, remoteUfrag: PeerUfrag, remotePassword: PeerPwd,
+            priority: 12345u, controlling: true, tieBreaker: 42);
+        await probe.SendAsync(stale, peer.LocalMediaEndPoint!);
+        Assert.False(
+            await AwaitSuccessResponseAsync(probe, codec, staleTransaction, TimeSpan.FromSeconds(2)),
+            "Die vor dem Restart genutzten Credentials dürfen nicht mehr beantwortet werden.");
+    }
+
     // ── harness ──────────────────────────────────────────────────────────────────
 
     // Drains the probe socket until a success response for this transaction arrives or the deadline passes.

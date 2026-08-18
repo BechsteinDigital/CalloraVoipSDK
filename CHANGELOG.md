@@ -22,10 +22,24 @@ The next line. Entries here accumulate the consumer-visible changes not yet rele
   fresh credentials of its own, as RFC 8445 §9.1.1.1 requires; the ICE role is carried over, since re-running
   the checks does not redetermine which side controls them.
 
-  **Not covered:** initiating a restart locally. The SDK adopts a restart the far side signals but cannot yet
-  signal one itself (the browser equivalent is `createOffer({iceRestart: true})`).
+  **Either side can start it.** Adopting a restart the far side signals needs no code change — it happens on the
+  existing `SetRemoteDescription` path. To signal one yourself there is a new
+  **`IPeerConnection.CreateIceRestartOfferAsync`** (the browser's `createOffer({ iceRestart: true })`): it rotates
+  this peer's ICE credentials, restarts its agent, and returns the offer that announces both. Reach for it when
+  connectivity degrades or the local network changes.
 
-  No public API changed — this is behaviour on the existing `SetRemoteDescription` path.
+  ```csharp
+  var offer = await peer.CreateIceRestartOfferAsync();
+  await signaling.SendAsync(offer);
+  ```
+
+  The rotation and the offer are produced by one call on purpose — an application cannot rotate without sending
+  the offer that tells the far side, which would leave it checking against credentials nobody honours. The agent
+  is restarted at offer time rather than when the answer arrives, because the far side starts checking against
+  the offered credentials a signalling round trip earlier.
+
+  The new member is **additive**: it has a default implementation that throws `NotSupportedException`, so an
+  existing implementation of `IPeerConnection` (a test double, say) keeps compiling.
 - **The DTLS-SRTP handshake offers AEAD cipher suites only** (#229, #323). Both roles are covered.
   - **Server:** the offered list also carried `TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256` next to AES-128-GCM,
     AES-256-GCM and ChaCha20-Poly1305. No browser ever selected it — they all negotiate one of the AEAD

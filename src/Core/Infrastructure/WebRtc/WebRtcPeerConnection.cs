@@ -89,8 +89,8 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     // session behind a snapshot delegate that takes _sync here, so the peer keeps sole ownership of its guarded
     // state (extracted to keep this file under the size limit).
     private readonly WebRtcSendLease _sendLease;
-    private UdpClient? _mediaSocket;
-    private bool _socketHandedOver;
+    // The shared media socket across its one hand-over to the transport (extracted; shares _sync).
+    private readonly WebRtcMediaSocketOwner _mediaSocket;
     private bool _started;
     // Owns the gathered TURN relay allocation (RFC 8656), retained for post-Start adoption; see the store.
     private readonly WebRtcRelayAllocationStore _relayAllocation;
@@ -223,6 +223,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         _congestion = new WebRtcCongestionRelay(() => { lock (_sync) { return _session; } });
         // The send-lease runner reads the live session under _sync via this snapshot delegate; the lock stays here.
         _sendLease = new WebRtcSendLease(_sendGate, () => { lock (_sync) { return _session; } });
+        _mediaSocket = new WebRtcMediaSocketOwner(_sync, _options.LocalEndPoint);
         // Shares _sync so the transport state keeps its original serialisation; the event raise (snapshot-and-
         // invoke, throwing handler logged not propagated) stays with the bridge and runs outside the lock.
         _connectionState = new WebRtcConnectionStateMachine(
@@ -257,7 +258,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     /// </summary>
     public IPEndPoint? LocalMediaEndPoint
     {
-        get { lock (_sync) { return _session?.LocalEndPoint ?? _mediaSocket?.Client.LocalEndPoint as IPEndPoint; } }
+        get { lock (_sync) { return _session?.LocalEndPoint ?? _mediaSocket.BoundEndPoint; } }
     }
 
     /// <summary>The selected remote media endpoint of the shared transport, or null before one is set.</summary>
@@ -465,6 +466,28 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     }
 
     /// <summary>
+    /// Produces an offer that requests an ICE restart (RFC 8445 §9, the W3C <c>createOffer({iceRestart: true})</c>):
+    /// the local ICE credentials are rotated and the running agent restarted with them <em>first</em>, so the
+    /// returned offer announces a restart that has already taken effect here. Rotating and offering together is
+    /// deliberate — an application cannot rotate without sending the offer that announces it, which would leave the
+    /// peer checking against credentials nobody honours. Before a session exists this is exactly
+    /// <see cref="CreateOffer"/>: a first offer's credentials are new anyway and there is no agent to restart.
+    /// </summary>
+    /// <param name="cancellationToken">Cancels before any state is touched.</param>
+    /// <returns>The offer SDP to send, carrying the rotated credentials.</returns>
+    /// <exception cref="InvalidOperationException">The signalling state does not permit an offer (RFC 8829 §4.1.3).</exception>
+    public async Task<string> CreateIceRestartOfferAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        BundledMediaSession? session;
+        lock (_sync)
+            session = _session;
+        if (session is not null)
+            await _renegotiator.RestartLocalIceAsync(session).ConfigureAwait(false);
+        return CreateOffer();
+    }
+
+    /// <summary>
     /// Applies the peer's remote description and returns this peer's local description. As the answerer (no local
     /// offer) the remote description is an offer: this negotiates and returns the WebRTC answer (RFC 8829
     /// setRemoteDescription → createAnswer). As the offerer (after <see cref="CreateOffer"/>) it is the answer:
@@ -566,7 +589,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         // (RFC 8445 §6.1.1); a relay ICE local candidate rides the socket only when a TURN allocation was
         // already gathered on it (the answerer adopts its allocation later — a follow-up).
         var session = WebRtcSessionFactory.TryCreate(
-            remote, localModel, _options, _handshaker, _certificate, _loggerFactory, _mediaSocket,
+            remote, localModel, _options, _handshaker, _certificate, _loggerFactory, _mediaSocket.Socket,
             iceControlling: pendingOffer is not null,
             relayIceBindingFactory: _relayAllocation.BuildOfferFactory());
         if (session is null)
@@ -579,7 +602,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             _session = session;
             // The transport now owns the pre-bound socket (if a session was built); DisposeAsync must not
             // dispose it again.
-            _socketHandedOver = session is not null;
+            _mediaSocket.MarkHandedOver(session is not null);
             // Retain the remote track identity (a=msid) so the receiver can group inbound tracks by the
             // remote MediaStream (the W3C RTCTrackEvent.streams semantics).
             ApplyRemoteInventory(remote);
@@ -846,7 +869,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             if (_started)
                 throw new InvalidOperationException(
                     "Cannot gather ICE candidates after StartAsync — the media socket is owned by the transport's receive loop.");
-            socket = _mediaSocket!.Client;
+            socket = _mediaSocket.Socket!.Client;
         }
 
         // The peer keeps ownership of the retained relay allocation and its session; the gatherer only sequences
@@ -903,27 +926,8 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
 
     // Binds the shared media socket up front (Trickle-ICE early-bind) so the offer/answer advertise the real
     // ephemeral port and a host candidate before the session (transport) exists — fixing the zero-port
-    // disabled offer. The transport takes ownership at session build; if the peer is disposed before that,
-    // DisposeAsync disposes the socket.
-    private IPEndPoint EnsureLocalMediaEndPoint()
-    {
-        lock (_sync)
-        {
-            if (_mediaSocket is null)
-            {
-                // Match the socket family to the configured local bind address; binding an IPv4
-                // UdpClient to an IPv6 endpoint (or vice versa) throws on family mismatch.
-                var socket = new UdpClient(_options.LocalEndPoint.AddressFamily);
-                // Kernel SO_RCVBUF for the shared media socket; sized for video bitrates, not the max
-                // datagram (MediaSocketDefaults keeps those two concerns separate).
-                socket.Client.ReceiveBufferSize = MediaSocketDefaults.SocketReceiveBufferBytes;
-                socket.Client.Bind(_options.LocalEndPoint);
-                _mediaSocket = socket;
-            }
-
-            return (IPEndPoint)_mediaSocket.Client.LocalEndPoint!;
-        }
-    }
+    // disabled offer. The owner handles the bind and the later hand-over to the transport.
+    private IPEndPoint EnsureLocalMediaEndPoint() => _mediaSocket.EnsureBound();
 
     // Records the remote track facts (a=msid identity, has-audio/has-video, the per-m-line sending video
     // inventory, derived by WebRtcRemoteMediaInventory) from a newly-applied remote description, so the receiver
@@ -971,8 +975,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             // If the early-bound socket was never handed to a transport, this peer still owns it and must
             // dispose it; once handed over, the session/transport owns it. Null it out so a second dispose
             // never double-disposes.
-            orphanSocket = _socketHandedOver ? null : _mediaSocket;
-            _mediaSocket = null;
+            orphanSocket = _mediaSocket.TakeOrphan();
             // Signalling terminates at Closed (RFC 8829 §4.1.3), idempotent across a double dispose. The event
             // is fired below, outside the lock (K3).
             signalingClosed = _signalingState != WebRtcSignalingState.Closed;

@@ -134,6 +134,9 @@ internal sealed class PeerConnection : IPeerConnection
 
     public string CreateOffer() => _peer.CreateOffer();
 
+    public Task<string> CreateIceRestartOfferAsync(CancellationToken cancellationToken = default) =>
+        _peer.CreateIceRestartOfferAsync(cancellationToken);
+
     public IAudioTrack AddAudioTrack() => AddAudioTrack(new AudioTrackOptions());
 
     public IAudioTrack AddAudioTrack(AudioTrackOptions options)

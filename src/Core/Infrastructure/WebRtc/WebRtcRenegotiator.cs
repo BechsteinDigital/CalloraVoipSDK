@@ -140,6 +140,33 @@ internal sealed class WebRtcRenegotiator
     }
 
     /// <summary>
+    /// Initiates an ICE restart locally (RFC 8445 §9.1.1.1, the W3C <c>createOffer({iceRestart: true})</c>): the
+    /// local credentials are rotated and the running agent is restarted with them, so the very next description
+    /// this peer builds advertises the new pair and the agent already answers checks against it.
+    /// </summary>
+    /// <remarks>
+    /// Only our half moves here. What the peer will do is not yet known — a conforming answerer rotates too
+    /// (§9.1.1.1), and that arrives as an ordinary detected restart in <see cref="ApplyReAnswerAsync"/>, which
+    /// restarts once more to adopt the peer's new credentials. A peer that does not rotate leaves our agent on
+    /// (new local, unchanged remote), which is correct and complete on its own.
+    /// </remarks>
+    /// <param name="session">The running media session whose agent is restarted.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="session"/> is <see langword="null"/>.</exception>
+    public async Task RestartLocalIceAsync(BundledMediaSession session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+
+        RotateLocalIce();
+        var localIce = LocalIceParameters;
+        await session.RestartLocalIceAsync(localIce.Ufrag, localIce.Pwd).ConfigureAwait(false);
+
+        _logger.LogInformation(
+            "ICE restart initiated locally (RFC 8445 §9): local credentials rotated on the running transport; " +
+            "the next offer advertises them.");
+        _onIceRestarted?.Invoke();
+    }
+
+    /// <summary>
     /// The offerer half of a second cycle: applies the track-set diff between our re-offer and the peer's
     /// re-answer, and restarts ICE when that answer rotated the peer's ICE credentials (RFC 8445 §9). Our own
     /// credentials are <em>not</em> rotated here — the re-offer already advertised them and the peer is checking
