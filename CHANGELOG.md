@@ -172,9 +172,10 @@ configurations. Validated end-to-end against a real Asterisk endpoint that carri
   FCI entries rather than the header, per §4.3.1. The existing mid-less `VideoKeyFrameRequested` is unchanged
   and still fires alongside it, so a single-track consumer needs no change.
 
-  **Source-breaking for anyone implementing `IPeerConnection` themselves** (adding an event to an interface
-  admits no default implementation that isn't a silent no-op). Consumers that only *use* the interface are
-  unaffected. The WebRTC surface is still Preview.
+  `IPeerConnection` grows by one member, as it did for `TrackReceived`, `SignalingStateChanged`,
+  `DtmfReceived` and `RecommendedBitrateChanged` before it — additive per ADR-006 §2, and invisible to
+  consumers that only *use* the interface. Code that implements it (in practice, test doubles) adds the
+  member; an event admits no default implementation that would not silently swallow subscriptions.
 
 - **RFC 8285 two-byte header extensions** (#224, ADR-070). The SDK knew only the one-byte form — profile
   `0xBEDE`, ids 1..14, values 1..16 bytes — which cannot carry an id above 14, a value longer than 16 bytes,

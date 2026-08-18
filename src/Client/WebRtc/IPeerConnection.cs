@@ -8,6 +8,10 @@ namespace CalloraVoipSdk.WebRtc;
 /// transport. Encoded media flows through <see cref="SendAudioAsync"/>/<see cref="SendVideoFrameAsync(System.ReadOnlyMemory{byte}, uint, System.Threading.CancellationToken)"/>
 /// — the SDK is transport-only, so the app owns the codec. The central per-connection abstraction of the
 /// WebRTC facade, mirroring the SIP <c>ICall</c>.
+/// <para>
+/// Written to be consumed, not implemented: it gains members as the facade grows (ADR-006 §2 treats that as
+/// additive), so a test double implementing it should expect to add one per minor release.
+/// </para>
 /// </summary>
 public interface IPeerConnection : IAsyncDisposable
 {
