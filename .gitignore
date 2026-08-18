@@ -107,6 +107,18 @@ docs/*
 !docs/adr/
 !docs/reference/
 
+# The RFC compliance references are tracked while the rest of docs/archive/ stays local. They call themselves
+# the binding reference for this SDK's development and are cited by name in commit messages and reviews, so
+# they have to be diffable and reviewable like the code they describe. Leaving them untracked is how they came
+# to claim RFC 3261 §19.1.4 was done while its implementation was wrong in half the RFC's own examples (#336):
+# nothing to diff, nothing to review, and no gate that could go red. The other files here stay ignored.
+!docs/archive/
+docs/archive/*
+!docs/archive/status-raw/
+docs/archive/status-raw/*
+!docs/archive/status-raw/RFC_VOIP_SDK_COMPLIANCE.md
+!docs/archive/status-raw/RFC3261_CHAPTER_STATUS.md
+
 AGENTS.md
 CLAUDE.md
 VoipSdk_Targetstruktur_fuer_KI.md
