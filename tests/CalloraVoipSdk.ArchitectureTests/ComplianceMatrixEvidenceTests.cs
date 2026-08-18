@@ -183,16 +183,15 @@ public sealed class ComplianceMatrixEvidenceTests
     /// Locates the compliance matrix, reporting <see langword="false"/> when it is not present.
     /// </summary>
     /// <remarks>
-    /// The matrix lives under <c>docs/archive/</c>, which <c>.gitignore</c> excludes — <c>docs/*</c> is blanket
-    /// ignored and only <c>adr</c>, <c>audit</c>, <c>reference</c>, <c>portal</c>, <c>maintainers</c> and
-    /// <c>handover</c> are negated back in. So a CI checkout has no matrix to check, and these gates are
-    /// effective on a developer machine only.
+    /// The matrix is tracked (a targeted negation in <c>.gitignore</c>, which otherwise excludes
+    /// <c>docs/*</c>), so these gates run everywhere including CI. That was not always so, and the gap is the
+    /// reason this gate exists at all: while the file was untracked it could claim RFC 3261 §19.1.4 was done
+    /// with an implementation wrong in half the RFC's own examples, and nothing could go red — there was
+    /// nothing to diff and nothing to review (#336).
     /// <para>
-    /// That is a real limitation, not a design: a document that calls itself the binding RFC reference but is
-    /// neither versioned nor reviewable is exactly the condition under which it drifted in the first place
-    /// (#336). Tracking it — most naturally by moving it under the already-tracked <c>docs/reference/</c> —
-    /// would make these checks bite everywhere, and is a decision about what belongs in the repository rather
-    /// than one to take inside a test.
+    /// The absence check stays as a guard for a partial checkout rather than as an expected path. If it ever
+    /// starts returning false in CI, the matrix has been un-tracked again and these gates have quietly stopped
+    /// protecting anything.
     /// </para>
     /// </remarks>
     private static bool TryFindMatrix(string repoRoot, out string path)
