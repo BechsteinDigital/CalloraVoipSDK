@@ -8,6 +8,13 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
 
 The next line. Entries here accumulate the consumer-visible changes not yet released.
 
+### Internal / in progress (not yet consumer-visible)
+
+- **Stream relay transport groundwork** (#240, ADR-073 slice 1). `StreamRelayMediaTransport` carries relayed
+  media over a persistent TCP/TLS stream (RFC 8656 §12 ChannelData, §12.5 padding), driven by the existing
+  transport-agnostic `TurnRelayCoordinator`. Not yet wired into ICE gathering or nomination — no consumer-visible
+  TCP/TLS relay path yet.
+
 ### Added
 
 - **The receive-simulcast layers the peer confirmed are readable on the peer** (#317 slice 2, RFC 8853 §5.3).
