@@ -14,6 +14,10 @@ The next line. Entries here accumulate the consumer-visible changes not yet rele
   media over a persistent TCP/TLS stream (RFC 8656 §12 ChannelData, §12.5 padding), driven by the existing
   transport-agnostic `TurnRelayCoordinator`. Not yet wired into ICE gathering or nomination — no consumer-visible
   TCP/TLS relay path yet.
+- **Stream relay gathering** (#240, ADR-073 slice 2). `TurnStreamAllocationProbe` gathers a TURN relay
+  allocation over a connected TCP/TLS stream — the stream counterpart of the UDP allocation probe — yielding the
+  relayed endpoint a stream relay candidate advertises, and leaving the stream open for hand-off to the
+  transport. Not yet wired into the ICE candidate set.
 
 ### Added
 
