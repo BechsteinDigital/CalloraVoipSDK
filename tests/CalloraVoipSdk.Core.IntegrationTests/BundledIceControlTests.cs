@@ -82,6 +82,117 @@ public sealed class BundledIceControlTests
         Assert.False(ice.IsActive);
     }
 
+    /// <summary>
+    /// #226: an ICE restart (RFC 8445 §9) swaps the agent on a running transport. After it, a check
+    /// authenticated with the <em>new</em> credentials is answered — the peer that rotated its ufrag can reach
+    /// us again without the session being torn down and rebuilt.
+    /// </summary>
+    [Fact]
+    public async Task After_an_ice_restart_a_check_with_the_new_credentials_is_answered()
+    {
+        using var peer = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        var peerEndPoint = (IPEndPoint)peer.Client.LocalEndPoint!;
+
+        var inbound = InboundPipeline();
+        await using var transport = new BundledMediaTransport(
+            new BundledMediaTransportOptions { LocalEndPoint = new IPEndPoint(IPAddress.Loopback, 0) },
+            inbound, NullLogger<BundledMediaTransport>.Instance);
+
+        await using var ice = new BundledIceControl(
+            Parameters(peerEndPoint, BundleUfrag, BundlePwd, PeerUfrag, PeerPwd),
+            inbound, transport.SendToAsync, NullLoggerFactory.Instance);
+        await transport.StartAsync();
+
+        const string newBundleUfrag = "bnd1";
+        const string newBundlePwd = "restartedpassword1234567";
+        const string newPeerUfrag = "pee1";
+        const string newPeerPwd = "restartedpeerpassword123";
+
+        await ice.RestartIceAsync(Parameters(peerEndPoint, newBundleUfrag, newBundlePwd, newPeerUfrag, newPeerPwd));
+
+        Assert.True(ice.IsActive); // the replacement agent is live, not a husk
+
+        var codec = new StunMessageCodec();
+        var (check, transactionId) = IceConsentCheckBuilder.Build(
+            codec, localUfrag: newPeerUfrag, remoteUfrag: newBundleUfrag, remotePassword: newBundlePwd,
+            priority: 12345u, controlling: true, tieBreaker: 42);
+
+        await peer.SendAsync(check, transport.LocalEndPoint);
+
+        Assert.True(
+            await AwaitSuccessResponseAsync(peer, codec, transactionId, TimeSpan.FromSeconds(5)),
+            "Der neu gestartete Agent hat den Check mit den neuen Credentials nicht beantwortet.");
+    }
+
+    /// <summary>
+    /// The other half, and the reason the old agent is detached before the new one attaches: once the restart
+    /// has happened, a check carrying the retired credentials no longer authenticates. Two live agents would
+    /// answer both, which is a protocol error and lets the retired check list nominate against the new one.
+    /// </summary>
+    [Fact]
+    public async Task After_an_ice_restart_a_check_with_the_retired_credentials_is_not_answered()
+    {
+        using var peer = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        var peerEndPoint = (IPEndPoint)peer.Client.LocalEndPoint!;
+
+        var inbound = InboundPipeline();
+        await using var transport = new BundledMediaTransport(
+            new BundledMediaTransportOptions { LocalEndPoint = new IPEndPoint(IPAddress.Loopback, 0) },
+            inbound, NullLogger<BundledMediaTransport>.Instance);
+
+        await using var ice = new BundledIceControl(
+            Parameters(peerEndPoint, BundleUfrag, BundlePwd, PeerUfrag, PeerPwd),
+            inbound, transport.SendToAsync, NullLoggerFactory.Instance);
+        await transport.StartAsync();
+
+        await ice.RestartIceAsync(Parameters(peerEndPoint, "bnd1", "restartedpassword1234567", "pee1", "restartedpeerpassword123"));
+
+        // Exactly the check that worked before the restart.
+        var codec = new StunMessageCodec();
+        var (staleCheck, staleTransactionId) = IceConsentCheckBuilder.Build(
+            codec, localUfrag: PeerUfrag, remoteUfrag: BundleUfrag, remotePassword: BundlePwd,
+            priority: 12345u, controlling: true, tieBreaker: 42);
+
+        await peer.SendAsync(staleCheck, transport.LocalEndPoint);
+
+        // Not "no datagram arrives" — the restarted agent sends its own checks to this socket, which is how we
+        // know it is alive. What must not arrive is an answer to the retired one.
+        Assert.False(
+            await AwaitSuccessResponseAsync(peer, codec, staleTransactionId, TimeSpan.FromSeconds(2)),
+            "Ein zurückgezogenes Credential-Paar wurde nach dem Restart noch beantwortet.");
+    }
+
+    // Drains the peer socket until a success response for this transaction arrives or the deadline passes.
+    // Everything else on the wire is the agent's own outbound traffic (its consent and connectivity checks).
+    private static async Task<bool> AwaitSuccessResponseAsync(
+        UdpClient peer, StunMessageCodec codec, byte[] transactionId, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            var receive = peer.ReceiveAsync();
+            var completed = await Task.WhenAny(receive, Task.Delay(deadline - DateTime.UtcNow));
+            if (completed != receive)
+                return false;
+
+            var message = codec.Decode(receive.Result.Buffer);
+            if (message is { MessageClass: StunMessageClass.SuccessResponse, MessageMethod: StunMessageMethod.Binding }
+                && message.TransactionId.AsSpan().SequenceEqual(transactionId))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static IceMediaParameters Parameters(
+        IPEndPoint remote, string localUfrag, string localPwd, string remoteUfrag, string remotePwd) =>
+        new(RemoteEndPoint: remote,
+            IceEnabled: true, IceControlling: false,
+            LocalIceUfrag: localUfrag, LocalIcePwd: localPwd,
+            RemoteIceUfrag: remoteUfrag, RemoteIcePwd: remotePwd);
+
     private static BundledInboundPipeline InboundPipeline()
     {
         var demux = BundledRtpDemultiplexerFactory.Create(
