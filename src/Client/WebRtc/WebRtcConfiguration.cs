@@ -23,6 +23,7 @@ public sealed class WebRtcConfiguration
     private readonly IReadOnlyList<string> _audioCodecs = ["opus"];
     private readonly IReadOnlyList<string> _videoCodecs = ["H264"];
     private readonly IReadOnlyList<string> _simulcastLayers = [];
+    private readonly IReadOnlyList<string> _simulcastRecvLayers = [];
     private readonly IReadOnlyList<IceServerConfiguration> _iceServers = [];
 
     /// <summary>
@@ -94,6 +95,21 @@ public sealed class WebRtcConfiguration
     {
         get => _simulcastLayers;
         init => _simulcastLayers = Copy(value, nameof(SimulcastLayers));
+    }
+
+    /// <summary>
+    /// Receive-side simulcast layers to ask the peer for (RFC 8853 §5.3), by <c>a=rid</c> id, e.g.
+    /// <c>["hi", "mid", "lo"]</c>. Empty (default) asks for a single video stream. When set, the offer
+    /// advertises <c>a=simulcast:recv</c> with the matching <c>a=rid … recv</c> and the RID header extension
+    /// (RFC 8852), so the peer it asked can tag each layer it sends back — each arriving layer then carries its
+    /// rid on the received frame. Requires <see cref="EnableVideo"/>. This peer must be the offerer for the
+    /// request to be advertised.
+    /// </summary>
+    /// <exception cref="ArgumentNullException">The assigned list is null.</exception>
+    public IReadOnlyList<string> SimulcastRecvLayers
+    {
+        get => _simulcastRecvLayers;
+        init => _simulcastRecvLayers = Copy(value, nameof(SimulcastRecvLayers));
     }
 
     /// <summary>

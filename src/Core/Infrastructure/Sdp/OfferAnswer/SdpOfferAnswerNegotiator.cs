@@ -73,7 +73,7 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
         {
             var video = options!.Video!;
             mediaLines.Add(BuildVideoOfferMedia(
-                video.Codecs, video.SimulcastSendRids, video.Port, profile, direction,
+                video.Codecs, video.SimulcastSendRids, video.SimulcastRecvRids, video.Port, profile, direction,
                 bundle ? "video" : null, options.VideoMsid, video.Crypto, video.HeaderExtensionUris,
                 bundle, rtcpMux, dtls, ice, video.Candidates));
         }
@@ -122,7 +122,7 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             // SendRecv, so a list that leaves it unset stays byte-identical to the pre-direction multi-track path.
             mediaLines.Add(track.Kind.Equals("video", StringComparison.OrdinalIgnoreCase)
                 ? BuildVideoOfferMedia(
-                    track.Codecs, track.SimulcastSendRids, localEndPoint.Port, profile, track.Direction,
+                    track.Codecs, track.SimulcastSendRids, track.SimulcastRecvRids, localEndPoint.Port, profile, track.Direction,
                     trackMid, track.Msid, track.Crypto, track.HeaderExtensionUris,
                     bundle, rtcpMux, dtls, ice, sharedCandidates)
                 : BuildAudioOfferMedia(
@@ -188,17 +188,21 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
     // before the app's extensions (MID first under BUNDLE), and session-level DTLS/ICE. Shared by the fixed
     // and multi-track paths.
     private static SdpMediaDescription BuildVideoOfferMedia(
-        IReadOnlyList<SdpCodecDefinition> codecs, IReadOnlyList<string> simulcastSendRids, int port,
+        IReadOnlyList<SdpCodecDefinition> codecs, IReadOnlyList<string> simulcastSendRids,
+        IReadOnlyList<string> simulcastRecvRids, int port,
         string profile, SdpMediaDirection direction, string? mid, SdpMsid? msid,
         IReadOnlyList<SdpCryptoAttribute> crypto, IReadOnlyList<string> headerExtUris,
         bool bundle, bool rtcpMux, SdpDtlsParameters? dtls, SdpIceParameters? ice,
         IReadOnlyList<SdpIceCandidate> candidates)
     {
         var (rtxCodecs, rtxFmtp) = VideoCodecCatalog.BuildRtx(codecs);
-        var videoExtmapUris = simulcastSendRids.Count > 0
+        // The RID extension (RFC 8852) is what tags each layer's packets, so it must be offered whenever the
+        // m-line names rids in EITHER direction — a recv-only offer needs it just as much, or the peer it
+        // asked to simulcast has no way to label the layers it sends back (#317).
+        var videoExtmapUris = simulcastSendRids.Count > 0 || simulcastRecvRids.Count > 0
             ? SdpExtmapNegotiation.WithBundledMid(bundle, [RtpHeaderExtensionUris.Rid, .. headerExtUris])
             : SdpExtmapNegotiation.WithBundledMid(bundle, headerExtUris);
-        var (rids, simulcastDeclaration) = BuildSimulcast(simulcastSendRids, codecs);
+        var (rids, simulcastDeclaration) = BuildSimulcast(simulcastSendRids, simulcastRecvRids, codecs);
 
         return new SdpMediaDescription
         {
@@ -739,17 +743,21 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
     // Send-side simulcast (RFC 8853): one a=rid per layer with direction "send", restricted to the primary
     // (first, non-RTX) video codec's payload type, plus one a=simulcast:send listing the layer ids in
     // order. Empty when no simulcast layer is configured (a single-stream video m-line).
+    // Builds the a=rid / a=simulcast lines for a video offer. Send rids (RFC 8853, this side simulcasts) and
+    // recv rids (this side asks the peer to simulcast, RFC 8853 §5.3) are independent: either, both, or
+    // neither. An answerer may only send what the offer marked recv, so a receive-only offerer — the
+    // conference host — must declare recv rids or the peer sends a single stream (#317).
     private static (IReadOnlyList<SdpRid> Rids, SdpSimulcast? Simulcast) BuildSimulcast(
-        IReadOnlyList<string> sendRids, IReadOnlyList<SdpCodecDefinition> videoCodecs)
+        IReadOnlyList<string> sendRids, IReadOnlyList<string> recvRids, IReadOnlyList<SdpCodecDefinition> videoCodecs)
     {
-        if (sendRids.Count == 0)
+        if (sendRids.Count == 0 && recvRids.Count == 0)
             return ([], null);
 
         var primaryPt = videoCodecs[0].PayloadType;
-        var rids = sendRids
-            .Select(rid => new SdpRid { Id = rid, Direction = "send", Restrictions = $"pt={primaryPt}" })
-            .ToArray();
-        return (rids, new SdpSimulcast { Send = sendRids });
+        var rids = new List<SdpRid>(sendRids.Count + recvRids.Count);
+        rids.AddRange(sendRids.Select(rid => new SdpRid { Id = rid, Direction = "send", Restrictions = $"pt={primaryPt}" }));
+        rids.AddRange(recvRids.Select(rid => new SdpRid { Id = rid, Direction = "recv", Restrictions = $"pt={primaryPt}" }));
+        return (rids, new SdpSimulcast { Send = sendRids, Recv = recvRids });
     }
 
     // The packetisation interval this stack actually sends at, and the range it can work with. 20 ms is

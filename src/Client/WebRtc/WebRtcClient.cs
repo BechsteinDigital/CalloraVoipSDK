@@ -88,6 +88,7 @@ public sealed class WebRtcClient : IWebRtcClient
                         Port = _config.LocalEndPoint.Port,
                         Codecs = ResolveVideoCodecs(_config.VideoCodecs),
                         SimulcastSendRids = _config.SimulcastLayers,
+                        SimulcastRecvRids = _config.SimulcastRecvLayers,
                         // Offer the Dependency Descriptor (#225): key-frame and layer information belongs in
                         // the header, not in a payload we may not be allowed to read (#223). Offering it is
                         // free — a peer that does not support it simply omits it from the answer, and the
