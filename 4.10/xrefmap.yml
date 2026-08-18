@@ -12667,6 +12667,12 @@ references:
   commentId: E:CalloraVoipSdk.WebRtc.IPeerConnection.VideoKeyFrameRequested
   fullName: CalloraVoipSdk.WebRtc.IPeerConnection.VideoKeyFrameRequested
   nameWithType: IPeerConnection.VideoKeyFrameRequested
+- uid: CalloraVoipSdk.WebRtc.IPeerConnection.VideoTrackKeyFrameRequested
+  name: VideoTrackKeyFrameRequested
+  href: _api/CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_VideoTrackKeyFrameRequested
+  commentId: E:CalloraVoipSdk.WebRtc.IPeerConnection.VideoTrackKeyFrameRequested
+  fullName: CalloraVoipSdk.WebRtc.IPeerConnection.VideoTrackKeyFrameRequested
+  nameWithType: IPeerConnection.VideoTrackKeyFrameRequested
 - uid: CalloraVoipSdk.WebRtc.IPeerConnectionManager
   name: IPeerConnectionManager
   href: _api/CalloraVoipSdk.WebRtc.IPeerConnectionManager.html
@@ -13018,6 +13024,70 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.WebRtc.IWebRtcTrickleSignaling.SendEndOfCandidatesAsync
   nameWithType: IWebRtcTrickleSignaling.SendEndOfCandidatesAsync
+- uid: CalloraVoipSdk.WebRtc.KeyFrameRequest
+  name: KeyFrameRequest
+  href: _api/CalloraVoipSdk.WebRtc.KeyFrameRequest.html
+  commentId: T:CalloraVoipSdk.WebRtc.KeyFrameRequest
+  fullName: CalloraVoipSdk.WebRtc.KeyFrameRequest
+  nameWithType: KeyFrameRequest
+- uid: CalloraVoipSdk.WebRtc.KeyFrameRequest.#ctor(System.String,System.UInt32,System.String)
+  name: KeyFrameRequest(string, uint, string?)
+  href: _api/CalloraVoipSdk.WebRtc.KeyFrameRequest.html#CalloraVoipSdk_WebRtc_KeyFrameRequest__ctor_System_String_System_UInt32_System_String_
+  commentId: M:CalloraVoipSdk.WebRtc.KeyFrameRequest.#ctor(System.String,System.UInt32,System.String)
+  name.vb: New(String, UInteger, String)
+  fullName: CalloraVoipSdk.WebRtc.KeyFrameRequest.KeyFrameRequest(string, uint, string?)
+  fullName.vb: CalloraVoipSdk.WebRtc.KeyFrameRequest.New(String, UInteger, String)
+  nameWithType: KeyFrameRequest.KeyFrameRequest(string, uint, string?)
+  nameWithType.vb: KeyFrameRequest.New(String, UInteger, String)
+- uid: CalloraVoipSdk.WebRtc.KeyFrameRequest.#ctor*
+  name: KeyFrameRequest
+  href: _api/CalloraVoipSdk.WebRtc.KeyFrameRequest.html#CalloraVoipSdk_WebRtc_KeyFrameRequest__ctor_
+  commentId: Overload:CalloraVoipSdk.WebRtc.KeyFrameRequest.#ctor
+  isSpec: "True"
+  name.vb: New
+  fullName: CalloraVoipSdk.WebRtc.KeyFrameRequest.KeyFrameRequest
+  fullName.vb: CalloraVoipSdk.WebRtc.KeyFrameRequest.New
+  nameWithType: KeyFrameRequest.KeyFrameRequest
+  nameWithType.vb: KeyFrameRequest.New
+- uid: CalloraVoipSdk.WebRtc.KeyFrameRequest.MediaSsrc
+  name: MediaSsrc
+  href: _api/CalloraVoipSdk.WebRtc.KeyFrameRequest.html#CalloraVoipSdk_WebRtc_KeyFrameRequest_MediaSsrc
+  commentId: P:CalloraVoipSdk.WebRtc.KeyFrameRequest.MediaSsrc
+  fullName: CalloraVoipSdk.WebRtc.KeyFrameRequest.MediaSsrc
+  nameWithType: KeyFrameRequest.MediaSsrc
+- uid: CalloraVoipSdk.WebRtc.KeyFrameRequest.MediaSsrc*
+  name: MediaSsrc
+  href: _api/CalloraVoipSdk.WebRtc.KeyFrameRequest.html#CalloraVoipSdk_WebRtc_KeyFrameRequest_MediaSsrc_
+  commentId: Overload:CalloraVoipSdk.WebRtc.KeyFrameRequest.MediaSsrc
+  isSpec: "True"
+  fullName: CalloraVoipSdk.WebRtc.KeyFrameRequest.MediaSsrc
+  nameWithType: KeyFrameRequest.MediaSsrc
+- uid: CalloraVoipSdk.WebRtc.KeyFrameRequest.Mid
+  name: Mid
+  href: _api/CalloraVoipSdk.WebRtc.KeyFrameRequest.html#CalloraVoipSdk_WebRtc_KeyFrameRequest_Mid
+  commentId: P:CalloraVoipSdk.WebRtc.KeyFrameRequest.Mid
+  fullName: CalloraVoipSdk.WebRtc.KeyFrameRequest.Mid
+  nameWithType: KeyFrameRequest.Mid
+- uid: CalloraVoipSdk.WebRtc.KeyFrameRequest.Mid*
+  name: Mid
+  href: _api/CalloraVoipSdk.WebRtc.KeyFrameRequest.html#CalloraVoipSdk_WebRtc_KeyFrameRequest_Mid_
+  commentId: Overload:CalloraVoipSdk.WebRtc.KeyFrameRequest.Mid
+  isSpec: "True"
+  fullName: CalloraVoipSdk.WebRtc.KeyFrameRequest.Mid
+  nameWithType: KeyFrameRequest.Mid
+- uid: CalloraVoipSdk.WebRtc.KeyFrameRequest.Rid
+  name: Rid
+  href: _api/CalloraVoipSdk.WebRtc.KeyFrameRequest.html#CalloraVoipSdk_WebRtc_KeyFrameRequest_Rid
+  commentId: P:CalloraVoipSdk.WebRtc.KeyFrameRequest.Rid
+  fullName: CalloraVoipSdk.WebRtc.KeyFrameRequest.Rid
+  nameWithType: KeyFrameRequest.Rid
+- uid: CalloraVoipSdk.WebRtc.KeyFrameRequest.Rid*
+  name: Rid
+  href: _api/CalloraVoipSdk.WebRtc.KeyFrameRequest.html#CalloraVoipSdk_WebRtc_KeyFrameRequest_Rid_
+  commentId: Overload:CalloraVoipSdk.WebRtc.KeyFrameRequest.Rid
+  isSpec: "True"
+  fullName: CalloraVoipSdk.WebRtc.KeyFrameRequest.Rid
+  nameWithType: KeyFrameRequest.Rid
 - uid: CalloraVoipSdk.WebRtc.KeyFrameSource
   name: KeyFrameSource
   href: _api/CalloraVoipSdk.WebRtc.KeyFrameSource.html

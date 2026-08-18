@@ -214,6 +214,13 @@ is the raw depacketised codec bitstream — the app owns decoding.</p>
 </dd>
     </dl>
     <dl class="jumplist">
+      <dt><a class="xref" href="CalloraVoipSdk.WebRtc.KeyFrameRequest.html">KeyFrameRequest</a></dt>
+      <dd><p>Which outbound video stream the remote peer asked a key frame for, surfaced on
+<a class="xref" href="CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_VideoTrackKeyFrameRequested">VideoTrackKeyFrameRequested</a> for each inbound PLI (RFC 4585 §6.3.1) or FIR
+(RFC 5104 §4.3.1).</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
       <dt><a class="xref" href="CalloraVoipSdk.WebRtc.RecordedFrame.html">RecordedFrame</a></dt>
       <dd><p>One encoded media frame captured for recording, tagged with its track kind and direction. Transport-only:
 <a class="xref" href="CalloraVoipSdk.WebRtc.RecordedFrame.html#CalloraVoipSdk_WebRtc_RecordedFrame_Payload">Payload</a> is the raw depacketised codec bitstream (the recorder does not decode).</p>
@@ -253,6 +260,10 @@ Callora) and exchanges SDP through it, while this peer runs ICE, DTLS-SRTP, BUND
 transport. Encoded media flows through <a class="xref" href="CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_SendAudioAsync_System_ReadOnlyMemory_System_Byte__System_Threading_CancellationToken_">SendAudioAsync(ReadOnlyMemory&lt;byte&gt;, CancellationToken)</a>/<a class="xref" href="CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_SendVideoFrameAsync_System_ReadOnlyMemory_System_Byte__System_UInt32_System_Threading_CancellationToken_">SendVideoFrameAsync(ReadOnlyMemory&lt;byte&gt;, uint, CancellationToken)</a>
 — the SDK is transport-only, so the app owns the codec. The central per-connection abstraction of the
 WebRTC facade, mirroring the SIP <code>ICall</code>.</p>
+<p>
+Written to be consumed, not implemented: it gains members as the facade grows (ADR-006 §2 treats that as
+additive), so a test double implementing it should expect to add one per minor release.
+</p>
 </dd>
     </dl>
     <dl class="jumplist">
