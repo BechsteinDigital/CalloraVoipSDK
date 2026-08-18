@@ -14,7 +14,13 @@ public sealed class SipOutboundRegistrationTests
     [Fact]
     public void An_outbound_registration_contact_carries_ob_instance_and_reg_id()
     {
-        var contact = SipRegistrationService.BuildContactHeaderValue(ContactUri, 600, "urn:uuid:1b4c-2");
+        // Bound to the request property the production path reads, so this stays a test of what actually
+        // feeds the builder rather than of a literal that happens to match today.
+        var request = new SipRegistrationRequest
+        {
+            Username = "bob", Password = "secret", Domain = "example.com", InstanceId = "urn:uuid:1b4c-2",
+        };
+        var contact = SipRegistrationService.BuildContactHeaderValue(ContactUri, 600, request.InstanceId);
 
         Assert.Contains($"<{ContactUri};ob>", contact); // RFC 5626 §4.1: ob is a URI parameter (inside <>)
         // RFC 5626 §4.1: the parameter NAME is the bare token +sip.instance; only the value is quoted.

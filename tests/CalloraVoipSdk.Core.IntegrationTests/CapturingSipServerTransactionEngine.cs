@@ -12,8 +12,16 @@ namespace CalloraVoipSdk.Core.IntegrationTests;
 internal sealed class CapturingSipServerTransactionEngine : ISipServerTransactionEngine
 {
     private readonly List<(int StatusCode, string ReasonPhrase)> _responses = new();
+    private readonly List<CapturedResponse> _detailedResponses = new();
 
     public IReadOnlyList<(int StatusCode, string ReasonPhrase)> Responses => _responses;
+
+    /// <summary>The responses with their headers and body, for tests that assert what a response carries.</summary>
+    public IReadOnlyList<CapturedResponse> DetailedResponses => _detailedResponses;
+
+    /// <summary>One response captured through the engine, including the header set the handler built.</summary>
+    internal sealed record CapturedResponse(
+        int StatusCode, string ReasonPhrase, IReadOnlyDictionary<string, string> Headers, string? Body);
 
     public void Dispose()
     {
@@ -35,6 +43,9 @@ internal sealed class CapturingSipServerTransactionEngine : ISipServerTransactio
         CancellationToken ct = default)
     {
         _responses.Add((statusCode, reasonPhrase));
+        _detailedResponses.Add(new CapturedResponse(
+            statusCode, reasonPhrase,
+            new Dictionary<string, string>(headers, StringComparer.OrdinalIgnoreCase), body));
         return Task.CompletedTask;
     }
 

@@ -9,6 +9,49 @@ namespace CalloraVoipSdk.Core.Infrastructure.Sip.Transport;
 
 internal static class SipTransportRuntimeUtilities
 {
+    /// <summary>
+    /// Derives the transport a Request-URI demands, per RFC 3261 §26.2.2 and §19.1.5: a <c>sips:</c> scheme
+    /// requires TLS (or WSS when the URI names it), and an explicit <c>;transport=</c> parameter selects
+    /// directly. Returns <see langword="false"/> when the URI settles nothing, leaving the caller to fall back
+    /// to a learned hint or its default.
+    /// </summary>
+    /// <remarks>
+    /// Split out of the runtime because it is the part with a right answer independent of any connection
+    /// state: <c>sips:</c> must never come out as plaintext, and that is worth pinning on its own (#336).
+    /// </remarks>
+    public static bool TryInferTransportFromUri(string? requestUri, out SipTransportProtocol transport)
+    {
+        transport = SipTransportProtocol.Udp;
+        if (string.IsNullOrWhiteSpace(requestUri))
+            return false;
+
+        // RFC 3261 §26.2.2: the secure scheme decides before any transport parameter is considered, so a
+        // sips: URI can never be talked down to a plaintext transport by its own parameters.
+        if (requestUri.StartsWith("sips:", StringComparison.OrdinalIgnoreCase))
+        {
+            transport = requestUri.Contains(";transport=wss", StringComparison.OrdinalIgnoreCase)
+                ? SipTransportProtocol.Wss
+                : SipTransportProtocol.Tls;
+            return true;
+        }
+
+        // Longest token first: ";transport=ws" is a prefix of ";transport=wss".
+        if (requestUri.Contains(";transport=wss", StringComparison.OrdinalIgnoreCase))
+            transport = SipTransportProtocol.Wss;
+        else if (requestUri.Contains(";transport=ws", StringComparison.OrdinalIgnoreCase))
+            transport = SipTransportProtocol.Ws;
+        else if (requestUri.Contains(";transport=tls", StringComparison.OrdinalIgnoreCase))
+            transport = SipTransportProtocol.Tls;
+        else if (requestUri.Contains(";transport=tcp", StringComparison.OrdinalIgnoreCase))
+            transport = SipTransportProtocol.Tcp;
+        else if (requestUri.Contains(";transport=udp", StringComparison.OrdinalIgnoreCase))
+            transport = SipTransportProtocol.Udp;
+        else
+            return false;
+
+        return true;
+    }
+
     public static int AllocateEphemeralPort()
     {
         // Probe on IPAddress.Any so the free-port hint matches the system-wide "+:" scope the WebSocket listener
