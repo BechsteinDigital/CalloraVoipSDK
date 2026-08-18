@@ -103,7 +103,7 @@ wenn auch die jeweiligen Update-RFCs berücksichtigt sind.
 | 8.1.1.4 | Call-ID | Ja | Erledigt | – | Stabiler Call-ID über Retry-Pfade (Auth/423). |
 | 8.1.1.5 | CSeq | Ja | Erledigt | – | CSeq-Methodenabgleich und Sequenznummer-Validierung. |
 | 8.1.1.6 | Max-Forwards | Ja | Erledigt | – | UAC setzt Max-Forwards=70. |
-| 8.1.1.7 | Via | Ja | Erledigt | RFC 3581 (rport-Parameter) | Via-Branch mit RFC 3261 Magic-Cookie; UAC setzt `;rport`; UAS reflektiert `rport=<port>` und `received=<ip>` in Responses. `SipProtocol.ReflectViaRport`, `SipCallSignalingService`, `SipCallSessionHeaderService` |
+| 8.1.1.7 | Via | Ja | Erledigt | RFC 3581 (rport-Parameter) | Via-Branch mit RFC 3261 Magic-Cookie; UAC setzt `;rport`; UAS reflektiert `rport=<port>` und `received=<ip>` in Responses. `SipProtocol.ReflectViaRport` — belegt durch `SipViaReflectionAndEscalationTests` (received bei abweichender Quelle, rport-Füllung, unverändert bei Treffer, idempotent bei doppelter Anwendung), `SipCallSignalingService`, `SipCallSessionHeaderService` |
 | 8.1.1.8 | Contact | Ja | Erledigt | RFC 5627 (GRUU), RFC 5626 (Outbound/reg-id) | INVITE trägt genau einen Contact; SIPS-Contact-Erzwingung. `SipCallSessionHeaderService.cs` |
 | 8.1.1.9 | Supported and Require | Ja | Erledigt | – | Require/Proxy-Require; 420-Retry mit token-basiertem Filtering. `SipRequireOptionPolicy.cs` |
 | 8.1.1.10 | Additional Message Components | Ja | Erledigt | RFC 4028 (Session-Timer), RFC 3323 (Privacy) | UAC erzeugt methodenspezifische Komponenten. |
@@ -117,7 +117,7 @@ wenn auch die jeweiligen Update-RFCs berücksichtigt sind.
 | 8.2 | UAS Behavior | Nein | Teilweise | – | Kernverhalten abgesichert; §8.2.2.1/§8.2.6.2 implementiert und per Compliance-Tests abgedeckt. |
 | 8.2.1 | Method Inspection | Ja | Erledigt | – | Unbekannte Methoden → 501 mit Allow-Header. `SipCallSignalingService.cs`; `SipUasSection8ComplianceTests.cs` |
 | 8.2.2 | Header Inspection | Ja | Erledigt | RFC 8217 (name-addr) | Pflichtheader (Via/From/To/Call-ID/CSeq) geprüft → 400; Ingress-Vollabdeckung. |
-| 8.2.2.1 | To and Request-URI | Ja | Erledigt | – | 416 bei unsupported URI Scheme; 404 bei unbekanntem User via `ISipUasUserIdentityPolicy` (ADR-001). Default: AcceptAll (backwards-compatible). `SipCallSignalingService.cs` |
+| 8.2.2.1 | To and Request-URI | Ja | Erledigt | – | 416 bei unsupported URI Scheme; 404 bei unbekanntem User via `ISipUasUserIdentityPolicy` (ADR-001). Default: AcceptAll (backwards-compatible). `SipCallSignalingService.cs`. Belegt durch `ServedUserSipIdentityPolicyTests` (gedientes AoR unabhaengig von der Schreibweise, nicht gedienter User abgelehnt, leere Menge verweigert statt still alles zu blockieren). |
 | 8.2.2.2 | Merged Requests | Ja | Erledigt | – | Merged INVITE mit gleicher Call-ID/From-tag/CSeq aber unterschiedlichem Via-branch → 482. `SipMergedInviteTracker.cs` |
 | 8.2.2.3 | Require | Ja | Erledigt | – | Unsupported Require-tags → 420 mit Unsupported-Header. `SipRequireOptionPolicy.cs` |
 | 8.2.3 | Content Processing | Ja | Erledigt | – | Content-Type ≠ application/sdp → 415 mit Accept; Content-Encoding ≠ identity → 415 mit Accept-Encoding. `SipContentPolicy.cs` |
@@ -133,7 +133,7 @@ wenn auch die jeweiligen Update-RFCs berücksichtigt sind.
 | 9.2 | Server Behavior | Nein | **Erledigt** | – | CANCEL→487 mit Reason-Header-Weiterleitung. `SipCallSessionInboundService.HandleInboundRequestAsync` (CANCEL-Zweig mit Transaktionsabgleich). Belegt durch `SipCancelTransactionMatchTests`. |
 | 10 | Registrations | Nein | **Erledigt** | RFC 5626 (Outbound/reg-id: **Erledigt**), RFC 5627 (GRUU: Offen), RFC 3327 (path), RFC 3608 (Service-Route) | Vollständige UAC-Seite implementiert. `SipSection10RegisterComplianceTests.cs` |
 | 10.1 | Overview | Nein | **Erledigt** | – | REGISTER/Unregister/Fetch-Bindings-Lifecycle via `ISipRegistrationService`. |
-| 10.2 | Constructing the REGISTER Request | Nein | **Erledigt** | RFC 5626 §4 (+sip.instance, reg-id), RFC 3327 (Supported: path) | Via/From/To/Call-ID/CSeq/Contact/Expires/Max-Forwards/User-Agent/Supported korrekt; `+sip.instance` + `reg-id=1` wenn `InstanceId` gesetzt; `Supported: outbound` automatisch hinzugefügt wenn `InstanceId` gesetzt. |
+| 10.2 | Constructing the REGISTER Request | Nein | **Erledigt** | RFC 5626 §4 (+sip.instance, reg-id), RFC 3327 (Supported: path) | Via/From/To/Call-ID/CSeq/Contact/Expires/Max-Forwards/User-Agent/Supported korrekt; `+sip.instance` + `reg-id=1` wenn `InstanceId` gesetzt; `Supported: outbound` automatisch hinzugefügt wenn `InstanceId` gesetzt. Belegt durch `SipOutboundRegistrationTests` (Contact trägt ob/instance/reg-id aus `SipRegistrationRequest.InstanceId`; ob hängt hinter einem bestehenden transport-Parameter; ohne Instanz-Id keine outbound-Parameter). Geprüft ist der Contact-Aufbau aus der Property, nicht der vollständige REGISTER-Versand. |
 | 10.2.1 | Adding Bindings | Nein | **Erledigt** | – | `RegisterAsync`; Expires-Header + Contact-`expires`-Parameter (§10.2.1.1). |
 | 10.2.1.1 | Setting the Expiration Interval | Nein | **Erledigt** | – | Contact: `<uri>;expires=N` gesetzt; Min-Expires-Retry bei 423. EffectiveExpires aus 200 OK extrahiert (Expires-Header oder Contact-Param). |
 | 10.2.1.2 | Preferences among Contact Addresses | Nein | Teilweise | RFC 3840/3841 (UA-Capabilities/Caller-Prefs) | `q`-Parameter (Contact-Preferenz) nicht implementiert; kein Mehrfach-Contact. |
@@ -200,7 +200,7 @@ wenn auch die jeweiligen Update-RFCs berücksichtigt sind.
 | 17.2.4 | Handling Transport Errors | Nein | **Erledigt** | – | Transport-Fehler bei Retransmit terminiert Transaction; `RegisterTransportErrorHandler`-Callback für TU-Benachrichtigung. |
 | 18 | Transport | Nein | Teilweise | RFC 7118 (WebSocket), RFC 5626 (Outbound), RFC 4168 (SCTP) | UDP/TCP/TLS/WS/WSS implementiert. §18.1.1/§18.1.2/§18.2.1/§18.2.2/§18.3/§18.4 erledigt. RFC 5626 reg-id+outbound erledigt; flow-token (Server-seitig) out-of-scope. |
 | 18.1 | Clients | Nein | **Erledigt** | – | §18.1.1: UDP→TCP-Eskalation >1300 Bytes. §18.1.2: UAC sendet `;rport`, Responses kommen per Transaction-Matching (branch) zurück. |
-| 18.1.1 | Sending Requests | Nein | **Erledigt** | RFC 3263 | Transport-Selektion via DNS-Kandidaten; Nachrichten >1300 Bytes werden von UDP auf TCP eskaliert, Via-Token wird aktualisiert (`EscalateViaTransportToTcp`). |
+| 18.1.1 | Sending Requests | Nein | **Erledigt** | RFC 3263 | Transport-Selektion via DNS-Kandidaten; Nachrichten >1300 Bytes werden von UDP auf TCP eskaliert, Via-Token wird aktualisiert (`EscalateViaTransportToTcp` — belegt durch `SipViaReflectionAndEscalationTests`). |
 | 18.1.2 | Receiving Responses | Nein | **Erledigt** | RFC 3581 (rport-Symmetric-Response) | UAC setzt `;rport` in Via; Responses treffen per UDP-Socket bzw. gleicher TCP-Verbindung ein; Transaction-Matching via branch. |
 | 18.2 | Servers | Nein | **Erledigt** | – | §18.2.1: `received=` immer hinzugefügt wenn Quell-IP ≠ sent-by; §18.2.2: Routing per Via-Parametern. |
 | 18.2.1 | Receiving Requests | Nein | **Erledigt** | RFC 3581, RFC 5626 | `SipProtocol.ReflectViaParameters`: `received=<ip>` wenn Quell-IP ≠ sent-by (RFC 3261 §18.2.1 MUST); `rport=<port>` wenn bare `;rport` vorhanden (RFC 3581 §4). CRLF-Pong (RFC 5626 §4.4.1) gesendet. |
@@ -209,13 +209,13 @@ wenn auch die jeweiligen Update-RFCs berücksichtigt sind.
 | 18.4 | Error Handling | Nein | **Erledigt** | – | Stale-Stream-Verbindung bei Send-Fehler entfernt; einmaliger Retry mit neuer Verbindung (`SendPayloadAsync` in `SipTransportRuntime.cs`). |
 | 19 | Common Message Components | Nein | **Erledigt** | RFC 8217, RFC 4475 (Torture Tests) | §19.1–§19.3 vollständig. `SipProtocol.cs` |
 | 19.1 | SIP and SIPS Uniform Resource Indicators | Nein | **Erledigt** | RFC 5630 (SIPS-URI-Klarstellungen) | §19.1.1–§19.1.6 erledigt. |
-| 19.1.1 | SIP and SIPS URI Components | Nein | **Erledigt** | – | `SipProtocol.TryParseSipUri`: user, host, port, scheme; URI-Parameter (transport, lr, maddr) via `GetUriParam`/`InferTransport`. |
+| 19.1.1 | SIP and SIPS URI Components | Nein | **Erledigt** | – | `SipUriProtocol.TryParseSipUri`: user, host, port, scheme; URI-Parameter (transport, lr, maddr) — belegt durch `SipUriComparisonTests` (die zehn Beispielpaare aus RFC 3261 §19.1.4, deren Vergleich genau diese Parameter liest) und `SipUriEncodingTests`. Transport-Ableitung siehe §19.1.5. |
 | 19.1.2 | Character Escaping Requirements | Nein | **Erledigt** | – | `SipUriProtocol.SipUriEncodeUser` / `SipUriDecodeUser`: RFC-konforme Percent-Encoding/Decoding für User-Info-Teil. Belegt durch `SipUriEncodingTests` (§25.1-Zeichenklassen, UTF-8-Oktett-Escaping, Round-Trip). |
 | 19.1.3 | Example SIP and SIPS URIs | - | N/A | – | Beispielabschnitt. |
 | 19.1.4 | URI Comparison | Nein | **Erledigt** | – | `SipUriProtocol.SipUriEqual`, angewandt von `ServedUserSipIdentityPolicy` (§8.2.2.1). Schema/Host case-insensitiv, User case-sensitiv inkl. Unreserved-Escape-Normalisierung; Port und `transport` werden **wie angegeben** verglichen (weggelassen ≠ explizit Default); `user`/`ttl`/`method`/`maddr` einseitig ⇒ ungleich, alle übrigen Parameter einseitig ⇒ ignoriert; URI-Header vollständig. Belegt durch `SipUriComparisonTests` gegen die zehn Beispielpaare aus §19.1.4. **Korrektur 2026-08-18:** die vorige Fassung war als erledigt geführt, verletzte aber fünf dieser zehn Beispiele (Port- und transport-Defaults wurden aufgelöst, unbekannte Parameter zählten einseitig, Escapes wurden nicht normalisiert) und hatte keinen Aufrufer und keinen Test. |
 | 19.1.5 | Forming Requests from a URI | Nein | **Erledigt** | – | `TryParseSipUri` + `InferTransport` + DNS-Auflösung via `SipDnsRouteResolver`; Transport-Parameter aus URI ausgewertet. |
 | 19.1.6 | Relating SIP URIs and tel URLs | Nein | **Erledigt** | RFC 3966 (The tel URI) | `SipUriProtocol.TryTelUriToSipUri`: `tel:+1-800-…` → `sip:+1800…@domain;user=phone`; visuelle Trennzeichen normalisiert; phone-context-Parameter entfernt. Belegt durch `SipUriEncodingTests` (RFC-3966-visual-separator, phone-context, Negativfälle). |
-| 19.2 | Option Tags | Nein | **Erledigt** | – | `SipRequireOptionPolicy`: Require-Validierung mit Supported={100rel, timer, replaces}; 420+Unsupported bei unbekannten Tags; Supported-Header gesetzt. |
+| 19.2 | Option Tags | Nein | **Erledigt** | – | `SipRequireOptionPolicy` — belegt durch `SipViaReflectionAndEscalationTests` (unterstützte Tags akzeptiert, unbekannte einzeln und dedupliziert im Unsupported-Header, fehlender Header kein Verstoß): Require-Validierung mit Supported={100rel, timer, replaces}; 420+Unsupported bei unbekannten Tags; Supported-Header gesetzt. |
 | 19.3 | Tags | Nein | **Erledigt** | – | `SipProtocol.NewTag()` → GUID-basiert (global unique, cryptographically random per RFC §19.3); From-Tag (UAC) / To-Tag (UAS) korrekt gesetzt; Dialog-Matching über From/To-Tags. |
 | 20 | Header Fields | Nein | Teilweise | RFC 8217 (name-addr/addr-spec für viele Header) | Viele Header implementiert; RFC 8217 name-addr-Pflicht teilweise durchgesetzt. |
 | 20.1 | Accept | Nein | **Erledigt** | – | `Accept: application/sdp` in UAC INVITE-Requests. `SipCallSessionHeaderService.CreateDialogRequestHeaders`. `SipSection20HeaderComplianceTests.cs` |
@@ -345,7 +345,7 @@ wenn auch die jeweiligen Update-RFCs berücksichtigt sind.
 | RFC 3840 | Indicating User Agent Capabilities in SIP | Should Have | Offen | – |
 | RFC 3841 | Caller Preferences for SIP | Should Have | Offen | – |
 | RFC 4412 | Communications Resource Priority for SIP | Nice-to-Have | Offen | – |
-| RFC 4488 | Suppression of SIP REFER Method Implicit Subscription | Should Have | **Erledigt** | `SendReferAsync(suppressSubscription: true)` → `Refer-Sub: false` + `Require: norefersub`; eingehender REFER mit `Refer-Sub: false` unterdrückt implizites NOTIFY; `norefersub` in `SupportedOptionTags` (kein 420). |
+| RFC 4488 | Suppression of SIP REFER Method Implicit Subscription | Should Have | **Erledigt** | `SendReferAsync(suppressSubscription: true)` → `Refer-Sub: false` + `Require: norefersub` (Tag von `SipRequireOptionPolicy` als unterstützt geführt — belegt durch `SipViaReflectionAndEscalationTests`); eingehender REFER mit `Refer-Sub: false` unterdrückt implizites NOTIFY; `norefersub` gilt als unterstützt, ein Require darauf löst also kein 420 aus. |
 | RFC 4575 | SIP Event Package for Conference State | Nice-to-Have | Offen | – |
 | RFC 4662 | SIP Event Notification Extension for Resource Lists | Nice-to-Have | Offen | – |
 | RFC 5057 | Multiple Dialog Usages in SIP | Should Have | Teilweise | Forking teilweise, `SipDialogManagerForkingComplianceTests.cs` |
@@ -508,7 +508,7 @@ wenn auch die jeweiligen Update-RFCs berücksichtigt sind.
 
 | RFC | Titel | Priorität | Status SDK | Implementierungsdetail |
 |---|---|---|---|---|
-| RFC 3551 | RTP AVP (G.711 PCMU PT 0 / PCMA PT 8 / G.722 PT 9) | Must Have | **Erledigt** | G.711 (μ-law/a-law) via `G711Codec.cs` (Windows/Linux); G.722 (PT 9) ebenfalls in `SdpUtilities.DefaultCodecs`; PCMU/PCMA/G722 per Default konfiguriert; RTP-Transport via SIPSorcery |
+| RFC 3551 | RTP AVP (G.711 PCMU PT 0 / PCMA PT 8 / G.722 PT 9) | Must Have | **Erledigt** | G.711 (μ-law/a-law) via `G711Codec.cs` (Windows/Linux); G.722 (PT 9) ebenfalls in der Default-Codec-Liste von `SdpUtilities`; PCMU/PCMA/G722 per Default konfiguriert — belegt durch `AudioCodecResolverTests`, `AudioPayloadCodecFactoryTests`, `G722FrameTests`; RTP-Transport via SIPSorcery |
 | RFC 3389 | RTP Payload for Comfort Noise (CN, PT 13) | Should Have | Offen | – |
 | RFC 4867 | RTP Payload Format for AMR and AMR-WB | Should Have | Offen | – |
 | RFC 7587 | RTP Payload Format for Opus | Must Have | Offen | Opus-Codec nicht konfiguriert; fehlt für WebRTC-Interop |
@@ -613,7 +613,7 @@ wenn auch die jeweiligen Update-RFCs berücksichtigt sind.
 | Reason Header | RFC 3326 | `SipReasonHeader.cs` |
 | Replaces Header | RFC 3891 | `SipReplacesHeaderValue.cs` |
 | STUN Protocol | RFC 8489 | `StunClient.cs`, `StunServer.cs`, `StunMessageCodec.cs` |
-| G.711/G.722 Codec | RFC 3551 | `G711Codec.cs`, `SdpUtilities.DefaultCodecs` |
+| G.711/G.722 Codec | RFC 3551 | `G711Codec.cs`, Default-Codec-Liste in `SdpUtilities` (belegt durch `AudioCodecResolverTests`) |
 | P-Asserted-Identity | RFC 3325 | `SipAssertedIdentityHeader.cs`, `ISipIdentityTrustPolicy.cs` |
 | RTP Core + Sequenzprüfung | RFC 3550 | `RtpPacketCodec.cs`, `RtpSession.cs`, `RtpSequenceValidator.cs` |
 | RTP AVP Profil | RFC 3551 | `RtpAvpProfile.cs` |

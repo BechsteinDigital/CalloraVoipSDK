@@ -10,7 +10,9 @@ namespace CalloraVoipSdk.Core.IntegrationTests;
 /// </summary>
 public sealed class ServedUserSipIdentityPolicyTests
 {
-    private static ServedUserSipIdentityPolicy Policy(params string[] aors) => new(aors);
+    // Typed as the contract the compliance matrix names for §8.2.2.1, not as the implementation: what is
+    // claimed is that a UAS can be told which users it serves, and that is the interface.
+    private static ISipUasUserIdentityPolicy Policy(params string[] aors) => new ServedUserSipIdentityPolicy(aors);
 
     [Fact]
     public void A_served_user_is_matched_regardless_of_how_the_peer_spells_it()
