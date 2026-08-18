@@ -265,6 +265,16 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     /// <see cref="SetRemoteDescriptionAsync"/> — before the session exists — so this exposes the bound socket's
     /// endpoint in that window and the transport's endpoint once the session is built. Null only before the bind.
     /// </summary>
+    /// <summary>
+    /// The receive-simulcast rids the peer confirmed on the primary video m-line (RFC 8853 §5.3), read off the
+    /// current session under the same lock as the other session-derived reads. Empty before a session exists or
+    /// when no receive simulcast was negotiated.
+    /// </summary>
+    public IReadOnlyList<string> NegotiatedReceiveSimulcastRids
+    {
+        get { lock (_sync) { return _session?.VideoReceiveRids.ToArray() ?? []; } }
+    }
+
     public IPEndPoint? LocalMediaEndPoint
     {
         get { lock (_sync) { return _session?.LocalEndPoint ?? _mediaSocket.BoundEndPoint; } }

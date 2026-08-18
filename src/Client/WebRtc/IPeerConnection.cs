@@ -32,6 +32,15 @@ public interface IPeerConnection : IAsyncDisposable
     /// <summary>The bound local media endpoint once the transport has bound; <see langword="null"/> before.</summary>
     IPEndPoint? LocalMediaEndPoint { get; }
 
+    /// <summary>
+    /// The receive-side simulcast layer ids (RFC 8853 §5.3) the peer confirmed after the last
+    /// <see cref="SetRemoteDescriptionAsync"/>: the <c>a=rid … recv</c> ids this offer asked for
+    /// (<see cref="WebRtcConfiguration.SimulcastRecvLayers"/>) that the answer echoed as <c>send</c>, on the
+    /// primary video m-line. Empty when no receive simulcast was negotiated. Lets a forwarding layer know which
+    /// layers to expect before frames arrive; each frame also carries its own layer id as it is received.
+    /// </summary>
+    IReadOnlyList<string> NegotiatedReceiveSimulcastRids { get; }
+
     /// <summary>Raised on every lifecycle transition (RFC 8829 <c>connectionstatechange</c>).</summary>
     event EventHandler<PeerConnectionState>? ConnectionStateChanged;
 

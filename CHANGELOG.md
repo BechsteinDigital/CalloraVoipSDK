@@ -10,6 +10,21 @@ The next line. Entries here accumulate the consumer-visible changes not yet rele
 
 ### Added
 
+- **The receive-simulcast layers the peer confirmed are readable on the peer** (#317 slice 2, RFC 8853 §5.3).
+  After `SetRemoteDescriptionAsync`, **`IPeerConnection.NegotiatedReceiveSimulcastRids`** lists the `a=rid …
+  recv` ids this offer asked for that the answer echoed as `send` (with the RID header extension) — the
+  negotiated set, so a forwarding layer knows which layers to expect before frames arrive; each frame still
+  carries its own layer id as it is received. Empty when the peer answered without simulcast.
+
+  While wiring this, a latent gap slice 1 had exposed was fixed: the receive-side negotiation admitted the
+  peer's layers even when the answer confirmed `a=simulcast:send` *without* echoing the RID header extension
+  (RFC 8852) — but without it the peer cannot tag the layers and they cannot be demultiplexed. It now requires
+  the extension, mirroring the send-side guard. Unreachable before an offer could ask recv, so no released
+  behaviour changes.
+
+  Adding a member to `IPeerConnection` is additive for consumers (ADR-006 §2); a test double that implements
+  the interface adds the member.
+
 - **An offer can ask the peer to simulcast** (#317, RFC 8853 §5.3). The receive path has demultiplexed
   incoming simulcast layers since 4.9.0 — but only a peer that *offered* could reach it; an SDK peer that
   offered itself could only say `a=simulcast:send`, never ask. Since an answerer may only send what the offer
