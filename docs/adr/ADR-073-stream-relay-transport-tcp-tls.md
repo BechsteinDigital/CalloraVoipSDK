@@ -69,6 +69,15 @@ receive* live on the stream, not the shared UDP socket:
 - A new `StreamRelayMediaTransport` owns the persistent TCP/TLS connection, presents the same
   send/receive-datagram surface to DTLS/ICE/RTP (so those layers compose unchanged), and carries relayed media
   as ChannelData both directions.
+
+  **This is libwebrtc's model.** In `p2p/base/turn_port.cc`, `TurnPort::PrepareAddress` creates its *own*
+  socket per TURN allocation — `CreateClientTcpSocket(... server_address_ ...)` for a TCP/TLS server,
+  `CreateUdpSocket` for UDP — so every TURN transport (UDP and stream alike) is a separate `Port` with its own
+  connection to the server, not a mode of the host socket. Decision 2 converges the stream relay onto exactly
+  that structure. (Our *existing* UDP relay diverges: ADR-056 transitions the one shared media socket in place
+  rather than owning a separate TURN socket — a deliberate past choice, shipped, and out of scope for #240. The
+  stream relay does not, and cannot, inherit that in-place model, so it lands closer to libwebrtc than the UDP
+  path does.)
 - Its relay candidate's `Check` send path frames a connectivity check as a Send indication over the stream
   (RFC 8656 §10, check phase), exactly as the UDP relay candidate does over the socket — only the raw-send
   delegate differs (stream write vs. `SendToAsync`).
