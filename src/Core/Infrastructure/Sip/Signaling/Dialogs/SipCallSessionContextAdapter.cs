@@ -37,31 +37,31 @@ internal sealed class SipCallSessionContextAdapter : ISipCallSessionContext
 
     public ISipServerTransactionEngine ServerTransactions => _session._serverTransactions;
 
-    public string LocalDisplayName => _session._localDisplayName;
+    public string LocalDisplayName => _session._config.EffectiveLocalDisplayName;
 
-    public string AuthUsername => _session._authUsername;
+    public string AuthUsername => _session._config.AuthUsername;
 
-    public string? AuthPassword => _session._authPassword;
+    public string? AuthPassword => _session._config.AuthPassword;
 
-    public string UserAgent => _session._userAgent;
+    public string UserAgent => _session._config.UserAgent;
 
-    public string? PreferredIdentityUri => _session._preferredIdentityUri;
+    public string? PreferredIdentityUri => _session._config.PreferredIdentityUri;
 
-    public string? PrivacyHeader => _session._privacyHeader;
+    public string? PrivacyHeader => _session._config.PrivacyHeader;
 
-    public string? RequireHeader => _session._requireHeader;
+    public string? RequireHeader => _session._config.RequireHeader;
 
-    public string? ProxyRequireHeader => _session._proxyRequireHeader;
+    public string? ProxyRequireHeader => _session._config.ProxyRequireHeader;
 
-    public string? ReferredBy => _session._referredBy;
+    public string? ReferredBy => _session._config.ReferredBy;
 
-    public IReadOnlyDictionary<string, string>? CustomHeaders => _session._customHeaders;
+    public IReadOnlyDictionary<string, string>? CustomHeaders => _session._config.CustomHeaders;
 
-    public SipTransportProtocol SignalingTransport => _session._signalingTransport;
+    public SipTransportProtocol SignalingTransport => _session._config.SignalingTransport;
 
-    public CalloraVoipSdk.Core.Application.Ports.Security.TlsConfiguration? LineTls => _session._lineTls;
+    public CalloraVoipSdk.Core.Application.Ports.Security.TlsConfiguration? LineTls => _session._config.LineTls;
 
-    public TimeSpan Timeout => _session._timeout;
+    public TimeSpan Timeout => _session._config.Timeout;
 
     public SipRequest? InitialInvite => _session._initialInvite;
 
@@ -185,10 +185,10 @@ internal sealed class SipCallSessionContextAdapter : ISipCallSessionContext
     public void TryApplyRemoteAssertedIdentity(string? assertedIdentityHeader, IPEndPoint remoteEndPoint) =>
         _session.ApplyRemoteAssertedIdentity(assertedIdentityHeader, remoteEndPoint);
 
-    public string RemoteRequestUri => _session._dialogManager.RemoteTargetUri ?? _session._initialRequestUri;
+    public string RemoteRequestUri => _session._dialogManager.RemoteTargetUri ?? _session._config.EffectiveInitialRequestUri;
 
     public IReadOnlyList<string> RouteSet =>
-        _session._dialogManager.RouteSet.Count > 0 ? _session._dialogManager.RouteSet : _session._initialRouteSet;
+        _session._dialogManager.RouteSet.Count > 0 ? _session._dialogManager.RouteSet : _session._config.InitialRouteSet;
 
     public IReadOnlyList<string> DialogRouteSet => _session._dialogManager.RouteSet;
 

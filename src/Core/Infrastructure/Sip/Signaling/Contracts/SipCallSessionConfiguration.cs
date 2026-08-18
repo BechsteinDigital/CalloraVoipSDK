@@ -106,4 +106,18 @@ internal sealed class SipCallSessionConfiguration
     /// ignored by the header builder. <see langword="null"/> for inbound dialogs.
     /// </summary>
     public IReadOnlyDictionary<string, string>? CustomHeaders { get; init; }
+
+    /// <summary>
+    /// <see cref="LocalDisplayName"/> normalised for header generation: an absent display name is the empty
+    /// string, never null, so a From/Contact builder never has to decide what "no display name" means.
+    /// </summary>
+    public string EffectiveLocalDisplayName => LocalDisplayName ?? string.Empty;
+
+    /// <summary>
+    /// The Request-URI the first out-of-dialog request targets: <see cref="InitialRequestUri"/> when one was
+    /// configured, otherwise <see cref="RemoteUri"/>. The fallback lives here rather than at each call site,
+    /// so "no override" cannot be interpreted two ways.
+    /// </summary>
+    public string EffectiveInitialRequestUri =>
+        string.IsNullOrWhiteSpace(InitialRequestUri) ? RemoteUri : InitialRequestUri!;
 }
