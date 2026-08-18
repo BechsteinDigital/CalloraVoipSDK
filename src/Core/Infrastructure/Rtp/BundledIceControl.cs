@@ -1,5 +1,6 @@
 using System.Net;
 using CalloraVoipSdk.Core.Infrastructure.Stun.Ice;
+using CalloraVoipSdk.Core.Infrastructure.Stun.Wire;
 using Microsoft.Extensions.Logging;
 
 namespace CalloraVoipSdk.Core.Infrastructure.Rtp;
@@ -27,6 +28,12 @@ internal sealed class BundledIceControl : IAsyncDisposable
     // Plain object rather than System.Threading.Lock: this assembly also targets net8.0, where that type
     // does not exist.
     private readonly object _restartGate = new();
+
+    // Discovers the socket's reflexive address over the LIVE transport (RFC 5389 §7), so an ICE restart can
+    // re-gather without surrendering the socket — surrendering it would cost the DTLS association and every SRTP
+    // context riding on it. It sits on the same inbound STUN feed as the agent; both match by transaction id, so
+    // neither sees the other's traffic as anything but noise. Null when no unframed send was supplied.
+    private readonly IceReflexiveProbe? _reflexiveProbe;
 
     // The live agent. Mutable because an ICE restart (RFC 8445 §9) replaces it wholesale — new credentials mean
     // a new check list, a new inbound validator and a new consent session, and none of those can be re-keyed in
@@ -64,6 +71,11 @@ internal sealed class BundledIceControl : IAsyncDisposable
     /// Invoked (in addition to <paramref name="onPairNominated"/>) when a relay pair is nominated, so the caller
     /// can switch the transport onto the relay data path (RFC 8656 ChannelBind). Forwarded to the ICE attachment.
     /// </param>
+    /// <param name="sendUnframed">
+    /// Raw send that reaches a server as-is in either transport mode (typically
+    /// <see cref="BundledMediaTransport.SendUnframedAsync"/>), used to re-probe the reflexive address on a live
+    /// transport. <see langword="null"/> leaves <see cref="ProbeServerReflexiveAsync"/> reporting nothing.
+    /// </param>
     public BundledIceControl(
         IceMediaParameters parameters,
         BundledInboundPipeline inbound,
@@ -74,7 +86,8 @@ internal sealed class BundledIceControl : IAsyncDisposable
         Action? onConnectivityRecovered = null,
         Action<IPEndPoint>? onPairNominated = null,
         Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>? relaySend = null,
-        Action<IPEndPoint>? onRelayPairNominated = null)
+        Action<IPEndPoint>? onRelayPairNominated = null,
+        Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>? sendUnframed = null)
     {
         _inbound = inbound ?? throw new ArgumentNullException(nameof(inbound));
         _sendRaw = sendRaw ?? throw new ArgumentNullException(nameof(sendRaw));
@@ -87,7 +100,32 @@ internal sealed class BundledIceControl : IAsyncDisposable
         _onRelayPairNominated = onRelayPairNominated;
 
         _attachment = Attach(parameters);
+
+        if (sendUnframed is not null)
+        {
+            _reflexiveProbe = new IceReflexiveProbe(
+                sendUnframed, new StunMessageCodec(), loggerFactory.CreateLogger<IceReflexiveProbe>());
+            _inbound.StunPacketReceived += OnProbeStunPacket;
+        }
     }
+
+    // The probe's half of the shared inbound STUN feed. A named handler rather than a lambda so disposal can
+    // detach it — a lambda would leave the pipeline holding this control after teardown.
+    private void OnProbeStunPacket(
+        byte[] datagram, IPEndPoint source, Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>? replyVia)
+        => _reflexiveProbe?.OnStunPacketReceived(datagram);
+
+    /// <summary>
+    /// Asks <paramref name="stunServer"/> what this socket looks like from outside (RFC 8445 §5.1.1.2), over the
+    /// running transport rather than by taking the socket back. Returns <see langword="null"/> when the server does
+    /// not answer, when it answers without XOR-MAPPED-ADDRESS, or when no unframed send was supplied.
+    /// </summary>
+    /// <param name="stunServer">The STUN server's transport address.</param>
+    /// <param name="timeout">Per-attempt wait before retransmitting (RFC 5389 §7.2.1).</param>
+    /// <param name="cancellationToken">Cancels the probe.</param>
+    public Task<IPEndPoint?> ProbeServerReflexiveAsync(
+        IPEndPoint stunServer, TimeSpan timeout, CancellationToken cancellationToken = default)
+        => _reflexiveProbe?.ProbeAsync(stunServer, timeout, cancellationToken) ?? Task.FromResult<IPEndPoint?>(null);
 
     /// <summary>
     /// Replaces the ICE agent with one built from <paramref name="parameters"/> — an ICE restart (RFC 8445 §9,
@@ -207,6 +245,8 @@ internal sealed class BundledIceControl : IAsyncDisposable
             live = _attachment;
 
         _inbound.StunPacketReceived -= live.OnStunPacketReceived;
+        if (_reflexiveProbe is not null)
+            _inbound.StunPacketReceived -= OnProbeStunPacket;
         await live.DisposeAsync().ConfigureAwait(false);
     }
 }

@@ -436,7 +436,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     /// </exception>
     public string CreateOffer()
     {
-        var local = EnsureLocalMediaEndPoint();
+        var local = _mediaSocket.EnsureBound();
         var offerModel = _negotiator.CreateOffer(
             local, _options.AudioCodecs, SdpMediaDirection.SendRecv, MediaOptions(local));
         var offerSdp = _serializer.Serialize(offerModel);
@@ -471,7 +471,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     /// returned offer announces a restart that has already taken effect here. Rotating and offering together is
     /// deliberate — an application cannot rotate without sending the offer that announces it, which would leave the
     /// peer checking against credentials nobody honours. Before a session exists this is exactly
-    /// <see cref="CreateOffer"/>: a first offer's credentials are new anyway and there is no agent to restart.
+    /// <see cref="CreateOffer"/>: a first offer's credentials are new anyway, and there is no agent to restart.
     /// </summary>
     /// <param name="cancellationToken">Cancels before any state is touched.</param>
     /// <returns>The offer SDP to send, carrying the rotated credentials.</returns>
@@ -570,7 +570,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         else
         {
             // Answerer: the remote description is the offer; negotiate our answer.
-            var local = EnsureLocalMediaEndPoint();
+            var local = _mediaSocket.EnsureBound();
             answererLocal = local;
             var result = _negotiator.NegotiateAnswer(
                 remote, local, _options.AudioCodecs, SdpMediaDirection.SendRecv, MediaOptions(local));
@@ -668,7 +668,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         if (isAnswerer)
         {
             RaiseSignalingState(WebRtcSignalingState.HaveRemoteOffer);
-            answererLocal = EnsureLocalMediaEndPoint();
+            answererLocal = _mediaSocket.EnsureBound();
             try
             {
                 newLocalModel = await _renegotiator.NegotiateAnswerAndApplyAsync(
@@ -862,26 +862,31 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         if (_options.IceServers.Count == 0)
             return;
 
-        var local = EnsureLocalMediaEndPoint();
-        Socket socket;
+        var local = _mediaSocket.EnsureBound();
+        BundledMediaSession? live;
+        Socket? socket;
         lock (_sync)
         {
-            if (_started)
-                throw new InvalidOperationException(
-                    "Cannot gather ICE candidates after StartAsync — the media socket is owned by the transport's receive loop.");
-            socket = _mediaSocket.Socket!.Client;
+            // After StartAsync the receive loop owns the socket, so gathering runs over the live transport — that
+            // is what lets an ICE restart re-gather without surrendering the socket that DTLS and SRTP depend on.
+            live = _started ? _session : null;
+            socket = _started ? null : _mediaSocket.Socket!.Client;
+            if (_started && live is null)
+                throw new InvalidOperationException("Cannot gather: this peer was started without a media session.");
         }
 
         // The peer keeps ownership of the retained relay allocation and its session; the gatherer only sequences
-        // the wire steps (each temporarily runs its own receive loop on the shared media socket, so they must
-        // not overlap the transport's post-Start loop).
+        // the wire steps (pre-start each runs its own receive loop on the socket, so they must not overlap).
         var gatherer = new WebRtcCandidateGatherer(_stunProbe, _turnProbe, _logger);
         var hostEndPoints = _hostCandidateProvider.GetHostEndPoints(local);
         var relatedHost = hostEndPoints.Count > 0 ? hostEndPoints[0] : local;
+        // Re-emit hosts on a live re-gather: an interface that came up since shares this socket's wildcard port.
+        if (live is not null) _candidateEmitter.EmitLocalHosts(hostEndPoints);
         // The relay store latches first-wins and adopts into an already-built (answerer) session; it reads the
         // adopt target through this _sync-guarded session snapshot, so the peer keeps sole ownership of _session.
         await gatherer.GatherAsync(
-            _options.IceServers, local, relatedHost, socket, _candidateEmitter.Emit,
+            _options.IceServers, local, relatedHost, socket, live is null ? null : live.ProbeServerReflexiveAsync,
+            _candidateEmitter.Emit,
             (serverEndPoint, allocation, gatheredLocal) => _relayAllocation.OnGathered(
                 serverEndPoint, allocation, gatheredLocal, () => { lock (_sync) { return _session; } }),
             cancellationToken).ConfigureAwait(false);
@@ -923,11 +928,6 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             _mediaStreamId,
             _audioTrackId,
             _videoTrackId);
-
-    // Binds the shared media socket up front (Trickle-ICE early-bind) so the offer/answer advertise the real
-    // ephemeral port and a host candidate before the session (transport) exists — fixing the zero-port
-    // disabled offer. The owner handles the bind and the later hand-over to the transport.
-    private IPEndPoint EnsureLocalMediaEndPoint() => _mediaSocket.EnsureBound();
 
     // Records the remote track facts (a=msid identity, has-audio/has-video, the per-m-line sending video
     // inventory, derived by WebRtcRemoteMediaInventory) from a newly-applied remote description, so the receiver

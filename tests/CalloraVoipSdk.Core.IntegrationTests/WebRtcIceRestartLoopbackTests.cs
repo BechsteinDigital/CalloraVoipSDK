@@ -5,6 +5,7 @@ using CalloraVoipSdk.Core.Infrastructure.Rtp;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Models;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.OfferAnswer;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Parsing;
+using CalloraVoipSdk.Core.Infrastructure.Stun.Attributes;
 using CalloraVoipSdk.Core.Infrastructure.Stun.Ice;
 using CalloraVoipSdk.Core.Infrastructure.Stun.Messages;
 using CalloraVoipSdk.Core.Infrastructure.Stun.Wire;
@@ -200,7 +201,78 @@ public sealed class WebRtcIceRestartLoopbackTests
             "Die vor dem Restart genutzten Credentials dürfen nicht mehr beantwortet werden.");
     }
 
+    /// <summary>
+    /// #226, re-gathering. A restart is triggered by the network changing, and the reflexive address is exactly
+    /// what a network change invalidates — so the candidates gathered before it are the ones least likely to
+    /// still be right. Gathering used to be refused outright once the peer was started ("the media socket is
+    /// owned by the transport's receive loop"), which left a restarted peer offering only its pre-restart view.
+    /// It now runs over the live transport, and the socket — the thing DTLS and SRTP are keyed to — is untouched.
+    /// </summary>
+    [Fact]
+    public async Task Re_gathering_after_a_restart_yields_a_fresh_reflexive_candidate_over_the_live_transport()
+    {
+        var peerCert = DtlsCertificate.GenerateEcdsaP256();
+        var counterpartCert = DtlsCertificate.GenerateEcdsaP256();
+
+        using var stunServer = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        var stunEndPoint = (IPEndPoint)stunServer.Client.LocalEndPoint!;
+        var codec = new StunMessageCodec();
+        using var serverLife = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        var serving = ServeStunAsync(stunServer, codec, serverLife.Token);
+
+        var (peer, counterpart, _) = await ConnectPairAsync(peerCert, counterpartCert, stunEndPoint);
+        await using var peerLease = peer;
+        await using var counterpartLease = counterpart;
+
+        var gathered = new List<string>();
+        peer.LocalIceCandidateDiscovered += candidate => { lock (gathered) gathered.Add(candidate); };
+
+        await peer.StartAsync();
+        await counterpart.StartAsync();
+        var socketBefore = peer.LocalMediaEndPoint!;
+
+        await peer.CreateIceRestartOfferAsync();
+        await peer.GatherCandidatesAsync();          // used to throw once started
+
+        string[] snapshot;
+        lock (gathered) snapshot = [.. gathered];
+        var reflexive = Assert.Single(snapshot, c => c.Contains("srflx", StringComparison.Ordinal));
+        // The fake server reports the source it saw, so the candidate carries the live media port — proof the
+        // probe rode the running transport rather than a socket of its own.
+        Assert.Contains($" {socketBefore.Port} ", reflexive, StringComparison.Ordinal);
+        Assert.Equal(socketBefore, peer.LocalMediaEndPoint);
+
+        await serverLife.CancelAsync();
+        await serving;
+    }
+
     // ── harness ──────────────────────────────────────────────────────────────────
+
+    // A minimal STUN server: answers each Binding request with XOR-MAPPED-ADDRESS of the source it saw.
+    private static async Task ServeStunAsync(UdpClient server, StunMessageCodec codec, CancellationToken ct)
+    {
+        try
+        {
+            while (!ct.IsCancellationRequested)
+            {
+                var received = await server.ReceiveAsync(ct);
+                if (codec.Decode(received.Buffer) is not { MessageMethod: StunMessageMethod.Binding } request)
+                    continue;
+
+                var bytes = codec.Encode(new StunMessage
+                {
+                    MessageClass = StunMessageClass.SuccessResponse,
+                    MessageMethod = StunMessageMethod.Binding,
+                    TransactionId = request.TransactionId,
+                    Attributes = [new XorMappedAddressAttribute { EndPoint = received.RemoteEndPoint }],
+                });
+                await server.SendAsync(bytes, bytes.Length, received.RemoteEndPoint);
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (SocketException) { }
+        catch (ObjectDisposedException) { }
+    }
 
     // Drains the probe socket until a success response for this transaction arrives or the deadline passes.
     private static async Task<bool> AwaitSuccessResponseAsync(
@@ -240,7 +312,7 @@ public sealed class WebRtcIceRestartLoopbackTests
 
     // Both ends need the other's port before construction, so ports are pre-allocated; retry on a bind race.
     private static async Task<(WebRtcPeerConnection Peer, BundledMediaSession Counterpart, int PeerPort)> ConnectPairAsync(
-        DtlsCertificate peerCert, DtlsCertificate counterpartCert)
+        DtlsCertificate peerCert, DtlsCertificate counterpartCert, IPEndPoint? stunServer = null)
     {
         for (var attempt = 1; ; attempt++)
         {
@@ -249,7 +321,7 @@ public sealed class WebRtcIceRestartLoopbackTests
             WebRtcPeerConnection? peer = null;
             try
             {
-                peer = BuildPeer(peerPort, peerCert);
+                peer = BuildPeer(peerPort, peerCert, stunServer);
                 var answer = await peer.SetRemoteDescriptionAsync(
                     Offer(counterpartPort, counterpartCert, CounterpartUfrag, CounterpartPwd));
                 var counterpart = BuildCounterpart(counterpartPort, peerPort, peerCert.Fingerprint, counterpartCert, answer);
@@ -263,13 +335,21 @@ public sealed class WebRtcIceRestartLoopbackTests
         }
     }
 
-    private static WebRtcPeerConnection BuildPeer(int localPort, DtlsCertificate cert) =>
+    private static WebRtcPeerConnection BuildPeer(int localPort, DtlsCertificate cert, IPEndPoint? stunServer = null) =>
         new(new WebRtcPeerOptions
             {
                 LocalEndPoint = new IPEndPoint(IPAddress.Loopback, localPort),
                 AudioCodecs = [new SdpCodecDefinition { PayloadType = AudioPayloadType, Name = "PCMU", ClockRate = 8000 }],
                 Dtls = new SdpDtlsParameters { Algorithm = cert.Fingerprint.Algorithm, Fingerprint = cert.Fingerprint.Value },
                 Ice = new SdpIceParameters { Ufrag = PeerUfrag, Pwd = PeerPwd },
+                IceServers = stunServer is null
+                    ? []
+                    : [new IceServerConfiguration
+                        {
+                            Type = IceServerType.Stun,
+                            Host = stunServer.Address.ToString(),
+                            Port = stunServer.Port,
+                        }],
             },
             new SdpOfferAnswerNegotiator(), new SdpSessionParser(), new SdpSessionSerializer(),
             new DtlsSrtpHandshaker(NullLogger<DtlsSrtpHandshaker>.Instance), cert, NullLoggerFactory.Instance);

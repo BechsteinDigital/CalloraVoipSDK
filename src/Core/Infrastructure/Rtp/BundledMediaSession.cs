@@ -363,7 +363,10 @@ internal sealed class BundledMediaSession : IAsyncDisposable
             // candidate — checked alongside the direct one, direct-preferred by pair priority.
             relaySend: relayBinding?.RelaySend,
             // A nominated relay pair additionally switches the transport onto the relay data path (ChannelBind).
-            onRelayPairNominated: OnRelayPairNominated);
+            onRelayPairNominated: OnRelayPairNominated,
+            // Reaches a STUN server as-is in either transport mode, so the reflexive address can be re-probed
+            // on a live transport after an ICE restart without giving up the socket.
+            sendUnframed: _transport.SendUnframedAsync);
 
         // Periodic RTCP Sender Reports for the active outbound streams (RFC 3550 §6.4): reads the outbound
         // pipeline's per-SSRC SR counters and sends over its fail-closed SRTCP send path. The CNAME mirrors the
@@ -479,6 +482,23 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     /// the checks does not redetermine which side controls them.
     /// </summary>
     public bool IceControlling => _iceParameters.IceControlling;
+
+    /// <summary>
+    /// Asks <paramref name="stunServer"/> what this socket looks like from outside (RFC 8445 §5.1.1.2), over the
+    /// running transport rather than by taking the socket back. <see langword="null"/> when the server does not
+    /// answer — a missing candidate is one fewer path to try, not an error.
+    /// </summary>
+    /// <remarks>
+    /// The point of running it live is an ICE restart: the reflexive address is exactly what a network change
+    /// invalidates, and re-gathering it must not cost the socket — the DTLS association and every SRTP context
+    /// depend on that socket surviving.
+    /// </remarks>
+    /// <param name="stunServer">The STUN server's transport address.</param>
+    /// <param name="timeout">Per-attempt wait before retransmitting (RFC 5389 §7.2.1).</param>
+    /// <param name="cancellationToken">Cancels the probe.</param>
+    public Task<IPEndPoint?> ProbeServerReflexiveAsync(
+        IPEndPoint stunServer, TimeSpan timeout, CancellationToken cancellationToken = default)
+        => _ice.ProbeServerReflexiveAsync(stunServer, timeout, cancellationToken);
 
     /// <summary>
     /// Restarts ICE with rotated <em>local</em> credentials only (RFC 8445 §9.1.1.1) — the half an agent applies

@@ -40,6 +40,17 @@ The next line. Entries here accumulate the consumer-visible changes not yet rele
 
   The new member is **additive**: it has a default implementation that throws `NotSupportedException`, so an
   existing implementation of `IPeerConnection` (a test double, say) keeps compiling.
+
+  **`GatherCandidatesAsync` now works after `StartAsync`** instead of throwing. A restart is triggered by the
+  network changing, and the server-reflexive address is exactly what a network change invalidates — so refusing
+  to gather left a restarted peer advertising the candidates it had before. It re-probes over the live transport
+  (the request rides the transport's raw send, the answer arrives through the same STUN demux that feeds the ICE
+  agent), so the media socket — and with it the DTLS session and the SRTP contexts — is untouched. Call it again
+  after a restart and handle the new candidates through `LocalIceCandidateDiscovered` as usual.
+
+  TURN servers are skipped on that path: the allocation is keyed to the 5-tuple the transport still holds and its
+  refresh loop keeps it alive, so the relay candidate did not change. A local host that itself changes networks
+  needs a new peer — keeping the socket is what makes the restart cheap, and re-binding it would defeat that.
 - **The DTLS-SRTP handshake offers AEAD cipher suites only** (#229, #323). Both roles are covered.
   - **Server:** the offered list also carried `TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256` next to AES-128-GCM,
     AES-256-GCM and ChaCha20-Poly1305. No browser ever selected it — they all negotiate one of the AEAD

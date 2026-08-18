@@ -76,13 +76,35 @@ Rotation and the description that announces it are produced together in one call
 up having rotated without sending the offer that tells the peer — which would leave the peer checking against
 credentials nobody honours.
 
-### 4. The role is carried over
+### 4. Re-gathering runs over the live transport, and stops where the socket guarantee starts
+
+Every reference stack re-gathers on a restart — libwebrtc restarts gathering on the next `MaybeStartGathering`,
+SipSorcery calls `StartGathering()`, Pion requires the caller to call `GatherCandidates`. Not doing so would
+leave a restarted peer offering the very candidates the network change invalidated.
+
+The obstacle was that gathering used to need the socket to itself: a probe ran its own receive loop, which the
+transport's loop owns once the peer has started, so gathering after `StartAsync` was refused outright. The read
+side is now inverted instead — the Binding request goes out through the transport's raw send and the response
+comes back through the same inbound STUN demux that feeds the ICE agent (`IceReflexiveProbe`). Both match by
+transaction id (RFC 5389 §6), so neither sees the other's traffic as anything but noise: the agent's consent
+registry ignores a probe response exactly as the probe ignores a connectivity check.
+
+Two things are deliberately **not** re-gathered:
+
+- **The TURN relay candidate.** The allocation is keyed to the 5-tuple the transport still holds and its refresh
+  loop keeps it alive, so the relay candidate did not change; re-allocating would only duplicate it.
+- **The socket itself.** Re-binding is what would produce genuinely new host candidates if the local host moved
+  networks — and it is exactly what this ADR refuses, because the DTLS association and every SRTP context are
+  keyed to that socket surviving. A local host that changes networks needs a new peer, not an ICE restart. Host
+  candidates are re-emitted, which covers an interface coming up under a wildcard bind (it shares the port).
+
+### 5. The role is carried over
 
 Re-running the checks does not redetermine which agent controls them. A role switch would need a fresh role
 negotiation neither side asked for. This matches the SIP path, which preserves `_iceControlling` across its
 restart for the same reason.
 
-### 5. The restart is a state transition, not a failure
+### 6. The restart is a state transition, not a failure
 
 The peer moves back to `Connecting`. A network change that killed consent has usually already dropped it to
 `Failed`; the restart is what makes that recoverable, so the transition must be allowed to run backwards out of
@@ -113,12 +135,41 @@ interface member that throws `NotSupportedException`, so adding it does not brea
 the interface (a consumer's test double) — the same additive pattern used elsewhere in this SDK when an interface
 gains a capability. The API-surface baseline records it.
 
+**Interop is proven against a real browser, not only against ourselves.** A loopback test can only confirm that
+we agree with our own reading of the RFC. The browser-interop suite now drives a restart against Chromium and
+asserts that *the browser* rotates its own ice-ufrag in the answer — which per §9.1.1.1 it does only once it has
+understood the offer as an ICE restart. That is a foreign implementation confirming our SDP, which is the one
+thing loopback cannot establish.
+
 **Three collaborators were extracted to make room.** `BundledMediaSession` and `WebRtcPeerConnection` were both
 at the 1000-line limit. The relay data path moved out of the session (`BundledRelayDataPath`); the
 connection-state machine (`WebRtcConnectionStateMachine`) and the media-socket ownership across its one hand-over
 to the transport (`WebRtcMediaSocketOwner`) moved out of the peer. Both peer collaborators share the peer's lock,
 so their serialisation is unchanged. `WebRtcPeerConnection` is back at exactly 1000 lines and is now essentially
 all public API plus documentation — the next change to it needs a structural split, not another small extraction.
+
+## How the reference stacks compare
+
+Checked against the sources, not the documentation, per the parity rule for this SDK.
+
+| | Agent object | Media during the restart | Re-gathers | Rotates local credentials |
+|---|---|---|---|---|
+| **libwebrtc** | reused (`P2PTransportChannel`) | keeps flowing | yes | yes |
+| **Pion** | reused, fully reset | stops | yes (caller) | yes |
+| **SipSorcery** | reused, fully reset | stops | yes | **no** |
+| **this SDK** | replaced | keeps flowing | yes (srflx, over the live transport) | yes |
+
+- **libwebrtc** keeps media alive by *generation-tagging*: `SetRemoteIceParameters` pushes onto a vector —
+  "Keep the ICE credentials so that newer connections are prioritized over the older ones" — and stamps every
+  existing `Connection` with the new generation, so old pairs stay valid while newer ones sort ahead. A different
+  mechanism from ours, the same RFC 8445 §9 outcome.
+- **Pion**'s `Agent.Restart` calls `setSelectedPair(nil)` and `deleteAllCandidates()`, so the selected pair and
+  its sockets are gone; §9's "continue to use the previously selected pair" is not met.
+- **SipSorcery** cannot signal a conforming restart at all: `RtpIceChannel.LocalIceUser` / `LocalIcePassword` are
+  `readonly`, set once in the constructor, so `restartIce()` re-gathers without rotating anything. A re-offer then
+  carries the same ufrag/pwd, which per §9.1.1.1 is not a restart, and the peer will not restart. Its
+  `RTCOfferOptions` has no `iceRestart` field either, and inbound `SetRemoteCredentials` overwrites the remote
+  values without resetting the check list.
 
 ## References
 

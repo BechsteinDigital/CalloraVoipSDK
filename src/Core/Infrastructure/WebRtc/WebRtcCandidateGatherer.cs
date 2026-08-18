@@ -3,6 +3,7 @@ using System.Net.Sockets;
 using CalloraVoipSdk;
 using CalloraVoipSdk.Core.Application.Ports.Connectivity;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Models;
+using CalloraVoipSdk.Core.Infrastructure.Stun.Client;
 using CalloraVoipSdk.Core.Infrastructure.Turn.Client;
 using Microsoft.Extensions.Logging;
 
@@ -32,6 +33,19 @@ internal sealed class WebRtcCandidateGatherer(
         IPEndPoint serverEndPoint, TurnAllocateResult allocation, IPEndPoint host);
 
     /// <summary>
+    /// Asks a STUN server for this socket's reflexive address over an ALREADY RUNNING transport, when the
+    /// receive loop owns the socket and a probe cannot read from it directly.
+    /// </summary>
+    /// <param name="server">The STUN server's transport address.</param>
+    /// <param name="timeout">Per-attempt wait before retransmitting.</param>
+    /// <param name="ct">Cancels the probe.</param>
+    public delegate Task<IPEndPoint?> LiveReflexiveProbe(IPEndPoint server, TimeSpan timeout, CancellationToken ct);
+
+    // Per-attempt wait for a live re-probe. Deliberately short: this runs alongside flowing media after an ICE
+    // restart, so a slow or dead STUN server must cost a couple of retransmissions, not a visible stall.
+    private static readonly TimeSpan LiveProbeTimeout = TimeSpan.FromMilliseconds(500);
+
+    /// <summary>
     /// Gathers srflx/relay candidates over <paramref name="socket"/> for the given <paramref name="servers"/>,
     /// emitting each via <paramref name="onCandidate"/>. A STUN server yields an srflx candidate (needs a STUN
     /// probe); a UDP TURN server yields a relay candidate when the allocation succeeds (needs a TURN probe),
@@ -42,7 +56,8 @@ internal sealed class WebRtcCandidateGatherer(
         IReadOnlyList<IceServerConfiguration> servers,
         IPEndPoint local,
         IPEndPoint relatedHost,
-        Socket socket,
+        Socket? socket,
+        LiveReflexiveProbe? liveProbe,
         Action<SdpIceCandidate> onCandidate,
         RelayGatheredCallback onRelayGathered,
         CancellationToken ct)
@@ -51,8 +66,19 @@ internal sealed class WebRtcCandidateGatherer(
         {
             switch (server.Type)
             {
+                case IceServerType.Stun when socket is null:
+                    await ReGatherServerReflexiveAsync(server, local, relatedHost, liveProbe, onCandidate, ct).ConfigureAwait(false);
+                    break;
                 case IceServerType.Stun:
                     await GatherServerReflexiveAsync(server, local, relatedHost, socket, onCandidate, ct).ConfigureAwait(false);
+                    break;
+                case IceServerType.Turn when socket is null:
+                    // A TURN allocation is keyed to the 5-tuple the transport still holds and is kept alive by
+                    // its refresh loop, so the relay candidate did not change — re-allocating would only
+                    // duplicate it. See ADR-072 for why the socket is deliberately preserved across a restart.
+                    logger.LogDebug(
+                        "Skipping TURN server {Host} on a live re-gather: the existing allocation still covers this 5-tuple.",
+                        server.Host);
                     break;
                 case IceServerType.Turn:
                     await GatherRelayAsync(server, local, relatedHost, socket, onCandidate, onRelayGathered, ct).ConfigureAwait(false);
@@ -66,6 +92,38 @@ internal sealed class WebRtcCandidateGatherer(
 
     // Queries one STUN server for the server-reflexive endpoint and emits an srflx candidate on success.
     // No-op without a STUN probe (a peer configured with STUN servers but no probe gathers host-only).
+    // The live counterpart of GatherServerReflexiveAsync: same candidate, discovered over a transport whose
+    // receive loop already owns the socket. Resolution is pinned to UDP because the media socket is UDP — a
+    // TCP/TLS STUN server cannot describe this 5-tuple.
+    private async Task ReGatherServerReflexiveAsync(
+        IceServerConfiguration server,
+        IPEndPoint local,
+        IPEndPoint relatedHost,
+        LiveReflexiveProbe? liveProbe,
+        Action<SdpIceCandidate> onCandidate,
+        CancellationToken ct)
+    {
+        if (liveProbe is null)
+            return;
+
+        IPEndPoint serverEndPoint;
+        try
+        {
+            serverEndPoint = await StunIceProbe
+                .ResolveUdpEndPointAsync(server, local.AddressFamily, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // An unresolvable server is one fewer candidate, never a failed re-gather.
+            logger.LogDebug(ex, "Could not resolve STUN server {Host} for a live re-gather.", server.Host);
+            return;
+        }
+
+        var reflexive = await liveProbe(serverEndPoint, LiveProbeTimeout, ct).ConfigureAwait(false);
+        if (reflexive is not null)
+            onCandidate(WebRtcIceCandidateFactory.ServerReflexiveCandidate(reflexive, relatedHost));
+    }
+
     private async Task GatherServerReflexiveAsync(
         IceServerConfiguration server,
         IPEndPoint local,
