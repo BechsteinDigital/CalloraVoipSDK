@@ -159,6 +159,23 @@ configurations. Validated end-to-end against a real Asterisk endpoint that carri
 
 ### Added
 
+- **A key-frame request says which stream the peer asked about** (#227, RFC 4585 §6.3.1 / RFC 5104 §4.3.1).
+  Inbound PLI and FIR were already routed to the right track — feedback naming an SSRC a track does not send
+  has been dropped since #161 — but the event a consumer sees, `VideoKeyFrameRequested`, carried nothing: not
+  the m-line, not the media SSRC, not the simulcast layer. A forwarder receiving it could only ask *every*
+  upstream source for a key frame, and it does so at the moment the link is already struggling, which is what
+  made the receiver ask in the first place.
+
+  The new **`IPeerConnection.VideoTrackKeyFrameRequested`** carries a `KeyFrameRequest` with the `Mid`, the
+  `MediaSsrc` the peer named, and the `Rid` of the simulcast encoding that SSRC belongs to (`null` when the
+  m-line is not simulcasting) — so one source, or one layer of it, can be asked. FIR reads its target from the
+  FCI entries rather than the header, per §4.3.1. The existing mid-less `VideoKeyFrameRequested` is unchanged
+  and still fires alongside it, so a single-track consumer needs no change.
+
+  **Source-breaking for anyone implementing `IPeerConnection` themselves** (adding an event to an interface
+  admits no default implementation that isn't a silent no-op). Consumers that only *use* the interface are
+  unaffected. The WebRTC surface is still Preview.
+
 - **RFC 8285 two-byte header extensions** (#224, ADR-070). The SDK knew only the one-byte form — profile
   `0xBEDE`, ids 1..14, values 1..16 bytes — which cannot carry an id above 14, a value longer than 16 bytes,
   or an empty value. The two-byte form (§4.3) is now encoded and parsed, the send side picks the form from

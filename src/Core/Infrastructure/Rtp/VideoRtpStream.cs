@@ -210,7 +210,9 @@ internal sealed class VideoRtpStream : IVideoMediaStream, IAsyncDisposable
         _keyFrameFeedback = new VideoKeyFrameFeedback(
             new RtcpPacketCodec(), _rtp.LocalSsrc,
             video.RemoteSupportsNack, video.RemoteSupportsPli, _rtp.SendControlAsync,
-            () => KeyFrameRequested?.Invoke(),
+            // A dedicated single-stream video channel: the named SSRC can only be this stream's, so there is
+            // nothing to attribute and the argument is deliberately unused (the bundled path uses it — #227).
+            _ => KeyFrameRequested?.Invoke(),
             OnRetransmitRequested,
             loggerFactory.CreateLogger<VideoKeyFrameFeedback>(), _lifetimeCts.Token,
             video.ReducedSizeRtcp);

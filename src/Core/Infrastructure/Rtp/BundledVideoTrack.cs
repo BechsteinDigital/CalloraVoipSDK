@@ -132,6 +132,13 @@ internal sealed class BundledVideoTrack : IDisposable
     /// </summary>
     public event Action? KeyFrameRequested;
 
+    /// <summary>
+    /// As <see cref="KeyFrameRequested"/>, but carrying which of this track's sending streams the peer named
+    /// (#227). A forwarding layer needs that to ask the right upstream source for a key frame instead of all
+    /// of them; a single-stream consumer can keep using the bare event.
+    /// </summary>
+    public event Action<VideoKeyFrameRequest>? KeyFrameRequestedForStream;
+
     /// <summary>Total reassembled inbound frames delivered.</summary>
     public long FramesReceived => Interlocked.Read(ref _framesReceived);
 
@@ -337,7 +344,7 @@ internal sealed class BundledVideoTrack : IDisposable
             // Key-frame feedback keeps no reporting state, so the send outcome (#162 P2-5) is not consulted:
             // a suppressed PLI/NACK is re-driven by the next loss or the next key-frame need.
             async (datagram, ct) => await _outbound.SendRtcpAsync(datagram, ct).ConfigureAwait(false),
-            () => KeyFrameRequested?.Invoke(),
+            RaiseKeyFrameRequested,
             onRetransmitRequested ?? (_ => { }),
             loggerFactory.CreateLogger<VideoKeyFrameFeedback>(),
             _lifetimeCts.Token);
@@ -633,6 +640,17 @@ internal sealed class BundledVideoTrack : IDisposable
         }
 
         return mine ?? (IReadOnlyList<RtcpPacket>)Array.Empty<RtcpPacket>();
+    }
+
+    // Resolves the SSRC an inbound PLI/FIR named to the simulcast layer it belongs to, then raises both the
+    // bare event (unchanged for single-stream consumers) and the attributed one. The compound has already been
+    // filtered to this track, so an SSRC that does not resolve means a lenient peer named 0 or one of our RTX
+    // SSRCs — reported with a null rid rather than guessed at.
+    private void RaiseKeyFrameRequested(uint mediaSsrc)
+    {
+        _outbound.TryResolveSendingSsrc(_mid, mediaSsrc, out var rid);
+        KeyFrameRequested?.Invoke();
+        KeyFrameRequestedForStream?.Invoke(new VideoKeyFrameRequest(mediaSsrc, rid));
     }
 
     private static IReadOnlySet<string> ToRidSet(IReadOnlyList<string>? rids)

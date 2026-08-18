@@ -69,6 +69,18 @@ public interface IPeerConnection : IAsyncDisposable
     event EventHandler? VideoKeyFrameRequested;
 
     /// <summary>
+    /// Raised for the same inbound PLI/FIR as <see cref="VideoKeyFrameRequested"/>, but naming the outbound
+    /// stream the peer asked about — its MID, the media SSRC, and the simulcast layer where there is one.
+    /// </summary>
+    /// <remarks>
+    /// Use this instead of <see cref="VideoKeyFrameRequested"/> whenever the peer sends more than one video
+    /// stream, and always in a forwarding server: without the attribution the only safe response to a request
+    /// is a key frame from every source, which turns one participant's decoder reset into a bandwidth spike
+    /// from all of them.
+    /// </remarks>
+    event EventHandler<KeyFrameRequest>? VideoTrackKeyFrameRequested;
+
+    /// <summary>
     /// Adds a video track (its own <c>m=video</c> line on the shared BUNDLE transport), returning a handle to
     /// send frames on it. The happy path: <c>var cam = peer.AddVideoTrack(); await cam.SendFrameAsync(frame, ts);</c>.
     /// </summary>

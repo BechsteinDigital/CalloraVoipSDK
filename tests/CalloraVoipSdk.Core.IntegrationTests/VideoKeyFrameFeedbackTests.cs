@@ -262,7 +262,9 @@ public sealed class VideoKeyFrameFeedbackTests
                 sent.Add(datagram.ToArray());
                 return ValueTask.CompletedTask;
             },
-            onKeyFrameRequested,
+            // The production callback now carries which media SSRC was named (#227); these cases only count
+            // requests, so the ssrc is dropped here and asserted where attribution is the subject.
+            _ => onKeyFrameRequested(),
             onRetransmitRequested ?? (_ => { }),
             NullLogger.Instance,
             CancellationToken.None);

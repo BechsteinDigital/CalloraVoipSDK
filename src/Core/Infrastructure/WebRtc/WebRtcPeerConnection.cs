@@ -148,6 +148,13 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     public event Action? VideoKeyFrameRequested;
 
     /// <summary>
+    /// Raised when the peer asks for a key frame on one specific outbound video stream (#227) — the MID and the
+    /// media SSRC its PLI/FIR named, with the <c>a=rid</c> layer when that m-line simulcasts. Fires alongside
+    /// <see cref="VideoKeyFrameRequested"/>, which stays mid-less for the single-track case.
+    /// </summary>
+    public event Action<string, VideoKeyFrameRequest>? VideoTrackKeyFrameRequested;
+
+    /// <summary>
     /// Raised once per fully received inbound DTMF tone (RFC 4733 telephone-event) with the tone code (0–15) and
     /// duration in milliseconds. Telephone-event packets are consumed here, never surfaced on <see cref="AudioReceived"/>.
     /// </summary>
@@ -696,6 +703,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             (mid, frame) => VideoTrackFrameReceived?.Invoke(mid, frame),
             (mid, rid, frame) => VideoLayerFrameReceived?.Invoke(mid, rid, frame),
             () => VideoKeyFrameRequested?.Invoke(),
+            (mid, request) => VideoTrackKeyFrameRequested?.Invoke(mid, request),
             (toneCode, durationMs) => DtmfReceived?.Invoke(toneCode, durationMs));
         // Fan the session's transport-cc recommended-bitrate revisions onto the peer's reactive surface (4.7.0).
         _congestion.WireSession(session, (bps, quality) => RecommendedBitrateChanged?.Invoke(bps, quality));

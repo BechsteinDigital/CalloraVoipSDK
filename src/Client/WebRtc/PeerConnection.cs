@@ -44,6 +44,7 @@ internal sealed class PeerConnection : IPeerConnection
     private EventHandler<string>? _localIceCandidateDiscovered;
     private EventHandler<DtmfTone>? _dtmfReceived;
     private EventHandler? _videoKeyFrameRequested;
+    private EventHandler<KeyFrameRequest>? _videoTrackKeyFrameRequested;
     private EventHandler<BitrateRecommendation>? _recommendedBitrateChanged;
 
     public PeerConnection(
@@ -81,6 +82,7 @@ internal sealed class PeerConnection : IPeerConnection
         _peer.LocalIceCandidateDiscovered += OnLocalIceCandidate;
         _peer.DtmfReceived += OnDtmfReceived;
         _peer.VideoKeyFrameRequested += OnVideoKeyFrameRequested;
+        _peer.VideoTrackKeyFrameRequested += OnVideoTrackKeyFrameRequested;
         _peer.RecommendedBitrateChanged += OnRecommendedBitrateChanged;
     }
 
@@ -124,6 +126,12 @@ internal sealed class PeerConnection : IPeerConnection
     {
         add { lock (_eventSync) _videoKeyFrameRequested += value; }
         remove { lock (_eventSync) _videoKeyFrameRequested -= value; }
+    }
+
+    public event EventHandler<KeyFrameRequest>? VideoTrackKeyFrameRequested
+    {
+        add { lock (_eventSync) _videoTrackKeyFrameRequested += value; }
+        remove { lock (_eventSync) _videoTrackKeyFrameRequested -= value; }
     }
 
     public event EventHandler<BitrateRecommendation>? RecommendedBitrateChanged
@@ -407,6 +415,7 @@ internal sealed class PeerConnection : IPeerConnection
         _peer.LocalIceCandidateDiscovered -= OnLocalIceCandidate;
         _peer.DtmfReceived -= OnDtmfReceived;
         _peer.VideoKeyFrameRequested -= OnVideoKeyFrameRequested;
+        _peer.VideoTrackKeyFrameRequested -= OnVideoTrackKeyFrameRequested;
         _peer.RecommendedBitrateChanged -= OnRecommendedBitrateChanged;
         try
         {
@@ -507,6 +516,15 @@ internal sealed class PeerConnection : IPeerConnection
         EventHandler? handler;
         lock (_eventSync) handler = _videoKeyFrameRequested;
         SdkEventDispatch.Raise(handler, this, _logger, nameof(VideoKeyFrameRequested));
+    }
+
+    private void OnVideoTrackKeyFrameRequested(string mid, Core.Infrastructure.Rtp.VideoKeyFrameRequest request)
+    {
+        EventHandler<KeyFrameRequest>? handler;
+        lock (_eventSync) handler = _videoTrackKeyFrameRequested;
+        SdkEventDispatch.Raise(
+            handler, this, new KeyFrameRequest(mid, request.MediaSsrc, request.Rid),
+            _logger, nameof(VideoTrackKeyFrameRequested));
     }
 
     // The SDK revised its recommended send bitrate for this peer (transport-cc). Surfaced as a

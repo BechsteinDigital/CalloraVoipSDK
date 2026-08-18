@@ -41,6 +41,7 @@ internal sealed class WebRtcSessionEventBridge
     /// <param name="raiseVideoTrackFrameReceived">Raises the peer's mid-tagged inbound-video-frame event.</param>
     /// <param name="raiseVideoLayerFrameReceived">Raises the peer's per-layer (mid, rid) inbound-video-frame event for recv-side simulcast/SFU forwarding (4.7.0).</param>
     /// <param name="raiseVideoKeyFrameRequested">Raises the peer's inbound key-frame-request event.</param>
+    /// <param name="raiseVideoTrackKeyFrameRequested">Raises the attributed key-frame request (MID + named stream).</param>
     /// <param name="raiseDtmfReceived">Raises the peer's inbound-DTMF event.</param>
     public void WireSession(
         BundledMediaSession session,
@@ -51,6 +52,7 @@ internal sealed class WebRtcSessionEventBridge
         Action<string, InboundVideoFrame> raiseVideoTrackFrameReceived,
         Action<string, string, InboundVideoFrame> raiseVideoLayerFrameReceived,
         Action raiseVideoKeyFrameRequested,
+        Action<string, VideoKeyFrameRequest> raiseVideoTrackKeyFrameRequested,
         Action<byte, int> raiseDtmfReceived)
     {
         ArgumentNullException.ThrowIfNull(session);
@@ -77,6 +79,7 @@ internal sealed class WebRtcSessionEventBridge
         // encoding tagged with its a=rid; fires only for RID-tagged layers, never the primary RID-less stream.
         session.VideoLayerFrameReceived += (mid, rid, frame) => raiseVideoLayerFrameReceived(mid, rid, frame);
         session.VideoKeyFrameRequested += () => raiseVideoKeyFrameRequested();
+        session.VideoTrackKeyFrameRequested += (mid, request) => raiseVideoTrackKeyFrameRequested(mid, request);
         session.DtmfReceived += (toneCode, durationMs) => raiseDtmfReceived(toneCode, durationMs);
     }
 
