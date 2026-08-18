@@ -13449,6 +13449,19 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.WebRtc.VideoTrackOptions.Direction
   nameWithType: VideoTrackOptions.Direction
+- uid: CalloraVoipSdk.WebRtc.VideoTrackOptions.SimulcastRecvRids
+  name: SimulcastRecvRids
+  href: _api/CalloraVoipSdk.WebRtc.VideoTrackOptions.html#CalloraVoipSdk_WebRtc_VideoTrackOptions_SimulcastRecvRids
+  commentId: P:CalloraVoipSdk.WebRtc.VideoTrackOptions.SimulcastRecvRids
+  fullName: CalloraVoipSdk.WebRtc.VideoTrackOptions.SimulcastRecvRids
+  nameWithType: VideoTrackOptions.SimulcastRecvRids
+- uid: CalloraVoipSdk.WebRtc.VideoTrackOptions.SimulcastRecvRids*
+  name: SimulcastRecvRids
+  href: _api/CalloraVoipSdk.WebRtc.VideoTrackOptions.html#CalloraVoipSdk_WebRtc_VideoTrackOptions_SimulcastRecvRids_
+  commentId: Overload:CalloraVoipSdk.WebRtc.VideoTrackOptions.SimulcastRecvRids
+  isSpec: "True"
+  fullName: CalloraVoipSdk.WebRtc.VideoTrackOptions.SimulcastRecvRids
+  nameWithType: VideoTrackOptions.SimulcastRecvRids
 - uid: CalloraVoipSdk.WebRtc.VideoTrackOptions.SimulcastSendRids
   name: SimulcastSendRids
   href: _api/CalloraVoipSdk.WebRtc.VideoTrackOptions.html#CalloraVoipSdk_WebRtc_VideoTrackOptions_SimulcastSendRids
@@ -13662,6 +13675,19 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.WebRtc.WebRtcConfiguration.SimulcastLayers
   nameWithType: WebRtcConfiguration.SimulcastLayers
+- uid: CalloraVoipSdk.WebRtc.WebRtcConfiguration.SimulcastRecvLayers
+  name: SimulcastRecvLayers
+  href: _api/CalloraVoipSdk.WebRtc.WebRtcConfiguration.html#CalloraVoipSdk_WebRtc_WebRtcConfiguration_SimulcastRecvLayers
+  commentId: P:CalloraVoipSdk.WebRtc.WebRtcConfiguration.SimulcastRecvLayers
+  fullName: CalloraVoipSdk.WebRtc.WebRtcConfiguration.SimulcastRecvLayers
+  nameWithType: WebRtcConfiguration.SimulcastRecvLayers
+- uid: CalloraVoipSdk.WebRtc.WebRtcConfiguration.SimulcastRecvLayers*
+  name: SimulcastRecvLayers
+  href: _api/CalloraVoipSdk.WebRtc.WebRtcConfiguration.html#CalloraVoipSdk_WebRtc_WebRtcConfiguration_SimulcastRecvLayers_
+  commentId: Overload:CalloraVoipSdk.WebRtc.WebRtcConfiguration.SimulcastRecvLayers
+  isSpec: "True"
+  fullName: CalloraVoipSdk.WebRtc.WebRtcConfiguration.SimulcastRecvLayers
+  nameWithType: WebRtcConfiguration.SimulcastRecvLayers
 - uid: CalloraVoipSdk.WebRtc.WebRtcConfiguration.UseStableNumericMediaIds
   name: UseStableNumericMediaIds
   href: _api/CalloraVoipSdk.WebRtc.WebRtcConfiguration.html#CalloraVoipSdk_WebRtc_WebRtcConfiguration_UseStableNumericMediaIds
@@ -13916,6 +13942,19 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.WebRtc.WebRtcOptions.SimulcastLayers
   nameWithType: WebRtcOptions.SimulcastLayers
+- uid: CalloraVoipSdk.WebRtc.WebRtcOptions.SimulcastRecvLayers
+  name: SimulcastRecvLayers
+  href: _api/CalloraVoipSdk.WebRtc.WebRtcOptions.html#CalloraVoipSdk_WebRtc_WebRtcOptions_SimulcastRecvLayers
+  commentId: P:CalloraVoipSdk.WebRtc.WebRtcOptions.SimulcastRecvLayers
+  fullName: CalloraVoipSdk.WebRtc.WebRtcOptions.SimulcastRecvLayers
+  nameWithType: WebRtcOptions.SimulcastRecvLayers
+- uid: CalloraVoipSdk.WebRtc.WebRtcOptions.SimulcastRecvLayers*
+  name: SimulcastRecvLayers
+  href: _api/CalloraVoipSdk.WebRtc.WebRtcOptions.html#CalloraVoipSdk_WebRtc_WebRtcOptions_SimulcastRecvLayers_
+  commentId: Overload:CalloraVoipSdk.WebRtc.WebRtcOptions.SimulcastRecvLayers
+  isSpec: "True"
+  fullName: CalloraVoipSdk.WebRtc.WebRtcOptions.SimulcastRecvLayers
+  nameWithType: WebRtcOptions.SimulcastRecvLayers
 - uid: CalloraVoipSdk.WebRtc.WebRtcOptions.UseStableNumericMediaIds
   name: UseStableNumericMediaIds
   href: _api/CalloraVoipSdk.WebRtc.WebRtcOptions.html#CalloraVoipSdk_WebRtc_WebRtcOptions_UseStableNumericMediaIds

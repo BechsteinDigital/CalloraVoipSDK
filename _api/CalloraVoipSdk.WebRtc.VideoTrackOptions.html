@@ -227,6 +227,42 @@ rejected when the track is added.</p>
 
 
 
+  <a id="CalloraVoipSdk_WebRtc_VideoTrackOptions_SimulcastRecvRids_" data-uid="CalloraVoipSdk.WebRtc.VideoTrackOptions.SimulcastRecvRids*"></a>
+
+  <h3 id="CalloraVoipSdk_WebRtc_VideoTrackOptions_SimulcastRecvRids" data-uid="CalloraVoipSdk.WebRtc.VideoTrackOptions.SimulcastRecvRids">
+  SimulcastRecvRids
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/VideoTrackOptions.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Receive-side simulcast layer ids to ask the peer for on this track (RFC 8853 §5.3), advertised as
+<code>a=rid … recv</code> plus <code>a=simulcast:recv …</code>. Empty (the default) asks for a single stream. An
+answerer may only simulcast what the offer marked recv, so a receive-only peer (e.g. a conference host)
+sets this to receive the peer's layers addressably; each arriving layer carries its rid on the received
+frame. This peer must be the offerer for the request to be advertised.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IReadOnlyList&lt;string&gt; SimulcastRecvRids { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
   <a id="CalloraVoipSdk_WebRtc_VideoTrackOptions_SimulcastSendRids_" data-uid="CalloraVoipSdk.WebRtc.VideoTrackOptions.SimulcastSendRids*"></a>
 
   <h3 id="CalloraVoipSdk_WebRtc_VideoTrackOptions_SimulcastSendRids" data-uid="CalloraVoipSdk.WebRtc.VideoTrackOptions.SimulcastSendRids">
@@ -265,7 +301,7 @@ rejected when the track is added.</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_VideoTrackOptions_StreamId" data-uid="CalloraVoipSdk.WebRtc.VideoTrackOptions.StreamId">
   StreamId
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/VideoTrackOptions.cs/#L41"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/VideoTrackOptions.cs/#L50"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>The WebRTC MediaStream id this track belongs to (<code>a=msid</code> stream id, RFC 8830).

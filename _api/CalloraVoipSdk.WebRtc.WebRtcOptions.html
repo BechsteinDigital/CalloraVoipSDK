@@ -193,7 +193,7 @@ meet only at the composition layer (<code>AddCalloraVoip(...).AddWebRtc(...)</co
 
   <h3 id="CalloraVoipSdk_WebRtc_WebRtcOptions_DtlsCertificate" data-uid="CalloraVoipSdk.WebRtc.WebRtcOptions.DtlsCertificate">
   DtlsCertificate
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcOptions.cs/#L55"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcOptions.cs/#L58"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>DTLS-SRTP identity certificate for the peer (ECDSA P-256 with an exportable private key);
@@ -258,7 +258,7 @@ meet only at the composition layer (<code>AddCalloraVoip(...).AddWebRtc(...)</co
 
   <h3 id="CalloraVoipSdk_WebRtc_WebRtcOptions_IceServers" data-uid="CalloraVoipSdk.WebRtc.WebRtcOptions.IceServers">
   IceServers
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcOptions.cs/#L49"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcOptions.cs/#L52"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>STUN/TURN servers for server-reflexive candidate gathering. See <a class="xref" href="CalloraVoipSdk.WebRtc.WebRtcConfiguration.html#CalloraVoipSdk_WebRtc_WebRtcConfiguration_IceServers">IceServers</a>. Default: none.</p>
@@ -322,7 +322,7 @@ meet only at the composition layer (<code>AddCalloraVoip(...).AddWebRtc(...)</co
 
   <h3 id="CalloraVoipSdk_WebRtc_WebRtcOptions_LoggerFactory" data-uid="CalloraVoipSdk.WebRtc.WebRtcOptions.LoggerFactory">
   LoggerFactory
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcOptions.cs/#L61"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcOptions.cs/#L64"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Logger factory override; <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> falls back to the container's registered factory.
@@ -398,6 +398,38 @@ Default: <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/b
 
   <div class="codewrapper">
     <pre><code class="lang-csharp hljs">public IReadOnlyList&lt;string&gt; SimulcastLayers { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_WebRtc_WebRtcOptions_SimulcastRecvLayers_" data-uid="CalloraVoipSdk.WebRtc.WebRtcOptions.SimulcastRecvLayers*"></a>
+
+  <h3 id="CalloraVoipSdk_WebRtc_WebRtcOptions_SimulcastRecvLayers" data-uid="CalloraVoipSdk.WebRtc.WebRtcOptions.SimulcastRecvLayers">
+  SimulcastRecvLayers
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcOptions.cs/#L49"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Receive-side simulcast layers to ask the peer for, by <code>a=rid</code> id. See <a class="xref" href="CalloraVoipSdk.WebRtc.WebRtcConfiguration.html#CalloraVoipSdk_WebRtc_WebRtcConfiguration_SimulcastRecvLayers">SimulcastRecvLayers</a>. Default: none.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IReadOnlyList&lt;string&gt; SimulcastRecvLayers { get; set; }</code></pre>
   </div>
 
 
