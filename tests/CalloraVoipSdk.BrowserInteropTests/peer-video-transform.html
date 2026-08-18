@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Callora Browser Interop Video Peer (Encoded Transform)</title></head>
+<body>
+<h1 id="status">init</h1>
+<script>
+(async () => {
+  const set = (s) => { document.getElementById('status').textContent = s; };
+  const ws = new WebSocket(`ws://${location.host}/ws`);
+  const send = (o) => { try { ws.send(JSON.stringify(o)); } catch (e) {} };
+  const log = (m) => { console.log('[peer-video-transform] ' + m); send({ type: 'log', candidate: String(m) }); };
+  window.onerror = (m) => log('window.onerror: ' + m);
+
+  // encodedInsertableStreams schaltet den Encoded-Transform-Pfad frei (WebRTC Encoded Transform).
+  const pc = new RTCPeerConnection({ iceServers: [], encodedInsertableStreams: true });
+  pc.onicecandidate = (e) => { if (e.candidate && e.candidate.candidate) send({ type: 'candidate', candidate: e.candidate.candidate }); };
+  pc.oniceconnectionstatechange = () => log('ice:' + pc.iceConnectionState);
+  pc.onconnectionstatechange = () => { set('pc:' + pc.connectionState); log('pc:' + pc.connectionState); };
+
+  ws.onmessage = async (ev) => {
+    const msg = JSON.parse(ev.data);
+    if (msg.type === 'offer') {
+      log('offer received');
+      await pc.setRemoteDescription({ type: 'offer', sdp: msg.sdp });
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      send({ type: 'answer', sdp: answer.sdp });
+      log('answer sent');
+    } else if (msg.type === 'candidate') {
+      try { await pc.addIceCandidate({ candidate: msg.candidate, sdpMLineIndex: 0 }); }
+      catch (e) { log('addIceCandidate failed: ' + e); }
+    }
+  };
+
+  // Wie ein reales E2EE-System: die Bytes, die Packetiser und SFU lesen müssen, bleiben klar, der Rest
+  // wird ersetzt. Kein echtes Kryptosystem: ein XOR genügt, um den Payload für jeden Parser unlesbar zu
+  // machen, und darum geht es hier. Die Klartext-Grenzen setzt der Test ein — sie sind der Messparameter:
+  // Jitsis Konstanten sind VP8-getunt, libwebrtcs Frame-Cryptor rechnet pro Codec.
+  const UNENCRYPTED_BYTES = __UNENCRYPTED_BYTES__;
+  let transformed = 0;
+  let keyFrames = 0;
+
+  const encrypt = new TransformStream({
+    transform(frame, controller) {
+      const data = new Uint8Array(frame.data);
+      const clear = UNENCRYPTED_BYTES[frame.type] !== undefined ? UNENCRYPTED_BYTES[frame.type] : 1;
+      for (let i = clear; i < data.length; i++) data[i] ^= 0x5A;
+      frame.data = data.buffer;
+      transformed++;
+      if (frame.type === 'key') keyFrames++;
+      controller.enqueue(frame);
+    },
+  });
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    for (const track of stream.getTracks()) pc.addTrack(track, stream);
+    log('getUserMedia video ok, tracks=' + stream.getTracks().length);
+
+    const sender = pc.getSenders().find((s) => s.track && s.track.kind === 'video');
+    if (!sender) {
+      log('no video sender');
+    } else if (typeof sender.createEncodedStreams !== 'function') {
+      log('createEncodedStreams UNAVAILABLE in this browser');
+    } else {
+      const streams = sender.createEncodedStreams();
+      streams.readable.pipeThrough(encrypt).pipeTo(streams.writable);
+      log('encoded transform installed on the video sender');
+    }
+  } catch (e) {
+    log('setup FAILED: ' + e);
+  }
+
+  const announceReady = () => {
+    set('ws:open');
+    send({ type: 'ready' });
+    log('ready sent');
+    // packetsReceived = Frames, die durch die Transformation gingen; keyFrames = davon Keyframes,
+    // wie der Browser sie selbst deklariert. Das ist die Gegenprobe zu dem, was das SDK meldet.
+    setInterval(() => send({ type: 'transform', packetsReceived: transformed, keyFrames: keyFrames }), 500);
+  };
+  if (ws.readyState === WebSocket.OPEN) announceReady();
+  else ws.onopen = announceReady;
+})();
+</script>
+</body>
+</html>

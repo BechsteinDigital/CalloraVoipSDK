@@ -77,7 +77,21 @@ VP8's is the one genuine exception.
   exposes enough to do that today; they report a merged boolean.
 - The claim "with `OpaqueVideoFrames` on, `IsKeyFrame` is always false" is retired from the changelog. It was
   true before #225 and misleading after it.
-- What remains open is the interop half of #310: H.264 receive from a browser using Encoded Transform, and a
-  gate test that exercises it. This ADR deliberately does not predict that result — the last two assumptions
-  about browser behaviour in this area (#261, and Chromium's descriptor on VP8 in #225) both came out against
-  the expectation when finally measured.
+- The interop half of #310 has since been **measured**, and it confirms the table above rather than the fear
+  behind the ticket. A Chromium sender with an Encoded Transform installed, encrypting everything past a
+  codec-appropriate clear prefix (start code + NAL header, as libwebrtc's frame cryptor does for H.264):
+
+  | Clear prefix | Frames the browser encrypted | RTP packets we received | Frames we reassembled |
+  |---|---|---|---|
+  | Jitsi's, VP8-tuned (key 10 / delta 3) | 796 | **4** | 1 |
+  | H.264-aware (key 16 / delta 8) | 26 | 57 | **30** |
+
+  With a codec-appropriate prefix the SDK reassembles the stream completely and keeps the key-frame signal.
+  With the VP8-tuned prefix the failure is on the **sender's** side of the wire: three clear bytes do not
+  cover an Annex-B start code, so the browser's own packetiser stops emitting — four packets for 796 frames,
+  meaning nothing ever reached our depacketiser to be discarded. Neither case is a limit of this SDK.
+
+- One thing the measurement changed about the premise: for a Chromium peer the key-frame flag never depends
+  on the payload at all. Chromium writes the Dependency Descriptor on the **H.264** m-line too, not only on
+  VP8, so every frame in those runs reported `KeyFrameSource.RtpHeaderExtension`. The payload-derived path
+  remains what answers for peers that do not offer the extension.

@@ -16,6 +16,12 @@ public sealed class BridgeMessage
     [JsonPropertyName("bytesReceived")] public long? BytesReceived { get; set; }
     [JsonPropertyName("packetsReceived")] public long? PacketsReceived { get; set; }
     [JsonPropertyName("framesDecoded")] public long? FramesDecoded { get; set; }
+
+    /// <summary>
+    /// Key frames the browser itself declared, reported by the Encoded Transform page (#310) — the
+    /// cross-check against what the SDK's receive path reports.
+    /// </summary>
+    [JsonPropertyName("keyFrames")] public long? KeyFrames { get; set; }
 }
 
 /// <summary>
