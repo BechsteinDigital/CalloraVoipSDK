@@ -10643,6 +10643,19 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.SipSignalingHardeningConfiguration.MaxServerTransactions
   nameWithType: SipSignalingHardeningConfiguration.MaxServerTransactions
+- uid: CalloraVoipSdk.SipSignalingHardeningConfiguration.ServedUserAors
+  name: ServedUserAors
+  href: _api/CalloraVoipSdk.SipSignalingHardeningConfiguration.html#CalloraVoipSdk_SipSignalingHardeningConfiguration_ServedUserAors
+  commentId: P:CalloraVoipSdk.SipSignalingHardeningConfiguration.ServedUserAors
+  fullName: CalloraVoipSdk.SipSignalingHardeningConfiguration.ServedUserAors
+  nameWithType: SipSignalingHardeningConfiguration.ServedUserAors
+- uid: CalloraVoipSdk.SipSignalingHardeningConfiguration.ServedUserAors*
+  name: ServedUserAors
+  href: _api/CalloraVoipSdk.SipSignalingHardeningConfiguration.html#CalloraVoipSdk_SipSignalingHardeningConfiguration_ServedUserAors_
+  commentId: Overload:CalloraVoipSdk.SipSignalingHardeningConfiguration.ServedUserAors
+  isSpec: "True"
+  fullName: CalloraVoipSdk.SipSignalingHardeningConfiguration.ServedUserAors
+  nameWithType: SipSignalingHardeningConfiguration.ServedUserAors
 - uid: CalloraVoipSdk.SipTransport
   name: SipTransport
   href: _api/CalloraVoipSdk.SipTransport.html
