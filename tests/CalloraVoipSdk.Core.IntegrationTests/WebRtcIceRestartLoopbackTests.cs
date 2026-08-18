@@ -141,7 +141,7 @@ public sealed class WebRtcIceRestartLoopbackTests
         await probe.SendAsync(fresh, peer.LocalMediaEndPoint!);
         Assert.True(
             await AwaitSuccessResponseAsync(probe, codec, freshTransaction, TimeSpan.FromSeconds(5)),
-            "Der Peer muss nach dem Restart Checks mit den rotierten Credentials beantworten.");
+            "After the restart the peer must answer checks carrying the rotated credentials.");
 
         var (retired, retiredTransaction) = IceConsentCheckBuilder.Build(
             codec, localUfrag: CounterpartUfrag, remoteUfrag: PeerUfrag, remotePassword: PeerPwd,
@@ -151,7 +151,7 @@ public sealed class WebRtcIceRestartLoopbackTests
         // an answer to the retired transaction.
         Assert.False(
             await AwaitSuccessResponseAsync(probe, codec, retiredTransaction, TimeSpan.FromSeconds(2)),
-            "Die zurückgezogenen Credentials dürfen nach dem Restart nicht mehr beantwortet werden.");
+            "The retired credentials must no longer be answered after the restart.");
     }
 
     /// <summary>
@@ -190,7 +190,7 @@ public sealed class WebRtcIceRestartLoopbackTests
         await probe.SendAsync(check, peer.LocalMediaEndPoint!);
         Assert.True(
             await AwaitSuccessResponseAsync(probe, codec, transaction, TimeSpan.FromSeconds(5)),
-            "Der Peer muss die Credentials beantworten, die sein eigenes Restart-Offer ankündigt.");
+            "The peer must answer the credentials its own restart offer announces.");
 
         var (stale, staleTransaction) = IceConsentCheckBuilder.Build(
             codec, localUfrag: CounterpartUfrag, remoteUfrag: PeerUfrag, remotePassword: PeerPwd,
@@ -198,7 +198,7 @@ public sealed class WebRtcIceRestartLoopbackTests
         await probe.SendAsync(stale, peer.LocalMediaEndPoint!);
         Assert.False(
             await AwaitSuccessResponseAsync(probe, codec, staleTransaction, TimeSpan.FromSeconds(2)),
-            "Die vor dem Restart genutzten Credentials dürfen nicht mehr beantwortet werden.");
+            "The credentials used before the restart must no longer be answered.");
     }
 
     /// <summary>
