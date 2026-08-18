@@ -86,8 +86,6 @@ public sealed class ComplianceMatrixEvidenceTests
         "11 :: HandleOptionsAsync",
         "13.3.1.4 :: SipServerTransactionEngine.ArmInviteSuccessRetransmit",
         "18.4 :: SendPayloadAsync",
-        "26.1.2 :: SipTransportRuntime.InferTransport",
-        "26.2.2 :: InferTransport",
         "RFC 6062 :: OpenTcpDataConnectionAsync",
         "RFC 6062 :: TurnTcpDataConnectionFactory",
         "RFC 6062 :: TurnTcpPassiveConnectionService",

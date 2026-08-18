@@ -749,27 +749,9 @@ internal sealed class SipTransportRuntime : ISipTransportRuntime
     /// </summary>
     private SipTransportProtocol InferTransport(string? requestUri, IPEndPoint remoteEndPoint)
     {
-        if (!string.IsNullOrWhiteSpace(requestUri)
-            && requestUri.StartsWith("sips:", StringComparison.OrdinalIgnoreCase))
-        {
-            if (requestUri.Contains(";transport=wss", StringComparison.OrdinalIgnoreCase))
-                return SipTransportProtocol.Wss;
-            return SipTransportProtocol.Tls;
-        }
-
-        if (!string.IsNullOrWhiteSpace(requestUri))
-        {
-            if (requestUri.Contains(";transport=wss", StringComparison.OrdinalIgnoreCase))
-                return SipTransportProtocol.Wss;
-            if (requestUri.Contains(";transport=ws", StringComparison.OrdinalIgnoreCase))
-                return SipTransportProtocol.Ws;
-            if (requestUri.Contains(";transport=tls", StringComparison.OrdinalIgnoreCase))
-                return SipTransportProtocol.Tls;
-            if (requestUri.Contains(";transport=tcp", StringComparison.OrdinalIgnoreCase))
-                return SipTransportProtocol.Tcp;
-            if (requestUri.Contains(";transport=udp", StringComparison.OrdinalIgnoreCase))
-                return SipTransportProtocol.Udp;
-        }
+        // The URI rule lives in the utilities so it can be exercised without a runtime (RFC 3261 §26.2.2).
+        if (SipTransportRuntimeUtilities.TryInferTransportFromUri(requestUri, out var fromUri))
+            return fromUri;
 
         if (_endpointTransportHints.TryGetValue(SipTransportRuntimeUtilities.BuildEndpointKey(null, remoteEndPoint), out var hinted))
             return hinted;
