@@ -83,8 +83,6 @@ public sealed class ComplianceMatrixEvidenceTests
     // off by naming the covering test in the row (or by writing one), then delete the line.
     private static readonly string[] UnnamedByAnyTestBaseline =
     [
-        "11 :: HandleOptionsAsync",
-        "13.3.1.4 :: SipServerTransactionEngine.ArmInviteSuccessRetransmit",
         "18.4 :: SendPayloadAsync",
         "RFC 6062 :: OpenTcpDataConnectionAsync",
         "RFC 6062 :: TurnTcpDataConnectionFactory",

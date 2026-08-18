@@ -145,7 +145,7 @@ wenn auch die jeweiligen Update-RFCs berücksichtigt sind.
 | 10.2.7 | Transmitting a Request | Nein | **Erledigt** | – | `SipClientTransactionExecutor`; Timeout-Handling; Retry für mehrere Route-Kandidaten. |
 | 10.2.8 | Error Responses | Nein | **Erledigt** | – | 401/407 Digest-Retry; 423 Min-Expires; 3xx Redirect; 413/415/416 Fallback; Telemetrie-Events. |
 | 10.3 | Processing REGISTER Requests | Nein | N/A | – | UAS/Registrar-Seite: SDK ist ein User Agent, kein Registrar — Out-of-Scope. |
-| 11 | Querying for Capabilities | Ja | **Erledigt** | RFC 3840 (Capabilities in Contact) | `HandleOptionsAsync` in `SipCallSignalingService.cs`; 200 OK mit Allow/Supported/User-Agent-Headern; UAC sendet OPTIONS für Keepalive. |
+| 11 | Querying for Capabilities | Ja | **Erledigt** | RFC 3840 (Capabilities in Contact) | OPTIONS-Antwort im `SipCallSessionInboundService`; 200 OK mit Allow/Accept/User-Agent-Headern; UAC sendet OPTIONS für Keepalive. Belegt durch `SipOptionsResponderTests` (200 nennt INVITE/ACK/BYE/CANCEL/OPTIONS und akzeptiert application/sdp). |
 | 11.1 | Construction of OPTIONS Request | Ja | **Erledigt** | – | OPTIONS-Request korrekt konstruiert; Max-Forwards, Via, From, To, Call-ID, CSeq. |
 | 11.2 | Processing of OPTIONS Request | Ja | **Erledigt** | – | Inbound OPTIONS → 200 OK mit Allow/Supported; kein Dialog erforderlich. |
 | 12 | Dialogs | Nein | **Erledigt** | RFC 6141 (re-INVITE/Target-Refresh), RFC 5057 (Multiple Dialog Usages) | Dialog-Basis vollständig via `SipDialogManager.cs`, `SipDialogPath.cs`; Target-Refresh getestet; Forking-Early-Randfälle nicht produktiv relevant. |
@@ -172,7 +172,7 @@ wenn auch die jeweiligen Update-RFCs berücksichtigt sind.
 | 13.3.1.1 | Progress | Nein | **Erledigt** | RFC 3262 (100rel-Provisional-Retransmission) | 100 Trying sofort; RFC 3262-Retransmission via `SipReliableProvisionalManager.cs`. |
 | 13.3.1.2 | The INVITE is Redirected | Nein | **Erledigt** | – | `ISipCallSession.RedirectAsync` → 3xx. |
 | 13.3.1.3 | The INVITE is Rejected | Nein | **Erledigt** | – | 486 Busy Here via `HangupAsync` während Ringing. |
-| 13.3.1.4 | The INVITE is Accepted | Nein | **Erledigt** | RFC 6026 (UAS muss 2xx retransmit bis ACK) | 200 OK mit Contact-Header; 2xx-Retransmit via `SipServerTransactionEngine.ArmInviteSuccessRetransmit`. |
+| 13.3.1.4 | The INVITE is Accepted | Nein | **Erledigt** | RFC 6026 (UAS muss 2xx retransmit bis ACK) | 200 OK mit Contact-Header; 2xx-Retransmit gesteuert vom `SipServerTransactionEngine` — belegt durch `SipInviteSuccessRetransmitTests` (UDP retransmittiert bis zum ACK, TCP nicht, Provisional armiert nichts; virtuelle Uhr). |
 | 14 | Modifying an Existing Session | Nein | **Erledigt** | RFC 6141 (re-INVITE vollständig neu spezifiziert), RFC 3311 (UPDATE-Methode) | RFC 6141 re-INVITE vollständig; UPDATE implementiert; hold/unhold/Target-Refresh getestet. `SipSection14And15ComplianceTests.cs` |
 | 14.1 | UAC Behavior | Nein | **Erledigt** | RFC 6141 | `HoldAsync/UnholdAsync`: re-INVITE gesendet, 200 OK auto-ACK, Target-Refresh angewandt. |
 | 14.2 | UAS Behavior | Nein | **Erledigt** | RFC 6141 | Inbound re-INVITE auto-beantwortet mit 200 OK; hold (a=sendonly/inactive) → OnHold; unhold → Established; RemoteHoldChanged-Event. `SipCallSessionInboundService.cs` |
@@ -618,7 +618,7 @@ wenn auch die jeweiligen Update-RFCs berücksichtigt sind.
 | RTP Core + Sequenzprüfung | RFC 3550 | `RtpPacketCodec.cs`, `RtpSession.cs`, `RtpSequenceValidator.cs` |
 | RTP AVP Profil | RFC 3551 | `RtpAvpProfile.cs` |
 | AES-256 für SRTP | RFC 6188 | `SrtpCryptoSuite.cs`, `SrtpKeyDerivation.cs` |
-| OPTIONS-Handling | RFC 3261 §11 | `SipCallSignalingService.HandleOptionsAsync` |
+| OPTIONS-Handling | RFC 3261 §11 | OPTIONS-Responder im `SipCallSessionInboundService` (belegt durch `SipOptionsResponderTests`) |
 | UPDATE-Methode | RFC 3311 | `SipCallSessionTransactionService.cs` |
 | REFER-Methode | RFC 3515 | `SipSubscriptionLifecycleManager.cs` |
 | Observability | – | `ISipTelemetrySink.cs`, `SipCdrRecord.cs` |

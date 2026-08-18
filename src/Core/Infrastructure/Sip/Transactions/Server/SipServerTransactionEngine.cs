@@ -64,7 +64,8 @@ internal sealed class SipServerTransactionEngine : ISipServerTransactionEngine
         ISipTransportRuntime transport,
         ILogger logger,
         int? maxServerTransactions = null,
-        TimeSpan? absoluteTransactionLifetime = null)
+        TimeSpan? absoluteTransactionLifetime = null,
+        IScheduledActionScheduler? timerScheduler = null)
     {
         _transport = transport ?? throw new ArgumentNullException(nameof(transport));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -74,7 +75,9 @@ internal sealed class SipServerTransactionEngine : ISipServerTransactionEngine
         _absoluteTransactionLifetime = absoluteTransactionLifetime is { } lifetime && lifetime > TimeSpan.Zero
             ? lifetime
             : DefaultAbsoluteTransactionLifetime;
-        _timerScheduler = new ScheduledActionScheduler(_logger);
+        // Injectable so the RFC 3261 §13.3.1.4 retransmit schedule can be driven without waiting on real
+        // time; production keeps the wall-clock scheduler (#336).
+        _timerScheduler = timerScheduler ?? new ScheduledActionScheduler(_logger);
     }
 
     /// <inheritdoc />
