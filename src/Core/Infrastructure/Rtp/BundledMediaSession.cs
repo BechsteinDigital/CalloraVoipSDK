@@ -238,151 +238,51 @@ internal sealed class BundledMediaSession : IAsyncDisposable
             ? new RtpInboundDtmfReassembler(_telephoneEventClockRate, (tone, ms) => DtmfReceived?.Invoke(tone, ms), _logger)
             : null;
 
-        // Inbound: demux the shared socket by the negotiated m-lines' payload types, route each MID.
-        var payloadTypesByMid = new Dictionary<string, IReadOnlyCollection<int>>(StringComparer.Ordinal)
-        {
-            [options.Audio.Mid] = new[] { (int)options.Audio.PayloadType },
-        };
-        // One entry per video m-line (P2b). A payload type shared across video tracks (two same-codec streams
-        // both use, e.g., PT 96) is dropped from the PT→MID demux map by the factory below, so those packets are
-        // demultiplexed by MID header extension (RFC 9143) instead — never guessed by an ambiguous PT.
-        foreach (var videoConfig in options.VideoTracks)
-        {
-            if (!payloadTypesByMid.TryAdd(videoConfig.Mid, new[] { (int)videoConfig.PayloadType }))
-                throw new ArgumentException(
-                    $"Duplicate video MID '{videoConfig.Mid}' in the bundle options.", nameof(options));
-        }
-        // One entry per additional inbound audio m-line (4.7.0). As for video, a PT shared across audio tracks is
-        // dropped from the demux map by the factory below and those packets route by MID header extension
-        // (RFC 9143) — never an ambiguous PT. A MID colliding with the primary audio or a video m-line is rejected.
-        foreach (var audioConfig in options.AdditionalAudioTracks)
-        {
-            if (!payloadTypesByMid.TryAdd(audioConfig.Mid, new[] { (int)audioConfig.PayloadType }))
-                throw new ArgumentException(
-                    $"Duplicate audio MID '{audioConfig.Mid}' in the bundle options.", nameof(options));
-        }
+        // The data path: everything a packet passes through on its way in or out, assembled in the one order
+        // its dependencies allow (router before the pipeline that feeds it, pipeline before the transport that
+        // drives it, transport before the relay binding built from its send path, all before the tracks that
+        // register on them). Kept in the composition helper so that order lives in one readable place.
+        var dataPath = BundledMediaSessionComposition.BuildDataPath(
+            options, RaiseAudioReceived, OnControlPacketReceived,
+            _inboundEventWiring.WireVideoTrackEvents, RaiseAudioTrackReceived, loggerFactory, _logger);
+        _router = dataPath.Router;
+        _receptionStats = dataPath.ReceptionStats;
+        _outboundQuality = dataPath.OutboundQuality;
+        _rtcpCodec = dataPath.RtcpCodec;
+        _inbound = dataPath.Inbound;
+        _transport = dataPath.Transport;
+        _outbound = dataPath.Outbound;
+        _audioTracks = dataPath.AudioTracks;
+        _video = dataPath.Video;
+        var relayBinding = dataPath.RelayBinding;
 
-        var router = new BundledTrackRouter(
-            BundledRtpDemultiplexerFactory.Create(options.MidExtensionId, payloadTypesByMid, options.RidExtensionId));
-        _router = router;
-        router.RegisterTrack(options.Audio.Mid, RaiseAudioReceived);
 
-        // Per-SSRC inbound reception statistics (RFC 3550 §6.4.1) feed the periodic RTCP report blocks: the
-        // inbound pipeline records each decoded RTP packet, and inbound SRs feed LSR/DLSR (subscribed below).
-        // The negotiated clock/kind is applied per inbound source by matching the first packet's payload type
-        // (the inbound SSRC is the remote's choice), so audio gets its exact §A.8 clock and video gets 90 kHz
-        // regardless of arrival order, and each source is attributed to its track (CF-004f).
-        _receptionStats = new BundledInboundReceptionStats(clockByPayloadType: BundledMediaSessionComposition.BuildInboundClockMap(options));
-        // Consumes the reception blocks the peer returns about our outbound streams to derive RTT and the loss
-        // the peer sees (RFC 3550 §6.4.1): fed by the reporter's SR send instants and by inbound RR/SR blocks.
-        _outboundQuality = new BundledOutboundQualityTracker();
-        _rtcpCodec = new RtcpPacketCodec();
+        // Keying and reporting on top of the data path: congestion control, inbound RTCP fan-out, the one DTLS
+        // association that keys every track, the one ICE agent that keeps the group alive, and the periodic
+        // Sender Reports. All of it needs the transport and pipelines to exist first, which is why it is a
+        // second step. The events stay here — only this session may raise them — so they are handed over as
+        // delegates rather than the composition reaching for them.
+        var keying = BundledMediaSessionComposition.BuildKeyingPlane(
+            options, dataPath, handshaker, certificate,
+            new BundledMediaSessionComposition.BundledMediaKeyingCallbacks(
+                HandshakeFailed: () => HandshakeFailed?.Invoke(),
+                Connected: () => Connected?.Invoke(),
+                PeerClosed: () => PeerClosed?.Invoke(),
+                MediaConsentLost: () => MediaConsentLost?.Invoke(),
+                MediaConnectivityDegraded: () => MediaConnectivityDegraded?.Invoke(),
+                MediaConnectivityRecovered: () => MediaConnectivityRecovered?.Invoke(),
+                // A nominated ICE pair (RFC 8445 §8) becomes the transport's send target AND the DTLS remote,
+                // so the handshake's inbound source filter follows the connectivity-checked pair.
+                PairNominated: OnPairNominated,
+                // A nominated relay pair additionally switches the transport onto the relay data path.
+                RelayPairNominated: OnRelayPairNominated),
+            loggerFactory, _logger);
+        _congestion = keying.Congestion;
+        _rtcpDispatcher = keying.RtcpDispatcher;
+        _dtls = keying.Dtls;
+        _ice = keying.Ice;
+        _rtcpReporter = keying.RtcpReporter;
 
-        _inbound = new BundledInboundPipeline(
-            router, new RtpPacketCodec(), loggerFactory.CreateLogger<BundledInboundPipeline>(), _receptionStats);
-        // Inbound Sender Reports carry the LSR the peer needs echoed back: decode each decrypted compound and
-        // record every SR's middle-32 NTP bits + arrival time per sender SSRC (RFC 3550 §6.4.1).
-        _inbound.ControlPacketReceived += OnControlPacketReceived;
-
-        _transport = new BundledMediaTransport(
-            new BundledMediaTransportOptions { LocalEndPoint = options.LocalEndPoint, RemoteEndPoint = options.RemoteEndPoint },
-            _inbound, loggerFactory.CreateLogger<BundledMediaTransport>(), options.PreBoundSocket);
-
-        // A relay ICE local candidate rides the same shared socket. Now that the socket exists, the injected
-        // (TURN-aware) factory builds the indication channel + control transactor + relay send path from the
-        // transport's targeted send; the transport unwraps relayed inbound datagrams and feeds control responses
-        // (SetIndicationRelay), and the relay send path becomes the ICE agent's relay candidate below. Null
-        // (no gathered allocation) leaves the transport direct-only.
-        // Unframed send: the relay control stack (control transactions + Send indications) is addressed to the
-        // relay server itself and must reach it raw in both modes — never framed as ChannelData once the
-        // transport enters relay mode.
-        var relayBinding = options.RelayIceBindingFactory?.Invoke(_transport.SendUnframedAsync);
-        if (relayBinding is not null)
-            _transport.SetIndicationRelay(relayBinding.Indication, relayBinding.OnControl);
-
-        // Outbound: a per-track sender for each m-line, stamping its MID (and, when negotiated, the one
-        // transport-wide-cc sequence the pipeline advances across all tracks).
-        _outbound = new BundledOutboundPipeline(
-            new RtpPacketCodec(), _transport, loggerFactory.CreateLogger<BundledOutboundPipeline>(),
-            stampsTransportCc: options.TransportWideCcExtensionId is not null);
-        _outbound.RegisterTrack(options.Audio.Mid, BundledMediaSessionComposition.BuildOutboundTrack(options, options.Audio));
-
-        // The additional inbound audio tracks (4.7.0) — each a bare receive sink plus a symmetric outbound sender —
-        // are wired by the collaborator (kept out of this ctor for the size limit): it registers each MID's router
-        // sink (raising the mid-tagged AudioTrackFrameReceived) and its outbound sender. The demux boundary was
-        // extended above; the primary anchor is untouched. Empty list → empty set (byte-identical single-audio path).
-        _audioTracks = options.AdditionalAudioTracks.Count > 0
-            ? new BundledAudioTrackSet(options, router, _outbound, RaiseAudioTrackReceived, _logger)
-            : new BundledAudioTrackSet(_outbound, _logger);
-
-        // One BundledVideoTrack per negotiated video m-line (P2b: N video tracks). Each registers its own
-        // outbound sender(s) and its own inbound router sink on its MID; per-SSRC SRTP keeps them independent.
-        var builtVideo = new List<(string Mid, BundledVideoTrack Track)>(options.VideoTracks.Count);
-        foreach (var video in options.VideoTracks)
-        {
-            var track = BundledMediaSessionComposition.BuildVideoTrack(options, video, _outbound, loggerFactory);
-            var mid = video.Mid;
-            var isPrimary = builtVideo.Count == 0;
-            _inboundEventWiring.WireVideoTrackEvents(mid, track, isPrimary);
-            router.RegisterTrack(mid, track.OnRtpPacket);
-            builtVideo.Add((mid, track));
-        }
-
-        _video = builtVideo.Count > 0 ? new BundledVideoTrackSet(builtVideo) : new BundledVideoTrackSet();
-
-        // Transport-wide congestion control (transport-cc), one plane per bundle. Only when the
-        // a=extmap was negotiated (so the transport actually stamps a transport-wide sequence) — otherwise the
-        // plane stays off. See BundledCongestionPlane: it wires the sender-side controller to PacketSent and the
-        // receive-side feedback sender to inbound RTP; OnControlPacketReceived fans decoded feedback into it.
-        _congestion = BundledMediaSessionComposition.BuildCongestionPlane(
-            options, _outbound, _inbound, _rtcpCodec, loggerFactory);
-
-        // Inbound RTCP decode + fan-out (RFC 3550 §6.4.1 / RFC 4585 / transport-cc): built now that the video set and
-        // congestion plane exist. Invoked only from the receive loop (subscribed on _inbound above), which starts
-        // in StartAsync, so this field is always assigned before the first dispatch.
-        _rtcpDispatcher = new BundledInboundRtcpDispatcher(
-            _rtcpCodec, _receptionStats, _outboundQuality, _video, _congestion, _logger);
-
-        // One shared DTLS association keys every track; one shared ICE agent keeps the group alive.
-        _dtls = new BundledDtlsKeying(
-            options.DtlsIsClient, options.RemoteEndPoint, options.RemoteFingerprint,
-            handshaker, certificate, _inbound, _outbound, _transport,
-            onHandshakeFailed: () => HandshakeFailed?.Invoke(), loggerFactory,
-            onKeysInstalled: () => Connected?.Invoke(),
-            onPeerClosed: () => PeerClosed?.Invoke());
-
-        _ice = new BundledIceControl(
-            options.Ice, _inbound, _transport.SendToAsync, loggerFactory,
-            onConsentLost: () => MediaConsentLost?.Invoke(),
-            onConnectivityDegraded: () => MediaConnectivityDegraded?.Invoke(),
-            onConnectivityRecovered: () => MediaConnectivityRecovered?.Invoke(),
-            // A nominated ICE pair (RFC 8445 §8) becomes the transport's send target AND the DTLS remote,
-            // so the DTLS handshake's inbound source filter follows the connectivity-checked pair.
-            onPairNominated: OnPairNominated,
-            // The relay send path (when a TURN allocation was gathered) becomes the ICE agent's relay local
-            // candidate — checked alongside the direct one, direct-preferred by pair priority.
-            relaySend: relayBinding?.RelaySend,
-            // A nominated relay pair additionally switches the transport onto the relay data path (ChannelBind).
-            onRelayPairNominated: OnRelayPairNominated,
-            // Reaches a STUN server as-is in either transport mode, so the reflexive address can be re-probed
-            // on a live transport after an ICE restart without giving up the socket.
-            sendUnframed: _transport.SendUnframedAsync);
-
-        // Periodic RTCP Sender Reports for the active outbound streams (RFC 3550 §6.4): reads the outbound
-        // pipeline's per-SSRC SR counters and sends over its fail-closed SRTCP send path. The CNAME mirrors the
-        // SIP-path monitor so both report the same canonical name. Started in StartAsync (early ticks are
-        // suppressed until DTLS installs the outbound SRTCP key); disposed before the transport it rides.
-        _rtcpReporter = new BundledRtcpReporter(
-            _outbound.SnapshotSenderReports,
-            _receptionStats.SnapshotReportBlocks,
-            options.Audio.Ssrc,
-            _outbound.SendRtcpAsync,
-            _rtcpCodec,
-            // Opaque per-session CNAME (RFC 7022) — never the machine name (privacy/correlation); overridable.
-            options.Cname ?? RtcpCname.NewOpaque(),
-            loggerFactory,
-            // Record each emitted SR's LSR + send instant so a peer's echoed report yields RTT (RFC 3550 §6.4.1).
-            onSenderReportSent: _outboundQuality.RecordLocalSenderReport);
 
         _audioSsrc = options.Audio.Ssrc;
         // Seed the outbound-SSRC bookkeeping (RFC 3550 §8.1) from the ctor tracks so OutboundSsrcs reflects the
