@@ -70,17 +70,11 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     // transport state. Guarded by _sync; transitioned via TransitionSignalingTo (event fired outside the lock).
     private WebRtcSignalingState _signalingState = WebRtcSignalingState.Stable;
     private string? _remoteDescription;
-    private SdpMsid? _remoteAudioMsid;
-    private SdpMsid? _remoteVideoMsid;
-    private bool _hasRemoteAudio;
-    private bool _hasRemoteVideo;
-    // Every remote video m-line the peer will send on (P2c: N tracks), in remote m-line order, each with its
-    // MID and a=msid. Empty until a remote description is applied. Guarded by _sync.
-    private IReadOnlyList<RemoteVideoTrackInfo> _remoteVideoTracks = [];
-    // Every ADDITIONAL remote audio m-line the peer will send on (4.7.0: N audio tracks beyond the primary anchor),
-    // each with its MID and a=msid. Empty until a remote description is applied (and for a single-audio remote);
-    // the primary audio is surfaced via the mid-less audio path. Guarded by _sync.
-    private IReadOnlyList<RemoteAudioTrackInfo> _remoteAudioTracks = [];
+    // The remote-track facts derived from the applied remote description (a=msid identities, has-audio/has-video,
+    // the per-m-line sending inventory). Held as the one immutable record the deriver returns rather than
+    // destructured into six fields: swapping one reference under _sync means a reader can never observe a
+    // half-updated inventory — six separate writes could be read between any two of them. Guarded by _sync.
+    private WebRtcRemoteMediaInventory? _remoteInventory;
     private string? _localDescription;
     private SdpSessionDescription? _localOfferModel;
     private BundledMediaSession? _session;
@@ -283,13 +277,13 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     /// </summary>
     public SdpMsid? RemoteAudioMsid
     {
-        get { lock (_sync) { return _remoteAudioMsid; } }
+        get { lock (_sync) { return _remoteInventory?.AudioMsid; } }
     }
 
     /// <summary>The remote peer's video-track identity (a=msid), or null. See <see cref="RemoteAudioMsid"/>.</summary>
     public SdpMsid? RemoteVideoMsid
     {
-        get { lock (_sync) { return _remoteVideoMsid; } }
+        get { lock (_sync) { return _remoteInventory?.VideoMsid; } }
     }
 
     /// <summary>
@@ -299,7 +293,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     /// </summary>
     public IReadOnlyList<RemoteVideoTrackInfo> RemoteVideoTracks
     {
-        get { lock (_sync) { return _remoteVideoTracks; } }
+        get { lock (_sync) { return _remoteInventory?.VideoTracks ?? []; } }
     }
 
     /// <summary>
@@ -309,7 +303,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     /// </summary>
     public IReadOnlyList<RemoteAudioTrackInfo> RemoteAudioTracks
     {
-        get { lock (_sync) { return _remoteAudioTracks; } }
+        get { lock (_sync) { return _remoteInventory?.AudioTracks ?? []; } }
     }
 
     /// <summary>
@@ -318,13 +312,13 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     /// </summary>
     public bool HasRemoteAudio
     {
-        get { lock (_sync) { return _hasRemoteAudio; } }
+        get { lock (_sync) { return _remoteInventory?.HasRemoteAudio ?? false; } }
     }
 
     /// <summary>Whether the applied remote description contains a video media line. See <see cref="HasRemoteAudio"/>.</summary>
     public bool HasRemoteVideo
     {
-        get { lock (_sync) { return _hasRemoteVideo; } }
+        get { lock (_sync) { return _remoteInventory?.HasRemoteVideo ?? false; } }
     }
 
     /// <summary>Cumulative transport counters for the media session, or null before a session is built.</summary>
@@ -605,7 +599,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             _mediaSocket.MarkHandedOver(session is not null);
             // Retain the remote track identity (a=msid) so the receiver can group inbound tracks by the
             // remote MediaStream (the W3C RTCTrackEvent.streams semantics).
-            ApplyRemoteInventory(remote);
+            _remoteInventory = WebRtcRemoteMediaInventory.FromRemoteDescription(remote);
             // Both roles settle to Stable now the exchange is complete: the offerer from HaveLocalOffer (answer
             // applied) and the answerer from HaveRemoteOffer (answer produced) — RFC 8829 §4.1.3. The event is
             // fired below, outside the lock (K3).
@@ -707,7 +701,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             _localDescription = newLocalSdp;
             // Refresh the remote track identity/inventory from the new description (P2c: the receiver re-materialises
             // its remote tracks from this). The transport is unchanged; only the advertised track set moved.
-            ApplyRemoteInventory(remote);
+            _remoteInventory = WebRtcRemoteMediaInventory.FromRemoteDescription(remote);
             // Both roles settle to Stable now the re-exchange is complete (RFC 8829 §4.1.3).
             _signalingState = WebRtcSignalingState.Stable;
         }
@@ -928,21 +922,6 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             _mediaStreamId,
             _audioTrackId,
             _videoTrackId);
-
-    // Records the remote track facts (a=msid identity, has-audio/has-video, the per-m-line sending video
-    // inventory, derived by WebRtcRemoteMediaInventory) from a newly-applied remote description, so the receiver
-    // materialises its remote tracks from it. Shared by the first cycle and renegotiation. The CALLER MUST hold
-    // _sync (it writes the guarded fields directly); it never re-locks.
-    private void ApplyRemoteInventory(SdpSessionDescription remote)
-    {
-        var inventory = WebRtcRemoteMediaInventory.FromRemoteDescription(remote);
-        _hasRemoteAudio = inventory.HasRemoteAudio;
-        _hasRemoteVideo = inventory.HasRemoteVideo;
-        _remoteAudioMsid = inventory.AudioMsid;
-        _remoteVideoMsid = inventory.VideoMsid;
-        _remoteAudioTracks = inventory.AudioTracks;
-        _remoteVideoTracks = inventory.VideoTracks;
-    }
 
     private void TransitionTo(WebRtcConnectionState next) => _connectionState.TransitionTo(next);
 
