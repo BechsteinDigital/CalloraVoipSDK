@@ -34,6 +34,15 @@ public sealed class VideoTrackOptions
     public IReadOnlyList<string> SimulcastSendRids { get; init; } = [];
 
     /// <summary>
+    /// Receive-side simulcast layer ids to ask the peer for on this track (RFC 8853 §5.3), advertised as
+    /// <c>a=rid … recv</c> plus <c>a=simulcast:recv …</c>. Empty (the default) asks for a single stream. An
+    /// answerer may only simulcast what the offer marked recv, so a receive-only peer (e.g. a conference host)
+    /// sets this to receive the peer's layers addressably; each arriving layer carries its rid on the received
+    /// frame. This peer must be the offerer for the request to be advertised.
+    /// </summary>
+    public IReadOnlyList<string> SimulcastRecvRids { get; init; } = [];
+
+    /// <summary>
     /// The WebRTC MediaStream id this track belongs to (<c>a=msid</c> stream id, RFC 8830).
     /// <see langword="null"/> (the default) puts the track in the peer's default stream. Tracks that share a
     /// stream id are grouped as one remote MediaStream on the receiver.

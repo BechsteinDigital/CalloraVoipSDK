@@ -8,6 +8,24 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
 
 The next line. Entries here accumulate the consumer-visible changes not yet released.
 
+### Added
+
+- **An offer can ask the peer to simulcast** (#317, RFC 8853 §5.3). The receive path has demultiplexed
+  incoming simulcast layers since 4.9.0 — but only a peer that *offered* could reach it; an SDK peer that
+  offered itself could only say `a=simulcast:send`, never ask. Since an answerer may only send what the offer
+  marked `recv`, a receive-only offerer — the conference host — got a single stream back, and the per-receiver
+  layer selection built in `callora-communication` had nothing to select from.
+
+  The new **`WebRtcConfiguration.SimulcastRecvLayers`** (and per-track **`VideoTrackOptions.SimulcastRecvRids`**)
+  declares the layers to ask for. The offer then carries `a=rid … recv`, `a=simulcast:recv`, and the RID header
+  extension (RFC 8852) so the peer can tag each layer it sends back; each arriving layer reaches the app with
+  its rid on the received frame, through the existing receive pipeline. An offer that sets neither send nor
+  recv rids is byte-identical to before.
+
+  Slice 1 of #317 — the offer-side declaration. Reading back which layers the answer confirmed as a
+  negotiated set, and the full peer-answers-and-simulcasts end-to-end test, follow next; a real browser proof
+  belongs in the interop matrix (#228).
+
 ### Changed
 
 - **SIP URI comparison (RFC 3261 §19.1.4) was wrong in five of the ten cases the RFC itself lists** (#285).

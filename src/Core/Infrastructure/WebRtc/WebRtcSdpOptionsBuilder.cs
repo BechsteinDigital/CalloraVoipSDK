@@ -85,6 +85,7 @@ internal static class WebRtcSdpOptionsBuilder
                     Candidates = video.Candidates,
                     HeaderExtensionUris = video.HeaderExtensionUris,
                     SimulcastSendRids = video.SimulcastSendRids,
+                    SimulcastRecvRids = video.SimulcastRecvRids,
                 }
                 : null,
             AudioMsid = new SdpMsid { StreamId = mediaStreamId, TrackId = audioTrackId },
@@ -131,6 +132,7 @@ internal static class WebRtcSdpOptionsBuilder
                 Crypto = video.Crypto,
                 HeaderExtensionUris = video.HeaderExtensionUris,
                 SimulcastSendRids = video.SimulcastSendRids,
+                SimulcastRecvRids = video.SimulcastRecvRids,
             });
 
         var appendedTracks = new List<(int Order, SdpTrackOptions Track)>(
@@ -153,6 +155,7 @@ internal static class WebRtcSdpOptionsBuilder
                 Direction = track.Direction,
                 Msid = new SdpMsid { StreamId = track.StreamId ?? mediaStreamId, TrackId = trackId },
                 SimulcastSendRids = track.SimulcastSendRids,
+                SimulcastRecvRids = track.SimulcastRecvRids,
             }));
 
         tracks.AddRange(appendedTracks

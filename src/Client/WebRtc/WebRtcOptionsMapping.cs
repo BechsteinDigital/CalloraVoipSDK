@@ -36,6 +36,7 @@ internal static class WebRtcOptionsMapping
             VideoCodecs = options.VideoCodecs,
             OpaqueVideoFrames = options.OpaqueVideoFrames,
             SimulcastLayers = options.SimulcastLayers,
+            SimulcastRecvLayers = options.SimulcastRecvLayers,
             IceServers = options.IceServers,
             DtlsCertificate = options.DtlsCertificate,
             LoggerFactory = options.LoggerFactory ?? loggerFactory,

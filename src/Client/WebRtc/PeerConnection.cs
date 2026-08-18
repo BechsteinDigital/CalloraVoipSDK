@@ -196,6 +196,7 @@ internal sealed class PeerConnection : IPeerConnection
             Codecs = VideoCodecCatalog.Resolve(codecNames),
             Direction = MapDirection(options.Direction),
             SimulcastSendRids = options.SimulcastSendRids,
+            SimulcastRecvRids = options.SimulcastRecvRids,
             StreamId = options.StreamId,
         });
 

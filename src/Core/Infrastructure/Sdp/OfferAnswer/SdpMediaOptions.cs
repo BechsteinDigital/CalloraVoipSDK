@@ -75,6 +75,14 @@ internal sealed class SdpVideoMediaOptions
     /// carries the RID header extension (RFC 8852) so each layer's SSRC is per-packet identifiable.
     /// </summary>
     public IReadOnlyList<string> SimulcastSendRids { get; init; } = [];
+
+    /// <summary>
+    /// Receive-side simulcast layer ids (RFC 8853 §5.3) to ask the peer for, advertised as <c>a=rid … recv</c>
+    /// plus <c>a=simulcast:recv …</c>. Empty asks for a single stream. When non-empty, the offer also carries
+    /// the RID header extension (RFC 8852) so the peer can tag each layer it sends back — an answerer may only
+    /// simulcast what the offer marked recv, so a receive-only offerer (e.g. a conference host) must set this.
+    /// </summary>
+    public IReadOnlyList<string> SimulcastRecvRids { get; init; } = [];
 }
 
 /// <summary>
@@ -111,6 +119,9 @@ internal sealed class SdpTrackOptions
 
     /// <summary>Send-side simulcast layer ids (RFC 8853), video only; empty offers a single stream.</summary>
     public IReadOnlyList<string> SimulcastSendRids { get; init; } = [];
+
+    /// <summary>Receive-side simulcast layer ids (RFC 8853 §5.3) to ask the peer for, video only; empty asks for one stream.</summary>
+    public IReadOnlyList<string> SimulcastRecvRids { get; init; } = [];
 }
 
 /// <summary>

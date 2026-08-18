@@ -45,6 +45,9 @@ public sealed class WebRtcOptions
     /// <summary>Send-side simulcast layers to offer, by <c>a=rid</c> id. See <see cref="WebRtcConfiguration.SimulcastLayers"/>. Default: none.</summary>
     public IReadOnlyList<string> SimulcastLayers { get; set; } = [];
 
+    /// <summary>Receive-side simulcast layers to ask the peer for, by <c>a=rid</c> id. See <see cref="WebRtcConfiguration.SimulcastRecvLayers"/>. Default: none.</summary>
+    public IReadOnlyList<string> SimulcastRecvLayers { get; set; } = [];
+
     /// <summary>STUN/TURN servers for server-reflexive candidate gathering. See <see cref="WebRtcConfiguration.IceServers"/>. Default: none.</summary>
     public IReadOnlyList<IceServerConfiguration> IceServers { get; set; } = [];
 

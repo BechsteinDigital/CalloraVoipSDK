@@ -20,6 +20,9 @@ internal sealed record WebRtcAddedVideoTrack
     /// <summary>Send-side simulcast layer ids (RFC 8853); empty offers a single video stream.</summary>
     public IReadOnlyList<string> SimulcastSendRids { get; init; } = [];
 
+    /// <summary>Receive-side simulcast layer ids (RFC 8853 §5.3) to ask the peer for on this track; empty asks for one stream.</summary>
+    public IReadOnlyList<string> SimulcastRecvRids { get; init; } = [];
+
     /// <summary>The WebRTC MediaStream id (a=msid stream id, RFC 8830), or null for the peer's default stream.</summary>
     public string? StreamId { get; init; }
 }
