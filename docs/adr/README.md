@@ -167,6 +167,7 @@ Guardrails** (see `ADR-011` for the format model).
 | [ADR-009](ADR-009-webrtc-browser-peer-roadmap.md) | WebRTC Browser-Peer Roadmap | Accepted | 2026-07-15 |
 | [ADR-012](ADR-012-webrtc-public-facade.md) | WebRTC Public Facade (`WebRtcClient`) | Accepted | 2026-07-18 |
 | [ADR-060](ADR-060-webrtc-facade-completion-and-server-hosting.md) | WebRTC Facade Completion — Fluent ICE Config, Send-Side Simulcast, and the TURN/STUN Server-Hosting Facade | Accepted | 2026-07-19 |
+| [ADR-072](ADR-072-ice-restart-replaces-the-agent-not-the-transport.md) | An ICE Restart Replaces the Agent, Not the Transport | Accepted | 2026-08-18 |
 
 ### TURN Relay
 

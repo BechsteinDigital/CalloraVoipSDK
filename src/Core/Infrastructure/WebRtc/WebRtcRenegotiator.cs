@@ -1,7 +1,10 @@
 using System.Net;
+using System.Security.Cryptography;
+using CalloraVoipSdk.Core.Application.Media.Ice;
 using CalloraVoipSdk.Core.Infrastructure.Rtp;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Models;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.OfferAnswer;
+using CalloraVoipSdk.Core.Infrastructure.Stun.Ice;
 using Microsoft.Extensions.Logging;
 
 namespace CalloraVoipSdk.Core.Infrastructure.WebRtc;
@@ -12,8 +15,14 @@ namespace CalloraVoipSdk.Core.Infrastructure.WebRtc;
 /// track-set delta — adding a track for each newly-negotiated video or additional-audio MID and deactivating one
 /// for each such MID the re-offer dropped — <b>without</b> rebuilding the transport, DTLS, ICE, or SRTP context.
 /// The PRIMARY audio m-line (the transport anchor) is never diffed, added, or deactivated (it carries ICE/DTLS).
-/// There is no ICE restart: a changed ICE ufrag/pwd on the shared audio m-line is rejected (a documented
-/// limitation), since re-keying the transport is not what this path does.
+/// <para>
+/// It also carries an <b>ICE restart</b> (#226, RFC 8445 §9 / RFC 8829 §5.3.1): rotated ICE credentials on the
+/// transport-anchoring m-line replace the session's ICE agent in place, so a peer that changed networks
+/// re-establishes connectivity instead of the call dropping. Nothing above ICE is rebuilt — the socket, the DTLS
+/// association and every SRTP context survive, which is the whole point of a restart. The local ICE credentials
+/// live here for the same reason: an ICE restart is the only thing that ever rotates them, and a restart is a
+/// renegotiation.
+/// </para>
 /// <para>
 /// SSRC allocation (RFC 3550 §8.1): the pool is seeded from <see cref="BundledMediaSession.OutboundSsrcs"/> —
 /// the SSRCs live on the session at diff time — because a WebRTC local description carries no <c>a=ssrc</c>
@@ -43,18 +52,45 @@ internal sealed class WebRtcRenegotiator
     // encrypted peer a clear-media track that reads ciphertext.
     private readonly bool _opaqueVideoFrames;
 
+    // Raised after an ICE restart was applied, so the owning peer can model it as a connection-state transition
+    // (back to Connecting) instead of leaving a peer that had already fallen to Failed there forever.
+    private readonly Action? _onIceRestarted;
+
+    // The local ICE credentials currently advertised. Mutable because an ICE restart rotates them
+    // (RFC 8445 §9.1.1.1) on a peer whose configuration — and socket — stay exactly what they were. Guarded by
+    // its own gate: the peer reads it while building any description, on whichever thread signalling arrives on.
+    private readonly object _iceGate = new();
+    private SdpIceParameters _localIce;
+
     /// <summary>Creates a renegotiator that logs via <paramref name="loggerFactory"/>.</summary>
     /// <param name="loggerFactory">Builds the diagnostic logger for the diff.</param>
     /// <param name="opaqueVideoFrames">
     /// The owning peer's <see cref="WebRtcPeerOptions.OpaqueVideoFrames"/> policy, stamped onto every video track
     /// this renegotiator adds so a mid-call track matches the session's existing ones.
     /// </param>
-    /// <exception cref="ArgumentNullException"><paramref name="loggerFactory"/> is <see langword="null"/>.</exception>
-    public WebRtcRenegotiator(ILoggerFactory loggerFactory, bool opaqueVideoFrames)
+    /// <param name="localIce">The peer's configured local ICE credentials and candidates — the starting value.</param>
+    /// <param name="onIceRestarted">Invoked after an applied ICE restart so the peer can transition its state.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="loggerFactory"/> or <paramref name="localIce"/> is <see langword="null"/>.</exception>
+    public WebRtcRenegotiator(
+        ILoggerFactory loggerFactory,
+        bool opaqueVideoFrames,
+        SdpIceParameters localIce,
+        Action? onIceRestarted = null)
     {
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
         _logger = loggerFactory.CreateLogger<WebRtcRenegotiator>();
         _opaqueVideoFrames = opaqueVideoFrames;
+        _localIce = localIce ?? throw new ArgumentNullException(nameof(localIce));
+        _onIceRestarted = onIceRestarted;
+    }
+
+    /// <summary>
+    /// The local ICE credentials and configured candidates to advertise in the next description. Follows an ICE
+    /// restart, so an answer to a restart offer carries the fresh ufrag/pwd the peer will authenticate against.
+    /// </summary>
+    public SdpIceParameters LocalIceParameters
+    {
+        get { lock (_iceGate) { return _localIce; } }
     }
 
     /// <summary>
@@ -70,8 +106,8 @@ internal sealed class WebRtcRenegotiator
     /// <param name="answerContext">The negotiator inputs (local endpoint, codecs, media options) to produce the answer.</param>
     /// <returns>The freshly negotiated answer model.</returns>
     /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
-    /// <exception cref="InvalidOperationException">No answer could be negotiated, or the re-offer requests an unsupported ICE restart.</exception>
-    public SdpSessionDescription NegotiateAnswerAndApply(
+    /// <exception cref="InvalidOperationException">No answer could be negotiated.</exception>
+    public async Task<SdpSessionDescription> NegotiateAnswerAndApplyAsync(
         BundledMediaSession session,
         SdpSessionDescription remote,
         WebRtcRenegotiationAnswerContext answerContext)
@@ -80,8 +116,15 @@ internal sealed class WebRtcRenegotiator
         ArgumentNullException.ThrowIfNull(remote);
         ArgumentNullException.ThrowIfNull(answerContext);
 
+        // Rotate our own credentials FIRST when the re-offer restarts ICE (RFC 8445 §9.1.1.1: the answerer to a
+        // restart offer must generate new ones too), because the answer built below has to advertise them — the
+        // peer authenticates its checks against what our answer says, not against what we used before.
+        var restart = DetectIceRestart(session, remote);
+        if (restart is not null)
+            RotateLocalIce();
+
         var result = answerContext.Negotiator.NegotiateAnswer(
-            remote, answerContext.Local, answerContext.AudioCodecs, SdpMediaDirection.SendRecv, answerContext.MediaOptions);
+            remote, answerContext.Local, answerContext.AudioCodecs, SdpMediaDirection.SendRecv, answerContext.MediaOptions());
         if (!result.Success || result.Answer is null)
         {
             // A failed re-answer leaves the running session intact (the old tracks keep flowing) — this throws before
@@ -91,7 +134,59 @@ internal sealed class WebRtcRenegotiator
         }
 
         Apply(session, ComputeDiff(session, result.Answer, remote));
+        if (restart is not null)
+            await RestartIceAsync(session, remote, restart).ConfigureAwait(false);
         return result.Answer;
+    }
+
+    /// <summary>
+    /// Initiates an ICE restart locally (RFC 8445 §9.1.1.1, the W3C <c>createOffer({iceRestart: true})</c>): the
+    /// local credentials are rotated and the running agent is restarted with them, so the very next description
+    /// this peer builds advertises the new pair and the agent already answers checks against it.
+    /// </summary>
+    /// <remarks>
+    /// Only our half moves here. What the peer will do is not yet known — a conforming answerer rotates too
+    /// (§9.1.1.1), and that arrives as an ordinary detected restart in <see cref="ApplyReAnswerAsync"/>, which
+    /// restarts once more to adopt the peer's new credentials. A peer that does not rotate leaves our agent on
+    /// (new local, unchanged remote), which is correct and complete on its own.
+    /// </remarks>
+    /// <param name="session">The running media session whose agent is restarted.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="session"/> is <see langword="null"/>.</exception>
+    public async Task RestartLocalIceAsync(BundledMediaSession session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+
+        RotateLocalIce();
+        var localIce = LocalIceParameters;
+        await session.RestartLocalIceAsync(localIce.Ufrag, localIce.Pwd).ConfigureAwait(false);
+
+        _logger.LogInformation(
+            "ICE restart initiated locally (RFC 8445 §9): local credentials rotated on the running transport; " +
+            "the next offer advertises them.");
+        _onIceRestarted?.Invoke();
+    }
+
+    /// <summary>
+    /// The offerer half of a second cycle: applies the track-set diff between our re-offer and the peer's
+    /// re-answer, and restarts ICE when that answer rotated the peer's ICE credentials (RFC 8445 §9). Our own
+    /// credentials are <em>not</em> rotated here — the re-offer already advertised them and the peer is checking
+    /// against those.
+    /// </summary>
+    /// <param name="session">The running media session to diff against and mutate.</param>
+    /// <param name="newLocalDescription">Our re-offer.</param>
+    /// <param name="newRemoteDescription">The peer's re-answer.</param>
+    /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
+    public async Task ApplyReAnswerAsync(
+        BundledMediaSession session,
+        SdpSessionDescription newLocalDescription,
+        SdpSessionDescription newRemoteDescription)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+
+        var restart = DetectIceRestart(session, newRemoteDescription);
+        Apply(session, ComputeDiff(session, newLocalDescription, newRemoteDescription));
+        if (restart is not null)
+            await RestartIceAsync(session, newRemoteDescription, restart).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -109,10 +204,6 @@ internal sealed class WebRtcRenegotiator
     /// <param name="newRemoteDescription">The peer's new description.</param>
     /// <returns>The delta to apply; <see cref="WebRtcRenegotiationDiff.IsEmpty"/> when nothing changed.</returns>
     /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// The new descriptions request an ICE restart (a changed ICE ufrag/pwd on the shared audio m-line) — this
-    /// path does not rebuild the transport, so an ICE restart is not supported (dispose and re-create the peer).
-    /// </exception>
     public WebRtcRenegotiationDiff ComputeDiff(
         BundledMediaSession session,
         SdpSessionDescription newLocalDescription,
@@ -122,9 +213,8 @@ internal sealed class WebRtcRenegotiator
         ArgumentNullException.ThrowIfNull(newLocalDescription);
         ArgumentNullException.ThrowIfNull(newRemoteDescription);
 
-        // Reject an ICE restart (RFC 8829 §5.3.1: a fresh ufrag/pwd on the transport-anchoring audio m-line):
-        // this path only diffs the track set on the existing transport, so a re-keyed transport is out of scope.
-        RejectIceRestart(session, newRemoteDescription);
+        // An ICE restart is orthogonal to the track set and handled by the callers that own the cycle
+        // (NegotiateAnswerAndApplyAsync / ApplyReAnswerAsync) — the diff below runs the same either way.
 
         // One SSRC pool for the whole diff, seeded from the live session (RFC 3550 §8.1). Video and audio adds both
         // draw from and grow it, so an added video track and an added audio track in the SAME diff never collide
@@ -260,24 +350,85 @@ internal sealed class WebRtcRenegotiator
             session.AddAudioTrack(config);
     }
 
-    // Rejects a re-offer that rotates the ICE credentials on the transport-anchoring audio m-line (RFC 8829
-    // §5.3.1 ICE restart): the shared transport keeps the ICE ufrag/pwd it was built with, and re-keying it is
-    // not part of the track-diff path. A re-offer that keeps the same credentials (the common mid-call
-    // add/remove-a-track case) passes through. The remote audio section carries the peer's ICE credentials
-    // (rtcp-mux BUNDLE shares the one transport, RFC 8843), so it is the one to compare.
-    private static void RejectIceRestart(BundledMediaSession session, SdpSessionDescription newRemoteDescription)
+    // Detects a re-negotiation that rotates the peer's ICE credentials on the transport-anchoring audio m-line
+    // (RFC 8445 §9.1.1.1 / RFC 8829 §5.3.1) and returns the section carrying them; null means no restart, which
+    // is the common mid-call add/remove-a-track case. The remote AUDIO section is the one to compare: rtcp-mux
+    // BUNDLE runs the whole group over that one transport (RFC 8843), so it carries the peer's ICE credentials.
+    private static SdpMediaDescription? DetectIceRestart(
+        BundledMediaSession session, SdpSessionDescription newRemoteDescription)
     {
         var newRemoteAudio = newRemoteDescription.Media.FirstOrDefault(m => m.MediaType.Equals("audio", Ci));
-        if (newRemoteAudio?.IceUfrag is not { } newUfrag)
-            return; // No ICE credentials in the re-offer to compare — nothing signals a restart.
+        if (newRemoteAudio is null)
+            return null;
 
-        // The session exposes the remote ICE credentials it was built with; a mismatch is an ICE restart request.
-        if (session.RemoteIceUfrag is { } currentUfrag
-            && !string.Equals(currentUfrag, newUfrag, StringComparison.Ordinal))
+        // Both halves matter — a restart may rotate either the ufrag or the pwd (RFC 8445 §9.1.1.1) — and the
+        // shared detector also rules out the two look-alikes: a first negotiation, and ICE being removed rather
+        // than restarted.
+        return IceRestartDetector.IsRestart(
+            session.RemoteIceUfrag, session.RemoteIcePwd, newRemoteAudio.IceUfrag, newRemoteAudio.IcePwd)
+            ? newRemoteAudio
+            : null;
+    }
+
+    // Applies a detected ICE restart to the running session: build the new ICE view from the re-negotiated remote
+    // section and the local credentials now in force, hand it to the session (which swaps the agent on the live
+    // socket), and let the peer model it as a state transition.
+    private async Task RestartIceAsync(
+        BundledMediaSession session, SdpSessionDescription remote, SdpMediaDescription remoteAudio)
+    {
+        // The peer's new transport address and check-list candidates, resolved exactly as the initial session
+        // build resolves them — including the session-level c= line fallback, since a re-offer may carry the new
+        // address only there. A restart usually accompanies a network change, so these normally all moved.
+        var remoteEndPoint = WebRtcRemoteEndPoint.Resolve(remoteAudio, remote.ConnectionAddress);
+        if (remoteEndPoint is null)
         {
-            throw new InvalidOperationException(
-                "ICE restart is not supported on a running WebRTC peer: the re-offer rotates the ICE ufrag on the " +
-                "shared transport. Dispose this peer and create a new one to restart ICE.");
+            // Nothing to check against. Leave the running agent alone rather than replace it with one that has no
+            // remote: media on the previously selected pair is still the best outcome available here.
+            _logger.LogWarning(
+                "The re-negotiation rotated the peer's ICE credentials but carried no usable remote address; " +
+                "keeping the running ICE agent.");
+            return;
+        }
+
+        var remoteCandidates = WebRtcSessionFactory.RemoteCandidates(remoteAudio);
+        if (remoteCandidates.Count == 0)
+            remoteCandidates = [new IceRemoteCandidate(remoteEndPoint, WebRtcSessionFactory.DefaultCandidatePriority)];
+
+        var localIce = LocalIceParameters;
+        await session.RestartIceAsync(new IceMediaParameters(
+            remoteEndPoint,
+            IceEnabled: true,
+            // The role is deliberately carried over: a restart re-runs the checks, it does not redetermine which
+            // agent controls them (RFC 8445 §9.1.1.1 — a role switch would need a fresh role negotiation).
+            session.IceControlling,
+            LocalIceUfrag: localIce.Ufrag,
+            LocalIcePwd: localIce.Pwd,
+            RemoteIceUfrag: remoteAudio.IceUfrag,
+            RemoteIcePwd: remoteAudio.IcePwd)
+        {
+            RemoteCandidates = remoteCandidates,
+        }).ConfigureAwait(false);
+
+        _logger.LogInformation(
+            "ICE restarted on the running peer (RFC 8445 §9): {CandidateCount} remote candidate(s), same transport.",
+            remoteCandidates.Count);
+        _onIceRestarted?.Invoke();
+    }
+
+    // Fresh local short-term credentials for a restart (RFC 8445 §9.1.1.1 requires BOTH to change). The
+    // configured candidates and ice-options carry over — a restart re-runs the checks over the same socket, so
+    // the local candidates advertised for it are still the ones we have.
+    private void RotateLocalIce()
+    {
+        lock (_iceGate)
+        {
+            _localIce = new SdpIceParameters
+            {
+                Ufrag = Convert.ToHexString(RandomNumberGenerator.GetBytes(4)),
+                Pwd = Convert.ToHexString(RandomNumberGenerator.GetBytes(16)),
+                Options = _localIce.Options,
+                Candidates = _localIce.Candidates,
+            };
         }
     }
 }
@@ -291,9 +442,13 @@ internal sealed class WebRtcRenegotiator
 /// <param name="Negotiator">The SDP offer/answer negotiator that produces the answer.</param>
 /// <param name="Local">The bound local media endpoint the answer advertises.</param>
 /// <param name="AudioCodecs">The peer's offered audio codecs.</param>
-/// <param name="MediaOptions">The media options (BUNDLE, DTLS, ICE, track set) for the answer.</param>
+/// <param name="MediaOptions">
+/// Builds the media options (BUNDLE, DTLS, ICE, track set) for the answer. A factory rather than a value because
+/// an ICE restart rotates the local credentials before the answer is negotiated, and the answer must carry the
+/// rotated ones — a value captured at the call site would still hold the retired ufrag.
+/// </param>
 internal sealed record WebRtcRenegotiationAnswerContext(
     ISdpOfferAnswerNegotiator Negotiator,
     IPEndPoint Local,
     IReadOnlyList<SdpCodecDefinition> AudioCodecs,
-    SdpMediaOptions MediaOptions);
+    Func<SdpMediaOptions> MediaOptions);

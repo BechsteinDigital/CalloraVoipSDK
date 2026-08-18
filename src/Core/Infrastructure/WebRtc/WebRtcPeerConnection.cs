@@ -64,9 +64,10 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     // switches to numeric MIDs on the first added track; stable mode starts numeric and appends in API call order.
     // A mid-call track remains pending until the next offer/answer cycle applies the live diff (RFC 8829).
     private readonly WebRtcAddedTrackSet _addedTracks;
-    private WebRtcConnectionState _state = WebRtcConnectionState.New;
+    // The transport half of the lifecycle (extracted, sharing _sync so its serialisation is unchanged).
+    private readonly WebRtcConnectionStateMachine _connectionState;
     // The RFC 8829 §4.1.3 signalling state (offer/answer half of the lifecycle), separate from the ICE/DTLS
-    // transport _state. Guarded by _sync; transitioned via TransitionSignalingTo (event fired outside the lock).
+    // transport state. Guarded by _sync; transitioned via TransitionSignalingTo (event fired outside the lock).
     private WebRtcSignalingState _signalingState = WebRtcSignalingState.Stable;
     private string? _remoteDescription;
     private SdpMsid? _remoteAudioMsid;
@@ -88,8 +89,8 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     // session behind a snapshot delegate that takes _sync here, so the peer keeps sole ownership of its guarded
     // state (extracted to keep this file under the size limit).
     private readonly WebRtcSendLease _sendLease;
-    private UdpClient? _mediaSocket;
-    private bool _socketHandedOver;
+    // The shared media socket across its one hand-over to the transport (extracted; shares _sync).
+    private readonly WebRtcMediaSocketOwner _mediaSocket;
     private bool _started;
     // Owns the gathered TURN relay allocation (RFC 8656), retained for post-Start adoption; see the store.
     private readonly WebRtcRelayAllocationStore _relayAllocation;
@@ -202,8 +203,13 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         _logger = loggerFactory.CreateLogger<WebRtcPeerConnection>();
         _hostCandidateProvider = hostCandidateProvider ?? new SystemWebRtcHostCandidateProvider(
             loggerFactory.CreateLogger<SystemWebRtcHostCandidateProvider>());
-        // Peer-lifetime opaque-video policy, captured once so a renegotiated track matches (#223, ADR-068).
-        _renegotiator = new WebRtcRenegotiator(_loggerFactory, _options.OpaqueVideoFrames);
+        // Peer-lifetime opaque-video policy, captured once so a renegotiated track matches (#223, ADR-068). It also
+        // owns the local ICE credentials, because an ICE restart (#226) is the only thing that ever rotates them.
+        _renegotiator = new WebRtcRenegotiator(
+            _loggerFactory, _options.OpaqueVideoFrames, _options.Ice,
+            // A restart re-runs connectivity checks, so the peer goes back to Connecting — including from Failed,
+            // which is where a network change that killed consent will already have left it.
+            onIceRestarted: () => TransitionTo(WebRtcConnectionState.Connecting));
         _relayAllocation = new WebRtcRelayAllocationStore(_loggerFactory);
         // The config primary video count (0 or 1) is fixed for the peer's lifetime, so the added-track set can do
         // the numeric-MID arithmetic without re-reading _options; it captures it once here.
@@ -217,13 +223,15 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         _congestion = new WebRtcCongestionRelay(() => { lock (_sync) { return _session; } });
         // The send-lease runner reads the live session under _sync via this snapshot delegate; the lock stays here.
         _sendLease = new WebRtcSendLease(_sendGate, () => { lock (_sync) { return _session; } });
+        _mediaSocket = new WebRtcMediaSocketOwner(_sync, _options.LocalEndPoint);
+        // Shares _sync so the transport state keeps its original serialisation; the event raise (snapshot-and-
+        // invoke, throwing handler logged not propagated) stays with the bridge and runs outside the lock.
+        _connectionState = new WebRtcConnectionStateMachine(
+            _sync, next => _sessionEvents.RaiseConnectionState(ConnectionStateChanged, next));
     }
 
     /// <summary>The current connection state.</summary>
-    public WebRtcConnectionState State
-    {
-        get { lock (_sync) { return _state; } }
-    }
+    public WebRtcConnectionState State => _connectionState.Current;
 
     /// <summary>The current RFC 8829 §4.1.3 signalling state (offer/answer half of the lifecycle).</summary>
     public WebRtcSignalingState SignalingState
@@ -250,7 +258,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     /// </summary>
     public IPEndPoint? LocalMediaEndPoint
     {
-        get { lock (_sync) { return _session?.LocalEndPoint ?? _mediaSocket?.Client.LocalEndPoint as IPEndPoint; } }
+        get { lock (_sync) { return _session?.LocalEndPoint ?? _mediaSocket.BoundEndPoint; } }
     }
 
     /// <summary>The selected remote media endpoint of the shared transport, or null before one is set.</summary>
@@ -428,7 +436,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     /// </exception>
     public string CreateOffer()
     {
-        var local = EnsureLocalMediaEndPoint();
+        var local = _mediaSocket.EnsureBound();
         var offerModel = _negotiator.CreateOffer(
             local, _options.AudioCodecs, SdpMediaDirection.SendRecv, MediaOptions(local));
         var offerSdp = _serializer.Serialize(offerModel);
@@ -455,6 +463,28 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             RaiseSignalingState(WebRtcSignalingState.HaveLocalOffer);
         _candidateEmitter.EmitLocalHosts(_hostCandidateProvider.GetHostEndPoints(local));
         return offerSdp;
+    }
+
+    /// <summary>
+    /// Produces an offer that requests an ICE restart (RFC 8445 §9, the W3C <c>createOffer({iceRestart: true})</c>):
+    /// the local ICE credentials are rotated and the running agent restarted with them <em>first</em>, so the
+    /// returned offer announces a restart that has already taken effect here. Rotating and offering together is
+    /// deliberate — an application cannot rotate without sending the offer that announces it, which would leave the
+    /// peer checking against credentials nobody honours. Before a session exists this is exactly
+    /// <see cref="CreateOffer"/>: a first offer's credentials are new anyway, and there is no agent to restart.
+    /// </summary>
+    /// <param name="cancellationToken">Cancels before any state is touched.</param>
+    /// <returns>The offer SDP to send, carrying the rotated credentials.</returns>
+    /// <exception cref="InvalidOperationException">The signalling state does not permit an offer (RFC 8829 §4.1.3).</exception>
+    public async Task<string> CreateIceRestartOfferAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        BundledMediaSession? session;
+        lock (_sync)
+            session = _session;
+        if (session is not null)
+            await _renegotiator.RestartLocalIceAsync(session).ConfigureAwait(false);
+        return CreateOffer();
     }
 
     /// <summary>
@@ -540,7 +570,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         else
         {
             // Answerer: the remote description is the offer; negotiate our answer.
-            var local = EnsureLocalMediaEndPoint();
+            var local = _mediaSocket.EnsureBound();
             answererLocal = local;
             var result = _negotiator.NegotiateAnswer(
                 remote, local, _options.AudioCodecs, SdpMediaDirection.SendRecv, MediaOptions(local));
@@ -559,7 +589,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         // (RFC 8445 §6.1.1); a relay ICE local candidate rides the socket only when a TURN allocation was
         // already gathered on it (the answerer adopts its allocation later — a follow-up).
         var session = WebRtcSessionFactory.TryCreate(
-            remote, localModel, _options, _handshaker, _certificate, _loggerFactory, _mediaSocket,
+            remote, localModel, _options, _handshaker, _certificate, _loggerFactory, _mediaSocket.Socket,
             iceControlling: pendingOffer is not null,
             relayIceBindingFactory: _relayAllocation.BuildOfferFactory());
         if (session is null)
@@ -572,7 +602,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             _session = session;
             // The transport now owns the pre-bound socket (if a session was built); DisposeAsync must not
             // dispose it again.
-            _socketHandedOver = session is not null;
+            _mediaSocket.MarkHandedOver(session is not null);
             // Retain the remote track identity (a=msid) so the receiver can group inbound tracks by the
             // remote MediaStream (the W3C RTCTrackEvent.streams semantics).
             ApplyRemoteInventory(remote);
@@ -605,7 +635,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     // HaveLocalOffer → Stable; answerer: Stable → HaveRemoteOffer → Stable), but the discriminator is the current
     // signalling state, not "was a local offer created" (that stays set after cycle 1): HaveLocalOffer means a fresh
     // re-offer was created here and this remote is its answer; Stable means this remote is a new offer to answer.
-    private Task<string> RenegotiateAsync(string remoteSdp, SdpSessionDescription remote)
+    private async Task<string> RenegotiateAsync(string remoteSdp, SdpSessionDescription remote)
     {
         bool isAnswerer;
         BundledMediaSession session;
@@ -638,12 +668,12 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         if (isAnswerer)
         {
             RaiseSignalingState(WebRtcSignalingState.HaveRemoteOffer);
-            answererLocal = EnsureLocalMediaEndPoint();
+            answererLocal = _mediaSocket.EnsureBound();
             try
             {
-                newLocalModel = _renegotiator.NegotiateAnswerAndApply(
+                newLocalModel = await _renegotiator.NegotiateAnswerAndApplyAsync(
                     session, remote,
-                    new WebRtcRenegotiationAnswerContext(_negotiator, answererLocal, _options.AudioCodecs, MediaOptions(answererLocal)));
+                    new WebRtcRenegotiationAnswerContext(_negotiator, answererLocal, _options.AudioCodecs, () => MediaOptions(answererLocal)));
             }
             catch
             {
@@ -668,7 +698,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
                 throw new InvalidOperationException($"Remote re-answer is not a valid response to the local re-offer: {reViolation}");
             }
 
-            _renegotiator.Apply(session, _renegotiator.ComputeDiff(session, newLocalModel, remote));
+            await _renegotiator.ApplyReAnswerAsync(session, newLocalModel, remote);
         }
 
         lock (_sync)
@@ -685,7 +715,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         RaiseSignalingState(WebRtcSignalingState.Stable);
         if (answererLocal is not null)
             _candidateEmitter.EmitLocalHosts(_hostCandidateProvider.GetHostEndPoints(answererLocal));
-        return Task.FromResult(newLocalSdp);
+        return newLocalSdp;
     }
 
     /// <summary>
@@ -832,26 +862,31 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         if (_options.IceServers.Count == 0)
             return;
 
-        var local = EnsureLocalMediaEndPoint();
-        Socket socket;
+        var local = _mediaSocket.EnsureBound();
+        BundledMediaSession? live;
+        Socket? socket;
         lock (_sync)
         {
-            if (_started)
-                throw new InvalidOperationException(
-                    "Cannot gather ICE candidates after StartAsync — the media socket is owned by the transport's receive loop.");
-            socket = _mediaSocket!.Client;
+            // After StartAsync the receive loop owns the socket, so gathering runs over the live transport — that
+            // is what lets an ICE restart re-gather without surrendering the socket that DTLS and SRTP depend on.
+            live = _started ? _session : null;
+            socket = _started ? null : _mediaSocket.Socket!.Client;
+            if (_started && live is null)
+                throw new InvalidOperationException("Cannot gather: this peer was started without a media session.");
         }
 
         // The peer keeps ownership of the retained relay allocation and its session; the gatherer only sequences
-        // the wire steps (each temporarily runs its own receive loop on the shared media socket, so they must
-        // not overlap the transport's post-Start loop).
+        // the wire steps (pre-start each runs its own receive loop on the socket, so they must not overlap).
         var gatherer = new WebRtcCandidateGatherer(_stunProbe, _turnProbe, _logger);
         var hostEndPoints = _hostCandidateProvider.GetHostEndPoints(local);
         var relatedHost = hostEndPoints.Count > 0 ? hostEndPoints[0] : local;
+        // Re-emit hosts on a live re-gather: an interface that came up since shares this socket's wildcard port.
+        if (live is not null) _candidateEmitter.EmitLocalHosts(hostEndPoints);
         // The relay store latches first-wins and adopts into an already-built (answerer) session; it reads the
         // adopt target through this _sync-guarded session snapshot, so the peer keeps sole ownership of _session.
         await gatherer.GatherAsync(
-            _options.IceServers, local, relatedHost, socket, _candidateEmitter.Emit,
+            _options.IceServers, local, relatedHost, socket, live is null ? null : live.ProbeServerReflexiveAsync,
+            _candidateEmitter.Emit,
             (serverEndPoint, allocation, gatheredLocal) => _relayAllocation.OnGathered(
                 serverEndPoint, allocation, gatheredLocal, () => { lock (_sync) { return _session; } }),
             cancellationToken).ConfigureAwait(false);
@@ -885,35 +920,14 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             local,
             _hostCandidateProvider.GetHostEndPoints(local),
             _options,
+            // Not _options.Ice: an ICE restart rotates the local credentials on a live peer (RFC 8445 §9.1.1.1),
+            // and every description built after one must advertise the rotated pair.
+            _renegotiator.LocalIceParameters,
             _addedTracks.SnapshotAudio(),
             _addedTracks.SnapshotVideo(),
             _mediaStreamId,
             _audioTrackId,
             _videoTrackId);
-
-    // Binds the shared media socket up front (Trickle-ICE early-bind) so the offer/answer advertise the real
-    // ephemeral port and a host candidate before the session (transport) exists — fixing the zero-port
-    // disabled offer. The transport takes ownership at session build; if the peer is disposed before that,
-    // DisposeAsync disposes the socket.
-    private IPEndPoint EnsureLocalMediaEndPoint()
-    {
-        lock (_sync)
-        {
-            if (_mediaSocket is null)
-            {
-                // Match the socket family to the configured local bind address; binding an IPv4
-                // UdpClient to an IPv6 endpoint (or vice versa) throws on family mismatch.
-                var socket = new UdpClient(_options.LocalEndPoint.AddressFamily);
-                // Kernel SO_RCVBUF for the shared media socket; sized for video bitrates, not the max
-                // datagram (MediaSocketDefaults keeps those two concerns separate).
-                socket.Client.ReceiveBufferSize = MediaSocketDefaults.SocketReceiveBufferBytes;
-                socket.Client.Bind(_options.LocalEndPoint);
-                _mediaSocket = socket;
-            }
-
-            return (IPEndPoint)_mediaSocket.Client.LocalEndPoint!;
-        }
-    }
 
     // Records the remote track facts (a=msid identity, has-audio/has-video, the per-m-line sending video
     // inventory, derived by WebRtcRemoteMediaInventory) from a newly-applied remote description, so the receiver
@@ -930,19 +944,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         _remoteVideoTracks = inventory.VideoTracks;
     }
 
-    private void TransitionTo(WebRtcConnectionState next)
-    {
-        lock (_sync)
-        {
-            if (_state == next || _state == WebRtcConnectionState.Closed)
-                return;
-            _state = next;
-        }
-
-        // The _state compare-and-set stays here under _sync; only the outside-the-lock event raise (identical
-        // snapshot-and-invoke, throwing handler logged not propagated) is delegated to the bridge.
-        _sessionEvents.RaiseConnectionState(ConnectionStateChanged, next);
-    }
+    private void TransitionTo(WebRtcConnectionState next) => _connectionState.TransitionTo(next);
 
     // Fires the signalling-state change event for a transition already committed to _signalingState under
     // _sync at the call site. The delegate is snapshotted inside the lock and invoked outside it (K3), so a
@@ -973,8 +975,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             // If the early-bound socket was never handed to a transport, this peer still owns it and must
             // dispose it; once handed over, the session/transport owns it. Null it out so a second dispose
             // never double-disposes.
-            orphanSocket = _socketHandedOver ? null : _mediaSocket;
-            _mediaSocket = null;
+            orphanSocket = _mediaSocket.TakeOrphan();
             // Signalling terminates at Closed (RFC 8829 §4.1.3), idempotent across a double dispose. The event
             // is fired below, outside the lock (K3).
             signalingClosed = _signalingState != WebRtcSignalingState.Closed;

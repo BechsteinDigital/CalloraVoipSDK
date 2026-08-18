@@ -77,18 +77,40 @@ public sealed class WebRtcSrflxGatheringTests
         Assert.DoesNotContain(candidates, c => c.Contains("typ srflx", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// #226: gathering after StartAsync used to throw, because the transport's receive loop owns the socket and a
+    /// probe could not read from it. That refusal left an ICE restart unable to re-gather — and the reflexive
+    /// address is exactly what the network change behind a restart invalidates. It now runs over the live
+    /// transport: the request goes out through the transport's raw send, the answer comes back through the same
+    /// inbound STUN demux that feeds the ICE agent, and the socket the DTLS session is keyed to is untouched.
+    /// </summary>
     [Fact]
-    public async Task GatherCandidates_after_start_throws()
+    public async Task GatherCandidates_after_start_still_reaches_a_stun_server_over_the_live_transport()
     {
-        var probe = new StunIceProbe(
-            new StunClient(new StunMessageCodec(), NullLogger<StunClient>.Instance), NullLoggerFactory.Instance);
+        var codec = new StunMessageCodec();
+        await using var stunServer = new StunServer(
+            new IPEndPoint(IPAddress.Loopback, 0), codec, responseIntegrityKey: null, NullLogger<StunServer>.Instance);
+        stunServer.Start(new StunBindingRequestHandler(codec, NullLogger<StunBindingRequestHandler>.Instance));
+
+        var probe = new StunIceProbe(new StunClient(codec, NullLogger<StunClient>.Instance), NullLoggerFactory.Instance);
+        var candidates = new List<string>();
         await using var peer = Peer(probe,
-            [new IceServerConfiguration { Type = IceServerType.Stun, Host = "127.0.0.1", Port = 3478 }]);
+            [new IceServerConfiguration { Type = IceServerType.Stun, Host = "127.0.0.1", Port = stunServer.LocalEndPoint.Port }]);
+        peer.LocalIceCandidateDiscovered += c => { lock (candidates) candidates.Add(c); };
 
         await peer.SetRemoteDescriptionAsync(WebRtcOffer());
         await peer.StartAsync(); // the transport receive loop now owns the media socket
+        var mediaPort = peer.LocalMediaEndPoint!.Port;
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => peer.GatherCandidatesAsync());
+        await peer.GatherCandidatesAsync();
+
+        string srflx;
+        lock (candidates)
+            srflx = Assert.Single(candidates, c => c.Contains("typ srflx", StringComparison.Ordinal));
+        // The server reports the source it saw, so the candidate carries the live media port — the probe rode the
+        // running transport, not a socket of its own.
+        Assert.Contains($" {mediaPort} ", srflx, StringComparison.Ordinal);
+        Assert.Equal(mediaPort, peer.LocalMediaEndPoint!.Port);
     }
 
     // A minimal remote WebRTC offer (BUNDLE + DTLS + ICE) so SetRemoteDescription builds a session.

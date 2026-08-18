@@ -138,6 +138,20 @@ internal sealed class StunIceProbe : IIceStunProbe
         };
     }
 
+    /// <summary>
+    /// Resolves an ICE server configuration to a UDP transport address in <paramref name="addressFamily"/>.
+    /// Exposed so a live re-gather (which cannot go through the socket-owning query path) resolves servers
+    /// exactly as the pre-start path does, instead of growing a second resolver that could drift from it.
+    /// </summary>
+    /// <param name="server">The configured STUN server.</param>
+    /// <param name="addressFamily">The media socket's address family — the query must use it.</param>
+    /// <param name="ct">Cancels the DNS lookup.</param>
+    internal static Task<IPEndPoint> ResolveUdpEndPointAsync(
+        IceServerConfiguration server,
+        System.Net.Sockets.AddressFamily addressFamily,
+        CancellationToken ct = default)
+        => ResolveServerEndPointAsync(server, StunTransport.Udp, addressFamily, ct);
+
     private static async Task<IPEndPoint> ResolveServerEndPointAsync(
         IceServerConfiguration server,
         StunTransport transport,

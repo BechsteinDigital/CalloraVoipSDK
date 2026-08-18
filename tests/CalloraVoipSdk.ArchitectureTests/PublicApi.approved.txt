@@ -1053,6 +1053,7 @@
   CalloraVoipSdk.WebRtc.IPeerConnection.AddVideoTrack(CalloraVoipSdk.WebRtc.VideoTrackOptions options) : CalloraVoipSdk.WebRtc.IVideoTrack
   CalloraVoipSdk.WebRtc.IPeerConnection.AttachMediaTap(CalloraVoipSdk.WebRtc.IMediaTap tap) : System.IDisposable
   CalloraVoipSdk.WebRtc.IPeerConnection.ConnectionStateChanged : event System.EventHandler<CalloraVoipSdk.WebRtc.PeerConnectionState>
+  CalloraVoipSdk.WebRtc.IPeerConnection.CreateIceRestartOfferAsync(System.Threading.CancellationToken cancellationToken = default) : System.Threading.Tasks.Task<System.String>
   CalloraVoipSdk.WebRtc.IPeerConnection.CreateOffer() : System.String
   CalloraVoipSdk.WebRtc.IPeerConnection.DtmfReceived : event System.EventHandler<CalloraVoipSdk.WebRtc.DtmfTone>
   CalloraVoipSdk.WebRtc.IPeerConnection.GatherCandidatesAsync(System.Threading.CancellationToken cancellationToken = default) : System.Threading.Tasks.Task

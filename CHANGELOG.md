@@ -10,6 +10,47 @@ The next line. Entries here accumulate the consumer-visible changes not yet rele
 
 ### Changed
 
+- **A WebRTC peer survives an ICE restart instead of having to be rebuilt** (#226, ADR-072). A re-offer that
+  rotated the peer's ICE credentials on the transport-anchoring m-line used to be rejected with *"dispose this
+  peer and create a new one"*. That is the re-offer a browser sends when its network changes — WLAN to mobile,
+  the ordinary case on a phone — so the call dropped. It now restarts ICE on the running peer.
+
+  The restart stops at the ICE layer, which is the whole point of one: the media socket, the DTLS association
+  and every per-SSRC SRTP context survive, so media resumes on the re-selected path without a second handshake.
+  Media also stays on the previously selected pair until a new one is nominated (RFC 8445 §9), so a peer whose
+  old path still works does not lose media the moment the re-offer arrives. As the answerer the SDK generates
+  fresh credentials of its own, as RFC 8445 §9.1.1.1 requires; the ICE role is carried over, since re-running
+  the checks does not redetermine which side controls them.
+
+  **Either side can start it.** Adopting a restart the far side signals needs no code change — it happens on the
+  existing `SetRemoteDescription` path. To signal one yourself there is a new
+  **`IPeerConnection.CreateIceRestartOfferAsync`** (the browser's `createOffer({ iceRestart: true })`): it rotates
+  this peer's ICE credentials, restarts its agent, and returns the offer that announces both. Reach for it when
+  connectivity degrades or the local network changes.
+
+  ```csharp
+  var offer = await peer.CreateIceRestartOfferAsync();
+  await signaling.SendAsync(offer);
+  ```
+
+  The rotation and the offer are produced by one call on purpose — an application cannot rotate without sending
+  the offer that tells the far side, which would leave it checking against credentials nobody honours. The agent
+  is restarted at offer time rather than when the answer arrives, because the far side starts checking against
+  the offered credentials a signalling round trip earlier.
+
+  The new member is **additive**: it has a default implementation that throws `NotSupportedException`, so an
+  existing implementation of `IPeerConnection` (a test double, say) keeps compiling.
+
+  **`GatherCandidatesAsync` now works after `StartAsync`** instead of throwing. A restart is triggered by the
+  network changing, and the server-reflexive address is exactly what a network change invalidates — so refusing
+  to gather left a restarted peer advertising the candidates it had before. It re-probes over the live transport
+  (the request rides the transport's raw send, the answer arrives through the same STUN demux that feeds the ICE
+  agent), so the media socket — and with it the DTLS session and the SRTP contexts — is untouched. Call it again
+  after a restart and handle the new candidates through `LocalIceCandidateDiscovered` as usual.
+
+  TURN servers are skipped on that path: the allocation is keyed to the 5-tuple the transport still holds and its
+  refresh loop keeps it alive, so the relay candidate did not change. A local host that itself changes networks
+  needs a new peer — keeping the socket is what makes the restart cheap, and re-binding it would defeat that.
 - **The DTLS-SRTP handshake offers AEAD cipher suites only** (#229, #323). Both roles are covered.
   - **Server:** the offered list also carried `TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256` next to AES-128-GCM,
     AES-256-GCM and ChaCha20-Poly1305. No browser ever selected it — they all negotiate one of the AEAD

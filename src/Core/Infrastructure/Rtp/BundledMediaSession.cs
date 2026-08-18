@@ -117,32 +117,15 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     // RaiseAudioReceived, which runs solely on the single shared receive loop, so the reassembler needs no
     // synchronization. Null when the peer did not negotiate telephone-event (no reassembly path).
     private readonly RtpInboundDtmfReassembler? _dtmfReassembler;
-    // 0 = no relay candidate wired; 1 = wired (at construction from the options factory, or later via
-    // AdoptRelay). Guards against wiring the relay path twice (a second indication relay / relay candidate).
-    private int _relayWired;
-    // The relay allocation keepalive (RFC 8656 §3.9), when a relay path was wired: started with the session and
-    // disposed — running its teardown Refresh(0) — before the transport it rides. Set from the relay binding at
-    // construction (offerer) or via AdoptRelay (answerer); Volatile for the gather→start/dispose cross-thread read.
-    private IRelayKeepAlive? _relayKeepAlive;
-    // The relay binding (its ChannelBind seam + relay server), retained so a relay-pair nomination can switch the
-    // transport onto the relay data path. Set from the binding at construction (offerer) or AdoptRelay (answerer).
-    private RelayIceBinding? _relayBinding;
-    // The one-shot direct→relay data-path transition, kicked off on the driver thread when a relay pair is
-    // nominated. Guarded so it runs at most once; cancelled and awaited before the transport is disposed (its
-    // ChannelBind + EnterRelayMode ride the live transport).
-    private int _relayTransitionStarted;
-    private Task? _relayTransitionTask;
-    private readonly CancellationTokenSource _relayTransitionCts = new();
-    // Set once the transition actually SUCCEEDED (channel installed) — not merely started, so a failed ChannelBind
-    // (transition abandoned, media back on the checked path) still lets a later nomination re-point the transport.
-    // Once set, the transport is relay-committed to the bound peer: a later relay→direct re-nomination must not
-    // re-point its remote (the bound channel forwards to the relay peer; re-pointing would mis-attribute inbound).
-    private int _relayTransitioned;
-    // The channel rebind keepalive (RFC 8656 §12), set once the relay data-path transition binds a channel:
-    // started right after SetRelayChannel and disposed — before the transport it rides — in DisposeAsync. The
-    // channel exists only after the transition, so this starts later than the allocation/permission keepalive.
-    // Volatile for the transition-thread write / dispose-thread read.
-    private IRelayKeepAlive? _channelRebind;
+    // The ICE view currently in force. Mutable because an ICE restart (RFC 8445 §9) rotates the credentials and
+    // replaces the agent; volatile because a renegotiator reads it off the signalling thread while a restart
+    // publishes from another. Only the credentials are read back — the agent owns the rest.
+    private volatile IceMediaParameters _iceParameters;
+
+    // The bundle's TURN relay data path (RFC 8656): the wiring claim, the allocation keepalive, the one-shot
+    // switch onto ChannelData when a relay pair wins ICE, and its teardown order. Extracted so the session does
+    // not carry that whole lifecycle inline; a session without a relay allocation just holds an inert one.
+    private readonly BundledRelayDataPath _relay;
 
     /// <summary>
     /// Raised with each decrypted inbound audio RTP packet on the <em>primary</em> audio track (the transport
@@ -380,7 +363,10 @@ internal sealed class BundledMediaSession : IAsyncDisposable
             // candidate — checked alongside the direct one, direct-preferred by pair priority.
             relaySend: relayBinding?.RelaySend,
             // A nominated relay pair additionally switches the transport onto the relay data path (ChannelBind).
-            onRelayPairNominated: OnRelayPairNominated);
+            onRelayPairNominated: OnRelayPairNominated,
+            // Reaches a STUN server as-is in either transport mode, so the reflexive address can be re-probed
+            // on a live transport after an ICE restart without giving up the socket.
+            sendUnframed: _transport.SendUnframedAsync);
 
         // Periodic RTCP Sender Reports for the active outbound streams (RFC 3550 §6.4): reads the outbound
         // pipeline's per-SSRC SR counters and sends over its fail-closed SRTCP send path. The CNAME mirrors the
@@ -419,12 +405,12 @@ internal sealed class BundledMediaSession : IAsyncDisposable
             _inboundEventWiring.WireVideoTrackEvents, _inboundEventWiring.RaiseAudioTrackReceivedGuarded,
             _attribution);
 
-        // A relay candidate wired at construction (offerer path) closes the door on a later AdoptRelay.
-        _relayWired = relayBinding is not null ? 1 : 0;
-        // Its keepalive (if any) is started in StartAsync, once the transport's receive loop is up.
-        _relayKeepAlive = relayBinding?.KeepAlive;
-        // Retained so a relay-pair nomination can switch the transport onto the relay data path.
-        _relayBinding = relayBinding;
+        // The relay data path: wired here when the offerer already gathered a TURN allocation, otherwise open for
+        // a later AdoptRelay (the answerer, which gathers after the session exists).
+        _relay = new BundledRelayDataPath(_transport, relayBinding, _logger);
+
+        // The ICE view the agent above was built with; RestartIceAsync replaces both together.
+        _iceParameters = options.Ice;
     }
 
     // Dispatches inbound audio to subscribers on the receive loop; a throwing subscriber must not tear
@@ -477,11 +463,100 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     public IPEndPoint LocalEndPoint => _transport.LocalEndPoint;
 
     /// <summary>
-    /// The remote peer's ICE username fragment the shared transport was built with (RFC 8839), or null when the
-    /// exchange carried no remote ICE credentials. A renegotiator compares it against a re-offer's ufrag to detect
-    /// an ICE restart (RFC 8829 §5.3.1), which the live track-diff path does not support.
+    /// The remote peer's ICE username fragment currently in force (RFC 8839), or null when the exchange carried no
+    /// remote ICE credentials. A renegotiator compares it against a re-offer's ufrag to detect an ICE restart
+    /// (RFC 8829 §5.3.1). Reflects the running agent, so it follows a <see cref="RestartIceAsync"/> — reading it
+    /// from the construction-time options would report a restart against every later re-offer.
     /// </summary>
-    public string? RemoteIceUfrag => _options.Ice.RemoteIceUfrag;
+    public string? RemoteIceUfrag => _iceParameters.RemoteIceUfrag;
+
+    /// <summary>
+    /// The remote peer's ICE password currently in force (RFC 8839), or null when the exchange carried no remote
+    /// ICE credentials. Paired with <see cref="RemoteIceUfrag"/> because a restart may rotate either
+    /// (RFC 8445 §9.1.1.1).
+    /// </summary>
+    public string? RemoteIcePwd => _iceParameters.RemoteIcePwd;
+
+    /// <summary>
+    /// Whether this agent holds the ICE controlling role (RFC 8445 §6.1.1). A restart carries it over: re-running
+    /// the checks does not redetermine which side controls them.
+    /// </summary>
+    public bool IceControlling => _iceParameters.IceControlling;
+
+    /// <summary>
+    /// Asks <paramref name="stunServer"/> what this socket looks like from outside (RFC 8445 §5.1.1.2), over the
+    /// running transport rather than by taking the socket back. <see langword="null"/> when the server does not
+    /// answer — a missing candidate is one fewer path to try, not an error.
+    /// </summary>
+    /// <remarks>
+    /// The point of running it live is an ICE restart: the reflexive address is exactly what a network change
+    /// invalidates, and re-gathering it must not cost the socket — the DTLS association and every SRTP context
+    /// depend on that socket surviving.
+    /// </remarks>
+    /// <param name="stunServer">The STUN server's transport address.</param>
+    /// <param name="timeout">Per-attempt wait before retransmitting (RFC 5389 §7.2.1).</param>
+    /// <param name="cancellationToken">Cancels the probe.</param>
+    public Task<IPEndPoint?> ProbeServerReflexiveAsync(
+        IPEndPoint stunServer, TimeSpan timeout, CancellationToken cancellationToken = default)
+        => _ice.ProbeServerReflexiveAsync(stunServer, timeout, cancellationToken);
+
+    /// <summary>
+    /// Restarts ICE with rotated <em>local</em> credentials only (RFC 8445 §9.1.1.1) — the half an agent applies
+    /// when it <em>initiates</em> a restart, before it knows what the peer will answer with. Everything else about
+    /// the ICE view is carried over unchanged: the remote credentials, endpoint and candidate list, and the role.
+    /// </summary>
+    /// <remarks>
+    /// Applied at offer time rather than deferred to the answer, because the peer starts authenticating its checks
+    /// against the credentials our offer advertises as soon as it processes that offer — which is a signalling
+    /// round trip before the answer reaches us. An agent still holding the old local password would reject those
+    /// checks (RFC 8445 §7.3.1.1), and a peer that marks pairs failed on a 401 would give up on the restart we
+    /// asked for. Restarting with (new local, current remote) is a fully working state in the meantime: the peer's
+    /// new-credential checks authenticate, and our outbound checks still carry the remote password its pre-restart
+    /// agent expects.
+    /// </remarks>
+    /// <param name="localIceUfrag">The freshly generated local username fragment.</param>
+    /// <param name="localIcePwd">The freshly generated local password.</param>
+    /// <exception cref="ArgumentException">Either credential is null or empty.</exception>
+    /// <exception cref="ObjectDisposedException">The session has been disposed.</exception>
+    public Task RestartLocalIceAsync(string localIceUfrag, string localIcePwd)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(localIceUfrag);
+        ArgumentException.ThrowIfNullOrEmpty(localIcePwd);
+
+        // `with` copies the whole record, so the remote candidate list — which the caller cannot see and must not
+        // lose — survives verbatim alongside the remote credentials, endpoint and role.
+        return RestartIceAsync(_iceParameters with { LocalIceUfrag = localIceUfrag, LocalIcePwd = localIcePwd });
+    }
+
+    /// <summary>
+    /// Restarts ICE on the running session (RFC 8445 §9, RFC 8839 §5.4): the agent is replaced with one built from
+    /// <paramref name="parameters"/> — rotated credentials, the re-offer's remote candidates, a fresh check list —
+    /// and connectivity checks run again over the same socket.
+    /// <para>
+    /// Nothing above ICE is rebuilt: the transport, its socket, the DTLS association and every per-SSRC SRTP
+    /// context survive, so tracks keep their keys and their sequence/index space. That is what a restart means to a
+    /// peer — the path is re-selected, the session is not renegotiated.
+    /// </para>
+    /// <para>
+    /// The transport's send target is deliberately left alone. RFC 8445 §9 keeps media on the previously selected
+    /// pair until a new one is selected, so a peer that rotated its credentials because it changed networks keeps
+    /// receiving on the old path for as long as that path still works, instead of losing media the moment the
+    /// re-offer arrives. The new agent re-points the transport itself when it nominates a pair.
+    /// </para>
+    /// </summary>
+    /// <param name="parameters">The new ICE view: rotated credentials, role, remote endpoint and candidates.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="parameters"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ObjectDisposedException">The session has been disposed.</exception>
+    public async Task RestartIceAsync(IceMediaParameters parameters)
+    {
+        ArgumentNullException.ThrowIfNull(parameters);
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+
+        await _ice.RestartIceAsync(parameters).ConfigureAwait(false);
+        // Publish only after the swap succeeded, so a failed restart does not leave the session claiming
+        // credentials no agent is answering with — which would make the next re-offer look like no restart at all.
+        _iceParameters = parameters;
+    }
 
     /// <summary>The local audio track's synchronisation source.</summary>
     public uint AudioSsrc => _audioSsrc;
@@ -576,31 +651,15 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     /// <param name="relayIceBindingFactory">Builds the relay binding from the transport's targeted send.</param>
     public void AdoptRelay(RelayIceBindingFactory relayIceBindingFactory)
     {
-        ArgumentNullException.ThrowIfNull(relayIceBindingFactory);
-        if (Interlocked.Exchange(ref _relayWired, 1) != 0)
+        // The relay data path owns the transport-side wiring, the retained binding and the keepalive; it hands
+        // back the adopted binding (null when nothing was adopted) so the ICE half stays here.
+        if (_relay.TryAdopt(relayIceBindingFactory) is not { } binding)
             return;
 
-        var binding = relayIceBindingFactory.Invoke(_transport.SendUnframedAsync);
-        if (binding is null)
-        {
-            // No allocation after all — release the claim so a later adoption can still wire the relay path.
-            Volatile.Write(ref _relayWired, 0);
-            return;
-        }
-
-        _transport.SetIndicationRelay(binding.Indication, binding.OnControl);
         // Hand the ICE agent both the relay send path and the per-peer permission installer: a controlled
         // (answerer) agent uses the installer to proactively permission the offerer's remote-candidate IPs
         // (RFC 8656 §9) so their inbound relay checks reach it rather than being dropped by the TURN server.
         _ice.AddRelayLocalCandidate(binding.RelaySend, binding.EnsurePermission);
-        // Retain the binding so a later relay-pair nomination can ChannelBind + switch the transport.
-        Volatile.Write(ref _relayBinding, binding);
-
-        // Keep the adopted allocation alive. Started here (idempotent) so an adoption that lands after StartAsync
-        // still runs the keepalive; the StartAsync start covers the pre-start case. Starting before the transport
-        // receive loop is up is safe — the first refresh is roughly half the allocation lifetime away.
-        Volatile.Write(ref _relayKeepAlive, binding.KeepAlive);
-        binding.KeepAlive?.Start();
     }
 
     /// <summary>
@@ -694,67 +753,19 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         // Once the relay data path is committed the transport is bound to the relay peer; a later re-nomination
         // (e.g. a direct path that only recovered after relay won) must not re-point the transport, or inbound
         // ChannelData — unwrapped and attributed to _remoteEndPoint — would be mis-sourced. Stay on the relay pair.
-        if (Volatile.Read(ref _relayTransitioned) != 0)
+        if (_relay.IsActive)
             return;
         _transport.SetRemoteEndPoint(remoteEndPoint);
         _dtls.SetRemoteEndPoint(remoteEndPoint);
     }
 
     /// <summary>Test seam: whether the transport has switched onto the relay data path (RFC 8656 ChannelData).</summary>
-    internal bool RelayDataPathActive => Volatile.Read(ref _relayTransitioned) != 0;
+    internal bool RelayDataPathActive => _relay.IsActive;
 
-    // A relay pair won ICE: switch the transport onto the relay data path (RFC 8656). Runs on the driver thread
-    // right after OnPairNominated has already pointed the transport's remote and DTLS at the peer (the
-    // precondition EnterRelayMode needs), so it only kicks off the async transition — at most once — and returns.
-    private void OnRelayPairNominated(IPEndPoint peer)
-    {
-        if (Interlocked.Exchange(ref _relayTransitionStarted, 1) != 0)
-            return;
-        Volatile.Write(ref _relayTransitionTask, Task.Run(() => TransitionToRelayAsync(peer)));
-    }
-
-    // ChannelBind the peer while the transport is still in direct mode (the request reaches the server unframed
-    // via the relay control stack), then flip the transport into relay mode and install the bound channel — media
-    // then flows as ChannelData through the TURN server (RFC 8656 §11–12). A failed ChannelBind leaves media on
-    // the checked path (logged); a disposing session cancels it.
-    private async Task TransitionToRelayAsync(IPEndPoint peer)
-    {
-        var binding = Volatile.Read(ref _relayBinding);
-        if (binding?.BindChannel is not { } bindChannel)
-            return;
-
-        try
-        {
-            var channelBinding = await bindChannel(peer, _relayTransitionCts.Token).ConfigureAwait(false);
-            // Re-assert the relay peer as the transport remote right before the flip, in case a direct
-            // re-nomination re-pointed it during the (sub-second) ChannelBind — the bound channel forwards to
-            // this peer, and inbound ChannelData is attributed to it.
-            _transport.SetRemoteEndPoint(peer);
-            _transport.EnterRelayMode(binding.Indication.RelayServer, binding.OnControl);
-            _transport.SetRelayChannel(channelBinding.Channel);
-            // Commit: from here a later re-nomination must not re-point the transport (see OnPairNominated).
-            Volatile.Write(ref _relayTransitioned, 1);
-            // Keep the channel binding alive (RFC 8656 §12): start the rebind loop now — the channel exists only
-            // after this transition — and dispose it before the transport it rides (DisposeAsync).
-            if (channelBinding.Rebind is { } channelRebind)
-            {
-                Volatile.Write(ref _channelRebind, channelRebind);
-                channelRebind.Start();
-            }
-            _logger.LogInformation(
-                "Relay data path activated for the nominated relay pair: media now flows as ChannelData through the " +
-                "TURN server (RFC 8656 §11–12).");
-        }
-        catch (OperationCanceledException) when (_relayTransitionCts.IsCancellationRequested)
-        {
-            // Session disposing — abort the transition.
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex,
-                "Failed to switch onto the relay data path after nominating a relay pair; media stays on the checked path.");
-        }
-    }
+    // A relay pair won ICE: hand it to the relay data path, which switches the transport onto ChannelData
+    // (RFC 8656 §11–12). Runs on the driver thread right after OnPairNominated has already pointed the
+    // transport's remote and DTLS at the peer — the precondition EnterRelayMode needs.
+    private void OnRelayPairNominated(IPEndPoint peer) => _relay.OnRelayPairNominated(peer);
 
     /// <summary>
     /// The bundle's sender-side transport-wide congestion controller (transport-cc), or
@@ -817,7 +828,7 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         _ice.Start();
         // Keep a gathered relay allocation alive for the session (RFC 8656 §3.9). Idempotent — AdoptRelay may
         // already have started it for an answerer.
-        Volatile.Read(ref _relayKeepAlive)?.Start();
+        _relay.Start();
         // Start emitting periodic Sender Reports (RFC 3550 §6.4). Its SRTCP send fails closed until the DTLS
         // handshake below installs the outbound SRTCP key, so an early start just suppresses the first ticks.
         _rtcpReporter.Start();
@@ -967,21 +978,10 @@ internal sealed class BundledMediaSession : IAsyncDisposable
             Volatile.Write(ref _disposed, 1);
 
         await _ice.DisposeAsync().ConfigureAwait(false);
-        // Drain a relay data-path transition in flight before disposing the transport it rides: the driver is
-        // now stopped (no new transition starts), so cancel and await the running one.
-        await _relayTransitionCts.CancelAsync().ConfigureAwait(false);
-        if (Volatile.Read(ref _relayTransitionTask) is { } transition)
-            await transition.ConfigureAwait(false);
-        _relayTransitionCts.Dispose();
-        // Dispose the channel rebind loop (RFC 8656 §12) before the allocation keepalive: both ride the
-        // transport's control send (so both must run before the transport is disposed), and the rebind stops
-        // first so it does not re-bind a channel the allocation teardown is about to drop.
-        if (Volatile.Read(ref _channelRebind) is { } channelRebind)
-            await channelRebind.DisposeAsync().ConfigureAwait(false);
-        // Dispose the relay keepalive after ICE (no more relay checks) but before the transport: its teardown
-        // Refresh(0) rides the transport's control send, so the transport must still be alive to carry it.
-        if (Volatile.Read(ref _relayKeepAlive) is { } keepAlive)
-            await keepAlive.DisposeAsync().ConfigureAwait(false);
+        // Tear the relay path down after ICE (the driver is stopped, so no new nomination starts a transition)
+        // and before the transport: it drains an in-flight transition, then stops the channel rebind and the
+        // allocation keepalive — both of which ride the transport's control send.
+        await _relay.DisposeAsync().ConfigureAwait(false);
         // Stop the transport-cc congestion plane before the transport it rides is torn down (its SRTCP feedback
         // send goes through the transport): its dispose signals the lifetime token and awaits the loop.
         if (_congestion is not null)

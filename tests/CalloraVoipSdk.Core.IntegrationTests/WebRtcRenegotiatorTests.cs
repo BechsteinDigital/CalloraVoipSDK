@@ -14,13 +14,14 @@ namespace CalloraVoipSdk.Core.IntegrationTests;
 /// timing): <see cref="WebRtcRenegotiator"/> diffs a re-offer's video m-lines against a running
 /// <see cref="BundledMediaSession"/> and applies the delta live via <see cref="BundledMediaSession.AddVideoTrack"/>
 /// / <see cref="BundledMediaSession.SetVideoTrackInactive"/>. SSRC allocation is seeded from the live session's
-/// outbound SSRCs, so an added track's SSRC never collides a running one (RFC 3550 §8.1). An ICE restart (a
-/// rotated remote ICE ufrag) is rejected — the transport is never rebuilt on this path.
+/// outbound SSRCs, so an added track's SSRC never collides a running one (RFC 3550 §8.1). ICE restart handling
+/// (#226) is covered at the peer level, where a full cycle can be driven.
 /// </summary>
 public sealed class WebRtcRenegotiatorTests
 {
     private static readonly IReadOnlyList<SdpCodecDefinition> Pcmu =
         [new SdpCodecDefinition { PayloadType = 0, Name = "PCMU", ClockRate = 8000 }];
+    private static readonly SdpIceParameters LocalIce = new() { Ufrag = "localU", Pwd = "localPassword1234567890" };
     private static readonly SdpCodecDefinition H264 = new() { PayloadType = 96, Name = "H264", ClockRate = 90000 };
 
     [Fact]
@@ -34,7 +35,7 @@ public sealed class WebRtcRenegotiatorTests
 
         // Re-offer adds a SECOND video m-line (MID "2"); the answer accepts both.
         var (reOffer, reAnswer) = Exchange(videoMids: ["1", "2"]);
-        var renegotiator = new WebRtcRenegotiator(NullLoggerFactory.Instance, opaqueVideoFrames: false);
+        var renegotiator = new WebRtcRenegotiator(NullLoggerFactory.Instance, opaqueVideoFrames: false, LocalIce);
 
         var diff = renegotiator.ComputeDiff(session, reAnswer, reOffer);
 
@@ -65,7 +66,7 @@ public sealed class WebRtcRenegotiatorTests
         await using var session = BuildSession(offer, answer);
 
         var (reOffer, reAnswer) = Exchange(videoMids: ["1", "2"]);
-        var renegotiator = new WebRtcRenegotiator(NullLoggerFactory.Instance, opaqueVideoFrames: opaque);
+        var renegotiator = new WebRtcRenegotiator(NullLoggerFactory.Instance, opaqueVideoFrames: opaque, LocalIce);
 
         var diff = renegotiator.ComputeDiff(session, reAnswer, reOffer);
 
@@ -83,7 +84,7 @@ public sealed class WebRtcRenegotiatorTests
 
         // Re-offer keeps only "1" (drops "2"); the answer mirrors it.
         var (reOffer, reAnswer) = Exchange(videoMids: ["1"]);
-        var renegotiator = new WebRtcRenegotiator(NullLoggerFactory.Instance, opaqueVideoFrames: false);
+        var renegotiator = new WebRtcRenegotiator(NullLoggerFactory.Instance, opaqueVideoFrames: false, LocalIce);
 
         var diff = renegotiator.ComputeDiff(session, reAnswer, reOffer);
 
@@ -102,23 +103,48 @@ public sealed class WebRtcRenegotiatorTests
         await using var session = BuildSession(offer, answer);
 
         var (reOffer, reAnswer) = Exchange(videoMids: ["1"]);
-        var diff = new WebRtcRenegotiator(NullLoggerFactory.Instance, opaqueVideoFrames: false).ComputeDiff(session, reAnswer, reOffer);
+        var diff = new WebRtcRenegotiator(NullLoggerFactory.Instance, opaqueVideoFrames: false, LocalIce).ComputeDiff(session, reAnswer, reOffer);
 
         Assert.True(diff.IsEmpty);
     }
 
     [Fact]
-    public async Task An_ice_restart_re_offer_is_rejected()
+    public async Task An_ice_restart_re_offer_restarts_the_session_ice_and_reports_it()
     {
         var (offer, answer) = Exchange(videoMids: ["1"]);
         await using var session = BuildSession(offer, answer);
 
-        // Re-offer rotates the remote (offer) ICE ufrag → an ICE restart the track-diff path does not support.
+        // Re-offer rotates the remote (offer) ICE ufrag → an ICE restart (#226, RFC 8445 §9).
         var (reOffer, reAnswer) = Exchange(videoMids: ["1"], offerUfrag: "restartedUfrag");
-        var renegotiator = new WebRtcRenegotiator(NullLoggerFactory.Instance, opaqueVideoFrames: false);
+        var restarted = false;
+        var renegotiator = new WebRtcRenegotiator(
+            NullLoggerFactory.Instance, opaqueVideoFrames: false, LocalIce, onIceRestarted: () => restarted = true);
 
-        var ex = Assert.Throws<InvalidOperationException>(() => renegotiator.ComputeDiff(session, reAnswer, reOffer));
-        Assert.Contains("ICE restart", ex.Message, StringComparison.Ordinal);
+        await renegotiator.ApplyReAnswerAsync(session, reAnswer, reOffer);
+
+        // The session now answers to the peer's new credentials, and the peer was told so it can transition
+        // its connection state instead of staying wherever the network change left it.
+        Assert.Equal("restartedUfrag", session.RemoteIceUfrag);
+        Assert.True(restarted, "der Peer muss über den angewandten ICE-Restart informiert werden");
+    }
+
+    [Fact]
+    public async Task A_re_offer_without_rotated_credentials_is_not_treated_as_a_restart()
+    {
+        var (offer, answer) = Exchange(videoMids: ["1"]);
+        await using var session = BuildSession(offer, answer);
+
+        // Same credentials — the common mid-call track change. Restarting here would tear down a working check
+        // list on every renegotiation.
+        var (reOffer, reAnswer) = Exchange(videoMids: ["1", "2"]);
+        var restarted = false;
+        var renegotiator = new WebRtcRenegotiator(
+            NullLoggerFactory.Instance, opaqueVideoFrames: false, LocalIce, onIceRestarted: () => restarted = true);
+
+        await renegotiator.ApplyReAnswerAsync(session, reAnswer, reOffer);
+
+        Assert.False(restarted);
+        Assert.Equal(["1", "2"], session.VideoMids); // the track diff still ran
     }
 
     [Fact]
@@ -133,7 +159,7 @@ public sealed class WebRtcRenegotiatorTests
 
         // Re-offer adds a SECOND audio m-line (MID "1"); both sides send-recv, so it is an inbound additional track.
         var (reOffer, reAnswer) = AudioExchange(audioMids: ["0", "1"]);
-        var renegotiator = new WebRtcRenegotiator(NullLoggerFactory.Instance, opaqueVideoFrames: false);
+        var renegotiator = new WebRtcRenegotiator(NullLoggerFactory.Instance, opaqueVideoFrames: false, LocalIce);
 
         var diff = renegotiator.ComputeDiff(session, reAnswer, reOffer);
 
@@ -162,7 +188,7 @@ public sealed class WebRtcRenegotiatorTests
         var (reOffer, reAnswer) = AudioExchange(
             audioMids: ["0", "1"],
             additionalDirection: SdpMediaDirection.SendOnly);
-        var renegotiator = new WebRtcRenegotiator(NullLoggerFactory.Instance, opaqueVideoFrames: false);
+        var renegotiator = new WebRtcRenegotiator(NullLoggerFactory.Instance, opaqueVideoFrames: false, LocalIce);
 
         var diff = renegotiator.ComputeDiff(session, reOffer, reAnswer);
 
@@ -183,7 +209,7 @@ public sealed class WebRtcRenegotiatorTests
 
         // Re-offer keeps only the anchor "0" (drops the additional "1").
         var (reOffer, reAnswer) = AudioExchange(audioMids: ["0"]);
-        var renegotiator = new WebRtcRenegotiator(NullLoggerFactory.Instance, opaqueVideoFrames: false);
+        var renegotiator = new WebRtcRenegotiator(NullLoggerFactory.Instance, opaqueVideoFrames: false, LocalIce);
 
         var diff = renegotiator.ComputeDiff(session, reAnswer, reOffer);
 
@@ -206,7 +232,7 @@ public sealed class WebRtcRenegotiatorTests
         // A re-offer that drops EVERY audio m-line except the anchor "0" must deactivate the two additional tracks
         // but NEVER the anchor — the anchor is not in AudioMids, so it can never appear in the deactivate list.
         var (reOffer, reAnswer) = AudioExchange(audioMids: ["0"]);
-        var renegotiator = new WebRtcRenegotiator(NullLoggerFactory.Instance, opaqueVideoFrames: false);
+        var renegotiator = new WebRtcRenegotiator(NullLoggerFactory.Instance, opaqueVideoFrames: false, LocalIce);
 
         var diff = renegotiator.ComputeDiff(session, reAnswer, reOffer);
 

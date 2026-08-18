@@ -68,18 +68,89 @@ public sealed class WebRtcPeerConnectionTests
         Assert.Contains(parsed.Media, m => m.MediaType == "video");
     }
 
+    /// <summary>
+    /// #226: a re-offer that rotates the peer's ICE credentials restarts ICE on the running peer instead of
+    /// throwing. The visible contract of a restart is that everything below signalling survives — the peer keeps
+    /// its media socket, so the DTLS association and the SRTP contexts on it stay valid — while the answer
+    /// advertises fresh local credentials, because RFC 8445 §9.1.1.1 requires the answerer to a restart offer to
+    /// generate its own new ufrag/pwd.
+    /// </summary>
     [Fact]
-    public async Task An_ice_restart_re_offer_is_rejected_on_a_running_peer()
+    public async Task An_ice_restart_re_offer_restarts_ice_on_the_running_peer()
     {
         await using var peer = Peer(Pcmu);
-        await peer.SetRemoteDescriptionAsync(WebRtcOffer());   // first: builds the session (remote ufrag "remoteU")
+        var firstAnswer = await peer.SetRemoteDescriptionAsync(WebRtcOffer());   // builds the session, remote "remoteU"
+        var mediaPort = peer.LocalMediaEndPoint!.Port;
+        var firstUfrag = IceUfragOf(firstAnswer);
 
-        // ICE restart (RFC 8829 §5.3.1) is not supported on a running peer: this path diffs only the track set on
-        // the existing transport, so a re-offer that rotates the remote ICE ufrag must fail loudly.
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => peer.SetRemoteDescriptionAsync(WebRtcOffer(iceUfrag: "restartedUfrag")));
-        Assert.Contains("ICE restart", ex.Message, StringComparison.Ordinal);
+        var restartAnswer = await peer.SetRemoteDescriptionAsync(WebRtcOffer(iceUfrag: "restartedUfrag"));
+
+        Assert.NotEqual(firstUfrag, IceUfragOf(restartAnswer));                  // RFC 8445 §9.1.1.1
+        Assert.Equal(mediaPort, peer.LocalMediaEndPoint!.Port);                  // same 5-tuple: no transport rebuild
+        // The restart is a state transition, not a failure: checks run again, so the peer is Connecting.
+        Assert.Equal(WebRtcConnectionState.Connecting, peer.State);
+        Assert.Equal(WebRtcSignalingState.Stable, peer.SignalingState);
     }
+
+    [Fact]
+    public async Task A_re_offer_that_keeps_the_ice_credentials_does_not_rotate_ours()
+    {
+        // The guard against restarting on every mid-call track change: only rotated remote credentials are a
+        // restart (RFC 8445 §9.1.1.1). A plain re-offer must leave our ufrag — and the peer's checks — alone.
+        await using var peer = Peer(Pcmu);
+        var firstAnswer = await peer.SetRemoteDescriptionAsync(WebRtcOffer());
+        var secondAnswer = await peer.SetRemoteDescriptionAsync(WebRtcOffer());
+
+        Assert.Equal(IceUfragOf(firstAnswer), IceUfragOf(secondAnswer));
+    }
+
+    /// <summary>
+    /// #226, local initiation: <c>CreateIceRestartOfferAsync</c> rotates this peer's ICE credentials and restarts
+    /// its agent before producing the offer, so the offer is what tells the far side. The rotation and the offer
+    /// are produced together on purpose — an app cannot rotate without sending the offer that announces it.
+    /// </summary>
+    [Fact]
+    public async Task An_ice_restart_offer_rotates_our_credentials_on_the_running_peer()
+    {
+        await using var peer = Peer(Pcmu);
+        var firstAnswer = await peer.SetRemoteDescriptionAsync(WebRtcOffer());
+        var mediaPort = peer.LocalMediaEndPoint!.Port;
+        var beforeUfrag = IceUfragOf(firstAnswer);
+
+        var restartOffer = await peer.CreateIceRestartOfferAsync();
+
+        Assert.NotEqual(beforeUfrag, IceUfragOf(restartOffer));       // RFC 8445 §9.1.1.1
+        Assert.Equal(mediaPort, peer.LocalMediaEndPoint!.Port);       // same 5-tuple: no transport rebuild
+        Assert.Equal(WebRtcSignalingState.HaveLocalOffer, peer.SignalingState);
+        Assert.Equal(WebRtcConnectionState.Connecting, peer.State);
+    }
+
+    [Fact]
+    public async Task A_plain_re_offer_does_not_rotate_our_credentials()
+    {
+        // The discriminator: only the restart offer rotates. A plain re-offer must keep the credentials the far
+        // side is already checking against, or every mid-call track change would silently restart ICE.
+        await using var peer = Peer(Pcmu);
+        var firstAnswer = await peer.SetRemoteDescriptionAsync(WebRtcOffer());
+
+        Assert.Equal(IceUfragOf(firstAnswer), IceUfragOf(peer.CreateOffer()));
+    }
+
+    [Fact]
+    public async Task An_ice_restart_offer_before_a_session_exists_is_a_plain_offer()
+    {
+        // Nothing to restart yet: a first offer's credentials are new anyway, and rotating would only churn the
+        // configured pair — with no agent to apply them to.
+        await using var peer = Peer(Pcmu);
+
+        var offer = await peer.CreateIceRestartOfferAsync();
+
+        Assert.Equal("localU", IceUfragOf(offer));
+        Assert.Equal(WebRtcSignalingState.HaveLocalOffer, peer.SignalingState);
+    }
+
+    private static string? IceUfragOf(string sdp) =>
+        new SdpSessionParser().Parse(sdp).Media.First(m => m.MediaType == "audio").IceUfrag;
 
     [Fact]
     public async Task Offerer_applying_the_answer_returns_its_own_offer_as_local_description()

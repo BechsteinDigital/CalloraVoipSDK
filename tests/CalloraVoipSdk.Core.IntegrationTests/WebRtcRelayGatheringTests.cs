@@ -126,16 +126,27 @@ public sealed class WebRtcRelayGatheringTests
         Assert.Null(peer.GatheredRelayAllocation);
     }
 
+    /// <summary>
+    /// #226: gathering after StartAsync no longer throws — it re-probes over the live transport so an ICE restart
+    /// can re-gather without giving up the socket. TURN is deliberately skipped on that path: the allocation is
+    /// keyed to the 5-tuple the transport still holds and its refresh loop keeps it alive, so the relay candidate
+    /// did not change and re-allocating would only duplicate it (ADR-072).
+    /// </summary>
     [Fact]
-    public async Task GatherCandidates_after_start_throws()
+    public async Task GatherCandidates_after_start_skips_turn_because_the_allocation_still_holds()
     {
+        var candidates = new List<string>();
         await using var peer = Peer(TurnProbe(new StunMessageCodec()),
             [Turn(port: 3478, username: "user", password: "pass")]);
+        peer.LocalIceCandidateDiscovered += c => { lock (candidates) candidates.Add(c); };
 
         await peer.SetRemoteDescriptionAsync(WebRtcOffer());
         await peer.StartAsync(); // the transport receive loop now owns the media socket
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => peer.GatherCandidatesAsync());
+        await peer.GatherCandidatesAsync();
+
+        lock (candidates)
+            Assert.DoesNotContain(candidates, c => c.Contains("typ relay", StringComparison.Ordinal));
     }
 
     private static TurnAllocationProbe TurnProbe(IStunMessageCodec codec) =>

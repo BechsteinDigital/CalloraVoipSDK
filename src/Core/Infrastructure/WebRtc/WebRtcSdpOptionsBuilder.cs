@@ -26,6 +26,11 @@ internal static class WebRtcSdpOptionsBuilder
     /// <summary>Builds the media options for the offer/answer at the bound local endpoint.</summary>
     /// <param name="local">The bound media endpoint (its port anchors every BUNDLE m-line).</param>
     /// <param name="options">The peer's configuration (audio/video codecs, DTLS, ICE).</param>
+    /// <param name="localIce">
+    /// The local ICE credentials and configured candidates in force for this description. Passed in rather than
+    /// read off <paramref name="options"/> because an ICE restart rotates the ufrag/pwd on a live peer
+    /// (RFC 8445 §9.1.1.1) while its configuration stays what it was constructed with.
+    /// </param>
     /// <param name="addedAudio">The runtime-added additional audio tracks (4.7.0), each with its stable a=msid track id.</param>
     /// <param name="addedVideo">The runtime-added video tracks (P2c), each with its stable a=msid track id.</param>
     /// <param name="mediaStreamId">The peer's stable MediaStream id (RFC 8830).</param>
@@ -35,6 +40,7 @@ internal static class WebRtcSdpOptionsBuilder
         IPEndPoint local,
         IReadOnlyList<IPEndPoint> hostEndPoints,
         WebRtcPeerOptions options,
+        SdpIceParameters localIce,
         IReadOnlyList<(WebRtcAddedAudioTrack Track, string TrackId, int Order)> addedAudio,
         IReadOnlyList<(WebRtcAddedVideoTrack Track, string TrackId, int Order)> addedVideo,
         string mediaStreamId,
@@ -44,16 +50,16 @@ internal static class WebRtcSdpOptionsBuilder
         ArgumentNullException.ThrowIfNull(hostEndPoints);
         // Wildcard is a socket bind policy, not a candidate. The provider expands it into active-interface
         // addresses that all share this socket's real port (RFC 8445 §5.1.1.1).
-        var candidates = new List<SdpIceCandidate>(options.Ice.Candidates.Count + hostEndPoints.Count);
+        var candidates = new List<SdpIceCandidate>(localIce.Candidates.Count + hostEndPoints.Count);
         for (var index = 0; index < hostEndPoints.Count; index++)
             candidates.Add(WebRtcIceCandidateFactory.LocalHostCandidate(hostEndPoints[index], index));
-        candidates.AddRange(options.Ice.Candidates);
+        candidates.AddRange(localIce.Candidates);
 
         var ice = new SdpIceParameters
         {
-            Ufrag = options.Ice.Ufrag,
-            Pwd = options.Ice.Pwd,
-            Options = options.Ice.Options,
+            Ufrag = localIce.Ufrag,
+            Pwd = localIce.Pwd,
+            Options = localIce.Options,
             Candidates = candidates,
         };
 

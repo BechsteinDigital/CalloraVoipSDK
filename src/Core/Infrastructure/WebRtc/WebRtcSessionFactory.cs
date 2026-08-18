@@ -31,7 +31,7 @@ internal static class WebRtcSessionFactory
     /// </summary>
     // Host-candidate priority (RFC 8445 §5.1.2.1: type pref 126, local pref 65535, component 1). Used only
     // as the ordering weight for a remote endpoint taken from the m-line address (no a=candidate priority).
-    private const long DefaultCandidatePriority = (126L << 24) | (65535L << 8) | 255L;
+    internal const long DefaultCandidatePriority = (126L << 24) | (65535L << 8) | 255L;
 
     /// <param name="localDescription">This peer's description (the offer if offering, else the answer).</param>
     /// <param name="remoteDescription">The other peer's description (the answer if we offered, else the offer).</param>
@@ -677,7 +677,7 @@ internal static class WebRtcSessionFactory
     // The usable remote candidates for connectivity checks (RFC 8839): component-1 UDP candidates with a
     // parseable address and real port, paired with their priority so the nomination driver checks the
     // highest-priority pair first (RFC 8445 §7.2.2).
-    private static IReadOnlyList<IceRemoteCandidate> RemoteCandidates(SdpMediaDescription remoteAudio) =>
+    internal static IReadOnlyList<IceRemoteCandidate> RemoteCandidates(SdpMediaDescription remoteAudio) =>
         remoteAudio.Candidates
             .Where(c => c.Component == 1 // RTP; rtcp-mux shares it (RFC 8843)
                         && c.Transport.Equals("udp", Ci)
