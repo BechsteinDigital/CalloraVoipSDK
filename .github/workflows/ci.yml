@@ -186,9 +186,16 @@ jobs:
       - name: Browser interop tests (Playwright/headless Chromium + Firefox + WebKit)
         # Browser + OS-Deps kommen aus dem Container. BrowserEngine.ResolveExecutable liest
         # PLAYWRIGHT_BROWSERS_PATH (/ms-playwright); Chromium startet mit ChromiumSandbox=false, weil der
-        # Container als root läuft ("Running as root without --no-sandbox is not supported"). Die Matrix fährt
-        # jedes Szenario gegen jeden im Image vorhandenen Motor; ein fehlender würde per-Browser-Fact
-        # übersprungen. `dotnet test` restored/baut den benötigten Graph selbst — der eigene `build`-Job deckt
-        # die Solution-weite Kompilierung ab, und `build-and-test` schließt Category=BrowserInterop aus (kein
-        # Doppellauf).
+        # Container als root läuft ("Running as root without --no-sandbox is not supported").
+        #
+        # HOME=/root: der Job läuft als root, GitHub setzt HOME aber auf /github/home (Eigentümer pwuser).
+        # Firefox verweigert dann den Start ("Running as root in a regular user's session is not supported —
+        # $HOME is /github/home which is owned by pwuser"). Ein root-eigenes HOME entschärft genau diese
+        # Prüfung; die User-Namespace-EPERM-Warnung darunter ist nicht fatal (lokal im selben Image gegen die
+        # GitHub-Bedingung reproduziert: mit HOME=/root startet Firefox, exit 0). Chromium ist davon
+        # unberührt. Die Matrix fährt jedes Szenario gegen jeden im Image vorhandenen Motor; ein fehlender
+        # würde per-Browser-Fact übersprungen. `dotnet test` restored/baut den Graph selbst; `build-and-test`
+        # schließt Category=BrowserInterop aus (kein Doppellauf).
+        env:
+          HOME: /root
         run: dotnet test tests/CalloraVoipSdk.BrowserInteropTests/CalloraVoipSdk.BrowserInteropTests.csproj --configuration Release -f net10.0 --filter "Category=BrowserInterop" --nologo --verbosity minimal
