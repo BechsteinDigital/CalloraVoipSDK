@@ -156,11 +156,19 @@ jobs:
 
   browser-interop:
     runs-on: ubuntu-latest
-    # Video (VP8) decode kann unter CI-CPU-Druck bis ~90 s je Test brauchen; großzügiger Job-Puffer.
-    # 20 statt 15, seit Install-Schritte einen Retry haben: der Normalfall bleibt bei ~40 s, aber ein
-    # einmal hängender Mirror soll den Retry noch bezahlen können, statt den Job kurz vor den Tests zu
-    # kappen. Die Schritt-Timeouts sind die eigentliche Grenze — dieser Wert ist nur das Dach.
-    timeout-minutes: 20
+    # Läuft im offiziellen Playwright-Container: Chromium/Firefox/WebKit samt aller OS-Abhängigkeiten sind
+    # unter /ms-playwright vorinstalliert (das Image setzt PLAYWRIGHT_BROWSERS_PATH). Das ersetzt den früheren
+    # apt-basierten `install-deps` + Browser-Download, der fast jeden Lauf an einem zähen Ubuntu-/Google-Mirror
+    # hängen ließ (gemessen 2026-08-17/18) — die eigentliche Fehlerquelle, nicht die Tests. Kein apt mehr im Job.
+    #
+    # Der Tag MUSS zur Microsoft.Playwright-NuGet-Version passen (1.61.0): das Image liefert genau die
+    # Browser-Revisionen, die der 1.61-Treiber erwartet, und die BrowserEngine.ResolveExecutable sucht.
+    # Beim Anheben des NuGet-Pakets diesen Tag mitziehen.
+    container:
+      image: mcr.microsoft.com/playwright:v1.61.0-noble
+    # Video (VP8) decode kann unter CI-CPU-Druck spürbar dauern; großzügiger Job-Puffer. Ohne den apt-Teil
+    # liegt der Normalfall bei ~1-2 min (lokal im selben Image: 14/14 in ~12 s nach Restore/Build).
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -175,66 +183,19 @@ jobs:
             9.0.x
             10.0.x
 
-      - name: Restore
-        run: dotnet restore CalloraVoipSdk.sln
-
-      - name: Build
-        run: dotnet build CalloraVoipSdk.sln --configuration Release --no-restore
-
-      - name: apt-Netzwerkwartezeiten begrenzen
-        # Ohne das wartet apt unbegrenzt auf einen zähen Mirror. Gemessen am 2026-08-17 (Runs 32068834396
-        # und 32071229687): archive.ubuntu.com lieferte die erste InRelease erst nach 38 s und blieb danach
-        # zwölf Minuten stehen — bis das Job-Budget aufgebraucht war. apt liest apt.conf.d, also gelten die
-        # Grenzen auch für das apt-get, das Playwright selbst startet.
-        run: |
-          sudo tee /etc/apt/apt.conf.d/99-ci-timeouts >/dev/null <<'CONF'
-          Acquire::Retries "3";
-          Acquire::http::Timeout "20";
-          Acquire::https::Timeout "20";
-          CONF
-
-      - name: Playwright-Systemabhängigkeiten (apt)
-        # Getrennt vom Browser-Download (vorher ein --with-deps-Aufruf), damit im Log sofort sichtbar ist,
-        # welche Hälfte klemmt — die Messung oben war nur deshalb möglich, weil apt zufällig zuerst lief.
-        # Jeder Versuch ist hart begrenzt: ein hängendes apt kostet 100 s und einen Retry, nicht den Job.
-        timeout-minutes: 6
+      - name: Browser interop tests (Playwright/headless Chromium + Firefox + WebKit)
+        # Browser + OS-Deps kommen aus dem Container. BrowserEngine.ResolveExecutable liest
+        # PLAYWRIGHT_BROWSERS_PATH (/ms-playwright); Chromium startet mit ChromiumSandbox=false, weil der
+        # Container als root läuft ("Running as root without --no-sandbox is not supported").
+        #
+        # HOME=/root: der Job läuft als root, GitHub setzt HOME aber auf /github/home (Eigentümer pwuser).
+        # Firefox verweigert dann den Start ("Running as root in a regular user's session is not supported —
+        # $HOME is /github/home which is owned by pwuser"). Ein root-eigenes HOME entschärft genau diese
+        # Prüfung; die User-Namespace-EPERM-Warnung darunter ist nicht fatal (lokal im selben Image gegen die
+        # GitHub-Bedingung reproduziert: mit HOME=/root startet Firefox, exit 0). Chromium ist davon
+        # unberührt. Die Matrix fährt jedes Szenario gegen jeden im Image vorhandenen Motor; ein fehlender
+        # würde per-Browser-Fact übersprungen. `dotnet test` restored/baut den Graph selbst; `build-and-test`
+        # schließt Category=BrowserInterop aus (kein Doppellauf).
         env:
-          DEBIAN_FRONTEND: noninteractive
-        run: |
-          set -uo pipefail
-          for attempt in 1 2; do
-            if timeout --signal=TERM --kill-after=15s 100s \
-                 pwsh tests/CalloraVoipSdk.BrowserInteropTests/bin/Release/net10.0/playwright.ps1 \
-                 install-deps chromium firefox; then
-              exit 0
-            fi
-            echo "::warning::apt-Versuch $attempt hing oder schlug fehl — Retry"
-            # Ein abgeschossener Versuch kann apt/dpkg mit gehaltenem Lock hinterlassen; sonst scheitert
-            # der Retry am Lock statt am eigentlichen Problem.
-            sudo pkill -TERM -f 'apt-get|dpkg' || true
-            sleep 5
-          done
-          exit 1
-
-      - name: Playwright-Browser (Chromium + Firefox)
-        # Befüllt ~/.cache/ms-playwright/{chromium,firefox}-* (wo BrowserEngine die Browser der Matrix sucht).
-        timeout-minutes: 6
-        run: |
-          set -uo pipefail
-          for attempt in 1 2; do
-            if timeout --signal=TERM --kill-after=15s 150s \
-                 pwsh tests/CalloraVoipSdk.BrowserInteropTests/bin/Release/net10.0/playwright.ps1 \
-                 install chromium firefox; then
-              exit 0
-            fi
-            echo "::warning::Browser-Download-Versuch $attempt hing oder schlug fehl — Retry"
-            sleep 5
-          done
-          exit 1
-
-      - name: Browser interop tests (Playwright/headless Chrome + Firefox)
-        # Bisher lokal-first aus dem Haupt-Gate (Category!=BrowserInterop); hier als eigener Linux-Job
-        # mit Browser-Install ins PR-CI-Gate gehoben. Die Matrix fährt jedes Szenario gegen beide Motoren
-        # (per-Browser-Fact skippt einen nicht installierten). Der build-and-test-Job schließt sie weiterhin
-        # aus, also kein Doppellauf.
-        run: dotnet test tests/CalloraVoipSdk.BrowserInteropTests/CalloraVoipSdk.BrowserInteropTests.csproj --configuration Release --no-build -f net10.0 --filter "Category=BrowserInterop" --nologo --verbosity minimal
+          HOME: /root
+        run: dotnet test tests/CalloraVoipSdk.BrowserInteropTests/CalloraVoipSdk.BrowserInteropTests.csproj --configuration Release -f net10.0 --filter "Category=BrowserInterop" --nologo --verbosity minimal
