@@ -475,6 +475,12 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     public string? RemoteIcePwd => _iceParameters.RemoteIcePwd;
 
     /// <summary>
+    /// Whether this agent holds the ICE controlling role (RFC 8445 §6.1.1). A restart carries it over: re-running
+    /// the checks does not redetermine which side controls them.
+    /// </summary>
+    public bool IceControlling => _iceParameters.IceControlling;
+
+    /// <summary>
     /// Restarts ICE on the running session (RFC 8445 §9, RFC 8839 §5.4): the agent is replaced with one built from
     /// <paramref name="parameters"/> — rotated credentials, the re-offer's remote candidates, a fresh check list —
     /// and connectivity checks run again over the same socket.

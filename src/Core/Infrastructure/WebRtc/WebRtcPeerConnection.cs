@@ -64,9 +64,10 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     // switches to numeric MIDs on the first added track; stable mode starts numeric and appends in API call order.
     // A mid-call track remains pending until the next offer/answer cycle applies the live diff (RFC 8829).
     private readonly WebRtcAddedTrackSet _addedTracks;
-    private WebRtcConnectionState _state = WebRtcConnectionState.New;
+    // The transport half of the lifecycle (extracted, sharing _sync so its serialisation is unchanged).
+    private readonly WebRtcConnectionStateMachine _connectionState;
     // The RFC 8829 §4.1.3 signalling state (offer/answer half of the lifecycle), separate from the ICE/DTLS
-    // transport _state. Guarded by _sync; transitioned via TransitionSignalingTo (event fired outside the lock).
+    // transport state. Guarded by _sync; transitioned via TransitionSignalingTo (event fired outside the lock).
     private WebRtcSignalingState _signalingState = WebRtcSignalingState.Stable;
     private string? _remoteDescription;
     private SdpMsid? _remoteAudioMsid;
@@ -202,8 +203,13 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         _logger = loggerFactory.CreateLogger<WebRtcPeerConnection>();
         _hostCandidateProvider = hostCandidateProvider ?? new SystemWebRtcHostCandidateProvider(
             loggerFactory.CreateLogger<SystemWebRtcHostCandidateProvider>());
-        // Peer-lifetime opaque-video policy, captured once so a renegotiated track matches (#223, ADR-068).
-        _renegotiator = new WebRtcRenegotiator(_loggerFactory, _options.OpaqueVideoFrames);
+        // Peer-lifetime opaque-video policy, captured once so a renegotiated track matches (#223, ADR-068). It also
+        // owns the local ICE credentials, because an ICE restart (#226) is the only thing that ever rotates them.
+        _renegotiator = new WebRtcRenegotiator(
+            _loggerFactory, _options.OpaqueVideoFrames, _options.Ice,
+            // A restart re-runs connectivity checks, so the peer goes back to Connecting — including from Failed,
+            // which is where a network change that killed consent will already have left it.
+            onIceRestarted: () => TransitionTo(WebRtcConnectionState.Connecting));
         _relayAllocation = new WebRtcRelayAllocationStore(_loggerFactory);
         // The config primary video count (0 or 1) is fixed for the peer's lifetime, so the added-track set can do
         // the numeric-MID arithmetic without re-reading _options; it captures it once here.
@@ -217,13 +223,14 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         _congestion = new WebRtcCongestionRelay(() => { lock (_sync) { return _session; } });
         // The send-lease runner reads the live session under _sync via this snapshot delegate; the lock stays here.
         _sendLease = new WebRtcSendLease(_sendGate, () => { lock (_sync) { return _session; } });
+        // Shares _sync so the transport state keeps its original serialisation; the event raise (snapshot-and-
+        // invoke, throwing handler logged not propagated) stays with the bridge and runs outside the lock.
+        _connectionState = new WebRtcConnectionStateMachine(
+            _sync, next => _sessionEvents.RaiseConnectionState(ConnectionStateChanged, next));
     }
 
     /// <summary>The current connection state.</summary>
-    public WebRtcConnectionState State
-    {
-        get { lock (_sync) { return _state; } }
-    }
+    public WebRtcConnectionState State => _connectionState.Current;
 
     /// <summary>The current RFC 8829 §4.1.3 signalling state (offer/answer half of the lifecycle).</summary>
     public WebRtcSignalingState SignalingState
@@ -605,7 +612,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     // HaveLocalOffer → Stable; answerer: Stable → HaveRemoteOffer → Stable), but the discriminator is the current
     // signalling state, not "was a local offer created" (that stays set after cycle 1): HaveLocalOffer means a fresh
     // re-offer was created here and this remote is its answer; Stable means this remote is a new offer to answer.
-    private Task<string> RenegotiateAsync(string remoteSdp, SdpSessionDescription remote)
+    private async Task<string> RenegotiateAsync(string remoteSdp, SdpSessionDescription remote)
     {
         bool isAnswerer;
         BundledMediaSession session;
@@ -641,9 +648,9 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             answererLocal = EnsureLocalMediaEndPoint();
             try
             {
-                newLocalModel = _renegotiator.NegotiateAnswerAndApply(
+                newLocalModel = await _renegotiator.NegotiateAnswerAndApplyAsync(
                     session, remote,
-                    new WebRtcRenegotiationAnswerContext(_negotiator, answererLocal, _options.AudioCodecs, MediaOptions(answererLocal)));
+                    new WebRtcRenegotiationAnswerContext(_negotiator, answererLocal, _options.AudioCodecs, () => MediaOptions(answererLocal)));
             }
             catch
             {
@@ -668,7 +675,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
                 throw new InvalidOperationException($"Remote re-answer is not a valid response to the local re-offer: {reViolation}");
             }
 
-            _renegotiator.Apply(session, _renegotiator.ComputeDiff(session, newLocalModel, remote));
+            await _renegotiator.ApplyReAnswerAsync(session, newLocalModel, remote);
         }
 
         lock (_sync)
@@ -685,7 +692,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         RaiseSignalingState(WebRtcSignalingState.Stable);
         if (answererLocal is not null)
             _candidateEmitter.EmitLocalHosts(_hostCandidateProvider.GetHostEndPoints(answererLocal));
-        return Task.FromResult(newLocalSdp);
+        return newLocalSdp;
     }
 
     /// <summary>
@@ -885,6 +892,9 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             local,
             _hostCandidateProvider.GetHostEndPoints(local),
             _options,
+            // Not _options.Ice: an ICE restart rotates the local credentials on a live peer (RFC 8445 §9.1.1.1),
+            // and every description built after one must advertise the rotated pair.
+            _renegotiator.LocalIceParameters,
             _addedTracks.SnapshotAudio(),
             _addedTracks.SnapshotVideo(),
             _mediaStreamId,
@@ -930,19 +940,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         _remoteVideoTracks = inventory.VideoTracks;
     }
 
-    private void TransitionTo(WebRtcConnectionState next)
-    {
-        lock (_sync)
-        {
-            if (_state == next || _state == WebRtcConnectionState.Closed)
-                return;
-            _state = next;
-        }
-
-        // The _state compare-and-set stays here under _sync; only the outside-the-lock event raise (identical
-        // snapshot-and-invoke, throwing handler logged not propagated) is delegated to the bridge.
-        _sessionEvents.RaiseConnectionState(ConnectionStateChanged, next);
-    }
+    private void TransitionTo(WebRtcConnectionState next) => _connectionState.TransitionTo(next);
 
     // Fires the signalling-state change event for a transition already committed to _signalingState under
     // _sync at the call site. The delegate is snapshotted inside the lock and invoked outside it (K3), so a
