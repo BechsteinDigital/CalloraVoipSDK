@@ -125,7 +125,7 @@ public sealed class WebRtcRenegotiatorTests
         // The session now answers to the peer's new credentials, and the peer was told so it can transition
         // its connection state instead of staying wherever the network change left it.
         Assert.Equal("restartedUfrag", session.RemoteIceUfrag);
-        Assert.True(restarted, "der Peer muss über den angewandten ICE-Restart informiert werden");
+        Assert.True(restarted, "the peer must be told about the applied ICE restart");
     }
 
     [Fact]

@@ -121,7 +121,7 @@ public sealed class BundledIceControlTests
 
         Assert.True(
             await AwaitSuccessResponseAsync(peer, codec, transactionId, TimeSpan.FromSeconds(5)),
-            "Der neu gestartete Agent hat den Check mit den neuen Credentials nicht beantwortet.");
+            "The restarted agent did not answer the check carrying the new credentials.");
     }
 
     /// <summary>
@@ -159,7 +159,7 @@ public sealed class BundledIceControlTests
         // know it is alive. What must not arrive is an answer to the retired one.
         Assert.False(
             await AwaitSuccessResponseAsync(peer, codec, staleTransactionId, TimeSpan.FromSeconds(2)),
-            "Ein zurückgezogenes Credential-Paar wurde nach dem Restart noch beantwortet.");
+            "A retired credential pair was still answered after the restart.");
     }
 
     // Drains the peer socket until a success response for this transaction arrives or the deadline passes.

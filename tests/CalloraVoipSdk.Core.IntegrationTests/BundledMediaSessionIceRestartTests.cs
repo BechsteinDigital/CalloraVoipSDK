@@ -57,7 +57,7 @@ public sealed class BundledMediaSessionIceRestartTests
 
         Assert.True(
             await AwaitSuccessResponseAsync(peer, codec, transactionId, TimeSpan.FromSeconds(5)),
-            "Die laufende Session hat den Check mit den rotierten Credentials nicht beantwortet.");
+            "The running session did not answer the check carrying the rotated credentials.");
     }
 
     [Fact]
@@ -82,7 +82,7 @@ public sealed class BundledMediaSessionIceRestartTests
         // is alive. What must not arrive is an answer to the retired transaction.
         Assert.False(
             await AwaitSuccessResponseAsync(peer, codec, staleTransactionId, TimeSpan.FromSeconds(2)),
-            "Ein zurückgezogenes Credential-Paar wurde nach dem Restart noch beantwortet.");
+            "A retired credential pair was still answered after the restart.");
     }
 
     [Fact]
