@@ -18,6 +18,10 @@ The next line. Entries here accumulate the consumer-visible changes not yet rele
   allocation over a connected TCP/TLS stream — the stream counterpart of the UDP allocation probe — yielding the
   relayed endpoint a stream relay candidate advertises, and leaving the stream open for hand-off to the
   transport. Not yet wired into the ICE candidate set.
+- **Stream relay candidate send path** (#240, ADR-073 slice 3). The transport-agnostic
+  `TurnRelayCandidateSendPath` composes over the stream transport with no new abstraction: a connectivity check
+  installs a TURN permission and frames a Send indication over the stream (verified against a real hosted TURN
+  server). Not yet attached as an ICE candidate in the nomination path.
 
 ### Added
 
