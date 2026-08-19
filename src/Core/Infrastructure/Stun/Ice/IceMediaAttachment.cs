@@ -137,6 +137,7 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
                     Type = RelayCandidateType,
                     Priority = RelayLocalCandidatePriority,
                     Check = (remote, useCandidate, ct) => _consent.SendCheckVia(relaySend, remote, useCandidate, ct),
+                    SendVia = relaySend,
                 });
             }
 
@@ -298,9 +299,15 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
     /// checks are not dropped by the TURN server. <see langword="null"/> leaves proactive permissioning off
     /// (the controlling path installs permissions as it sends relayed checks).
     /// </param>
+    /// <param name="onNominated">
+    /// Invoked with the nominated remote when THIS relay candidate wins the pair (RFC 8445 §8), for a relay that
+    /// owns its own transport (a stream relay, ADR-073) to switch that transport onto the relay data path.
+    /// <see langword="null"/> (the UDP relay) falls to the session-level relay-nominated callback instead.
+    /// </param>
     public void AddRelayLocalCandidate(
         Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask> relaySend,
-        Func<IPAddress, CancellationToken, Task>? ensurePermission = null)
+        Func<IPAddress, CancellationToken, Task>? ensurePermission = null,
+        Action<IPEndPoint>? onNominated = null)
     {
         ArgumentNullException.ThrowIfNull(relaySend);
         if (_consent is null)
@@ -324,6 +331,8 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
             Type = RelayCandidateType,
             Priority = RelayLocalCandidatePriority,
             Check = (remote, useCandidate, ct) => _consent.SendCheckVia(relaySend, remote, useCandidate, ct),
+            SendVia = relaySend,
+            OnNominated = onNominated,
         });
     }
 
@@ -344,8 +353,18 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
     // candidate nominates over the shared media socket, exactly as before.
     private void OnDriverNominated(IceLocalCandidate local, IPEndPoint remoteEndPoint)
     {
-        var sendVia = local.Type == RelayCandidateType ? Volatile.Read(ref _relaySend) : null;
-        NominateInternal(remoteEndPoint, sendVia);
+        // Consent rides the winning candidate's own send path (a relay's Send indication, or null for direct),
+        // carried on the candidate so coexisting relays are not conflated by a single shared field.
+        if (!NominateInternal(remoteEndPoint, local.SendVia))
+            return;
+
+        // The winning candidate switches its OWN transport onto the relay data path when it owns one (a stream
+        // relay carries an OnNominated). A UDP relay leaves it null and switches its shared socket in place via
+        // the session-level relay-nominated callback; a direct candidate does neither.
+        if (local.OnNominated is { } onNominated)
+            onNominated(remoteEndPoint);
+        else if (local.SendVia is not null)
+            FireRelayPairNominated(remoteEndPoint);
     }
 
     // Adopts the pair the controlling peer nominates via its inbound USE-CANDIDATE check (RFC 8445 §7.3.1.5).
@@ -356,16 +375,26 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
     private void Nominate(
         IPEndPoint remoteEndPoint,
         Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>? replyVia)
-        => NominateInternal(remoteEndPoint, sendVia: replyVia);
+    {
+        if (!NominateInternal(remoteEndPoint, replyVia))
+            return;
 
-    // First nomination wins for this ICE generation. Consent starts only after this selection.
-    private void NominateInternal(
+        // A controlled agent that adopted a relay-framed nomination (replyVia set) switches its shared socket in
+        // place via the session-level callback. The controlled-agent stream-relay path (a candidate-owned
+        // OnNominated) is the known controlled-agent relay gap and is not driven here.
+        if (replyVia is not null)
+            FireRelayPairNominated(remoteEndPoint);
+    }
+
+    // First nomination wins for this ICE generation. Returns true only for the call that won the latch (consent
+    // starts only after this selection), so the caller runs relay-nomination side effects exactly once.
+    private bool NominateInternal(
         IPEndPoint remoteEndPoint,
         Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>? sendVia)
     {
         var nominated = new IceNominatedTarget(remoteEndPoint, sendVia);
         if (Interlocked.CompareExchange(ref _lastNominated, nominated, null) is not null)
-            return;
+            return false;
 
         _nominationDriver?.AcceptRemoteNomination(remoteEndPoint);
         _consent?.Nominate(remoteEndPoint, sendVia);
@@ -379,18 +408,21 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
             _logger.LogError(ex, "Unhandled exception in ICE pair-nominated handler.");
         }
 
-        // A relay pair (its send path is relay-framed) additionally notifies the caller so it can switch the
-        // transport onto the relay data path (ChannelBind). A direct pair (sendVia null) never does.
-        if (sendVia is not null)
+        return true;
+    }
+
+    // Notifies the session that a relay pair was nominated so it can switch the transport onto the relay data
+    // path (ChannelBind). Used for the UDP relay (shared-socket in-place switch) and the controlled-agent path;
+    // a candidate that owns its transport (a stream relay) drives its own OnNominated instead.
+    private void FireRelayPairNominated(IPEndPoint remoteEndPoint)
+    {
+        try
         {
-            try
-            {
-                _onRelayPairNominated?.Invoke(remoteEndPoint);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Unhandled exception in ICE relay-pair-nominated handler.");
-            }
+            _onRelayPairNominated?.Invoke(remoteEndPoint);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled exception in ICE relay-pair-nominated handler.");
         }
     }
 

@@ -165,12 +165,11 @@ internal sealed class WebRtcCandidateGatherer(
 
         if (server.Transport != IceTransport.Udp)
         {
-            // Loud enough to diagnose the config trap on the non-builder path (a WebRtcConfiguration set directly
-            // bypasses the builder's reject): a TCP/TLS TURN entry gathers no relay candidate — the TCP/TLS relay
-            // data path is not wired into the media bundle.
-            logger.LogWarning(
-                "Skipping TURN server {Host} with transport {Transport}: only UDP TURN is supported for relay " +
-                "gathering — no relay candidate is gathered for this server.",
+            // A TCP/TLS TURN entry is not gathered here (this path rides the UDP media socket); it is gathered as a
+            // stream relay candidate over its own connection by the peer's stream relay path (ADR-073).
+            logger.LogDebug(
+                "TURN server {Host} with transport {Transport} is gathered as a stream relay over its own " +
+                "connection (ADR-073), not on the media socket.",
                 server.Host, server.Transport);
             return;
         }

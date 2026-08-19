@@ -162,6 +162,38 @@ Divergence and honest open edges (to be carried in the implementing PRs, per ADR
 4. Data path E2E over TCP against a real `TurnServer` (#240 criterion 2); then TLS (criterion 3).
 5. Interop-matrix entry recording which combination is proven (#240 criterion 5).
 
+## Implementation status
+
+Slices 1–3 shipped incrementally (`StreamRelayMediaTransport`, `TurnStreamAllocationProbe`, the relay-candidate
+send path over the stream, the inbound Data-indication path, the consent integration, the gathering-time
+producer). The **media path** (decision 2 — the distinct transport selected by nomination) then shipped as one
+change:
+
+- **Per-candidate nomination routing.** `IceLocalCandidate` carries its own `SendVia` and an `OnNominated` hook,
+  so coexisting relays (a UDP relay and a stream relay) are no longer conflated by a single shared field — the
+  winning candidate's own transport is switched.
+- **The switch itself.** `BundledMediaTransport.EnterStreamRelayMode` forwards every send to the stream
+  transport's ChannelData path (its own TCP/TLS connection) and `InjectRelayedInbound` feeds its relayed inbound
+  into the same pipeline; DTLS/SRTP/RTP ride above, unchanged. This is **libwebrtc's / pjnath's model** — a TURN
+  allocation over its own socket, selected by nomination — reached here for the stream relay (the UDP relay keeps
+  its ADR-056 in-place socket switch). `BundledStreamRelayPath` owns the adoption, the one-shot transition
+  (ChannelBind → `EnterStreamRelayMode`) and the teardown order.
+- **Peer wiring.** `WebRtcStreamRelayConnector` connects a TCP/TLS TURN entry; `WebRtcStreamRelayStore` retains it
+  first-wins and adopts it into the session (now for the answerer, on build for the offerer). The old "TCP/TLS
+  gathers no relay candidate" config trap is gone.
+
+Open edges carried forward (ADR-009):
+
+- **Controlled-agent stream relay.** The controlled agent (answerer) nominates via the session-level callback, not
+  the per-candidate `OnNominated`, so an answerer-side stream relay does not switch its own media — the
+  controlling (offerer) stream relay is the working path (the pre-existing controlled-agent relay gap, ADR-054).
+- **Real-server / browser data-path E2E** stays interop (#228): the transition is timeout-bound (a relay only
+  wins when direct fails) and not fully unit-testable, so the unit proof drives the transition through the real
+  session ICE agent with an echoing attachment, while the transport ChannelData round-trip and the TCP/TLS
+  connect + gather are proven against real sockets and a hosted `TurnServer`.
+- **TLS certificate validation** is an injected callback (platform default in production); wiring it to
+  configuration is a follow-up.
+
 ## Sources
 
 - Code: `TurnStreamFramer`, `IRelayControlTransport`, `TurnRelayCoordinator`, `IRelayDatagramChannel`,

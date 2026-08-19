@@ -16,6 +16,9 @@ namespace CalloraVoipSdk.Core.Infrastructure.Common.Relay;
 /// </summary>
 internal interface IStreamRelayAttachment : IAsyncDisposable
 {
+    /// <summary>The relayed transport address the TURN server allocated — the relay candidate's advertised address.</summary>
+    IPEndPoint RelayedEndPoint { get; }
+
     /// <summary>The relay local candidate's TURN-framed send path (RFC 8656 §10) — <c>(datagram, remoteTarget, ct)</c>.</summary>
     Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask> RelaySend { get; }
 
@@ -37,4 +40,18 @@ internal interface IStreamRelayAttachment : IAsyncDisposable
 
     /// <summary>Starts the relay allocation/permission keepalive (RFC 8656 §3.9/§9), if any. Idempotent.</summary>
     void StartKeepAlive();
+
+    /// <summary>
+    /// Transitions this stream relay onto the media path once its pair is nominated: ChannelBinds
+    /// <paramref name="peer"/> (RFC 8656 §11) over the stream, installs the bound channel, re-points relayed
+    /// inbound media at <paramref name="onInboundMedia"/>, and starts the channel keepalive (§12). Returns the
+    /// stream's ChannelData media send — <c>(datagram, ct)</c> — for the session to route media through (its own
+    /// transport then forwards media there instead of the UDP socket), or <see langword="null"/> when the relay
+    /// cannot bind a channel, leaving media on the direct path (which then fails consent, ADR-073 §3).
+    /// </summary>
+    /// <param name="peer">The nominated remote to bind a relay channel to.</param>
+    /// <param name="onInboundMedia">The session's relayed-media sink (inbound ChannelData inner, attributed to the peer).</param>
+    /// <param name="ct">Cancellation token — the session cancels an in-flight transition before teardown.</param>
+    Task<Func<ReadOnlyMemory<byte>, CancellationToken, ValueTask>?> BindChannelAsync(
+        IPEndPoint peer, Action<byte[]> onInboundMedia, CancellationToken ct);
 }

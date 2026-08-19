@@ -185,6 +185,56 @@ public sealed class BundledIceControlRelayTests
         Assert.Equal(0, Volatile.Read(ref relayFired));
     }
 
+    [Fact]
+    public async Task Only_the_winning_relay_candidate_fires_its_own_OnNominated()
+    {
+        // Two coexisting relay candidates (e.g. a UDP relay and a stream relay, ADR-073). Only the one whose pair
+        // actually validates must fire its own per-candidate nomination hook — the routing that lets each relay
+        // switch its own transport, rather than a single shared callback firing for whichever relay is configured.
+        var remote = new IPEndPoint(IPAddress.Loopback, 53010);
+        var pipeline = Pipeline();
+        BundledIceControl control = null!;
+        var nominatedA = 0;
+        var nominatedB = 0;
+        var pairNominated = new TaskCompletionSource<IPEndPoint>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        ValueTask DirectSend(ReadOnlyMemory<byte> datagram, IPEndPoint target, CancellationToken ct)
+            => throw new SocketException((int)SocketError.NetworkUnreachable);
+
+        // Relay A answers each check (echoing the transaction id back), so its pair validates and is nominated.
+        ValueTask RelaySendA(ReadOnlyMemory<byte> datagram, IPEndPoint target, CancellationToken ct)
+        {
+            var response = new byte[20];
+            response[0] = 0x01; response[1] = 0x01;
+            response[4] = 0x21; response[5] = 0x12; response[6] = 0xA4; response[7] = 0x42;
+            datagram.Span.Slice(8, 12).CopyTo(response.AsSpan(8));
+            _ = Task.Run(() => control.OnRelayStunReceived(response, target, RelaySendA));
+            return ValueTask.CompletedTask;
+        }
+        // Relay B never answers, so its pair never validates and it is never the nominated local.
+        static ValueTask RelaySendB(ReadOnlyMemory<byte> datagram, IPEndPoint target, CancellationToken ct)
+            => ValueTask.CompletedTask;
+
+        control = new BundledIceControl(
+            IceParameters(remote), pipeline, DirectSend, NullLoggerFactory.Instance,
+            onPairNominated: ep => pairNominated.TrySetResult(ep));
+        try
+        {
+            control.AddRelayLocalCandidate(RelaySendA, onNominated: _ => Interlocked.Increment(ref nominatedA));
+            control.AddRelayLocalCandidate(RelaySendB, onNominated: _ => Interlocked.Increment(ref nominatedB));
+            control.Start();
+
+            Assert.Equal(remote, await pairNominated.Task.WaitAsync(TimeSpan.FromSeconds(10)));
+            await Task.Delay(150); // give any erroneous per-candidate callback a chance to fire
+            Assert.Equal(1, Volatile.Read(ref nominatedA));
+            Assert.Equal(0, Volatile.Read(ref nominatedB));
+        }
+        finally
+        {
+            await control.DisposeAsync();
+        }
+    }
+
     private static IceMediaParameters IceParameters(IPEndPoint remote) =>
         new(remote, IceEnabled: true, IceControlling: true,
             LocalIceUfrag: "offr", LocalIcePwd: "offrPassword", RemoteIceUfrag: "answ", RemoteIcePwd: "answPassword")
