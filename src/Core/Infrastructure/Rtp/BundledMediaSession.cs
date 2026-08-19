@@ -141,6 +141,8 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     private int _streamRelayTransitionStarted;
     private Task? _streamRelayTransitionTask;
     private readonly CancellationTokenSource _streamRelayTransitionCts = new();
+    // Set once the stream relay media transition succeeded (EnterStreamRelayMode ran) — media now rides the stream.
+    private int _streamRelayActive;
 
     /// <summary>
     /// Raised with each decrypted inbound audio RTP packet on the <em>primary</em> audio track (the transport
@@ -755,6 +757,9 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     /// <summary>Test seam: whether the transport has switched onto the relay data path (RFC 8656 ChannelData).</summary>
     internal bool RelayDataPathActive => _relay.IsActive;
 
+    /// <summary>Test seam: whether the session's media has switched onto an adopted stream relay (ADR-073).</summary>
+    internal bool StreamRelayDataPathActive => Volatile.Read(ref _streamRelayActive) != 0;
+
     // A relay pair won ICE: hand it to the relay data path, which switches the transport onto ChannelData
     // (RFC 8656 §11–12). Runs on the driver thread right after OnPairNominated has already pointed the
     // transport's remote and DTLS at the peer — the precondition EnterRelayMode needs.
@@ -790,6 +795,7 @@ internal sealed class BundledMediaSession : IAsyncDisposable
             }
 
             _transport.EnterStreamRelayMode(streamMediaSend);
+            Volatile.Write(ref _streamRelayActive, 1);
             _logger.LogInformation(
                 "Stream relay data path activated: media now flows as ChannelData over the TURN stream connection " +
                 "(RFC 8656 §11–12, ADR-073).");
