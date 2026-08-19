@@ -117,9 +117,14 @@ interop test.</p>
 <td>The same three scenarios via the browser-agnostic <code>BrowserEngine</code> matrix. Negotiates DTLS-SRTP with <strong>AES-CM</strong> — the SDK needs no AES-GCM for Firefox interop</td>
 </tr>
 <tr>
-<td><strong>coturn</strong> (TURN relay)</td>
+<td><strong>coturn</strong> (UDP TURN relay)</td>
 <td>✅ Automated in CI</td>
 <td>TURN relay allocation and media over a real coturn server, end-to-end</td>
+</tr>
+<tr>
+<td><strong>TCP/TLS TURN relay</strong> (stream relay, ADR-073)</td>
+<td>🧪 Unit / hosted-server proven; browser &amp; cloud-TURN pending</td>
+<td>New in 4.11 (RFC 8656 §12 ChannelData over a persistent TCP/TLS connection). Verified against a hosted <code>TurnServer</code> over <strong>both TCP and TLS</strong> — allocate, gather a relay candidate, install a permission, frame a Send indication — plus the media ChannelData send→inject→decrypt round-trip and a nominated-relay media switch, in unit/integration tests on every CI run. <strong>Not yet</strong> exercised over a real browser or a real cloud TURN server; that data-path interop is tracked in #228 / #241</td>
 </tr>
 <tr>
 <td><strong>AVM FRITZ!Box</strong></td>
