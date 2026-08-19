@@ -127,22 +127,11 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     // not carry that whole lifecycle inline; a session without a relay allocation just holds an inert one.
     private readonly BundledRelayDataPath _relay;
 
-    // A stream relay candidate adopted post-construction (ADR-073): unlike _relay it owns its OWN TCP/TLS
-    // transport (distinct from the shared UDP socket), so it is driven through the IStreamRelayAttachment seam
-    // rather than the transport. Held so its keepalive starts with the session and it is disposed — after the ICE
-    // agent, so a late relay send cannot use its transport after teardown — on dispose. Null until AdoptStreamRelay
-    // wires one; the wiring claim is a one-shot latch.
-    private IStreamRelayAttachment? _streamRelay;
-    private int _streamRelayWired;
-
-    // The one-shot stream relay media transition (ADR-073), kicked off on the ICE driver thread when the stream
-    // relay pair wins. Guarded so it runs at most once; cancelled and awaited before the stream relay and the
-    // shared transport it rides are disposed.
-    private int _streamRelayTransitionStarted;
-    private Task? _streamRelayTransitionTask;
-    private readonly CancellationTokenSource _streamRelayTransitionCts = new();
-    // Set once the stream relay media transition succeeded (EnterStreamRelayMode ran) — media now rides the stream.
-    private int _streamRelayActive;
+    // The bundle's adopted stream relay (ADR-073): a TURN relay on its own TCP/TLS connection (distinct from the
+    // shared media socket), wired into the ICE agent and switched onto the media path when its pair wins. Its
+    // adoption, one-shot transition and teardown order live in this lifecycle collaborator (mirroring _relay for
+    // the UDP relay). Inert until AdoptStreamRelay adopts one.
+    private readonly BundledStreamRelayPath _streamRelay;
 
     /// <summary>
     /// Raised with each decrypted inbound audio RTP packet on the <em>primary</em> audio track (the transport
@@ -338,6 +327,8 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         // The relay data path: wired here when the offerer already gathered a TURN allocation, otherwise open for
         // a later AdoptRelay (the answerer, which gathers after the session exists).
         _relay = new BundledRelayDataPath(_transport, relayBinding, _logger);
+        // The stream relay lifecycle (ADR-073): needs the transport and the ICE agent, both built above.
+        _streamRelay = new BundledStreamRelayPath(_transport, _ice, _logger);
 
         // The ICE view the agent above was built with; RestartIceAsync replaces both together.
         _iceParameters = options.Ice;
@@ -618,44 +609,7 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     /// </para>
     /// </summary>
     /// <param name="streamRelay">The gathered stream relay candidate to adopt.</param>
-    public void AdoptStreamRelay(IStreamRelayAttachment streamRelay)
-    {
-        ArgumentNullException.ThrowIfNull(streamRelay);
-        if (Interlocked.Exchange(ref _streamRelayWired, 1) != 0)
-        {
-            // Already adopted — dispose the redundant candidate rather than leak its transport and stream.
-            _logger.LogWarning("A stream relay was already adopted for this session; disposing the redundant candidate.");
-            _ = DisposeRedundantStreamRelayAsync(streamRelay);
-            return;
-        }
-
-        _streamRelay = streamRelay;
-        // Wire the inbound route and start the relay transport's receive loop before the candidate is checked, so
-        // a relayed inbound check (request or response) has a live route into the ICE agent. The response goes
-        // back the way it came (RFC 8656 §10): the relay reply path is the candidate's own send.
-        streamRelay.Activate((peer, inner) => _ice.OnRelayStunReceived(inner, peer, streamRelay.RelaySend));
-        // Hand the ICE agent the relay send path plus a per-candidate nomination hook: when THIS stream relay
-        // wins the pair, it switches the session's media onto its own transport (ADR-073), not the shared socket.
-        _ice.AddRelayLocalCandidate(
-            streamRelay.RelaySend,
-            streamRelay.EnsurePermission,
-            onNominated: peer => OnStreamRelayNominated(peer, streamRelay));
-        // Keep the allocation alive (RFC 8656 §3.9). Idempotent, so an adoption that lands after StartAsync still
-        // runs the keepalive; the StartAsync path covers a pre-start adoption.
-        streamRelay.StartKeepAlive();
-    }
-
-    private async Task DisposeRedundantStreamRelayAsync(IStreamRelayAttachment streamRelay)
-    {
-        try
-        {
-            await streamRelay.DisposeAsync().ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "Disposing a redundant stream relay candidate failed.");
-        }
-    }
+    public void AdoptStreamRelay(IStreamRelayAttachment streamRelay) => _streamRelay.Adopt(streamRelay);
 
     /// <summary>
     /// Adds a video track to this bundle <em>live</em> (P3b): after construction, while the receive loop runs
@@ -758,57 +712,12 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     internal bool RelayDataPathActive => _relay.IsActive;
 
     /// <summary>Test seam: whether the session's media has switched onto an adopted stream relay (ADR-073).</summary>
-    internal bool StreamRelayDataPathActive => Volatile.Read(ref _streamRelayActive) != 0;
+    internal bool StreamRelayDataPathActive => _streamRelay.IsActive;
 
     // A relay pair won ICE: hand it to the relay data path, which switches the transport onto ChannelData
     // (RFC 8656 §11–12). Runs on the driver thread right after OnPairNominated has already pointed the
     // transport's remote and DTLS at the peer — the precondition EnterRelayMode needs.
     private void OnRelayPairNominated(IPEndPoint peer) => _relay.OnRelayPairNominated(peer);
-
-    // The STREAM relay pair won ICE (ADR-073): switch the session's media onto the stream relay's own transport.
-    // Runs on the driver thread — like OnRelayPairNominated it only kicks off the async transition (at most once).
-    private void OnStreamRelayNominated(IPEndPoint peer, IStreamRelayAttachment streamRelay)
-    {
-        if (Interlocked.Exchange(ref _streamRelayTransitionStarted, 1) != 0)
-            return;
-        _streamRelayTransitionTask = Task.Run(() => TransitionStreamRelayAsync(peer, streamRelay));
-    }
-
-    // ChannelBind the peer over the stream (RFC 8656 §11), route relayed inbound media into our pipeline, and
-    // switch the shared transport's media send onto the stream (ADR-073). A failed bind leaves media on the
-    // direct path — which, being dead (the relay only won because direct failed), then fails consent and the
-    // pair goes down (ADR-073 §3 fail-and-renominate). A disposing session cancels the transition.
-    private async Task TransitionStreamRelayAsync(IPEndPoint peer, IStreamRelayAttachment streamRelay)
-    {
-        try
-        {
-            // Attribute relayed inbound to the peer before media rides the stream.
-            _transport.SetRemoteEndPoint(peer);
-            var streamMediaSend = await streamRelay
-                .BindChannelAsync(peer, inner => _transport.InjectRelayedInbound(inner, peer), _streamRelayTransitionCts.Token)
-                .ConfigureAwait(false);
-            if (streamMediaSend is null)
-            {
-                _logger.LogWarning(
-                    "Stream relay pair nominated but no channel could be bound; media stays on the direct path (ADR-073).");
-                return;
-            }
-
-            _transport.EnterStreamRelayMode(streamMediaSend);
-            Volatile.Write(ref _streamRelayActive, 1);
-            _logger.LogInformation(
-                "Stream relay data path activated: media now flows as ChannelData over the TURN stream connection " +
-                "(RFC 8656 §11–12, ADR-073).");
-        }
-        catch (OperationCanceledException) when (_streamRelayTransitionCts.IsCancellationRequested)
-        {
-            // Normal teardown cancelled the transition.
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Stream relay media transition failed; media stays on the direct path.");
-        }
-    }
 
     /// <summary>
     /// The bundle's sender-side transport-wide congestion controller (transport-cc), or
@@ -873,8 +782,8 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         // already have started it for an answerer.
         _relay.Start();
         // Same for an adopted stream relay's own allocation (ADR-073). Idempotent — AdoptStreamRelay already
-        // started it if it landed before this call; null when no stream relay was adopted.
-        _streamRelay?.StartKeepAlive();
+        // started it if it landed before this call; a no-op when no stream relay was adopted.
+        _streamRelay.Start();
         // Start emitting periodic Sender Reports (RFC 3550 §6.4). Its SRTCP send fails closed until the DTLS
         // handshake below installs the outbound SRTCP key, so an early start just suppresses the first ticks.
         _rtcpReporter.Start();
@@ -1024,25 +933,14 @@ internal sealed class BundledMediaSession : IAsyncDisposable
             Volatile.Write(ref _disposed, 1);
 
         await _ice.DisposeAsync().ConfigureAwait(false);
-        // Drain an in-flight stream relay media transition now (the driver is stopped, so no new one starts): it
-        // rides both the stream relay's transport (ChannelBind) and the shared transport (EnterStreamRelayMode /
-        // InjectRelayedInbound), so it must finish before either is disposed below.
-        await _streamRelayTransitionCts.CancelAsync().ConfigureAwait(false);
-        if (_streamRelayTransitionTask is { } transition)
-        {
-            try { await transition.ConfigureAwait(false); }
-            catch (Exception ex) { _logger.LogDebug(ex, "Stream relay media transition ended with an exception during dispose."); }
-        }
-        _streamRelayTransitionCts.Dispose();
         // Tear the relay path down after ICE (the driver is stopped, so no new nomination starts a transition)
         // and before the transport: it drains an in-flight transition, then stops the channel rebind and the
         // allocation keepalive — both of which ride the transport's control send.
         await _relay.DisposeAsync().ConfigureAwait(false);
-        // Dispose an adopted stream relay after the ICE agent too (ADR-073): its relay send and keepalive ride its
-        // own TCP/TLS transport, so the agent — which drives those — must be stopped first. It owns its transport
-        // (and the stream), independent of the shared UDP transport below, and disposes keepalive-before-transport.
-        if (_streamRelay is { } streamRelay)
-            await streamRelay.DisposeAsync().ConfigureAwait(false);
+        // Same for an adopted stream relay after the ICE agent (ADR-073): it drains an in-flight media transition,
+        // then disposes the candidate (its keepalives before its own transport). Its relay send and transition
+        // ride both the shared transport and its own, so the agent — which drives them — must be stopped first.
+        await _streamRelay.DisposeAsync().ConfigureAwait(false);
         // Stop the transport-cc congestion plane before the transport it rides is torn down (its SRTCP feedback
         // send goes through the transport): its dispose signals the lifetime token and awaits the loop.
         if (_congestion is not null)
