@@ -87,28 +87,22 @@ public sealed class CalloraWebRtcBuilder
 
     /// <summary>
     /// Adds a TURN server for relay candidate gathering (RFC 8656), with the long-term credentials the
-    /// allocation authenticates with. Accumulates with any servers already configured. Only UDP TURN is
-    /// supported for relay gathering — a TCP/TLS transport is rejected up front (the TCP/TLS relay data path
-    /// is not yet wired into the WebRTC media bundle), so a misconfiguration fails loudly instead of silently
-    /// gathering no relay candidate.
+    /// allocation authenticates with. Accumulates with any servers already configured. The relay is gathered
+    /// over <see cref="IceTransport.Udp"/> (on the shared media socket) or over <see cref="IceTransport.Tcp"/> /
+    /// <see cref="IceTransport.Tls"/> (a stream relay on its own connection to the server, ADR-073). TLS gives a
+    /// last-resort path across firewalls that allow only outbound 443.
     /// </summary>
     /// <param name="host">The TURN server hostname or IP address.</param>
     /// <param name="username">The long-term credential username.</param>
     /// <param name="password">The long-term credential password.</param>
-    /// <param name="port">Optional explicit port; the TURN default (3478) is used when null.</param>
-    /// <param name="transport">The transport to reach the server on; only <see cref="IceTransport.Udp"/> is supported.</param>
-    /// <exception cref="ArgumentException"><paramref name="transport"/> is not UDP (TCP/TLS TURN is not yet implemented).</exception>
+    /// <param name="port">Optional explicit port; the TURN default for the transport is used when null (3478 for UDP/TCP, 5349 for TLS).</param>
+    /// <param name="transport">The transport to reach the server on (UDP, TCP or TLS).</param>
     public CalloraWebRtcBuilder WithTurnServer(
         string host, string username, string password, int? port = null, IceTransport transport = IceTransport.Udp)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(host);
         ArgumentException.ThrowIfNullOrWhiteSpace(username);
         ArgumentException.ThrowIfNullOrWhiteSpace(password);
-        if (transport != IceTransport.Udp)
-            throw new ArgumentException(
-                $"TURN transport '{transport}' is not supported for WebRTC relay gathering — only UDP is implemented. " +
-                "Pass IceTransport.Udp (the default) or omit the transport argument.",
-                nameof(transport));
         return AddIceServer(new IceServerConfiguration
         {
             Type = IceServerType.Turn,
@@ -121,23 +115,16 @@ public sealed class CalloraWebRtcBuilder
     }
 
     /// <summary>
-    /// Adds one or more fully-specified ICE servers (STUN/TURN), accumulating with any already configured.
-    /// A TURN entry with a non-UDP transport is rejected — only UDP TURN is supported for relay gathering.
+    /// Adds one or more fully-specified ICE servers (STUN/TURN), accumulating with any already configured. A
+    /// TURN entry may use any <see cref="IceTransport"/> — UDP (media-socket relay) or TCP/TLS (a stream relay
+    /// on its own connection, ADR-073).
     /// </summary>
     /// <param name="servers">The ICE server entries to add.</param>
-    /// <exception cref="ArgumentException">A TURN entry uses a non-UDP transport (TCP/TLS TURN is not yet implemented).</exception>
     public CalloraWebRtcBuilder WithIceServers(params IceServerConfiguration[] servers)
     {
         ArgumentNullException.ThrowIfNull(servers);
         foreach (var server in servers)
-        {
             ArgumentNullException.ThrowIfNull(server);
-            // The shared rule (#166 P2-7), so this door, the options validator and WebRtcConfiguration cannot
-            // drift into accepting what the others reject.
-            if (WebRtcIceServerPolicy.IsUnsupportedTurnTransport(server))
-                throw new ArgumentException(
-                    WebRtcIceServerPolicy.UnsupportedTurnTransportMessage(server), nameof(servers));
-        }
 
         _services.PostConfigure<WebRtcOptions>(options => options.IceServers = [.. options.IceServers, .. servers]);
         return this;

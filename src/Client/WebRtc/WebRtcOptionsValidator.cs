@@ -44,14 +44,6 @@ public sealed class WebRtcOptionsValidator : IValidateOptions<WebRtcOptions>
                 {
                     failures.Add($"{prefix}.Password is required for TURN servers.");
                 }
-
-                // #166 P2-7: the same rule the builder and WebRtcConfiguration enforce. Without it a
-                // TCP/TLS TURN entry configured through IOptions passed startup validation and then silently
-                // gathered no relay candidate, because only UDP gets a TURN allocation probe.
-                if (WebRtcIceServerPolicy.IsUnsupportedTurnTransport(server))
-                {
-                    failures.Add($"{prefix}: {WebRtcIceServerPolicy.UnsupportedTurnTransportMessage(server)}");
-                }
             }
         }
 

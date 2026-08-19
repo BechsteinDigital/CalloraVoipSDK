@@ -119,11 +119,10 @@ public sealed class WebRtcConfiguration
     /// <see cref="IPeerConnection.LocalIceCandidateDiscovered"/> to trickle out (RFC 8838).
     /// </summary>
     /// <remarks>
-    /// Only UDP TURN is supported for relay gathering; a TURN entry on TCP/TLS is rejected here rather than
-    /// accepted into a client that would then silently gather no relay candidate (#166 P2-7, feature: #155).
+    /// TURN relay is gathered over UDP (on the shared media socket) and over TCP/TLS (a stream relay on its own
+    /// connection, ADR-073), so any <see cref="IceTransport"/> is accepted for a TURN entry.
     /// </remarks>
     /// <exception cref="ArgumentNullException">The assigned list is null.</exception>
-    /// <exception cref="ArgumentException">A TURN entry uses a non-UDP transport.</exception>
     public IReadOnlyList<IceServerConfiguration> IceServers
     {
         get => _iceServers;
@@ -133,11 +132,6 @@ public sealed class WebRtcConfiguration
             foreach (var server in servers)
             {
                 ArgumentNullException.ThrowIfNull(server, nameof(IceServers));
-                if (WebRtcIceServerPolicy.IsUnsupportedTurnTransport(server))
-                {
-                    throw new ArgumentException(
-                        WebRtcIceServerPolicy.UnsupportedTurnTransportMessage(server), nameof(IceServers));
-                }
             }
 
             _iceServers = servers;
