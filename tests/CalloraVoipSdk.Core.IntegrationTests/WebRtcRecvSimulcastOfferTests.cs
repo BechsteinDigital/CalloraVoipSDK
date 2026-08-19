@@ -46,11 +46,13 @@ public sealed class WebRtcRecvSimulcastOfferTests
     [Fact]
     public void An_offer_can_ask_recv_and_send_at_once()
     {
-        var video = Offer(send: ["a"], recv: ["hi", "lo"]).Media.Single(m => m.MediaType == "video");
+        // Both directions carry two or more layers — a single a=rid is not simulcast and is dropped at the
+        // SDP origin (#369), so a coexisting-directions offer needs a real layer set in each.
+        var video = Offer(send: ["a", "b"], recv: ["hi", "lo"]).Media.Single(m => m.MediaType == "video");
 
-        Assert.Equal(["a"], video.Rids.Where(r => r.Direction == "send").Select(r => r.Id));
+        Assert.Equal(["a", "b"], video.Rids.Where(r => r.Direction == "send").Select(r => r.Id));
         Assert.Equal(["hi", "lo"], video.Rids.Where(r => r.Direction == "recv").Select(r => r.Id));
-        Assert.Equal(["a"], video.Simulcast!.Send);
+        Assert.Equal(["a", "b"], video.Simulcast!.Send);
         Assert.Equal(["hi", "lo"], video.Simulcast.Recv);
     }
 

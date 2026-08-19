@@ -199,11 +199,17 @@ internal static class WebRtcSessionFactory
         // across m-lines), so it is taken from the first video section that carries simulcast encodings. Without
         // it in our own description we cannot key the encodings, so the exchange is not a usable simulcast session.
         byte? ridExtensionId = null;
-        if (videoTracks.Any(v => v.Encodings.Count > 0))
+        if (videoTracks.Any(v => v.Encodings.Count > 0 || v.ReceiveRids.Count > 0))
         {
             var simulcastSection = localVideoSections.FirstOrDefault(s => RidExtensionId(s) is not null);
             ridExtensionId = simulcastSection is not null ? RidExtensionId(simulcastSection) : null;
-            if (ridExtensionId is null)
+
+            // The id is needed both to STAMP outbound layers (send encodings) and to READ inbound RIDs on the
+            // receive demux (case A — the answerer receiving a peer's simulcast, #369). Send-side simulcast
+            // cannot function without it, so fail the session rather than emit unlabelled layers the peer
+            // cannot demux; a receive-only track degrades to a single stream if the id is somehow absent (it
+            // never is when the answer confirmed recv, which echoes the extension, RFC 8852).
+            if (ridExtensionId is null && videoTracks.Any(v => v.Encodings.Count > 0))
             {
                 loggerFactory.CreateLogger(typeof(WebRtcSessionFactory)).LogWarning(
                     "Simulcast video is configured but the local description carries no RID header-extension id " +
@@ -577,9 +583,11 @@ internal static class WebRtcSessionFactory
     // remote section is the one already paired to this local video m-line by MID (P2b), so, with several video
     // m-lines, each track's simulcast is confirmed against its own peer section — not just the first.
     //
-    // Role assumption: this confirmation is only meaningful for the OFFERER, where localSendRids come from our
-    // offer and the remote section is the peer's answer. The answerer's local description carries no a=rid send
-    // today (answerer-side simulcast is a separate follow-up), so this is never reached on the answerer path.
+    // Symmetric in role (#369): for the OFFERER, localSendRids come from our offer's a=rid send and the remote
+    // section is the peer's answer confirming recv. For the ANSWERER, our answer's a=rid send was derived from
+    // the offer's a=simulcast:recv intersected with our configured layers, and the remote section is that same
+    // offer — which carries the recv ids. Either way the confirmed set is our send RIDs ∩ the peer section's
+    // recv RIDs, so the same intersection is correct on both paths.
     //
     // Limitation (RFC 8853 §5.1): comma-separated alternatives within one simulcast stream (e.g.
     // "recv hi,mid") are matched verbatim, so an alternative token never equals a bare send RID and that layer
