@@ -26,6 +26,11 @@ The next line. Entries here accumulate the consumer-visible changes not yet rele
   adds the receive half of the relay ICE candidate: during the checking phase a relayed Data indication on the
   stream is unwrapped to its inner payload and originating peer (a connectivity-check response, RFC 8656 §10),
   while non-Data STUN from the server stays on the control path. Not yet attached into the ICE nomination.
+- **Stream relay candidate in the consent loop** (#240, ADR-073 slice 4b). A consent check sent over the stream
+  and answered as a relayed Data indication is confirmed through `IceMediaConsentSession.OnStunResponse` —
+  proving the relay candidate, whose send and receive live on the stream rather than the shared media socket,
+  plugs into the same consent machinery because the transaction matcher is send-path agnostic. Not yet
+  assembled into the live ICE session.
 
 ### Added
 
