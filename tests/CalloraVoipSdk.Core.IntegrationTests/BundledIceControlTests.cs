@@ -60,7 +60,7 @@ public sealed class BundledIceControlTests
         var completed = await Task.WhenAny(receiveTask, Task.Delay(TimeSpan.FromSeconds(5)));
         Assert.Same(receiveTask, completed); // a response came back over the shared socket
 
-        var response = codec.Decode(receiveTask.Result.Buffer);
+        var response = codec.Decode((await receiveTask).Buffer);
         Assert.NotNull(response);
         Assert.Equal(StunMessageClass.SuccessResponse, response!.MessageClass);
         Assert.Equal(StunMessageMethod.Binding, response.MessageMethod);

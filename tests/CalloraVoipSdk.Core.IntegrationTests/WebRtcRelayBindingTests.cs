@@ -232,7 +232,7 @@ public sealed class WebRtcRelayBindingTests
         // CreatePermission for the peer IP round-trips to the (fake) server, MESSAGE-INTEGRITY-authenticated.
         await binding.EnsurePermission!(Peer.Address, CancellationToken.None);
 
-        var permission = Assert.Single(permissionRequests.Where(b => IsCreatePermissionFor(codec, b, Peer)));
+        var permission = Assert.Single(permissionRequests, b => IsCreatePermissionFor(codec, b, Peer));
         var authKey = allocation.EffectiveCredentials!.WithRealmAndNonce("callora.example", "nonce-1").DeriveHmacKey();
         Assert.True(codec.VerifyIntegrity(permission, authKey),
             "the proactive CreatePermission must carry a MESSAGE-INTEGRITY from the allocation credentials");

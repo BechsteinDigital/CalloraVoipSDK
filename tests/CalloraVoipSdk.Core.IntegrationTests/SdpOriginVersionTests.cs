@@ -89,7 +89,7 @@ public sealed class SdpOriginVersionTests
     }
 
     [Fact]
-    public void Distinct_channels_use_distinct_session_ids()
+    public async Task Distinct_channels_use_distinct_session_ids()
     {
         SipCoreCallChannel Create() => new(
             NullLogger<SipCoreCallChannel>.Instance,
@@ -101,8 +101,8 @@ public sealed class SdpOriginVersionTests
         using var a = Create();
         using var b = Create();
 
-        var idA = ParseOrigin(a.BuildOfferSdpAsync(LocalEndPoint, hold: false, CancellationToken.None).Result).Id;
-        var idB = ParseOrigin(b.BuildOfferSdpAsync(LocalEndPoint, hold: false, CancellationToken.None).Result).Id;
+        var idA = ParseOrigin(await a.BuildOfferSdpAsync(LocalEndPoint, hold: false, CancellationToken.None)).Id;
+        var idB = ParseOrigin(await b.BuildOfferSdpAsync(LocalEndPoint, hold: false, CancellationToken.None)).Id;
 
         Assert.NotEqual(idA, idB);
     }

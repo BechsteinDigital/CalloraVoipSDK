@@ -165,8 +165,8 @@ public sealed class DtlsSrtpHandshakeTests
         var serverTask = handshaker.HandshakeAsync(
             DtlsRole.Server, server, serverCertificate, clientCertificate.Fingerprint, timeout.Token, clientId);
         await Task.WhenAll(clientTask, serverTask);
-        using var clientResult = clientTask.Result;
-        using var serverResult = serverTask.Result;
+        using var clientResult = await clientTask;
+        using var serverResult = await serverTask;
 
         var flights = serverFlights.ToArray();
         Assert.NotEmpty(flights);
@@ -204,8 +204,8 @@ public sealed class DtlsSrtpHandshakeTests
         var serverTask = handshaker.HandshakeAsync(
             DtlsRole.Server, server, serverCertificate, clientCertificate.Fingerprint, timeout.Token);
         await Task.WhenAll(clientTask, serverTask);
-        using var clientResult = clientTask.Result;
-        using var serverResult = serverTask.Result;
+        using var clientResult = await clientTask;
+        using var serverResult = await serverTask;
 
         var flights = serverFlights.ToArray();
         Assert.NotEmpty(flights);
@@ -244,8 +244,8 @@ public sealed class DtlsSrtpHandshakeTests
         var serverTask = handshaker.HandshakeAsync(
             DtlsRole.Server, serverA, serverCertificate, clientCertificate.Fingerprint, timeout.Token, idA);
         await Task.WhenAll(clientTask, serverTask);
-        clientTask.Result.Dispose();
-        serverTask.Result.Dispose();
+        (await clientTask).Dispose();
+        (await serverTask).Dispose();
 
         var hellos = clientHellos.ToArray();
         Assert.True(hellos.Length >= 2, "expected a second, cookie'd ClientHello");

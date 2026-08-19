@@ -150,8 +150,8 @@ public sealed class BundledVideoFeedbackRoutingTests
         await second.SendFrameAsync(new byte[] { 0x10, 0xDD, 0xEE, 0xFF }, rtpTimestamp: 3000);
 
         var sent = sender.Captured.Select(d => RtpCodec.Decode(d)).Where(p => p.PayloadType == VideoPayloadType).ToArray();
-        var fromFirst = Assert.Single(sent.Where(p => p.Ssrc == FirstSsrc));
-        var fromSecond = Assert.Single(sent.Where(p => p.Ssrc == SecondSsrc));
+        var fromFirst = Assert.Single(sent, p => p.Ssrc == FirstSsrc);
+        var fromSecond = Assert.Single(sent, p => p.Ssrc == SecondSsrc);
         Assert.Equal(fromFirst.SequenceNumber, fromSecond.SequenceNumber); // the overlapping sequence space
         sender.Clear();
 

@@ -143,7 +143,7 @@ public sealed class BundledVideoRtxRetransmitTests
         });
 
         await Task.Delay(200);
-        Assert.Empty(sender.Captured.Select(d => RtpCodec.Decode(d)).Where(p => p.PayloadType == RtxPayloadType));
+        Assert.DoesNotContain(sender.Captured.Select(d => RtpCodec.Decode(d)), p => p.PayloadType == RtxPayloadType);
     }
 
     [Fact]

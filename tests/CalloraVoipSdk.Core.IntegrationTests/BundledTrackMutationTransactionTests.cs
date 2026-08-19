@@ -162,7 +162,7 @@ public sealed class BundledTrackMutationTransactionTests
         stats.RecordRtp(0x2222, 1, 0, payloadType: 97);
         stats.RecordRtp(0x2222, 2, 3000, payloadType: 97);
 
-        var added = Assert.Single(stats.SnapshotJitterMsPerSsrc().Where(j => j.Ssrc == 0x2222));
+        var added = Assert.Single(stats.SnapshotJitterMsPerSsrc(), j => j.Ssrc == 0x2222);
         Assert.Equal("vid2", added.Mid);
         Assert.Equal(BundledStreamKind.Video, added.Kind);
 

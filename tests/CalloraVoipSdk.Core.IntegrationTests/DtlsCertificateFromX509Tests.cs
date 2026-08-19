@@ -89,8 +89,8 @@ public sealed class DtlsCertificateFromX509Tests
             await serverTask;
         }
 
-        using var clientResult = clientTask.Result;
-        using var serverResult = serverTask.Result;
+        using var clientResult = await clientTask;
+        using var serverResult = await serverTask;
 
         // RFC 5764 §4.2: the client's write keys are the server's read keys — proves the supplied
         // certificates genuinely keyed the DTLS-SRTP exchange, not just parsed into a fingerprint.

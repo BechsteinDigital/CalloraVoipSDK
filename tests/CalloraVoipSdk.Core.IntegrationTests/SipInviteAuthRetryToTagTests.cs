@@ -60,7 +60,7 @@ public sealed class SipInviteAuthRetryToTagTests
                 body: null,
                 allowRingingTransition: true,
                 successState: SipDialogState.Established,
-                CancellationToken.None)).ConfigureAwait(false);
+                CancellationToken.None));
 
         var invites = transport.SnapshotRequests().Where(r => r.Method == "INVITE").ToList();
         Assert.Equal(2, invites.Count); // initial INVITE + authenticated retry

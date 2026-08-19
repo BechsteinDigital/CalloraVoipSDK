@@ -75,7 +75,7 @@ public sealed class SdpMultiTrackAudioTests
 
         Assert.Equal(3, offer.Media.Count);
         Assert.All(offer.Media, m => Assert.Equal("audio", m.MediaType));
-        Assert.Equal(["0", "1", "2"], offer.Media.Select(m => m.Mid).ToArray());
+        Assert.Equal(["0", "1", "2"], offer.Media.Select(m => m.Mid!).ToArray());
         Assert.Equal("BUNDLE 0 1 2", offer.Group);
         // One shared BUNDLE transport port on every audio m-line (RFC 8843).
         Assert.All(offer.Media, m => Assert.Equal(Offerer.Port, m.Port));
@@ -105,7 +105,7 @@ public sealed class SdpMultiTrackAudioTests
         var offer = Offer(Audio("p1"), Audio("p2"), Video("cam"));
 
         Assert.Equal(["audio", "audio", "video"], offer.Media.Select(m => m.MediaType).ToArray());
-        Assert.Equal(["0", "1", "2"], offer.Media.Select(m => m.Mid).ToArray());
+        Assert.Equal(["0", "1", "2"], offer.Media.Select(m => m.Mid!).ToArray());
         Assert.Equal("BUNDLE 0 1 2", offer.Group);
     }
 
@@ -127,7 +127,7 @@ public sealed class SdpMultiTrackAudioTests
         var media = result.Answer!.Media;
         Assert.Equal(3, media.Count);
         Assert.All(media, m => Assert.Equal("audio", m.MediaType));
-        Assert.Equal(["0", "1", "2"], media.Select(m => m.Mid).ToArray());     // mids mirrored 1:1 (RFC 8829)
+        Assert.Equal(["0", "1", "2"], media.Select(m => m.Mid!).ToArray());     // mids mirrored 1:1 (RFC 8829)
         Assert.Equal("BUNDLE 0 1 2", result.Answer.Group);                     // all mids accepted
         // Audio anchors the transport: every audio m-line is active (non-zero port), none declined.
         Assert.All(media, m => Assert.True(m.Port > 0, $"audio m-line {m.Mid} was declined"));
@@ -241,7 +241,7 @@ public sealed class SdpMultiTrackAudioTests
         // Serialize→parse roundtrip is stable: mids, media types, and BUNDLE group survive.
         var sdp = new SdpSessionSerializer().Serialize(result.Answer!);
         var reparsed = new SdpSessionParser().Parse(sdp);
-        Assert.Equal(["0", "1"], reparsed.Media.Select(m => m.Mid).ToArray());
+        Assert.Equal(["0", "1"], reparsed.Media.Select(m => m.Mid!).ToArray());
         Assert.Equal(["audio", "audio"], reparsed.Media.Select(m => m.MediaType).ToArray());
         Assert.Equal("BUNDLE 0 1", reparsed.Group);
     }
@@ -259,7 +259,7 @@ public sealed class SdpMultiTrackAudioTests
         var sdp = new SdpSessionSerializer().Serialize(result.Answer!);
         var reparsed = new SdpSessionParser().Parse(sdp);
 
-        Assert.Equal(["0", "1", "2"], reparsed.Media.Select(m => m.Mid).ToArray());
+        Assert.Equal(["0", "1", "2"], reparsed.Media.Select(m => m.Mid!).ToArray());
         Assert.Equal(["audio", "audio", "audio"], reparsed.Media.Select(m => m.MediaType).ToArray());
         Assert.Equal("BUNDLE 0 1 2", reparsed.Group);
     }
