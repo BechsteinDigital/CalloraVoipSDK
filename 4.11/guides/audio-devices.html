@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Audio devices | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Audio devices | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/portal/guides/audio-devices.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="audio-devices">Audio devices</h1>
+
+<p>The SDK plays and captures audio through a platform backend
+(<code>CalloraVoipSdk.Audio.Linux</code> or <code>CalloraVoipSdk.Audio.Windows</code>). The <code>VoipClient</code>
+exposes enumeration, hot-switch, mute and volume at runtime.</p>
+<h2 id="attach-the-default-device">Attach the default device</h2>
+<pre><code class="lang-csharp">await client.AttachDefaultAudioAsync(call);
+await client.DetachDefaultAudioAsync(call);
+</code></pre>
+<p>With <code>EnableAutomaticAudioDeviceSelection</code> (default <code>true</code>) the SDK picks the OS default
+input/output. Run headless by leaving the device unattached and using a
+<a href="media-tap.html">media tap</a> instead.</p>
+<h2 id="enumerate-devices">Enumerate devices</h2>
+<pre><code class="lang-csharp">IReadOnlyList&lt;AudioDeviceDescriptor&gt; inputs  = client.GetAvailableInputAudioDevices();
+IReadOnlyList&lt;AudioDeviceDescriptor&gt; outputs = client.GetAvailableOutputAudioDevices();
+AudioDeviceRuntimeSnapshot snapshot          = client.GetAudioDeviceRuntimeSnapshot();
+</code></pre>
+<p>The snapshot reports the currently selected devices, mute and volume state.</p>
+<h2 id="hot-switch-mute-volume">Hot-switch, mute, volume</h2>
+<p>These take effect on active calls without renegotiation:</p>
+<pre><code class="lang-csharp">client.SwitchAudioInputDevice(deviceId);
+client.SwitchAudioOutputDevice(deviceId);
+
+client.SetAudioInputVolume(0.8f);    // 0.0 – 1.0
+client.SetAudioOutputVolume(1.0f);
+
+client.SetAudioInputMuted(true);
+client.SetAudioOutputMuted(false);
+
+client.UpdateAudioFormat(new AudioDeviceFormat(/* sample rate, channels … */));
+</code></pre>
+<p>Passing <code>null</code> to <code>SwitchAudioInputDevice</code>/<code>SwitchAudioOutputDevice</code> reverts to the OS
+default.</p>
+<h2 id="codec-preference">Codec preference</h2>
+<p>Wire format is chosen by SDP negotiation. Bias it with an ordered list once at
+construction:</p>
+<pre><code class="lang-csharp">new VoipConfiguration
+{
+    PreferredAudioCodecs = new[] { &quot;OPUS&quot;, &quot;G722&quot;, &quot;PCMU&quot;, &quot;PCMA&quot; }
+};
+</code></pre>
+<blockquote>
+<p><strong>Codec support:</strong> the platform audio backends (<code>Audio.Linux</code> / <code>Audio.Windows</code>) decode and
+encode <strong>PCMU, PCMA, G.722 and Opus</strong> (RFC 7587, natively at 48 kHz). A call that negotiates any
+of these plays through <code>AttachDefaultAudioAsync</code> without extra work. Opus is opt-in — list
+<code>&quot;OPUS&quot;</code> in <code>PreferredAudioCodecs</code> (or it is dropped from the offer). For other/custom codecs,
+drive the call through a <a href="media-tap.html">media tap</a> with your own codec instead.</p>
+<p><strong>Known limitation (G.722):</strong> G.722 transcoding currently resets its ADPCM predictor state
+per frame instead of carrying it across frames, which can cause audible artifacts. Prefer
+Opus or G.711 (PCMU/PCMA) where audio quality matters until this is fixed
+(<a href="https://github.com/BechsteinDigital/callora-voip-sdk/issues">issue tracker</a>).</p>
+</blockquote>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/portal/guides/audio-devices.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

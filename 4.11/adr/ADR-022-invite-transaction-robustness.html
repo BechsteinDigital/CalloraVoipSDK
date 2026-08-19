@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-022: INVITE Transaction Robustness — Retransmission, Fork, 100rel, Codec | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-022: INVITE Transaction Robustness — Retransmission, Fork, 100rel, Codec | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-022-invite-transaction-robustness.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-022-invite-transaction-robustness--retransmission-fork-100rel-codec">ADR-022: INVITE Transaction Robustness — Retransmission, Fork, 100rel, Codec</h1>
+
+<p>Status: Accepted
+Date: 2026-07-09</p>
+<h2 id="context">Context</h2>
+<p>Several distinct INVITE-side failures against real peers (sipgate, Fritz!Box, an OpenAI
+G.711 transport) shared one theme: the SDK's INVITE-transaction handling misclassified or
+mishandled ordinary UAS situations, breaking call establishment.</p>
+<ol>
+<li><strong>Double-INVITE misread as a merge.</strong> <code>SipMergedInviteTracker.TryBuildMergeKey</code> keyed the
+merge on <code>Call-ID | From-tag | CSeq | INVITE</code> <strong>without the top Via branch</strong>. RFC 3261
+§8.2.2.2 (with §17.2.3 matching) defines a merged request only when the identity tuple
+matches <em>and</em> the top-Via branch <strong>differs</strong>. A second INVITE with the <strong>same</strong> branch is a
+retransmission (§17.2.1). The branch-agnostic key flagged every repeat — including genuine
+retransmissions — as a merge, so the SDK wrongly answered <strong>482 Loop Detected</strong>.</li>
+<li><strong>Fork-handling failure logged at Debug.</strong> The fire-and-forget fork ACK/BYE path
+(<code>SipCallSessionTransactionService.AcknowledgeForkAndMaybeTerminateAsync</code>) swallowed all
+exceptions into a <code>LogDebug</code> catch — invisible, though a failed fork-ACK retransmits the 2xx
+to timeout and a failed fork-BYE leaks a hung call-leg on the non-selected UAS.</li>
+<li><strong><code>Supported: 100rel</code> treated as <code>Require</code>.</strong> <code>ShouldUseReliableProvisional</code> opted into a
+reliable 180 with <code>Require: 100rel</code> on merely-<code>Supported</code>; when the box sent no PRACK, the
+200 OK hung behind retransmit timeouts (&quot;it keeps ringing&quot;).</li>
+<li><strong>Codec negotiation produced an audio-less answer.</strong> G.722 was hard-pinned rank 0; and a box
+listing PCMU/PCMA/G722 as static PTs <em>without</em> rtpmap yielded an answer containing only
+<code>telephone-event</code> (488 &quot;SDP problem&quot;), because name-based intersection never matched the
+&quot;PT<n>&quot; placeholder names.</n></li>
+</ol>
+<h3 id="verified-current-state-graphify--logs">Verified current state (graphify + logs)</h3>
+<ul>
+<li><code>SipMergedInviteTracker</code> (<code>src/Core/Infrastructure/Sip/Signaling/Ingress/SipMergedInviteTracker.cs</code>,
+L13) exposes <code>.IsMergedInvite()</code> / <code>.TryBuildMergeKey()</code> / <code>.PruneExpired()</code> and is referenced
+by <code>SipCallSignalingService</code>. <code>_seen</code> stores <code>(string? Branch, DateTimeOffset SeenAt)</code>;
+<code>IsMergedInvite</code> extracts the top-Via branch via <code>SipProtocol.ExtractViaBranch</code> — same tuple +
+<strong>different</strong> branch → merged (482); <strong>same</strong> branch (or unparseable on one side) →
+retransmission (false, TTL refreshed). Identity key unchanged; branch is a compare value, not a
+key part.</li>
+<li>Fork-error catch in <code>SipCallSessionTransactionService</code> logs <code>LogWarning</code> (was <code>LogDebug</code>);
+no control-flow change.</li>
+<li>100rel opt-in (<code>ShouldUseReliableProvisional</code>) fires only on explicit <code>Require: 100rel</code>
+(RFC 3262 §3), not on <code>Supported</code>.</li>
+<li>Codec preference: <code>SdpMediaNegotiationOptions.PreferredCodecNames</code> orders/filters offer and
+answer (telephone-event always retained; no match → defaults); <code>ResolveEffectiveName</code>
+(PT 0/8/9 → PCMU/PCMA/G722) runs before the identity compare in
+<code>SdpOfferAnswerNegotiator.NegotiateCodecs</code> so static-PT offers without rtpmap still match.
+Public surface: <code>SdkConfiguration.PreferredAudioCodecs</code> → <code>VoipClient</code> → line/call channel.</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<p>Classify INVITE-transaction situations by the RFC's own discriminators and fail loud where an
+operator needs to see it:</p>
+<ol>
+<li><strong>Merge vs. retransmission by top-Via branch.</strong> Same identity tuple + different branch =
+merge (482); same branch = retransmission (route into the normal ingress path).</li>
+<li><strong>Fork-handling errors log at Warning</strong>, not Debug.</li>
+<li><strong>Reliable provisional only on <code>Require: 100rel</code></strong> (§3262 §3), never on <code>Supported</code>.</li>
+<li><strong>Codec selection honours a configured preference and resolves static PTs to names</strong> before
+intersection; telephone-event is preserved; empty audio answers are prevented.</li>
+</ol>
+<p>Crux: each fix restores an RFC discriminator the code had collapsed — branch for merge/retx,
+<code>Require</code> vs <code>Supported</code> for 100rel, canonical codec name for static PTs.</p>
+<h2 id="consequences">Consequences</h2>
+<p>Positive: retransmitted (same-branch) out-of-dialog INVITEs are no longer 482'd; genuine merges
+(other branch) still 482 (RFC-correct); fork failures are operationally visible; ringing no
+longer hangs on a phantom 100rel requirement; codec answers always contain a real audio codec
+and honour operator preference.</p>
+<p>Tradeoffs / honest limits: if a peer retransmits with a <strong>different</strong> branch, 482 remains
+RFC-correct — so the double-INVITE class is not universally &quot;solved&quot;; a residual case would point
+elsewhere. Codec preference and 100rel are audio/SDP-adjacent decisions folded here because they
+were part of the same call-establishment failure class in the M1 hotfix log; the SDP negotiation
+machinery itself is the concern of the SDP cluster (C03). Real-call efficacy stayed founder
+real-tests. Note: a separate SDES crypto-mirroring bug was flagged in the same log as
+out-of-scope follow-up (see C04/security).</p>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li>Merge detection MUST use the top-Via branch as the discriminator; a same-branch repeat is a
+retransmission, never a merge.</li>
+<li>Fork ACK/BYE failures MUST be logged at Warning or higher.</li>
+<li>Reliable provisional responses MUST require explicit <code>Require: 100rel</code>.</li>
+<li>A codec answer MUST NOT be telephone-event-only when the offer carries a usable audio codec;
+static PTs (0/8/9) resolve to canonical names before intersection.</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Logs: docs/archive/agent-log/2026-07-09-dev-b7-double-invite-retransmission.md;
+docs/archive/agent-log/2026-07-09-dev-b7-fork-error-warning.md;
+docs/archive/agent-log/2026-07-08-dev-m1-hotfix.md (100rel opt-in + codec preference nachträge)</li>
+<li>Code: <code>SipMergedInviteTracker</code> (src/Core/Infrastructure/Sip/Signaling/Ingress/SipMergedInviteTracker.cs);
+<code>SipCallSessionTransactionService</code> (fork-error catch);
+<code>ShouldUseReliableProvisional</code>; <code>SdpOfferAnswerNegotiator.NegotiateCodecs</code> /
+<code>ResolveEffectiveName</code>; <code>SdpMediaNegotiationOptions.PreferredCodecNames</code></li>
+<li>Tests: SipMergedInviteTrackerTests; SipInviteSuccessAckTests; ReliableProvisionalOptInTests;
+codec-preference tests (m1-hotfix)</li>
+<li>Marker: RFC 3261 §8.2.2.2, §17.2.1, §17.2.3; RFC 3262 §3; B.7</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-022-invite-transaction-robustness.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

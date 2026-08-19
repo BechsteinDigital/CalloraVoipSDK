@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-049: Opus Audio Codec Integration via Concentus (Managed Encode/Decode) | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-049: Opus Audio Codec Integration via Concentus (Managed Encode/Decode) | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-049-opus-codec-integration-concentus.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-049-opus-audio-codec-integration-via-concentus-managed-encodedecode">ADR-049: Opus Audio Codec Integration via Concentus (Managed Encode/Decode)</h1>
+
+<p>Status: Accepted
+Date: 2026-07-08</p>
+<h2 id="context">Context</h2>
+<p>The SDK ships a full audio media path (G.711 µ-law/A-law, G.722, comfort noise) that is
+otherwise <strong>transport-oriented</strong>: the stack negotiates payload types, packetises, and moves RTP
+without owning a compute-heavy codec runtime. The video path deliberately holds that line — video
+is transport-only, with no native encode/decode inside the SDK (see the C11/C12 media clusters and
+project memory: &quot;Codec Transport-only (kein nativer Encode/Decode)&quot;).</p>
+<p>Opus (RFC 7587) is different. Founders wanted Opus on the wire (sipgate lists Opus), and Opus is a
+computed codec: there is no way to interoperate by moving payload bytes alone. Two options existed:
+a native Opus binary (per-platform <code>.so</code>/<code>.dll</code>/<code>.dylib</code> deployment burden on every SDK consumer),
+or a managed implementation. The founder decision recorded in the delivery log was <strong>Concentus</strong>
+(pure C#, MIT), explicitly &quot;kein natives Deployment&quot; — accept a real runtime codec dependency in
+Core in exchange for zero native-deployment cost.</p>
+<p>This is the first (and, for audio, currently the only) place the SDK performs genuine
+sample-level audio compression/decompression, which is why it warrants its own decision record: it
+breaks the otherwise-uniform transport-only codec posture, on purpose, for one codec.</p>
+<h3 id="verified-current-state-graphify-grounded">Verified current state (graphify-grounded)</h3>
+<ul>
+<li><strong>Concentus is a real Core runtime dependency</strong>: <code>Concentus</code> 2.2.2 in
+<code>src/Core/CalloraVoipSdk.Core.csproj</code> (the first runtime codec dependency in Core).</li>
+<li><strong><code>OpusPayloadCodec</code> does actual encode/decode, not transport shuffling.</strong> It constructs a
+Concentus <code>IOpusEncoder</code>/<code>IOpusDecoder</code> (<code>OpusCodecFactory.CreateEncoder/CreateDecoder</code>, mono,
+<code>OPUS_APPLICATION_VOIP</code>) and calls <code>_encoder.Encode(...)</code> / <code>_decoder.Decode(...)</code> to convert
+between PCM16 and Opus payloads (<code>OpusPayloadCodec.cs:37-78</code>). Encoder/decoder are <strong>stateful
+across frames</strong> (prediction/FEC) → one instance per stream direction, not shared across calls.</li>
+<li><strong>RFC 7587 clock model is honoured in code</strong>: <code>RtpClockRate = 48000</code> always, independent of the
+coded bandwidth; <code>SamplesPerDefaultFrame = 960</code> (20 ms). The PCM sample rate is a ctor parameter
+(48 kHz default; the bridge path passes 8 kHz — Concentus resamples internally), while the RTP
+timestamp clock stays 48 kHz (owned by the RTP session, not the codec).</li>
+<li><strong>Opt-in only on SDP.</strong> Opus is an <code>OptInCodecs</code> entry (PT 107, <code>opus/48000/2</code>, dynamic PT) in
+<code>SdpUtilities.cs:34-36</code>; it is offered <strong>only</strong> when <code>SdkConfiguration.PreferredAudioCodecs</code>
+requests it. The default codec set is byte-unchanged, so the existing PCMU agent path is
+unaffected. <code>PayloadCodecKind.Opus = 7</code> is the normalized family; the string &quot;OPUS&quot; resolves to
+it in <code>AudioPayloadTranscoder.cs:327-328</code>, and the transcoding plan holds the stateful instance
+per call leg (<code>AudioPayloadTranscoder.cs:233</code>).</li>
+<li><strong>Two additional consumers exist beyond the file/transcode path</strong> (divergence vs. what the O1/O2
+logs describe): <code>OpusDeviceCodec</code> wraps one <code>OpusPayloadCodec</code> for platform audio backends,
+adding a capture-side accumulator that emits whole 20 ms frames (<code>OpusDeviceCodec.cs</code>); and
+<code>BridgeAudioTranscoder</code> reuses <code>OpusPayloadCodec</code> at 8 kHz (its own decision — see the C13
+bridge ADR).</li>
+<li><strong>Negotiation guard</strong>: negotiation requires ≥1 real audio codec; a pinned opt-in codec the peer
+does not offer yields a 488 rather than a telephone-event-only answer (per O1 log; enforced in
+the SDP negotiation path).</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<p>Integrate Opus as a <strong>first-class, managed, encode/decode codec</strong> rather than treating it as
+transport-only:</p>
+<ol>
+<li><strong>Take a managed Opus dependency (Concentus, MIT) in Core.</strong> Accept the first runtime codec
+dependency in the Core library in exchange for zero native-binary deployment for SDK consumers.</li>
+<li><strong>Wrap it in <code>OpusPayloadCodec</code></strong> — a thin, stateful, mono, RFC 7587 adapter (48 kHz RTP clock;
+configurable PCM rate) that owns exactly one encoder + one decoder per stream direction.</li>
+<li><strong>Expose Opus opt-in only</strong> via <code>SdkConfiguration.PreferredAudioCodecs</code> (SDP PT 107,
+<code>opus/48000/2</code>), leaving the default codec set and the existing PCMU path byte-identical.</li>
+<li>Resolve/normalise the codec through the existing <code>PayloadCodecKind</code> / <code>AudioPayloadTranscoder</code>
+plan machinery, holding the stateful codec instance per call leg.</li>
+</ol>
+<h3 id="crux">Crux</h3>
+<p>The C13 crux is a <strong>deliberate asymmetry</strong>: video stays transport-only (no native codec in the
+SDK), but Opus does <strong>real sample-level encode/decode in-process</strong>. Verified: <code>OpusPayloadCodec</code>
+calls Concentus <code>Encode()</code>/<code>Decode()</code> — it is not payload transport plus a bridge to device audio.
+The reason Opus is the exception and video is not: Opus interop is impossible without computing the
+codec, and a <em>managed</em> implementation (Concentus) removes the only real cost of doing so in an SDK
+(native per-platform deployment). Video's compute cost and hardware-acceleration expectations do
+not have an equivalent cheap managed answer, so video keeps the transport-only line.</p>
+<h2 id="consequences">Consequences</h2>
+<p>Positive:</p>
+<ul>
+<li>Opus interoperability on the wire (sipgate, browsers) without shipping native binaries — SDK
+consumers stay platform-agnostic.</li>
+<li>Additive: default codec negotiation and the PCMU path are byte-unchanged; Opus is strictly
+opt-in, so the change cannot regress existing audio calls.</li>
+<li>One reusable codec adapter serves the file/transcode path, the device path
+(<code>OpusDeviceCodec</code>), and the bridge path (<code>BridgeAudioTranscoder</code>) at different sample rates.</li>
+</ul>
+<p>Tradeoffs / honest divergence:</p>
+<ul>
+<li><strong>Codec posture is no longer uniform.</strong> The SDK now has exactly one runtime audio codec that
+computes samples; the &quot;transport-only&quot; description that still fits video does <strong>not</strong> fit Opus.
+This ADR is the record that the asymmetry is intentional, not drift.</li>
+<li><strong>Managed-codec quality/performance ceiling.</strong> Concentus is pure C#; it carries the CPU cost of a
+managed Opus and cannot use platform hardware codecs. Acceptable for VoIP frame sizes, but it is
+a ceiling, not free.</li>
+<li><strong>Tuning is defaulted, not exposed.</strong> Bitrate, DTX, and decode-side FEC/PLC are Concentus
+defaults; none are configurable yet (O1/O2 caveats). Opus PLC/FEC is not used on loss.</li>
+<li><strong>Scope divergence from the logs</strong>: <code>OpusDeviceCodec</code> (platform-backend adapter) is present in
+the code but not described in the O1/O2 delivery logs — it is a later reuse of <code>OpusPayloadCodec</code>
+and inherits the same managed encode/decode decision.</li>
+<li><strong>Not production-proven.</strong> The O1 log is explicit: no &quot;Opus produktionsbewiesen&quot; claim; a real
+sipgate call needs the bridge (see C13 bridge ADR) and founder acceptance of audio quality.</li>
+</ul>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li>Opus stays <strong>opt-in only</strong>; the default codec set and PCMU passthrough path remain byte-identical
+(regression-tested: default answer is Opus-free; PCMU preference yields PT 0/8000/160).</li>
+<li>One <code>OpusPayloadCodec</code> (encoder+decoder) instance per stream direction — never shared across
+calls or directions (state is prediction/FEC-bearing).</li>
+<li>RTP timestamp clock stays 48 kHz regardless of the codec's PCM sample rate; the codec never owns
+the RTP clock.</li>
+<li>Negotiation must still yield ≥1 real audio codec; a pinned unsupported opt-in codec → 488, never
+a telephone-event-only answer.</li>
+<li>No &quot;production-ready Opus&quot; claim without a real interop test (sipgate) plus quality acceptance;
+the codec being green in unit tests is not a status upgrade.</li>
+<li>Any <em>new</em> native or additional codec dependency is a fresh decision — this ADR authorises exactly
+one managed dependency (Concentus) for exactly one codec (Opus), not a general native-codec door.</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Logs: <code>docs/archive/agent-log/2026-07-08-dev-codec-opus.md</code> (B.2/O1 — Opus/Concentus opt-in);
+decision inventory <code>docs/reference/decision-inventory.md</code> cluster C13.</li>
+<li>Code: <code>src/Core/Application/Media/Sessions/OpusPayloadCodec.cs</code>,
+<code>.../OpusDeviceCodec.cs</code>, <code>.../PayloadCodecKind.cs</code>,
+<code>.../AudioPayloadTranscoder.cs</code> (<code>:233</code>, <code>:327-328</code>),
+<code>src/Core/Infrastructure/Sdp/SdpUtilities.cs</code> (<code>:34-36</code>, <code>:475</code>),
+<code>src/Core/CalloraVoipSdk.Core.csproj</code> (<code>:13</code> Concentus 2.2.2).</li>
+<li>Marker/RFC/dep: RFC 7587 (Opus RTP, 48 kHz clock, §2.1 telephone-event, §4.1);
+Concentus 2.2.2 (managed C# Opus, MIT); founder decision &quot;Concentus, kein natives Deployment&quot;.</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-049-opus-codec-integration-concentus.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Lines | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Lines | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/portal/concepts/lines.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="lines">Lines</h1>
+
+<p>A <strong>line</strong> (<code>IPhoneLine</code>) is a registered SIP identity — the result of a successful
+<code>ConnectAsync</code>. It is the origin of outbound calls and the target of inbound ones. The
+<code>PhoneLineManager</code> (<code>client.Lines</code>) owns the registered lines.</p>
+<h2 id="getting-a-line">Getting a line</h2>
+<pre><code class="lang-csharp">var connect = await client.ConnectAsync(new SipAccount
+{
+    Username = &quot;1001&quot;, Password = &quot;secret&quot;, SipServer = &quot;pbx.example.com&quot;
+});
+
+IPhoneLine line = connect.Line!;   // valid only when connect.IsSuccess
+</code></pre>
+<p><code>SipAccount</code> carries the credentials plus registration behaviour:</p>
+<ul>
+<li><code>RegistrationExpiry</code> (default <code>300</code> s) — the REGISTER <code>Expires</code> value</li>
+<li><code>InboundNumbers</code> — DIDs to match for trunk inbound</li>
+<li><code>AcceptTrunkInbound</code> (default <code>true</code>)</li>
+</ul>
+<h2 id="placing-calls">Placing calls</h2>
+<pre><code class="lang-csharp">ICall call = await line.DialAsync(&quot;sip:1002@pbx.example.com&quot;);
+// optional per-call overrides:
+ICall secure = await line.DialAsync(&quot;sip:1002@pbx.example.com&quot;,
+    new DialOptions { UseSrtp = true });
+</code></pre>
+<p><code>DialAsync</code> returns immediately with a <a href="calls.html"><code>ICall</code></a> in an early state; observe
+<code>ICall.StateChanged</code> to follow ringing → connected. The client-level
+<code>DialAndWaitUntilConnectedAsync</code> wraps this and awaits the answer.</p>
+<h2 id="line-events">Line events</h2>
+<table>
+<thead>
+<tr>
+<th>Event</th>
+<th>Fires when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>StateChanged</code></td>
+<td>Registration state changes (registered / failed / expired)</td>
+</tr>
+<tr>
+<td><code>IncomingCall</code></td>
+<td>An INVITE arrives for this line</td>
+</tr>
+<tr>
+<td><code>LineReconnecting</code></td>
+<td>The SDK is re-establishing a dropped registration</td>
+</tr>
+<tr>
+<td><code>LineReconnectFailed</code></td>
+<td>A reconnect attempt failed</td>
+</tr>
+</tbody>
+</table>
+<p>All line events follow the <a href="events.html">event threading contract</a>.</p>
+<h2 id="unregistering">Unregistering</h2>
+<pre><code class="lang-csharp">await line.UnregisterAsync();
+</code></pre>
+<p>Unregister reuses the registration's Call-ID and next CSeq (RFC 3261 §10.2.2) so the
+registrar actually clears the binding. <code>Dispose()</code> on the client unregisters all lines.</p>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/portal/concepts/lines.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

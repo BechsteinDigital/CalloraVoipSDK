@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-043: Video SDP Offer/Answer Negotiation (m=video, rtcp-fb, RTX/apt) | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-043: Video SDP Offer/Answer Negotiation (m=video, rtcp-fb, RTX/apt) | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-043-video-sdp-negotiation.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-043-video-sdp-offeranswer-negotiation-mvideo-rtcp-fb-rtxapt">ADR-043: Video SDP Offer/Answer Negotiation (m=video, rtcp-fb, RTX/apt)</h1>
+
+<p>Status: Accepted
+Date: 2026-07-14</p>
+<h2 id="context">Context</h2>
+<p>The SDK gained a SIP-video signaling path: it must offer and answer an <code>m=video</code> media
+description alongside audio, matching codecs, and negotiate the video-specific SDP attributes
+that the media layer depends on — <code>a=rtcp-fb</code> (RFC 4585 §4.2) so both peers know which RTCP
+feedback the other understands, and <code>a=rtx</code>/<code>apt</code> (RFC 4588 §8.1) so a repair stream can be
+carried. This ADR covers the <strong>SDP surface</strong> for video; the media/security/feedback behaviour
+those attributes gate is covered by the sibling C12 ADRs. Audio SDES offer/answer is ADR-C04-01;
+BUNDLE SDP generation is the ADR-010/011 track (separate transport, not this SIP path).</p>
+<p>The founding constraint (memory <code>project_video_interop_codec_decision</code>): <strong>SIP-video first,
+transport-only</strong> — the SDK negotiates and moves codec bitstreams but does not natively
+encode/decode. Codec support is therefore a capability list, not an encoder set.</p>
+<h3 id="verified-current-state-graphify-grounded">Verified current state (graphify-grounded)</h3>
+<ul>
+<li><code>VideoCodecCatalog</code> (<code>src/Core/Infrastructure/Sdp/VideoCodecCatalog.cs</code>) is the single source
+of truth: VP8 (PT 96) and H.264 (PT 97), both at the mandatory 90 kHz clock (<code>Defaults</code>,
+L13-17). H.264 offers <code>packetization-mode=1</code> (<code>BuildFmtp</code>, L59-63) and is only <em>accepted</em> when
+the peer explicitly declares mode 1 (<code>HasPacketizationMode1</code>, L49-52) — the packetiser always
+emits FU-A, which a mode-0 peer cannot receive.</li>
+<li><code>SdpOfferAnswerNegotiator.TryNegotiateVideoAnswerMedia</code>
+(<code>src/Core/Infrastructure/Sdp/OfferAnswer/SdpOfferAnswerNegotiator.cs</code> L472) answers the first
+offered video m-line only; <code>SelectVideoCodecs</code> (L631) matches by <strong>name + clock rate, never the
+static-PT fallback</strong> the audio path uses (dynamic video PTs make a bare-PT match unsafe), and
+mirrors offered PTs per RFC 3264 §6.1.</li>
+<li><code>NegotiateFeedback</code> (L87-92) answers the <strong>intersection</strong> of offered and implemented feedback
+(<code>nack</code>, <code>nack pli</code>, <code>ccm fir</code>); <code>NegotiateRtx</code> (L124-140) echoes only repair codecs whose
+<code>apt</code> points at an accepted PT, preserving the offered rtx numbering.</li>
+<li>Multi-m-line answers: every offered m-line is answered in offer order; unanswerable ones get
+port 0 (RFC 3264 §6). Only the first video m-line is negotiated, the rest port 0.</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<p>Model video as a first-class SDP media section built from a static capability catalog, and make
+the answer path <strong>fail-closed and spec-exact</strong>:</p>
+<ol>
+<li><strong><code>VideoCodecCatalog</code> is the only capability authority.</strong> Offer emits VP8+H.264 (or the
+configured <code>PreferredVideoCodecs</code> subset) with <code>packetization-mode=1</code> on H.264; answer
+intersects offered against catalog by name+clock. No static-PT fallback for video.</li>
+<li><strong><code>a=rtcp-fb</code> is negotiated as a set intersection</strong> (RFC 4585 §4.2), advertised for all
+formats (<code>*</code>). The offer advertises the full <code>StandardFeedback</code> set; the answer keeps only
+mutually-supported entries. NACK is advertised even though the retransmit path landed later —
+for symmetry with RTX-capable peers.</li>
+<li><strong><code>a=rtx</code>/<code>apt</code> is negotiated per accepted codec</strong> (RFC 4588 §8.1): offer builds one repair
+codec per video codec with PTs above the highest video PT; answer echoes the peer's rtx PT/apt
+for accepted codecs only. <code>CallVideoParameters.RtxPayloadType</code> surfaces the result to the
+media layer.</li>
+<li><strong>RFC 3264 §6 multi-m-line fidelity.</strong> Every offered m-line is answered in order; a peer's
+video offer we cannot satisfy yields a zero-port line rather than a vanished m-line.</li>
+</ol>
+<h3 id="crux">Crux</h3>
+<p>Video PTs are dynamic, so the answer must match on <code>(name, clock)</code> and <strong>must not</strong> reuse the
+audio path's static-PT fallback — a bare-PT match would answer a codec the peer never offered
+(the M1 finding in the video-sdp log). H.264 acceptance is additionally gated on
+<code>packetization-mode=1</code> because the packetiser is FU-A-only. These two gates are what keep the
+answer honest about what the media layer can actually receive.</p>
+<h2 id="consequences">Consequences</h2>
+<p>Positive: video negotiation reuses the audio offer/answer machinery and the catalog keeps codec
+truth in one place. The RFC 3264 §6 fix (answer every m-line) benefits all inbound multi-m-line
+offers, not just video.</p>
+<p>Divergence / honesty:</p>
+<ul>
+<li>The <code>a=rtcp-fb</code> answer normalises a PT-specific offer (<code>96 ccm fir</code>) to <code>* ccm fir</code>.
+<code>*</code> is a superset, interop-safe for single-codec video; <strong>per-PT mirroring is deferred</strong>
+(<code>NegotiateFeedback</code> DECISION comment, L82-85) and would be needed for multi-codec video.</li>
+<li>Only the <strong>first</strong> video m-line is negotiated; further video m-lines get port 0.</li>
+<li>Codec is <strong>transport-only</strong>: negotiation succeeds with no native encoder/decoder behind it. A
+successful <code>m=video</code> answer is not a claim of end-to-end video without an application-supplied
+codec.</li>
+</ul>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li><code>SelectVideoCodecs</code> must never fall back to static-PT matching (regression-tested against the
+VP9@96-vs-VP8 collision).</li>
+<li>H.264 accepted only with explicit <code>packetization-mode=1</code>.</li>
+<li><code>NegotiateFeedback</code>/<code>NegotiateRtx</code> are intersections — never advertise or echo something the
+peer did not offer / a codec not accepted.</li>
+<li>No end-to-end / interop / DONE claim from SDP tests alone (transport-only, SDK↔SDK roundtrips).</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Logs: <code>docs/archive/agent-log/2026-07-14-dev-video-sdp.md</code>,
+<code>…-video-rtcp-fb-sdp.md</code>, <code>…-video-rtx-sdp.md</code>.</li>
+<li>Code (graphify-verified): <code>src/Core/Infrastructure/Sdp/VideoCodecCatalog.cs</code>
+(<code>Defaults</code>, <code>BuildFmtp</code>, <code>HasPacketizationMode1</code>, <code>StandardFeedback</code>, <code>NegotiateFeedback</code>,
+<code>BuildRtx</code>, <code>NegotiateRtx</code>, <code>TryFindRtxPayloadType</code>);
+<code>src/Core/Infrastructure/Sdp/OfferAnswer/SdpOfferAnswerNegotiator.cs</code>
+(<code>TryNegotiateVideoAnswerMedia</code> L472, <code>SelectVideoCodecs</code> L631);
+<code>src/Core/Infrastructure/Sdp/Models/SdpRtcpFeedback.cs</code>.</li>
+<li>Markers: <code>DECISION</code> in <code>NegotiateFeedback</code> (<code>*</code>-normalisation).</li>
+<li>RFC: 3264 §6/§6.1 (offer/answer, m-line mirroring), 4585 §4.2 (rtcp-fb), 4588 §8.1 (rtx/apt),
+6184 §8.1 (H.264 packetization-mode), 7741 (VP8), 5104 §4.3.1 (FIR/ccm).</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-043-video-sdp-negotiation.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

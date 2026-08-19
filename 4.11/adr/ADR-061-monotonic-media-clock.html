@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-061: Monotonic Clock for Time-Based Media and RTCP Computations | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-061: Monotonic Clock for Time-Based Media and RTCP Computations | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-061-monotonic-media-clock.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-061-monotonic-clock-for-time-based-media-and-rtcp-computations">ADR-061: Monotonic Clock for Time-Based Media and RTCP Computations</h1>
+
+<p>Status: Accepted
+Date: 2026-07-24</p>
+<h2 id="context">Context</h2>
+<p>Several media and RTCP computations are pure elapsed-time deltas: the jitter buffer's
+interarrival-jitter estimate and playout schedule, and the RFC 3550 §6.4.1 round-trip time
+(<code>arrival - sentAt - DLSR</code>) plus the DLSR (<code>now - remoteSrReceivedAt</code>) we advertise to the peer.
+All of these originally read their instants from <code>DateTimeOffset.UtcNow</code> — the wall clock.</p>
+<p>A wall clock is not monotonic. NTP steps, manual clock changes, DST transitions, and leap-second
+smears can move <code>UtcNow</code> <strong>backward or forward</strong> mid-call. For a delta-based computation that is a
+correctness bug, not a rounding nuisance:</p>
+<ul>
+<li><strong>Jitter buffer</strong> — a backward step makes <code>now &lt; reference</code> seemingly forever, which stalls
+playout; a forward step marks the whole queue &quot;late&quot; and dumps it.</li>
+<li><strong>RTT</strong> — a backward step was already discarded by the existing <code>roundTrip &gt; 0</code> guard, but a
+<strong>forward</strong> step between sending our SR and its echo arriving inflates the RTT to a bogus positive
+value that passes the guard.</li>
+<li><strong>DLSR</strong> — a step in either direction skews the delay we advertise, so the peer computes a wrong
+RTT from our report.</li>
+</ul>
+<p>The crux: these computations only ever consume <em>differences</em> between two instants, so they need a
+jump-immune source; but the on-wire NTP timestamps and the reporting snapshots need a <em>real</em>
+time-of-day and must stay on the wall clock. The two concerns share the same call sites and must be
+separated cleanly.</p>
+<h3 id="verified-current-state-graphify--git">Verified current state (graphify + git)</h3>
+<ul>
+<li><code>MonotonicClock</code> exists at <code>src/Core/Infrastructure/Common/Timing/MonotonicClock.cs</code>
+(graphify: node <code>MonotonicClock</code>, community 582). It is an <code>internal static</code> class backed by
+<code>Stopwatch.GetTimestamp()</code> / <code>Stopwatch.GetElapsedTime(origin)</code>, exposing
+<code>DateTimeOffset Now =&gt; DateTimeOffset.UnixEpoch + Stopwatch.GetElapsedTime(OriginTimestamp)</code>. Its
+own XML doc states the value is a synthetic epoch-anchored instant where <strong>only deltas are
+meaningful</strong> (introduced in <code>dc01a5d</code>).</li>
+<li><code>MonotonicClockTests</code> (<code>tests/CalloraVoipSdk.Core.IntegrationTests/MonotonicClockTests.cs</code>,
+graphify community 537) covers the two contract properties: <code>Now_never_decreases_across_rapid_reads</code>
+and <code>Now_advances_with_elapsed_time</code> — both revert-verified RED on a backward-running clock.</li>
+<li><strong>Jitter buffer path</strong> — <code>RtpCallMediaSession</code> reads <code>MonotonicClock.Now</code> directly at both jitter
+sites: the arrival <code>_jitterBuffer.Add(packet, MonotonicClock.Now)</code> and the playout
+<code>_jitterBuffer.TryGetNext(MonotonicClock.Now)</code>. Metrics-publish instants in the same file
+(<code>_nextMetricsPublishAtUtc</code>, <code>CreateRuntimeMetricsSnapshot</code>, <code>PublishRuntimeMetricsIfDue</code>)
+deliberately stay on <code>DateTimeOffset.UtcNow</code>.</li>
+<li><strong>BUNDLE RTT path</strong> — <code>BundledRtcpReporter</code> carries <strong>two</strong> injectable seams:
+<code>Func&lt;DateTimeOffset&gt; _utcNow</code> (default <code>() =&gt; DateTimeOffset.UtcNow</code>, stamps the on-wire NTP/RTP
+timestamps) and <code>Func&lt;DateTimeOffset&gt; _monotonicNow</code> (default <code>() =&gt; MonotonicClock.Now</code>, the RTT
+send instant handed to <code>onSenderReportSent</code>). One monotonic instant is shared by every SR in a
+compound. <code>BundledMediaSession</code> reads the RR arrival from <code>MonotonicClock.Now</code> for the RTT delta.</li>
+<li><strong>SIP RTCP path</strong> — <code>CallRtcpQualityMonitor</code> lives in the <strong>Application</strong> layer, which DDD layering
+forbids from referencing Infrastructure (architecture-test-enforced). It therefore does <strong>not</strong> call
+<code>MonotonicClock</code>; instead it carries a <strong>local duplicate</strong> monotonic default
+(<code>private static readonly long MonotonicOrigin = Stopwatch.GetTimestamp();</code> +
+<code>DefaultMonotonicNow() =&gt; DateTimeOffset.UnixEpoch + Stopwatch.GetElapsedTime(MonotonicOrigin)</code>)
+exposed as an injectable <code>Func&lt;DateTimeOffset&gt; _monotonicNow</code>. Wall-clock <code>UtcNow</code> is retained for
+the NTP timestamps and the <code>CallQualitySnapshot</code> capture time; the RTT/DLSR anchor fields were
+renamed off their <code>*Utc</code> suffix.</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<p><strong>Read every delta-based media/RTCP computation off a monotonic clock; keep every absolute
+time-of-day (on-wire NTP timestamps, reporting snapshots) on the wall clock.</strong></p>
+<ol>
+<li>Provide a <code>Stopwatch</code>-backed <code>MonotonicClock</code> under <code>Infrastructure/Common/Timing</code> — jump-free,
+epoch-anchored, only deltas meaningful.</li>
+<li>Migrate the three time-critical delta sites to it:
+<ul>
+<li>jitter-buffer arrival + playout (<code>dc01a5d</code>),</li>
+<li>BUNDLE RTT send instant + RR arrival (<code>aa517b7</code>),</li>
+<li>SIP-path RTT + advertised DLSR (<code>5e38c60</code>).</li>
+</ul>
+</li>
+<li>Where a type may inject its time source for deterministic tests, expose the monotonic read as an
+injectable <code>Func&lt;DateTimeOffset&gt;</code> seam <strong>separate from</strong> the wall-clock seam, so a test can prove
+the delta is derived from the monotonic clock even when the wall clock is decades off.</li>
+</ol>
+<h3 id="crux">Crux</h3>
+<p>The single instant a delta is computed from must come from a jump-immune source; the single instant
+that goes on the wire (or into a human-facing snapshot) must come from a real time-of-day. These two
+instants co-locate at the same call site — the design separates them into two named reads
+(<code>monotonicNow</code> vs <code>utcNow</code>) rather than one shared <code>now</code>, so neither concern silently borrows the
+other's clock.</p>
+<h2 id="consequences">Consequences</h2>
+<p>Positive: RTT, DLSR, and the jitter buffer survive an NTP step / manual clock change / DST / leap
+smear mid-call. The forward-step RTT inflation that slipped past the <code>roundTrip &gt; 0</code> guard is closed.
+On-wire NTP timestamps and reporting snapshots remain real time-of-day, so peers and dashboards read
+correct absolute times. The injectable seams make the monotonicity structurally testable
+(revert-verified RED tests exist for the jitter contract, the BUNDLE send instant, and the SIP RTT).</p>
+<p>Divergence, stated honestly:</p>
+<ul>
+<li><strong>Two implementations of the same clock.</strong> Infrastructure has <code>MonotonicClock</code> (used directly by
+<code>RtpCallMediaSession</code> / <code>BundledMediaSession</code>, and as the default behind <code>BundledRtcpReporter</code>'s
+<code>monotonicNow</code> seam). The Application-layer <code>CallRtcpQualityMonitor</code> cannot reference it (DDD
+layering, enforced by architecture tests) and so carries a <strong>local copy</strong> of the same
+<code>Stopwatch</code>-based logic. The two are semantically identical but physically duplicated; they can
+drift if one is changed without the other. No shared Application-visible abstraction bridges them
+today.</li>
+<li><strong>Seam shape is not uniform.</strong> <code>RtpCallMediaSession</code> and <code>BundledMediaSession</code> read
+<code>MonotonicClock.Now</code> inline (not injected — the jitter contract is proven at the <code>JitterBuffer</code>
+level and the BUNDLE RR-arrival monotonicity is structural). <code>BundledRtcpReporter</code> and
+<code>CallRtcpQualityMonitor</code> expose a <code>Func&lt;DateTimeOffset&gt;</code> seam. There is no single injected clock
+interface across the stacks.</li>
+<li><strong>Deliberate wall-clock retention.</strong> NTP/RTP on-wire timestamps, <code>CapturedAtUtc</code>/snapshot instants,
+the empty-snapshot time, and metrics-publish scheduling stay on <code>UtcNow</code> <strong>by design</strong> — they are
+absolute reporting instants, not deltas. This is correct, not an oversight, but it means both clocks
+coexist in the same files.</li>
+<li>The DLSR-we-send monotonicity in the SIP path is <strong>structural</strong> (send-loop driven) and has no
+isolated unit test — verified by construction, not by a red/green assertion.</li>
+</ul>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li>A monotonic instant is a synthetic epoch-anchored value: <strong>never</strong> interpret it as a date/time, and
+never put it on the wire. On-wire NTP timestamps and human-facing snapshots stay on the wall clock.</li>
+<li>Any new delta-based media/RTCP computation (jitter, RTT, DLSR, playout, interarrival) reads a
+monotonic source, never <code>UtcNow</code>.</li>
+<li>At a call site that both computes a delta and stamps a wire/snapshot instant, keep the two reads
+named and separate (<code>monotonicNow</code> vs <code>utcNow</code>); do not collapse them into one <code>now</code>.</li>
+<li>If <code>MonotonicClock</code>'s logic changes, update the Application-layer <code>CallRtcpQualityMonitor</code> copy in
+lockstep until a layering-safe shared abstraction removes the duplication.</li>
+<li>Monotonicity that is only structural (e.g. the SIP DLSR-we-send) must at minimum be revert-verified
+or covered by the delta-consumer's test; do not claim a monotonic guarantee without a check.</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<p>Commits (PR #14, SIP-14 media hardening):</p>
+<ul>
+<li><code>dc01a5d</code> — fix(rtp): drive the jitter buffer off a monotonic clock, not wall-clock. Adds
+<code>MonotonicClock</code> + <code>MonotonicClockTests</code>; migrates the arrival <code>Add</code> and playout <code>TryGetNext</code>.</li>
+<li><code>aa517b7</code> — fix(rtp): compute the BUNDLE RTT on a monotonic clock, not wall-clock. Adds the
+<code>monotonicNow</code> seam to <code>BundledRtcpReporter</code>; <code>BundledMediaSession</code> reads RR arrival from
+<code>MonotonicClock.Now</code>; RTT anchor fields renamed off <code>*Utc</code>.</li>
+<li><code>5e38c60</code> — fix(rtcp): compute the SIP-path RTT and DLSR on a monotonic clock. Application-layer
+local <code>Stopwatch</code> monotonic default + injectable <code>monotonicNow</code> seam in <code>CallRtcpQualityMonitor</code>;
+NTP/snapshot instants stay wall-clock. Completes the wall-clock→monotonic item across all three
+media stacks.</li>
+<li><code>26816e5</code> — refactor(rtcp): decode each inbound RTCP compound once, then fan out. <em>Context only —
+same PR #14, not part of the clock decision.</em></li>
+</ul>
+<p>Code (graphify-verified):</p>
+<ul>
+<li><code>src/Core/Infrastructure/Common/Timing/MonotonicClock.cs</code> (graphify node <code>MonotonicClock</code>, community 582)</li>
+<li><code>tests/CalloraVoipSdk.Core.IntegrationTests/MonotonicClockTests.cs</code> (graphify community 537)</li>
+<li><code>src/Core/Infrastructure/Rtp/RtpCallMediaSession.cs</code> — jitter arrival/playout <code>MonotonicClock.Now</code></li>
+<li><code>src/Core/Infrastructure/Rtp/BundledRtcpReporter.cs</code> — <code>_utcNow</code> / <code>_monotonicNow</code> seams</li>
+<li><code>src/Core/Infrastructure/Rtp/BundledMediaSession.cs</code> — RR arrival <code>MonotonicClock.Now</code></li>
+<li><code>src/Core/Application/Media/CallRtcpQualityMonitor.cs</code> — Application-layer local monotonic duplicate</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-061-monotonic-media-clock.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-004: RFC 5626 &#167;4.4.1 – CRLF Keepalive Pong on Stream Transports | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-004: RFC 5626 &#167;4.4.1 – CRLF Keepalive Pong on Stream Transports | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-004-rfc5626-crlf-keepalive-pong.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-004-rfc-5626-441--crlf-keepalive-pong-on-stream-transports">ADR-004: RFC 5626 §4.4.1 – CRLF Keepalive Pong on Stream Transports</h1>
+
+<p>Status: Accepted
+Date: 2026-04-09
+RFC reference: RFC 5626 §4.4.1 (CRLF Keep-Alive Mechanism)</p>
+<hr>
+<h2 id="context">Context</h2>
+<p>RFC 5626 §4.4.1 defines a lightweight keepalive mechanism for SIP over stream
+transports (TCP, TLS):</p>
+<blockquote>
+<p>A client SHOULD send a double-CRLF (4 bytes: <code>\r\n\r\n</code>) when no message has
+been received for a configurable interval. A server receiving the double-CRLF
+SHOULD respond with a single CRLF (2 bytes: <code>\r\n</code>).</p>
+</blockquote>
+<p>The double-CRLF is also valid as a leading preamble before a SIP message per
+RFC 3261 §7.5. The distinction is:</p>
+<ul>
+<li><strong>Standalone</strong> <code>\r\n\r\n</code> (no SIP message follows) → keepalive ping; pong required.</li>
+<li><code>\r\n\r\n</code> followed by a SIP start-line → preamble; no pong.</li>
+</ul>
+<p>Previously the SDK trimmed leading CRLF silently in <code>SipWireStreamFramer.TrimLeadingCrLf</code>
+without ever responding. Clients relying on pong detection to verify server
+liveness would time out and close the connection.</p>
+<hr>
+<h2 id="decision">Decision</h2>
+<p><strong><code>SipWireStreamFramer</code>:</strong></p>
+<ul>
+<li><code>TrimLeadingCrLf</code> now sets <code>_consumedKeepalivePing = true</code> when it removes ≥ 4
+bytes (at least one double-CRLF pair).</li>
+<li>Expose <code>bool ConsumedKeepalivePing</code> (read-only) and <code>void ClearKeepalivePingFlag()</code>.</li>
+</ul>
+<p><strong><code>SipStreamConnection.ReceiveLoopAsync</code>:</strong></p>
+<ul>
+<li>Count dispatched SIP frames per read cycle (<code>framesDispatched</code>).</li>
+<li>After the frame-dispatch loop, if <code>framesDispatched == 0 &amp;&amp; _framer.ConsumedKeepalivePing</code>:
+send <code>\r\n</code> (single CRLF pong) and clear the flag.</li>
+<li>If <code>framesDispatched &gt; 0</code>, the double-CRLF was a preamble; do NOT pong.</li>
+</ul>
+<p>This CRLF pong is <strong>not</strong> sent for <code>SipWebSocketConnection</code> because WebSocket
+has its own native Ping/Pong frames defined by RFC 6455 §5.5.</p>
+<hr>
+<h2 id="consequences">Consequences</h2>
+<p><strong>Positive:</strong></p>
+<ul>
+<li>Clients using RFC 5626 keepalive (including most SIP softphones and ATAs behind
+NAT) can reliably detect that the server-side connection is alive.</li>
+<li>Minimal overhead: 2 bytes sent only when a keepalive is received, which is
+infrequent (default interval ≥ 120 seconds per RFC 5626).</li>
+</ul>
+<p><strong>Negative:</strong></p>
+<ul>
+<li>The full RFC 5626 &quot;Outbound&quot; mechanism (reg-id, Instance-ID, flow recovery) is
+still not implemented. The pong is the keepalive-maintenance part; Outbound
+registration flow recovery is a separate and more complex feature.</li>
+<li><code>SipWireStreamFramer</code> now has a side-effectful flag (<code>ConsumedKeepalivePing</code>)
+that callers must reset. Callers that forget <code>ClearKeepalivePingFlag</code> after a
+pong would not re-pong on the next keepalive (the flag is set again by the next
+<code>TrimLeadingCrLf</code> call, so practical impact is minimal).</li>
+</ul>
+<hr>
+<h2 id="alternatives-considered">Alternatives considered</h2>
+<ol>
+<li><strong>Respond with pong always (including CRLF-prefixed SIP messages)</strong> — Rejected.
+RFC 5626 §4.4.1 says to respond to the keepalive, not to preambles before SIP
+messages. Sending extra bytes before delivering a response would be incorrect.</li>
+<li><strong>Handle in <code>SipWireStreamFramer.TryReadFrame</code> via a synthetic frame</strong> — Rejected.
+Mixing keepalive semantics into the message framing layer violates separation of
+concerns; the framer should only produce SIP message frames.</li>
+<li><strong>Handle at transport level (before framing)</strong> — Rejected. At the raw byte level
+we cannot reliably distinguish a standalone <code>\r\n\r\n</code> from one that has more
+bytes following in the next network segment until framing is attempted.</li>
+</ol>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-004-rfc5626-crlf-keepalive-pong.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

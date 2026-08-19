@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-024: SDP Offer/Answer Negotiation — Origin Versioning and extmap Id Assignment | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-024: SDP Offer/Answer Negotiation — Origin Versioning and extmap Id Assignment | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-024-sdp-offer-answer-origin-and-extmap-negotiation.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-024-sdp-offeranswer-negotiation--origin-versioning-and-extmap-id-assignment">ADR-024: SDP Offer/Answer Negotiation — Origin Versioning and extmap Id Assignment</h1>
+
+<p>Status: Accepted
+Date: 2026-07-14</p>
+<h2 id="context">Context</h2>
+<p>The SDK builds and answers SDP for every SIP call leg. Two negotiation semantics govern how a
+remote peer interprets what we send, and both were originally hard-coded in a way that broke
+interop or blocked a feature:</p>
+<ul>
+<li><strong>Origin line (<code>o=</code>).</strong> The origin field carried a constant <code>o=- 0 0 IN ...</code>. RFC 3264 §5 lets a
+peer detect a session modification (hold, re-INVITE) by observing the <strong>incremented sess-version</strong>
+in <code>o=</code>. A constant <code>0 0</code> means foreign PBXs never see a hold/re-INVITE as a change — an interop
+break (this was the concrete failure that motivated the change).</li>
+<li><strong>Header extensions (<code>a=extmap</code>).</strong> RTP header extensions (RFC 8285) need their one-byte ids
+negotiated in offer/answer so both sides agree which id carries which URI. Without an extmap
+negotiation surface, congestion control (transport-wide sequence number), BUNDLE MID routing, and
+simulcast RID could not place their extensions on the wire.</li>
+</ul>
+<p>Both live on the same signaling surface — the SDP the SDK emits in an offer and echoes in an answer —
+and flow through the same <code>SdpOfferAnswerNegotiator</code> + serializer path, so they are decided together.</p>
+<h3 id="verified-current-state-graphify-grounded">Verified current state (graphify-grounded)</h3>
+<ul>
+<li><code>SdpSessionDescription</code> (<code>src/Core/Infrastructure/Sdp/Models/SdpSessionDescription.cs</code>) carries
+<code>SessionId</code> and <code>SessionVersion</code> (<code>long</code>, both marked RFC 4566 §5.2 in XML doc). The serializer
+(<code>SdpSessionSerializer.cs:24</code>) emits <code>o=- {SessionId} {SessionVersion} IN {netType} {addr}</code>.</li>
+<li>The origin values are threaded through the option DTOs: <code>SdpMediaNegotiationOptions</code> (public port)
+→ <code>SdpMediaOptions</code> (<code>SessionId</code>/<code>SessionVersion</code>, RFC 4566 §5.2 in doc) → <code>CreateOffer</code> /
+<code>NegotiateAnswer</code> / disabled-answer builders in <code>SdpOfferAnswerNegotiator</code>.</li>
+<li><code>SipCoreCallChannel</code> owns the origin identity per call leg
+(<code>src/Core/Infrastructure/Sip/Adapters/SipCoreCallChannel.cs</code>): a process-wide monotonic seed
+(<code>_sessionIdSeed = UtcNow.ToUnixTimeSeconds()</code>, <code>Interlocked.Increment</code>) gives each channel a
+<strong>stable, unique sess-id</strong> (<code>_sdpSessionId</code>, L94); <code>BuildLocalSdpOptions()</code> (L785) sets
+<code>SessionVersion = Interlocked.Increment(ref _sdpSessionVersion)</code> (L803) on every local SDP build.
+Retransmits reuse the cached SDP string (no rebuild → version stays stable).</li>
+<li><code>SdpExtmap</code> (<code>src/Core/Infrastructure/Sdp/Models/SdpExtmap.cs</code>): <code>Id</code> + optional <code>Direction</code> +
+<code>Uri</code>, with <code>TryParse</code>/<code>Serialize</code>. Parser adds an <code>extmap</code> case
+(<code>SdpSessionParser.cs:171</code>), the serializer emits <code>a=extmap:{...}</code> per m-line
+(<code>SdpSessionSerializer.cs:113</code>), and <code>MediaBuilder</code> carries a per-m-line <code>Extensions</code> list.</li>
+<li><code>SdpOfferAnswerNegotiator</code> performs the negotiation:
+<ul>
+<li><code>BuildOfferExtmaps</code> (L571) assigns sequential one-byte ids <code>1..14</code>
+(<code>OneByteMaxExtensionId = 14</code>, RFC 8285 §4.2: 0 is padding, 15 reserved) to the supported URIs;
+empty list ⇒ no <code>a=extmap</code>.</li>
+<li><code>BuildAnswerExtmaps</code> (L608) echoes the <strong>offered id</strong> for each offered URI we support and drops
+the rest (RFC 8285 §5: the offerer owns id assignment); only one-byte ids are echoed.</li>
+<li>Beyond the original transport-cc scope, the same machinery now also carries <strong>MID</strong>
+(<code>WithMidExtension</code>, RFC 8843 §9 / RFC 9143) and <strong>RID</strong> for BUNDLE and send-side simulcast
+(RFC 8853): <code>BundledExtmapUris</code> prepends <code>RtpHeaderExtensionUris.Mid</code> (and <code>.Rid</code> for simulcast)
+so the answer mirrors the offered id on every m-line.</li>
+</ul>
+</li>
+<li>Both surfaces are <strong>default-off / backward-compatible</strong>: no session options ⇒ <code>o= 0 0</code>; empty
+<code>HeaderExtensionUris</code> and non-BUNDLE ⇒ no <code>a=extmap</code> emitted.</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<p>Treat the SDP the SDK emits in an offer and echoes in an answer as a negotiated contract, and encode
+two rules on the shared <code>SdpOfferAnswerNegotiator</code> + serializer path:</p>
+<ol>
+<li><p><strong>Origin identity is per-leg and modification-signalling.</strong> Each <code>SipCoreCallChannel</code> (call leg)
+owns a <strong>stable sess-id</strong> for its lifetime and an <strong>incrementing sess-version</strong>. The version is
+bumped on every locally built SDP (offer, answer, hold, unhold) so a remote peer detects the
+modification per RFC 3264 §5; retransmits reuse the cached SDP string and therefore keep the same
+version. Origin values are optional inputs to the negotiator (public
+<code>SdpMediaNegotiationOptions</code>), preserving the <code>0 0</code> default for callers that do not supply them.</p>
+</li>
+<li><p><strong>The offerer owns extmap id assignment; the answerer echoes.</strong> The offer assigns sequential
+one-byte ids (1..14) to its supported header-extension URIs; the answer echoes the offered id for
+each URI it supports and silently drops unsupported or non-one-byte (reserved 0/15) ids. The same
+negotiation carries transport-cc, MID (BUNDLE), and RID (simulcast). extmap emission is opt-in.</p>
+</li>
+</ol>
+<h3 id="crux">Crux</h3>
+<p>The subtle part is <em>when</em> origin version changes and <em>who</em> owns extmap ids.</p>
+<ul>
+<li><strong>Version ownership lives at the channel, not the SDP builder.</strong> The sess-id/version pair is state
+of the call leg, so it belongs to <code>SipCoreCallChannel</code> (which knows about retransmits vs. genuine
+re-builds), not to the stateless negotiator. The negotiator only stamps whatever id/version it is
+handed. This keeps the negotiator pure and makes &quot;same leg → same id, bumped version&quot; a property of
+the channel's build/cache discipline.</li>
+<li><strong>The offerer, not the answerer, is the id authority (RFC 8285 §5).</strong> The answer never invents an
+id; it can only echo an offered one or drop it. Modelling MID/RID as &quot;prepend the URI to the
+supported set&quot; makes the generic <code>BuildAnswerExtmaps</code> echo them at the offered id automatically —
+one negotiation path serves transport-cc, BUNDLE, and simulcast without special cases.</li>
+</ul>
+<h2 id="consequences">Consequences</h2>
+<p>Positive: hold/re-INVITE are now observable to remote peers (the interop precondition B.5 was built
+for); header extensions have a real offer/answer negotiation surface that later slices (transport-cc,
+BUNDLE routing, simulcast) plug into without touching the parser/serializer. Both changes are additive
+and default-off, so existing non-BUNDLE, non-extension SDP is byte-identical.</p>
+<p>Honest divergence:</p>
+<ul>
+<li><strong>Version increments unconditionally per local build, not strictly &quot;on change.&quot;</strong> RFC 4566 §5.2 and
+RFC 3264 §5 specify that sess-version increments <em>only when the session description actually
+changes</em>. The implementation increments on every <code>BuildLocalSdpOptions()</code> call and relies on the
+<strong>retransmit cache</strong> (same SDP string → no rebuild → no bump) to approximate that rule. A genuine
+re-build that happens to produce an identical description would still bump the version. This is a
+deliberate simplification: over-signalling a change is interop-safe (peers re-evaluate an unchanged
+offer harmlessly), under-signalling is not. It is not a strict RFC &quot;only-on-change&quot; implementation.</li>
+<li><strong>Interop is not claimed.</strong> The B.5 log is explicit: the change makes the origin line <em>correct and
+test/wire-proven</em>, but &quot;hold/re-INVITE interop against a foreign PBX&quot; remains an unverified real-test
+item. This ADR records the negotiation semantics, not an interop guarantee.</li>
+<li><strong>One-byte extmap only.</strong> Only the one-byte header form (ids 1..14) is offered and echoed; the
+two-byte form (RFC 8285 §4.3) is not negotiated. URIs beyond the first 14 are dropped. Acceptable
+because the SDK's supported extension set is small.</li>
+<li><strong>extmap is a signalling surface, not yet a data path in the base slice.</strong> The negotiation exists
+independently of stamping bytes into RTP; the transport-cc data path was tracked as follow-up. The
+SDK does not over-offer an extension it cannot yet honour end-to-end (BUNDLE MID and simulcast RID
+are the wired consumers today).</li>
+</ul>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li>Non-BUNDLE, no-extension SDP stays byte-identical: no origin options ⇒ <code>o= 0 0</code>; empty
+<code>HeaderExtensionUris</code> and non-BUNDLE ⇒ no <code>a=extmap</code>. Verified by regression tests
+(<code>SdpOriginVersionTests</code>, <code>VideoExtmapNegotiationTests</code>).</li>
+<li>Origin: same call leg → same sess-id across successive local SDPs; version strictly increases per
+local build; distinct channels → distinct sess-ids (<code>SdpOriginVersionTests</code>, 5 tests).</li>
+<li>extmap: the answer echoes only offered ids for supported URIs, drops unsupported URIs and reserved
+ids 0/15 (one-byte range guard), and the offerer's id is never rewritten by the answer
+(<code>VideoExtmapNegotiationTests</code>, 11 tests incl. the id-0/15 boundary).</li>
+<li>The sess-version bump must remain coupled to the SDP-build/retransmit-cache path in
+<code>SipCoreCallChannel</code>; moving version state into the stateless negotiator would break the
+&quot;retransmit keeps the version&quot; invariant.</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Logs: <code>docs/archive/agent-log/2026-07-08-dev-b5-sdp-origin-version.md</code> (B.5 origin/version,
+commit 889a9f5); <code>docs/archive/agent-log/2026-07-14-dev-sdp-extmap-negotiation.md</code> (extmap
+negotiation, commit 172c7ad, merged 4523a3f).</li>
+<li>Code: <code>src/Core/Infrastructure/Sdp/Models/SdpSessionDescription.cs</code> (SessionId/SessionVersion);
+<code>src/Core/Infrastructure/Sdp/Parsing/SdpSessionSerializer.cs</code> (o= + a=extmap emit);
+<code>src/Core/Infrastructure/Sdp/Parsing/SdpSessionParser.cs</code> (extmap parse);
+<code>src/Core/Infrastructure/Sdp/Parsing/MediaBuilder.cs</code> (per-m-line Extensions);
+<code>src/Core/Infrastructure/Sdp/Models/SdpExtmap.cs</code>;
+<code>src/Core/Infrastructure/Sdp/OfferAnswer/SdpOfferAnswerNegotiator.cs</code> (BuildOfferExtmaps L571,
+BuildAnswerExtmaps L608, WithMidExtension L602, OneByteMaxExtensionId L567);
+<code>src/Core/Infrastructure/Sdp/OfferAnswer/SdpMediaOptions.cs</code> (SessionId/SessionVersion);
+<code>src/Core/Application/Ports/Sdp/SdpMediaNegotiationOptions.cs</code> (public port);
+<code>src/Core/Infrastructure/Sip/Adapters/SipCoreCallChannel.cs</code> (_sdpSessionId L94,
+BuildLocalSdpOptions L785, version bump L803).</li>
+<li>Tests: <code>SdpOriginVersionTests</code>; <code>VideoExtmapNegotiationTests</code>.</li>
+<li>RFC/Marker: RFC 4566 §5.2 (o= sess-id/sess-version); RFC 3264 §5 (version-increment
+modification semantics); RFC 8285 §4.2/§4.3/§5 (one-byte/two-byte header extensions, offerer owns
+id assignment); RFC 8843 §9 / RFC 9143 (MID); RFC 8853 (simulcast RID).</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-024-sdp-offer-answer-origin-and-extmap-negotiation.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

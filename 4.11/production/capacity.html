@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Capacity and sizing | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Capacity and sizing | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/portal/production/capacity.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="capacity-and-sizing">Capacity and sizing</h1>
+
+<p><strong>Short answer: there is no published &quot;N calls&quot; number for CalloraVoipSdk, and you should distrust
+anyone who gives you one.</strong> Concurrent-call capacity is a property of <em>your</em> host, runtime, GC mode,
+power profile and PBX — not of the SDK. What we publish instead is a <strong>reproducible measurement
+method</strong> plus one fully-documented reference run, so you can measure your own envelope with the
+same gate and compare like with like.</p>
+<h2 id="the-quality-gate">The quality gate</h2>
+<p>Capacity is only meaningful together with the quality bar it was measured at. A call counts as
+passing only when it stayed connected for the whole measurement window <strong>and</strong> both directions
+satisfy every one of:</p>
+<table>
+<thead>
+<tr>
+<th>Gate</th>
+<th>Threshold</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Application and RTP delivery</td>
+<td>≥ 99 % of the time-derived expectation</td>
+</tr>
+<tr>
+<td>p99 frame interval</td>
+<td>≤ 40 ms</td>
+</tr>
+<tr>
+<td>Longest silence (including window edges)</td>
+<td>&lt; 250 ms</td>
+</tr>
+<tr>
+<td>Packet loss</td>
+<td>&lt; 1 %</td>
+</tr>
+<tr>
+<td>RTP/RTCP jitter</td>
+<td>≤ 30 ms</td>
+</tr>
+</tbody>
+</table>
+<p>Evidence is recorded per call and per direction: application frames (<code>IMediaSender.SendAsync</code> /
+<code>IMediaReceiver.FrameReceived</code>), RTP counters from <code>ICall.RtpStatistics</code>, p50/p95/p99 frame
+intervals, interarrival jitter, longest silence, gap-class counts, and RFC 3550 extended-sequence
+gaps. A call with incomplete RTP/RTCP evidence does <strong>not</strong> pass, even if audio kept flowing.</p>
+<h2 id="three-classifications--read-the-label">Three classifications — read the label</h2>
+<ul>
+<li><strong>Strict capacity</strong> — the largest stage where <em>every</em> call passed <em>every</em> gate. One failure of
+any kind rejects the stage.</li>
+<li><strong>Functional full-duplex evidence</strong> — every call stayed connected, exchanged media, kept complete
+RTP/RTCP evidence and met the delivery/loss/silence gates, but at least one strict <em>timing</em> gate
+failed. Useful diagnostic; <strong>not</strong> a capacity claim.</li>
+<li><strong>Generator-limited evidence</strong> — the load generator, not the SDK, was the bottleneck. Recognisable
+by an outbound failure cluster whose call indices share a remainder modulo the worker count.
+Must never be presented as an SDK boundary.</li>
+</ul>
+<p>Near the scheduler boundary, strict outcomes vary between repetitions. That is why results are
+always reported as <em>&quot;largest repeatedly validated stage&quot;</em> plus <em>&quot;any higher single-window
+observation&quot;</em> — never as one universal maximum.</p>
+<h2 id="reference-run-2026-07-28">Reference run (2026-07-28)</h2>
+<p>One concrete host: 8-core / 16-thread Intel i7-11800H, Nobara Linux 44, .NET 10, ~31 GiB RAM,
+<strong>Server GC</strong>, a restricted &quot;Office&quot; power profile (capped ~65 %, no turbo), with a co-located
+Asterisk <code>Echo()</code> container sharing the same machine. 20-ms PCMU frames, 10 s settling, 30 s exact
+measurement window.</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">Calls</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">1,408</td>
+<td><strong>Strict — repeatedly validated.</strong> Every call passed every gate, in independent runs</td>
+</tr>
+<tr>
+<td style="text-align: right;">1,792</td>
+<td>Strict in a single window; a repetition put 128 calls at a 41–43 ms inbound p99</td>
+</tr>
+<tr>
+<td style="text-align: right;">1,920</td>
+<td><strong>Functional full-duplex.</strong> All calls connected with complete RTP/RTCP evidence and ≥ 99 % delivery; 27 calls recorded a 41 ms inbound p99 against the 40 ms limit</td>
+</tr>
+</tbody>
+</table>
+<p>Resource picture at 1,920 calls: SDK testhost ≈ 0.85 GiB working set (1.10 GiB peak), Asterisk
+≈ 0.41 GiB, managed allocations ≈ 3.35 GiB over 30 s (~120 MB/s), combined SDK + PBX CPU below 45 %
+of the machine. <strong>RAM and CPU were not the binding constraint — inbound playout <em>scheduling</em> was.</strong></p>
+<h2 id="what-this-means-for-your-sizing">What this means for your sizing</h2>
+<ul>
+<li><strong>These numbers describe that host and that profile.</strong> Treat 1,408 as evidence that the SDK is not
+the bottleneck at four-figure call counts on a laptop-class CPU, not as your number.</li>
+<li><strong>GC mode matters a lot.</strong> Workstation GC at 1,024 calls produced 158/158/0 (Gen0/1/2)
+collections; Server GC produced 30/0/0. Use Server GC for concurrency.</li>
+<li><strong>Power/frequency policy matters.</strong> The reference run was deliberately measured on a throttled
+profile, so it is conservative rather than best-case.</li>
+<li><strong>Co-locating the PBX costs you headroom.</strong> Asterisk shared the same 16 logical CPUs.</li>
+<li><strong>The first thing to fail is timing, not memory.</strong> Size for scheduler headroom, and watch p99
+frame interval rather than RAM.</li>
+</ul>
+<h2 id="measure-your-own-envelope">Measure your own envelope</h2>
+<p>The benchmark ships with the repository. It is marked <code>SoakLong</code> + <code>Capacity</code> and is deliberately
+excluded from PR and release CI — it takes a machine to itself:</p>
+<pre><code class="lang-bash">dotnet test tests/CalloraVoipSdk.InteropTests -c Release -f net10.0 \
+  --filter &quot;Category=Capacity&quot;
+</code></pre>
+<p>Defaults ramp from 64 to 4,096 calls. For a focused run around a boundary you already suspect:</p>
+<pre><code class="lang-bash">CALLORA_CAPACITY_LEVELS=512,1024,1280 \
+CALLORA_CAPACITY_REPORT=/tmp/callora-capacity.json \
+dotnet test tests/CalloraVoipSdk.InteropTests -c Release -f net10.0 \
+  --filter &quot;Category=Capacity&quot;
+</code></pre>
+<p>Every run serializes its full profile — host, runtime, thresholds, worker count, per-stage results
+and teardown state — into the JSON report. Any capacity claim that does not come with that report
+is not a validated claim.</p>
+<p>The complete profile, environment variables, report fields and interpretation limits are documented
+for maintainers in
+<a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/maintainers/capacity-quality-benchmark.md"><code>docs/maintainers/capacity-quality-benchmark.md</code></a>,
+and the full reference-run write-up — including the pre-fix results and what changed — in
+<a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/audit/2026-07-28-capacity-quality-evidence.md"><code>docs/audit/2026-07-28-capacity-quality-evidence.md</code></a>.</p>
+<h2 id="known-observability-limit">Known observability limit</h2>
+<p>Inbound RTP exposes exact local sequence-range evidence. For <strong>outbound</strong> RTP the public surface
+exposes sent-packet counters plus the peer's latest RTCP receiver-report loss and jitter, but not
+the peer's extended-highest-sequence counter — so an exact outbound sequence-gap count cannot be
+derived, and the benchmark reports it as <code>null</code> rather than inventing one. Adding raw remote
+receiver-report counters to the public quality snapshot would close that gap.</p>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/portal/production/capacity.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>
