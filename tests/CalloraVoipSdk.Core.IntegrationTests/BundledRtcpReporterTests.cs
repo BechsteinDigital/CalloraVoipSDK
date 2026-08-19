@@ -355,7 +355,7 @@ public sealed class BundledRtcpReporterTests
         var thirtyTwo = (await ReceiveOnlyReportAsync(32)).OfType<RtcpReceiverReport>().ToList();
         Assert.Equal(2, thirtyTwo.Count);
         Assert.Equal(31, thirtyTwo[0].ReportBlocks.Count);
-        Assert.Equal(1, thirtyTwo[1].ReportBlocks.Count);
+        Assert.Single(thirtyTwo[1].ReportBlocks);
     }
 
     private static async Task<IReadOnlyList<RtcpPacket>> ReceiveOnlyReportAsync(int blockCount)

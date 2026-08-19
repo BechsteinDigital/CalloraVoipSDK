@@ -34,7 +34,7 @@ public sealed class SipInviteSuccessAckTests
         while (DateTime.UtcNow < deadline && !logger.Entries.Any(e => e.Level == LogLevel.Warning))
             await Task.Delay(20);
 
-        var warning = Assert.Single(logger.Entries.Where(e => e.Level == LogLevel.Warning));
+        var warning = Assert.Single(logger.Entries, e => e.Level == LogLevel.Warning);
         Assert.Contains("forked INVITE", warning.Message, StringComparison.OrdinalIgnoreCase);
         // A fork-handling failure must not be logged at the near-invisible Debug level.
         Assert.DoesNotContain(logger.Entries, e => e.Level == LogLevel.Debug && e.Message.Contains("forked INVITE", StringComparison.OrdinalIgnoreCase));

@@ -54,7 +54,7 @@ public sealed class RtcpTransportFeedbackGapTests
     {
         var decoded = RoundTrip(Feedback(Received(10), Received(12)));
 
-        var eleven = Assert.Single(decoded.Statuses.Where(s => s.SequenceNumber == 11));
+        var eleven = Assert.Single(decoded.Statuses, s => s.SequenceNumber == 11);
         Assert.False(eleven.Received);
     }
 

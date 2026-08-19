@@ -262,7 +262,7 @@ public sealed class WebRtcPeerConnectionTests
         var offer = peer.CreateOffer();
 
         var audio = new SdpSessionParser().Parse(offer).Media.Single(m => m.MediaType == "audio");
-        var candidate = Assert.Single(audio.Candidates.Where(c => c.Type == "host"));
+        var candidate = Assert.Single(audio.Candidates, c => c.Type == "host");
         Assert.Equal("udp", candidate.Transport);
         Assert.Equal(1, candidate.Component); // RTP; rtcp-mux shares it
         Assert.Equal("127.0.0.1", candidate.Address);
@@ -278,7 +278,7 @@ public sealed class WebRtcPeerConnectionTests
         var offer = peer.CreateOffer();
 
         var audio = new SdpSessionParser().Parse(offer).Media.Single(m => m.MediaType == "audio");
-        var candidate = Assert.Single(audio.Candidates.Where(c => c.Type == "host"));
+        var candidate = Assert.Single(audio.Candidates, c => c.Type == "host");
         Assert.Equal("127.0.0.1", candidate.Address);
         Assert.True(candidate.Port > 0, "early-bind should advertise the real ephemeral port");
         Assert.True(audio.Port > 0, "the audio m-line carries the real port, not a disabled zero port");
@@ -376,7 +376,7 @@ public sealed class WebRtcPeerConnectionTests
         var offer = peer.CreateOffer();
 
         var audio = new SdpSessionParser().Parse(offer).Media.Single(m => m.MediaType == "audio");
-        var host = Assert.Single(audio.Candidates.Where(candidate => candidate.Type == "host"));
+        var host = Assert.Single(audio.Candidates, candidate => candidate.Type == "host");
         Assert.Equal(interfaceAddress.ToString(), host.Address);
         Assert.Equal(peer.LocalMediaEndPoint!.Port, host.Port);
         Assert.DoesNotContain(audio.Candidates, candidate => candidate.Address is "0.0.0.0" or "::");

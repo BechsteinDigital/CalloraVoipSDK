@@ -135,7 +135,7 @@ public sealed class RtxRetransmissionTests
     }
 
     [Fact]
-    public void Buffer_is_safe_under_concurrent_store_and_lookup()
+    public async Task Buffer_is_safe_under_concurrent_store_and_lookup()
     {
         var buffer = new RtpRetransmissionBuffer(capacity: 1024);
         var writer = Task.Run(() =>
@@ -150,7 +150,7 @@ public sealed class RtxRetransmissionTests
         });
 
         // No exception (torn dictionary state) is the assertion.
-        Assert.True(Task.WhenAll(writer, reader).Wait(TimeSpan.FromSeconds(10)));
+        await Task.WhenAll(writer, reader).WaitAsync(TimeSpan.FromSeconds(10));
     }
 
     private static RtpPacket OriginalPacket(ushort seq, byte[] payload) => new()

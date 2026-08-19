@@ -61,7 +61,7 @@ public sealed class TransportCcSendHistoryTests
         => Assert.Throws<ArgumentOutOfRangeException>(() => new TransportCcSendHistory(capacity));
 
     [Fact]
-    public void Concurrent_record_and_lookup_do_not_corrupt_entries()
+    public async Task Concurrent_record_and_lookup_do_not_corrupt_entries()
     {
         const int perProducer = 2000;
         var history = new TransportCcSendHistory(4096);
@@ -77,7 +77,7 @@ public sealed class TransportCcSendHistoryTests
                 _ = history.TryGetSendTimestamp((ushort)i, out _); // must not throw or tear
         });
 
-        Task.WaitAll(writer, reader);
+        await Task.WhenAll(writer, reader);
 
         // Every distinct sequence (all < capacity, no slot reuse) is recallable with its timestamp.
         for (var i = 0; i < perProducer; i++)

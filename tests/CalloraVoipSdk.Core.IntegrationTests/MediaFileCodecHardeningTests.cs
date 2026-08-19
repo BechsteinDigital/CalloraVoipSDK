@@ -23,16 +23,16 @@ public sealed class MediaFileCodecHardeningTests
     public async Task Mp3_passthrough_reads_a_bare_frame()
     {
         var frame = BuildMp3Frame();
-        var path = await WriteTempAsync(frame).ConfigureAwait(false);
+        var path = await WriteTempAsync(frame);
         try
         {
             await using var reader = new Mp3PassthroughReader(path, PassthroughContext());
-            var read = await reader.ReadNextFrameAsync().ConfigureAwait(false);
+            var read = await reader.ReadNextFrameAsync();
 
             Assert.NotNull(read);
             Assert.Equal(frame.Length, read!.Value.Frame.Payload.Length);
             Assert.True(read.Value.Frame.Payload.Span.SequenceEqual(frame));
-            Assert.Null(await reader.ReadNextFrameAsync().ConfigureAwait(false));
+            Assert.Null(await reader.ReadNextFrameAsync());
         }
         finally
         {
@@ -45,11 +45,11 @@ public sealed class MediaFileCodecHardeningTests
     {
         var frame = BuildMp3Frame();
         var stream = Combine(BuildId3v2Tag(64), frame);
-        var path = await WriteTempAsync(stream).ConfigureAwait(false);
+        var path = await WriteTempAsync(stream);
         try
         {
             await using var reader = new Mp3PassthroughReader(path, PassthroughContext());
-            var read = await reader.ReadNextFrameAsync().ConfigureAwait(false);
+            var read = await reader.ReadNextFrameAsync();
 
             Assert.NotNull(read);
             Assert.Equal(frame.Length, read!.Value.Frame.Payload.Length);
@@ -67,11 +67,11 @@ public sealed class MediaFileCodecHardeningTests
         var frame = BuildMp3Frame();
         var junk = new byte[] { 0x00, 0x13, 0x37, 0xFF, 0x00, 0xAB };
         var stream = Combine(junk, frame);
-        var path = await WriteTempAsync(stream).ConfigureAwait(false);
+        var path = await WriteTempAsync(stream);
         try
         {
             await using var reader = new Mp3PassthroughReader(path, PassthroughContext());
-            var read = await reader.ReadNextFrameAsync().ConfigureAwait(false);
+            var read = await reader.ReadNextFrameAsync();
 
             Assert.NotNull(read);
             Assert.True(read!.Value.Frame.Payload.Span.SequenceEqual(frame));
@@ -104,14 +104,14 @@ public sealed class MediaFileCodecHardeningTests
     {
         var wav = BuildMinimalWav([0x01, 0x00, 0x02, 0x00]);
         var path = Path.Combine(Path.GetTempPath(), $"voipsdk-wav-{Guid.NewGuid():N}.wav");
-        await File.WriteAllBytesAsync(path, wav).ConfigureAwait(false);
+        await File.WriteAllBytesAsync(path, wav);
         try
         {
             var context = new AudioFileCodecContext(
                 PayloadType: 11, ClockRate: 8000, SampleRate: 8000, SamplesPerFrame: 160, CodecName: "L16");
 
             await using var reader = new WavAudioFileReader(path, context);
-            var frame = await reader.ReadNextFrameAsync().ConfigureAwait(false);
+            var frame = await reader.ReadNextFrameAsync();
             Assert.NotNull(frame);
         }
         finally
@@ -162,15 +162,15 @@ public sealed class MediaFileCodecHardeningTests
         try
         {
             // Give ffmpeg a moment to actually spawn, then cancel.
-            await Task.Delay(600).ConfigureAwait(false);
+            await Task.Delay(600);
             cts.Cancel();
 
-            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await run.ConfigureAwait(false))
-                .ConfigureAwait(false);
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await run)
+                ;
 
             // The killed process must drain; poll briefly so we do not race the OS reaping it.
             for (var i = 0; i < 60 && CountFfmpegProcesses() > before; i++)
-                await Task.Delay(50).ConfigureAwait(false);
+                await Task.Delay(50);
 
             Assert.True(
                 CountFfmpegProcesses() <= before,
@@ -231,15 +231,15 @@ public sealed class MediaFileCodecHardeningTests
 
             var writer = await Mp3TranscodingWriter
                 .CreateAsync(outputDir, context, new WavAudioFileCodec(), logger: null, CancellationToken.None)
-                .ConfigureAwait(false);
+                ;
 
-            await writer.WriteFrameAsync(new MediaFrame(new byte[320], 0, 160)).ConfigureAwait(false);
+            await writer.WriteFrameAsync(new MediaFrame(new byte[320], 0, 160));
 
             // Encode targets a directory -> ffmpeg fails, but DisposeAsync must swallow it.
-            await writer.DisposeAsync().ConfigureAwait(false);
+            await writer.DisposeAsync();
 
             // Idempotent second dispose must also not throw.
-            await writer.DisposeAsync().ConfigureAwait(false);
+            await writer.DisposeAsync();
         }
         finally
         {
@@ -261,13 +261,13 @@ public sealed class MediaFileCodecHardeningTests
 
             var writer = await Mp3TranscodingWriter
                 .CreateAsync(output, context, new WavAudioFileCodec(), logger: null, CancellationToken.None)
-                .ConfigureAwait(false);
+                ;
 
             // ~200 ms of silence.
             for (var i = 0; i < 10; i++)
-                await writer.WriteFrameAsync(new MediaFrame(new byte[320], 0, 160)).ConfigureAwait(false);
+                await writer.WriteFrameAsync(new MediaFrame(new byte[320], 0, 160));
 
-            await writer.DisposeAsync().ConfigureAwait(false);
+            await writer.DisposeAsync();
 
             Assert.True(File.Exists(output));
             Assert.True(new FileInfo(output).Length > 0);
@@ -319,7 +319,7 @@ public sealed class MediaFileCodecHardeningTests
     private static async Task<string> WriteTempAsync(byte[] bytes)
     {
         var path = Path.Combine(Path.GetTempPath(), $"voipsdk-mp3-{Guid.NewGuid():N}.mp3");
-        await File.WriteAllBytesAsync(path, bytes).ConfigureAwait(false);
+        await File.WriteAllBytesAsync(path, bytes);
         return path;
     }
 

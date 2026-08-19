@@ -75,9 +75,9 @@ public sealed class SipSessionTimerMinSeRetryTests
 
         var invite = service.SendInviteTransactionAsync(
             body: null, allowRingingTransition: true, SipDialogState.Established, CancellationToken.None);
-        var completed = await Task.WhenAny(invite, Task.Delay(TimeSpan.FromSeconds(5))).ConfigureAwait(false);
+        var completed = await Task.WhenAny(invite, Task.Delay(TimeSpan.FromSeconds(5)));
         Assert.True(completed == invite, "session-timer retry loop did not terminate within the timeout window");
-        await Assert.ThrowsAsync<SipFinalResponseException>(() => invite).ConfigureAwait(false);
+        await Assert.ThrowsAsync<SipFinalResponseException>(() => invite);
 
         var invites = transport.SnapshotRequests().Count(r => r.Method == "INVITE");
         Assert.True(invites <= 3, $"expected a bounded INVITE count, got {invites}");

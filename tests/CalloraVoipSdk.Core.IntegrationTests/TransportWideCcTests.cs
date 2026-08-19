@@ -100,7 +100,7 @@ public sealed class TransportWideCcTests
     {
         var extension = RtpCodec.Decode(datagram).HeaderExtension;
         Assert.NotNull(extension);
-        var element = Assert.Single(OneByteRtpHeaderExtensions.Parse(extension!).Where(e => e.Id == id));
+        var element = Assert.Single(OneByteRtpHeaderExtensions.Parse(extension!), e => e.Id == id);
         return BinaryPrimitives.ReadUInt16BigEndian(element.Value.Span);
     }
 

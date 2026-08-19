@@ -60,7 +60,7 @@ public sealed class TransportCcArrivalRecorderTests
         => Assert.Throws<ArgumentOutOfRangeException>(() => new TransportCcArrivalRecorder(capacity));
 
     [Fact]
-    public void Concurrent_producers_record_without_loss_or_corruption()
+    public async Task Concurrent_producers_record_without_loss_or_corruption()
     {
         const int producers = 4;
         const int perProducer = 1000;
@@ -77,7 +77,7 @@ public sealed class TransportCcArrivalRecorderTests
             });
         }
 
-        Task.WaitAll(tasks);
+        await Task.WhenAll(tasks);
 
         Assert.Equal(producers * perProducer, recorder.Drain().Count);
         Assert.Equal(0, recorder.DroppedCount);

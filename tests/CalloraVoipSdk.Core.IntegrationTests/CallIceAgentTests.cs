@@ -135,7 +135,7 @@ public sealed class CallIceAgentTests
         var description = await agent.BuildLocalDescriptionAsync(LocalRtp, sharedMediaSocket: null, videoEndPoint);
 
         Assert.NotNull(description);
-        var videoHost = Assert.Single(description!.VideoCandidates.Where(c => c.Type == "host"));
+        var videoHost = Assert.Single(description!.VideoCandidates, c => c.Type == "host");
         Assert.Equal(1, videoHost.Component);      // RTP component of the video stream
         Assert.Equal(40002, videoHost.Port);       // the video port, not the audio port
         Assert.Equal(LocalRtp.Address.ToString(), videoHost.Address);

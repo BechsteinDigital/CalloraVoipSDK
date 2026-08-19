@@ -59,7 +59,7 @@ public sealed class SdpMultiTrackOfferTests
         var offer = Offer(AudioTrack(), AudioTrack(), VideoTrack(), VideoTrack());
 
         Assert.Equal(4, offer.Media.Count);
-        Assert.Equal(["0", "1", "2", "3"], offer.Media.Select(m => m.Mid).ToArray());
+        Assert.Equal(["0", "1", "2", "3"], offer.Media.Select(m => m.Mid!).ToArray());
         Assert.Equal(["audio", "audio", "video", "video"], offer.Media.Select(m => m.MediaType).ToArray());
         Assert.Equal("BUNDLE 0 1 2 3", offer.Group);
         // One shared BUNDLE transport port on every m-line (RFC 8843).
@@ -72,7 +72,7 @@ public sealed class SdpMultiTrackOfferTests
         var offer = Offer(VideoTrack(), AudioTrack(), VideoTrack());
 
         Assert.Equal(["video", "audio", "video"], offer.Media.Select(m => m.MediaType).ToArray());
-        Assert.Equal(["0", "1", "2"], offer.Media.Select(m => m.Mid).ToArray());
+        Assert.Equal(["0", "1", "2"], offer.Media.Select(m => m.Mid!).ToArray());
         Assert.Equal("BUNDLE 0 1 2", offer.Group);
     }
 
@@ -122,7 +122,7 @@ public sealed class SdpMultiTrackOfferTests
         var reparsed = new SdpSessionParser().Parse(sdp);
 
         Assert.Equal(3, reparsed.Media.Count);
-        Assert.Equal(["0", "1", "2"], reparsed.Media.Select(m => m.Mid).ToArray());
+        Assert.Equal(["0", "1", "2"], reparsed.Media.Select(m => m.Mid!).ToArray());
         Assert.Equal(["audio", "video", "video"], reparsed.Media.Select(m => m.MediaType).ToArray());
         Assert.Equal("BUNDLE 0 1 2", reparsed.Group);
     }

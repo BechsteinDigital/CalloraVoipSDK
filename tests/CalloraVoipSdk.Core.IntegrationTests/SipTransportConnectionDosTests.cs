@@ -27,8 +27,8 @@ public sealed class SipTransportConnectionDosTests
             var port = ((IPEndPoint)listener.LocalEndpoint).Port;
             var client = new TcpClient();
             var connect = client.ConnectAsync(IPAddress.Loopback, port);
-            var server = await listener.AcceptTcpClientAsync().ConfigureAwait(false);
-            await connect.ConfigureAwait(false);
+            var server = await listener.AcceptTcpClientAsync();
+            await connect;
             return (server, client);
         }
         finally
@@ -55,7 +55,7 @@ public sealed class SipTransportConnectionDosTests
         try
         {
             // Client stays silent: the server side must reap the connection once the idle window elapses.
-            var done = await Task.WhenAny(closed.Task, Task.Delay(CloseWait)).ConfigureAwait(false);
+            var done = await Task.WhenAny(closed.Task, Task.Delay(CloseWait));
             Assert.True(done == closed.Task, "idle stream connection was not closed within the timeout window");
         }
         finally
@@ -91,10 +91,10 @@ public sealed class SipTransportConnectionDosTests
                 "Content-Length: 5\r\n" +
                 "\r\n" +
                 "hello");
-            await client.GetStream().WriteAsync(message).ConfigureAwait(false);
-            await client.GetStream().FlushAsync().ConfigureAwait(false);
+            await client.GetStream().WriteAsync(message);
+            await client.GetStream().FlushAsync();
 
-            var done = await Task.WhenAny(received.Task, Task.Delay(CloseWait)).ConfigureAwait(false);
+            var done = await Task.WhenAny(received.Task, Task.Delay(CloseWait));
             Assert.True(done == received.Task, "complete SIP message was not framed and delivered");
             Assert.Equal(message.Length, (await received.Task).Length);
         }
@@ -123,7 +123,7 @@ public sealed class SipTransportConnectionDosTests
 
         try
         {
-            var done = await Task.WhenAny(closed.Task, Task.Delay(CloseWait)).ConfigureAwait(false);
+            var done = await Task.WhenAny(closed.Task, Task.Delay(CloseWait));
             Assert.True(done == closed.Task, "idle WebSocket connection was not closed within the timeout window");
         }
         finally
@@ -159,9 +159,9 @@ public sealed class SipTransportConnectionDosTests
             // One WS message larger than the header+body ceiling: the loop must refuse it and close,
             // never letting the aggregation buffer grow to the full attacker-chosen size.
             var oversized = new byte[(384 * 1024) + 1];
-            await clientWs.SendAsync(oversized, WebSocketMessageType.Text, endOfMessage: true, CancellationToken.None).ConfigureAwait(false);
+            await clientWs.SendAsync(oversized, WebSocketMessageType.Text, endOfMessage: true, CancellationToken.None);
 
-            var done = await Task.WhenAny(closed.Task, Task.Delay(CloseWait)).ConfigureAwait(false);
+            var done = await Task.WhenAny(closed.Task, Task.Delay(CloseWait));
             Assert.True(done == closed.Task, "oversized WebSocket message did not trigger a connection close");
             Assert.False(framed, "oversized WebSocket message must never be dispatched as a SIP frame");
         }

@@ -61,9 +61,9 @@ public sealed class SipInviteDigestRetryDosTests
             allowRingingTransition: true,
             successState: SipDialogState.Established,
             CancellationToken.None);
-        var completed = await Task.WhenAny(invite, Task.Delay(TimeSpan.FromSeconds(5))).ConfigureAwait(false);
+        var completed = await Task.WhenAny(invite, Task.Delay(TimeSpan.FromSeconds(5)));
         Assert.True(completed == invite, "INVITE digest-retry loop did not terminate within the timeout window");
-        await Assert.ThrowsAsync<SipFinalResponseException>(() => invite).ConfigureAwait(false);
+        await Assert.ThrowsAsync<SipFinalResponseException>(() => invite);
 
         // Bounded: initial INVITE + first authenticated retry + at most the stale-retry cap (2).
         var invites = transport.SnapshotRequests().Count(r => r.Method == "INVITE");

@@ -72,7 +72,7 @@ public sealed class SdpMultiTrackAnswerTests
 
         var media = result.Answer!.Media;
         Assert.Equal(["video", "audio", "video"], media.Select(m => m.MediaType).ToArray());
-        Assert.Equal(["0", "1", "2"], media.Select(m => m.Mid).ToArray());   // mids mirrored 1:1 (RFC 8829)
+        Assert.Equal(["0", "1", "2"], media.Select(m => m.Mid!).ToArray());   // mids mirrored 1:1 (RFC 8829)
         Assert.Equal("BUNDLE 0 1 2", result.Answer.Group);                    // group lists the accepted mids
     }
 
@@ -121,7 +121,7 @@ public sealed class SdpMultiTrackAnswerTests
 
         var reparsed = new SdpSessionParser().Parse(sdp);
 
-        Assert.Equal(["0", "1", "2"], reparsed.Media.Select(m => m.Mid).ToArray());
+        Assert.Equal(["0", "1", "2"], reparsed.Media.Select(m => m.Mid!).ToArray());
         Assert.Equal(["audio", "video", "video"], reparsed.Media.Select(m => m.MediaType).ToArray());
         Assert.Equal("BUNDLE 0 1 2", reparsed.Group);
     }

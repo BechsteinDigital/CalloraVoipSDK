@@ -54,6 +54,7 @@ public sealed class WebRtcFacadeCorrectnessTests
 
         Assert.Single(raised);
         Assert.Empty(frames);
+        Assert.NotNull(track);
         Assert.Equal("stream-1", track.StreamId);
 
         set.DeliverAudioFrame(mid: null, "stream-1", "track-a", new EncodedFrame(new byte[] { 1 }, null, false, null));

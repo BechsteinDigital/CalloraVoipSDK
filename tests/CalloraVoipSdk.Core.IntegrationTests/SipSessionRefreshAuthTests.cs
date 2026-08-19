@@ -79,6 +79,6 @@ public sealed class SipSessionRefreshAuthTests
         var accepted = await service.SendSessionRefreshUpdateAsync(CancellationToken.None);
 
         Assert.False(accepted);
-        Assert.Single(transport.SnapshotRequests().Where(r => r.Method == "UPDATE")); // no credentials → no retry
+        Assert.Single(transport.SnapshotRequests(), r => r.Method == "UPDATE"); // no credentials → no retry
     }
 }
