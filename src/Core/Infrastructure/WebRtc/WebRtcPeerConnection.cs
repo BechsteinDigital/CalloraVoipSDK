@@ -10,6 +10,7 @@ using CalloraVoipSdk.Core.Infrastructure.Rtp;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Models;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.OfferAnswer;
 using CalloraVoipSdk.Core.Infrastructure.Sdp.Parsing;
+using CalloraVoipSdk.Core.Infrastructure.Stun.Wire;
 using CalloraVoipSdk.Core.Infrastructure.Turn.Client;
 using Microsoft.Extensions.Logging;
 namespace CalloraVoipSdk.Core.Infrastructure.WebRtc;
@@ -88,6 +89,11 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     private bool _started;
     // Owns the gathered TURN relay allocation (RFC 8656), retained for post-Start adoption; see the store.
     private readonly WebRtcRelayAllocationStore _relayAllocation;
+    // The TCP/TLS stream relay path (ADR-073): the connector turns a stream TURN entry into a candidate over its
+    // own connection; the store retains it first-wins and adopts it into the session (now for the answerer, on
+    // build for the offerer). Separate from the UDP _relayAllocation, which rides the shared media socket.
+    private readonly WebRtcStreamRelayConnector _streamRelayConnector;
+    private readonly WebRtcStreamRelayStore _streamRelay;
     // Trickle ICE (RFC 8838): receives remote candidates, buffering those that arrive before the session exists
     // and routing them to the check list on AttachSession, then routing later ones live. Parsing + mDNS live in
     // the collaborator (keeps this file under the size limit); it owns its own no-loss buffering gate.
@@ -212,6 +218,8 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             // which is where a network change that killed consent will already have left it.
             onIceRestarted: () => TransitionTo(WebRtcConnectionState.Connecting));
         _relayAllocation = new WebRtcRelayAllocationStore(_loggerFactory);
+        _streamRelayConnector = new WebRtcStreamRelayConnector(new StunMessageCodec(), _loggerFactory);
+        _streamRelay = new WebRtcStreamRelayStore(_loggerFactory);
         // The config primary video count (0 or 1) is fixed for the peer's lifetime, so the added-track set can do
         // the numeric-MID arithmetic without re-reading _options; it captures it once here.
         _addedTracks = new WebRtcAddedTrackSet(_options.VideoTracks.Count);
@@ -669,6 +677,43 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
             (serverEndPoint, allocation, gatheredLocal) => _relayAllocation.OnGathered(
                 serverEndPoint, allocation, gatheredLocal, () => { lock (_sync) { return _session; } }),
             cancellationToken).ConfigureAwait(false);
+
+        // Stream relay candidates (TCP/TLS TURN, ADR-073) gather over their own connection — independent of the
+        // media socket — so they are gathered here rather than through the socket-centric gatherer above.
+        await GatherStreamRelaysAsync(local, relatedHost, cancellationToken).ConfigureAwait(false);
+    }
+
+    // Gathers a stream relay candidate for each TCP/TLS TURN server (ADR-073), first-wins: the first that
+    // allocates is retained + advertised and adopted into the session (now for the answerer, on build for the
+    // offerer); a surplus is disposed. A failed connect/allocation is one fewer candidate, never a throw. Skips
+    // entirely once one is retained (an ICE restart re-gather keeps the existing stream connection, like the UDP
+    // relay keeps its allocation).
+    private async Task GatherStreamRelaysAsync(IPEndPoint local, IPEndPoint relatedHost, CancellationToken ct)
+    {
+        if (_streamRelay.RelayedEndPoint is not null)
+            return;
+
+        foreach (var server in _options.IceServers)
+        {
+            if (server.Type != IceServerType.Turn || server.Transport == IceTransport.Udp)
+                continue;
+
+            var candidate = await _streamRelayConnector
+                .ConnectAndGatherAsync(server, local.AddressFamily, onInboundMedia: _ => { }, ct)
+                .ConfigureAwait(false);
+            if (candidate is null)
+                continue;
+
+            // OnGathered latches first-wins and adopts into an already-built (answerer) session, reading the adopt
+            // target through the same _sync-guarded snapshot the UDP store uses, so the peer keeps sole ownership.
+            if (_streamRelay.OnGathered(candidate, () => { lock (_sync) { return _session; } }))
+            {
+                _candidateEmitter.Emit(WebRtcIceCandidateFactory.RelayCandidate(candidate.RelayedEndPoint, relatedHost));
+                return;
+            }
+
+            await candidate.DisposeAsync().ConfigureAwait(false); // first-wins: this later candidate is surplus
+        }
     }
 
     // Wires the built session's transport-lifecycle and inbound-media events onto this peer via the event bridge.
@@ -699,6 +744,10 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
     private void OnSessionBuilt(BundledMediaSession session)
     {
         WireSession(session);
+        // Adopt a retained stream relay into the freshly built session (the offerer path — its session did not
+        // exist when the candidate was gathered). A no-op for the answerer (already adopted at gather) and when
+        // no stream relay was gathered.
+        _streamRelay.AdoptInto(session);
         _trickleIce.AttachSession(session);
     }
 
@@ -786,6 +835,9 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         await _sendGate.BeginDrainAsync().ConfigureAwait(false);
         if (session is not null)
             await session.DisposeAsync().ConfigureAwait(false);
+        // Dispose a stream relay that no session ever adopted (an offerer whose session was never built); an
+        // adopted one was just disposed by the session above.
+        await _streamRelay.DisposeAsync().ConfigureAwait(false);
         orphanSocket?.Dispose();
         _mdnsLifetime.Dispose();
     }

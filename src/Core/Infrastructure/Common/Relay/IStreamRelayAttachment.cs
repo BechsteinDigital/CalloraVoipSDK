@@ -16,6 +16,9 @@ namespace CalloraVoipSdk.Core.Infrastructure.Common.Relay;
 /// </summary>
 internal interface IStreamRelayAttachment : IAsyncDisposable
 {
+    /// <summary>The relayed transport address the TURN server allocated — the relay candidate's advertised address.</summary>
+    IPEndPoint RelayedEndPoint { get; }
+
     /// <summary>The relay local candidate's TURN-framed send path (RFC 8656 §10) — <c>(datagram, remoteTarget, ct)</c>.</summary>
     Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask> RelaySend { get; }
 

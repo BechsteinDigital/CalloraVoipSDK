@@ -124,6 +124,8 @@ internal sealed class FakeStreamRelayAttachment : IStreamRelayAttachment
     public bool Disposed { get; private set; }
     public Action<IPEndPoint, byte[]>? InboundRoute { get; private set; }
 
+    public IPEndPoint RelayedEndPoint { get; } = new(IPAddress.Parse("203.0.113.1"), 50000);
+
     public Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask> RelaySend { get; } =
         (_, _, _) => ValueTask.CompletedTask;
 
@@ -158,6 +160,8 @@ internal sealed class EchoingStreamRelayAttachment : IStreamRelayAttachment
 
     public int BindChannelCalls;
     public IPEndPoint? BoundPeer { get; private set; }
+
+    public IPEndPoint RelayedEndPoint { get; } = new(IPAddress.Parse("203.0.113.2"), 50000);
 
     public EchoingStreamRelayAttachment()
     {
