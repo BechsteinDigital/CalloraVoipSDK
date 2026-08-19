@@ -43,6 +43,14 @@ internal sealed class StreamRelayMediaTransport : IRelayControlTransport, IAsync
     // The bound relay channel, installed after ChannelBind. Read on the send path and written by the
     // nomination/coordinator thread — Volatile so a sender observing non-null sees a fully constructed channel.
     private IRelayDatagramChannel? _channel;
+
+    // The per-peer indication channel used during the ICE checking phase (RFC 8656 §10): relayed Data
+    // indications carry a connectivity-check response from a specific peer. Installed before checks and read on
+    // the receive loop — Volatile so the loop observing non-null sees a fully constructed channel. Distinct from
+    // the post-nomination ChannelData path (_channel), which the framer separates by frame type.
+    private IRelayIndicationChannel? _indicationRelay;
+    private Action<IPEndPoint, byte[]>? _onInboundIndication;
+
     private Task? _receiveLoop;
     private int _disposed;
 
@@ -86,6 +94,26 @@ internal sealed class StreamRelayMediaTransport : IRelayControlTransport, IAsync
     {
         ArgumentNullException.ThrowIfNull(channel);
         Volatile.Write(ref _channel, channel);
+    }
+
+    /// <summary>
+    /// Installs the per-peer indication channel for the ICE checking phase (RFC 8656 §10): once set, an inbound
+    /// relayed Data indication is unwrapped to its inner payload and originating peer and delivered to
+    /// <paramref name="onInboundIndication"/> (a connectivity-check response), while other STUN traffic from the
+    /// relay server stays on the control path. The receive half of the relay ICE candidate (ADR-054), the
+    /// counterpart of the send path's <see cref="TurnRelayCandidateSendPath"/>. Independent of the
+    /// post-nomination <see cref="SetRelayChannel"/> data path — the two are separated by frame type.
+    /// </summary>
+    /// <param name="indication">The indication channel that unwraps Data indications for the allocation's relay server.</param>
+    /// <param name="onInboundIndication">Invoked with the peer and inner payload of each relayed Data indication.</param>
+    public void SetIndicationRelay(IRelayIndicationChannel indication, Action<IPEndPoint, byte[]> onInboundIndication)
+    {
+        ArgumentNullException.ThrowIfNull(indication);
+        ArgumentNullException.ThrowIfNull(onInboundIndication);
+        Volatile.Write(ref _onInboundIndication, onInboundIndication);
+        // Publish the callback before the channel discriminator, so the receive loop observing a non-null
+        // channel also sees the sink (mirrors the transport's other publish-before-discriminator ordering).
+        Volatile.Write(ref _indicationRelay, indication);
     }
 
     /// <summary>
@@ -145,9 +173,26 @@ internal sealed class StreamRelayMediaTransport : IRelayControlTransport, IAsync
                 }
 
                 if (frame.IsChannelData)
+                {
                     _onInboundMedia(frame.Payload);
+                    continue;
+                }
+
+                // A STUN frame is either a relayed Data indication (a check response from a peer, during the
+                // checking phase) or a TURN control response (Allocate/Permission/ChannelBind). The indication
+                // channel's TryUnwrap succeeds only for the former; everything else is control. The frame's
+                // source is the relay server — the one connection this transport carries.
+                var indication = Volatile.Read(ref _indicationRelay);
+                if (indication is not null
+                    && indication.TryUnwrap(frame.Payload, indication.RelayServer, out var peer, out var inner)
+                    && peer is not null)
+                {
+                    Volatile.Read(ref _onInboundIndication)?.Invoke(peer, inner);
+                }
                 else
+                {
                     _onRelayControl(frame.Payload);
+                }
             }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
