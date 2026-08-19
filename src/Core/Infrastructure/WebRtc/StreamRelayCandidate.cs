@@ -20,7 +20,7 @@ namespace CalloraVoipSdk.Core.Infrastructure.WebRtc;
 /// wiring (slice 4c-ii); this type owns only the transport-and-keepalive lifecycle and its teardown order.
 /// </para>
 /// </summary>
-internal sealed class StreamRelayCandidate : IAsyncDisposable
+internal sealed class StreamRelayCandidate : IStreamRelayAttachment
 {
     private readonly StreamRelayMediaTransport _transport;
     private int _activated;
@@ -40,6 +40,12 @@ internal sealed class StreamRelayCandidate : IAsyncDisposable
 
     /// <summary>The relay binding — its send path, permission installer, channel-bind seam and keepalive.</summary>
     public RelayIceBinding Binding { get; }
+
+    /// <inheritdoc />
+    public Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask> RelaySend => Binding.RelaySend;
+
+    /// <inheritdoc />
+    public Func<IPAddress, CancellationToken, Task>? EnsurePermission => Binding.EnsurePermission;
 
     /// <summary>The relayed transport address the TURN server allocated (this candidate's advertised address).</summary>
     public IPEndPoint RelayedEndPoint { get; }
