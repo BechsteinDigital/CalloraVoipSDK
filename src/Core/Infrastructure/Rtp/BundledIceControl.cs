@@ -234,6 +234,34 @@ internal sealed class BundledIceControl : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Feeds an inbound STUN datagram that arrived through a <em>separate</em> relay transport (a stream relay's
+    /// own connection, ADR-073) into this bundle's ICE agent — the inbound counterpart of
+    /// <see cref="AddRelayLocalCandidate"/>. Unlike the UDP relay, whose relayed indications ride the shared media
+    /// socket and reach the agent through the inbound pipeline, a stream relay owns its own receive loop, so its
+    /// unwrapped relayed connectivity checks are handed in here directly (kept off the shared single-consumer RTP
+    /// demux): an inbound response confirms the relay candidate's check (consent/nomination), and an inbound
+    /// request is answered back through <paramref name="replyVia"/> — the relay reply path (RFC 8656 §10), so the
+    /// response returns the way it came rather than over the direct socket (RFC 8445 role-agnostic routing). The
+    /// ICE agent's STUN entry is transaction-correlated and thread-safe, so feeding it from the stream receive
+    /// loop concurrently with the direct socket's loop is safe. No-op semantics follow the attachment (a datagram
+    /// that matches nothing is ignored).
+    /// </summary>
+    /// <param name="datagram">The inner STUN datagram unwrapped from a relayed Data indication.</param>
+    /// <param name="source">The peer the datagram originated from (never the TURN server it arrived through).</param>
+    /// <param name="replyVia">The relay reply path a response to an inbound connectivity check must take.</param>
+    public void OnRelayStunReceived(
+        byte[] datagram,
+        IPEndPoint source,
+        Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask> replyVia)
+    {
+        ArgumentNullException.ThrowIfNull(datagram);
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(replyVia);
+        // _attachment is volatile: a restart swaps it under _restartGate, and this read sees the live one.
+        _attachment.OnStunPacketReceived(datagram, source, replyVia);
+    }
+
     /// <summary>Detaches from the inbound STUN feed and disposes the consent session.</summary>
     public async ValueTask DisposeAsync()
     {
