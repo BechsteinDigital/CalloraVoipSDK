@@ -24,4 +24,20 @@ internal sealed class IceLocalCandidate
     /// the TURN server.
     /// </summary>
     public required Func<IPEndPoint, bool, CancellationToken, Task<bool>> Check { get; init; }
+
+    /// <summary>
+    /// The relay send path this candidate's consent freshness rides once nominated (a TURN Send indication),
+    /// or <see langword="null"/> for a direct (host/srflx) candidate that sends on the media socket. Carried on
+    /// the candidate so nomination routes consent through the candidate that actually won — which distinguishes
+    /// coexisting relays (for example a UDP relay and a stream relay) rather than reading a single shared field.
+    /// </summary>
+    public Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>? SendVia { get; init; }
+
+    /// <summary>
+    /// Invoked once, when THIS candidate is the nominated pair's local (RFC 8445 §8), with the nominated remote.
+    /// A relay candidate that owns its own transport (a stream relay, ADR-073) uses it to switch that transport
+    /// onto the relay data path. Left <see langword="null"/> by direct candidates and by the UDP relay, which
+    /// switches its shared socket in place through the session-level relay-nominated callback instead.
+    /// </summary>
+    public Action<IPEndPoint>? OnNominated { get; init; }
 }

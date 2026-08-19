@@ -43,8 +43,10 @@ internal sealed class BundledIceControl : IAsyncDisposable
 
     // A relay local candidate added after construction (the answerer's TURN path). Retained so a restart can
     // re-apply it to the fresh agent — dropping it would silently downgrade a relayed session to direct-only.
+    // OnNominated is the stream relay's own-transport switch (ADR-073), null for the UDP relay.
     private (Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask> Send,
-             Func<IPAddress, CancellationToken, Task>? EnsurePermission)? _lateRelay;
+             Func<IPAddress, CancellationToken, Task>? EnsurePermission,
+             Action<IPEndPoint>? OnNominated)? _lateRelay;
 
     private int _disposed;
 
@@ -185,7 +187,7 @@ internal sealed class BundledIceControl : IAsyncDisposable
             _onConnectivityRecovered, _onPairNominated, _relaySend, _onRelayPairNominated);
 
         if (_lateRelay is { } relay)
-            attachment.AddRelayLocalCandidate(relay.Send, relay.EnsurePermission);
+            attachment.AddRelayLocalCandidate(relay.Send, relay.EnsurePermission, relay.OnNominated);
 
         if (detach is not null)
             _inbound.StunPacketReceived -= detach.OnStunPacketReceived;
@@ -221,16 +223,22 @@ internal sealed class BundledIceControl : IAsyncDisposable
     /// proactively permission offerer remote-candidate IPs. <see langword="null"/> leaves proactive permissioning
     /// off (a controlling agent installs permissions itself as it relays outbound checks).
     /// </param>
+    /// <param name="onNominated">
+    /// Invoked with the nominated remote when this relay candidate wins the pair, for a relay that owns its own
+    /// transport (a stream relay, ADR-073) to switch that transport onto the relay data path. <see langword="null"/>
+    /// (the UDP relay) falls to the session-level relay-nominated callback. Retained for restart re-apply.
+    /// </param>
     public void AddRelayLocalCandidate(
         Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask> relaySend,
-        Func<IPAddress, CancellationToken, Task>? ensurePermission = null)
+        Func<IPAddress, CancellationToken, Task>? ensurePermission = null,
+        Action<IPEndPoint>? onNominated = null)
     {
         // Retained under the same gate that publishes an agent, so a concurrent restart either builds its agent
         // with this relay path or has it applied here — never neither.
         lock (_restartGate)
         {
-            _lateRelay = (relaySend, ensurePermission);
-            _attachment.AddRelayLocalCandidate(relaySend, ensurePermission);
+            _lateRelay = (relaySend, ensurePermission, onNominated);
+            _attachment.AddRelayLocalCandidate(relaySend, ensurePermission, onNominated);
         }
     }
 
