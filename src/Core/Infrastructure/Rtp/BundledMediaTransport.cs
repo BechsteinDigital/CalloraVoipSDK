@@ -45,6 +45,14 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IRelayCont
     private readonly UdpClient _udp;
 
     private IRelayDatagramChannel? _relay;
+
+    // The stream relay media send (ADR-073): when a stream relay pair is nominated, every media/ICE send is
+    // forwarded here — the stream transport frames it as ChannelData over its own TCP/TLS connection — instead of
+    // the UDP socket, and the stream transport injects its relayed inbound via InjectRelayedInbound. This is the
+    // distinct-transport counterpart of the UDP whole-socket relay (_relay); the two are mutually exclusive.
+    // Mutable → Volatile on every send path (the nomination thread flips it while the receive loop / senders run).
+    private Func<ReadOnlyMemory<byte>, CancellationToken, ValueTask>? _streamMediaSend;
+
     // The per-pair relay indication path (RFC 8656 §10), active in direct mode only: relayed Data indications
     // from its server are unwrapped to the inner payload + peer, and the server's control responses go to the
     // control callback. Independent of the whole-socket relay mode above (_relayServer) — mutually exclusive.
@@ -171,6 +179,49 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IRelayCont
     }
 
     /// <summary>
+    /// Transitions a direct-mode transport onto a <em>stream</em> relay (ADR-073) once a stream relay pair is
+    /// nominated: every subsequent send is forwarded to <paramref name="streamMediaSend"/> — the stream transport
+    /// frames it as ChannelData over its own TCP/TLS connection — instead of the UDP socket, and the stream
+    /// transport injects its relayed inbound through <see cref="InjectRelayedInbound"/>. Unlike
+    /// <see cref="EnterRelayMode"/> there is no in-place socket switch: the media simply rides a different
+    /// transport, chosen by nomination (the reference model — libwebrtc/pjnath route the selected candidate's own
+    /// socket). Mutually exclusive with the UDP whole-socket relay mode. The nominated peer must already be the
+    /// remote endpoint (relayed inbound is attributed to it).
+    /// </summary>
+    /// <param name="streamMediaSend">The stream transport's ChannelData media send — <c>(datagram, ct)</c>.</param>
+    /// <exception cref="InvalidOperationException">The transport runs the UDP whole-socket relay mode, or no remote endpoint is set.</exception>
+    public void EnterStreamRelayMode(Func<ReadOnlyMemory<byte>, CancellationToken, ValueTask> streamMediaSend)
+    {
+        ArgumentNullException.ThrowIfNull(streamMediaSend);
+        if (Volatile.Read(ref _relayServer) is not null)
+            throw new InvalidOperationException(
+                "EnterStreamRelayMode conflicts with the UDP whole-socket relay mode (mutually exclusive).");
+        if (Volatile.Read(ref _remoteEndPoint) is null)
+            throw new InvalidOperationException(
+                "EnterStreamRelayMode requires a remote endpoint — the bound peer relayed inbound is attributed to.");
+
+        Volatile.Write(ref _streamMediaSend, streamMediaSend);
+    }
+
+    /// <summary>
+    /// Injects a datagram relayed inbound over the stream relay (the inner payload of a ChannelData frame, RFC
+    /// 8656 §12) into the same inbound pipeline as socket traffic, attributed to <paramref name="peer"/>. Called
+    /// from the stream transport's receive loop once <see cref="EnterStreamRelayMode"/> is active; a no-op before
+    /// then (nothing rides the stream until a stream relay pair is nominated). Post-nomination the direct socket
+    /// path is dead (the relay only wins when direct fails), so the stream is effectively the sole inbound source.
+    /// </summary>
+    /// <param name="datagram">The inner datagram unwrapped from a relayed ChannelData frame.</param>
+    /// <param name="peer">The nominated peer the relayed media is attributed to.</param>
+    public void InjectRelayedInbound(byte[] datagram, IPEndPoint peer)
+    {
+        ArgumentNullException.ThrowIfNull(datagram);
+        ArgumentNullException.ThrowIfNull(peer);
+        if (Volatile.Read(ref _streamMediaSend) is null)
+            return;
+        _inbound.ProcessInboundDatagram(datagram, peer);
+    }
+
+    /// <summary>
     /// Enables the per-pair TURN relay indication path (RFC 8656 §10) on a <em>direct-mode</em> transport, so a
     /// relay ICE local candidate can send connectivity checks to several remote candidates over one allocation
     /// (framed as Send indications) while the direct host/srflx candidate keeps using the socket directly.
@@ -221,6 +272,15 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IRelayCont
     /// <inheritdoc />
     public async ValueTask SendAsync(ReadOnlyMemory<byte> datagram, CancellationToken cancellationToken)
     {
+        if (Volatile.Read(ref _streamMediaSend) is { } streamSend)
+        {
+            // Stream relay mode (ADR-073): the peer is reachable only over the stream relay's own connection, so
+            // every send (DTLS/RTP and any late ICE datagram alike) is framed as ChannelData over the stream —
+            // the peer's transport unwraps ChannelData and re-classifies, exactly as the UDP whole-socket relay.
+            await streamSend(datagram, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         if (Volatile.Read(ref _relay) is { } relay)
         {
             // Relay mode: frame as ChannelData and send to the TURN server, which forwards it to the bound
@@ -257,6 +317,14 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IRelayCont
     public async ValueTask SendToAsync(ReadOnlyMemory<byte> datagram, IPEndPoint target, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(target);
+
+        if (Volatile.Read(ref _streamMediaSend) is { } streamSend)
+        {
+            // Stream relay mode: the one bound channel over the stream carries every send to the bound peer, so a
+            // targeted send is framed as ChannelData over the stream too (target is implicit — the bound peer).
+            await streamSend(datagram, cancellationToken).ConfigureAwait(false);
+            return;
+        }
 
         if (Volatile.Read(ref _relay) is { } relay)
         {
