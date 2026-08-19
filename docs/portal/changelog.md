@@ -5,6 +5,21 @@ The authoritative changelog lives in the repository:
 
 ## Release highlights
 
+### 4.11.0 — 2026-08-19
+
+**Media over a TCP/TLS TURN relay, and a WebRTC peer that survives an ICE restart.** The relay data path was
+UDP-only, so a caller behind a firewall that allows only outbound 443 had no last-resort path. 4.11.0 relays
+media over a persistent **TCP/TLS** connection to the TURN server (RFC 8656 §12 ChannelData) as a first-class
+ICE candidate — configure it with `WithTurnServer(..., transport: IceTransport.Tls)` (or `.Tcp`). Media rides
+the transport the winning candidate selects, the model libwebrtc and pjnath use; the UDP relay keeps its
+in-place whole-socket switch. Separately, `IPeerConnection.CreateIceRestartOfferAsync(...)` lets a peer
+re-gather and re-nominate connectivity **in place** (preserving DTLS/SRTP) instead of being disposed and
+rebuilt, and an offer can now ask the peer to simulcast (`WebRtcConfiguration.SimulcastRecvLayers`). Also:
+media-flow/silence monitoring on `ICall`, RFC 8285 two-byte header extensions and the AV1 Dependency Descriptor
+on the RTP path, SIP hardening (RFC 3261 §19.1.4 / §8.2.2.1) and static-IP-trunk support. **Purely additive —
+no public API removed or changed** (verified against `PublicApi.approved.txt`). See
+[`RELEASE_NOTES_4.11.0.md`](https://github.com/BechsteinDigital/CalloraVoipSDK/blob/main/RELEASE_NOTES_4.11.0.md).
+
 ### 4.10.0 — 2026-08-07
 
 **Per-call outgoing-audio mute on `ICall`.** Two additive members — `MuteAsync(bool muted, …)` and `IsMuted` —

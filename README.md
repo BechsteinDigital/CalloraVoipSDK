@@ -19,7 +19,7 @@ It exposes a stable, developer-friendly API through `VoipClient` while keeping t
 🧪 **Examples:** [`examples/`](examples) — runnable samples (BasicCalling, Dialer, Transfer, CustomAudio, Switchboard, VideoCalling, WebRtcPeer, WebRtcRecording, WebRtcDependencyInjection, and a browser video-call website `WebRtcVideoCall.Web`)
 🛠️ **Maintainers:** [`MAINTAINING.md`](MAINTAINING.md) — architecture map, invariants, workflows; rules in [`ENGINEERING_RULES.md`](ENGINEERING_RULES.md)
 
-> **Project status — 4.10.** The **SIP + RTP core** is the mature, production-oriented surface:
+> **Project status — 4.11.** The **SIP + RTP core** is the mature, production-oriented surface:
 > registration, in/outbound call control, transfer, DTMF, SRTP (SDES) and measured RTCP quality
 > metrics — with symmetric RTP (comedia) as the production-proven NAT path. It is exercised in CI
 > by an **automated interop suite against a real Asterisk (PJSIP) container** — registration,
@@ -30,15 +30,38 @@ It exposes a stable, developer-friendly API through `VoipClient` while keeping t
 > validated in CI against **real browsers** (Chromium and Firefox, headless via Playwright: audio
 > and VP8 video, SDK as offerer *and* as answerer), and the **self-hostable STUN/TURN server** is
 > exercised end-to-end against a real **coturn** relay. Deliberate limits in this line: no data
-> channels (SCTP), TURN relay is **UDP-only**, no **ICE restart on a connected peer** (dispose and
-> re-create it), and **full ICE** (RFC 8445/7675) is opt-in and not yet production-proven — validate
-> it for your trunk before enabling it. The 4.7 multi-party primitives (multi-track, renegotiation,
+> channels (SCTP); the **TCP/TLS TURN relay** (new in 4.11) is unit-proven but its browser/real-server
+> data-path validation is still in the interop matrix, so validate it before relying on it — the **UDP
+> relay** is production-proven; and **full ICE** (RFC 8445/7675) is opt-in and not yet production-proven —
+> validate it for your trunk before enabling it. The 4.7 multi-party primitives (multi-track, renegotiation,
 > receive-side simulcast) are stable and transport-only, but the browser-interop matrix exercises the
 > **1 audio + 1 video** path only — validate a multi-track topology against your own clients. Known
 > gaps and interop defects are tracked openly in the
 > [issue tracker](../../issues) — bug reports and interop feedback are especially welcome.
 
 **Contents:** [Why](#why-calloravoipsdk) · [Progressive API](#progressive-api-simple-first-deeper-when-needed) · [Features](#current-feature-set) · [Install](#installation) · [Quickstart](#quickstart) · [Architecture](#architecture) · [Contributing](#contributing) · [Security](#security) · [License](#license)
+
+## What's new in 4.11
+
+**Media over a TCP/TLS TURN relay, and a WebRTC peer that survives an ICE restart** — the two "deliberate
+limits" the 4.10 line called out. Purely additive: no public API was removed or changed (verified against the
+tracked `PublicApi.approved.txt` baseline).
+
+- **TCP/TLS TURN relay (#240, ADR-073).** The relay data path is no longer UDP-only. Add a TURN server with
+  `IceTransport.Tcp`/`IceTransport.Tls` and a relay candidate carries media over a persistent TCP/TLS connection
+  to the server (RFC 8656 §12 ChannelData) — media rides the transport the winning pair selects, the model
+  libwebrtc and pjnath use. TLS gives a last-resort path across firewalls that allow only outbound 443.
+  *Unit-proven; browser/real-server data-path validation is tracked in the interop matrix.*
+- **ICE restart on a connected peer (#226).** `IPeerConnection.CreateIceRestartOfferAsync(...)` re-gathers and
+  re-nominates connectivity in place — the DTLS association and SRTP contexts are preserved — instead of forcing
+  a dispose-and-rebuild.
+- **Receive-side simulcast (#317).** A receive-only offerer (a conference host) can ask the peer to simulcast
+  via `WebRtcConfiguration.SimulcastRecvLayers`; `IPeerConnection.NegotiatedReceiveSimulcastRids` reads back what
+  the answer confirmed.
+- **Media-flow/silence monitoring, RTP header-extension coverage (RFC 8285 two-byte, AV1 Dependency
+  Descriptor), SIP hardening (RFC 3261 §19.1.4 / §8.2.2.1) and static-IP-trunk support.**
+
+Full detail in [`CHANGELOG.md`](CHANGELOG.md) and [`RELEASE_NOTES_4.11.0.md`](RELEASE_NOTES_4.11.0.md).
 
 ## What's new in 4.10
 
@@ -308,7 +331,7 @@ logic without depending on internal implementation types.
 
 CalloraVoipSdk follows Semantic Versioning (`MAJOR.MINOR.PATCH`).
 
-- Current public release line: `4.x` — latest release `4.7.0`
+- Current public release line: `4.x` — latest release `4.11.0`
   (see [releases](https://github.com/BechsteinDigital/callora-voip-sdk/releases))
 - Public API removals only happen in MAJOR releases; deprecations are introduced
   through `[Obsolete(...)]` before removal

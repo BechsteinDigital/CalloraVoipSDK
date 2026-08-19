@@ -8,31 +8,30 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
 
 The next line. Entries here accumulate the consumer-visible changes not yet released.
 
-### Internal / in progress (not yet consumer-visible)
+## [4.11.0] - 2026-08-19
 
-- **Stream relay transport groundwork** (#240, ADR-073 slice 1). `StreamRelayMediaTransport` carries relayed
-  media over a persistent TCP/TLS stream (RFC 8656 §12 ChannelData, §12.5 padding), driven by the existing
-  transport-agnostic `TurnRelayCoordinator`. Not yet wired into ICE gathering or nomination — no consumer-visible
-  TCP/TLS relay path yet.
-- **Stream relay gathering** (#240, ADR-073 slice 2). `TurnStreamAllocationProbe` gathers a TURN relay
-  allocation over a connected TCP/TLS stream — the stream counterpart of the UDP allocation probe — yielding the
-  relayed endpoint a stream relay candidate advertises, and leaving the stream open for hand-off to the
-  transport. Not yet wired into the ICE candidate set.
-- **Stream relay candidate send path** (#240, ADR-073 slice 3). The transport-agnostic
-  `TurnRelayCandidateSendPath` composes over the stream transport with no new abstraction: a connectivity check
-  installs a TURN permission and frames a Send indication over the stream (verified against a real hosted TURN
-  server). Not yet attached as an ICE candidate in the nomination path.
-- **Stream relay inbound indication path** (#240, ADR-073 slice 4a). `StreamRelayMediaTransport.SetIndicationRelay`
-  adds the receive half of the relay ICE candidate: during the checking phase a relayed Data indication on the
-  stream is unwrapped to its inner payload and originating peer (a connectivity-check response, RFC 8656 §10),
-  while non-Data STUN from the server stays on the control path. Not yet attached into the ICE nomination.
-- **Stream relay candidate in the consent loop** (#240, ADR-073 slice 4b). A consent check sent over the stream
-  and answered as a relayed Data indication is confirmed through `IceMediaConsentSession.OnStunResponse` —
-  proving the relay candidate, whose send and receive live on the stream rather than the shared media socket,
-  plugs into the same consent machinery because the transaction matcher is send-path agnostic. Not yet
-  assembled into the live ICE session.
+Media over a TCP/TLS TURN relay, and a WebRTC peer that survives an ICE restart. The relay data path used to be
+UDP-only, so a caller behind a firewall that allows only outbound 443 had no last-resort path; 4.11.0 relays
+media over a persistent TCP/TLS connection to the TURN server (RFC 8656 §12 ChannelData) as a first-class ICE
+candidate — media rides the transport the winning pair selects, the model libwebrtc and pjnath use. A WebRTC
+peer can now re-gather and re-nominate connectivity in place (`IPeerConnection.CreateIceRestartOfferAsync`)
+instead of being disposed and rebuilt, and an offer can ask the peer to simulcast (receive-side). Alongside:
+media-flow/silence monitoring on `ICall`, RFC 8285 two-byte header extensions and the AV1 Dependency Descriptor
+on the RTP path, several SIP-hardening fixes (RFC 3261 §19.1.4 URI comparison, §8.2.2.1 served-user gating), and
+static-IP-trunk support. Purely additive — no public API was removed or changed (verified against
+`PublicApi.approved.txt`).
 
 ### Added
+
+- **Media over a TCP/TLS TURN relay** (#240, ADR-073). The relay data path was UDP-only; a relay candidate can
+  now carry media over a persistent TCP/TLS connection to the TURN server (RFC 8656 §2.1, ChannelData §12/§12.5).
+  Add a TURN server with `IceTransport.Tcp` or `IceTransport.Tls` to the ICE servers: the peer connects it,
+  gathers a relay candidate over that connection, and once a stream relay pair is nominated the session's media
+  (DTLS/RTP) flows as ChannelData over the stream — DTLS/SRTP ride above it unchanged. This is the reference
+  model (libwebrtc/pjnath route the selected candidate's own socket); the existing UDP relay keeps its in-place
+  whole-socket switch. TLS gives a last-resort path across firewalls that allow only outbound 443. The working
+  path is the controlling (offerer) agent; the answerer-side stream relay and the real-server/browser data-path
+  proof are the documented open edges (ADR-073, interop #228).
 
 - **The receive-simulcast layers the peer confirmed are readable on the peer** (#317 slice 2, RFC 8853 §5.3).
   After `SetRemoteDescriptionAsync`, **`IPeerConnection.NegotiatedReceiveSimulcastRids`** lists the `a=rid …
