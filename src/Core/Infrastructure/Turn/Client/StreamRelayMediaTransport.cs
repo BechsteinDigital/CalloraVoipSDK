@@ -32,7 +32,10 @@ internal sealed class StreamRelayMediaTransport : IRelayControlTransport, IAsync
     private readonly Stream _stream;
     private readonly IPEndPoint _relayServer;
     private readonly Action<byte[]> _onRelayControl;
-    private readonly Action<byte[]> _onInboundMedia;
+    // The relayed-media sink (ChannelData inner). Seeded at construction (a placeholder before a session adopts
+    // the relay) and re-pointed at the session's inbound when a stream relay pair is nominated
+    // (SetMediaInbound) — Volatile because the receive loop reads it while the nomination thread swaps it.
+    private Action<byte[]> _onInboundMedia;
     private readonly ILogger<StreamRelayMediaTransport> _logger;
 
     // A stream permits only one writer at a time; every write (control and data) takes this so a control
@@ -117,6 +120,19 @@ internal sealed class StreamRelayMediaTransport : IRelayControlTransport, IAsync
     }
 
     /// <summary>
+    /// Re-points the relayed-media sink (the inner payload of each inbound ChannelData frame, RFC 8656 §12) at
+    /// the adopting session's inbound, called when a stream relay pair is nominated so relayed media reaches the
+    /// media pipeline attributed to the bound peer. Idempotent-safe; the receive loop observes it via
+    /// <see cref="Volatile"/>.
+    /// </summary>
+    /// <param name="onInboundMedia">The session's relayed-media sink.</param>
+    public void SetMediaInbound(Action<byte[]> onInboundMedia)
+    {
+        ArgumentNullException.ThrowIfNull(onInboundMedia);
+        Volatile.Write(ref _onInboundMedia, onInboundMedia);
+    }
+
+    /// <summary>
     /// Sends one media/transport datagram (STUN check, DTLS flight, RTP/RTCP) through the bound channel as
     /// ChannelData over the stream, padded to a 4-byte boundary (RFC 8656 §12.5). Suppressed (no-op) until a
     /// channel is installed, mirroring the UDP transport's suppress-until-bound behaviour.
@@ -174,7 +190,7 @@ internal sealed class StreamRelayMediaTransport : IRelayControlTransport, IAsync
 
                 if (frame.IsChannelData)
                 {
-                    _onInboundMedia(frame.Payload);
+                    Volatile.Read(ref _onInboundMedia)(frame.Payload);
                     continue;
                 }
 

@@ -103,6 +103,10 @@ internal sealed class FakeStreamRelayAttachment : IStreamRelayAttachment
 
     public void StartKeepAlive() => KeepAliveStarted = true;
 
+    public Task<Func<ReadOnlyMemory<byte>, CancellationToken, ValueTask>?> BindChannelAsync(
+        IPEndPoint peer, Action<byte[]> onInboundMedia, CancellationToken ct)
+        => Task.FromResult<Func<ReadOnlyMemory<byte>, CancellationToken, ValueTask>?>((_, _) => ValueTask.CompletedTask);
+
     public ValueTask DisposeAsync()
     {
         Disposed = true;

@@ -26,6 +26,10 @@ internal sealed class StreamRelayCandidate : IStreamRelayAttachment
     private int _activated;
     private int _disposed;
 
+    // The channel rebind keepalive (RFC 8656 §12), set once a media transition binds a channel. It rides the
+    // stream transport's control send, so it is disposed before the transport in DisposeAsync.
+    private IRelayKeepAlive? _channelRebind;
+
     internal StreamRelayCandidate(
         StreamRelayMediaTransport transport,
         RelayIceBinding binding,
@@ -76,6 +80,31 @@ internal sealed class StreamRelayCandidate : IStreamRelayAttachment
     /// </summary>
     public void StartKeepAlive() => Binding.KeepAlive?.Start();
 
+    /// <inheritdoc />
+    public async Task<Func<ReadOnlyMemory<byte>, CancellationToken, ValueTask>?> BindChannelAsync(
+        IPEndPoint peer, Action<byte[]> onInboundMedia, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(peer);
+        ArgumentNullException.ThrowIfNull(onInboundMedia);
+
+        if (Binding.BindChannel is not { } bindChannel)
+            return null;
+
+        var channelBinding = await bindChannel(peer, ct).ConfigureAwait(false);
+        // Route relayed inbound media to the session BEFORE opening the ChannelData data path, so the first
+        // inbound frame after the channel opens already has the right sink.
+        _transport.SetMediaInbound(onInboundMedia);
+        _transport.SetRelayChannel(channelBinding.Channel);
+        // Keep the channel binding alive (RFC 8656 §12); disposed before the transport it rides in DisposeAsync.
+        if (channelBinding.Rebind is { } rebind)
+        {
+            _channelRebind = rebind;
+            rebind.Start();
+        }
+
+        return (payload, sendCt) => _transport.SendMediaAsync(payload, sendCt);
+    }
+
     /// <summary>
     /// Tears the candidate down. The keepalive is disposed first — its teardown Refresh(0) rides the transport's
     /// send, so it must run while the transport is still alive — and only then is the transport (and with it the
@@ -86,6 +115,10 @@ internal sealed class StreamRelayCandidate : IStreamRelayAttachment
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
             return;
 
+        // Both keepalives ride the transport's control send, so they are disposed — running their teardown —
+        // before the transport: the channel rebind first (it exists only after a transition), then the allocation.
+        if (_channelRebind is { } channelRebind)
+            await channelRebind.DisposeAsync().ConfigureAwait(false);
         if (Binding.KeepAlive is { } keepAlive)
             await keepAlive.DisposeAsync().ConfigureAwait(false);
         await _transport.DisposeAsync().ConfigureAwait(false);
