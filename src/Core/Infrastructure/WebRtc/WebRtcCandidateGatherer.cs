@@ -144,8 +144,8 @@ internal sealed class WebRtcCandidateGatherer(
 
     // Allocates a TURN relay on the media socket and emits a relay candidate on success, reporting the
     // allocation to the peer first (retention/adoption). No-op without a TURN probe. Only UDP TURN is gathered
-    // over the media socket — TCP/TLS TURN needs its own connection (a later slice) — and a failed allocation
-    // is simply no relay candidate (as with a failed srflx query), never a throw.
+    // over the media socket — TCP/TLS TURN is gathered as a stream relay over its own connection (ADR-073) — and a
+    // failed allocation is simply no relay candidate (as with a failed srflx query), never a throw.
     private async Task GatherRelayAsync(
         IceServerConfiguration server,
         IPEndPoint local,

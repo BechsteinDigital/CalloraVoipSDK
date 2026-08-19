@@ -1,10 +1,11 @@
 # WebRTC
 
-> **Status (4.7).** The WebRTC facade is **validated in CI against real browsers** — Chromium and
+> **Status (4.11).** The WebRTC facade is **validated in CI against real browsers** — Chromium and
 > Firefox, headless via Playwright, audio and VP8 video, in both roles (SDK as offerer and as
 > answerer), over DTLS-SRTP including AES-GCM. Known scope limits: data channels (SCTP) are **not
-> included**; TURN relay is **UDP-only** (no TCP/TLS relay); and Safari/WebKit is not yet
-> verified. The media socket follows the address family of the configured `LocalEndPoint`, so IPv4
+> included**; the **TCP/TLS TURN relay** (new in 4.11) is available but unit-proven only — its
+> browser/real-server data-path validation is tracked in the interop matrix, while the **UDP relay** is
+> production-proven; and Safari/WebKit is not yet verified. The media socket follows the address family of the configured `LocalEndPoint`, so IPv4
 > and IPv6 both work. Browser **mDNS (`.local`) host candidates are resolved** via the OS resolver
 > (RFC 8828). Trickle ICE and early-bind are included: an ephemeral media port still yields a live
 > m-line, though a fixed, reachable port remains the recommendation for NAT reachability without
@@ -15,10 +16,10 @@
 > (RFC 8829), **receive-side simulcast demux** (the RID a layer arrived on is surfaced per frame),
 > and a **per-peer recommended outgoing bitrate** derived from transport-cc feedback. All additive —
 > a peer that uses none of them negotiates byte-identical SDP and behaves exactly as before. The SDK
-> stays a peer, not a conference server: it **forwards, it does not mix or transcode**. Two limits
-> worth knowing up front: **ICE restart on a connected peer is not supported** (dispose and re-create
-> the peer), and these primitives are **not yet covered by the browser-interop CI matrix** — the
-> browser suite exercises the 1 audio + 1 video path. See the sections below.
+> stays a peer, not a conference server: it **forwards, it does not mix or transcode**. One limit
+> worth knowing up front: these primitives are **not yet covered by the browser-interop CI matrix** — the
+> browser suite exercises the 1 audio + 1 video path. (ICE restart on a connected peer is supported since
+> 4.11 via `CreateIceRestartOfferAsync`.) See the sections below.
 
 The `CalloraVoipSdk.WebRtc` namespace is a signalling-neutral WebRTC peer surface that mirrors the
 four-level design of `VoipClient`. It is **transport-only**: the SDK runs ICE, DTLS-SRTP, BUNDLE and
@@ -168,8 +169,9 @@ and the tracks already running keep flowing. A new track's SSRCs are allocated d
 one, so it never collides a running stream's per-SSRC SRTP context (RFC 3550 §8.1). Observe where you
 are in the exchange via `SignalingState` / `SignalingStateChanged` (W3C `RTCSignalingState`).
 
-**Honest limits.** **ICE restart is not supported** — a re-offer that rotates the ICE ufrag on the
-shared transport is rejected; dispose and re-create the peer to restart ICE. A peer that uses only
+**ICE restart.** A re-offer that rotates the ICE ufrag on the shared transport re-gathers and re-nominates
+connectivity in place (`CreateIceRestartOfferAsync`, since 4.11) — the DTLS association and SRTP contexts are
+preserved, so the peer need not be disposed and rebuilt. A peer that uses only
 `WebRtcConfiguration.EnableVideo` and never calls `AddVideoTrack` emits the byte-identical 1+1 SDP as
 before, and `SendVideoFrameAsync` still addresses the primary track.
 

@@ -1,7 +1,8 @@
 {
-  "latest": "4.10",
+  "latest": "4.11",
   "versions": [
-    { "label": "4.10", "path": "" },
+    { "label": "4.11", "path": "" },
+    { "label": "4.10", "path": "4.10" },
     { "label": "4.9", "path": "4.9" },
     { "label": "4.8", "path": "4.8" },
     { "label": "4.7", "path": "4.7" },

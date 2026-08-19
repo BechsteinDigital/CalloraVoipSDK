@@ -52,15 +52,17 @@ misconfigured STUN/TURN server yields host-only candidates.
 
 - **Safari / WebKit** — a `BrowserEngine.WebKit` exists in the matrix, but no verified run.
 - **Data channels (SCTP)** — not implemented, so anything relying on them will not work.
-- **TURN relay is UDP-only** — no TCP/TLS relay. The relay path itself is verified against a real
-  coturn server.
+- **TCP/TLS TURN relay is not yet browser/real-server-verified here.** New in 4.11 (a stream relay over
+  a persistent TCP/TLS connection, RFC 8656 §12) and unit-proven, but its data path over real browsers /
+  cloud TURN is still tracked in this matrix. The **UDP relay** path is verified against a real coturn server.
 - **The 4.7 multi-party primitives are outside this CI matrix.** Multiple video and audio tracks over
   one BUNDLE, mid-call renegotiation, receive-side simulcast demux (`EncodedFrame.Rid`) and the
   per-peer bitrate recommendation are stable since 4.7.0 and transport-only, but the browser suite
   above exercises the **1 audio + 1 video** path only. A multi-track topology against a browser is
   therefore unverified here — validate it against your own clients. See the
   [WebRTC guide](../guides/webrtc.md).
-- **ICE restart on a connected peer** is not supported — dispose and re-create the peer.
+- **ICE restart on a connected peer** is supported (since 4.11, `CreateIceRestartOfferAsync`), but its
+  behaviour over real browsers is not yet exercised in this matrix.
 
 Interop reports for other browsers are welcome:
 [info@bechstein.digital](mailto:info@bechstein.digital).

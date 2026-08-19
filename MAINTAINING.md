@@ -110,7 +110,7 @@ Kurzfassung — Details und Fundstellen in [`ENGINEERING_RULES.md`](ENGINEERING_
 - .NET SDK **10.0.100** (`global.json`, rollForward latestFeature); Ziel-TFMs
   `net8.0;net9.0;net10.0` überall (ArchitectureTests nur net10.0).
 - Version kommt aus `src/Directory.Build.props` (`VersionPrefix` + `VersionSuffix`, aktuell
-  `4.6.0`); Releases überschreiben per `/p:Version` aus dem Git-Tag.
+  `4.11.0`); Releases überschreiben per `/p:Version` aus dem Git-Tag.
 
 ```bash
 dotnet build CalloraVoipSdk.sln --configuration Release
@@ -245,7 +245,11 @@ deren PDBs Pfade verschobener Dateien und verfälschen die Zahl.
    Dispatch-Input.
 3. Doku: `release-docs.yml` deployt DocFX nach GitHub Pages (root + versioniert) bei Push
    auf main; `docs.yml` ist das PR-Gate für den Doku-Build.
-4. `CHANGELOG.md` pflegen; Breaking Changes im README-Abschnitt „What's new" nachziehen.
+4. **Release-Doku (pro Minor/Major):** `VersionPrefix` in `src/Directory.Build.props` hochziehen;
+   `CHANGELOG.md` (`[Unreleased]` → `[X.Y.Z] - DATUM` + frische `[Unreleased]`); `RELEASE_NOTES_X.Y.Z.md`
+   schreiben; `docs/portal/changelog.md` (Release-Highlight), README-Abschnitt „What's new", Status-Zeile und
+   „latest release" nachziehen. Die Public-API-Fläche ist über `tests/CalloraVoipSdk.ArchitectureTests/PublicApi.approved.txt`
+   (test-erzwungen) belegt — ein Removal oder eine Signatur-Änderung dort ⇒ Major-Bump, sonst Minor (additiv).
 
 ### 3.6 Doku-Grenzen
 
@@ -305,6 +309,13 @@ Typische Erweiterungspunkte:
 > DTLS-post-handshake-`close_notify`-Servicing ([ADR-066](docs/adr/ADR-066-dtls-post-handshake-association-servicing.md)).
 > Die einzelnen Punkte unten stammen aus dem 4.6.0-Stand — Details zu allem Neuen in
 > [`CHANGELOG.md`](CHANGELOG.md) und [`RELEASE_NOTES_4.8.0.md`](RELEASE_NOTES_4.8.0.md).
+
+> **Nachtrag 4.11.0 (2026-08-19):** Seither: WebRTC-**ICE-Restart am verbundenen Peer** (#226), **recv-Simulcast**
+> (#317), RFC-8285-Zwei-Byte-Header-Extensions und AV1-Dependency-Descriptor, Media-Flow/Silence-Monitoring auf
+> `ICall`, SIP-Härtung (RFC 3261 §19.1.4 / §8.2.2.1) und Static-IP-Trunk-Support — sowie der **TCP/TLS-TURN-Relay**
+> (#240, [ADR-073](docs/adr/ADR-073-stream-relay-transport-tcp-tls.md)): unit-bewiesen, Browser/Real-Server-Interop
+> noch offen (#228). Rein additiv, keine Public-API entfernt oder geändert (belegt via `PublicApi.approved.txt`).
+> Details in [`CHANGELOG.md`](CHANGELOG.md) und [`RELEASE_NOTES_4.11.0.md`](RELEASE_NOTES_4.11.0.md).
 
 Quellen: `docs/audit/INTEROP_SOAK_AUDIT.md` (F-Register) und die Tiefenanalyse 2026-07-22
 (`docs/audit/2026-07-22-quelltext-tiefenanalyse.md`). **Sämtliche P1-Befunde der Tiefenanalyse

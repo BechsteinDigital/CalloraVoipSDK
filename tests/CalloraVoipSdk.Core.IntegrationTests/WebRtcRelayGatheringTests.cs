@@ -107,8 +107,11 @@ public sealed class WebRtcRelayGatheringTests
     }
 
     [Fact]
-    public async Task GatherCandidates_skips_a_non_udp_turn_server()
+    public async Task GatherCandidates_yields_no_relay_for_an_unreachable_tcp_turn_server()
     {
+        // A TCP/TLS TURN server is gathered as a stream relay over its own connection (ADR-073), not on the UDP
+        // media socket. Here nothing listens on the configured port, so the connect is refused and — like any
+        // unreachable server — it yields no relay candidate, without disturbing gathering.
         await using var peer = Peer(TurnProbe(new StunMessageCodec()),
             [new IceServerConfiguration
             {
@@ -120,10 +123,10 @@ public sealed class WebRtcRelayGatheringTests
         peer.LocalIceCandidateDiscovered += candidates.Add;
 
         peer.CreateOffer();
-        await peer.GatherCandidatesAsync(); // TCP TURN is not gathered over the UDP media socket → no relay
+        await peer.GatherCandidatesAsync();
 
         Assert.DoesNotContain(candidates, c => c.Contains("typ relay", StringComparison.Ordinal));
-        Assert.Null(peer.GatheredRelayAllocation);
+        Assert.Null(peer.GatheredRelayAllocation); // the UDP relay allocation; the stream relay is separate
     }
 
     /// <summary>
