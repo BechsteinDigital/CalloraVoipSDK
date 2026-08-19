@@ -70,7 +70,10 @@ public sealed class VideoMediaStreamE2eTests
         await sender.StartAsync();
 
         var frame = EncodedFrame("VP8", 2000);
-        using var overall = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        // The gate here is DTLS-handshake completion (ECDSA + retransmit timers), which can crawl on a loaded
+        // Windows CI runner — 30 s was too tight and flaked with a TaskCanceledException. Once keyed, a single
+        // frame round-trips in milliseconds, so a generous deadline costs nothing on a healthy run.
+        using var overall = new CancellationTokenSource(TimeSpan.FromSeconds(90));
         uint ts = 90000;
         while (!received.Task.IsCompleted)
         {
