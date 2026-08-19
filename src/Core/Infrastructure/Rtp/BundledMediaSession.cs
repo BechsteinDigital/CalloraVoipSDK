@@ -127,6 +127,14 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     // not carry that whole lifecycle inline; a session without a relay allocation just holds an inert one.
     private readonly BundledRelayDataPath _relay;
 
+    // A stream relay candidate adopted post-construction (ADR-073): unlike _relay it owns its OWN TCP/TLS
+    // transport (distinct from the shared UDP socket), so it is driven through the IStreamRelayAttachment seam
+    // rather than the transport. Held so its keepalive starts with the session and it is disposed — after the ICE
+    // agent, so a late relay send cannot use its transport after teardown — on dispose. Null until AdoptStreamRelay
+    // wires one; the wiring claim is a one-shot latch.
+    private IStreamRelayAttachment? _streamRelay;
+    private int _streamRelayWired;
+
     /// <summary>
     /// Raised with each decrypted inbound audio RTP packet on the <em>primary</em> audio track (the transport
     /// anchor). Backward-compatible with the pre-4.7.0 single-audio path: it never fires for an additional audio
@@ -583,6 +591,59 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     }
 
     /// <summary>
+    /// Adopts a <em>stream</em> relay ICE local candidate (ADR-073): a TURN relay that carries its own send and
+    /// receive over a persistent TCP/TLS connection to the server, distinct from the shared UDP media socket. It
+    /// is wired into this session's one ICE agent alongside the direct (host/srflx) candidates, direct-preferred
+    /// by pair priority (RFC 8445 §6.1.2.3): the attachment's relayed connectivity checks are routed into the
+    /// agent through <see cref="BundledIceControl.OnRelayStunReceived"/> (kept off the shared single-consumer RTP
+    /// demux — the agent's STUN entry is transaction-correlated and thread-safe, so the stream receive loop feeds
+    /// it concurrently with the direct socket's loop), and the agent gains the relay send path and permission
+    /// installer as a second local candidate.
+    /// <para>
+    /// Order matters: the inbound route and the transport's receive loop are wired first
+    /// (<see cref="IStreamRelayAttachment.Activate"/>) so an inbound check has somewhere to land before the agent
+    /// starts checking the relay candidate. The keepalive is started here too (idempotent — <see cref="StartAsync"/>
+    /// also starts it), so an adoption that lands after the session started still keeps the allocation alive. The
+    /// attachment is disposed after the ICE agent on teardown (its relay send rides its own transport, so the agent
+    /// must stop first). Single-shot: a second adoption is a no-op and disposes the redundant attachment.
+    /// </para>
+    /// </summary>
+    /// <param name="streamRelay">The gathered stream relay candidate to adopt.</param>
+    public void AdoptStreamRelay(IStreamRelayAttachment streamRelay)
+    {
+        ArgumentNullException.ThrowIfNull(streamRelay);
+        if (Interlocked.Exchange(ref _streamRelayWired, 1) != 0)
+        {
+            // Already adopted — dispose the redundant candidate rather than leak its transport and stream.
+            _logger.LogWarning("A stream relay was already adopted for this session; disposing the redundant candidate.");
+            _ = DisposeRedundantStreamRelayAsync(streamRelay);
+            return;
+        }
+
+        _streamRelay = streamRelay;
+        // Wire the inbound route and start the relay transport's receive loop before the candidate is checked, so
+        // a relayed inbound check (request or response) has a live route into the ICE agent. The response goes
+        // back the way it came (RFC 8656 §10): the relay reply path is the candidate's own send.
+        streamRelay.Activate((peer, inner) => _ice.OnRelayStunReceived(inner, peer, streamRelay.RelaySend));
+        _ice.AddRelayLocalCandidate(streamRelay.RelaySend, streamRelay.EnsurePermission);
+        // Keep the allocation alive (RFC 8656 §3.9). Idempotent, so an adoption that lands after StartAsync still
+        // runs the keepalive; the StartAsync path covers a pre-start adoption.
+        streamRelay.StartKeepAlive();
+    }
+
+    private async Task DisposeRedundantStreamRelayAsync(IStreamRelayAttachment streamRelay)
+    {
+        try
+        {
+            await streamRelay.DisposeAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Disposing a redundant stream relay candidate failed.");
+        }
+    }
+
+    /// <summary>
     /// Adds a video track to this bundle <em>live</em> (P3b): after construction, while the receive loop runs
     /// and media flows on the existing tracks, without touching the shared transport, DTLS association, ICE
     /// agent, or SRTP context — and without interrupting any existing track. The new track rides its own MID on
@@ -749,6 +810,9 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         // Keep a gathered relay allocation alive for the session (RFC 8656 §3.9). Idempotent — AdoptRelay may
         // already have started it for an answerer.
         _relay.Start();
+        // Same for an adopted stream relay's own allocation (ADR-073). Idempotent — AdoptStreamRelay already
+        // started it if it landed before this call; null when no stream relay was adopted.
+        _streamRelay?.StartKeepAlive();
         // Start emitting periodic Sender Reports (RFC 3550 §6.4). Its SRTCP send fails closed until the DTLS
         // handshake below installs the outbound SRTCP key, so an early start just suppresses the first ticks.
         _rtcpReporter.Start();
@@ -902,6 +966,11 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         // and before the transport: it drains an in-flight transition, then stops the channel rebind and the
         // allocation keepalive — both of which ride the transport's control send.
         await _relay.DisposeAsync().ConfigureAwait(false);
+        // Dispose an adopted stream relay after the ICE agent too (ADR-073): its relay send and keepalive ride its
+        // own TCP/TLS transport, so the agent — which drives those — must be stopped first. It owns its transport
+        // (and the stream), independent of the shared UDP transport below, and disposes keepalive-before-transport.
+        if (_streamRelay is { } streamRelay)
+            await streamRelay.DisposeAsync().ConfigureAwait(false);
         // Stop the transport-cc congestion plane before the transport it rides is torn down (its SRTCP feedback
         // send goes through the transport): its dispose signals the lifetime token and awaits the loop.
         if (_congestion is not null)
