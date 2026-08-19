@@ -22,6 +22,10 @@ The next line. Entries here accumulate the consumer-visible changes not yet rele
   `TurnRelayCandidateSendPath` composes over the stream transport with no new abstraction: a connectivity check
   installs a TURN permission and frames a Send indication over the stream (verified against a real hosted TURN
   server). Not yet attached as an ICE candidate in the nomination path.
+- **Stream relay inbound indication path** (#240, ADR-073 slice 4a). `StreamRelayMediaTransport.SetIndicationRelay`
+  adds the receive half of the relay ICE candidate: during the checking phase a relayed Data indication on the
+  stream is unwrapped to its inner payload and originating peer (a connectivity-check response, RFC 8656 §10),
+  while non-Data STUN from the server stays on the control path. Not yet attached into the ICE nomination.
 
 ### Added
 
