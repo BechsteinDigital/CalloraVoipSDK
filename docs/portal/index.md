@@ -21,13 +21,15 @@ and intelligent decision logic.
 
 ## Current Status
 
-Latest release: **v4.7.2** on [nuget.org](https://www.nuget.org/packages/CalloraVoipSdk) (this
-documentation). The 4.7 line builds multi-party / SFU enablement onto the WebRTC facade — multiple video
-and audio tracks over one BUNDLE with mid-call renegotiation, receive-side simulcast demux, and a per-peer
-send-bitrate recommendation — all additive and transport-only on top of the 4.6 WebRTC facade,
-DTLS-SRTP with AEAD-AES-GCM, self-hostable STUN/TURN server, and the stable SIP + RTP core. The 4.7 patch
-releases sharpen ICE connection setup (4.7.1, 4.7.2) and fold in a round of review hardening across ICE,
-the WebRTC track path and TURN.
+Latest release: **v4.11.0** on [nuget.org](https://www.nuget.org/packages/CalloraVoipSdk) (this
+documentation). 4.11 closes the two limits the 4.10 line called out: the TURN relay data path is no longer
+UDP-only — a relay candidate can carry media over a persistent **TCP/TLS** connection to the server (a stream
+relay, RFC 8656 §12 ChannelData), unit-proven with browser/real-server interop tracked in the matrix — and a
+WebRTC peer now **survives an ICE restart** in place (`CreateIceRestartOfferAsync`) instead of being disposed
+and rebuilt. It also adds receive-side simulcast (an offer can ask the peer to simulcast), media-flow/silence
+monitoring on `ICall`, RFC 8285 two-byte header extensions and the AV1 Dependency Descriptor, and SIP hardening.
+All additive — no public API was removed or changed — on top of the multi-party WebRTC facade (4.7),
+DTLS-SRTP with AEAD-AES-GCM, the self-hostable STUN/TURN server, and the stable SIP + RTP core.
 
 > **How to read the status column.** *Stable* = mature, covered by the RFC-oriented test suite and
 > by automated interop, and the intended production surface. *Opt-in* = shipped and tested, but off
@@ -92,7 +94,8 @@ byte-identical SDP to 4.6. The SDK stays a peer: it **forwards, it does not mix 
 | Receive-side simulcast demux (RFC 8853 / 8852): per-RID reassembly, layer id on `EncodedFrame.Rid` | ✅ Stable (forwarding-only — layer choice is the app's) |
 | Per-peer send-bitrate recommendation from transport-cc (`RecommendedOutgoingBitrateBps`, `RecommendedBitrateChanged`) | ✅ Stable |
 | On-demand key-frame request per track (`RequestVideoKeyFrameAsync(mid)`, RFC 4585 §6.3.1 PLI) | ✅ Stable |
-| ICE restart on a connected peer (re-offer rotating the ICE ufrag) | 🚫 Not supported — dispose and re-create the peer |
+| ICE restart on a connected peer (`CreateIceRestartOfferAsync`, re-offer rotating the ICE ufrag) | ✅ Stable |
+| TURN relay over TCP/TLS (stream relay, RFC 8656 §12 ChannelData) | ✅ Available (unit-proven; browser/real-server interop tracked in the matrix) |
 | Audio mixing / transcoding (a real conference server) | 🚫 Not included — out of scope by design |
 
 ## Choose your integration depth
