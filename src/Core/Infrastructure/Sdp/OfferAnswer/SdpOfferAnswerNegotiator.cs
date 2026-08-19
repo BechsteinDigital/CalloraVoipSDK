@@ -196,13 +196,14 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
         IReadOnlyList<SdpIceCandidate> candidates)
     {
         var (rtxCodecs, rtxFmtp) = VideoCodecCatalog.BuildRtx(codecs);
-        // The RID extension (RFC 8852) is what tags each layer's packets, so it must be offered whenever the
-        // m-line names rids in EITHER direction — a recv-only offer needs it just as much, or the peer it
-        // asked to simulcast has no way to label the layers it sends back (#317).
-        var videoExtmapUris = simulcastSendRids.Count > 0 || simulcastRecvRids.Count > 0
+        var (rids, simulcastDeclaration) = SdpSimulcastNegotiation.BuildOffer(simulcastSendRids, simulcastRecvRids, codecs);
+        // The RID extension (RFC 8852) is what tags each layer's packets, so it is offered exactly when the
+        // m-line actually declares simulcast in EITHER direction — a recv-only offer needs it just as much, or
+        // the peer it asked to simulcast has no way to label the layers it sends back (#317). A lone rid is not
+        // simulcast, so where BuildSimulcast dropped it the extension goes with it (#369).
+        var videoExtmapUris = simulcastDeclaration is not null
             ? SdpExtmapNegotiation.WithBundledMid(bundle, [RtpHeaderExtensionUris.Rid, .. headerExtUris])
             : SdpExtmapNegotiation.WithBundledMid(bundle, headerExtUris);
-        var (rids, simulcastDeclaration) = BuildSimulcast(simulcastSendRids, simulcastRecvRids, codecs);
 
         return new SdpMediaDescription
         {
@@ -712,6 +713,16 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
         foreach (var rtx in rtxCodecs)
             feedbackPts.Add(rtx.PayloadType);
 
+        // Simulcast (RFC 8853): confirm the offered layers in the answer — recv for a peer that will send,
+        // send for a peer that asked us to (#369). When a direction is confirmed the answer must also echo
+        // the RID header extension (RFC 8852) so the layers can be labelled per packet — added to the
+        // supported set here so BuildAnswer reflects it under the offered id; without any confirmed layer the
+        // extension set (and thus the whole m-line) stays byte-identical to a non-simulcast answer.
+        var (simulcastRids, simulcastAnswer) = SdpSimulcastNegotiation.BuildAnswer(offered, video.SimulcastSendRids, negotiated);
+        var answerExtmapUris = simulcastAnswer is not null
+            ? SdpExtmapNegotiation.WithMid([RtpHeaderExtensionUris.Rid, .. video.HeaderExtensionUris])
+            : SdpExtmapNegotiation.WithMid(video.HeaderExtensionUris);
+
         return new SdpMediaDescription
         {
             MediaType = "video",
@@ -735,30 +746,14 @@ internal sealed class SdpOfferAnswerNegotiator : ISdpOfferAnswerNegotiator
             IceOptions = localOptions.Ice?.Options,
             Candidates = video.Candidates,
             // RTP header extensions (RFC 8285 §5): echo the offered id for each URI we support,
-            // dropping the rest — the answer confirms the negotiated id↔uri mapping.
-            Extensions = SdpExtmapNegotiation.BuildAnswer(offered.Extensions, SdpExtmapNegotiation.WithMid(video.HeaderExtensionUris))
+            // dropping the rest — the answer confirms the negotiated id↔uri mapping. The RID extension is in
+            // the supported set only when a simulcast direction was confirmed above.
+            Extensions = SdpExtmapNegotiation.BuildAnswer(offered.Extensions, answerExtmapUris),
+            Rids = simulcastRids,
+            Simulcast = simulcastAnswer
         };
     }
 
-    // Send-side simulcast (RFC 8853): one a=rid per layer with direction "send", restricted to the primary
-    // (first, non-RTX) video codec's payload type, plus one a=simulcast:send listing the layer ids in
-    // order. Empty when no simulcast layer is configured (a single-stream video m-line).
-    // Builds the a=rid / a=simulcast lines for a video offer. Send rids (RFC 8853, this side simulcasts) and
-    // recv rids (this side asks the peer to simulcast, RFC 8853 §5.3) are independent: either, both, or
-    // neither. An answerer may only send what the offer marked recv, so a receive-only offerer — the
-    // conference host — must declare recv rids or the peer sends a single stream (#317).
-    private static (IReadOnlyList<SdpRid> Rids, SdpSimulcast? Simulcast) BuildSimulcast(
-        IReadOnlyList<string> sendRids, IReadOnlyList<string> recvRids, IReadOnlyList<SdpCodecDefinition> videoCodecs)
-    {
-        if (sendRids.Count == 0 && recvRids.Count == 0)
-            return ([], null);
-
-        var primaryPt = videoCodecs[0].PayloadType;
-        var rids = new List<SdpRid>(sendRids.Count + recvRids.Count);
-        rids.AddRange(sendRids.Select(rid => new SdpRid { Id = rid, Direction = "send", Restrictions = $"pt={primaryPt}" }));
-        rids.AddRange(recvRids.Select(rid => new SdpRid { Id = rid, Direction = "recv", Restrictions = $"pt={primaryPt}" }));
-        return (rids, new SdpSimulcast { Send = sendRids, Recv = recvRids });
-    }
 
     // The packetisation interval this stack actually sends at, and the range it can work with. 20 ms is
     // the default every audio path here uses (see SdpUtilities), and 10..120 ms brackets what is usable:
