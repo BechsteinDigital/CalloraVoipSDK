@@ -75,6 +75,9 @@ internal sealed class Call : ICall, IDisposable
     public string? Diversion => _channel.Diversion;
 
     /// <inheritdoc />
+    public IReadOnlyList<string> DiversionChain => _channel.DiversionChain;
+
+    /// <inheritdoc />
     public string? RemoteDisplayName => _channel.RemoteDisplayName;
 
     /// <inheritdoc />

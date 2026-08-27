@@ -52,6 +52,8 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
     internal int _completedInviteCSeq;
     private string? _remoteAssertedIdentity;
     private readonly string? _diversion;
+
+    private readonly IReadOnlyList<string> _diversionChain = Array.Empty<string>();
     private readonly string? _remoteDisplayName;
     private string? _remoteSdp;
     private string? _earlyMediaSdp;
@@ -161,6 +163,14 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
                 _initialInvite.Header("P-Asserted-Identity"),
                 configuration.RemoteEndPoint);
             _diversion = SipCallSessionUtilities.ParseDiversionUri(_initialInvite.Header("Diversion"));
+            // Header() returns the first row only, which is the whole of what Diversion could ever
+            // say here and none of what History-Info says. The full chain needs every row of both,
+            // and the Request-URI to recognise which History-Info entry is us rather than a party
+            // that forwarded the call.
+            _diversionChain = SipDiversionHistory.Parse(
+                _initialInvite.HeaderValues("History-Info"),
+                _initialInvite.HeaderValues("Diversion"),
+                _initialInvite.RequestUri);
             _remoteDisplayName = SipProtocol.ExtractDisplayNameFromNameAddr(_initialInvite.Header("From"));
             var initialRemoteCSeq = SipProtocol.ExtractCSeqNumber(_initialInvite.Header("CSeq"));
             if (initialRemoteCSeq > 0)
@@ -186,6 +196,9 @@ internal sealed class SipCallSession : ISipCallSession, IDisposable
     public string? RemoteAssertedIdentity { get { lock (_sync) return _remoteAssertedIdentity; } }
     /// <inheritdoc />
     public string? Diversion => _diversion;
+
+    /// <inheritdoc />
+    public IReadOnlyList<string> DiversionChain => _diversionChain;
     /// <inheritdoc />
     public string? RemoteDisplayName => _remoteDisplayName;
     /// <inheritdoc />

@@ -51,6 +51,14 @@ internal interface ISipCallSession : IDisposable
     string? Diversion => null;
 
     /// <summary>
+    /// The addresses this call was forwarded from, oldest first, read from whichever retargeting
+    /// header the carrier sent — <c>History-Info</c> (RFC 4244) or <c>Diversion</c> (RFC 5806).
+    /// Empty when none was reported, which is not the same as "the call was not forwarded".
+    /// Defaults to empty so existing implementations keep compiling.
+    /// </summary>
+    IReadOnlyList<string> DiversionChain => Array.Empty<string>();
+
+    /// <summary>
     /// Remote party display-name from the inbound INVITE From header (RFC 3261 §8.1.1.3), or
     /// <see langword="null"/> when the header carried none. Defaults to <see langword="null"/> so
     /// existing implementations keep compiling.

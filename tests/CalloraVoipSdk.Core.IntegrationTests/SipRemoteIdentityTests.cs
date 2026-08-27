@@ -65,6 +65,40 @@ public sealed class SipRemoteIdentityTests
         Assert.Equal("sip:diverted-from@pbx.example", call.Diversion);
     }
 
+    [Fact]
+    public void The_forwarding_chain_surfaces_on_the_call()
+    {
+        using var channel = new SipCoreCallChannel(
+            NullLogger<SipCoreCallChannel>.Instance,
+            new SdpNegotiator(),
+            NullSipTelemetrySink.Instance,
+            SrtpPolicy.Disabled,
+            "test");
+
+        var call = new Call(
+            CallId.New(),
+            CallDirection.Inbound,
+            "sip:remote@test.invalid",
+            channel,
+            new FakePhoneLine(),
+            NullLogger<Call>.Instance);
+
+        // Before a session is attached nothing has been reported — which is not a claim that the
+        // call arrived directly.
+        Assert.Empty(call.DiversionChain);
+
+        channel.AttachSession(new StubIdentityCallSession(
+            remoteAssertedIdentity: null,
+            diversion: "sip:second@pbx.example",
+            diversionChain: ["sip:first@pbx.example", "sip:second@pbx.example"]));
+
+        // Oldest first: the number the caller originally dialled at the front, the party that
+        // forwarded it to us at the back. Diversion keeps meaning what it always did — the first URI
+        // of the first Diversion row, which is the most recent hop.
+        Assert.Equal(["sip:first@pbx.example", "sip:second@pbx.example"], call.DiversionChain);
+        Assert.Equal("sip:second@pbx.example", call.Diversion);
+    }
+
     [Theory]
     [InlineData("\"Alice Example\" <sip:a@b>", "Alice Example")]
     [InlineData("Bob <sip:b@c>", "Bob")]
@@ -155,7 +189,8 @@ public sealed class SipRemoteIdentityTests
         string localUri = "sip:sdk@127.0.0.1",
         string remoteUri = "sip:remote@127.0.0.1",
         string? remoteDisplayName = null,
-        bool isInbound = true)
+        bool isInbound = true,
+        IReadOnlyList<string>? diversionChain = null)
         : ISipCallSession
     {
         public string CallId => "identity-stub-call";
@@ -166,6 +201,7 @@ public sealed class SipRemoteIdentityTests
         public bool IsInbound => isInbound;
         public string? RemoteAssertedIdentity => remoteAssertedIdentity;
         public string? Diversion => diversion;
+        public IReadOnlyList<string> DiversionChain => diversionChain ?? Array.Empty<string>();
         public string? RemoteDisplayName => remoteDisplayName;
         public string? RemoteSdp => null;
         public IPEndPoint LocalSignalingEndPoint => new(IPAddress.Loopback, 5060);

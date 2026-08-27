@@ -222,6 +222,12 @@ internal sealed class SipCoreCallChannel : ICallChannel, IRtcpSocketHandoff
     public string? Diversion { get { lock (_sessionSync) return _session?.Diversion; } }
 
     /// <inheritdoc />
+    public IReadOnlyList<string> DiversionChain
+    {
+        get { lock (_sessionSync) return _session?.DiversionChain ?? Array.Empty<string>(); }
+    }
+
+    /// <inheritdoc />
     public string? RemoteDisplayName { get { lock (_sessionSync) return _session?.RemoteDisplayName; } }
 
     /// <inheritdoc />

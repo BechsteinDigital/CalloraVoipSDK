@@ -65,6 +65,12 @@ internal interface ICallChannel : IDisposable
     /// </summary>
     string? Diversion => null;
 
+    /// <summary>
+    /// The addresses the call was forwarded from, oldest first, from History-Info (RFC 4244) or
+    /// Diversion (RFC 5806); empty when no retargeting was reported.
+    /// </summary>
+    IReadOnlyList<string> DiversionChain => Array.Empty<string>();
+
     /// <summary>Remote party display-name (inbound From), or <see langword="null"/>. Default: null.</summary>
     string? RemoteDisplayName => null;
 
