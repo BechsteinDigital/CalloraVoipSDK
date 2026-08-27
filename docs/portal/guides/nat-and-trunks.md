@@ -151,12 +151,28 @@ await line.DialAsync("sip:4930999@trunk.provider.example", new DialOptions
 });
 ```
 
-On inbound calls the peer-asserted identity and diversion history are read-only on the call:
+On inbound calls the peer-asserted identity and retargeting history are read-only on the call:
 
 ```csharp
-var caller    = call.RemoteAssertedIdentity;  // P-Asserted-Identity (RFC 3325), trusted peers only
-var divertedFrom = call.Diversion;            // Diversion (RFC 5806), when present
+var caller = call.RemoteAssertedIdentity;  // P-Asserted-Identity (RFC 3325), trusted peers only
+var chain  = call.DiversionChain;          // every address it was forwarded from, oldest first
+var lastHop = call.Diversion;              // first URI of the first Diversion row (RFC 5806)
 ```
+
+`DiversionChain` is the one to route on. Two headers answer "where was this call forwarded from" —
+`Diversion` (RFC 5806) and `History-Info` (RFC 4244) — and carriers differ on which they send. Reading
+one of them directly makes your integration correct with part of the market and silently blind with
+the rest, where a forwarded call then looks exactly like a direct one. `DiversionChain` reads both and
+normalises them into one order: the number the caller originally dialled at the front, the party that
+forwarded it to you at the back.
+
+The two headers are ordered opposite ways, which is why this is not a matter of picking either. Diversion
+is most-recent-first. History-Info is oldest-first by its `index` parameter and lists *targets* rather
+than forwarders, so its last entry is where the request currently is — you. That entry is dropped, matched
+by RFC 3261 §19.1.4 URI comparison rather than string equality.
+
+An empty chain means no retargeting was **reported**. It does not mean the call arrived directly: a carrier
+that sends neither header leaves the distinction unavailable, and nothing downstream can recover it.
 
 ## Reliable provisionals
 

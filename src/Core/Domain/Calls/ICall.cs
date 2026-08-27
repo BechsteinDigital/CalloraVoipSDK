@@ -122,6 +122,30 @@ public interface ICall
     string? Diversion { get; }
 
     /// <summary>
+    /// Every address this call was forwarded from, oldest first — the number the caller originally
+    /// dialled at the front, the party that forwarded it to us at the back. Empty for outbound calls
+    /// and whenever no retargeting was reported.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Read from whichever header the carrier sent: <c>History-Info</c> (RFC 4244) or
+    /// <c>Diversion</c> (RFC 5806). The two are ordered opposite ways and no carrier sends both
+    /// consistently, so a consumer reading one of them directly is correct with part of the market
+    /// and silently blind with the rest — and blind here means a forwarded call is indistinguishable
+    /// from a direct one. Both are normalised to this one order.
+    /// </para>
+    /// <para>
+    /// An empty list means nothing was <em>reported</em>, not that the call arrived directly. A
+    /// carrier that sends neither header leaves the distinction unavailable.
+    /// </para>
+    /// <para>
+    /// <see cref="Diversion"/> stays what it always was — the first URI of the first Diversion header
+    /// row — for consumers that want exactly that.
+    /// </para>
+    /// </remarks>
+    IReadOnlyList<string> DiversionChain => Array.Empty<string>();
+
+    /// <summary>
     /// The remote party's display name as received — the caller's name from the inbound INVITE
     /// <c>From</c> header (RFC 3261 §8.1.1.3). <see langword="null"/> when the header carried no
     /// display name, or for outbound calls. Complements <see cref="RemoteParty"/> (which is the URI

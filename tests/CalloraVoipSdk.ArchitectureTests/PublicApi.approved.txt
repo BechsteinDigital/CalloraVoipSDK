@@ -491,6 +491,7 @@
   CalloraVoipSdk.Core.Domain.Calls.ICall.CallId : CalloraVoipSdk.Core.Domain.Calls.CallId { get }
   CalloraVoipSdk.Core.Domain.Calls.ICall.Direction : CalloraVoipSdk.Core.Domain.Calls.CallDirection { get }
   CalloraVoipSdk.Core.Domain.Calls.ICall.Diversion : System.String { get }
+  CalloraVoipSdk.Core.Domain.Calls.ICall.DiversionChain : System.Collections.Generic.IReadOnlyList<System.String> { get }
   CalloraVoipSdk.Core.Domain.Calls.ICall.DtmfReceived : event System.EventHandler<CalloraVoipSdk.Core.Domain.Events.DtmfReceivedEventArgs>
   CalloraVoipSdk.Core.Domain.Calls.ICall.EarlyMediaSdp : System.String { get }
   CalloraVoipSdk.Core.Domain.Calls.ICall.HangupAsync(System.Threading.CancellationToken ct = default) : System.Threading.Tasks.Task

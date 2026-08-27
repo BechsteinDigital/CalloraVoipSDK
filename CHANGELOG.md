@@ -8,6 +8,25 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
 
 The next line. Entries here accumulate the consumer-visible changes not yet released.
 
+### Added
+
+- **The retargeting history of an inbound call, whichever header the carrier sent it in.**
+  **`ICall.DiversionChain`** lists every address a call was forwarded from, oldest first — the number
+  the caller originally dialled at the front, the party that forwarded it to us at the back. It reads
+  both `History-Info` (RFC 4244) and `Diversion` (RFC 5806), which answer the same question and are
+  ordered opposite ways: Diversion is most-recent-first, History-Info is oldest-first by its `index`
+  parameter and lists *targets* rather than forwarders, so its final entry is the request's current
+  destination. Both are normalised to one order, and the entry naming us is dropped (RFC 3261 §19.1.4
+  URI comparison, not string equality).
+
+  Until now only the first row of `Diversion` was read. No carrier sends both headers consistently,
+  so a consumer was correct with part of the market and silently blind with the rest — and blind here
+  means a forwarded call is indistinguishable from a direct one, which is exactly the distinction a
+  PBX routes on. An empty list means nothing was *reported*, not that the call arrived directly.
+
+  `ICall.Diversion` is unchanged: still the first URI of the first `Diversion` row, for consumers that
+  want precisely that. Purely additive — one line in `PublicApi.approved.txt`.
+
 ## [4.11.0] - 2026-08-19
 
 Media over a TCP/TLS TURN relay, and a WebRTC peer that survives an ICE restart. The relay data path used to be
