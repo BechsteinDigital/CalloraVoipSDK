@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Struct CallRtpStatistics | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Struct CallRtpStatistics | CalloraVoipSdk ">
+      
+      <meta name="description" content="Raw RTP transport statistics for one active call media leg, exposed for diagnostics, billing and troubleshooting. Unlike  — which surfaces derived quality metrics (jitter/loss in ms/%, MOS) — this record carries the underlying RFC 3550 counters (SSRC identifiers, packet/octet counts, RTP-unit jitter) without interpretation. Available on  once media is flowing.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/new/main/apiSpec/new?filename=CalloraVoipSdk_Core_Domain_Calls_CallRtpStatistics.md&amp;value=---%0Auid%3A%20CalloraVoipSdk.Core.Domain.Calls.CallRtpStatistics%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="CalloraVoipSdk.Core.Domain.Calls.CallRtpStatistics">
+
+
+
+  <h1 id="CalloraVoipSdk_Core_Domain_Calls_CallRtpStatistics" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallRtpStatistics" class="text-break">
+Struct CallRtpStatistics  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallRtpStatistics.cs/#L39"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="CalloraVoipSdk.html">CalloraVoipSdk</a>.<a class="xref" href="CalloraVoipSdk.Core.html">Core</a>.<a class="xref" href="CalloraVoipSdk.Core.Domain.html">Domain</a>.<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.html">Calls</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>CalloraVoipSdk.Core.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Raw RTP transport statistics for one active call media leg, exposed for diagnostics,
+billing and troubleshooting. Unlike <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallQualitySnapshot.html">CallQualitySnapshot</a> — which surfaces
+derived quality metrics (jitter/loss in ms/%, MOS) — this record carries the underlying
+RFC 3550 counters (SSRC identifiers, packet/octet counts, RTP-unit jitter) without
+interpretation. Available on <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.ICall.html#CalloraVoipSdk_Core_Domain_Calls_ICall_RtpStatistics">RtpStatistics</a> once media is flowing.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public readonly record struct CallRtpStatistics : IEquatable&lt;CallRtpStatistics&gt;</code></pre>
+  </div>
+
+
+
+
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.iequatable-1">IEquatable</a>&lt;<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallRtpStatistics.html">CallRtpStatistics</a>&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetype.equals">ValueType.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetype.gethashcode">ValueType.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetype.tostring">ValueType.ToString()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+  </dd></dl>
+
+
+
+
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallRtpStatistics__ctor_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallRtpStatistics.#ctor*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallRtpStatistics__ctor_System_DateTimeOffset_System_UInt32_System_Nullable_System_UInt32__System_UInt32_System_UInt32_System_UInt32_System_UInt32_System_Int32_System_Byte_System_UInt32_System_UInt32_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallRtpStatistics.#ctor(System.DateTimeOffset,System.UInt32,System.Nullable{System.UInt32},System.UInt32,System.UInt32,System.UInt32,System.UInt32,System.Int32,System.Byte,System.UInt32,System.UInt32)">
+  CallRtpStatistics(DateTimeOffset, uint, uint?, uint, uint, uint, uint, int, byte, uint, uint)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallRtpStatistics.cs/#L39"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Raw RTP transport statistics for one active call media leg, exposed for diagnostics,
+billing and troubleshooting. Unlike <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallQualitySnapshot.html">CallQualitySnapshot</a> — which surfaces
+derived quality metrics (jitter/loss in ms/%, MOS) — this record carries the underlying
+RFC 3550 counters (SSRC identifiers, packet/octet counts, RTP-unit jitter) without
+interpretation. Available on <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.ICall.html#CalloraVoipSdk_Core_Domain_Calls_ICall_RtpStatistics">RtpStatistics</a> once media is flowing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public CallRtpStatistics(DateTimeOffset CapturedAtUtc, uint LocalSsrc, uint? RemoteSsrc, uint PacketsSent, uint OctetsSent, uint PacketsReceived, uint PacketsExpected, int CumulativePacketsLost, byte FractionLost, uint ExtendedHighestSequenceNumber, uint InterarrivalJitterRtpUnits)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>CapturedAtUtc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.datetimeoffset">DateTimeOffset</a></dt>
+    <dd><p>UTC timestamp at which these counters were sampled.</p>
+</dd>
+    <dt><code>LocalSsrc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>Our synchronization source identifier (RFC 3550 §5.1).</p>
+</dd>
+    <dt><code>RemoteSsrc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>?</dt>
+    <dd><p>The peer's synchronization source identifier once at least one RTP/RTCP packet has been
+received from it; <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> before the remote SSRC is known.</p>
+</dd>
+    <dt><code>PacketsSent</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>Total RTP packets we have sent on this leg (RTCP SR sender count).</p>
+</dd>
+    <dt><code>OctetsSent</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>Total RTP payload octets we have sent on this leg (RTCP SR octet count).</p>
+</dd>
+    <dt><code>PacketsReceived</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>Total RTP packets received from the peer on this leg.</p>
+</dd>
+    <dt><code>PacketsExpected</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>Number of RTP packets expected from the peer based on the observed sequence-number range
+(RFC 3550 §A.3); <code>PacketsExpected - PacketsReceived</code> approximates loss.</p>
+</dd>
+    <dt><code>CumulativePacketsLost</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Cumulative number of RTP packets from the peer lost since the start of reception
+(RFC 3550 §6.4.1); may be negative when duplicates arrive.</p>
+</dd>
+    <dt><code>FractionLost</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a></dt>
+    <dd><p>The 8-bit fixed-point loss fraction over the last reporting interval (RFC 3550 §6.4.1):
+the loss ratio is <code>FractionLost / 256.0</code>.</p>
+</dd>
+    <dt><code>ExtendedHighestSequenceNumber</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>Extended highest RTP sequence number received from the peer (RFC 3550 §6.4.1): the highest
+16-bit sequence number combined with the wrap-around count in the upper bits.</p>
+</dd>
+    <dt><code>InterarrivalJitterRtpUnits</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>Interarrival jitter estimate in RTP timestamp units (RFC 3550 §6.4.1). Divide by the codec
+clock rate to convert to seconds.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallRtpStatistics_CapturedAtUtc_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallRtpStatistics.CapturedAtUtc*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallRtpStatistics_CapturedAtUtc" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallRtpStatistics.CapturedAtUtc">
+  CapturedAtUtc
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallRtpStatistics.cs/#L40"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>UTC timestamp at which these counters were sampled.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public DateTimeOffset CapturedAtUtc { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.datetimeoffset">DateTimeOffset</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallRtpStatistics_CumulativePacketsLost_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallRtpStatistics.CumulativePacketsLost*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallRtpStatistics_CumulativePacketsLost" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallRtpStatistics.CumulativePacketsLost">
+  CumulativePacketsLost
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallRtpStatistics.cs/#L47"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Cumulative number of RTP packets from the peer lost since the start of reception
+(RFC 3550 §6.4.1); may be negative when duplicates arrive.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int CumulativePacketsLost { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallRtpStatistics_ExtendedHighestSequenceNumber_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallRtpStatistics.ExtendedHighestSequenceNumber*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallRtpStatistics_ExtendedHighestSequenceNumber" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallRtpStatistics.ExtendedHighestSequenceNumber">
+  ExtendedHighestSequenceNumber
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallRtpStatistics.cs/#L49"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Extended highest RTP sequence number received from the peer (RFC 3550 §6.4.1): the highest
+16-bit sequence number combined with the wrap-around count in the upper bits.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public uint ExtendedHighestSequenceNumber { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallRtpStatistics_FractionLost_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallRtpStatistics.FractionLost*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallRtpStatistics_FractionLost" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallRtpStatistics.FractionLost">
+  FractionLost
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallRtpStatistics.cs/#L48"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The 8-bit fixed-point loss fraction over the last reporting interval (RFC 3550 §6.4.1):
+the loss ratio is <code>FractionLost / 256.0</code>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public byte FractionLost { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallRtpStatistics_InterarrivalJitterRtpUnits_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallRtpStatistics.InterarrivalJitterRtpUnits*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallRtpStatistics_InterarrivalJitterRtpUnits" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallRtpStatistics.InterarrivalJitterRtpUnits">
+  InterarrivalJitterRtpUnits
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallRtpStatistics.cs/#L50"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Interarrival jitter estimate in RTP timestamp units (RFC 3550 §6.4.1). Divide by the codec
+clock rate to convert to seconds.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public uint InterarrivalJitterRtpUnits { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallRtpStatistics_LocalSsrc_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallRtpStatistics.LocalSsrc*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallRtpStatistics_LocalSsrc" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallRtpStatistics.LocalSsrc">
+  LocalSsrc
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallRtpStatistics.cs/#L41"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Our synchronization source identifier (RFC 3550 §5.1).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public uint LocalSsrc { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallRtpStatistics_OctetsSent_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallRtpStatistics.OctetsSent*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallRtpStatistics_OctetsSent" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallRtpStatistics.OctetsSent">
+  OctetsSent
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallRtpStatistics.cs/#L44"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Total RTP payload octets we have sent on this leg (RTCP SR octet count).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public uint OctetsSent { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallRtpStatistics_PacketsExpected_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallRtpStatistics.PacketsExpected*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallRtpStatistics_PacketsExpected" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallRtpStatistics.PacketsExpected">
+  PacketsExpected
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallRtpStatistics.cs/#L46"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Number of RTP packets expected from the peer based on the observed sequence-number range
+(RFC 3550 §A.3); <code>PacketsExpected - PacketsReceived</code> approximates loss.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public uint PacketsExpected { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallRtpStatistics_PacketsReceived_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallRtpStatistics.PacketsReceived*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallRtpStatistics_PacketsReceived" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallRtpStatistics.PacketsReceived">
+  PacketsReceived
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallRtpStatistics.cs/#L45"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Total RTP packets received from the peer on this leg.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public uint PacketsReceived { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallRtpStatistics_PacketsSent_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallRtpStatistics.PacketsSent*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallRtpStatistics_PacketsSent" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallRtpStatistics.PacketsSent">
+  PacketsSent
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallRtpStatistics.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Total RTP packets we have sent on this leg (RTCP SR sender count).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public uint PacketsSent { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_CallRtpStatistics_RemoteSsrc_" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallRtpStatistics.RemoteSsrc*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_CallRtpStatistics_RemoteSsrc" data-uid="CalloraVoipSdk.Core.Domain.Calls.CallRtpStatistics.RemoteSsrc">
+  RemoteSsrc
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallRtpStatistics.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The peer's synchronization source identifier once at least one RTP/RTCP packet has been
+received from it; <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> before the remote SSRC is known.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public uint? RemoteSsrc { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/CallRtpStatistics.cs/#L39" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

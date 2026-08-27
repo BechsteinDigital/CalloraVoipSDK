@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-032: Media Hot-Path and SIP-Framer Allocation Avoidance | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-032: Media Hot-Path and SIP-Framer Allocation Avoidance | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-032-media-hotpath-allocation-avoidance.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-032-media-hot-path-and-sip-framer-allocation-avoidance">ADR-032: Media Hot-Path and SIP-Framer Allocation Avoidance</h1>
+
+<p>Status: Accepted
+Date: 2026-07-09</p>
+<h2 id="context">Context</h2>
+<p>Two data paths run per-packet or per-segment for the whole lifetime of a call and therefore
+dominate the SDK's steady-state allocation rate:</p>
+<ol>
+<li>The <strong>RTP/RTCP receive loop</strong> — one datagram every ~20 ms per media stream (~50/s per call),
+for the entire call.</li>
+<li>The <strong>SIP stream framer</strong> — every TCP/TLS segment on a signalling connection is appended and
+the buffered header is re-scanned on each <code>TryReadFrame</code>.</li>
+</ol>
+<p>The <code>UdpClient.ReceiveAsync(ct)</code> overload the receive loop originally used allocates a fresh
+<code>byte[]</code> inside every <code>UdpReceiveResult</code>, i.e. one heap allocation per inbound media packet.
+<code>SipWireStreamFramer</code> appended byte-by-byte (<code>List&lt;byte&gt;.Add</code> per byte, a capacity check per
+byte) and split the header text <strong>twice</strong> (once in the chunked-encoding check, once in the
+Content-Length parse), allocating a second <code>string[]</code> plus its substrings for nothing.</p>
+<p>The governing rule is ENGINEERING_RULES <strong>K3</strong>: on the media hot path, no allocations where
+avoidable (HARD-F1), and bounded buffers with drop-oldest rather than unbounded queues
+(HARD-F4). The framer is signalling-plane, not media hot path, but the same allocation-hygiene
+principle applies to a per-segment loop.</p>
+<h3 id="verified-current-state-graphify--code">Verified current state (graphify + code)</h3>
+<ul>
+<li><strong>The RTP receive loop rents one pooled buffer for its whole lifetime.</strong>
+<code>RtpSession.RunReceiveLoopAsync</code> (<code>src/Core/Infrastructure/Rtp/Session/RtpSession.cs</code>,
+graphify node L462) rents a single <code>ArrayPool&lt;byte&gt;.Shared.Rent(MediaSocketDefaults.DatagramBufferBytes)</code>
+outside the loop, receives into it via
+<code>_udp.Client.ReceiveFromAsync(buffer, SocketFlags.None, remoteTemplate, ct)</code> (socket-level,
+so the unconnected socket still yields the remote endpoint), and returns the buffer in a
+<code>finally</code>. <code>ProcessDatagram</code> takes a <code>ReadOnlySpan&lt;byte&gt;</code> (L514), not a <code>byte[]</code>.</li>
+<li><strong>The buffer-reuse safety invariant is upheld by copy-on-retain.</strong> The loop is
+single-threaded (one sequential <code>await</code>), and everything retained past <code>ProcessDatagram</code> is
+copied synchronously before the next receive overwrites the buffer: the STUN and DTLS
+branches call <code>datagram.ToArray()</code> before invoking their handlers (L525, L542); the plain
+RTCP branch clones (<code>datagram.ToArray()</code>, L597); <code>SrtpContext.Unprotect</code> /
+<code>UnprotectRtcp</code> return fresh arrays; <code>RtpPacketCodec.Decode</code> copies payload and extension
+data. The in-code comment at L466-470 records exactly this reasoning.</li>
+<li><strong>The pattern was replicated, not left one-off.</strong> <code>BundledMediaTransport</code>
+(<code>src/Core/Infrastructure/Rtp/BundledMediaTransport.cs</code> L320) rents from the same pool with
+the same <code>MediaSocketDefaults.DatagramBufferBytes</code> size — the ADR-011 multi-track transport
+reuses the same pooled-receive discipline.</li>
+<li><strong>The SIP framer bulk-copies and splits once.</strong> <code>SipWireStreamFramer.Append</code>
+(<code>src/Core/Infrastructure/Sip/Transport/SipWireStreamFramer.cs</code> L39) is <code>_buffer.AddRange(bytes)</code>
+(one capacity check per segment). <code>TryReadFrame</code> (L59) splits the header text <strong>once</strong>
+(<code>headerText.Split(&quot;\r\n&quot;, …)</code>, L86) and passes the resulting <code>string[]</code> to both
+<code>HasChunkedTransferEncoding(lines)</code> and <code>TryParseContentLength(lines, …)</code>; the in-code comment
+at L84-85 names the removed double-split. The final frame is copied out with
+<code>GC.AllocateUninitializedArray&lt;byte&gt;</code> (L102).</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<p>Eliminate the two highest-frequency avoidable allocations without changing observed behaviour:</p>
+<ol>
+<li><strong>Pooled per-loop RTP receive buffer.</strong> The receive loop rents one buffer from
+<code>ArrayPool&lt;byte&gt;.Shared</code>, receives into it via socket-level <code>ReceiveFromAsync</code>, and hands
+<code>ProcessDatagram</code> a span. Anything retained past the synchronous span-processing is copied;
+the single-threaded loop guarantees no two datagrams alias the buffer at once.</li>
+<li><strong>Framer bulk-append + single header split.</strong> <code>Append</code> uses <code>AddRange</code>; <code>TryReadFrame</code>
+splits the header once and shares the lines array between the two header checks.</li>
+</ol>
+<p><strong>Crux:</strong> the receive loop is single-threaded, so one reused buffer is safe <em>precisely because</em>
+every retained byte is copied before the next <code>ReceiveFromAsync</code>; the correctness of pooling
+rests on that copy-on-retain invariant, not on the pooling mechanism itself.</p>
+<h2 id="consequences">Consequences</h2>
+<p>Positive:</p>
+<ul>
+<li>RTP receive drops from one <code>byte[]</code> per datagram to one rented buffer per loop lifetime
+(structural, verified by inspection). Data integrity across the reused buffer is gate-proven
+by <code>RtpPooledReceiveBufferTests</code> — 60 packets of varying length (20..59 B) each carrying a
+unique fill byte; every received packet must match its exact length and marker, so a
+cross-packet bleed (wrong slice length or stale trailing bytes) fails hard.</li>
+<li>The framer's <code>frame_parse</code> case dropped <strong>−720 B/op (−24 %)</strong> and <strong>−57 % time</strong>
+(3008 → 2288 B/op; 5266 → 2244 ns/op) on the <code>sip.stream_framer.frame_parse</code> perf harness
+(<code>GC.GetAllocatedBytes</code>, net9.0). Neighbouring cases (<code>srtp.protect_unprotect</code>,
+<code>rtp.packet_codec.decode</code>) were unchanged — no regress. A first dedicated
+<code>SipWireStreamFramerTests</code> (6 cases) pins the parse behaviour against the refactor.</li>
+</ul>
+<p>Tradeoffs / honest divergence:</p>
+<ul>
+<li><strong>The RTP receive-loop allocation reduction is claimed structurally, not benchmarked.</strong> There
+is no BenchmarkDotNet number for the receive path — one rent per loop vs. one per datagram is
+a code-inspection fact, not a measured delta. Only the framer path carries a measured number.</li>
+<li><strong>Socket API change forced a teardown fix.</strong> <code>Socket.ReceiveFromAsync(Memory,…,ct)</code> throws an
+NRE on Linux if the socket is disposed under a pending receive (the old <code>UdpClient.ReceiveAsync</code>
+tolerated it). The loop therefore cancels an internal linked CTS <em>first</em> (the pending receive
+ends cleanly with <code>OperationCanceledException</code>) and disposes the socket only after — a
+behaviour the loop now depends on for clean shutdown.</li>
+<li><strong>RTCP encode-side LINQ was deliberately left in place.</strong> The <code>Select().ToArray()</code>/<code>Sum()</code>
+in <code>RtcpPacketCodec.Encode</code> runs only on the periodic report <em>send</em> path (~1 report per
+interval per call), not the receive hot path; the decode path is already LINQ-free.
+Micro-optimising it would be premature — assessed and consciously out of scope, not silently
+dropped.</li>
+<li><strong>Further framer headroom remains open.</strong> A span-based header-line iteration (instead of
+<code>string.Split</code> producing substring allocations) would cut more, and is recorded as a follow-up
+rather than built.</li>
+<li>No claim of &quot;B.6 DONE&quot; — this is the two highest-frequency allocations addressed; the RTCP
+encode path and span-based header iteration remain as bounded, justified follow-ups.</li>
+</ul>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li>The single-stream <code>RtpSession</code> receive behaviour is byte-identical through the pooling change:
+the burst test (<code>RtpPooledReceiveBufferTests</code>) fails hard on any cross-packet bleed, and the
+full send/receive/SRTP suite is the regression net.</li>
+<li>Any byte retained beyond <code>ProcessDatagram</code>'s synchronous span handling MUST be copied before
+the next <code>ReceiveFromAsync</code> — the loop's single-thread + copy-on-retain invariant is the
+safety basis for reusing the buffer (in-code INVARIANT, RtpSession L466-470).</li>
+<li>The pooled buffer is returned in a <code>finally</code>; the datagram buffer size is the shared
+<code>MediaSocketDefaults.DatagramBufferBytes</code> constant, the same one <code>BundledMediaTransport</code> rents.</li>
+<li>Framer behaviour (Content-Length framing, compact <code>l</code>, chunked reject, fragmented append,
+keepalive ping, missing Content-Length throw) is pinned by <code>SipWireStreamFramerTests</code>.</li>
+<li>Perf regressions on the framer path are gated (±15 % on the perf harness).</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Logs: <code>docs/archive/agent-log/2026-07-09-dev-b6-rtp-receive-pooling.md</code> (pooled RTP receive
+buffer, copy-on-retain invariant, teardown fix, <code>RtpPooledReceiveBufferTests</code>),
+<code>2026-07-09-dev-b6-sip-framer-alloc.md</code> (framer <code>AddRange</code> + single split, −24 % measured,
+RTCP-LINQ assessed-and-excluded, <code>SipWireStreamFramerTests</code>).</li>
+<li>Code (graphify-verified): <code>RtpSession.cs</code> (<code>RunReceiveLoopAsync</code> L462, <code>ProcessDatagram</code> L514,
+copy-on-retain L525/L542/L597, INVARIANT L466-470), <code>BundledMediaTransport.cs</code> (pooled rent
+L320), <code>SipWireStreamFramer.cs</code> (<code>Append</code>/<code>AddRange</code> L39, single split L86, <code>TryReadFrame</code>
+L59), <code>MediaSocketDefaults.cs</code> (<code>DatagramBufferBytes</code>).</li>
+<li>Markers / RFC: ENGINEERING_RULES K3 (hot-path no-alloc / HARD-F1, bounded buffers / HARD-F4),
+RFC 3550 §A.1 (probation, referenced by the burst-test liveness threshold), RFC 5626 §4.4.1
+(double-CRLF keepalive the framer consumes).</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-032-media-hotpath-allocation-avoidance.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

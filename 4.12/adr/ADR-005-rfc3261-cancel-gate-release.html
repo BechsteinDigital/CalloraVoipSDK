@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-005: RFC 3261 &#167;9.1 – Release Operation Gate Before INVITE Transaction | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-005: RFC 3261 &#167;9.1 – Release Operation Gate Before INVITE Transaction | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-005-rfc3261-cancel-gate-release.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-005-rfc-3261-91--release-operation-gate-before-invite-transaction">ADR-005: RFC 3261 §9.1 – Release Operation Gate Before INVITE Transaction</h1>
+
+<p>Status: Accepted
+Date: 2026-04-09
+RFC reference: RFC 3261 §9.1 (Canceling a Request – UAC Behavior)</p>
+<hr>
+<h2 id="context">Context</h2>
+<p>RFC 3261 §9.1 requires that a UAC <strong>can send CANCEL at any time while an INVITE is
+pending</strong> (i.e., before a final response is received). This means <code>HangupAsync</code> must
+be callable during an in-flight <code>HoldAsync</code>, <code>UnholdAsync</code>, or the initial
+<code>StartOutboundInviteAsync</code>.</p>
+<p>Prior to this change, <code>StartOutboundInviteAsync</code>, <code>HoldAsync</code>, and <code>UnholdAsync</code> each
+held the <code>_operationGate</code> (a <code>SemaphoreSlim(1,1)</code>) for the <strong>entire duration</strong> of the
+<code>SendInviteTransactionAsync</code> call — i.e., until the final INVITE response was received.
+<code>HangupAsync</code> also acquires the same gate, so calling it while an INVITE was in flight
+caused a deadlock: the CANCEL was never sent.</p>
+<hr>
+<h2 id="decision">Decision</h2>
+<p><strong><code>StartOutboundInviteAsync</code>, <code>HoldAsync</code>, <code>UnholdAsync</code>:</strong><br>
+Release <code>_operationGate</code> <strong>before</strong> calling <code>SendInviteTransactionAsync</code>.<br>
+The gate guards only the initial state validation and setup (state transition,
+body preparation). The actual INVITE transaction runs without the gate.</p>
+<p><strong><code>HangupAsync</code>:</strong><br>
+When state is <code>Established</code> or <code>OnHold</code> <strong>and</strong> <code>_activeInviteCSeq &gt; 0 &amp;&amp; !string.IsNullOrWhiteSpace(_activeInviteBranch)</code>, send <code>CANCEL</code> instead of <code>BYE</code>.</p>
+<h3 id="why-this-is-safe">Why this is safe</h3>
+<p><code>SendInviteTransactionAsync</code> sets <code>_context.ActiveInviteCSeq</code> and
+<code>_context.ActiveInviteBranch</code> <strong>synchronously</strong> (before its first internal <code>await</code>).
+In C#, the synchronous preamble of an awaited async method runs on the caller's thread
+before any suspension. Thus, by the time the calling thread yields at
+<code>await _transactionService.SendInviteTransactionAsync(...)</code>, the branch is already
+set — even though the gate has been released.</p>
+<p>In practice, callers that need to act on the in-flight INVITE (e.g. <code>HangupAsync</code>)
+do so after observing a transport event (e.g. the request appearing in
+<code>RecordingSipTransportRuntime</code>), which provides a natural happens-before guarantee.</p>
+<h3 id="state-transitions">State transitions</h3>
+<p><code>TransitionTo</code> is protected by the internal <code>_sync</code> lock (separate from the gate) and
+is idempotent once <code>Terminated</code> is reached. If both <code>HangupAsync</code> and the conclusion
+of <code>SendInviteTransactionAsync</code> race to call <code>TransitionTo(Terminated)</code>, the second
+call is a no-op.</p>
+<hr>
+<h2 id="consequences">Consequences</h2>
+<p><strong>Positive:</strong></p>
+<ul>
+<li><code>HangupAsync</code> can send CANCEL for any pending INVITE (initial or re-INVITE)
+without deadlocking.</li>
+<li>The CANCEL Via branch is a fresh <code>NewBranch()</code> (RFC 3261 §9.1 compliant).</li>
+<li>The CANCEL CSeq matches the INVITE CSeq (RFC 3261 §9.1 compliant).</li>
+<li>All four §9 compliance tests pass.</li>
+</ul>
+<p><strong>Negative:</strong></p>
+<ul>
+<li>The narrow window between gate release and <code>_activeInviteBranch</code> being set is not
+guarded by the gate. In practice this is harmless (synchronous preamble), but
+<code>_activeInviteBranch</code> is not <code>volatile</code>. A future refactor could add
+<code>Volatile.Read/Write</code> for extra correctness.</li>
+<li>After cancelling a re-INVITE, the established dialog is terminated (BYE not sent).
+Per RFC 3261, a CANCEL that results in a 487 for the re-INVITE leaves the
+established dialog alive; a BYE would then be needed. This is an acceptable
+simplification: <code>HangupAsync</code> semantics are &quot;end the call&quot;, so skipping the BYE
+is reasonable and the remote side will detect the lapse via keepalive or timeout.</li>
+</ul>
+<hr>
+<h2 id="alternatives-considered">Alternatives considered</h2>
+<ol>
+<li><strong>Keep gate held; add a <code>CancelInviteAsync</code> bypass path</strong> — Rejected. Adds API
+surface and duplicates hangup logic outside the normal gate-protected flow.</li>
+<li><strong>Use a <code>CancellationToken</code> passed to <code>SendInviteTransactionAsync</code></strong> — Rejected.
+Cancelling a <code>CancellationToken</code> would abort the local transaction without sending
+CANCEL on the wire, violating RFC 3261 §9.1.</li>
+<li><strong>Add a dedicated <code>_cancelRequested</code> flag</strong> — Rejected. More complex than simply
+releasing the gate early; offers no correctness advantage.</li>
+</ol>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-005-rfc3261-cancel-gate-release.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

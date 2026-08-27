@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-069: Media Silence Is Reported, Not Terminated On | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-069: Media Silence Is Reported, Not Terminated On | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-069-media-supervision-liveness-not-silence.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-069-media-silence-is-reported-not-terminated-on">ADR-069: Media Silence Is Reported, Not Terminated On</h1>
+
+<p>Status: Accepted
+Date: 2026-08-17</p>
+<h2 id="context">Context</h2>
+<p><code>MediaSupervisionOptions.InboundMediaTimeout</code> stood at 15 seconds and <strong>terminated</strong> the call when inbound
+RTP had been silent that long. The rationale was sound — behind NAT a far-end BYE may never reach our
+in-dialog Contact, the media simply stops, and an agent should not keep talking to a dead line — but the
+signal it measured was the wrong one.</p>
+<p>Silence is not evidence that the far end is gone. Three ordinary situations produce it while the peer is
+perfectly reachable:</p>
+<ul>
+<li><strong>Silence suppression / comfort noise</strong> (RFC 3389): a sender with VAD emits far fewer packets in speech
+pauses, or none.</li>
+<li><strong>Hold</strong>: depending on the peer, <code>sendonly</code>/<code>inactive</code> carries no RTP at all.</li>
+<li><strong>Bridge switches</strong>: the gap between legs during an attended transfer.</li>
+</ul>
+<p>This is not theory. #256 was an attended-transfer interop test that went red intermittently: the harness
+pumped RTP for 8 seconds and then went quiet while the consultation call and the transfer ran. Once the
+silence passed 15 seconds, <strong>our own supervisor</strong> hung up the callee call. The Asterisk trace shows no BYE
+towards the callee at any point — the PBX was never involved.</p>
+<h3 id="what-the-reference-stacks-do">What the reference stacks do</h3>
+<p>Verified against primary sources, not documentation summaries, because the memory rule for this SDK is
+parity-or-better with the reference implementations.</p>
+<table>
+<thead>
+<tr>
+<th>Stack</th>
+<th>Trigger</th>
+<th>Threshold</th>
+<th>Hold</th>
+<th>Reaction</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>SIPSorcery</strong> (<code>SIPUserAgent</code>)</td>
+<td>RTP <strong>or RTCP</strong> silent</td>
+<td>30 s (<code>NO_ACTIVITY_TIMEOUT_FACTOR 6 × 5000 ms</code>, settable)</td>
+<td>exempt, local <strong>and</strong> remote</td>
+<td><code>Hangup()</code></td>
+<td>on</td>
+</tr>
+<tr>
+<td><strong>Asterisk</strong> <code>res_pjsip</code></td>
+<td>RTP silent</td>
+<td><code>rtp_timeout</code></td>
+<td>separate <code>rtp_timeout_hold</code></td>
+<td>channel hung up</td>
+<td><strong>0 = off</strong></td>
+</tr>
+<tr>
+<td><strong>FreeSWITCH</strong></td>
+<td>RTP silent</td>
+<td><code>media_timeout</code></td>
+<td>separate value</td>
+<td>hangup, cause <code>MEDIA_TIMEOUT</code></td>
+<td><strong>0 = off</strong></td>
+</tr>
+<tr>
+<td><strong>pjsip</strong> (library)</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td>no built-in detection</td>
+<td>—</td>
+</tr>
+<tr>
+<td><strong>libwebrtc / Pion</strong></td>
+<td>—</td>
+<td>ICE consent 30 s (RFC 7675)</td>
+<td>—</td>
+<td>ICE state change, app decides</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<p>Two corrections to the assumptions in #261 came out of this. First, <strong>terminating is not the outlier</strong>:
+SIPSorcery's user agent — our comparable layer, not the bare <code>RTPSession</code> underneath it — calls <code>Hangup()</code>
+on timeout, and Asterisk and FreeSWITCH hang up too when enabled. Second, the actual outliers were the
+threshold (15 s against everyone else's 30 s or off) and <strong>what resets the clock</strong>: SIPSorcery counts RTP
+<em>or RTCP</em>, and we counted RTP alone.</p>
+<h3 id="what-the-measurement-then-showed">What the measurement then showed</h3>
+<p>The obvious repair — count RTCP as liveness, on the assumption that a peer which is alive keeps reporting on
+the RFC 3550 §6.2 interval — was tested against both reference PBXes before being believed, in
+<code>TwoLegTransferMatrix</code>: bridge two SDK legs through the PBX, stop sending, and sample the callee's inbound
+RTCP counter every two seconds through 20 s of silence.</p>
+<table>
+<thead>
+<tr>
+<th>PBX</th>
+<th>inbound RTCP during 20 s of media silence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Asterisk 22 (<code>direct_media=no</code>)</td>
+<td><code>rtcp_rx</code> 0 → <strong>1</strong> after ~4 s, then frozen for the rest</td>
+</tr>
+<tr>
+<td>FreeSWITCH (<code>direct_media</code> off)</td>
+<td><code>rtcp_rx</code> 0 → <strong>2</strong> by ~8 s, then frozen for the rest</td>
+</tr>
+</tbody>
+</table>
+<p><strong>The assumption is false with a PBX in the media path.</strong> As a relay with nothing to forward, neither
+Asterisk nor FreeSWITCH keeps an RTCP beacon running; both go quiet on both planes. RTCP is a reliable
+liveness signal only against an endpoint that reports unconditionally — SIPSorcery does, which is why the
+rule works in <em>its</em> topology and not in ours. In the same runs our supervisor hung up a demonstrably live
+call (Asterisk: callee terminated locally after 8 s; FreeSWITCH: caller first, then the PBX cleared the
+callee with <code>NORMAL_CLEARING</code>).</p>
+<p>So there is no signal on the wire that separates &quot;the peer went quiet&quot; from &quot;the peer went away&quot;. That is
+the fact this decision has to be built on — and it is precisely why Asterisk and FreeSWITCH ship their own
+equivalents disabled.</p>
+<h2 id="decision">Decision</h2>
+<p><strong>Media silence is reported to the application; it does not end calls.</strong> The teardown remains available, on
+loss of liveness rather than of media, and is off by default.</p>
+<ol>
+<li><p><strong>Report, don't terminate — the shipped default.</strong> Media silence for <code>MediaSilenceNotifyAfter</code>
+(default 15 s) raises <code>ICall.MediaFlowChanged</code>, and again when media resumes, carrying the length of the
+silence that ended. <code>InboundMediaTimeout</code> defaults to <code>TimeSpan.Zero</code> (off). This is parity with Asterisk
+and FreeSWITCH, which disable their equivalents, and it is the only defensible default given the
+measurement: without a liveness beacon, any threshold ends live calls, and this one demonstrably did.</p>
+</li>
+<li><p><strong>The application decides, which the references do not offer.</strong> SIPSorcery's app learns nothing until the
+call is already gone; Asterisk's and FreeSWITCH's operators get a hangup cause after the fact. An SDK
+consumer is told <em>while the call is still up</em> and can play a prompt, escalate, end the call on its own
+policy, or ignore it. That is the &quot;better, not merely equal&quot; part of this decision.</p>
+</li>
+<li><p><strong>When enabled, liveness is inbound RTP or inbound RTCP.</strong> Either one proves the far end is present.
+<code>CallMediaRuntimeMetrics</code> gained <code>RtcpPacketsReceived</code> for this; <code>RtpCallMediaSession</code> counts inbound
+compounds before the fan-out, so a throwing subscriber cannot make a live peer look dead. RTCP can only
+extend the deadline, never shorten it — worth having even though the measurement shows a PBX will not
+supply it.</p>
+</li>
+<li><p><strong>The teardown carries a reason.</strong> A media-timeout hangup sets a <code>CallTerminationReason</code>
+(<code>Failed</code>/<code>Local</code>, &quot;Media timeout: no inbound RTP or RTCP from the far end&quot;), so a consumer can tell an
+SDK-initiated teardown from a peer BYE on <code>CallStateChangedEventArgs.TerminationReason</code>. FreeSWITCH makes
+the same distinction with its <code>MEDIA_TIMEOUT</code> cause; SIPSorcery does not. This required parking the reason
+before the BYE: the channel reports <code>Terminated</code> from inside its own <code>HangupAsync</code> with only the generic
+locally-terminated reason it can derive from SIP, so a reason passed after that call reached an
+already-terminated aggregate and was dropped.</p>
+</li>
+<li><p><strong>A dead peer is still caught, on the signalling plane.</strong> RFC 4028 session timers (ADR-023, default
+1800 s) end a dialog whose peer stopped refreshing. Slower than a media timeout, but it is evidence rather
+than a heuristic — and it is what pjsip relies on, having no media-timeout mechanism at all.</p>
+</li>
+<li><p><strong>Hold stays exempt</strong> (<code>HangupHeldCallOnSilence</code>, default false), covering both local hold and remote hold
+— <code>Call.HandleRemoteHoldChanged</code> moves the call to <code>OnHold</code> as well, so the exemption applies to a peer
+that put <em>us</em> on hold. This matches SIPSorcery and Asterisk's separate <code>rtp_timeout_hold</code>.</p>
+</li>
+<li><p><strong>The policy is a testable state machine.</strong> The decision moved out of <code>CallMediaOrchestrator</code> into
+<code>MediaActivity.Observe(metrics, state, options, now)</code> returning a <code>MediaSupervisionOutcome</code>. The clock is a
+parameter, so every threshold, exemption and once-only guarantee is pinned by a unit test instead of by a
+20-second interop run. The orchestrator only performs the effects.</p>
+</li>
+</ol>
+<h2 id="consequences">Consequences</h2>
+<ul>
+<li>The class of false teardowns that produced #256 is gone by default: the SDK no longer ends a call because
+media stopped. Pinned end to end in <code>TwoLegTransferMatrix</code> against both PBXes — 20 s of silence, the call
+survives, the silence and its end are reported, and the transfer afterwards still delivers media.</li>
+<li><strong>Consumer-visible default change:</strong> <code>InboundMediaTimeout</code> goes from 15 s to <code>TimeSpan.Zero</code> (off). A
+deployment that wants the teardown sets it explicitly — 30 s is the recommended value — and gets the
+liveness semantics, not the old media-silence one, so the same number fires less often than before.</li>
+<li>New public API: <code>ICall.MediaFlowChanged</code> and <code>CallMediaFlowChangedEventArgs</code>, plus
+<code>VoipConfiguration.MediaSilenceNotifyAfter</code> / <code>VoipOptions.MediaSilenceNotifyAfter</code>. Recorded in
+<code>PublicApi.approved.txt</code> (ADR-006 §4).</li>
+<li><code>MediaSilenceNotifyAfter</code> must be shorter than <code>InboundMediaTimeout</code> when both are enabled; the options
+validator rejects the inverted configuration rather than accepting a warning that could never fire.</li>
+<li><strong>The NAT case the old default served is now the application's to handle.</strong> A far-end BYE lost behind NAT
+leaves a call up until the session timer expires. <code>MediaFlowChanged</code> is the signal to act on; a deployment
+that prefers the old automatic teardown enables it with one setting.</li>
+<li><strong>Not covered:</strong> ICE consent freshness (RFC 7675) would be a cryptographically authenticated liveness
+source, and unlike RTCP a peer must answer it. Per ADR-041 it is built but unwired on the SIP path — wiring
+it would make a media-timeout teardown evidence-based rather than heuristic, and is the natural follow-up.</li>
+</ul>
+<h2 id="references">References</h2>
+<ul>
+<li>RFC 3550 §6.2 (RTCP transmission interval), RFC 3389 (comfort noise), RFC 7675 (ICE consent freshness)</li>
+<li><code>sipsorcery-org/sipsorcery</code> — <code>src/SIPSorcery/net/RTCP/RTCPSession.cs</code> (<code>NO_ACTIVITY_TIMEOUT_FACTOR</code>,
+<code>NoActivityTimeoutMilliseconds</code>) and <code>src/SIPSorcery/app/SIPUserAgents/SIPUserAgent.cs</code> (<code>OnRtpTimeout</code>)</li>
+<li>Asterisk <code>res_pjsip</code> endpoint options <code>rtp_timeout</code> / <code>rtp_timeout_hold</code></li>
+<li>FreeSWITCH <code>media_timeout</code> (deprecated <code>rtp-timeout-sec</code>), hangup cause <code>MEDIA_TIMEOUT</code></li>
+<li>pjproject#4030 (no built-in RTP timeout detection)</li>
+<li>Issues #261 (this decision) and #256 (the interop flake it explains)</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-069-media-supervision-liveness-not-silence.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Architecture Decision Records (ADR) | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Architecture Decision Records (ADR) | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/README.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="architecture-decision-records-adr">Architecture Decision Records (ADR)</h1>
+
+<p>This directory is the canonical record of the load-bearing architecture decisions behind
+CalloraVoipSdk. Each ADR captures one decision as <strong>Context → Decision → Consequences →
+Guardrails</strong> (see <code>ADR-011</code> for the format model).</p>
+<h2 id="reading-notes">Reading notes</h2>
+<ul>
+<li><strong>Numbering is immutable.</strong> ADR-001…012 are the original, hand-authored records. ADR-013…061
+were <strong>backfilled on 2026-07-27</strong> from the project's development history (114 archived
+engineering logs under <code>docs/archive/agent-log/</code>, git history, and the memory anchors) and
+<strong>verified against the actual source</strong> via the code graph. Where a log claimed more than the
+code delivers, the ADR records the real state and flags the divergence honestly — no ADR claims
+more than the technical evidence supports.</li>
+<li><strong>Status.</strong> <code>Accepted</code> = decision taken and in effect (open limitations, if any, are stated in
+the ADR itself). <code>Proposed</code> = decided in principle, not fully realised in the tree.</li>
+<li><strong>Errata.</strong> ADR-006 (§4 API-surface gate) and ADR-011 (B4/B5 slice wording) carry dated errata
+where the original prose diverged from the shipped code; the errata state the verified reality.</li>
+<li>Two decisions were verified as <em>already covered</em> by existing ADRs and deliberately not
+duplicated: BUNDLE/multi-track (ADR-010/011) and the WebRTC peer facade (ADR-009/012).</li>
+<li><strong>Type names are time-bound.</strong> ADRs written before 4.6.0 name the old SIP-facade types. In 4.6.0
+they were renamed: <code>SdkConfiguration</code> → <code>VoipConfiguration</code>, <code>SdkOptions</code> → <code>VoipOptions</code>,
+<code>AddCallora(...)</code> → <code>AddCalloraVoip(...)</code> (no compatibility aliases). The ADR texts stay unchanged
+as a dated record — translate as you read. The current state is in
+<a href="../../CHANGELOG.md"><code>CHANGELOG.md</code></a>.</li>
+</ul>
+<h3 id="architecture-layering--delivery-process">Architecture, Layering &amp; Delivery Process</h3>
+<table>
+<thead>
+<tr>
+<th>ADR</th>
+<th>Title</th>
+<th>Status</th>
+<th>Date</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="ADR-013-role-based-delivery-workflow.html">ADR-013</a></td>
+<td>Role-Based Delivery Workflow (CEO / PO / DEV / Reviewer)</td>
+<td>Accepted</td>
+<td>2026-04-14</td>
+</tr>
+<tr>
+<td><a href="ADR-014-ddd-layering-gated-baselines.html">ADR-014</a></td>
+<td>DDD Layer Direction Enforced by Gated Shrink-Only Baselines</td>
+<td>Accepted</td>
+<td>2026-07-08</td>
+</tr>
+<tr>
+<td><a href="ADR-015-icallregistry-domain-port-dip.html">ADR-015</a></td>
+<td>PhoneLine↔CallManager Decoupling via Domain Port <code>ICallRegistry</code> (DIP)</td>
+<td>Accepted</td>
+<td>2026-07-08</td>
+</tr>
+<tr>
+<td><a href="ADR-016-peer-calibrated-refactoring-backlog.html">ADR-016</a></td>
+<td>Peer-Calibrated Refactoring Backlog — Harden, Don't Rebuild</td>
+<td>Accepted</td>
+<td>2026-07-17</td>
+</tr>
+<tr>
+<td><a href="ADR-057-audit-findings-register-marker-discipline.html">ADR-057</a></td>
+<td>Audit → Findings-Register → Code-Marker as Durable, Claim-Verified Audit Memory</td>
+<td>Accepted</td>
+<td>2026-07-22</td>
+</tr>
+<tr>
+<td><a href="ADR-058-layered-test-interop-soak-model.html">ADR-058</a></td>
+<td>Layered L0–L4 Test Model with Interop/Soak Harness and a Document-Don't-Fix Register</td>
+<td>Accepted</td>
+<td>2026-07-21</td>
+</tr>
+</tbody>
+</table>
+<h3 id="product-platform-versioning--extensibility">Product, Platform, Versioning &amp; Extensibility</h3>
+<table>
+<thead>
+<tr>
+<th>ADR</th>
+<th>Title</th>
+<th>Status</th>
+<th>Date</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="ADR-006-api-versioning-strategy.html">ADR-006</a></td>
+<td>API Versioning and Compatibility Strategy</td>
+<td>Accepted</td>
+<td>2026-04-14</td>
+</tr>
+<tr>
+<td><a href="ADR-007-host-centric-platform-split.html">ADR-007</a></td>
+<td>Host-Centric Platform Split (Engine OSS + Host + Plugins)</td>
+<td>Accepted</td>
+<td>2026-04-16</td>
+</tr>
+<tr>
+<td><a href="ADR-008-community-module-store.html">ADR-008</a></td>
+<td>Community Module Store Architecture</td>
+<td>Proposed</td>
+<td>2026-07-11</td>
+</tr>
+<tr>
+<td><a href="ADR-059-public-media-tap-contract.html">ADR-059</a></td>
+<td>Public Per-Call Media-Tap Contract (Synchronous, Encoded, Fan-Out)</td>
+<td>Accepted</td>
+<td>2026-07-07</td>
+</tr>
+</tbody>
+</table>
+<h3 id="sip-signaling">SIP Signaling</h3>
+<table>
+<thead>
+<tr>
+<th>ADR</th>
+<th>Title</th>
+<th>Status</th>
+<th>Date</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="ADR-001-uas-user-identity-policy.html">ADR-001</a></td>
+<td>UAS User Identity Policy (RFC 3261 §8.2.2.1)</td>
+<td>Accepted</td>
+<td>2026-04-09</td>
+</tr>
+<tr>
+<td><a href="ADR-002-uas-redirect-redirect-async.html">ADR-002</a></td>
+<td>UAS Redirect (RFC 3261 §8.3) — RedirectAsync on ISipCallSession</td>
+<td>Accepted</td>
+<td>2026-04-09</td>
+</tr>
+<tr>
+<td><a href="ADR-003-rfc3581-rport-uas-response-reflection.html">ADR-003</a></td>
+<td>RFC 3581 §4 – rport/received Reflection in UAS Responses</td>
+<td>Accepted</td>
+<td>2026-04-09</td>
+</tr>
+<tr>
+<td><a href="ADR-004-rfc5626-crlf-keepalive-pong.html">ADR-004</a></td>
+<td>RFC 5626 §4.4.1 – CRLF Keepalive Pong on Stream Transports</td>
+<td>Accepted</td>
+<td>2026-04-09</td>
+</tr>
+<tr>
+<td><a href="ADR-005-rfc3261-cancel-gate-release.html">ADR-005</a></td>
+<td>RFC 3261 §9.1 – Release Operation Gate Before INVITE Transaction</td>
+<td>Accepted</td>
+<td>2026-04-09</td>
+</tr>
+<tr>
+<td><a href="ADR-017-register-expires-lifecycle.html">ADR-017</a></td>
+<td>REGISTER Expires / Refresh Lifecycle</td>
+<td>Accepted</td>
+<td>2026-07-09</td>
+</tr>
+<tr>
+<td><a href="ADR-018-challenge-driven-digest-auth.html">ADR-018</a></td>
+<td>Challenge-Driven Digest Authentication for REGISTER</td>
+<td>Accepted</td>
+<td>2026-07-09</td>
+</tr>
+<tr>
+<td><a href="ADR-019-nat-routable-contact-and-media-address.html">ADR-019</a></td>
+<td>NAT-Routable Contact and Advertised Media Address</td>
+<td>Accepted</td>
+<td>2026-07-08</td>
+</tr>
+<tr>
+<td><a href="ADR-020-dialog-route-set-record-route.html">ADR-020</a></td>
+<td>Dialog Route-Set — Record-Route Echo and In-Dialog Routing</td>
+<td>Accepted</td>
+<td>2026-07-09</td>
+</tr>
+<tr>
+<td><a href="ADR-021-trunk-inbound-matching.html">ADR-021</a></td>
+<td>Trunk-Inbound Line Matching</td>
+<td>Accepted</td>
+<td>2026-07-08</td>
+</tr>
+<tr>
+<td><a href="ADR-022-invite-transaction-robustness.html">ADR-022</a></td>
+<td>INVITE Transaction Robustness — Retransmission, Fork, 100rel, Codec</td>
+<td>Accepted</td>
+<td>2026-07-09</td>
+</tr>
+<tr>
+<td><a href="ADR-023-session-timer-negotiation.html">ADR-023</a></td>
+<td>RFC 4028 Session-Timer Negotiation</td>
+<td>Accepted</td>
+<td>2026-07-09</td>
+</tr>
+</tbody>
+</table>
+<h3 id="sdp-offeranswer">SDP Offer/Answer</h3>
+<table>
+<thead>
+<tr>
+<th>ADR</th>
+<th>Title</th>
+<th>Status</th>
+<th>Date</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="ADR-024-sdp-offer-answer-origin-and-extmap-negotiation.html">ADR-024</a></td>
+<td>SDP Offer/Answer Negotiation — Origin Versioning and extmap Id Assignment</td>
+<td>Accepted</td>
+<td>2026-07-14</td>
+</tr>
+</tbody>
+</table>
+<h3 id="media-security--sdes--srtp">Media Security — SDES / SRTP</h3>
+<table>
+<thead>
+<tr>
+<th>ADR</th>
+<th>Title</th>
+<th>Status</th>
+<th>Date</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="ADR-025-sdes-offer-answer-negotiation.html">ADR-025</a></td>
+<td>SDES Offer/Answer Negotiation with Own-Key Answers and Fail-Closed Keyless Rejection</td>
+<td>Accepted</td>
+<td>2026-07-09</td>
+</tr>
+<tr>
+<td><a href="ADR-026-srtp-media-path-fail-closed-hardening.html">ADR-026</a></td>
+<td>SRTP Media-Path Wiring — Fail-Closed Keying, Wire-Derived Keys, and Hardening</td>
+<td>Accepted</td>
+<td>2026-07-09</td>
+</tr>
+<tr>
+<td><a href="ADR-027-srtp-continuity-reinvite-rekey.html">ADR-027</a></td>
+<td>SRTP Continuity Across Re-INVITE — Hold/Unhold Key Stability and Peer Rekey</td>
+<td>Accepted</td>
+<td>2026-07-09</td>
+</tr>
+</tbody>
+</table>
+<h3 id="media-security--dtls-srtp">Media Security — DTLS-SRTP</h3>
+<table>
+<thead>
+<tr>
+<th>ADR</th>
+<th>Title</th>
+<th>Status</th>
+<th>Date</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="ADR-028-dtls-srtp-foundation.html">ADR-028</a></td>
+<td>DTLS-SRTP Keying Foundation (RFC 5763/5764)</td>
+<td>Accepted</td>
+<td>2026-07-14</td>
+</tr>
+<tr>
+<td><a href="ADR-029-dtls-srtp-signaling-and-keying-precedence.html">ADR-029</a></td>
+<td>DTLS-SRTP Signaling, Answer-Role, and Keying-Method Precedence</td>
+<td>Accepted</td>
+<td>2026-07-14</td>
+</tr>
+<tr>
+<td><a href="ADR-030-dtls-srtp-media-wiring.html">ADR-030</a></td>
+<td>DTLS-SRTP Media Wiring and Fail-Closed Context Installation</td>
+<td>Accepted</td>
+<td>2026-07-14</td>
+</tr>
+<tr>
+<td><a href="ADR-066-dtls-post-handshake-association-servicing.html">ADR-066</a></td>
+<td>DTLS Post-Handshake Association Servicing and Egress Ordering</td>
+<td>Accepted</td>
+<td>2026-08-06</td>
+</tr>
+<tr>
+<td><a href="ADR-067-dtls-stateless-cookie-scope.html">ADR-067</a></td>
+<td>Scope of the DTLS Stateless Cookie (HelloVerifyRequest)</td>
+<td>Accepted</td>
+<td>2026-08-12</td>
+</tr>
+</tbody>
+</table>
+<h3 id="media-security--srtcp">Media Security — SRTCP</h3>
+<table>
+<thead>
+<tr>
+<th>ADR</th>
+<th>Title</th>
+<th>Status</th>
+<th>Date</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="ADR-031-srtcp-crypto-core-and-rtcp-path-wiring.html">ADR-031</a></td>
+<td>SRTCP Crypto Core and RTCP-Path Wiring</td>
+<td>Accepted</td>
+<td>2026-07-09</td>
+</tr>
+</tbody>
+</table>
+<h3 id="rtp-transport--wire-boundary-hardening">RTP Transport &amp; Wire-Boundary Hardening</h3>
+<table>
+<thead>
+<tr>
+<th>ADR</th>
+<th>Title</th>
+<th>Status</th>
+<th>Date</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="ADR-032-media-hotpath-allocation-avoidance.html">ADR-032</a></td>
+<td>Media Hot-Path and SIP-Framer Allocation Avoidance</td>
+<td>Accepted</td>
+<td>2026-07-09</td>
+</tr>
+<tr>
+<td><a href="ADR-033-wire-boundary-dos-hardening.html">ADR-033</a></td>
+<td>DoS Hardening at the RTP and SIP Wire Boundaries</td>
+<td>Accepted</td>
+<td>2026-07-09</td>
+</tr>
+<tr>
+<td><a href="ADR-034-secondary-stream-and-onebyte-header-extensions.html">ADR-034</a></td>
+<td>Secondary-Stream Transport and RFC 8285 One-Byte Header Extensions</td>
+<td>Accepted</td>
+<td>2026-07-14</td>
+</tr>
+<tr>
+<td><a href="ADR-035-rtx-retransmission-mechanics.html">ADR-035</a></td>
+<td>RTX Retransmission Mechanics — OSN Encapsulation and the Retransmit Buffer</td>
+<td>Accepted</td>
+<td>2026-07-14</td>
+</tr>
+<tr>
+<td><a href="ADR-070-two-byte-rtp-header-extensions.html">ADR-070</a></td>
+<td>Two-Byte RTP Header Extensions and Form Selection by Need</td>
+<td>Accepted</td>
+<td>2026-08-17</td>
+</tr>
+<tr>
+<td><a href="ADR-071-payload-reads-under-partial-encryption.html">ADR-071</a></td>
+<td>What the Clear-Media Video Path Reads, and Which of It Survives Partial Encryption</td>
+<td>Accepted</td>
+<td>2026-08-17</td>
+</tr>
+</tbody>
+</table>
+<h3 id="rtcp-feedback-congestion-control--timing">RTCP, Feedback, Congestion Control &amp; Timing</h3>
+<table>
+<thead>
+<tr>
+<th>ADR</th>
+<th>Title</th>
+<th>Status</th>
+<th>Date</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="ADR-036-rtcp-wire-codec-tolerant-decode.html">ADR-036</a></td>
+<td>RTCP Wire Codec — Feedback/XR Framing and Tolerant Compound Decode</td>
+<td>Accepted</td>
+<td>2026-07-15</td>
+</tr>
+<tr>
+<td><a href="ADR-037-rtt-convergence-seed.html">ADR-037</a></td>
+<td>Jitter-Buffer RTT Convergence Seed</td>
+<td>Accepted</td>
+<td>2026-07-09</td>
+</tr>
+<tr>
+<td><a href="ADR-038-transport-cc-feedback-plane.html">ADR-038</a></td>
+<td>Transport-Wide Congestion Control — Feedback Plane (seq stamping, arrival recording, RTCP feedback)</td>
+<td>Accepted</td>
+<td>2026-07-15</td>
+</tr>
+<tr>
+<td><a href="ADR-039-transport-cc-estimator-bitrate-api.html">ADR-039</a></td>
+<td>Transport-Wide Congestion Control — Estimator, AIMD Rate Policy, and Recommended-Bitrate API</td>
+<td>Accepted</td>
+<td>2026-07-15</td>
+</tr>
+<tr>
+<td><a href="ADR-061-monotonic-media-clock.html">ADR-061</a></td>
+<td>Monotonic Clock for Time-Based Media and RTCP Computations</td>
+<td>Accepted</td>
+<td>2026-07-24</td>
+</tr>
+</tbody>
+</table>
+<h3 id="ice-connectivity-sip-path">ICE Connectivity (SIP path)</h3>
+<table>
+<thead>
+<tr>
+<th>ADR</th>
+<th>Title</th>
+<th>Status</th>
+<th>Date</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="ADR-040-send-side-ice-state-machine.html">ADR-040</a></td>
+<td>Send-Side ICE State Machine on the SIP Path (RFC 8445)</td>
+<td>Accepted</td>
+<td>2026-07-09</td>
+</tr>
+<tr>
+<td><a href="ADR-041-consent-freshness-and-ice-restart-primitives.html">ADR-041</a></td>
+<td>ICE Consent-Freshness and Restart as Built-but-Unwired SIP Primitives</td>
+<td>Accepted</td>
+<td>2026-07-09</td>
+</tr>
+<tr>
+<td><a href="ADR-042-ice-verification-and-shared-socket-gathering.html">ADR-042</a></td>
+<td>ICE Verification Discipline and Shared-Socket srflx Gathering</td>
+<td>Accepted</td>
+<td>2026-07-08</td>
+</tr>
+</tbody>
+</table>
+<h3 id="video-media-path">Video Media Path</h3>
+<table>
+<thead>
+<tr>
+<th>ADR</th>
+<th>Title</th>
+<th>Status</th>
+<th>Date</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="ADR-043-video-sdp-negotiation.html">ADR-043</a></td>
+<td>Video SDP Offer/Answer Negotiation (m=video, rtcp-fb, RTX/apt)</td>
+<td>Accepted</td>
+<td>2026-07-14</td>
+</tr>
+<tr>
+<td><a href="ADR-044-video-packetisation-and-reorder-playout.html">ADR-044</a></td>
+<td>Video Packetisation and Contiguous-Release Reorder Playout</td>
+<td>Accepted</td>
+<td>2026-07-14</td>
+</tr>
+<tr>
+<td><a href="ADR-045-video-loss-recovery-nack-pli-rtx.html">ADR-045</a></td>
+<td>Video Loss Recovery — Gated NACK/PLI Feedback and RTX</td>
+<td>Accepted</td>
+<td>2026-07-14</td>
+</tr>
+<tr>
+<td><a href="ADR-046-video-media-security-sdes-dtls.html">ADR-046</a></td>
+<td>Video Media Security — Per-m-line SDES, RTX Keying, DTLS Precedence</td>
+<td>Accepted</td>
+<td>2026-07-14</td>
+</tr>
+<tr>
+<td><a href="ADR-047-video-ice-media-layer-and-candidates.html">ADR-047</a></td>
+<td>Video ICE — Per-5-tuple Media Layer, Shared Credentials, Full Candidate Gathering</td>
+<td>Accepted</td>
+<td>2026-07-14</td>
+</tr>
+<tr>
+<td><a href="ADR-048-video-media-stream-and-channel-activation.html">ADR-048</a></td>
+<td>Video Media Stream and SIP Channel Activation</td>
+<td>Accepted</td>
+<td>2026-07-14</td>
+</tr>
+<tr>
+<td><a href="ADR-068-opaque-video-payload-format.html">ADR-068</a></td>
+<td>Opaque Video Payload Format for End-to-End Encrypted Frames</td>
+<td>Accepted</td>
+<td>2026-08-17</td>
+</tr>
+</tbody>
+</table>
+<h3 id="media-supervision">Media Supervision</h3>
+<table>
+<thead>
+<tr>
+<th>ADR</th>
+<th>Title</th>
+<th>Status</th>
+<th>Date</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="ADR-069-media-supervision-liveness-not-silence.html">ADR-069</a></td>
+<td>Media Silence Is Reported, Not Terminated On</td>
+<td>Accepted</td>
+<td>2026-08-17</td>
+</tr>
+</tbody>
+</table>
+<h3 id="audio-codecs">Audio Codecs</h3>
+<table>
+<thead>
+<tr>
+<th>ADR</th>
+<th>Title</th>
+<th>Status</th>
+<th>Date</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="ADR-049-opus-codec-integration-concentus.html">ADR-049</a></td>
+<td>Opus Audio Codec Integration via Concentus (Managed Encode/Decode)</td>
+<td>Accepted</td>
+<td>2026-07-08</td>
+</tr>
+<tr>
+<td><a href="ADR-050-bridge-audio-transcoding-opus-mulaw.html">ADR-050</a></td>
+<td>Bridge Audio Transcoding — Wire Codec ↔ µ-law Tap</td>
+<td>Accepted</td>
+<td>2026-07-08</td>
+</tr>
+</tbody>
+</table>
+<h3 id="concurrency--qos">Concurrency &amp; QoS</h3>
+<table>
+<thead>
+<tr>
+<th>ADR</th>
+<th>Title</th>
+<th>Status</th>
+<th>Date</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="ADR-051-event-dispatch-and-object-lifecycle-concurrency.html">ADR-051</a></td>
+<td>Event-Dispatch and Object-Lifecycle Concurrency Contract</td>
+<td>Accepted</td>
+<td>2026-07-08</td>
+</tr>
+<tr>
+<td><a href="ADR-052-media-hotpath-lockfree-fanout-and-bounded-buffers.html">ADR-052</a></td>
+<td>Media Hot-Path Concurrency — Lock-Free Fan-Out and Bounded Drop-Oldest Buffers</td>
+<td>Accepted</td>
+<td>2026-07-08</td>
+</tr>
+<tr>
+<td><a href="ADR-053-qos-observed-not-marked.html">ADR-053</a></td>
+<td>QoS as an Observed Metric, Not a Marked Packet</td>
+<td>Accepted</td>
+<td>2026-07-08</td>
+</tr>
+</tbody>
+</table>
+<h3 id="bundle--multi-track-transport">BUNDLE &amp; Multi-Track Transport</h3>
+<table>
+<thead>
+<tr>
+<th>ADR</th>
+<th>Title</th>
+<th>Status</th>
+<th>Date</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="ADR-010-bundle-transport-slice-plan.html">ADR-010</a></td>
+<td>BUNDLE Media-Transport — Slice-Plan</td>
+<td>Accepted</td>
+<td>2026-07-15</td>
+</tr>
+<tr>
+<td><a href="ADR-011-rtp-multitrack-transport.html">ADR-011</a></td>
+<td>Multi-Track RTP Transport for BUNDLE</td>
+<td>Accepted</td>
+<td>2026-07-15</td>
+</tr>
+</tbody>
+</table>
+<h3 id="webrtc--browser-interop">WebRTC &amp; Browser Interop</h3>
+<table>
+<thead>
+<tr>
+<th>ADR</th>
+<th>Title</th>
+<th>Status</th>
+<th>Date</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="ADR-009-webrtc-browser-peer-roadmap.html">ADR-009</a></td>
+<td>WebRTC Browser-Peer Roadmap</td>
+<td>Accepted</td>
+<td>2026-07-15</td>
+</tr>
+<tr>
+<td><a href="ADR-012-webrtc-public-facade.html">ADR-012</a></td>
+<td>WebRTC Public Facade (<code>WebRtcClient</code>)</td>
+<td>Accepted</td>
+<td>2026-07-18</td>
+</tr>
+<tr>
+<td><a href="ADR-060-webrtc-facade-completion-and-server-hosting.html">ADR-060</a></td>
+<td>WebRTC Facade Completion — Fluent ICE Config, Send-Side Simulcast, and the TURN/STUN Server-Hosting Facade</td>
+<td>Accepted</td>
+<td>2026-07-19</td>
+</tr>
+<tr>
+<td><a href="ADR-072-ice-restart-replaces-the-agent-not-the-transport.html">ADR-072</a></td>
+<td>An ICE Restart Replaces the Agent, Not the Transport</td>
+<td>Accepted</td>
+<td>2026-08-18</td>
+</tr>
+</tbody>
+</table>
+<h3 id="turn-relay">TURN Relay</h3>
+<table>
+<thead>
+<tr>
+<th>ADR</th>
+<th>Title</th>
+<th>Status</th>
+<th>Date</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="ADR-054-turn-relay-as-ice-candidate.html">ADR-054</a></td>
+<td>TURN Relay as a First-Class ICE Candidate</td>
+<td>Accepted</td>
+<td>2026-07-19</td>
+</tr>
+<tr>
+<td><a href="ADR-055-turn-control-stack-allocation-permission-keepalive.html">ADR-055</a></td>
+<td>TURN Control Stack — Allocation, Permission, and Keepalive over the Shared Socket</td>
+<td>Accepted</td>
+<td>2026-07-19</td>
+</tr>
+<tr>
+<td><a href="ADR-056-post-nomination-whole-socket-relay-transition.html">ADR-056</a></td>
+<td>Post-Nomination Whole-Socket Relay Transition (ChannelBind / ChannelData)</td>
+<td>Accepted</td>
+<td>2026-07-19</td>
+</tr>
+</tbody>
+</table>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/README.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

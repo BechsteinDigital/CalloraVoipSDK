@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-073: Stream Relay Transport (TURN over TCP/TLS ChannelData) | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-073: Stream Relay Transport (TURN over TCP/TLS ChannelData) | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-073-stream-relay-transport-tcp-tls.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-073-stream-relay-transport-turn-over-tcptls-channeldata">ADR-073: Stream Relay Transport (TURN over TCP/TLS ChannelData)</h1>
+
+<p>Status: Accepted
+Date: 2026-08-18
+Related: #240 (acceptance criterion 1), ADR-054, ADR-056, ADR-011, ADR-009
+Ratified: 2026-08-18 (User) — three decisions and the slice plan accepted; reconnect = fail-and-renominate.</p>
+<h2 id="context">Context</h2>
+<p>The TURN relay data path is UDP-only. <code>#240</code> needs the relay data path to also run over a TCP/TLS
+connection to the TURN server (RFC 8656 §2.1 client-to-server transport, ChannelData framed over the
+stream per §12.5). This ADR is that issue's first acceptance criterion — the design that must be
+ratified before any code touches the shared, security-critical media transport.</p>
+<h3 id="what-already-exists-verified">What already exists (verified)</h3>
+<ul>
+<li><strong>Control over TCP and TLS works.</strong> <code>TcpTlsTurnControlE2eTests</code> allocates against a hosted stream-transport
+<code>TurnServer</code> over TCP and TLS — Allocate/Auth/Refresh run.</li>
+<li><strong>Stream wire framing exists.</strong> <code>TurnStreamFramer</code> reads STUN and ChannelData frames off a stream, including
+the RFC 8656 §12.5 4-byte padding. It is not wired into a media transport.</li>
+<li><strong>The relay control stack is already transport-agnostic.</strong> <code>TurnRelayCoordinator</code> runs
+Allocate → CreatePermission → ChannelBind and installs the bound channel by driving <code>IRelayControlTransport</code>
+(<code>SendControlAsync</code> + <code>SetRelayChannel</code>) and <code>IRelayDatagramChannel</code> — abstractions deliberately kept off the
+concrete transport (their own docs say so). This cluster is used only in tests today.</li>
+<li><strong>The relay is modelled as an ICE candidate, not a parallel stack (ADR-054).</strong> <code>IceLocalCandidate.Check</code> is
+the abstraction point; the relay's send path (<code>TurnRelayCandidateSendPath</code>) &quot;holds no socket and no transport
+type, so it composes above any media transport.&quot; Nomination, consent and pair-priority are shared with
+host/srflx.</li>
+</ul>
+<h3 id="what-is-udp-bound-and-blocks-a-stream-relay">What is UDP-bound and blocks a stream relay</h3>
+<ul>
+<li><strong><code>BundledMediaTransport</code> is built around a UDP send target</strong> and, for relay, transitions <em>in place</em> into
+whole-socket ChannelData mode on the same 5-tuple (ADR-056). ADR-056 explicitly scopes TCP/TLS out:
+&quot;This is UDP whole-socket relay; a stream relay transport is a separate, unbuilt feature.&quot;</li>
+<li><strong><code>TurnAllocationProbe</code> binds a UDP media socket</strong> and allocates on its 5-tuple, because ICE gathering runs
+before the transport takes the socket over. A stream relay has no such socket.</li>
+</ul>
+<h2 id="the-crux">The crux</h2>
+<p>Over UDP there is <strong>one</strong> shared media socket. Direct (host/srflx) and relay share it; ADR-054 makes relay a
+send path on that socket, and ADR-056 transitions that same socket into ChannelData mode after a relay pair is
+nominated. <strong>A stream relay breaks this &quot;one shared socket&quot; premise</strong>: the persistent TCP/TLS connection to the
+TURN server <em>is</em> the transport, and it does not share a 5-tuple with the UDP media socket the direct candidates
+use. So a stream relay cannot be an in-place <em>mode</em> of <code>BundledMediaTransport</code> (there is no socket to flip) —
+it must be a <strong>distinct media transport</strong>, selected by ICE nomination, whose receive path is the stream rather
+than the UDP socket. That is the load-bearing decision this ADR asks to ratify.</p>
+<h2 id="decision">Decision</h2>
+<h3 id="1-reuse-the-transport-agnostic-relay-control-cluster-do-not-build-a-parallel-stack">1. Reuse the transport-agnostic relay control cluster; do not build a parallel stack</h3>
+<p><code>TurnRelayCoordinator</code> / <code>IRelayControlTransport</code> / <code>IRelayDatagramChannel</code> / <code>TurnStreamFramer</code> were built
+transport-agnostic precisely for this. The stream relay is a <strong>new transport implementation behind these
+seams</strong>, not new orchestration:</p>
+<ul>
+<li>The stream transport implements <code>IRelayControlTransport</code>: <code>SendControlAsync</code> writes a STUN request as a
+stream frame; <code>SetRelayChannel</code> opens the ChannelData data phase.</li>
+<li><code>TurnRelayCoordinator</code> drives Allocate → Permission → ChannelBind over that surface, unchanged.</li>
+<li>The bound channel is an <code>IRelayDatagramChannel</code> that frames/unwraps ChannelData over the stream via
+<code>TurnStreamFramer</code>.</li>
+</ul>
+<p>This resolves #240's explicit open question (&quot;reuse or deliberately discard the coordinator cluster&quot;):
+<strong>reuse.</strong> The cluster's test-only status ends here — this is the production caller it was shaped for.</p>
+<h3 id="2-the-stream-relay-is-a-distinct-media-transport-chosen-as-an-ice-candidate">2. The stream relay is a distinct media transport, chosen as an ICE candidate</h3>
+<p>Keep ADR-054 at the ICE layer — the send path is still the candidate — but the stream relay's send <em>and
+receive</em> live on the stream, not the shared UDP socket:</p>
+<ul>
+<li><p>A new <code>StreamRelayMediaTransport</code> owns the persistent TCP/TLS connection, presents the same
+send/receive-datagram surface to DTLS/ICE/RTP (so those layers compose unchanged), and carries relayed media
+as ChannelData both directions.</p>
+<p><strong>This is libwebrtc's model.</strong> In <code>p2p/base/turn_port.cc</code>, <code>TurnPort::PrepareAddress</code> creates its <em>own</em>
+socket per TURN allocation — <code>CreateClientTcpSocket(... server_address_ ...)</code> for a TCP/TLS server,
+<code>CreateUdpSocket</code> for UDP — so every TURN transport (UDP and stream alike) is a separate <code>Port</code> with its own
+connection to the server, not a mode of the host socket. Decision 2 converges the stream relay onto exactly
+that structure. (Our <em>existing</em> UDP relay diverges: ADR-056 transitions the one shared media socket in place
+rather than owning a separate TURN socket — a deliberate past choice, shipped, and out of scope for #240. The
+stream relay does not, and cannot, inherit that in-place model, so it lands closer to libwebrtc than the UDP
+path does.)</p>
+</li>
+<li><p>Its relay candidate's <code>Check</code> send path frames a connectivity check as a Send indication over the stream
+(RFC 8656 §10, check phase), exactly as the UDP relay candidate does over the socket — only the raw-send
+delegate differs (stream write vs. <code>SendToAsync</code>).</p>
+</li>
+<li><p>On nomination of the stream relay pair, steady-state media is ChannelData over the stream (RFC 8656 §11–12).
+Unlike ADR-056 there is <strong>no in-place transition of a UDP socket</strong> — the stream transport was ChannelData-
+capable from the start; nomination simply selects it.</p>
+</li>
+</ul>
+<h3 id="3-reconnect-fail-and-renominate-for-v1-not-transparent-continuity">3. Reconnect: fail-and-renominate for v1, not transparent continuity</h3>
+<p>A TCP/TLS connection can drop, and a TURN allocation is bound to the client transport address (the connection's
+5-tuple). A new connection is a <strong>new allocation with a new relayed address</strong> — it cannot silently resume the
+old one. So transparent reconnect is not achievable without re-gathering and re-nominating.</p>
+<p><strong>v1 decision: a dropped stream relay fails ICE consent (RFC 7675) and the pair goes down</strong>, exactly as ADR-056
+treats a committed relay it cannot re-transition. The call then falls to another working pair, or the
+application triggers an ICE restart (ADR-072, already shipped) which re-gathers — including a fresh stream
+relay allocation — and re-nominates. Graceful reconnect that re-allocates and re-advertises a new relay
+candidate under a live session is a <strong>named follow-up</strong>, not v1.</p>
+<p>Rationale: this keeps the first cut honest and bounded. The reconnect machinery (re-allocate + re-candidate +
+consent hand-off under load) is its own hard problem; pretending a stream relay is as durable as a UDP socket
+would be the dishonest shortcut.</p>
+<p><strong>Reference parity confirms this is not a shortcut but the established behaviour.</strong> Neither reference stack
+transparently reconnects a dropped TURN-TCP/TLS allocation:</p>
+<ul>
+<li><strong>libwebrtc</strong> (<code>p2p/base/turn_port.cc</code>): <code>TurnPort::OnSocketClose</code> — &quot;Connection with server failed&quot; — calls
+<code>Close()</code>. The port fails; <code>P2PTransportChannel</code> continues with remaining candidates or the application
+performs an ICE restart. No allocation-preserving reconnect.</li>
+<li><strong>pjnath / pjsip</strong> (<code>pjnath/src/pjnath/turn_sock.c</code>): a TCP or TLS close in <code>on_data_read</code> calls
+<code>sess_fail(&quot;TCP connection closed&quot; / &quot;TLS connection closed&quot;)</code> → <code>pj_turn_session_destroy</code>. The session is
+destroyed; recovery is via ICE restart.</li>
+</ul>
+<p>So fail-and-renominate is <em>equal</em> to libwebrtc and pjsip (the project's match-or-exceed bar); graceful
+reconnect would exceed both references at a cost neither pays, and our ICE restart (ADR-072) already provides
+the recovery path they rely on.</p>
+<h3 id="4-gathering-produces-a-stream-relay-candidate-over-its-own-connection">4. Gathering produces a stream-relay candidate over its own connection</h3>
+<p>A stream analog of <code>TurnAllocationProbe</code> connects TCP/TLS to the server, allocates over that connection, and
+yields a relay candidate whose retained allocation (relayed endpoint, effective credentials, and the live
+stream) is handed to the coordinator to continue (permission / channel-bind / refresh) on the <strong>same
+connection</strong> — no re-allocation, mirroring the UDP probe's socket-continuity contract. A failed allocation
+yields no relay candidate and is not fatal to gathering (as with srflx and the UDP relay).</p>
+<h2 id="consequences">Consequences</h2>
+<p>Positive:</p>
+<ul>
+<li>The relay data path becomes transport-independent at the seam that already models it that way; the UDP path
+is untouched (additive — no <code>StreamRelayMediaTransport</code> in play means byte-identical behaviour).</li>
+<li>&quot;Force relay over TCP/TLS&quot; remains an ICE policy over shared nomination machinery (ADR-054), not a bespoke
+code path.</li>
+<li>TLS gives a relay that traverses firewalls allowing only outbound 443 — the last-resort connectivity TURN
+exists for, now over the transport most restrictive networks permit.</li>
+</ul>
+<p>Divergence and honest open edges (to be carried in the implementing PRs, per ADR-009):</p>
+<ul>
+<li><strong>No in-place UDP↔stream switch.</strong> Direct is UDP, stream relay is a separate transport; a call does not
+migrate a live UDP socket onto a stream. Nomination picks one.</li>
+<li><strong>Reconnect is fail-and-renominate, not transparent</strong> (decision 3). A mid-call server-connection drop needs
+an ICE restart to recover a relay.</li>
+<li><strong>Controlled-agent relay gap carries over</strong> (ADR-054/056): only the controlling agent nominates a relay pair.</li>
+<li><strong>No browser-interop proof</strong> (ADR-009): real-server and browser validation belong in the interop matrix
+(#228 / #240's later criteria), not in unit scope.</li>
+</ul>
+<h2 id="ratification-points-for-the-user--po">Ratification points (for the User / PO)</h2>
+<ol>
+<li><strong>Distinct stream transport vs. in-place mode</strong> (decision 2). Confirm the stream relay is a separate
+transport selected by nomination, not a mode of <code>BundledMediaTransport</code>. This is the load-bearing call.</li>
+<li><strong>Reconnect semantics</strong> (decision 3). Confirm fail-and-renominate for v1, with graceful re-allocation as a
+follow-up — or require graceful reconnect in scope now.</li>
+<li><strong>Reuse the coordinator cluster</strong> (decision 1). Confirm reuse over a fresh stack.</li>
+</ol>
+<h2 id="proposed-slice-plan-after-ratification">Proposed slice plan (after ratification)</h2>
+<ol>
+<li><code>StreamRelayMediaTransport</code> implementing <code>IRelayControlTransport</code> over a <code>TurnStreamFramer</code>-framed
+connection; unit-tested against the hosted stream <code>TurnServer</code> (control phase + a stream <code>IRelayDatagramChannel</code>).</li>
+<li>Stream <code>TurnAllocationProbe</code> analog → a stream relay candidate; gathering wiring.</li>
+<li>Relay candidate over the stream in the ICE nomination path (ADR-054 shape, stream send delegate).</li>
+<li>Data path E2E over TCP against a real <code>TurnServer</code> (#240 criterion 2); then TLS (criterion 3).</li>
+<li>Interop-matrix entry recording which combination is proven (#240 criterion 5).</li>
+</ol>
+<h2 id="implementation-status">Implementation status</h2>
+<p>Slices 1–3 shipped incrementally (<code>StreamRelayMediaTransport</code>, <code>TurnStreamAllocationProbe</code>, the relay-candidate
+send path over the stream, the inbound Data-indication path, the consent integration, the gathering-time
+producer). The <strong>media path</strong> (decision 2 — the distinct transport selected by nomination) then shipped as one
+change:</p>
+<ul>
+<li><strong>Per-candidate nomination routing.</strong> <code>IceLocalCandidate</code> carries its own <code>SendVia</code> and an <code>OnNominated</code> hook,
+so coexisting relays (a UDP relay and a stream relay) are no longer conflated by a single shared field — the
+winning candidate's own transport is switched.</li>
+<li><strong>The switch itself.</strong> <code>BundledMediaTransport.EnterStreamRelayMode</code> forwards every send to the stream
+transport's ChannelData path (its own TCP/TLS connection) and <code>InjectRelayedInbound</code> feeds its relayed inbound
+into the same pipeline; DTLS/SRTP/RTP ride above, unchanged. This is <strong>libwebrtc's / pjnath's model</strong> — a TURN
+allocation over its own socket, selected by nomination — reached here for the stream relay (the UDP relay keeps
+its ADR-056 in-place socket switch). <code>BundledStreamRelayPath</code> owns the adoption, the one-shot transition
+(ChannelBind → <code>EnterStreamRelayMode</code>) and the teardown order.</li>
+<li><strong>Peer wiring.</strong> <code>WebRtcStreamRelayConnector</code> connects a TCP/TLS TURN entry; <code>WebRtcStreamRelayStore</code> retains it
+first-wins and adopts it into the session (now for the answerer, on build for the offerer). The old &quot;TCP/TLS
+gathers no relay candidate&quot; config trap is gone.</li>
+</ul>
+<p>Open edges carried forward (ADR-009):</p>
+<ul>
+<li><strong>Controlled-agent stream relay.</strong> The controlled agent (answerer) nominates via the session-level callback, not
+the per-candidate <code>OnNominated</code>, so an answerer-side stream relay does not switch its own media — the
+controlling (offerer) stream relay is the working path (the pre-existing controlled-agent relay gap, ADR-054).</li>
+<li><strong>Real-server / browser data-path E2E</strong> stays interop (#228): the transition is timeout-bound (a relay only
+wins when direct fails) and not fully unit-testable, so the unit proof drives the transition through the real
+session ICE agent with an echoing attachment, while the transport ChannelData round-trip and the TCP/TLS
+connect + gather are proven against real sockets and a hosted <code>TurnServer</code>.</li>
+<li><strong>TLS certificate validation</strong> is an injected callback (platform default in production); wiring it to
+configuration is a follow-up.</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Code: <code>TurnStreamFramer</code>, <code>IRelayControlTransport</code>, <code>TurnRelayCoordinator</code>, <code>IRelayDatagramChannel</code>,
+<code>TurnAllocationProbe</code>, <code>BundledMediaTransport</code>, <code>TurnRelayCandidateSendPath</code>, <code>IceLocalCandidate</code>.</li>
+<li>ADRs: ADR-054 (relay as ICE candidate), ADR-056 (UDP whole-socket relay transition — scopes stream out),
+ADR-011 (shared BUNDLE transport), ADR-072 (ICE restart), ADR-009 (interop boundary).</li>
+<li>RFC 8656 §2.1 (TCP/TLS client-server transport), §10 (Send/Data indications), §11 (ChannelBind),
+§12 / §12.5 (ChannelData and its stream framing/padding).</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-073-stream-relay-transport-tcp-tls.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

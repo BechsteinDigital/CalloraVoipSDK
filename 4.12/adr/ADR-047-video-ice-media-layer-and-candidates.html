@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-047: Video ICE — Per-5-tuple Media Layer, Shared Credentials, Full Candidate Gathering | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-047: Video ICE — Per-5-tuple Media Layer, Shared Credentials, Full Candidate Gathering | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-047-video-ice-media-layer-and-candidates.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-047-video-ice--per-5-tuple-media-layer-shared-credentials-full-candidate-gathering">ADR-047: Video ICE — Per-5-tuple Media Layer, Shared Credentials, Full Candidate Gathering</h1>
+
+<p>Status: Accepted
+Date: 2026-07-14</p>
+<h2 id="context">Context</h2>
+<p>Without BUNDLE the video m-line has its <strong>own</strong> 5-tuple (own socket/port), so it needs its own
+ICE: it must answer inbound connectivity checks (RFC 8445 §7.3) and run consent freshness
+(RFC 7675) on the video socket, and it must gather and emit its own candidates (host + srflx +
+relay, RFC 8839) so a strict candidate-pairing peer has something to probe. Credentials are
+<strong>session-shared</strong> (one ufrag/pwd across all m-lines, distinct 5-tuples) — not per-m-line, not
+BUNDLE. This ADR covers video ICE; the audio ICE state machine and consent primitives are the
+C11 track, whose machinery this reuses; BUNDLE (one agent, one 5-tuple) is the ADR-010/011 track.</p>
+<h3 id="verified-current-state-graphify-grounded">Verified current state (graphify-grounded)</h3>
+<ul>
+<li><code>IceMediaParameters</code> (internal record) decouples the ICE view from <code>CallMediaParameters</code>, with
+<code>FromCall</code> (audio, 1:1 projection of the 7 fields the old path read) and <code>FromVideo</code> (video
+5-tuple, shared creds). <code>IceMediaAttachment</code>/<code>IceMediaConsentSessionFactory</code> take
+<code>IceMediaParameters</code> — audio stays behaviour-identical.</li>
+<li><code>VideoRtpStream</code> builds <code>IceMediaAttachment</code> from <code>FromVideo(video)</code> (L256-259), wires
+<code>StunPacketReceived</code>/<code>Start</code>/<code>DisposeAsync</code>, and on <code>OnMediaConsentLost</code> logs + <code>StopTransmission</code>
+(L265-269, RFC 7675 §5.1 — socket stays open for a possible ICE restart). Inactive (a no-op)
+when ICE was not negotiated (<code>_iceMedia.IsActive</code> gate, L258). Separate consent loops for
+audio/video on separate sockets, no shared mutable state.</li>
+<li>Candidate gathering: <code>CallIceAgent.GatherTransportCandidatesAsync(endpoint, socket, ct)</code> was
+extracted from <code>BuildLocalDescriptionAsync</code> and is called for <strong>both</strong> audio and video —
+host + srflx (STUN via the socket) + relay (TURN allocation) + dedup, identical ordering,
+foundation numbering, and warn-once for a missing TURN allocator. <code>SipCoreCallChannel</code> passes
+<code>_localVideoSocket?.Client</code> as the video socket. <code>CallIceLocalDescription.VideoCandidates</code>
+carries the full host/srflx/relay set.</li>
+<li>Emission: <code>SdpOfferAnswerNegotiator</code> emits the shared <code>ice-ufrag</code>/<code>pwd</code> and <code>video.Candidates</code>
+on <strong>both</strong> the video offer and answer m-line (L554-559), only when ICE is set (SDES/DTLS
+sections untouched otherwise). <code>SdpUtilities.TryResolveVideoParameters</code> stamps the video remote
+creds with a media-level override falling back to the session-shared value
+(<code>video.IceUfrag ?? sharedRemoteIceUfrag</code>). The enricher chain runs Ice → Srtp → Dtls, and the
+SRTP rebuild carries the ICE fields through (invariant: ICE runs before SRTP).</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<ol>
+<li><strong>Per-5-tuple video ICE with session-shared credentials.</strong> The video stream runs its own
+inbound-check responder and consent loop on its own socket, keyed from one session-wide
+ufrag/pwd — not BUNDLE (which would collapse to one 5-tuple), not per-m-line credentials.</li>
+<li><strong>Reuse the audio ICE machinery</strong> via <code>IceMediaParameters</code> so audio is a byte-for-byte 1:1
+projection and video is a second projection of the same types — no forked ICE code.</li>
+<li><strong>Gather the full candidate set for video</strong> (host + srflx + relay) through the shared
+<code>GatherTransportCandidatesAsync</code>, over the video socket, so audio and video gather identically
+and a candidate-pairing peer can probe the video 5-tuple.</li>
+<li><strong>Emit shared ufrag/pwd + video candidates on offer and answer</strong>; resolve remote creds with a
+media-level override over the session-shared fallback.</li>
+<li><strong>Consent loss ceases video transmission</strong> but leaves the socket open (RFC 7675 §5.1).</li>
+</ol>
+<h3 id="crux">Crux</h3>
+<p>The founding constraint is <strong>SIP-video first, no BUNDLE</strong> (memory
+<code>project_video_interop_codec_decision</code>): audio and video keep distinct 5-tuples but share one ICE
+credential set. That shapes everything here — <code>IceMediaParameters.FromVideo</code> reuses the audio
+attachment with the shared creds and the video socket, and the candidate gatherer is extracted so
+one code path serves both sockets. The alternative (per-m-line credentials or a shared BUNDLE
+socket) is explicitly the later ADR-010/011 track, not this path.</p>
+<h2 id="consequences">Consequences</h2>
+<p>Positive: video reuses the whole audio ICE stack (state machine, consent, gathering) with a thin
+projection; audio is provably unchanged; NAT paths for video are covered by srflx/relay.</p>
+<p>Divergence / honesty:</p>
+<ul>
+<li><strong>No full ICE candidate-pair selection on the video 5-tuple.</strong> Consent uses the m-line 5-tuple
+(lite-consent style); candidates are gathered/emitted/answered but <strong>not actively paired</strong>
+(video-ice-srflx-relay log caveat). Trickle-ICE for video is also open. <strong>No DONE/compliant
+claim.</strong></li>
+<li>Interop for the media-layer step is SDK↔SDK (5-tuple derived from the m-line address/port);
+strict candidate-pairing WebRTC peers were addressed by the later host/srflx/relay slices, but
+full pairing remains open.</li>
+<li>Video <code>OnMediaConsentLost → StopTransmission</code> mirrors audio but is not covered by a real
+consent-timeout test (would be flaky) — noted follow-up.</li>
+<li><code>_keyFrameFeedback</code> not disposed — pre-existing, not introduced here (review follow-up).</li>
+</ul>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li>Audio ICE stays a 1:1 projection through <code>IceMediaParameters.FromCall</code> (regression net).</li>
+<li>Non-ICE video leg is inactive (<code>IsActive</code> false) — no consent/responder, fail-closed.</li>
+<li>Enricher order Ice → Srtp → Dtls; the SRTP rebuild must carry the video ICE fields through.</li>
+<li>Candidate gathering stays in the application layer; the channel only forwards the video socket.</li>
+<li>Video candidates emitted only when the list is non-empty (no regression for plain/SDES/DTLS).</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Logs: <code>docs/archive/agent-log/2026-07-14-dev-video-ice-media-layer.md</code>,
+<code>…-video-ice-candidates.md</code>, <code>…-video-ice-srflx-relay.md</code>.</li>
+<li>Code (graphify-verified): <code>src/Core/Infrastructure/Rtp/VideoRtpStream.cs</code> (ICE attachment
+L256, <code>OnMediaConsentLost</code> L265); <code>src/Core/Infrastructure/Stun/Ice/IceMediaAttachment.cs</code>
+(<code>IceMediaParameters.FromVideo</code>); <code>CallIceAgent.GatherTransportCandidatesAsync</code>,
+<code>CallIceLocalDescription.VideoCandidates</code>;
+<code>src/Core/Infrastructure/Sdp/OfferAnswer/SdpOfferAnswerNegotiator.cs</code> (video ICE emission
+L554-559); <code>src/Core/Infrastructure/Sdp/SdpUtilities.cs</code> (<code>TryResolveVideoParameters</code> L521);
+<code>SipCoreCallChannel</code> (<code>_localVideoSocket</code> passthrough); <code>CallMediaParametersIceEnricher.EnrichVideo</code>.</li>
+<li>Related: C11 (audio ICE state machine / consent), ADR-010/011 (BUNDLE, single 5-tuple).</li>
+<li>RFC: 8445 §7.3 (inbound checks), 7675 §5.1 (consent), 8839 (ICE in SDP), 8843 (BUNDLE — the
+path <em>not</em> taken here).</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-047-video-ice-media-layer-and-candidates.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

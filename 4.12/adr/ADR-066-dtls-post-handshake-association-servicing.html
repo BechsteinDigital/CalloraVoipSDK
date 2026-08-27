@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-066: DTLS Post-Handshake Association Servicing and Egress Ordering | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-066: DTLS Post-Handshake Association Servicing and Egress Ordering | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-066-dtls-post-handshake-association-servicing.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-066-dtls-post-handshake-association-servicing-and-egress-ordering">ADR-066: DTLS Post-Handshake Association Servicing and Egress Ordering</h1>
+
+<p>Status: Accepted
+Date: 2026-08-06</p>
+<h2 id="context">Context</h2>
+<p>After a successful DTLS-SRTP handshake the four SRTP/SRTCP contexts are derived and media flows <strong>directly over
+SRTP</strong> (RFC 5764 §4.2). Two defects remained in the DTLS keying channel around that point.</p>
+<ol>
+<li><strong>Egress was fire-and-forget.</strong> BouncyCastle calls <code>Send</code> synchronously from its handshake thread; the bridge
+ran <code>_ = SendOutboundAsync(datagram)</code> — so records had no local order, no backpressure, and a transport
+failure was only logged (the handshake did not fail). At teardown <code>close_notify</code> was sent fire-and-forget and
+the lifetime token was cancelled immediately after, so it could be dropped — and DTLS does not retransmit
+alerts (RFC 6347 §4.2.7).</li>
+<li><strong>The association was never serviced after key export.</strong> Nobody called <code>Receive</code> on the <code>DtlsTransport</code>
+again, so a remote <code>close_notify</code> went unnoticed, alerts changed nothing, and media kept flowing under a
+keying channel the peer considered closed (RFC 8827 §6.5).</li>
+</ol>
+<p>The BouncyCastle post-handshake semantics had to be pinned empirically (they are not obvious): a peer
+<code>close_notify</code> does <strong>not</strong> surface as a clean <code>Receive</code> return of <code>-1</code>. BouncyCastle processes it, closes the
+underlying transport, and then — reading on — throws our now-closed <code>QueueDatagramTransport</code> as
+<code>TlsFatalAlert(internal_error)</code>. A peer <em>fatal</em> alert surfaces as <code>TlsFatalAlertReceived</code>; application_data
+surfaces as a positive length; a plain timeout as <code>-1</code> with the transport still open.</p>
+<p>Reference stacks diverge here: libwebrtc and aiortc actively service the DTLS channel after keying and map a
+peer <code>close_notify</code> onto a transport-state/close event; Pion services it only when a DataChannel is negotiated,
+and pjsip reacts only to hard SSL faults (a clean <code>close_notify</code> is ignored). None sends an active
+<code>no_renegotiation</code> alert.</p>
+<h2 id="decision">Decision</h2>
+<p>Service the keying channel and make egress a proper contract.</p>
+<ol>
+<li><strong>Ordered single-writer egress (<code>DtlsEgressPump</code>).</strong> A bounded queue drained by one consumer awaits the socket
+send in order (local record order, bounded backpressure — no second unbounded queue). The first transport
+fault is captured and re-thrown from the next enqueue, so it reaches BouncyCastle and fails the handshake
+closed instead of being logged. Teardown drains a pending <code>close_notify</code> on a tight deadline before cancelling
+the rest.</li>
+<li><strong>A control-receive loop (<code>DtlsAssociationReceiver</code>)</strong> started after key export, on a single consumer. It
+discards and counts stray DTLS application_data in pure-SRTP mode (RFC 5764: RTP/RTCP stays SRTP/SRTCP), and
+on a peer close/alert notifies the session owner so media ceases. It does <strong>not</strong> notify on our own teardown.</li>
+<li><strong>A normalising adapter (<code>IDtlsControlChannel</code> / <code>BouncyCastleDtlsControlChannel</code>)</strong> maps the mixed
+BouncyCastle signalling onto <code>{Timeout, ApplicationData, Closed}</code>, disambiguating a close from a timeout via
+<code>QueueDatagramTransport.IsClosed</code>. This keeps the loop testable without a live handshake.</li>
+<li><strong>Owner reaction:</strong> the peer-close callback flows <code>BundledDtlsKeying</code> → <code>BundledMediaSession.PeerClosed</code> →
+<code>WebRtcSessionEventBridge</code> → <code>WebRtcConnectionState.Closed</code> (a peer <code>close_notify</code> is a deliberate teardown of
+the secure channel; this mirrors libwebrtc's <code>DtlsTransportState::kClosed</code>).</li>
+<li><strong>Renegotiation is rejected passively.</strong> BouncyCastle discards a post-handshake ClientHello automatically (no
+rekey), which is exactly what libwebrtc/BoringSSL and pjsip/aiortc do. No active <code>no_renegotiation</code> alert is
+sent — BouncyCastle offers no hook and no reference stack sends one. Live rekeying/MKI stays out of scope.</li>
+</ol>
+<p><strong>Teardown ordering is the critical invariant:</strong> the receiver is stopped <em>cleanly</em> (cancellation makes its
+bounded receive time out — a clean <code>-1</code> that does not fault the record layer) <strong>before</strong> <code>close_notify</code> is sent,
+because a faulted record layer makes BouncyCastle skip the <code>close_notify</code> (<code>m_failed</code>). Only then is the
+transport closed and the egress drained.</p>
+<h2 id="consequences">Consequences</h2>
+<ul>
+<li><strong>Media no longer runs under a closed keying channel</strong> on the WebRTC/bundle path: a peer <code>close_notify</code> ends
+the association deterministically and surfaces as <code>connectionState = &quot;closed&quot;</code>.</li>
+<li><strong>Reference parity:</strong> better than Pion/pjsip (which do not service the channel in the keying-only case), on par
+with libwebrtc/aiortc.</li>
+<li><strong>All new types are internal</strong> — no public API surface added.</li>
+<li><strong>The SIP media-session owner reaction is a documented follow-up.</strong> SIP legs still service the association
+(close noticed and logged, application_data discarded) but do not yet notify the owner; a SIP leg is torn down
+via BYE, not a mid-call DTLS <code>close_notify</code>, so the gap is low-risk.</li>
+<li><strong>A sub-millisecond late-completion race</strong> (a handshake completing exactly during teardown) may drop the final
+<code>close_notify</code> — the same narrow, acknowledged race as the egress teardown; the association is closed either
+way.</li>
+</ul>
+<h2 id="alternatives-considered">Alternatives considered</h2>
+<ul>
+<li><strong>Send an active <code>no_renegotiation</code> alert.</strong> Rejected: BouncyCastle offers no hook (it would require manual
+record inspection and alert framing), it goes beyond every reference stack, and passive rejection already
+prevents a rekey.</li>
+<li><strong>Map a peer close to <code>Failed</code> instead of <code>Closed</code>.</strong> Considered: a fatal alert is failure-like, but the
+dominant case is a clean <code>close_notify</code> (a deliberate close), for which <code>Closed</code> matches libwebrtc <code>kClosed</code>.</li>
+<li><strong>Close the transport before stopping the receiver.</strong> Rejected: it faults BouncyCastle's record layer, which
+then suppresses the outgoing <code>close_notify</code>.</li>
+<li><strong>Keep egress fire-and-forget and only add the receive loop.</strong> Rejected: without ordered egress with error
+propagation, the teardown <code>close_notify</code> has no delivery guarantee and a send failure stays invisible.</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-066-dtls-post-handshake-association-servicing.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

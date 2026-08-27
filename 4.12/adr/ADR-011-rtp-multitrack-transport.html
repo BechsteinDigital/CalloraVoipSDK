@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-011: Multi-Track RTP Transport for BUNDLE | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-011: Multi-Track RTP Transport for BUNDLE | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-011-rtp-multitrack-transport.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-011-multi-track-rtp-transport-for-bundle">ADR-011: Multi-Track RTP Transport for BUNDLE</h1>
+
+<p>Status: Accepted
+Date: 2026-07-15</p>
+<h2 id="context">Context</h2>
+<p>BUNDLE (RFC 8843, ADR-010) needs one shared 5-tuple / UDP socket / DTLS association / ICE agent
+carrying multiple media streams (audio + video), each with its own SSRC, sequence space,
+payload type, and RTX. The routing brain and outbound stamping are already built and on <code>main</code>:
+MID header-extension codec (B1), the §9.2 demultiplexer (B2a) + factory, the track router (B2b),
+and outbound MID stamping in the send path (B2c-out). What remains — B2c-in — is the transport
+itself: making one transport serve multiple tracks. This is the invasive part and needs a design
+before code.</p>
+<h3 id="verified-current-state">Verified current state</h3>
+<ul>
+<li><code>RtpSession</code> is <strong>single-stream</strong>: one UDP socket, one SSRC, one sequence counter, one
+timestamp, one outbound/inbound SRTP + SRTCP context, plus the RFC 7983 packet-type demux
+(STUN/DTLS/RTP/RTCP), transport-cc stamping, and the RTX secondary path — all for one stream.</li>
+<li><strong>Video runs a second, fully separate <code>RtpSession</code></strong> (<code>VideoRtpStream</code>) with its own socket/port,
+DTLS association, ICE/consent, and SRTP contexts.</li>
+<li><strong><code>SrtpContext</code> is single-SSRC</strong>: it keeps one sender index and one 64-packet replay window
+(<code>_replayWindowIndex</code>/<code>_replayWindowBitmap</code>); the SSRC only feeds the IV (<code>BuildIv</code>), it does not
+key per-SSRC ROC/replay state. Today that is fine — one context per stream.</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<p>Do <strong>not</strong> rework the battle-tested single-stream <code>RtpSession</code> into a multi-track type — that would
+destabilise every audio call. Instead:</p>
+<ol>
+<li><strong>Extract the reusable low-level primitives</strong> both paths share — the UDP socket send/receive and
+the RFC 7983 packet-type demux — so the new bundled transport reuses them without duplicating and
+without touching <code>RtpSession</code>'s stream logic.</li>
+<li><strong>Build <code>BundledMediaTransport</code> alongside</strong> <code>RtpSession</code>: it owns the shared socket, DTLS, ICE,
+the shared SRTP master key, packet-type demux, and rtcp-mux, and hosts N <strong>tracks</strong>. A track owns
+the per-SSRC stream state (sequence, timestamp, payload type, RTX, transport-cc) and stamps MID on
+outbound (via the built stamper). Inbound is packet-type-demuxed → SRTP-unprotected → routed by the
+built <code>BundledTrackRouter</code> → the track's receive.</li>
+<li>Non-BUNDLE calls keep using <code>RtpSession</code> unchanged; only BUNDLE calls use <code>BundledMediaTransport</code>.</li>
+</ol>
+<h3 id="crux-design-pieces">Crux design pieces</h3>
+<ul>
+<li><strong>Per-SSRC SRTP.</strong> Under one shared DTLS-derived master key, ROC and the replay window are
+per-SSRC (RFC 3711 §3.2: the cryptographic context is per-SSRC). <code>SrtpContext</code> must key its ROC +
+replay state by SSRC (a per-SSRC state map under the shared key), for both directions.</li>
+<li><strong>Primitive reuse.</strong> Pull the socket loop and packet-type demux out of <code>RtpSession</code> into a shared
+unit so <code>BundledMediaTransport</code> does not fork them.</li>
+<li><strong>RTCP.</strong> Compound RTCP routed by sender/media SSRC (rtcp-mux already shares the port); SR/RR per
+track.</li>
+</ul>
+<h2 id="sub-slice-plan-b2c-in--b6">Sub-slice plan (B2c-in → B6)</h2>
+<ul>
+<li><strong>B2c-in-1 — Per-SSRC SRTP state.</strong> Extend <code>SrtpContext</code> to keep ROC + replay window per SSRC under
+the shared key. Isolated + testable (protect/unprotect two SSRCs independently, replay per SSRC).
+Prerequisite for shared-key multi-track. <strong>Recommended first slice.</strong></li>
+<li><strong>B2c-in-2 — Extract shared transport primitives.</strong> Socket send/receive + RFC 7983 packet-type
+demux into a reusable unit; <code>RtpSession</code> delegates to it (behaviour-neutral, existing suite green).</li>
+<li><strong>B2c-in-3 — <code>BundledMediaTransport</code> inbound.</strong> Compose the primitives + shared inbound SRTP +
+<code>BundledTrackRouter</code> → per-track receive.</li>
+<li><strong>B2c-in-4 — <code>BundledMediaTransport</code> outbound multi-track.</strong> Per-track sender: own SSRC/seq/PT +
+MID stamp → shared SRTP protect → shared socket. The hard part.</li>
+<li><strong>B3 — Shared DTLS + ICE consent</strong> for the transport (one association / one agent, one consent loop).</li>
+<li><strong>B4 — Video as a track</strong> — <code>VideoRtpStream</code> sends/receives over the shared transport instead of its
+own <code>RtpSession</code>; its codec/packetisation/keyframe/reorder/transport-cc logic stays.</li>
+<li><strong>B5 — SDP BUNDLE generation</strong> — <code>a=group:BUNDLE</code>, one port, session-level ICE, <code>extmap sdes:mid</code>.</li>
+<li><strong>B6 — Browser-interop validation</strong> (Chrome/Firefox).</li>
+</ul>
+<h2 id="consequences">Consequences</h2>
+<p>Positive: the proven single-stream <code>RtpSession</code> (all audio today) is untouched; BUNDLE is additive.
+The routing brain, config, and outbound stamping are already done and tested, so B2c-in is transport
+plumbing over a finished routing layer.</p>
+<p>Tradeoffs: two transport types (<code>RtpSession</code> + <code>BundledMediaTransport</code>) sharing extracted primitives —
+governance needed to keep them from diverging. Per-SSRC SRTP touches the crypto hot path (careful
+review + tests). B2c-in-2 (primitive extraction) refactors <code>RtpSession</code> internals behaviour-neutrally
+— the full send/receive/SRTP suite is the safety net.</p>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li>Single-stream <code>RtpSession</code> behaviour stays byte-identical through the extraction (test suite green).</li>
+<li>Per-SSRC SRTP change reviewed against replay/ROC correctness with per-SSRC tests.</li>
+<li>No <code>a=group:BUNDLE</code> offered until <code>BundledMediaTransport</code> serves both tracks (B5 after B2c-in/B3/B4).</li>
+</ul>
+<h2 id="errata-2026-07-27-verified-against-code-during-adr-backfill">Errata (2026-07-27, verified against code during ADR backfill)</h2>
+<p>The sub-slice plan was written before code; two later mechanism choices diverge from the prose here
+(decision unchanged, wording lagged the final placement):</p>
+<ul>
+<li><strong>B4 — video as a track.</strong> Implemented as a <em>new</em> <code>BundledVideoTrack</code> riding the shared transport,
+<strong>not</strong> by converting <code>VideoRtpStream</code>. <code>VideoRtpStream</code> is retained deliberately as the non-BUNDLE
+separate-m-line video path (per ADR-010's guardrail). The decision (video as a track on the shared
+transport) holds; the mechanism is a parallel type. See ADR-043…048 (video path) and ADR-046.</li>
+<li><strong>B5 — SDP BUNDLE generation.</strong> Lives on <code>SdpOfferAnswerNegotiator</code>, driven by
+<code>SdpMediaOptions.Bundle</code> (<code>Infrastructure/Sdp/OfferAnswer/</code>) — not on the SIP <code>SdpMediaNegotiationOptions.Bundle</code>
+named in the plan (that field does not exist). This is consistent with ADR-010's &quot;no BUNDLE code in
+the SIP signaling core&quot; guardrail; the plan prose predates the SIP/WebRTC split.</li>
+</ul>
+<p>Per-SSRC SRTP (Crux #1) and the <code>BundledMediaTransport</code>-alongside-<code>RtpSession</code> model (Crux #2) were
+verified as implemented essentially as written (<code>SrtpContext</code> per-SSRC <code>SrtpSsrcState</code>, shared
+DTLS/ICE via <code>BundledDtlsKeying</code>/<code>BundledIceControl</code>).</p>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-011-rtp-multitrack-transport.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

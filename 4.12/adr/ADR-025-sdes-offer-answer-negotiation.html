@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-025: SDES Offer/Answer Negotiation with Own-Key Answers and Fail-Closed Keyless Rejection | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-025: SDES Offer/Answer Negotiation with Own-Key Answers and Fail-Closed Keyless Rejection | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-025-sdes-offer-answer-negotiation.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-025-sdes-offeranswer-negotiation-with-own-key-answers-and-fail-closed-keyless-rejection">ADR-025: SDES Offer/Answer Negotiation with Own-Key Answers and Fail-Closed Keyless Rejection</h1>
+
+<p>Status: Accepted
+Date: 2026-07-09</p>
+<h2 id="context">Context</h2>
+<p>SDES (RFC 4568) keys SRTP by carrying master key material inline in SDP <code>a=crypto</code>
+attributes. Getting the offer/answer key semantics right is a correctness- <em>and</em>
+security-critical decision: each side must encrypt its outbound direction with its <strong>own</strong>
+freshly generated key and decrypt the inbound direction with the <strong>peer's</strong> key. Echoing the
+offerer's key back in the answer makes both directions derive the same keystream and either
+breaks decryption or collapses confidentiality.</p>
+<p>The original code did exactly the wrong thing. A live bug on <code>main</code>
+(<code>SdpOfferAnswerNegotiator</code>, historic line 134: <code>crypto = [offeredAudio.Crypto[0]]</code>) mirrored
+the remote master key straight into the answer. The forward-port assumption (&quot;port the fix
+branch&quot;) turned out empty — the fix branch and <code>main</code> were byte-identical, so this was fixed
+directly against <code>main</code>, not ported (log <code>2026-07-08-dev-srtp-sdes-answer</code>). Two further
+gaps followed: the SDK could only <em>answer</em> SDES (inbound calls) but never <em>offer</em> it
+(outbound calls could not send <code>RTP/SAVP</code> with <code>a=crypto</code>), and a secure <code>RTP/SAVP(F)</code>
+offer we could not key had to be resolved without ever falling through to plain RTP.</p>
+<h3 id="verified-current-state-graphify--code">Verified current state (graphify + code)</h3>
+<ul>
+<li><code>SdesCryptoSelector</code> (<code>src/Core/Infrastructure/Sdp/OfferAnswer/SdesCryptoSelector.cs</code>,
+graphify community 275; pure static class) is the single point of SDES key selection. Its
+XML doc states the invariant verbatim: <em>&quot;The answer MUST carry the answerer's own master
+key/salt — echoing the offerer's key would make both directions derive the same keystream
+and break the peer's decryption (and any confidentiality claim).&quot;</em></li>
+<li><code>SelectAnswer(offered)</code> iterates offered <code>a=crypto</code> lines, keeps the first with a supported
+suite (<code>TryMapSuite</code> → <code>SrtpCryptoSuiteNames.TryParse</code>) and an <code>inline:</code> key, mirrors the
+<strong>tag</strong> (RFC 4568 §5.1.2) and the <strong>suite</strong>, and generates <strong>fresh</strong> local key params
+(<code>GenerateInlineKeyParams</code> → <code>RandomNumberGenerator.GetBytes(keyLen + saltLen)</code>). Non-inline
+lines are skipped — &quot;answering them would negotiate an undecryptable call.&quot;</li>
+<li><code>BuildDefaultOffer()</code> offers exactly one suite, the mandatory-to-implement
+<code>AES_CM_128_HMAC_SHA1_80</code> (RFC 4568 §6.2, via <code>SrtpCryptoSuiteNames.DefaultSuiteName</code>),
+tag 1, fresh inline key (RFC 4568 §5.1.1). A single offered suite keeps the later
+offer/answer key match unambiguous.</li>
+<li><code>SdpOfferAnswerNegotiator</code> (<code>src/…/Sdp/OfferAnswer/SdpOfferAnswerNegotiator.cs</code>) selects the
+answer profile by keying method: DTLS fingerprint present → <code>UDP/TLS/RTP/SAVPF</code>; else
+<code>a=crypto</code> present → <code>RTP/SAVP</code>; else plain <code>RTP/AVP</code> (verified code lines 33-40). It
+<strong>rejects</strong> (<code>Success = false</code>) a secure SDES profile it can key neither via SDES nor DTLS:
+<code>if (localCrypto is null &amp;&amp; fingerprint is null &amp;&amp; IsSdesSecuredProfile(offeredAudio.Profile))</code>
+(verified line 258). <code>IsSdesSecuredProfile</code> matches <code>RTP/SAVP</code>/<code>RTP/SAVPF</code> (lines 781-782).</li>
+<li>Suite-token ↔ implemented-suite mapping lives in the SRTP module
+(<code>SrtpCryptoSuiteNames</code>), not in SDP — the negotiator delegates, keeping the SDP layer free
+of crypto types (module boundary; log <code>2026-07-08-dev-srtp-media-path</code>).</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<p>Negotiate SDES with strictly mirrored key semantics and a hard fail-closed floor:</p>
+<ol>
+<li><strong>Own-key answers.</strong> The answer always carries the answerer's own freshly generated master
+key/salt, mirroring only the offerer's tag and suite (RFC 4568 §5.1.2/§5.1.3). Never echo
+the offered key.</li>
+<li><strong>Symmetric offer path.</strong> As offerer, send <code>RTP/SAVP</code> + one <code>a=crypto</code> line
+(<code>AES_CM_128_HMAC_SHA1_80</code>, tag 1, fresh key; RFC 4568 §5.1.1/§6.2), retain that key as the
+outbound-encrypt key, and match the peer's answer crypto as the inbound-decrypt key.</li>
+<li><strong>Single offered suite.</strong> Offer exactly one suite so the offer/answer key correspondence is
+unambiguous; multi-suite offers with tag-based matching are deferred follow-up.</li>
+<li><strong>Fail-closed on keyless secure profiles (ENGINEERING_RULES K1).</strong> A secure <code>RTP/SAVP(F)</code>
+offer that can be keyed neither via SDES (no answerable/supported <code>a=crypto</code>) nor via DTLS
+(no fingerprint) is <strong>rejected</strong> (<code>Success = false</code> → 488), never silently downgraded to
+plain RTP. A plain <code>RTP/AVP</code> offer carrying an unsupported <code>a=crypto</code> legally falls back to
+an unencrypted answer (AVP was never a secure profile).</li>
+</ol>
+<p><strong>Crux:</strong> the answer's key is generated locally and independently of the offer; &quot;keyless
+secure negotiation&quot; terminates the call rather than producing a plaintext downgrade.</p>
+<h2 id="consequences">Consequences</h2>
+<p>Positive: fixes a real confidentiality/correctness bug (mirrored key); makes outbound SRTP
+possible at all; the single-suite offer removes ambiguity from the key match; the fail-closed
+reject makes downgrade attacks against SDES-secured profiles non-viable.</p>
+<p>Tradeoffs / honest divergence:</p>
+<ul>
+<li><strong>MKI, key lifetime, and KDR are not negotiated.</strong> The answer carries no session params;
+these are out of scope (logs <code>2026-07-08-dev-srtp-sdes-answer</code>, <code>-media-path</code>).</li>
+<li><strong>Only one suite is offered.</strong> Multi-suite offers with tag-based answer matching are optional
+follow-up.</li>
+<li><strong>A policy edge remains:</strong> an <code>RTP/AVP</code> offer <em>with</em> an <code>a=crypto</code> line against
+<code>SrtpPolicy.Required</code> passes the offer-signalling gate and can still produce a plain answer —
+the gate inspects offer signalling, not the negotiated result. Post-negotiation result
+validation is tracked as follow-up (logs <code>-sdes-answer</code>, <code>-media-path</code>). This ADR does not
+claim that gap is closed.</li>
+<li><strong>No production interop claim.</strong> sipgate and comparable trunks offer only <code>RTP/AVP</code>; SDES
+correctness is proven by unit + in-proc E2E tests, not against a live SDES peer.</li>
+</ul>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li>The SDES answer key is always freshly generated and never equal to the offered key
+(<code>GenerateInlineKeyParams</code>; tests assert own-key ≠ offer-key, two runs ≠ each other).</li>
+<li>Tag and suite of the selected offered line are mirrored into the answer (RFC 4568 §5.1.2).</li>
+<li>Only <code>inline:</code> keyed, supported-suite lines are answered; anything else is skipped.</li>
+<li>A keyless SDES-secured profile (<code>RTP/SAVP</code>/<code>RTP/SAVPF</code>) is rejected, never answered plain
+(<code>SdpOfferAnswerNegotiator</code>, code line 258; ENGINEERING_RULES K1).</li>
+<li>Suite-token mapping stays in the SRTP module; the SDP layer holds no crypto types.</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Logs: <code>docs/archive/agent-log/2026-07-08-dev-srtp-s0-step1.md</code> (crypto layer port),
+<code>2026-07-08-dev-srtp-sdes-answer.md</code> (S1: own-key answer, mirror-bug fix),
+<code>2026-07-09-dev-srtp-offer-sdes.md</code> (offer-SDES, single suite).</li>
+<li>Code (graphify-verified): <code>SdesCryptoSelector.cs</code> (community 275),
+<code>SdpOfferAnswerNegotiator.cs</code> (<code>SelectAnswer</code>/<code>NegotiateAnswer</code>, lines 33-40, 258, 781-782),
+<code>SrtpCryptoSuiteNames</code> (suite mapping / <code>DefaultSuiteName</code>).</li>
+<li>Markers / RFC: RFC 4568 §5.1.1/§5.1.2/§5.1.3/§6.1/§6.2 (SDES); RFC 6188 (AES-256 suites);
+ENGINEERING_RULES K1 (fail-closed), K5 (secrets), K7 (RFC references in code).</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-025-sdes-offer-answer-negotiation.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

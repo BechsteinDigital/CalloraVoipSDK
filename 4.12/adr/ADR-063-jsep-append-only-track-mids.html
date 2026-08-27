@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-063: JSEP-Conformant Append-Only MIDs for Runtime-Added WebRTC Tracks | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-063: JSEP-Conformant Append-Only MIDs for Runtime-Added WebRTC Tracks | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-063-jsep-append-only-track-mids.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-063-jsep-conformant-append-only-mids-for-runtime-added-webrtc-tracks">ADR-063: JSEP-Conformant Append-Only MIDs for Runtime-Added WebRTC Tracks</h1>
+
+<p>Status: Accepted
+Date: 2026-08-01</p>
+<h2 id="context">Context</h2>
+<p>The WebRTC facade lets a consumer add audio/video tracks at runtime (<code>IPeerConnection.AddAudioTrack</code> /
+<code>AddVideoTrack</code>, 4.7.0 N-audio / N-video). Each call returns the track's numeric <code>a=mid</code>, which the consumer
+then uses to address the track (send frames, request key frames). <code>WebRtcAddedTrackSet</code> assigns those MIDs and
+<code>WebRtcSdpOptionsBuilder</code> lays the m-lines out for the offer; the two must agree or the handle addresses the
+wrong m-line.</p>
+<p>Until 4.7.2 the default (&quot;legacy&quot;) layout grouped the m-lines by kind — primary audio, all added audio, primary
+video, all added video — and derived each MID from its position in that grouped list. A stable-numeric opt-in
+(<code>UseStableNumericMediaIds</code>, 4.7.1) offered the alternative append-only layout.</p>
+<p>A pre-release review found the grouped layout is broken (Finding 2). Because an added video's MID depends on how
+many added <em>audio</em> tracks precede it in the group, and audio can be added <em>after</em> the video, the MID handed back
+at <code>AddVideoTrack</code> time drifts. Concretely: with no primary video, <code>AddVideoTrack()</code> returns <code>&quot;1&quot;</code>, and a later
+<code>AddAudioTrack()</code> also returns <code>&quot;1&quot;</code> — the two handles collide, and after negotiation the video actually sits at
+MID <code>&quot;2&quot;</code>, so <code>VideoTrack.SendFrameAsync</code> addresses the audio m-line. The bug was latent because every existing
+test added tracks in &quot;natural&quot; (audio-before-video) order, where grouped and append-only layouts coincide.</p>
+<p>The authoritative model is JSEP (RFC 8829 §5.2) / RFC 8843: a MID is a <strong>stable identifier</strong> assigned from a
+monotonic counter at first negotiation and never changed; m-sections are <strong>never reordered or removed</strong> (a
+closed one is kept <code>rejected</code> in place); new tracks are <strong>appended</strong> in <code>addTrack</code>/<code>addTransceiver</code> order, not
+grouped by kind. Every reference stack does exactly this — libwebrtc/Chrome (<code>&quot;0&quot;</code>, <code>&quot;1&quot;</code>, …), Firefox
+(<code>sdparta_N</code>), Pion and aiortc (monotonic counter). None groups m-lines by type. So the grouped layout is not
+just buggy, it is <strong>below reference parity</strong>; the append-only (&quot;stable&quot;) layout <em>is</em> the reference behaviour.</p>
+<h2 id="decision">Decision</h2>
+<p>Runtime-added tracks always use the stable, append-only numeric-MID layout, independent of the flag.</p>
+<ol>
+<li><code>WebRtcAddedTrackSet</code> assigns every added track a MID of <code>1 + primaryVideoCount + callOrder</code> — the primary
+audio (MID 0) and primary video(s) keep their MIDs, and each runtime track appends in global API call order,
+independent of its kind. Mixed audio/video add order can no longer collide or shift a MID.</li>
+<li><code>WebRtcSdpOptionsBuilder</code> routes any offer with runtime-added tracks through the append-only <code>StableMultiTrack</code>
+layout; the grouped <code>LegacyMultiTrack</code> path is removed.</li>
+<li><code>UseStableNumericMediaIds</code> is retained (public API, no SemVer break) but now governs only the <em>fixed 1+1</em>
+case: whether such a peer offers numeric MIDs or the historic semantic <code>audio</code>/<code>video</code> MIDs. Its default
+stays <code>false</code>, so a fixed 1+1 peer's SDP remains <strong>byte-identical</strong> to 4.6/4.7.1.</li>
+</ol>
+<p>Related hardening in the same review round (Finding 1): recv-side simulcast attaches a per-RID depacketiser +
+reorder buffer per RID (<code>BundledVideoTrack</code>) and the demux learns SSRC→MID/RID associations
+(<code>BundledRtpDemultiplexer</code>). An authenticated peer can stamp a fresh RID/SSRC on every packet, so both are now
+DoS-capped (RFC 8853 / ENGINEERING_RULES §132-133 wire-boundary caps): RID lanes above the cap drop the packet;
+the learned tables resolve a new key for the packet without retaining an unbounded entry.</p>
+<h2 id="consequences">Consequences</h2>
+<ul>
+<li><strong>The Finding 2 collision is gone</strong> and added-track MIDs are RFC 8829-stable, matching libwebrtc/Firefox/Pion.
+A new <code>WebRtcAddedTrackSetTests</code> regression covers the previously untested mixed (video-before-audio) order.</li>
+<li><strong>A behaviour change for the non-default legacy N-path.</strong> A peer that added tracks with <code>UseStableNumericMediaIds</code>
+left at its default now emits append-only (call-order) m-lines instead of type-grouped ones. This is a bug fix
+(the grouped layout mis-addressed tracks) and is JSEP-conformant; the m-line <em>order</em> differs but MIDs stay a
+valid BUNDLE set. The fixed 1+1 SDP is unchanged, so SIP and simple WebRTC peers are unaffected.</li>
+<li><strong>No public API change.</strong> <code>PublicApi.approved.txt</code> is unchanged; only the flag's documented meaning narrows.</li>
+<li><strong>Recv DoS surface bounded.</strong> Simulcast senders with a handful of encodings are unaffected by the RID cap;
+only a peer flooding distinct RIDs/SSRCs is throttled.</li>
+</ul>
+<h2 id="alternatives-considered">Alternatives considered</h2>
+<ul>
+<li><strong>Keep the legacy layout as an explicit opt-in.</strong> Rejected: it is a known-wrong, sub-reference behaviour with
+no consumer benefit; keeping a foot-gun opt-in only invites the same bug to be re-hit.</li>
+<li><strong>Decouple <code>a=mid</code> from the m-line index (carry an explicit MID token).</strong> RFC-clean, but a larger change to the
+negotiator/serializer for no additional correctness over append-only, which the reference stacks already use.</li>
+<li><strong>Flip the default to stable and keep both paths.</strong> Still ships a broken grouped path; a mixed-order add under
+the (now non-default) legacy flag would still collide. Removing the path is simpler and strictly safer.</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-063-jsep-append-only-track-mids.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>
