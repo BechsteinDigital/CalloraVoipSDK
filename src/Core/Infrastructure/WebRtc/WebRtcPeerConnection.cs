@@ -208,6 +208,7 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         _mdnsResolver = mdnsResolver ?? new SystemMdnsResolver();
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
         _logger = loggerFactory.CreateLogger<WebRtcPeerConnection>();
+        WarnOnDegenerateSimulcastConfig();
         _hostCandidateProvider = hostCandidateProvider ?? new SystemWebRtcHostCandidateProvider(
             loggerFactory.CreateLogger<SystemWebRtcHostCandidateProvider>());
         // Peer-lifetime opaque-video policy, captured once so a renegotiated track matches (#223, ADR-068). It also
@@ -442,7 +443,38 @@ internal sealed class WebRtcPeerConnection : IAsyncDisposable
         if (_negotiation.Current == WebRtcSignalingState.Closed)
             throw new InvalidOperationException("Cannot add a video track after the peer is closed.");
 
+        WarnOnDegenerateSimulcast(track.SimulcastSendRids, track.SimulcastRecvRids, "added track");
         return _addedTracks.AddVideo(track);
+    }
+
+    // A simulcast direction with a single distinct RID is not simulcast: the SDP builder drops a lone a=rid
+    // (Chrome strips it, RFC 8853, #369), so the track silently degrades to one stream. Surface that once, at
+    // the point the configuration enters the peer, rather than leaving the developer to discover it on the wire
+    // (HARD-G3: a reduction is observable, never silent). Setup-time only — never on the media path.
+    private void WarnOnDegenerateSimulcastConfig()
+    {
+        for (var i = 0; i < _options.VideoTracks.Count; i++)
+            WarnOnDegenerateSimulcast(
+                _options.VideoTracks[i].SimulcastSendRids, _options.VideoTracks[i].SimulcastRecvRids, $"track {i}");
+    }
+
+    private void WarnOnDegenerateSimulcast(
+        IReadOnlyList<string> sendRids, IReadOnlyList<string> recvRids, string context)
+    {
+        WarnOnSingleSimulcastLayer(sendRids, "send", context);
+        WarnOnSingleSimulcastLayer(recvRids, "receive", context);
+    }
+
+    private void WarnOnSingleSimulcastLayer(IReadOnlyList<string> rids, string direction, string context)
+    {
+        if (rids.Where(r => !string.IsNullOrEmpty(r)).Distinct(StringComparer.Ordinal).Count() != 1)
+            return;
+
+        _logger.LogWarning(
+            "Video {Context}: a single simulcast {Direction} RID ({Rids}) was configured, but one a=rid is not " +
+            "simulcast (RFC 8853) and is dropped — it falls back to a single stream. Configure two or more " +
+            "distinct RIDs, or none.",
+            context, direction, string.Join(",", rids));
     }
 
     /// <summary>
