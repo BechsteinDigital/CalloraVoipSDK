@@ -5,6 +5,19 @@ The authoritative changelog lives in the repository:
 
 ## Release highlights
 
+### 4.12.0 — 2026-08-27
+
+**Simulcast when the SDK answers, and the full retargeting history of an inbound call.** 4.11 negotiated
+simulcast only as the offerer; 4.12.0 confirms an offered `a=simulcast:send` in the answer — the common SFU
+topology, client offers and server answers — with the received layers tagged by RID
+(`NegotiatedReceiveSimulcastRids`), and answers an offered `a=simulcast:recv` with `a=simulcast:send` for the
+configured layers. It rides the existing `SimulcastLayers` / `SimulcastRecvLayers` config, so there is no
+public API change; a single configured RID now falls back to a single stream with a warning rather than a
+degenerate `a=simulcast`. Separately, `ICall.DiversionChain` lists every address a forwarded call was diverted
+from, read from `History-Info` (RFC 4244) and `Diversion` (RFC 5806) alike. **Purely additive** — one new
+public member, nothing removed or changed (verified against `PublicApi.approved.txt`). See
+[`RELEASE_NOTES_4.12.0.md`](https://github.com/BechsteinDigital/CalloraVoipSDK/blob/main/RELEASE_NOTES_4.12.0.md).
+
 ### 4.11.0 — 2026-08-19
 
 **Media over a TCP/TLS TURN relay, and a WebRTC peer that survives an ICE restart.** The relay data path was
