@@ -202,7 +202,7 @@ options and builder paths agree instead of one failing fast and the others accep
 
   <h3 id="CalloraVoipSdk_WebRtc_WebRtcConfiguration_DtlsCertificate" data-uid="CalloraVoipSdk.WebRtc.WebRtcConfiguration.DtlsCertificate">
   DtlsCertificate
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcConfiguration.cs/#L146"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcConfiguration.cs/#L151"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>DTLS-SRTP identity for the peer's certificate/fingerprint (must carry an exportable ECDSA P-256
@@ -268,7 +268,7 @@ privacy default.</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_WebRtcConfiguration_IceServers" data-uid="CalloraVoipSdk.WebRtc.WebRtcConfiguration.IceServers">
   IceServers
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcConfiguration.cs/#L126"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcConfiguration.cs/#L131"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>STUN/TURN servers for gathering server-reflexive and relay ICE candidates (RFC 8445 §5.1.1). Empty
@@ -347,7 +347,7 @@ ICE for remote reachability arrive in a later slice — see ADR-012.)</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_WebRtcConfiguration_LoggerFactory" data-uid="CalloraVoipSdk.WebRtc.WebRtcConfiguration.LoggerFactory">
   LoggerFactory
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcConfiguration.cs/#L149"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcConfiguration.cs/#L154"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Logger factory for diagnostics; <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> disables logging.</p>
@@ -428,14 +428,17 @@ ADR-068.
 
   <h3 id="CalloraVoipSdk_WebRtc_WebRtcConfiguration_SimulcastLayers" data-uid="CalloraVoipSdk.WebRtc.WebRtcConfiguration.SimulcastLayers">
   SimulcastLayers
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcConfiguration.cs/#L94"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcConfiguration.cs/#L97"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Send-side simulcast layers to offer (RFC 8853), by <code>a=rid</code> id in send order, e.g.
 <code>[&quot;hi&quot;, &quot;mid&quot;, &quot;lo&quot;]</code>. Empty (default) offers a single video stream. When set, the app sends
 each layer's encoded frames via <a class="xref" href="CalloraVoipSdk.WebRtc.IPeerConnection.html#CalloraVoipSdk_WebRtc_IPeerConnection_SendVideoFrameAsync_System_String_System_ReadOnlyMemory_System_Byte__System_UInt32_System_Threading_CancellationToken_">SendVideoFrameAsync(string, ReadOnlyMemory&lt;byte&gt;, uint, CancellationToken)</a>
 — the SDK packetises each on its own SSRC with the RID header extension (RFC 8852). Requires
-<a class="xref" href="CalloraVoipSdk.WebRtc.WebRtcConfiguration.html#CalloraVoipSdk_WebRtc_WebRtcConfiguration_EnableVideo">EnableVideo</a>. This peer must be the offerer for the simulcast to be advertised.</p>
+<a class="xref" href="CalloraVoipSdk.WebRtc.WebRtcConfiguration.html#CalloraVoipSdk_WebRtc_WebRtcConfiguration_EnableVideo">EnableVideo</a>. Advertised whether this peer offers (<code>a=simulcast:send</code>) or answers a
+peer's <code>a=simulcast:recv</code> (#369). Fewer than two <em>distinct</em> ids is not simulcast — a lone
+<code>a=rid</code> is dropped (RFC 8853; Chrome strips it), so such a value falls back to a single stream and
+logs a warning.</p>
 </div>
   <div class="markdown level1 conceptual"></div>
 
@@ -470,7 +473,7 @@ each layer's encoded frames via <a class="xref" href="CalloraVoipSdk.WebRtc.IPee
 
   <h3 id="CalloraVoipSdk_WebRtc_WebRtcConfiguration_SimulcastRecvLayers" data-uid="CalloraVoipSdk.WebRtc.WebRtcConfiguration.SimulcastRecvLayers">
   SimulcastRecvLayers
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcConfiguration.cs/#L109"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcConfiguration.cs/#L114"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Receive-side simulcast layers to ask the peer for (RFC 8853 §5.3), by <code>a=rid</code> id, e.g.
@@ -478,7 +481,9 @@ each layer's encoded frames via <a class="xref" href="CalloraVoipSdk.WebRtc.IPee
 advertises <code>a=simulcast:recv</code> with the matching <code>a=rid … recv</code> and the RID header extension
 (RFC 8852), so the peer it asked can tag each layer it sends back — each arriving layer then carries its
 rid on the received frame. Requires <a class="xref" href="CalloraVoipSdk.WebRtc.WebRtcConfiguration.html#CalloraVoipSdk_WebRtc_WebRtcConfiguration_EnableVideo">EnableVideo</a>. This peer must be the offerer for the
-request to be advertised.</p>
+request to be advertised (as the answerer, an offered <code>a=simulcast:send</code> is received automatically,
+#369). Fewer than two <em>distinct</em> ids is not simulcast — a lone <code>a=rid</code> is dropped (RFC 8853),
+so such a value falls back to a single stream and logs a warning.</p>
 </div>
   <div class="markdown level1 conceptual"></div>
 
