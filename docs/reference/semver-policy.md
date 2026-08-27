@@ -5,7 +5,7 @@ Gültig für alle `CalloraVoipSdk.*` Pakete.
 ## Version-Schema
 
 - `MAJOR.MINOR.PATCH`
-- Aktuelle Release-Linie: `4.x` (aktuell `4.11.0`)
+- Aktuelle Release-Linie: `4.x` (aktuell `4.12.0`)
 
 ## Erhöhungsregeln
 

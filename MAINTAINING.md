@@ -110,7 +110,7 @@ Kurzfassung — Details und Fundstellen in [`ENGINEERING_RULES.md`](ENGINEERING_
 - .NET SDK **10.0.100** (`global.json`, rollForward latestFeature); Ziel-TFMs
   `net8.0;net9.0;net10.0` überall (ArchitectureTests nur net10.0).
 - Version kommt aus `src/Directory.Build.props` (`VersionPrefix` + `VersionSuffix`, aktuell
-  `4.11.0`); Releases überschreiben per `/p:Version` aus dem Git-Tag.
+  `4.12.0`); Releases überschreiben per `/p:Version` aus dem Git-Tag.
 
 ```bash
 dotnet build CalloraVoipSdk.sln --configuration Release
@@ -316,6 +316,16 @@ Typische Erweiterungspunkte:
 > (#240, [ADR-073](docs/adr/ADR-073-stream-relay-transport-tcp-tls.md)): unit-bewiesen, Browser/Real-Server-Interop
 > noch offen (#228). Rein additiv, keine Public-API entfernt oder geändert (belegt via `PublicApi.approved.txt`).
 > Details in [`CHANGELOG.md`](CHANGELOG.md) und [`RELEASE_NOTES_4.11.0.md`](RELEASE_NOTES_4.11.0.md).
+
+> **Nachtrag 4.12.0 (2026-08-27):** Seither: WebRTC-**Simulcast als Answerer** (#369) — ein angebotenes
+> `a=simulcast:send` (die verbreitete SFU-Topologie) wird jetzt in der Antwort bestätigt und die empfangenen
+> Ebenen kommen RID-getaggt an; beide Richtungen sind SDK↔SDK medien-bewiesen (echter DTLS-SRTP-Loopback),
+> Browser-Interop weiter offen (#228). Dazu **`ICall.DiversionChain`** (#374): die vollständige Umleitungs-
+> Historie eines eingehenden Rufs, gelesen aus `History-Info` (RFC 4244) **und** `Diversion` (RFC 5806). Eine
+> einzelne Simulcast-RID wird nun beobachtbar (geloggt) zu einem Single-Stream degradiert statt still (#377).
+> Rein additiv — eine Public-API-Zeile ergänzt (`ICall.DiversionChain`), nichts entfernt oder geändert (belegt
+> via `PublicApi.approved.txt`). Details in [`CHANGELOG.md`](CHANGELOG.md) und
+> [`RELEASE_NOTES_4.12.0.md`](RELEASE_NOTES_4.12.0.md).
 
 Quellen: `docs/audit/INTEROP_SOAK_AUDIT.md` (F-Register) und die Tiefenanalyse 2026-07-22
 (`docs/audit/2026-07-22-quelltext-tiefenanalyse.md`). **Sämtliche P1-Befunde der Tiefenanalyse

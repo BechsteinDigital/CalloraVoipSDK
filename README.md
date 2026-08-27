@@ -61,7 +61,7 @@ tracked `PublicApi.approved.txt` baseline).
 - **Media-flow/silence monitoring, RTP header-extension coverage (RFC 8285 two-byte, AV1 Dependency
   Descriptor), SIP hardening (RFC 3261 §19.1.4 / §8.2.2.1) and static-IP-trunk support.**
 
-Full detail in [`CHANGELOG.md`](CHANGELOG.md) and [`RELEASE_NOTES_4.11.0.md`](RELEASE_NOTES_4.11.0.md).
+Full detail in [`CHANGELOG.md`](CHANGELOG.md) and [`RELEASE_NOTES_4.12.0.md`](RELEASE_NOTES_4.12.0.md).
 
 ## What's new in 4.10
 
@@ -331,7 +331,7 @@ logic without depending on internal implementation types.
 
 CalloraVoipSdk follows Semantic Versioning (`MAJOR.MINOR.PATCH`).
 
-- Current public release line: `4.x` — latest release `4.11.0`
+- Current public release line: `4.x` — latest release `4.12.0`
   (see [releases](https://github.com/BechsteinDigital/callora-voip-sdk/releases))
 - Public API removals only happen in MAJOR releases; deprecations are introduced
   through `[Obsolete(...)]` before removal

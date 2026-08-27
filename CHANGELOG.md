@@ -8,6 +8,8 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
 
 The next line. Entries here accumulate the consumer-visible changes not yet released.
 
+## [4.12.0] - 2026-08-27
+
 ### Added
 
 - **The retargeting history of an inbound call, whichever header the carrier sent it in.**

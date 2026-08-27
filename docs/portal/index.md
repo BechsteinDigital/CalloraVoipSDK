@@ -21,13 +21,18 @@ and intelligent decision logic.
 
 ## Current Status
 
-Latest release: **v4.11.0** on [nuget.org](https://www.nuget.org/packages/CalloraVoipSdk) (this
-documentation). 4.11 closes the two limits the 4.10 line called out: the TURN relay data path is no longer
+Latest release: **v4.12.0** on [nuget.org](https://www.nuget.org/packages/CalloraVoipSdk) (this
+documentation). 4.12.0 adds **simulcast when the SDK answers** — an offered `a=simulcast:send` (the common
+SFU topology, client offers and server answers) is confirmed in the answer with the received layers tagged by
+RID, both directions SDK↔SDK media-proven — and **`ICall.DiversionChain`**, the full retargeting history of an
+inbound call read from `History-Info` (RFC 4244) and `Diversion` (RFC 5806) alike. It builds on 4.11, which
+closed the two limits the 4.10 line called out: the TURN relay data path is no longer
 UDP-only — a relay candidate can carry media over a persistent **TCP/TLS** connection to the server (a stream
 relay, RFC 8656 §12 ChannelData), unit-proven with browser/real-server interop tracked in the matrix — and a
 WebRTC peer now **survives an ICE restart** in place (`CreateIceRestartOfferAsync`) instead of being disposed
-and rebuilt. It also adds receive-side simulcast (an offer can ask the peer to simulcast), media-flow/silence
-monitoring on `ICall`, RFC 8285 two-byte header extensions and the AV1 Dependency Descriptor, and SIP hardening.
+and rebuilt. Simulcast is now negotiated in **both roles** (offerer since 4.11, answerer since 4.12); also
+media-flow/silence monitoring on `ICall`, RFC 8285 two-byte header extensions and the AV1 Dependency Descriptor,
+and SIP hardening.
 All additive — no public API was removed or changed — on top of the multi-party WebRTC facade (4.7),
 DTLS-SRTP with AEAD-AES-GCM, the self-hostable STUN/TURN server, and the stable SIP + RTP core.
 
