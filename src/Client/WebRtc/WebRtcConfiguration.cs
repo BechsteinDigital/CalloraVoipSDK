@@ -88,7 +88,10 @@ public sealed class WebRtcConfiguration
     /// <c>["hi", "mid", "lo"]</c>. Empty (default) offers a single video stream. When set, the app sends
     /// each layer's encoded frames via <see cref="IPeerConnection.SendVideoFrameAsync(string, System.ReadOnlyMemory{byte}, uint, System.Threading.CancellationToken)"/>
     /// — the SDK packetises each on its own SSRC with the RID header extension (RFC 8852). Requires
-    /// <see cref="EnableVideo"/>. This peer must be the offerer for the simulcast to be advertised.
+    /// <see cref="EnableVideo"/>. Advertised whether this peer offers (<c>a=simulcast:send</c>) or answers a
+    /// peer's <c>a=simulcast:recv</c> (#369). Fewer than two <em>distinct</em> ids is not simulcast — a lone
+    /// <c>a=rid</c> is dropped (RFC 8853; Chrome strips it), so such a value falls back to a single stream and
+    /// logs a warning.
     /// </summary>
     /// <exception cref="ArgumentNullException">The assigned list is null.</exception>
     public IReadOnlyList<string> SimulcastLayers
@@ -103,7 +106,9 @@ public sealed class WebRtcConfiguration
     /// advertises <c>a=simulcast:recv</c> with the matching <c>a=rid … recv</c> and the RID header extension
     /// (RFC 8852), so the peer it asked can tag each layer it sends back — each arriving layer then carries its
     /// rid on the received frame. Requires <see cref="EnableVideo"/>. This peer must be the offerer for the
-    /// request to be advertised.
+    /// request to be advertised (as the answerer, an offered <c>a=simulcast:send</c> is received automatically,
+    /// #369). Fewer than two <em>distinct</em> ids is not simulcast — a lone <c>a=rid</c> is dropped (RFC 8853),
+    /// so such a value falls back to a single stream and logs a warning.
     /// </summary>
     /// <exception cref="ArgumentNullException">The assigned list is null.</exception>
     public IReadOnlyList<string> SimulcastRecvLayers

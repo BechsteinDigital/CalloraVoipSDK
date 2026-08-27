@@ -27,6 +27,21 @@ The next line. Entries here accumulate the consumer-visible changes not yet rele
   `ICall.Diversion` is unchanged: still the first URI of the first `Diversion` row, for consumers that
   want precisely that. Purely additive — one line in `PublicApi.approved.txt`.
 
+- **Simulcast now works when the SDK answers, not only when it offers.** A peer that offers
+  `a=simulcast:send` — the common SFU topology, where the client offers and the server answers — is now
+  confirmed in the answer with `a=simulcast:recv`, and the received layers arrive tagged with their RID
+  (`NegotiatedReceiveSimulcastRids`, per-layer received frames). A peer that asks with `a=simulcast:recv`
+  is answered with `a=simulcast:send` for the layers the app is configured to produce. Only the
+  intersection is confirmed (RFC 8853 §5.1), and only when the offer carried the RID header extension
+  (RFC 8852). Driven entirely through the existing `SimulcastLayers` / `SimulcastRecvLayers` config and
+  events — no public API change (#369).
+
+  Behaviour note: a single configured RID is not simulcast — a lone `a=rid` is dropped (RFC 8853; Chrome
+  strips it and never enters simulcast), so a one-layer `SimulcastLayers`/`SimulcastRecvLayers` now falls
+  back to a single stream instead of emitting a degenerate `a=simulcast`, and logs a warning at
+  configuration time. Configure two or more distinct RIDs, or none. This corrects the offer output for
+  that edge; multi-layer simulcast and non-simulcast sessions are unaffected.
+
 ## [4.11.0] - 2026-08-19
 
 Media over a TCP/TLS TURN relay, and a WebRTC peer that survives an ICE restart. The relay data path used to be
