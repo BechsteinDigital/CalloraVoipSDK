@@ -201,10 +201,23 @@ headers and header-injection attempts are refused):</p>
     }
 });
 </code></pre>
-<p>On inbound calls the peer-asserted identity and diversion history are read-only on the call:</p>
-<pre><code class="lang-csharp">var caller    = call.RemoteAssertedIdentity;  // P-Asserted-Identity (RFC 3325), trusted peers only
-var divertedFrom = call.Diversion;            // Diversion (RFC 5806), when present
+<p>On inbound calls the peer-asserted identity and retargeting history are read-only on the call:</p>
+<pre><code class="lang-csharp">var caller = call.RemoteAssertedIdentity;  // P-Asserted-Identity (RFC 3325), trusted peers only
+var chain  = call.DiversionChain;          // every address it was forwarded from, oldest first
+var lastHop = call.Diversion;              // first URI of the first Diversion row (RFC 5806)
 </code></pre>
+<p><code>DiversionChain</code> is the one to route on. Two headers answer &quot;where was this call forwarded from&quot; —
+<code>Diversion</code> (RFC 5806) and <code>History-Info</code> (RFC 4244) — and carriers differ on which they send. Reading
+one of them directly makes your integration correct with part of the market and silently blind with
+the rest, where a forwarded call then looks exactly like a direct one. <code>DiversionChain</code> reads both and
+normalises them into one order: the number the caller originally dialled at the front, the party that
+forwarded it to you at the back.</p>
+<p>The two headers are ordered opposite ways, which is why this is not a matter of picking either. Diversion
+is most-recent-first. History-Info is oldest-first by its <code>index</code> parameter and lists <em>targets</em> rather
+than forwarders, so its last entry is where the request currently is — you. That entry is dropped, matched
+by RFC 3261 §19.1.4 URI comparison rather than string equality.</p>
+<p>An empty chain means no retargeting was <strong>reported</strong>. It does not mean the call arrived directly: a carrier
+that sends neither header leaves the distinction unavailable, and nothing downstream can recover it.</p>
 <h2 id="reliable-provisionals">Reliable provisionals</h2>
 <p>The SDK sends reliable provisional responses (RFC 3262, <code>100rel</code>) only when the peer
 explicitly requires them (<code>Require: 100rel</code>). This avoids interop friction with peers

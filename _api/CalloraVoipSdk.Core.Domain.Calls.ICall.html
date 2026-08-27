@@ -183,7 +183,7 @@ Per-method tags below state the exact exceptions and result semantics.</p>
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_CalledNumber" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.CalledNumber">
   CalledNumber
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L152"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L176"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>The dialed number (DID) an inbound call was addressed to — the user part of
@@ -276,6 +276,57 @@ Informational routing history, surfaced as-received.</p>
 
 
 
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Calls_ICall_DiversionChain_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.DiversionChain*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_DiversionChain" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.DiversionChain">
+  DiversionChain
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L146"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Every address this call was forwarded from, oldest first — the number the caller originally
+dialled at the front, the party that forwarded it to us at the back. Empty for outbound calls
+and whenever no retargeting was reported.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IReadOnlyList&lt;string&gt; DiversionChain { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="CalloraVoipSdk_Core_Domain_Calls_ICall_DiversionChain_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Read from whichever header the carrier sent: <code>History-Info</code> (RFC 4244) or
+<code>Diversion</code> (RFC 5806). The two are ordered opposite ways and no carrier sends both
+consistently, so a consumer reading one of them directly is correct with part of the market
+and silently blind with the rest — and blind here means a forwarded call is indistinguishable
+from a direct one. Both are normalised to this one order.
+</p>
+<p>
+An empty list means nothing was <em>reported</em>, not that the call arrived directly. A
+carrier that sends neither header leaves the distinction unavailable.
+</p>
+<p>
+<a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.ICall.html#CalloraVoipSdk_Core_Domain_Calls_ICall_Diversion">Diversion</a> stays what it always was — the first URI of the first Diversion header
+row — for consumers that want exactly that.
+</p>
+</div>
 
 
 
@@ -389,7 +440,7 @@ final ICE state and the selected local/remote candidate pair.</p>
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_IsMuted" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.IsMuted">
   IsMuted
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L158"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L182"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Whether this call's outgoing audio is currently muted locally (see <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.ICall.html#CalloraVoipSdk_Core_Domain_Calls_ICall_MuteAsync_System_Boolean_System_Threading_CancellationToken_">MuteAsync(bool, CancellationToken)</a>).
@@ -454,7 +505,7 @@ final ICE state and the selected local/remote candidate pair.</p>
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_LocalParty" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.LocalParty">
   LocalParty
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L144"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L168"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>The local party's SIP URI in this dialog: on an inbound call the address the call was placed to
@@ -588,7 +639,7 @@ calls, untrusted peers, or when the header is absent.</p>
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_RemoteDisplayName" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.RemoteDisplayName">
   RemoteDisplayName
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L130"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L154"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>The remote party's display name as received — the caller's name from the inbound INVITE
@@ -623,7 +674,7 @@ without the display name). Defaults to <a href="https://learn.microsoft.com/dotn
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_RemoteNumber" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.RemoteNumber">
   RemoteNumber
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L137"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L161"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>The remote party's number — the user part of <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.ICall.html#CalloraVoipSdk_Core_Domain_Calls_ICall_RemoteParty">RemoteParty</a> (the caller's number on
@@ -830,7 +881,7 @@ on that event's <a class="xref" href="CalloraVoipSdk.Core.Domain.Events.CallStat
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_AcceptAsync_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.AcceptAsync(System.Threading.CancellationToken)">
   AcceptAsync(CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L232"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L256"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Accepts an inbound ringing call and moves it to <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallState.html#CalloraVoipSdk_Core_Domain_Calls_CallState_Connected">Connected</a>.</p>
@@ -878,7 +929,7 @@ on that event's <a class="xref" href="CalloraVoipSdk.Core.Domain.Events.CallStat
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_AttendedTransferAsync_CalloraVoipSdk_Core_Domain_Calls_ICall_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.AttendedTransferAsync(CalloraVoipSdk.Core.Domain.Calls.ICall,System.Threading.CancellationToken)">
   AttendedTransferAsync(ICall, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L341"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L365"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Attended transfer: transfer this call to the party in <code class="paramref">consultationCall</code>.</p>
@@ -931,7 +982,7 @@ and this call returned to <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_BlindTransferAsync_System_String_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.BlindTransferAsync(System.String,System.Threading.CancellationToken)">
   BlindTransferAsync(string, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L323"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L347"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Performs a blind transfer to <code class="paramref">targetUri</code>. On a successful transfer the call
@@ -983,7 +1034,7 @@ moves to <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallState.html#C
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_HangupAsync_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.HangupAsync(System.Threading.CancellationToken)">
   HangupAsync(CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L242"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L266"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Hangs up the call and transitions it to <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.CallState.html#CalloraVoipSdk_Core_Domain_Calls_CallState_Terminated">Terminated</a>. If the call is
@@ -1023,7 +1074,7 @@ not cancelled via this token.</p>
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_HoldAsync_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.HoldAsync(System.Threading.CancellationToken)">
   HoldAsync(CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L254"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L278"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Places the active call on hold and emits a local <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.ICall.html#CalloraVoipSdk_Core_Domain_Calls_ICall_HoldStateChanged">HoldStateChanged</a> event.</p>
@@ -1068,7 +1119,7 @@ not cancelled via this token.</p>
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_MuteAsync_System_Boolean_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.MuteAsync(System.Boolean,System.Threading.CancellationToken)">
   MuteAsync(bool, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L280"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L304"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Mutes or unmutes this call's <b>outgoing</b> audio locally: the SDK stops (or resumes) sending
@@ -1116,7 +1167,7 @@ state. Read the current state via <a class="xref" href="CalloraVoipSdk.Core.Doma
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_RedirectAsync_System_Collections_Generic_IReadOnlyList_System_String__System_Int32_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.RedirectAsync(System.Collections.Generic.IReadOnlyList{System.String},System.Int32,System.Threading.CancellationToken)">
   RedirectAsync(IReadOnlyList&lt;string&gt;, int, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L376"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L400"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Redirects an inbound ringing call with a 3xx SIP response and contact targets. Does not throw
@@ -1166,7 +1217,7 @@ before any SIP round-trip); <a class="xref" href="CalloraVoipSdk.Core.Domain.Cal
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_RejectAsync_System_Int32_System_String_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.RejectAsync(System.Int32,System.String,System.Threading.CancellationToken)">
   RejectAsync(int, string?, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L357"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L381"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Rejects an inbound ringing call with a 4xx/5xx/6xx SIP status. Does not throw for foreseeable
@@ -1216,7 +1267,7 @@ before any SIP round-trip); <a class="xref" href="CalloraVoipSdk.Core.Domain.Cal
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_RestartIceAsync_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.RestartIceAsync(System.Threading.CancellationToken)">
   RestartIceAsync(CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L297"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L321"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Initiates a local ICE restart (RFC 8445 §9) on a connected, ICE-negotiated call: the SDK
@@ -1266,7 +1317,7 @@ not cancelled via this token.</p>
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_SendDtmfAsync_CalloraVoipSdk_Core_Domain_Calls_DtmfTone_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.SendDtmfAsync(CalloraVoipSdk.Core.Domain.Calls.DtmfTone,System.Threading.CancellationToken)">
   SendDtmfAsync(DtmfTone, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L310"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L334"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Sends one DTMF tone while the call is connected.</p>
@@ -1314,7 +1365,7 @@ not cancelled via this token.</p>
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_SendInfoAsync_System_String_System_String_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.SendInfoAsync(System.String,System.String,System.Threading.CancellationToken)">
   SendInfoAsync(string, string, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L395"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L419"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Sends in-dialog SIP INFO. Does not throw for foreseeable outcomes; the result carries the
@@ -1364,7 +1415,7 @@ the current state; or <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.Cal
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_SendNotifyAsync_System_String_System_String_System_String_System_String_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.SendNotifyAsync(System.String,System.String,System.String,System.String,System.Threading.CancellationToken)">
   SendNotifyAsync(string, string, string?, string?, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L450"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L474"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Sends in-dialog SIP NOTIFY. Does not throw for foreseeable outcomes; the result carries the
@@ -1419,7 +1470,7 @@ classification instead.</p>
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_SendOptionsAsync_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.SendOptionsAsync(System.Threading.CancellationToken)">
   SendOptionsAsync(CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L411"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L435"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Sends in-dialog SIP OPTIONS. Does not throw for foreseeable outcomes; the result carries the
@@ -1462,7 +1513,7 @@ classification instead.</p>
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_SendSubscribeAsync_System_String_System_Int32_System_String_System_String_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.SendSubscribeAsync(System.String,System.Int32,System.String,System.String,System.Threading.CancellationToken)">
   SendSubscribeAsync(string, int, string?, string?, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L428"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L452"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Sends in-dialog SIP SUBSCRIBE. Does not throw for foreseeable outcomes; the result carries the
@@ -1517,7 +1568,7 @@ classification instead.</p>
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_UnholdAsync_System_Threading_CancellationToken_" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.UnholdAsync(System.Threading.CancellationToken)">
   UnholdAsync(CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L266"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L290"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Takes the call off hold and emits a local <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.ICall.html#CalloraVoipSdk_Core_Domain_Calls_ICall_HoldStateChanged">HoldStateChanged</a> event.</p>
@@ -1565,7 +1616,7 @@ not cancelled via this token.</p>
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_DtmfReceived" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.DtmfReceived">
   DtmfReceived
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L183"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L207"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Raised when a DTMF tone is received. This event may fire from <em>two</em> threads: the SIP
@@ -1598,7 +1649,7 @@ It is therefore not guaranteed single-threaded — keep the handler thread-safe 
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_HoldStateChanged" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.HoldStateChanged">
   HoldStateChanged
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L176"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L200"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Raised when the remote party puts the call on or off hold, and only when the hold state
@@ -1632,7 +1683,7 @@ are not buffered for handlers attached later.</p>
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_IceConnectionStateChanged" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.IceConnectionStateChanged">
   IceConnectionStateChanged
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L205"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L229"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Raised when the running ICE transport state changes after establishment (for example
@@ -1666,7 +1717,7 @@ path — tear down, alert the user, or (later) trigger an ICE restart. Not buffe
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_MediaFlowChanged" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.MediaFlowChanged">
   MediaFlowChanged
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L219"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L243"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Raised when inbound media goes silent on a connected call, and again when it resumes (#261, ADR-069).
@@ -1706,7 +1757,7 @@ end the call — long before the SDK's own liveness timeout would. A peer that s
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_QualitySnapshotChanged" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.QualitySnapshotChanged">
   QualitySnapshotChanged
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L197"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L221"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Raised periodically with an updated call-quality snapshot. Fires on a media/RTCP thread
@@ -1739,7 +1790,7 @@ the signaling-thread events above. Not buffered.</p>
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_StateChanged" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.StateChanged">
   StateChanged
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L168"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L192"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Raised when <a class="xref" href="CalloraVoipSdk.Core.Domain.Calls.ICall.html#CalloraVoipSdk_Core_Domain_Calls_ICall_State">State</a> changes. Serialized on the SIP signaling thread. Changes are
@@ -1773,7 +1824,7 @@ action to observe every subsequent change. See the interface remarks for the han
 
   <h3 id="CalloraVoipSdk_Core_Domain_Calls_ICall_TransferRequested" data-uid="CalloraVoipSdk.Core.Domain.Calls.ICall.TransferRequested">
   TransferRequested
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L190"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Calls/ICall.cs/#L214"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Raised when the peer requests a transfer (SIP REFER), on the SIP signaling thread. The
