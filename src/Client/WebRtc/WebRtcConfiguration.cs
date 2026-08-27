@@ -148,6 +148,29 @@ public sealed class WebRtcConfiguration
     /// private key); <see langword="null"/> generates a fresh ephemeral identity per peer — the WebRTC
     /// privacy default.
     /// </summary>
+    /// <summary>
+    /// Playout delay in milliseconds for buffering <em>inbound</em> audio before it is raised, or 0 (the
+    /// default) to raise packets the moment they arrive.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Leave this at 0 unless the app mixes.</b> A peer that forwards audio — an SFU, a recorder writing
+    /// what it gets — wants arrivals raised immediately, because the browser at the far end runs its own
+    /// jitter buffer (NetEQ) and a second one here only adds latency to the same job.
+    /// </para>
+    /// <para>
+    /// A peer whose consumer <em>mixes</em> is in the opposite position: it must produce one frame every
+    /// frame interval from whatever each source has delivered by then, and it cannot wait. Handed raw
+    /// arrivals it reads a burst as a single usable frame and the rest as silence — audible as audio that
+    /// cuts out after every pause and returns seconds later. Opus DTX makes that the normal case rather
+    /// than the exception, because a browser sends nothing while nobody speaks and the packets after the
+    /// silence arrive together. Setting this puts an adaptive jitter buffer in front of the receive event
+    /// so the mixer gets a steady cadence; 60 is a reasonable starting point, and the buffer adapts from
+    /// there.
+    /// </para>
+    /// </remarks>
+    public int AudioReceivePlayoutDelayMs { get; init; }
+
     public X509Certificate2? DtlsCertificate { get; init; }
 
     /// <summary>Logger factory for diagnostics; <see langword="null"/> disables logging.</summary>

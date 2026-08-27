@@ -1159,6 +1159,7 @@
   CalloraVoipSdk.WebRtc.WebRtcClient.Peers : CalloraVoipSdk.WebRtc.IPeerConnectionManager { get }
   CalloraVoipSdk.WebRtc.WebRtcConfiguration..ctor()
   CalloraVoipSdk.WebRtc.WebRtcConfiguration.AudioCodecs : System.Collections.Generic.IReadOnlyList<System.String> { get, init }
+  CalloraVoipSdk.WebRtc.WebRtcConfiguration.AudioReceivePlayoutDelayMs : System.Int32 { get, init }
   CalloraVoipSdk.WebRtc.WebRtcConfiguration.DtlsCertificate : System.Security.Cryptography.X509Certificates.X509Certificate2 { get, init }
   CalloraVoipSdk.WebRtc.WebRtcConfiguration.EnableVideo : System.Boolean { get, init }
   CalloraVoipSdk.WebRtc.WebRtcConfiguration.IceServers : System.Collections.Generic.IReadOnlyList<CalloraVoipSdk.IceServerConfiguration> { get, init }

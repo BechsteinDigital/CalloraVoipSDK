@@ -113,6 +113,25 @@ internal sealed record BundledMediaSessionOptions
     /// <summary>Reorder-window depth for the video track (packets); ignored for audio-only.</summary>
     public int VideoReorderDepth { get; init; } = 32;
 
+    /// <summary>
+    /// Playout delay, in milliseconds, for buffering inbound audio before it is raised. Zero (the
+    /// default) raises packets as they arrive.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Leave it at zero for a session that forwards: the receiving browser buffers anyway, and every
+    /// millisecond added here is added to the conversation for nothing.
+    /// </para>
+    /// <para>
+    /// Set it for a session whose consumer <em>mixes</em>. A mixer has to produce a frame every frame
+    /// interval from whatever each source has delivered by then; handed raw arrivals it reads a burst
+    /// as one usable frame and the rest as silence. With Opus DTX — nothing sent while nobody speaks,
+    /// then the packets after the pause arriving together — that is the normal case, and it sounds
+    /// like audio that stops after every pause and comes back seconds later.
+    /// </para>
+    /// </remarks>
+    public int AudioReceivePlayoutDelayMs { get; init; }
+
     /// <summary>Initial RTP sequence number for the outbound tracks (RFC 3550 §5.1 random start).</summary>
     public ushort InitialSequenceNumber { get; init; } = 1;
 

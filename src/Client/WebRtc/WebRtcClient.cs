@@ -101,6 +101,9 @@ public sealed class WebRtcClient : IWebRtcClient
             // End-to-end encrypted video (#223, ADR-068): a peer-wide transport policy, so it reaches every video
             // track the session builds now and every one a later renegotiation adds.
             OpaqueVideoFrames = _config.OpaqueVideoFrames,
+            // Also peer-wide, and for the same reason: whether inbound audio is paced is a property of what
+            // this app does with it, not of any one m-line.
+            AudioReceivePlayoutDelayMs = _config.AudioReceivePlayoutDelayMs,
             Dtls = new SdpDtlsParameters
             {
                 Algorithm = certificate.Fingerprint.Algorithm,
