@@ -198,17 +198,65 @@ options and builder paths agree instead of one failing fast and the others accep
 
 
 
-  <a id="CalloraVoipSdk_WebRtc_WebRtcConfiguration_DtlsCertificate_" data-uid="CalloraVoipSdk.WebRtc.WebRtcConfiguration.DtlsCertificate*"></a>
+  <a id="CalloraVoipSdk_WebRtc_WebRtcConfiguration_AudioReceivePlayoutDelayMs_" data-uid="CalloraVoipSdk.WebRtc.WebRtcConfiguration.AudioReceivePlayoutDelayMs*"></a>
 
-  <h3 id="CalloraVoipSdk_WebRtc_WebRtcConfiguration_DtlsCertificate" data-uid="CalloraVoipSdk.WebRtc.WebRtcConfiguration.DtlsCertificate">
-  DtlsCertificate
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcConfiguration.cs/#L151"><i class="bi bi-code-slash"></i></a>
+  <h3 id="CalloraVoipSdk_WebRtc_WebRtcConfiguration_AudioReceivePlayoutDelayMs" data-uid="CalloraVoipSdk.WebRtc.WebRtcConfiguration.AudioReceivePlayoutDelayMs">
+  AudioReceivePlayoutDelayMs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcConfiguration.cs/#L172"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>DTLS-SRTP identity for the peer's certificate/fingerprint (must carry an exportable ECDSA P-256
 private key); <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> generates a fresh ephemeral identity per peer — the WebRTC
 privacy default.</p>
 </div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int AudioReceivePlayoutDelayMs { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="CalloraVoipSdk_WebRtc_WebRtcConfiguration_AudioReceivePlayoutDelayMs_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>Leave this at 0 unless the app mixes.</b> A peer that forwards audio — an SFU, a recorder writing
+what it gets — wants arrivals raised immediately, because the browser at the far end runs its own
+jitter buffer (NetEQ) and a second one here only adds latency to the same job.
+</p>
+<p>
+A peer whose consumer <em>mixes</em> is in the opposite position: it must produce one frame every
+frame interval from whatever each source has delivered by then, and it cannot wait. Handed raw
+arrivals it reads a burst as a single usable frame and the rest as silence — audible as audio that
+cuts out after every pause and returns seconds later. Opus DTX makes that the normal case rather
+than the exception, because a browser sends nothing while nobody speaks and the packets after the
+silence arrive together. Setting this puts an adaptive jitter buffer in front of the receive event
+so the mixer gets a steady cadence; 60 is a reasonable starting point, and the buffer adapts from
+there.
+</p>
+</div>
+
+
+
+
+  <a id="CalloraVoipSdk_WebRtc_WebRtcConfiguration_DtlsCertificate_" data-uid="CalloraVoipSdk.WebRtc.WebRtcConfiguration.DtlsCertificate*"></a>
+
+  <h3 id="CalloraVoipSdk_WebRtc_WebRtcConfiguration_DtlsCertificate" data-uid="CalloraVoipSdk.WebRtc.WebRtcConfiguration.DtlsCertificate">
+  DtlsCertificate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcConfiguration.cs/#L174"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
   <div class="markdown level1 conceptual"></div>
 
   <div class="codewrapper">
@@ -347,7 +395,7 @@ ICE for remote reachability arrive in a later slice — see ADR-012.)</p>
 
   <h3 id="CalloraVoipSdk_WebRtc_WebRtcConfiguration_LoggerFactory" data-uid="CalloraVoipSdk.WebRtc.WebRtcConfiguration.LoggerFactory">
   LoggerFactory
-  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcConfiguration.cs/#L154"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Client/WebRtc/WebRtcConfiguration.cs/#L177"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Logger factory for diagnostics; <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> disables logging.</p>

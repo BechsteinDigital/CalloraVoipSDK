@@ -13610,6 +13610,19 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.WebRtc.WebRtcConfiguration.AudioCodecs
   nameWithType: WebRtcConfiguration.AudioCodecs
+- uid: CalloraVoipSdk.WebRtc.WebRtcConfiguration.AudioReceivePlayoutDelayMs
+  name: AudioReceivePlayoutDelayMs
+  href: _api/CalloraVoipSdk.WebRtc.WebRtcConfiguration.html#CalloraVoipSdk_WebRtc_WebRtcConfiguration_AudioReceivePlayoutDelayMs
+  commentId: P:CalloraVoipSdk.WebRtc.WebRtcConfiguration.AudioReceivePlayoutDelayMs
+  fullName: CalloraVoipSdk.WebRtc.WebRtcConfiguration.AudioReceivePlayoutDelayMs
+  nameWithType: WebRtcConfiguration.AudioReceivePlayoutDelayMs
+- uid: CalloraVoipSdk.WebRtc.WebRtcConfiguration.AudioReceivePlayoutDelayMs*
+  name: AudioReceivePlayoutDelayMs
+  href: _api/CalloraVoipSdk.WebRtc.WebRtcConfiguration.html#CalloraVoipSdk_WebRtc_WebRtcConfiguration_AudioReceivePlayoutDelayMs_
+  commentId: Overload:CalloraVoipSdk.WebRtc.WebRtcConfiguration.AudioReceivePlayoutDelayMs
+  isSpec: "True"
+  fullName: CalloraVoipSdk.WebRtc.WebRtcConfiguration.AudioReceivePlayoutDelayMs
+  nameWithType: WebRtcConfiguration.AudioReceivePlayoutDelayMs
 - uid: CalloraVoipSdk.WebRtc.WebRtcConfiguration.DtlsCertificate
   name: DtlsCertificate
   href: _api/CalloraVoipSdk.WebRtc.WebRtcConfiguration.html#CalloraVoipSdk_WebRtc_WebRtcConfiguration_DtlsCertificate
