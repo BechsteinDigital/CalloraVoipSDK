@@ -21,8 +21,12 @@ and intelligent decision logic.
 
 ## Current Status
 
-Latest release: **v4.12.0** on [nuget.org](https://www.nuget.org/packages/CalloraVoipSdk) (this
-documentation). 4.12.0 adds **simulcast when the SDK answers** — an offered `a=simulcast:send` (the common
+Latest release: **v4.13.0** on [nuget.org](https://www.nuget.org/packages/CalloraVoipSdk) (this
+documentation). 4.13.0 lets a consumer that **mixes** buffer inbound WebRTC audio before it is raised
+(`WebRtcConfiguration.AudioReceivePlayoutDelayMs`, default 0 = raise on arrival): a mixer must produce a frame
+every frame interval and otherwise reads an Opus-DTX burst as one usable frame plus silence, which a caller
+hears as audio cutting out after every pause. It builds on 4.12.0, which added **simulcast when the SDK
+answers** — an offered `a=simulcast:send` (the common
 SFU topology, client offers and server answers) is confirmed in the answer with the received layers tagged by
 RID, both directions SDK↔SDK media-proven — and **`ICall.DiversionChain`**, the full retargeting history of an
 inbound call read from `History-Info` (RFC 4244) and `Diversion` (RFC 5806) alike. It builds on 4.11, which

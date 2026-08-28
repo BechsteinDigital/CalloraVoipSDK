@@ -8,6 +8,38 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
 
 The next line. Entries here accumulate the consumer-visible changes not yet released.
 
+## [4.13.0] - 2026-08-28
+
+### Added
+
+- **A jitter buffer on the inbound WebRTC audio path, for consumers that mix.**
+  **`WebRtcConfiguration.AudioReceivePlayoutDelayMs`** buffers arriving audio and releases it on a
+  steady playout cadence instead of raising it the moment it comes off the wire. Default 0 keeps the
+  previous behaviour exactly.
+
+  Set it only when the consumer **mixes**. A peer that forwards wants arrivals raised immediately —
+  the browser at the far end runs its own jitter buffer (NetEQ), and a second one here only adds
+  latency to the same job. A mixer is in the opposite position: it must produce one frame every frame
+  interval from whatever each source delivered by then, and it cannot wait. Handed raw arrivals it
+  reads a burst as one usable frame and the rest as silence.
+
+  Opus DTX makes that the normal case rather than the exception. A browser sends nothing while nobody
+  speaks, so the packets after a pause arrive together — and the far end hears audio that cuts out
+  after every pause and returns seconds later. That is the defect this was found through, in a
+  two-party conference between a browser and a telephone: phone to browser was clean, browser to
+  phone stuttered.
+
+  The SIP path in this SDK has had this shape all along (`RtpCallMediaSession` buffers arrivals and
+  drains them from a playout loop); only the WebRTC receive path did not. Purely additive — one line
+  in `PublicApi.approved.txt`.
+
+  Behaviour notes for anyone enabling it: one buffer per audio m-line at that **track's** clock rate
+  (48 kHz Opus and 8 kHz G.711 in one bundle would otherwise be scheduled six times off); the buffer
+  resets on an SSRC change, because a new source brings its own sequence space and would otherwise
+  read as wild reordering; packets due together are released together rather than one per interval;
+  and a gap is passed on **as a gap** — this layer carries encoded RTP and does not know the codec,
+  so repeating a frame would be an artefact rather than concealment.
+
 ## [4.12.0] - 2026-08-27
 
 ### Added

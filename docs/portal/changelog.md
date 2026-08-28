@@ -5,6 +5,20 @@ The authoritative changelog lives in the repository:
 
 ## Release highlights
 
+### 4.13.0 — 2026-08-28
+
+**Inbound WebRTC audio can be buffered before it is raised, for consumers that mix.** Packets on a WebRTC
+audio track were raised the moment they arrived — correct for a peer that forwards, because the browser at
+the far end runs its own jitter buffer. A consumer that *mixes* has the opposite problem: it must produce a
+frame every frame interval from whatever each source delivered by then, and reads a burst as one usable
+frame plus silence. Opus DTX makes that the normal case (a browser sends nothing while nobody speaks, so
+the packets after a pause arrive together), audible as audio that cuts out after every pause.
+`WebRtcConfiguration.AudioReceivePlayoutDelayMs` puts an adaptive jitter buffer in front of the receive
+event; the default of 0 keeps the previous behaviour exactly. The SIP path has always worked this way
+(`RtpCallMediaSession`); only the WebRTC receive path did not. **Purely additive** — one new public member,
+nothing removed or changed (verified against `PublicApi.approved.txt`). See
+[`RELEASE_NOTES_4.13.0.md`](https://github.com/BechsteinDigital/CalloraVoipSDK/blob/main/RELEASE_NOTES_4.13.0.md).
+
 ### 4.12.0 — 2026-08-27
 
 **Simulcast when the SDK answers, and the full retargeting history of an inbound call.** 4.11 negotiated

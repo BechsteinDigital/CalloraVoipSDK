@@ -9,7 +9,7 @@ references an engineer needs; the *why* behind the architecture lives in the ADR
 | Document | What it covers |
 |----------|----------------|
 | [decision-inventory.md](decision-inventory.md) | Mapping of the 113 archived engineering logs to decision clusters — the provenance index behind ADR-013…061. |
-| [semver-policy.md](semver-policy.md) | Versioning scheme, increment rules, release channels, per-package versioning (current version `4.12.0`). See ADR-006. |
+| [semver-policy.md](semver-policy.md) | Versioning scheme, increment rules, release channels, per-package versioning (current version `4.13.0`). See ADR-006. |
 | [plugin-contract.md](plugin-contract.md) | Plugin/module contract v1 (extension points, module registry). See ADR-007, ADR-008, ADR-059. |
 | [websocket-protocol.md](websocket-protocol.md) | Realtime WebSocket protocol surface. |
 
