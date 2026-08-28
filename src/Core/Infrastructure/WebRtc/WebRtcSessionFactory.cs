@@ -229,6 +229,7 @@ internal static class WebRtcSessionFactory
             Audio = audioTrack,
             AudioSendEnabled = audioSendEnabled,
             AdditionalAudioTracks = additionalAudioTracks,
+            AudioReceivePlayoutDelayMs = options.AudioReceivePlayoutDelayMs,
             VideoTracks = videoTracks,
             DtlsIsClient = dtlsIsClient,
             RemoteFingerprint = new DtlsFingerprint { Algorithm = fingerprint.Algorithm, Value = fingerprint.Value },

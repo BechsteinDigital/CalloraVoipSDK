@@ -107,6 +107,15 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     // stay on the session; this holds only the subscription plumbing both the ctor loop and AddVideoTrack share.
     private readonly BundledMediaSessionInboundEventWiring _inboundEventWiring;
 
+    // Null unless this session was asked to buffer inbound audio (AudioReceivePlayoutDelayMs). A
+    // forwarding session leaves it null and keeps raising packets as they arrive.
+    private readonly BundledAudioJitterBuffers? _audioReceiveBuffers;
+
+    // The cadence buffered audio is released on. 20 ms is the frame interval every codec on this path
+    // uses; releasing on a coarser tick would hand a mixer two frames on one tick and none on the next,
+    // which is the burst the buffer exists to remove.
+    private static readonly TimeSpan AudioPlayoutInterval = TimeSpan.FromMilliseconds(20);
+
     // Every outbound SSRC this bundle has issued (RFC 3550 §8.1): seeded from the ctor tracks and extended on
     // AddVideoTrack under _trackMutationGate. A deactivated track's SSRCs are RETIRED, not released — under one
     // SRTP key an SSRC must never be issued twice (#161 P2-12) — so this is the set a renegotiation allocates
@@ -243,13 +252,19 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         // Inbound-media event wiring (per-video-track frame/key-frame subscriptions + guarded additional-audio raise)
         // lives in a collaborator to keep this file under the size limit (R3); the events stay on this session (they
         // can only be invoked from here), so it is handed thin raise delegates that null-conditionally invoke each.
+        // Inbound audio is buffered only when this session was asked for it (null otherwise). The buffer
+        // sits between arrival and the event, so a consumer that mixes gets a steady cadence while a
+        // forwarding one is untouched and pays no latency — see BundledAudioJitterBuffers for why.
+        _audioReceiveBuffers = BundledAudioJitterBuffers.CreateIfRequested(
+            options, AudioPlayoutInterval, (mid, packet) => AudioTrackFrameReceived?.Invoke(mid, packet), _logger);
+
         _inboundEventWiring = new BundledMediaSessionInboundEventWiring(
             frame => VideoFrameReceived?.Invoke(frame),
             (mid, frame) => VideoTrackFrameReceived?.Invoke(mid, frame),
             (mid, rid, frame) => VideoLayerFrameReceived?.Invoke(mid, rid, frame),
             () => VideoKeyFrameRequested?.Invoke(),
             (mid, request) => VideoTrackKeyFrameRequested?.Invoke(mid, request),
-            (mid, packet) => AudioTrackFrameReceived?.Invoke(mid, packet),
+            RaiseBufferedOrDirect,
             _logger);
         // Inbound DTMF reassembler only when telephone-event was negotiated (RFC 4733): it fires DtmfReceived on a
         // completed tone. Driven solely by the receive loop (via RaiseAudioReceived), so it needs no locking.
@@ -362,7 +377,20 @@ internal sealed class BundledMediaSession : IAsyncDisposable
     // Raises the mid-tagged inbound-audio event for an additional audio m-line (4.7.0). Passed to the audio-track
     // collaborator, which guards it against a throwing subscriber (K3). DTMF is not reassembled here — RFC 4733
     // telephone-event stays on the primary audio track (the send/DTMF facade addresses only the primary).
-    private void RaiseAudioTrackReceived(string mid, RtpPacket packet) => AudioTrackFrameReceived?.Invoke(mid, packet);
+    private void RaiseAudioTrackReceived(string mid, RtpPacket packet) => RaiseBufferedOrDirect(mid, packet);
+
+    // The one place that decides whether an arriving audio packet waits. TryAdd answers false for an
+    // m-line this session does not buffer — a track negotiated after the buffers were built, say — and
+    // then the packet goes straight out rather than being dropped for want of a buffer.
+    private void RaiseBufferedOrDirect(string mid, RtpPacket packet)
+    {
+        if (_audioReceiveBuffers?.TryAdd(mid, packet) == true)
+        {
+            return;
+        }
+
+        AudioTrackFrameReceived?.Invoke(mid, packet);
+    }
 
     /// <summary>
     /// Test seam: injects one inbound audio-MID RTP packet straight into the audio dispatch path
@@ -931,6 +959,11 @@ internal sealed class BundledMediaSession : IAsyncDisposable
         // half-torn-down session. Take the gate only to flip the flag; the async teardown runs outside it.
         lock (_trackMutationGate)
             Volatile.Write(ref _disposed, 1);
+
+        if (_audioReceiveBuffers is not null)
+        {
+            await _audioReceiveBuffers.DisposeAsync().ConfigureAwait(false);
+        }
 
         await _ice.DisposeAsync().ConfigureAwait(false);
         // Tear the relay path down after ICE (the driver is stopped, so no new nomination starts a transition)

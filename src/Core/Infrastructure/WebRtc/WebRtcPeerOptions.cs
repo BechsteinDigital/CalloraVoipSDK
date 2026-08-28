@@ -50,6 +50,14 @@ internal sealed record WebRtcPeerOptions
     public bool OpaqueVideoFrames { get; init; }
 
     /// <summary>Local DTLS-SRTP identity (fingerprint + setup role) signalled in the answer (RFC 5763).</summary>
+    /// <summary>
+    /// Playout delay in milliseconds for buffering inbound audio, or 0 to raise packets on arrival.
+    /// Peer-wide, like <see cref="OpaqueVideoFrames"/>: it reaches every audio m-line the session builds,
+    /// including the ones a later renegotiation adds.
+    /// See <see cref="Client.WebRtc.WebRtcConfiguration.AudioReceivePlayoutDelayMs"/> for when to set it.
+    /// </summary>
+    public int AudioReceivePlayoutDelayMs { get; init; }
+
     public required SdpDtlsParameters Dtls { get; init; }
 
     /// <summary>Local ICE credentials and candidates for the shared 5-tuple (RFC 8839).</summary>
