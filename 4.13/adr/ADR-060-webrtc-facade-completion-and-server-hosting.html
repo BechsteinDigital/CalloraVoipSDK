@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-060: WebRTC Facade Completion — Fluent ICE Config, Send-Side Simulcast, and the TURN/STUN Server-Hosting Facade | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-060: WebRTC Facade Completion — Fluent ICE Config, Send-Side Simulcast, and the TURN/STUN Server-Hosting Facade | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-060-webrtc-facade-completion-and-server-hosting.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-060-webrtc-facade-completion--fluent-ice-config-send-side-simulcast-and-the-turnstun-server-hosting-facade">ADR-060: WebRTC Facade Completion — Fluent ICE Config, Send-Side Simulcast, and the TURN/STUN Server-Hosting Facade</h1>
+
+<p>Status: Accepted
+Date: 2026-07-19</p>
+<h2 id="context">Context</h2>
+<p>ADR-009 set the WebRTC browser-peer roadmap and ADR-012 fixed the public <strong>peer/client</strong> facade
+(<code>WebRtcClient : IWebRtcClient</code>, the four-level architecture, <code>IPeerConnection</code>, the <code>TrackReceived</code>
+model, <code>WebRtcOptions</code>/<code>WebRtcConfiguration</code>, <code>AddCalloraWebRtc</code> → <code>CalloraWebRtcBuilder</code>). Both
+ADRs were written <em>before</em> the code and, as the build order landed, three tracing decisions were
+made that neither ADR records — and in two cases the shipped surface diverges from the ADR sketch.
+This ADR closes that gap without re-deciding what ADR-009/012 already own.</p>
+<p>Verified against the code (2026-07-27):</p>
+<ol>
+<li><p><strong>Fluent ICE-server configuration diverged from ADR-012 §5.</strong> ADR-012 named the builder methods
+<code>WithIceServers</code>/<code>WithDtlsCertificate</code>/<code>WithSignaling</code>/<code>WithModule</code>. The shipped
+<code>CalloraWebRtcBuilder</code> (<code>src/Client/WebRtc/CalloraWebRtcBuilder.cs</code>) instead offers
+<code>WithStunServer(host, port?)</code>, <code>WithTurnServer(host, user, pass, port?, transport?)</code>,
+<code>WithIceServers(params IceServerConfiguration[])</code>, <code>WithVideo(params codecs)</code>,
+<code>WithDtlsCertificate</code>, and <code>WithLoggerFactory</code>. <code>WithSignaling</code>/<code>WithModule</code> were <strong>not</strong> built;
+ICE-server config (STUN/TURN accumulating into <code>WebRtcOptions.IceServers</code>) was, and is the primary
+config surface a browser-facing app needs. The accumulation semantics (each call appends via
+<code>PostConfigure</code> so it composes with the caller's own <code>Action&lt;WebRtcOptions&gt;</code>) are a real API
+contract that no ADR states.</p>
+</li>
+<li><p><strong>Send-side simulcast is on the public peer.</strong> <code>IPeerConnection</code>
+(<code>src/Client/WebRtc/IPeerConnection.cs</code>) ships <code>SendVideoFrameAsync(string rid, …)</code> (RFC 8853)
+alongside the single-stream overload, backed by <code>WebRtcConfiguration.SimulcastLayers</code>
+(mapped 1:1 from <code>WebRtcOptions</code> in <code>WebRtcOptionsMapping</code>). ADR-009 §3 explicitly deferred
+simulcast (&quot;Screensharing / mehrere Video-Tracks / Simulcast folgen danach&quot;); ADR-012's peer
+sketch does not mention it. The send-side layer contract — app encodes each rid at its own
+resolution/bitrate and calls once per layer per frame; recv-side demux is still out — is
+undocumented. (The peer also grew <code>CreateOffer</code>/<code>SetRemoteDescriptionAsync</code>-returns-answer,
+<code>AddIceCandidateAsync</code>, <code>GatherCandidatesAsync</code>, <code>SendDtmfAsync</code>, <code>VideoKeyFrameRequested</code>, and
+<code>AttachMediaTap</code>, i.e. the ADR-012 §4/§6 seams landed with different method names than the ADR
+sketch's <code>CreateAnswerAsync</code>/<code>AddRemoteIceCandidateAsync</code>.)</p>
+</li>
+<li><p><strong>A TURN/STUN server-hosting facade exists and is in neither ADR.</strong> <code>src/Client/Hosting/</code>
+(namespaces <code>CalloraVoipSdk.Hosting</code> + <code>CalloraVoipSdk.DependencyInjection</code>) exposes
+<code>AddCalloraTurnServer</code>/<code>AddCalloraStunServer</code> → <code>CalloraTurnServerBuilder</code>/<code>CalloraStunServerBuilder</code>,
+the runtime hosts <code>ITurnServerHost</code>/<code>IStunServerHost</code> (both <code>IAsyncDisposable</code>, bind-on-construct,
+<code>Start()</code>), and the options/config pair <code>TurnServerHostOptions</code>/<code>TurnServerHostConfiguration</code> (and
+the STUN equivalents) with <code>ToConfiguration</code>. This turns the previously test-only Core
+<code>TurnServer</code>/<code>StunServer</code> into a supported product surface. ADR-009/012 only ever describe the SDK
+as a WebRTC <em>client/peer</em>; running a TURN/STUN <em>server</em> is a distinct product decision with its own
+guardrails (it is a separately deployable host, not part of <code>WebRtcClient</code> or <code>VoipClient</code>).</p>
+</li>
+</ol>
+<p>Not in scope here (owned elsewhere, do not duplicate):</p>
+<ul>
+<li>The TURN-relay <strong>media datapath</strong> (relay as ICE candidate, control stack, whole-socket transition):
+cluster <strong>C16</strong> (<code>_draft-C16-01/02/03</code>).</li>
+<li>The <strong>send-side ICE agent</strong> in the BUNDLE transport (<code>IceMediaConsentSession</code>,
+<code>IceNominationDriver</code>, <code>IceMediaAttachment</code>, checked nomination): cluster <strong>C11</strong>
+(<code>_draft-C11-01/02/03</code>); C16 builds on it.</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<h3 id="1-the-webrtc-config-surface-is-ice-server-first-and-accumulating">1. The WebRTC config surface is ICE-server-first and accumulating</h3>
+<p><code>CalloraWebRtcBuilder</code> is the L3 override seam for the WebRTC facade (mirroring <code>CalloraBuilder</code> for
+SIP). Its ICE configuration is the primary surface: <code>WithStunServer</code> / <code>WithTurnServer</code> add typed
+<code>IceServerConfiguration</code> entries; <code>WithIceServers</code> adds fully-specified entries; <strong>all three
+accumulate</strong> (append, never replace) so they compose with an app's own <code>AddCalloraWebRtc(configure)</code>.
+<code>WithVideo</code>, <code>WithDtlsCertificate</code>, <code>WithLoggerFactory</code> round out the L3 knobs. The ADR-012 §5
+<code>WithSignaling</code>/<code>WithModule</code> names are superseded: signaling is wired per-connection through
+<code>ConnectPeerAsync</code>/<code>IWebRtcSignaling</code>, and modules through the shared <code>IModuleRegistry</code>, not through
+builder methods.</p>
+<h3 id="2-send-side-simulcast-is-a-first-class-transport-only-peer-capability">2. Send-side simulcast is a first-class, transport-only peer capability</h3>
+<p><code>IPeerConnection.SendVideoFrameAsync(string rid, …)</code> (RFC 8853) is supported for the <strong>send</strong> side:
+the app supplies <code>WebRtcConfiguration.SimulcastLayers</code>, encodes each layer itself, and pushes one
+already-encoded frame per rid per frame. Consistent with ADR-012's transport-only guardrail, the SDK
+packetises and routes per rid but does not encode. <strong>Recv-side simulcast demux remains out of scope</strong>
+(a later slice) — this ADR only records that the <em>send</em> direction shipped.</p>
+<h3 id="3-the-turnstun-server-host-is-a-separate-deployable-facade--not-the-peer">3. The TURN/STUN server host is a separate, deployable facade — not the peer</h3>
+<p><code>AddCalloraTurnServer</code>/<code>AddCalloraStunServer</code> register a standalone host (<code>ITurnServerHost</code> /
+<code>IStunServerHost</code>) that a deployment runs to <em>provide</em> relay/reflexive service to peers. It is a peer
+of <code>AddCalloraVoip</code>/<code>AddCalloraWebRtc</code>, not a sub-feature of either client. It reuses the four-level
+option/config/builder shape (mutable <code>*HostOptions</code> for DI, immutable <code>*HostConfiguration</code> for direct
+construction, <code>ToConfiguration</code> projection, a fluent <code>Calloira*ServerBuilder</code> for bind endpoint /
+realm / credentials / transport / TLS / public relay address). The host wraps the Core
+<code>TurnServer</code>/<code>StunServer</code>, promoting them from test-only to product surface, without moving server
+code into the client facades.</p>
+<h2 id="consequences">Consequences</h2>
+<p>Positive: the shipped WebRTC public surface (fluent ICE config, send-side simulcast) and the
+TURN/STUN hosting facade are now recorded and RFC-anchored; the ADR set matches the code, so a
+reader is not misled by ADR-012 §5's superseded method names or by the absence of any server-hosting
+decision. A deployment can self-host relay/reflexive infrastructure through a supported API.</p>
+<p>Tradeoffs: three public surfaces (WebRTC builder, peer simulcast overload, hosting facade) are now
+under public-API stability. The hosting facade widens the product's remit from pure client to
+client-plus-infrastructure, and inherits the &quot;no server code in the SIP/WebRTC client cores&quot;
+constraint. Send-side-only simulcast is an asymmetric capability until recv-side demux lands.</p>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li>The TURN/STUN server host stays a <strong>separate</strong> facade under <code>CalloraVoipSdk.Hosting</code>; no server
+code leaks into <code>WebRtcClient</code>/<code>VoipClient</code> or the SIP/WebRTC transport cores.</li>
+<li>Simulcast stays <strong>transport-only</strong> (app owns the encoder; SDK packetises per rid); no &quot;simulcast
+ready&quot; claim covers recv-side demux until that slice ships.</li>
+<li>Builder ICE methods <strong>accumulate</strong>; a method must never silently replace previously configured ICE
+servers.</li>
+<li>ADR-009/012 remain the source of truth for the peer facade, four-level architecture, and
+<code>TrackReceived</code> model; this ADR only records the deltas above. TURN-relay datapath → C16;
+BUNDLE send-side ICE → C11 (not restated here).</li>
+<li>No &quot;WebRTC-ready/production&quot; claim without browser-interop validation (inherited from ADR-009/012).</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<ul>
+<li><code>docs/adr/ADR-009-webrtc-browser-peer-roadmap.md</code> (§3 simulcast deferral, §4 facade, §6 TURN)</li>
+<li><code>docs/adr/ADR-012-webrtc-public-facade.md</code> (§5 builder — superseded method names; §4 track model)</li>
+<li><code>src/Client/WebRtc/CalloraWebRtcBuilder.cs</code> (<code>WithStunServer</code>/<code>WithTurnServer</code>/<code>WithIceServers</code>)</li>
+<li><code>src/Client/WebRtc/IPeerConnection.cs</code> (<code>SendVideoFrameAsync(rid, …)</code>, <code>AttachMediaTap</code>)</li>
+<li><code>src/Client/WebRtc/WebRtcOptionsMapping.cs</code> (<code>SimulcastLayers</code> projection)</li>
+<li><code>src/Client/Hosting/</code> (<code>ITurnServerHost</code>, <code>IStunServerHost</code>, <code>AddCalloraTurnServer</code>,
+<code>AddCalloraStunServer</code>, <code>CalloraTurnServerBuilder</code>, <code>*HostOptions</code>/<code>*HostConfiguration</code>)</li>
+<li>Out of scope: <code>_draft-C16-01/02/03</code> (TURN-relay datapath), <code>_draft-C11-01/02/03</code> (send-side ICE)</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-060-webrtc-facade-completion-and-server-hosting.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

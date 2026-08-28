@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-065: Public PCM Transcoding Surface | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-065: Public PCM Transcoding Surface | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-065-public-pcm-transcoding-surface.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-065-public-pcm-transcoding-surface">ADR-065: Public PCM Transcoding Surface</h1>
+
+<p>Status: Accepted
+Date: 2026-08-06</p>
+<h2 id="context">Context</h2>
+<p>A server-side consumer often needs to move audio between codecs through linear PCM. The prototypical case is an
+SFU/mixer that decodes N−1 conference legs to PCM to mix a <strong>phone</strong> participant (G.711/G.722 over SIP) into a
+<strong>WebRTC</strong> conference (Opus), then re-encodes the mix per leg. The SDK already wraps Concentus (Opus) and NAudio
+(G.711 A-law/µ-law, G.722) internally for its own media path, but exposed no way for a consumer to reuse that
+transcoding — forcing them to take a direct dependency on Concentus/NAudio and re-implement the framing.</p>
+<p>We want to expose transcoding <strong>without</strong> leaking the third-party codec libraries into the public API (so the
+SDK keeps ownership of those dependencies and can swap them), and without shipping a new NuGet package the
+consumer must reference explicitly.</p>
+<h2 id="decision">Decision</h2>
+<p>Expose a small, transport-only transcoding surface in <strong><code>CalloraVoipSdk.Audio.Abstractions</code></strong>:</p>
+<ol>
+<li><strong><code>IAudioPayloadCodec</code></strong> — decode a codec payload to PCM16 and encode PCM16 to a codec payload. I/O is
+<strong>PCM16 little-endian <code>byte[]</code></strong>; the interface carries the codec and the PCM sample rate.</li>
+<li><strong><code>AudioPayloadCodecFactory</code></strong> — creates the codec for a given active codec (Opus / G.711 A-law / G.711 µ-law
+/ G.722), optionally at a specified PCM sample rate.</li>
+<li><strong>Concentus/NAudio never appear in a public signature</strong> — the concrete wrappers adapt them behind the
+interface.</li>
+<li><strong>Fail-closed rate validation:</strong> fixed-rate codecs (G.711/G.722) reject a non-canonical <code>pcmSampleRate</code>; Opus
+accepts 8/12/16/24/48 kHz; an invalid Opus frame length throws a named <code>ArgumentException</code>.</li>
+<li><strong>Stateful contract:</strong> one instance per stream direction (Opus and G.722 carry inter-frame state); this is
+documented on the interface.</li>
+<li><strong>Shipped transitively</strong> via the <code>CalloraVoipSdk</code> meta-package — no new <code>PackageReference</code> for the consumer.
+The <code>Audio.*</code> assemblies sit <strong>outside</strong> the Client/Core <code>PublicApi.approved.txt</code> baseline gate by design, so
+this surface is governed by its own module contract rather than the SDK-facade baseline.</li>
+</ol>
+<h2 id="consequences">Consequences</h2>
+<ul>
+<li><strong>Additive, dependency-clean:</strong> a consumer transcodes Opus/G.711/G.722 ↔ PCM16 without referencing Concentus
+or NAudio, and the SDK keeps those dependencies internal and swappable.</li>
+<li><strong>The SFU mixing use case is unblocked</strong> using the same codecs the media path already uses (bit-parity).</li>
+<li><strong>The statefulness contract is explicit</strong>, so a consumer that reuses one instance across both directions (a
+correctness bug for Opus/G.722) is warned in the docs.</li>
+<li><strong>No native encode/decode is added</strong> beyond the existing wrappers — this is a transport/transcoding surface,
+consistent with the SDK's &quot;codec transport-only, no native codec engine&quot; posture.</li>
+</ul>
+<h2 id="alternatives-considered">Alternatives considered</h2>
+<ul>
+<li><strong>Expose Concentus/NAudio directly.</strong> Rejected: it leaks third-party types into the public API, couples the
+consumer to the implementation, and blocks swapping the codec backend.</li>
+<li><strong>No public surface (keep transcoding internal).</strong> Rejected: it forces every server-side consumer to take the
+codec dependencies and re-implement framing/rate handling that the SDK already gets right.</li>
+<li><strong>A separate opt-in NuGet package.</strong> Rejected for now: transitive delivery via the meta-package is simpler for
+the consumer and the surface is small; a split can follow if the dependency footprint becomes a concern.</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-065-public-pcm-transcoding-surface.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

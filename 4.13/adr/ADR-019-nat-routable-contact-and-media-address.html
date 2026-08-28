@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-019: NAT-Routable Contact and Advertised Media Address | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-019: NAT-Routable Contact and Advertised Media Address | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-019-nat-routable-contact-and-media-address.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-019-nat-routable-contact-and-advertised-media-address">ADR-019: NAT-Routable Contact and Advertised Media Address</h1>
+
+<p>Status: Accepted
+Date: 2026-07-08</p>
+<h2 id="context">Context</h2>
+<p>Behind NAT against a public registrar/trunk (sipgate, Fritz!Box), registration succeeded
+(401→auth→200) and OPTIONS keepalives ran, yet the trunk showed &quot;offline&quot; and inbound INVITEs
+never arrived — and when they did, ACK/BYE and media failed. Root cause across the failure
+family: the SDK advertised <strong>private / loopback</strong> addresses in the places a remote peer must
+route back to.</p>
+<ul>
+<li>REGISTER Contact carried the route-probed private LAN IP → the registrar bound the AOR to an
+unroutable address → no inbound.</li>
+<li>The in-dialog Contact in the 200 OK carried the private IP → the caller's ACK could not
+route → 200-OK retransmission storm.</li>
+<li>The SDP <code>c=</code> line carried the private (or <code>127.0.0.1</code>) address → the far-end SBC sent media
+into the void → recv=0.</li>
+</ul>
+<p>The registrar already reflects the caller's public address in the 200 OK Via
+(<code>received=</code>/<code>rport=</code>, RFC 3581 §4) — the SDK just wasn't using it. And a manual public host is
+awkward with dynamic IPs.</p>
+<h3 id="verified-current-state-graphify--logs">Verified current state (graphify + logs)</h3>
+<ul>
+<li><code>NatPublicContactState</code> (<code>src/Core/Infrastructure/Sip/Adapters/NatPublicContactState.cs</code>, L12)
+holds a single learned public value; <code>.ApplyObserved(...)</code> is the pure change-detection
+decision function.</li>
+<li><code>AdvertisedMediaAddressResolver</code> (<code>src/Core/Infrastructure/Sip/Adapters/AdvertisedMediaAddressResolver.cs</code>,
+L18) exposes <code>.Resolve()</code> + <code>.ProbeRoute()</code>: a concrete non-loopback bind address is
+authoritative; a loopback bind toward a non-loopback peer is <strong>not</strong> advertised — it
+route-probes against <code>RemoteSignalingEndPoint</code> (IP directly, no DNS), falls back to a
+URI-host probe, and only logs a warning before ever advertising loopback. The probe is
+injectable for deterministic tests.</li>
+<li>Precedence for the SIP contact: <strong>manual <code>PublicSipHost</code> &gt; learned (rport/received) &gt; local</strong>.
+Learned value is recomputed on <em>every</em> 200 OK; a <em>change</em> triggers exactly one immediate
+re-REGISTER (idempotent — a second identical 200 OK is a no-op, self-healing on IP change).</li>
+<li>Media split: the SDP <code>c=</code> line advertises the public address
+(<code>ResolveAdvertisedSdpAddress = publicMediaAddress ?? local</code>), while the RTP/RTCP socket
+<strong>still binds locally</strong> (a public IP is not a bindable interface); the far-end SBC latches via
+symmetric RTP onto the real source port.</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<p>Advertise a routable identity everywhere a peer routes back, while keeping the bind local:</p>
+<ol>
+<li><strong>Learn, don't just configure.</strong> Parse <code>received=</code>/<code>rport=</code> from the 200 OK top Via
+(<code>SipProtocol.ExtractViaReceivedRport</code>, RFC 3261 §18.2.1 / RFC 3581 §4); hold one learned
+value; re-REGISTER exactly once on change. A manual <code>PublicSipHost</code>/<code>PublicSipPort</code> override
+always wins (DynDNS/FQDN host string supported).</li>
+<li><strong>One source for the contact.</strong> REGISTER Contact, in-dialog Contact (200 OK), and Via are all
+built from the same resolved value, so ACK/BYE route over the pinhole and the retransmission
+storm stops.</li>
+<li><strong>Advertise ≠ bind for media.</strong> The SDP <code>c=</code> line carries the public/route-probed address;
+RTP/RTCP bind locally and rely on symmetric-RTP latching. Never advertise a loopback address
+toward a non-loopback peer — route-probe instead.</li>
+</ol>
+<p>Crux: single-state + change-detection (not &quot;one-shot correction + flag + counter&quot;) makes the
+learning idempotent and self-terminating; and &quot;advertised&quot; and &quot;bound&quot; are deliberately
+different addresses.</p>
+<h2 id="consequences">Consequences</h2>
+<p>Positive: zero-config NAT traversal for the common case (learn from rport); stable AOR binding;
+ACK/BYE routable; media reaches the far end via latching; manual override for DynDNS / explicit
+public IP. No flag, no counter, converges on its own.</p>
+<p>Tradeoffs / honest limits: media path B assumes the far-end SBC does symmetric-RTP latching —
+if the port does not latch, RTP-socket STUN for the public media port is required follow-up (and
+sending outbound RTP first to open the pinhole helps). <strong>CGNAT / symmetric NAT is explicitly not
+covered</strong> — the rport address may still be unreachable, needing a real public IP / port-forward /
+TURN. Real-world confirmation (trunk online + inbound call + audio) stayed a founder real-test in
+the logs; the ADR records the mechanism, not an end-to-end &quot;NAT solved&quot; claim.</p>
+<p>Relationship to ADR-003: ADR-003 is the <strong>UAS reflecting</strong> rport/received into responses it
+sends; this ADR is the <strong>UAC learning</strong> its own public contact from the rport/received a
+registrar reflected back. Complementary, not overlapping.</p>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li>Contact precedence is fixed: manual override &gt; learned &gt; local; one contact source only.</li>
+<li>Re-REGISTER fires only on an actual change of the learned value; identical observation = no-op.</li>
+<li>Never advertise a loopback address toward a non-loopback peer; route-probe or warn.</li>
+<li>Advertised media address and bound socket address are decoupled by design.</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Logs: docs/archive/agent-log/2026-07-08-dev-sip-public-contact.md;
+docs/archive/agent-log/2026-07-08-dev-sip-rport-contact.md;
+docs/archive/agent-log/2026-07-08-dev-sip-media-nat.md;
+docs/archive/agent-log/2026-07-08-dev-m1-hotfix.md (advertised-media-address root cause)</li>
+<li>Code: <code>NatPublicContactState</code> (src/Core/Infrastructure/Sip/Adapters/NatPublicContactState.cs);
+<code>AdvertisedMediaAddressResolver</code> (src/Core/Infrastructure/Sip/Adapters/AdvertisedMediaAddressResolver.cs);
+<code>SipProtocol.ExtractViaReceivedRport</code>; <code>SipLineChannel</code>; <code>SipCoreCallChannel.ResolveAdvertisedSdpAddress</code></li>
+<li>Tests: SipPublicContactTests; SipInDialogPublicContactTests; AdvertisedMediaAddressResolver tests</li>
+<li>Marker: RFC 3261 §18.2.1, §10.3; RFC 3581 §4; N1 / N2 / Media-NAT</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-019-nat-routable-contact-and-media-address.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

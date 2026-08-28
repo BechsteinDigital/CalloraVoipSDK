@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-072: An ICE Restart Replaces the Agent, Not the Transport | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-072: An ICE Restart Replaces the Agent, Not the Transport | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-072-ice-restart-replaces-the-agent-not-the-transport.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-072-an-ice-restart-replaces-the-agent-not-the-transport">ADR-072: An ICE Restart Replaces the Agent, Not the Transport</h1>
+
+<p>Status: Accepted
+Date: 2026-08-18</p>
+<h2 id="context">Context</h2>
+<p>Until now a re-offer that rotated the peer's ICE credentials on the transport-anchoring m-line was rejected:</p>
+<blockquote>
+<p>ICE restart is not supported on a running WebRTC peer. Dispose this peer and create a new one to restart ICE.</p>
+</blockquote>
+<p>The SIP path has had a restart since #62 (<code>ICall.RestartIceAsync</code>). The WebRTC peer did not, and the case it
+fails on is not exotic. A browser participant moving from WLAN to mobile — the ordinary situation on a phone —
+signals exactly this re-offer. Rejecting it drops the call. In a video consultation that is a visible break in
+the middle of a treatment. An application-layer resume covers getting back in; it does not cover the experience.</p>
+<p>The question this ADR settles is <strong>how far down the stack a restart reaches</strong>. Three layers could plausibly be
+rebuilt, and the reference stacks agree on the answer:</p>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Rebuilt on restart?</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ICE agent (credentials, check list, consent)</td>
+<td><strong>Yes</strong></td>
+<td>The credentials rotated; every piece of ICE state is keyed to them</td>
+</tr>
+<tr>
+<td>Socket / 5-tuple</td>
+<td>No</td>
+<td>The local candidate did not change; re-binding would invalidate the peer's check list</td>
+</tr>
+<tr>
+<td>DTLS association, SRTP contexts</td>
+<td>No</td>
+<td>RFC 8842: a restart is not a re-keying. Re-handshaking would restart every stream's index space</td>
+</tr>
+<tr>
+<td>Tracks, SSRCs</td>
+<td>No</td>
+<td>Orthogonal — the track set is the renegotiation diff, which runs independently</td>
+</tr>
+</tbody>
+</table>
+<p>This is also what a browser does: <code>createOffer({iceRestart: true})</code> re-gathers and re-runs checks; the
+<code>RTCDtlsTransport</code> and the media keep going.</p>
+<h2 id="decision">Decision</h2>
+<h3 id="1-the-agent-is-replaced-wholesale-not-re-keyed">1. The agent is replaced wholesale, not re-keyed</h3>
+<p>New credentials mean a new inbound validator, a new check list and a new consent session. None can be re-keyed
+in place without leaving half-updated state on the media hot path, so <code>BundledIceControl.RestartIceAsync</code> builds
+a fresh <code>IceMediaAttachment</code> and swaps it in.</p>
+<p><strong>The order is the load-bearing part.</strong> The old agent is detached from the inbound STUN feed <em>before</em> the new
+one attaches, so no datagram is ever offered to both. Two live agents would be a protocol error — one answers
+checks with retired credentials — and two live nomination drivers could redirect the transport against each
+other. The gap between detach and attach drops inbound checks for the length of a few statements; ICE
+retransmits them (RFC 8445 §14.1). That retransmission is the mechanism that makes the swap safe, not an
+accident we are relying on. The old agent is disposed last, so the window in which nothing is running is bounded
+by a few statements rather than by a disposal.</p>
+<p>A relay local candidate added after construction (the answerer's TURN path) is re-applied to the new agent.
+Dropping it would silently downgrade a relayed session to direct-only at exactly the moment the network changed
+— when the relay is most likely to be the only thing that works.</p>
+<h3 id="2-media-stays-on-the-previously-selected-pair">2. Media stays on the previously selected pair</h3>
+<p>The transport's send target is deliberately <strong>not</strong> re-pointed when the restart is applied. RFC 8445 §9 keeps
+media on the previously selected pair until a new one is selected. A peer that rotated its credentials because
+it changed networks keeps receiving on the old path for as long as that path still works, instead of losing
+media the moment the re-offer arrives. The new agent re-points the transport itself when it nominates.</p>
+<h3 id="3-whoever-signals-the-restart-rotates-first">3. Whoever signals the restart rotates first</h3>
+<p>RFC 8445 §9.1.1.1 requires new credentials on both sides. Which side rotates when follows from who is speaking:</p>
+<ul>
+<li><strong>Answering a restart offer:</strong> rotate <em>before</em> negotiating the answer, because the answer has to carry the new
+credentials — the peer authenticates against what our answer says.</li>
+<li><strong>Initiating one</strong> (<code>CreateIceRestartOfferAsync</code>, the W3C <code>createOffer({iceRestart: true})</code>): rotate <em>before</em>
+producing the offer, and restart the agent at the same moment. Deferring the agent restart until the answer
+arrives would be a bug, not an optimisation: the peer starts checking against the credentials our offer
+advertises as soon as it processes that offer — a signalling round trip earlier — and an agent still holding
+the old password would reject those checks (§7.3.1.1). A peer that marks pairs failed on a 401 would abandon
+the restart we asked for. Restarting with (new local, current remote) is a fully working state meanwhile: the
+peer's new-credential checks authenticate, and our outbound checks still carry the password its pre-restart
+agent expects. When the answer then rotates the remote half, the ordinary detection path restarts once more to
+adopt it.</li>
+<li><strong>Applying a re-answer that rotates:</strong> adopt the peer's new credentials; ours stay as our re-offer advertised
+them.</li>
+</ul>
+<p>Rotation and the description that announces it are produced together in one call, so an application cannot end
+up having rotated without sending the offer that tells the peer — which would leave the peer checking against
+credentials nobody honours.</p>
+<h3 id="4-re-gathering-runs-over-the-live-transport-and-stops-where-the-socket-guarantee-starts">4. Re-gathering runs over the live transport, and stops where the socket guarantee starts</h3>
+<p>Every reference stack re-gathers on a restart — libwebrtc restarts gathering on the next <code>MaybeStartGathering</code>,
+SipSorcery calls <code>StartGathering()</code>, Pion requires the caller to call <code>GatherCandidates</code>. Not doing so would
+leave a restarted peer offering the very candidates the network change invalidated.</p>
+<p>The obstacle was that gathering used to need the socket to itself: a probe ran its own receive loop, which the
+transport's loop owns once the peer has started, so gathering after <code>StartAsync</code> was refused outright. The read
+side is now inverted instead — the Binding request goes out through the transport's raw send and the response
+comes back through the same inbound STUN demux that feeds the ICE agent (<code>IceReflexiveProbe</code>). Both match by
+transaction id (RFC 5389 §6), so neither sees the other's traffic as anything but noise: the agent's consent
+registry ignores a probe response exactly as the probe ignores a connectivity check.</p>
+<p>Two things are deliberately <strong>not</strong> re-gathered:</p>
+<ul>
+<li><strong>The TURN relay candidate.</strong> The allocation is keyed to the 5-tuple the transport still holds and its refresh
+loop keeps it alive, so the relay candidate did not change; re-allocating would only duplicate it.</li>
+<li><strong>The socket itself.</strong> Re-binding is what would produce genuinely new host candidates if the local host moved
+networks — and it is exactly what this ADR refuses, because the DTLS association and every SRTP context are
+keyed to that socket surviving. A local host that changes networks needs a new peer, not an ICE restart. Host
+candidates are re-emitted, which covers an interface coming up under a wildcard bind (it shares the port).</li>
+</ul>
+<h3 id="5-the-role-is-carried-over">5. The role is carried over</h3>
+<p>Re-running the checks does not redetermine which agent controls them. A role switch would need a fresh role
+negotiation neither side asked for. This matches the SIP path, which preserves <code>_iceControlling</code> across its
+restart for the same reason.</p>
+<h3 id="6-the-restart-is-a-state-transition-not-a-failure">6. The restart is a state transition, not a failure</h3>
+<p>The peer moves back to <code>Connecting</code>. A network change that killed consent has usually already dropped it to
+<code>Failed</code>; the restart is what makes that recoverable, so the transition must be allowed to run backwards out of
+<code>Failed</code>.</p>
+<h2 id="consequences">Consequences</h2>
+<p><strong>A running peer survives a network change.</strong> The socket, the DTLS association and every per-SSRC SRTP context
+are untouched, so media resumes on the re-selected path without a second handshake and without the stream index
+spaces restarting under a live key.</p>
+<p><strong>Neither continuing media nor a rotated ufrag is evidence that the restart worked.</strong> This is worth stating
+because it shaped the tests, and the trap appears twice.</p>
+<p>Once a pair is latched and SRTP is keyed, RTP keeps flowing whatever ICE does — verified by mutation: a build
+that rotates the credentials but never swaps the agent still passes a media-only assertion. One layer up, the
+ufrag in a locally produced restart offer is read from the renegotiator's credential state, so the same
+never-restarts build still emits a fresh-looking offer while the live socket answers with the old password —
+precisely the failure that would strand the far side.</p>
+<p>The evidence in both directions is therefore taken on the wire, against a real connected peer: after a restart
+the peer answers connectivity checks authenticated with the credentials now in force and no longer answers the
+retired ones. Those are the assertions that die under the mutations; the SDP-level ones survive them, which is
+why they are not left to carry the claim alone.</p>
+<p><strong>The public surface grew by one member</strong>, <code>IPeerConnection.CreateIceRestartOfferAsync</code>. It is a <em>defaulted</em>
+interface member that throws <code>NotSupportedException</code>, so adding it does not break an existing implementation of
+the interface (a consumer's test double) — the same additive pattern used elsewhere in this SDK when an interface
+gains a capability. The API-surface baseline records it.</p>
+<p><strong>Interop is proven against a real browser, not only against ourselves.</strong> A loopback test can only confirm that
+we agree with our own reading of the RFC. The browser-interop suite now drives a restart against Chromium and
+asserts that <em>the browser</em> rotates its own ice-ufrag in the answer — which per §9.1.1.1 it does only once it has
+understood the offer as an ICE restart. That is a foreign implementation confirming our SDP, which is the one
+thing loopback cannot establish.</p>
+<p><strong>Three collaborators were extracted to make room.</strong> <code>BundledMediaSession</code> and <code>WebRtcPeerConnection</code> were both
+at the 1000-line limit. The relay data path moved out of the session (<code>BundledRelayDataPath</code>); the
+connection-state machine (<code>WebRtcConnectionStateMachine</code>) and the media-socket ownership across its one hand-over
+to the transport (<code>WebRtcMediaSocketOwner</code>) moved out of the peer. Both peer collaborators share the peer's lock,
+so their serialisation is unchanged. <code>WebRtcPeerConnection</code> is back at exactly 1000 lines and is now essentially
+all public API plus documentation — the next change to it needs a structural split, not another small extraction.</p>
+<h2 id="how-the-reference-stacks-compare">How the reference stacks compare</h2>
+<p>Checked against the sources, not the documentation, per the parity rule for this SDK.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Agent object</th>
+<th>Media during the restart</th>
+<th>Re-gathers</th>
+<th>Rotates local credentials</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>libwebrtc</strong></td>
+<td>reused (<code>P2PTransportChannel</code>)</td>
+<td>keeps flowing</td>
+<td>yes</td>
+<td>yes</td>
+</tr>
+<tr>
+<td><strong>Pion</strong></td>
+<td>reused, fully reset</td>
+<td>stops</td>
+<td>yes (caller)</td>
+<td>yes</td>
+</tr>
+<tr>
+<td><strong>SipSorcery</strong></td>
+<td>reused, fully reset</td>
+<td>stops</td>
+<td>yes</td>
+<td><strong>no</strong></td>
+</tr>
+<tr>
+<td><strong>this SDK</strong></td>
+<td>replaced</td>
+<td>keeps flowing</td>
+<td>yes (srflx, over the live transport)</td>
+<td>yes</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>libwebrtc</strong> keeps media alive by <em>generation-tagging</em>: <code>SetRemoteIceParameters</code> pushes onto a vector —
+&quot;Keep the ICE credentials so that newer connections are prioritized over the older ones&quot; — and stamps every
+existing <code>Connection</code> with the new generation, so old pairs stay valid while newer ones sort ahead. A different
+mechanism from ours, the same RFC 8445 §9 outcome.</li>
+<li><strong>Pion</strong>'s <code>Agent.Restart</code> calls <code>setSelectedPair(nil)</code> and <code>deleteAllCandidates()</code>, so the selected pair and
+its sockets are gone; §9's &quot;continue to use the previously selected pair&quot; is not met.</li>
+<li><strong>SipSorcery</strong> cannot signal a conforming restart at all: <code>RtpIceChannel.LocalIceUser</code> / <code>LocalIcePassword</code> are
+<code>readonly</code>, set once in the constructor, so <code>restartIce()</code> re-gathers without rotating anything. A re-offer then
+carries the same ufrag/pwd, which per §9.1.1.1 is not a restart, and the peer will not restart. Its
+<code>RTCOfferOptions</code> has no <code>iceRestart</code> field either, and inbound <code>SetRemoteCredentials</code> overwrites the remote
+values without resetting the check list.</li>
+</ul>
+<h2 id="references">References</h2>
+<ul>
+<li>RFC 8445 §9 (ICE restarts), §9.1.1.1 (new credentials on both sides), §14.1 (retransmission)</li>
+<li>RFC 8829 §5.3.1 (JSEP: signalling an ICE restart)</li>
+<li>RFC 8839 §5.4 (SDP: <code>a=ice-ufrag</code> / <code>a=ice-pwd</code> rotation)</li>
+<li>RFC 8842 (a restart is not a DTLS re-keying)</li>
+<li>RFC 7675 (consent freshness — the loop the replaced agent owns)</li>
+<li><a href="ADR-054-turn-relay-as-ice-candidate.html">ADR-054</a> — the relay local candidate a restart must carry over</li>
+<li>#226 (this change), #62 (the SIP-path restart)</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-072-ice-restart-replaces-the-agent-not-the-transport.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

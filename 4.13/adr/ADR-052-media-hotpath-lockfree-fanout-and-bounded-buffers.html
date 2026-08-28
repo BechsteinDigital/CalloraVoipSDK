@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-052: Media Hot-Path Concurrency — Lock-Free Fan-Out and Bounded Drop-Oldest Buffers | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-052: Media Hot-Path Concurrency — Lock-Free Fan-Out and Bounded Drop-Oldest Buffers | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-052-media-hotpath-lockfree-fanout-and-bounded-buffers.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-052-media-hot-path-concurrency--lock-free-fan-out-and-bounded-drop-oldest-buffers">ADR-052: Media Hot-Path Concurrency — Lock-Free Fan-Out and Bounded Drop-Oldest Buffers</h1>
+
+<p>Status: Accepted
+Date: 2026-07-08</p>
+<h2 id="context">Context</h2>
+<p>The media hot path runs a packet or a frame every ~20 ms per stream for the entire life of a
+call. Two of its steps hand data to code the SDK does not control, and one of its steps buffers
+data between two threads that run at different rates:</p>
+<ol>
+<li><strong>Fan-out to listeners/taps.</strong> Inbound audio and video frames are delivered to any number of
+subscribed listeners (the public media-tap consumers, recording taps, bridge transcoders). The
+listener bodies are foreign code — arbitrary consumer callbacks that may be slow, may throw, and
+may add or remove themselves concurrently.</li>
+<li><strong>Rate-mismatched buffering.</strong> The RTP receive path is network-paced and bursty; the audio
+playback callback is hardware-paced (one frame per invocation); the video reorder/jitter path
+holds packets behind sequence gaps; NACK retransmission holds recently-sent packets. Each is a
+producer/consumer buffer between threads running at different speeds.</li>
+</ol>
+<p>The concurrency hazards here differ from the signalling plane. Holding a lock while invoking a
+foreign listener would let a slow or re-entrant consumer stall the RTP receive thread — jitter,
+dropped packets, or deadlock if the callback re-enters the SDK. And an <em>unbounded</em> buffer on any
+of these paths would, under sustained jitter or a stalled consumer, grow without limit: the failure
+mode is not just memory but mouth-to-ear latency (a 10-second backlog plays 10 seconds late).</p>
+<p>The governing rule is ENGINEERING_RULES <strong>K3</strong>: on the media hot path, no locks over foreign code,
+no avoidable allocations (HARD-F1), bounded buffers with drop-oldest instead of unbounded queues
+(HARD-F4), and copy-on-write arrays for tap/listener lists. This ADR records the <em>concurrency</em>
+decision for that path — how foreign code is isolated and how backpressure is applied. The
+<em>allocation</em> dimension (pooled receive buffers, span-based framing) is C07-01; the tap <em>API shape</em>
+(encoded frames, per-call fan-out) is C18-01. This ADR is the thread-safety complement to both.</p>
+<h3 id="verified-current-state-graphify--code">Verified current state (graphify + code)</h3>
+<ul>
+<li><strong>Fan-out snapshots the listener set, then runs foreign code with no lock held.</strong>
+<code>SipCallChannelFrameTap.DeliverInbound</code> (<code>src/Core/Infrastructure/Sip/Adapters/SipCallChannelFrameTap.cs</code>,
+~L40) takes the lock only long enough to copy the listeners into a stack array
+(<code>lock (_listenerSync) listeners = [.. _listeners];</code>), then iterates that array <strong>outside</strong> the
+lock, wrapping each <code>listener(frame)</code> in try/catch so one faulting listener is logged and the
+rest still run (&quot;continuing with the remaining listeners&quot;). Add/remove mutate the backing list
+under the same lock. Tests
+<code>CallVideoFrameContractTests.A_faulting_listener_does_not_prevent_the_others</code> and
+<code>..._Removed_listener_stops_receiving_without_affecting_others</code> pin the fault-isolation and
+live-mutation guarantees.</li>
+<li><strong>Audio playback buffer is bounded with drop-oldest.</strong>
+<code>BoundedPlaybackBuffer</code> (<code>src/Audio/Abstractions/Processing/BoundedPlaybackBuffer.cs</code>) wraps a
+<code>Channel.CreateBounded&lt;byte[]&gt;</code> with <code>FullMode = BoundedChannelFullMode.DropOldest</code> and an
+eviction callback that does <code>Interlocked.Increment(ref _droppedFrames)</code>; <code>Enqueue</code> uses
+<code>TryWrite</code> (always succeeds under DropOldest). <code>LinuxAudioDevice</code> caps it at
+<code>PlaybackQueueCapacity = 50</code> frames (1 s @ 20 ms) with the HARD-F4 rationale in-comment.</li>
+<li><strong>Video reorder buffer is depth-bounded and skips forward.</strong>
+<code>VideoReorderBuffer</code> (<code>src/Core/Infrastructure/Rtp/VideoReorderBuffer.cs</code>) bounds depth (1–16384)
+and, when the buffered count exceeds depth behind a gap, advances <code>_nextExpected</code> to the lowest
+buffered sequence — discarding the stale gap rather than growing.</li>
+<li><strong>NACK retransmission buffer is capacity-bounded FIFO.</strong>
+<code>RtpRetransmissionBuffer</code> (<code>.../Rtp/Retransmission/RtpRetransmissionBuffer.cs</code>, default 512,
+max 32768) dequeues the oldest sequence when full under <code>lock (_sync)</code>.</li>
+<li><strong>HARD-F1/F4 markers exist and are localised.</strong> HARD-F1 (no per-frame allocation) marks the
+cached G.722 codec instances (<code>WindowsAudioDevice</code>, <code>LinuxAudioDevice</code>), <code>PcmG722Codec</code>, and
+<code>PcmGain</code>; HARD-F4 (bounded drop-oldest) marks <code>BoundedPlaybackBuffer</code> and <code>LinuxAudioDevice</code>.</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<p>The media hot path isolates foreign code and applies bounded backpressure by construction:</p>
+<ol>
+<li><strong>Fan-out is lock-free over foreign code.</strong> The listener set is captured under a short lock into
+a private snapshot array; foreign listener invocation then runs <strong>outside</strong> the lock. The RTP
+receive thread is therefore never held on a listener's execution time, and a listener cannot
+deadlock the SDK by re-entering the lock.</li>
+<li><strong>A faulting listener is isolated.</strong> Each invocation is wrapped in try/catch-and-log; one
+listener's exception never denies delivery to the others and never propagates onto the media
+thread. (This is the hot-path counterpart to the &quot;handlers must not throw&quot; contract in C14-01,
+which cannot be enforced against foreign code — so it is contained instead.)</li>
+<li><strong>Every inter-thread media buffer is bounded with a drop policy — never unbounded.</strong> Drop-oldest
+is the jitter-buffer-correct choice on the playout path (evict stale frames so latency stays
+bounded and playback stays fresh); the reorder buffer skips forward past a stale gap; the NACK
+buffer is bounded FIFO. Overflow is a counted, observable event, not silent growth and not
+backpressure that stalls the producer.</li>
+<li><strong>No avoidable allocation on the per-frame path (HARD-F1)</strong> — codec and gain helpers are stateless
+and reused rather than allocated per frame. (Buffer-pooling detail is C07-01.)</li>
+</ol>
+<h3 id="crux">Crux</h3>
+<p>The decision that ties the path together is that <strong>the hot path treats both foreign code and
+overflow as things to bound, not to wait on.</strong> Foreign listener code is bounded by snapshotting the
+set and dropping the lock before calling it (time isolation) and by catching its faults (failure
+isolation). Overflow is bounded by dropping the <em>oldest</em> datum, because on a real-time media path a
+stale frame is worthless — keeping it only adds latency. Both choices refuse the tempting
+alternative (hold the lock / grow the queue) precisely because that alternative converts a transient
+consumer problem into an unbounded producer stall.</p>
+<h2 id="consequences">Consequences</h2>
+<p>Positive: the RTP receive thread runs at a bounded, predictable cost regardless of how many
+listeners are attached or how they behave; buffered latency has a hard ceiling; overflow is
+observable via drop counters; no media-path lock is ever held across untrusted code.</p>
+<p>Tradeoffs and honest divergences:</p>
+<ul>
+<li><strong>&quot;Copy-on-write&quot; is the intent, not the literal mechanism.</strong> The K3 wording says <em>copy-on-write
+arrays</em> for listener lists. The implementation (<code>SipCallChannelFrameTap</code>) is not a persistent
+immutable array swapped by <code>Interlocked.Exchange</code>; it is a mutable <code>List&lt;&gt;</code> under a lock that is
+<strong>snapshot-copied into a fresh array on every delivery</strong>. The guarantee is equivalent (the
+hot-path iteration sees a stable snapshot and never holds the lock over foreign code), but there
+is a per-delivery array allocation, which is in mild tension with HARD-F1's allocation goal. That
+is an accepted trade: correctness of fan-out over cheapness of a small array copy, and the
+allocation is bounded by listener count, not by traffic content.</li>
+<li><strong>Drop-oldest is lossy by design.</strong> Under sustained overload the SDK silently discards media
+(counted, not logged per drop). That is correct for real-time playout but means the tap/consumer
+is not guaranteed lossless delivery under overload — a consumer that needs every frame must keep
+up.</li>
+<li><strong>The three buffers use three different bound mechanisms</strong> (bounded channel / depth-skip / FIFO
+cap) suited to their semantics rather than one shared type; this is deliberate, but it means
+&quot;bounded drop-oldest&quot; is a family of policies, not a single implementation, and HARD-F4 markers
+are present on only the audio playout members.</li>
+<li><strong>Nothing gates this mechanically.</strong> No architecture test forbids an unbounded queue or a
+lock-held-over-callback on a new media path; the contract is review-enforced.</li>
+</ul>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li>New media-path fan-out snapshots the subscriber set and invokes foreign code outside any lock,
+with per-invocation fault isolation; reviewers reject a lock held across a listener/tap callback.</li>
+<li>New inter-thread media buffers are bounded and carry an explicit overflow policy (drop-oldest by
+default on playout paths) plus a drop counter; an unbounded <code>Queue</code>/<code>List</code> on a media path is a
+review finding and should carry a HARD-F4 marker with rationale.</li>
+<li>Per-frame code reuses stateless helpers rather than allocating per frame (HARD-F1); see C07-01 for
+the buffer-pooling companion rules.</li>
+<li>Overflow is observable (a counter), never a producer stall and never silent unbounded growth.</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>ENGINEERING_RULES.md — K3 (media hot path: no locks over foreign code, HARD-F1 no-alloc,
+HARD-F4 bounded drop-oldest, copy-on-write tap/listener lists).</li>
+<li>docs/thread-memory-safety-analysis.md — unbounded-collections and hot-path-lock catalogue that
+this contract closes; MediaReceiver AttachToCall TOCTOU noted as the lifetime companion.</li>
+<li>Code (graphify-oriented, then read):
+<code>src/Core/Infrastructure/Sip/Adapters/SipCallChannelFrameTap.cs</code> (snapshot fan-out + fault isolation);
+<code>src/Audio/Abstractions/Processing/BoundedPlaybackBuffer.cs</code> and
+<code>src/Audio/Linux/Infrastructure/LinuxAudioDevice.cs</code> (bounded drop-oldest, HARD-F4);
+<code>src/Core/Infrastructure/Rtp/VideoReorderBuffer.cs</code> (depth-bound skip-forward);
+<code>src/Core/Infrastructure/Rtp/Retransmission/RtpRetransmissionBuffer.cs</code> (bounded FIFO);
+<code>src/Core/Application/Media/Sessions/PcmG722Codec.cs</code>, <code>src/Audio/Abstractions/Processing/PcmGain.cs</code> (HARD-F1);
+<code>tests/CalloraVoipSdk.Core.IntegrationTests/CallVideoFrameContractTests.cs</code> (fault-isolation, live-mutation).</li>
+<li>Related ADRs: C14-01 (event-dispatch/object-lifecycle concurrency), C07-01 (allocation avoidance),
+C18-01 (public media-tap contract).</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-052-media-hotpath-lockfree-fanout-and-bounded-buffers.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

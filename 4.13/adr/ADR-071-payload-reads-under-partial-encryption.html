@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-071: What the Clear-Media Video Path Reads, and Which of It Survives Partial Encryption | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-071: What the Clear-Media Video Path Reads, and Which of It Survives Partial Encryption | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-071-payload-reads-under-partial-encryption.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-071-what-the-clear-media-video-path-reads-and-which-of-it-survives-partial-encryption">ADR-071: What the Clear-Media Video Path Reads, and Which of It Survives Partial Encryption</h1>
+
+<p>Status: Accepted
+Date: 2026-08-17</p>
+<h2 id="context">Context</h2>
+<p>ADR-068 built the <em>opaque</em> video path (#223): two SDK endpoints carry ciphertext byte-identically without
+reading the frame. The research behind it produced a second finding that the opaque path does not address —
+<strong>no shipping end-to-end-encryption system makes the payload opaque on the wire.</strong> Every one of them leaves
+the bytes a packetiser and a forwarder must read in the clear and encrypts the rest:</p>
+<ul>
+<li>Jitsi (<code>lib-jitsi-meet/modules/e2ee/Context.ts</code>): <code>UNENCRYPTED_BYTES = { delta: 3, key: 10, undefined: 1 }</code></li>
+<li>libwebrtc's frame cryptor (LiveKit and others): per-codec &quot;unencrypted header bytes&quot;; for H.264 the clear
+prefix must cover the NAL headers, and the ciphertext is RBSP-escaped so it cannot emulate a start code</li>
+<li>RFC 9605 §6.1/§6.2: the forwarder works from RTP metadata; key-frame requests sit outside the encryption
+layer</li>
+</ul>
+<p>A browser using Encoded Transform therefore lands on the SDK's <strong>clear-media</strong> path with a payload that is
+readable only in its first bytes — and that path kept its payload assumptions, deliberately, because they are
+correct for genuine clear media.</p>
+<p>This ADR records what those assumptions actually are. Point-by-point, not in the abstract: the reason #310
+exists is that &quot;the clear path reads the payload&quot; was a statement nobody had made precise.</p>
+<h2 id="the-inventory">The inventory</h2>
+<h3 id="vp8-vp8depacketiser-vp8payloaddescriptor">VP8 (<code>Vp8Depacketiser</code>, <code>Vp8PayloadDescriptor</code>)</h3>
+<table>
+<thead>
+<tr>
+<th>Read</th>
+<th>Where it comes from</th>
+<th>Survives partial encryption?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RTP payload descriptor: S bit, PID, and the optional I/L/T/K extension bytes (RFC 7741 §4.2)</td>
+<td>Written by the <em>sender's packetiser</em>, after any frame transform</td>
+<td><strong>Yes</strong> — structurally. It is not part of the encoded frame.</td>
+</tr>
+<tr>
+<td>One frame byte: <code>payload[headerLength] &amp; 0x01</code>, the P bit (RFC 7741 §4.3 → RFC 6386 §9.1)</td>
+<td>The first byte of the encoded frame</td>
+<td><strong>Not guaranteed.</strong> Clear for Jitsi (3/10 bytes) and for libwebrtc's frame cryptor; ciphertext for a sender that encrypts the frame whole, and then the key-frame flag is a coin toss.</td>
+</tr>
+</tbody>
+</table>
+<p>Nothing else is read. The remainder is copied through verbatim.</p>
+<h3 id="h264-h264depacketiser">H.264 (<code>H264Depacketiser</code>)</h3>
+<table>
+<thead>
+<tr>
+<th>Read</th>
+<th>Where it comes from</th>
+<th>Survives partial encryption?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>payload[0] &amp; 0x1F</code> — NAL type dispatch (RFC 6184 §5.2)</td>
+<td>RTP-level NAL header, written by the packetiser</td>
+<td><strong>Yes</strong></td>
+</tr>
+<tr>
+<td>STAP-A: 16-bit size fields per aggregated unit (§5.7.1)</td>
+<td>Written by the packetiser when it aggregates</td>
+<td><strong>Yes</strong> — the aggregation is built after the transform, not encrypted with the frame</td>
+</tr>
+<tr>
+<td>STAP-A: first byte of each aggregated unit, for IDR detection</td>
+<td>NAL header of the aggregated NAL unit</td>
+<td><strong>Yes</strong> in practice — this is exactly the &quot;unencrypted header bytes&quot; every shipping implementation keeps clear</td>
+</tr>
+<tr>
+<td>FU-A: indicator byte + FU header (§5.8), and the NAL header reconstructed from them</td>
+<td>Written by the packetiser when it fragments</td>
+<td><strong>Yes</strong></td>
+</tr>
+</tbody>
+</table>
+<p>The concern raised in #310 — that the STAP-A length fields sit &quot;in the payload behind&quot; the NAL header — does
+not hold: those fields are produced by the sending packetiser, which runs <em>after</em> the encryption transform.
+<strong>H.264 key-frame detection (IDR, NAL type 5) is therefore structurally sound even for an encrypted stream.</strong>
+VP8's is the one genuine exception.</p>
+<h2 id="decision">Decision</h2>
+<ol>
+<li><p><strong>The key-frame flag carries its provenance to the SDK surface.</strong> <code>EncodedFrame.KeyFrameSource</code> is
+<code>RtpHeaderExtension</code> (the Dependency Descriptor, #225 — written before encryption, always trustworthy),
+<code>Payload</code> (derived by the depacketiser, trustworthy as far as the table above allows), or <code>Unknown</code> (no
+signal at all). <code>IsKeyFrame</code> keeps its meaning and its type; nothing about an existing consumer changes.</p>
+</li>
+<li><p><strong>A payload format that does not read the payload says so, rather than reporting <code>false</code>.</strong> The opaque
+depacketisers report <code>Unknown</code>, which is what their <code>isKeyFrame: false</code> always meant. This closes a
+documentation lie: with the descriptor negotiated, an opaque session now reports a <em>real</em> key-frame flag,
+so &quot;always false under the switch&quot; had stopped being true.</p>
+</li>
+<li><p><strong>No behavioural change to the clear path.</strong> The VP8 P bit is still read and still believed for a session
+in the clear. Suppressing it for encrypted senders is not possible without knowing that the sender
+encrypts — which SDP does not say — and guessing would break genuine clear media, which is the common
+case.</p>
+</li>
+<li><p><strong>The remedy is the descriptor, not a heuristic.</strong> For a peer that encrypts frames, the Dependency
+Descriptor is the answer, and the SDK offers it by default. This is also what the reference stacks do:
+libwebrtc treats the descriptor as the codec-agnostic carrier precisely because it is readable under
+E2EE; mediasoup moved to it after frame marking was removed; LiveKit states outright that payload-header
+parsing breaks under generic payload encryption.</p>
+</li>
+</ol>
+<h2 id="consequences">Consequences</h2>
+<ul>
+<li><p>A forwarder built on the SDK can implement &quot;trust only header-derived key frames&quot; — no reference stack
+exposes enough to do that today; they report a merged boolean.</p>
+</li>
+<li><p>The claim &quot;with <code>OpaqueVideoFrames</code> on, <code>IsKeyFrame</code> is always false&quot; is retired from the changelog. It was
+true before #225 and misleading after it.</p>
+</li>
+<li><p>The interop half of #310 has since been <strong>measured</strong>, and it confirms the table above rather than the fear
+behind the ticket. A Chromium sender with an Encoded Transform installed, encrypting everything past a
+codec-appropriate clear prefix (start code + NAL header, as libwebrtc's frame cryptor does for H.264):</p>
+<table>
+<thead>
+<tr>
+<th>Clear prefix</th>
+<th>Frames the browser encrypted</th>
+<th>RTP packets we received</th>
+<th>Frames we reassembled</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Jitsi's, VP8-tuned (key 10 / delta 3)</td>
+<td>796</td>
+<td><strong>4</strong></td>
+<td>1</td>
+</tr>
+<tr>
+<td>H.264-aware (key 16 / delta 8)</td>
+<td>26</td>
+<td>57</td>
+<td><strong>30</strong></td>
+</tr>
+</tbody>
+</table>
+<p>With a codec-appropriate prefix the SDK reassembles the stream completely and keeps the key-frame signal.
+With the VP8-tuned prefix the failure is on the <strong>sender's</strong> side of the wire: three clear bytes do not
+cover an Annex-B start code, so the browser's own packetiser stops emitting — four packets for 796 frames,
+meaning nothing ever reached our depacketiser to be discarded. Neither case is a limit of this SDK.</p>
+</li>
+<li><p>One thing the measurement changed about the premise: for a Chromium peer the key-frame flag never depends
+on the payload at all. Chromium writes the Dependency Descriptor on the <strong>H.264</strong> m-line too, not only on
+VP8, so every frame in those runs reported <code>KeyFrameSource.RtpHeaderExtension</code>. The payload-derived path
+remains what answers for peers that do not offer the extension.</p>
+</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-071-payload-reads-under-partial-encryption.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>
