@@ -3,7 +3,7 @@
     <!-- Fallback for local/dev builds; released packages get the version from the git tag via the
          release workflow (/p:Version=X.Y.Z), which drives PackageVersion, AssemblyVersion,
          FileVersion and InformationalVersion together. -->
-    <VersionPrefix>4.12.0</VersionPrefix>
+    <VersionPrefix>4.13.0</VersionPrefix>
     <!-- 4.11.0 minor release: local/dev/CI builds off main are versioned 4.11.0 (stable). The release workflow can
          still pin an explicit -p:Version=X.Y.Z from the git tag (which wins over both conditions below), and
          a prerelease build can opt into a suffix with -p:VersionSuffix=preview.N; absent either the version

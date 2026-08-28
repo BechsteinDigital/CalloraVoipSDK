@@ -110,7 +110,7 @@ Kurzfassung — Details und Fundstellen in [`ENGINEERING_RULES.md`](ENGINEERING_
 - .NET SDK **10.0.100** (`global.json`, rollForward latestFeature); Ziel-TFMs
   `net8.0;net9.0;net10.0` überall (ArchitectureTests nur net10.0).
 - Version kommt aus `src/Directory.Build.props` (`VersionPrefix` + `VersionSuffix`, aktuell
-  `4.12.0`); Releases überschreiben per `/p:Version` aus dem Git-Tag.
+  `4.13.0`); Releases überschreiben per `/p:Version` aus dem Git-Tag.
 
 ```bash
 dotnet build CalloraVoipSdk.sln --configuration Release
@@ -326,6 +326,16 @@ Typische Erweiterungspunkte:
 > Rein additiv — eine Public-API-Zeile ergänzt (`ICall.DiversionChain`), nichts entfernt oder geändert (belegt
 > via `PublicApi.approved.txt`). Details in [`CHANGELOG.md`](CHANGELOG.md) und
 > [`RELEASE_NOTES_4.12.0.md`](RELEASE_NOTES_4.12.0.md).
+
+> **Nachtrag 4.13.0 (2026-08-28):** Seither: ein **Jitter-Buffer im WebRTC-Empfangspfad**, opt-in über
+> `WebRtcConfiguration.AudioReceivePlayoutDelayMs` (Default 0 = unverändertes Verhalten). Er ist für
+> Konsumenten gedacht, die **mischen**: Ein weiterleitender Peer braucht ihn nicht — der Browser am
+> anderen Ende puffert selbst —, ein Mixer dagegen muss in jedem Frame-Intervall ein Frame erzeugen und
+> liest einen Burst sonst als ein brauchbares Frame plus Stille. Durch Opus DTX ist das der Normalfall
+> und nicht die Ausnahme, und hörbar als Ton, der nach jeder Sprechpause abreißt. Der SIP-Pfad hatte
+> diese Form immer schon (`RtpCallMediaSession`); nur der WebRTC-Empfangspfad nicht. Rein additiv — eine
+> Public-API-Zeile ergänzt, nichts entfernt oder geändert (belegt via `PublicApi.approved.txt`). Details
+> in [`CHANGELOG.md`](CHANGELOG.md) und [`RELEASE_NOTES_4.13.0.md`](RELEASE_NOTES_4.13.0.md).
 
 Quellen: `docs/audit/INTEROP_SOAK_AUDIT.md` (F-Register) und die Tiefenanalyse 2026-07-22
 (`docs/audit/2026-07-22-quelltext-tiefenanalyse.md`). **Sämtliche P1-Befunde der Tiefenanalyse

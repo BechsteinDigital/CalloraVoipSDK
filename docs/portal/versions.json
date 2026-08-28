@@ -1,9 +1,13 @@
 {
-  "latest": "4.12",
+  "latest": "4.13",
   "versions": [
     {
-      "label": "4.12",
+      "label": "4.13",
       "path": ""
+    },
+    {
+      "label": "4.12",
+      "path": "4.12"
     },
     {
       "label": "4.11",
