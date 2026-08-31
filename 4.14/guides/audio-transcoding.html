@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Audio transcoding (PCM) | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Audio transcoding (PCM) | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/portal/guides/audio-transcoding.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="audio-transcoding-pcm">Audio transcoding (PCM)</h1>
+
+<p>A server-side consumer can transcode between the SDK's payload codecs and linear PCM16 through a small,
+transport-only surface in <code>CalloraVoipSdk.Audio.Abstractions.Processing</code>. The prototypical case is an
+<strong>SFU/mixer</strong> that decodes a phone leg (G.711/G.722 over SIP) to PCM, mixes it into a <strong>WebRTC</strong>
+conference, and re-encodes to Opus per leg. Concentus and NAudio stay behind the interface — they never
+appear in a public signature, and no extra <code>PackageReference</code> is needed. See
+<a href="../adr/ADR-065-public-pcm-transcoding-surface.md">ADR-065</a>.</p>
+<h2 id="surface">Surface</h2>
+<table>
+<thead>
+<tr>
+<th>Member</th>
+<th>Signature</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>AudioPayloadCodecFactory.Create</code></td>
+<td><code>Create(ActiveCodec codec)</code></td>
+<td>Transcoder at the codec's canonical PCM rate (48 kHz Opus / 16 kHz G.722 / 8 kHz G.711)</td>
+</tr>
+<tr>
+<td><code>AudioPayloadCodecFactory.Create</code></td>
+<td><code>Create(ActiveCodec codec, int pcmSampleRate)</code></td>
+<td>Transcoder at an explicit PCM rate (Opus: 8/12/16/24/48 kHz)</td>
+</tr>
+<tr>
+<td><code>IAudioPayloadCodec.DecodeToPcm16</code></td>
+<td><code>byte[] DecodeToPcm16(ReadOnlySpan&lt;byte&gt; payload)</code></td>
+<td>Decode one RTP payload to PCM16 LE bytes</td>
+</tr>
+<tr>
+<td><code>IAudioPayloadCodec.EncodeFromPcm16</code></td>
+<td><code>byte[] EncodeFromPcm16(ReadOnlySpan&lt;byte&gt; pcm16)</code></td>
+<td>Encode PCM16 LE bytes to one RTP payload</td>
+</tr>
+<tr>
+<td><code>IAudioPayloadCodec.Codec</code></td>
+<td><code>ActiveCodec</code></td>
+<td>The codec this instance transcodes</td>
+</tr>
+<tr>
+<td><code>IAudioPayloadCodec.PcmSampleRate</code></td>
+<td><code>int</code></td>
+<td>PCM sample rate (media rate, <strong>not</strong> the RTP clock)</td>
+</tr>
+</tbody>
+</table>
+<p><code>ActiveCodec</code> values: <code>Pcmu</code>, <code>Pcma</code>, <code>G722</code>, <code>Opus</code>. I/O is <strong>PCM16 little-endian</strong> (2 bytes per
+sample). <code>IAudioPayloadCodec</code> is <code>IDisposable</code>.</p>
+<h2 id="decode-a-leg-then-encode-the-mix">Decode a leg, then encode the mix</h2>
+<p>Create <strong>one instance per stream direction</strong> — Opus and G.722 carry inter-frame state, so a decode
+instance and an encode instance are separate and never shared across directions or calls.</p>
+<pre><code class="lang-csharp">using CalloraVoipSdk.Audio.Abstractions.Processing;
+
+// Inbound phone leg (µ-law) → PCM
+using var phoneDecoder = AudioPayloadCodecFactory.Create(ActiveCodec.Pcmu);
+
+// Outbound conference leg (Opus) → payload
+using var opusEncoder = AudioPayloadCodecFactory.Create(ActiveCodec.Opus);
+
+// per received phone packet:
+byte[] phonePcm = phoneDecoder.DecodeToPcm16(g711Payload);   // PCM16 LE @ 8 kHz
+
+// … resample to 48 kHz and mix in your own buffer, producing `mixPcm` (PCM16 LE @ 48 kHz) …
+
+byte[] opusPayload = opusEncoder.EncodeFromPcm16(mixPcm);    // send this to the WebRTC peer
+</code></pre>
+<p>The SDK does not resample or mix for you — it hands you PCM16 at <code>PcmSampleRate</code> and takes PCM16 back.
+An empty input yields an empty array. For Opus, <code>EncodeFromPcm16</code> requires a valid Opus frame length
+(2.5/5/10/20/40/60 ms at <code>PcmSampleRate</code>); an invalid length throws <code>ArgumentException</code>.</p>
+<h2 id="sample-rate-vs-rtp-clock">Sample rate vs. RTP clock</h2>
+<p><code>PcmSampleRate</code> is the rate of the PCM this instance decodes to / encodes from — <strong>not</strong> the RTP
+timestamp clock. They differ for G.722: its PCM rate is 16 kHz while its RTP clock is 8 kHz
+(RFC 3551 §4.5.2). For Opus the RTP clock is always 48 kHz (RFC 7587 §4.1) regardless of the PCM rate.
+Never use <code>PcmSampleRate</code> as the RTP clock.</p>
+<p>Fixed-rate codecs are fail-closed: G.711 and G.722 reject any <code>pcmSampleRate</code> other than their
+canonical rate (8 kHz / 16 kHz) rather than producing silently mis-rated audio. Opus accepts
+8/12/16/24/48 kHz and resamples internally.</p>
+<pre><code class="lang-csharp">AudioPayloadCodecFactory.Create(ActiveCodec.G722, 8_000);   // throws ArgumentException — G.722 is 16 kHz
+AudioPayloadCodecFactory.Create(ActiveCodec.Opus, 24_000);  // ok — Opus honours the supported rate
+</code></pre>
+<h2 id="limitations">Limitations</h2>
+<ul>
+<li><strong>One instance per stream direction.</strong> Opus and G.722 carry predictor/FEC state; sharing an instance
+across directions or calls produces artefacts. G.711 is stateless, but the same contract applies
+uniformly. Dispose each instance when the stream ends.</li>
+<li><strong>Transcoding only — no resampling or mixing.</strong> You own the PCM buffer, the mix, and any rate
+conversion between codecs (e.g. 8 kHz phone PCM ↔ 48 kHz Opus PCM).</li>
+<li>The <code>Audio.*</code> assemblies sit outside the Client/Core <code>PublicApi.approved.txt</code> baseline by design and
+are governed by their own module contract. They ship transitively via the <code>CalloraVoipSdk</code>
+meta-package — no direct Concentus/NAudio dependency.</li>
+</ul>
+<h2 id="see-also">See also</h2>
+<ul>
+<li><a href="media-tap.html">Media tap</a> — observe/record decoded PCM on a live call</li>
+<li><a href="audio-devices.html">Audio devices</a> — capture/render endpoints</li>
+<li><a href="webrtc.html">WebRTC</a> — the forwarding peer primitives an SFU builds on</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/portal/guides/audio-transcoding.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

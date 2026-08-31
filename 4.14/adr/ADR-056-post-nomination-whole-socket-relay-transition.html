@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-056: Post-Nomination Whole-Socket Relay Transition (ChannelBind / ChannelData) | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-056: Post-Nomination Whole-Socket Relay Transition (ChannelBind / ChannelData) | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-056-post-nomination-whole-socket-relay-transition.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-056-post-nomination-whole-socket-relay-transition-channelbind--channeldata">ADR-056: Post-Nomination Whole-Socket Relay Transition (ChannelBind / ChannelData)</h1>
+
+<p>Status: Accepted
+Date: 2026-07-19</p>
+<h2 id="context">Context</h2>
+<p>Once a relay ICE pair is nominated (ADR-C16-01), media must actually flow through the relay. Two
+operating phases exist for a relay allocation on the shared 5-tuple (ADR-011):</p>
+<ul>
+<li><strong>Check phase.</strong> During connectivity checks the relay candidate sends each check as a per-pair TURN
+Send indication (RFC 8656 §10), because a relay candidate may probe several remote candidates and
+none is yet the bound peer. This is what ADR-C16-01's send path does — cheap to set up, but every
+datagram carries a full Send/Data-indication STUN wrapper. This was the direction historically
+called &quot;Fork B&quot;.</li>
+<li><strong>Post-nomination steady state.</strong> Once a single peer is nominated, RFC 8656 offers ChannelBind
+(§11) + ChannelData (§12): a 4-byte channel header instead of a full indication wrapper, for <em>all</em>
+media on that peer. This is the RFC-complete steady state — historically &quot;Fork A&quot;.</li>
+</ul>
+<p>The fork was a real decision, not a shortcut: run steady-state media as compact ChannelData (§11–12),
+or keep everything as Send/Data indications. <strong>The User decided (2026-07-19): Fork A — &quot;nach den RFC,
+vollständig und korrekt.&quot;</strong> So the transport must transition, at runtime, from direct mode into a
+whole-socket relay mode where every datagram (STUN, DTLS, RTP, RTCP) is framed as ChannelData to the
+TURN server and every inbound datagram is unwrapped from it — below the packet demux, so the DTLS/ICE
+layers above compose unchanged. This is a change to the shared, security-critical media socket, so it
+was built as transport primitive first, then orchestration, then a correctness fix.</p>
+<h3 id="verified-current-state">Verified current state</h3>
+<ul>
+<li><code>BundledMediaTransport</code> (<code>src/Core/Infrastructure/Rtp/BundledMediaTransport.cs</code>) runs two relay
+phases on one 5-tuple. Its own class doc: the <em>control phase</em> (a <code>RelayServer</code> is set) sends TURN
+requests via <code>SendControlAsync</code> and surfaces control responses via <code>OnRelayControl</code>, so the
+allocation can be established before any channel exists (outbound media suppressed meanwhile); once
+ChannelBind completes, <code>SetRelayChannel</code> installs the <code>IRelayDatagramChannel</code> and the <em>data phase</em>
+begins — every outbound datagram framed as ChannelData, every inbound one unwrapped.</li>
+<li><code>EnterRelayMode(relayServer, onControl)</code> (L158) transitions a <em>direct-mode</em> transport into
+whole-socket relay mode at runtime (RFC 8656 §11–12): it rejects an already-relay transport and a
+transport with no remote endpoint (the bound peer relayed inbound is attributed to). The mode
+discriminator <code>_relayServer</code> and control sink <code>_onRelayControl</code> are <code>readonly → mutable</code>; the sink
+is published (<code>Volatile.Write</code>) <strong>before</strong> the discriminator, so a reader observing relay mode also
+sees the sink. All 6 runtime reads of <code>_relayServer</code> are <code>Volatile.Read</code> (the receive loop reads it
+concurrently with the nomination thread that flips it). The per-pair indication path
+(<code>SetIndicationRelay</code>, §10) goes dormant after the flip and is mutually exclusive with relay mode
+(each throws if the other is active).</li>
+<li><code>SetRelayChannel</code> (L133) is valid only in relay mode and only for a channel bound to that same
+server; <code>SendAsync</code> (L224) frames via <code>relay.Wrap</code> to the relay server when a channel is installed.</li>
+<li>Ordering: ChannelBind runs <strong>before</strong> <code>EnterRelayMode</code>, in direct mode, so the request reaches the
+server unframed. After the flip, <code>SendToAsync</code> would frame control as ChannelData (broken), so a
+distinct <code>SendUnframedAsync</code> sends raw to the server in both modes (identical to <code>SendToAsync</code> in
+direct mode) and the channel-rebind loop uses it to keep re-binding even after the data path flips.</li>
+<li>Orchestration (<code>BundledMediaSession</code>): <code>IceMediaAttachment</code>/<code>BundledIceControl</code> fire an optional
+<code>onRelayPairNominated</code> callback <em>only</em> for a relay pair; the session runs a once-guarded
+<code>TransitionToRelayAsync</code> = ChannelBind → <code>EnterRelayMode</code> → <code>SetRelayChannel</code>, cancelled and awaited
+<strong>before</strong> the transport is disposed. <code>OnPairNominated</code> (sets remote/DTLS) runs synchronously before
+<code>onRelayPairNominated</code>, so the <code>EnterRelayMode</code> precondition (<code>_remoteEndPoint</code> set) holds.</li>
+<li>Correctness fix (4d-4c-iii): a <code>_relayTransitioned</code>-succeeded flag commits the transport to relay
+after <code>SetRelayChannel</code>; <code>OnPairNominated</code> becomes a no-op afterwards, and the transition re-asserts
+<code>SetRemoteEndPoint(peer)</code> before <code>EnterRelayMode</code>. Finding: after the flip, direct checks misroute
+anyway, so a relay→direct re-nomination is only possible in a sub-second window, which the flag closes.</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<p>Transition the shared BUNDLE transport at runtime from direct mode into <strong>whole-socket relay mode</strong>
+(RFC 8656 §11–12) when a relay ICE pair is nominated, so all steady-state media flows as ChannelData —
+the RFC-complete Fork A, per the User's decision.</p>
+<ol>
+<li><strong>Two phases on one socket, discriminated by a volatile mode field.</strong> Direct mode uses the socket
+(and, for relay checks, the dormant-until-flip per-pair indication path); relay mode frames every
+datagram as ChannelData to the TURN server and unwraps every inbound one, below the packet demux, so
+DTLS/ICE/RTP above are unchanged. The two paths (per-pair indication vs. whole-socket relay) are
+mutually exclusive by construction.</li>
+<li><strong>Nominate → ChannelBind → EnterRelayMode → SetRelayChannel, in that order.</strong> ChannelBind runs in
+direct mode (request reaches the server unframed). <code>EnterRelayMode</code> then suppresses sends until
+<code>SetRelayChannel</code> installs the bound channel, opening the data path. The session drives this once,
+guarded, only for a relay pair.</li>
+<li><strong>Control after the flip goes raw via <code>SendUnframedAsync</code>.</strong> Channel rebind, refresh, and any other
+control that must reach the <em>server</em> (not the peer) send raw in both modes, so they are not
+double-framed as ChannelData after the transition.</li>
+<li><strong>Commit to relay once bound.</strong> After <code>SetRelayChannel</code> succeeds, a <code>_relayTransitioned</code> flag makes
+<code>OnPairNominated</code> a no-op, so a late relay→direct re-nomination cannot re-point the unwrap source and
+silently drop inbound media. The transition re-asserts the peer as the remote endpoint before flipping.</li>
+<li><strong>Concurrency by publication order and volatile reads.</strong> The nomination thread flips the mode; the
+receive loop and send paths read it. Publish the control sink before the discriminator; read all mode
+state via <code>Volatile</code>. Cancel and await the transition before disposing the transport.</li>
+</ol>
+<h3 id="crux">Crux</h3>
+<p>The transition is a mutation of the <em>shared, security-critical</em> media socket while a receive loop and
+send threads run against it. Correctness rests on three things: (a) ChannelBind must happen while still
+direct (or the bind request itself gets suppressed/mis-framed); (b) control-to-server must bypass
+ChannelData framing (<code>SendUnframedAsync</code>) or the rebind/refresh loops break the moment the data path
+flips; (c) once committed to relay, nomination must not re-point the unwrap source — hence the
+succeeded-flag, not merely a started-flag (a failed transition must not lock the transport).</p>
+<h2 id="consequences">Consequences</h2>
+<p>Positive: steady-state relayed media uses the compact ChannelData framing (RFC-complete), not a full
+indication wrapper per packet. The transition is additive to the direct path — with no
+<code>EnterRelayMode</code> call the transport is byte-identical to before (verified: full suite green including
+direct mode, ctor-relay mode, SIP media, and session paths). DTLS/ICE/RTP layers above are unaware of
+the mode.</p>
+<p>Divergence and honest open edges:</p>
+<ul>
+<li><strong>The full session-level transition is not exercised end-to-end in a fast test.</strong> Forcing a real
+relay pair to be <em>nominated</em> over a real session socket is timeout-bound (direct exhaustion ~10 s+),
+so the whole ChannelData round-trip through a session is not in a unit test. The transport primitives
+(<code>EnterRelayMode</code> + <code>SetRelayChannel</code> over a real <code>TurnRelayChannel</code>, control-response surfacing) and
+the orchestration wiring (relay-pair-nominated callback firing, dispose ordering) are tested
+individually; an orchestration end-to-end uses an IPv6-dead direct pair to reach <code>SetRelayChannel</code>
+quickly. No real-server end-to-end and no browser interop (ADR-009) — no production-ready claim.</li>
+<li><strong>Relay→direct re-nomination after commit is closed, not gracefully re-transitioned.</strong> The transport
+commits to relay; it does not transition <em>back</em> to direct. In practice direct checks misroute after
+the flip so this window is sub-second, but a formal relay→direct downgrade is not supported.</li>
+<li><strong>Transition happens after check-phase indications, not per-pair during checks.</strong> This is the
+intended split (Fork B for checks, Fork A for steady state), but it means there is a brief moment
+where sends are suppressed (<code>_relayServer</code> set, <code>_relay</code> still null) between <code>EnterRelayMode</code> and
+<code>SetRelayChannel</code>.</li>
+<li><strong>Controlled-agent relay gap carries over</strong> (ADR-C16-01): only the controlling agent nominates a
+relay pair, so only it triggers the transition. An Answerer-owned relay against a direct Offerer does
+not transition.</li>
+<li><strong>TCP/TLS relay data path out of scope.</strong> This is UDP whole-socket relay; a stream relay transport is
+a separate, unbuilt feature.</li>
+</ul>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li>Order is load-bearing and must not be reordered: <strong>ChannelBind (direct) → EnterRelayMode →
+SetRelayChannel.</strong> ChannelBind after <code>EnterRelayMode</code> (with no channel yet) would be suppressed.</li>
+<li>Control destined for the TURN <em>server</em> (rebind, refresh) must use <code>SendUnframedAsync</code>, never the
+ChannelData-framing send, so it is not double-wrapped after the flip.</li>
+<li>Every mode field (<code>_relayServer</code>, <code>_relay</code>, <code>_onRelayControl</code>) is read via <code>Volatile</code>; publish the
+control sink before the mode discriminator. <code>EnterRelayMode</code> is at most once and only on a
+direct-mode transport with a remote endpoint set.</li>
+<li>Commit with a <em>succeeded</em> flag (after <code>SetRelayChannel</code>), not a started flag, so a failed transition
+does not lock the transport; once committed, <code>OnPairNominated</code> is a no-op.</li>
+<li>The whole-socket relay path and the per-pair indication path are mutually exclusive — never active
+together on one transport.</li>
+<li>Cancel and await the transition before disposing the transport; the transport must outlive the
+channel-rebind/keepalive teardown that rides its send.</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Logs (<code>docs/archive/agent-log/</code>):
+<ul>
+<li><code>2026-07-19-dev-relay-4c-4b.md</code> — records the Fork A vs. Fork B block awaiting the User decision.</li>
+<li><code>2026-07-19-dev-relay-4d-4c-i.md</code> — <strong>Fork A decision</strong> (&quot;nach den RFC, vollständig und korrekt&quot;);
+<code>EnterRelayMode</code> primitive, <code>_relayServer</code> readonly→mutable, 6 volatile sites, publication order,
+dormant indication path, suppress window <code>_relayServer!=null &amp;&amp; _relay==null</code>.</li>
+<li><code>2026-07-19-dev-relay-4d-4c-ii.md</code> — orchestration: ChannelBind-before-EnterRelayMode ordering,
+<code>SendUnframedAsync</code> for post-transition control, <code>onRelayPairNominated</code> (relay-only), session
+<code>TransitionToRelayAsync</code>, dispose ordering; the Low-1 re-nomination finding raised here.</li>
+<li>(Low-1 fix <code>4d-4c-iii</code>, main <code>035c1f3</code>) — <code>_relayTransitioned</code> succeeded-flag; <code>OnPairNominated</code>
+no-op after commit; re-assert <code>SetRemoteEndPoint</code> before flip; orchestration E2E via IPv6-dead direct.</li>
+</ul>
+</li>
+<li>Code:
+<ul>
+<li><code>src/Core/Infrastructure/Rtp/BundledMediaTransport.cs</code> (<code>EnterRelayMode</code> L158, <code>SetRelayChannel</code>
+L133, <code>SetIndicationRelay</code> L187, <code>SendAsync</code> L224, <code>SendUnframedAsync</code>)</li>
+<li><code>src/Core/Infrastructure/Rtp/BundledMediaSession.cs</code> (<code>TransitionToRelayAsync</code>, <code>OnRelayPairNominated</code>)</li>
+<li><code>src/Core/Infrastructure/Rtp/BundledIceControl.cs</code>, <code>src/Core/Infrastructure/Stun/Ice/IceMediaAttachment.cs</code></li>
+<li><code>src/Core/Infrastructure/Common/Relay/RelayIceBinding.cs</code> (<code>BindChannel</code>), <code>IRelayDatagramChannel.cs</code></li>
+<li><code>src/Core/Infrastructure/Turn/Client/TurnRelayChannel.cs</code> (<code>Wrap</code>/<code>TryUnwrap</code>, channel <code>0x4000</code>)</li>
+</ul>
+</li>
+<li>Markers / RFC: RFC 8656 §10 (Send/Data indications — check phase), §11 (ChannelBind), §12
+(ChannelData — steady state). Adjacent: ADR-C16-01 (relay as ICE candidate), ADR-C16-02 (control
+stack / keepalive), ADR-011 (shared BUNDLE transport), ADR-009 (interop boundary).</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-056-post-nomination-whole-socket-relay-transition.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

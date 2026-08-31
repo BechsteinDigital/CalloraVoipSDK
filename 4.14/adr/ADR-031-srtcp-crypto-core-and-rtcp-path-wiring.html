@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-031: SRTCP Crypto Core and RTCP-Path Wiring | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-031: SRTCP Crypto Core and RTCP-Path Wiring | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-031-srtcp-crypto-core-and-rtcp-path-wiring.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-031-srtcp-crypto-core-and-rtcp-path-wiring">ADR-031: SRTCP Crypto Core and RTCP-Path Wiring</h1>
+
+<p>Status: Accepted
+Date: 2026-07-09</p>
+<h2 id="context">Context</h2>
+<p>A negotiated SRTP call encrypted its RTP but sent its <strong>RTCP in the clear</strong> — sender/receiver
+reports, BYE, feedback, and RTCP-XR all left the socket unprotected even under an active SRTP
+session. That is both a confidentiality leak (CNAMEs, timing, loss statistics) and a fail-open
+inconsistency: the media path was secure while its control channel was not. Closing it needs the
+SRTCP transform of RFC 3711 §3.4, which is <em>not</em> the SRTP transform — RTCP uses an independent
+keystream (KDF labels 3/4/5), a different packet layout, an explicit 31-bit SRTCP index instead of
+an implicit rollover counter, and mandatory authentication.</p>
+<p>The work was cut into two slices, one decision: <strong>(1)</strong> an isolated, testable SRTCP crypto core
+(<code>2026-07-09-dev-srtcp-crypto-core.md</code>), then <strong>(2)</strong> wiring it into the live RTCP send/receive path
+(<code>2026-07-09-dev-srtcp-wiring.md</code>). Slice 2 also surfaced a remote-triggerable DoS on the receive
+loop — that hardening decision is owned by ADR C07-02 (wire-boundary DoS), not re-decided here.</p>
+<h3 id="verified-current-state-graphify-grounded">Verified current state (graphify-grounded)</h3>
+<ul>
+<li><strong>Crypto core exists and matches §3.4.</strong> <code>SrtcpContext</code> (<code>src/Core/Infrastructure/Srtp/Context/ SrtcpContext.cs</code>) implements <code>ISrtcpContext.ProtectRtcp</code>/<code>UnprotectRtcp</code>. Layout is
+<code>[8-byte clear header][AES-CM encrypted payload][E|31-bit index (4B)][auth tag]</code>; the first 8
+bytes stay clear, AES-CM runs from byte 8, the IV carries the SRTCP index (no ROC, per the class
+doc &quot;no rollover counter feeds the IV or the authentication&quot;), and the HMAC-SHA1 tag covers the
+encrypted packet <strong>including</strong> the E|index word. Receive is verify-then-decrypt with
+<code>CryptographicOperations.FixedTimeEquals</code> (RFC 3711 §3.3); <code>Dispose</code> zeroes keys.</li>
+<li><strong>Independent RTCP keystream.</strong> <code>SrtpKeyDerivation.DeriveRtcp</code> (<code>Srtp/Crypto/SrtpKeyDerivation.cs</code>)
+derives from the <em>same</em> master material with labels 3/4/5 (<code>LabelRtcpCipherKey/AuthKey/Salt</code>),
+distinct from the SRTP <code>Derive</code> labels 0/1/2 — RFC 3711 §4.3.2.</li>
+<li><strong>Wired into the live path.</strong> <code>RtpSession.SendControlCoreAsync</code> (<code>Rtp/Session/RtpSession.cs</code>
+L303-329) calls <code>OutboundSrtcp.ProtectRtcp</code> after the <code>_transmissionStopped</code> gate and before the
+socket send; <code>RtpSession.ProcessDatagram</code>'s RTCP branch (L560-598) calls
+<code>InboundSrtcp.UnprotectRtcp</code>. <code>RtpSessionOptions</code> carries <code>OutboundSrtcp</code>/<code>InboundSrtcp</code>
+(<code>ISrtcpContext?</code>). Contexts are minted from the same <code>SrtpKeyMaterial</code> as the SRTP contexts via
+<code>SdesMediaCryptoContextFactory</code> (4-tuple RTP+RTCP; <code>RtpCallMediaSession</code> L167-179) and disposed
+together (L476-477).</li>
+<li><strong>Fail-closed on RTCP too.</strong> When <code>RequireEncryptedMedia</code> is set and no SRTCP context is installed
+yet (DTLS-SRTP pre-handshake), outbound RTCP is suppressed, not sent in clear (RtpSession L326-329);
+inbound clear RTCP is likewise rejected (L560). Matches ENGINEERING_RULES K1.</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<p>Protect RTCP under a negotiated SRTP session with a dedicated SRTCP transform, built as an isolated
+crypto core first and wired into the control path second.</p>
+<ol>
+<li><strong>Separate <code>SrtcpContext</code>, do not overload <code>SrtpContext</code>.</strong> SRTCP is a different transform (index
+word, no ROC, different KDF labels, always-authenticated). A per-direction <code>ISrtcpContext</code> keeps
+the SRTP hot path untouched and the SRTCP layout self-contained.</li>
+<li><strong>Independent RTCP keystream via labels 3/4/5.</strong> <code>DeriveRtcp</code> reuses the KDF but with the RTCP
+label set, so an RTCP keystream never overlaps the RTP keystream under the same master key.</li>
+<li><strong>Wire at the <code>RtpSession</code> control boundary.</strong> Protect in <code>SendControlCoreAsync</code>, unprotect in the
+RTCP arm of <code>ProcessDatagram</code>; <code>RtpSessionOptions</code> transports the contexts; the media session
+factory mints RTP+RTCP contexts together from one <code>SrtpKeyMaterial</code> and disposes them together.</li>
+<li><strong>Fail closed on RTCP.</strong> No plain-RTCP fallback once encryption is required or a context is
+installed; suppress-and-log instead (K1).</li>
+</ol>
+<h3 id="crux">Crux</h3>
+<p>The SRTCP transform is <em>not</em> SRTP with a different key. Three properties are load-bearing and were
+implemented deliberately, going <strong>beyond</strong> the two logs' original sketch:</p>
+<ul>
+<li><strong>No ROC — the 31-bit SRTCP index is explicit and authenticated.</strong> The index word travels on the
+wire and is inside the HMAC input, so replay/ordering does not depend on a synchronised rollover
+counter the way SRTP does (<code>BuildIv</code> places the index in IV bytes 10-13; §4.1).</li>
+<li><strong>Per-SSRC index and replay state, not per-direction.</strong> <code>SrtcpContext</code> keys its send index and
+replay window by SSRC (<code>Dictionary&lt;uint, SrtcpSsrcState&gt;</code>, <code>SrtcpSsrcState.cs</code> over a shared
+<code>SlidingReplayWindow</code>), so several RTCP senders multiplexed over one BUNDLE key do not collide in
+one window (RFC 3711 §3.2.3, marker HARD-D1). The original crypto-core log described a single
+per-direction sender index + one 64-packet window; the shipped code is per-SSRC.</li>
+<li><strong>80-bit SRTCP auth tag regardless of suite.</strong> <code>SrtcpAuthTagLength = 10</code>. The 32-bit truncation of
+RFC 3711 §5.2 applies to SRTP only; SRTCP stays at 80 bits even under
+<code>AES_CM_128_HMAC_SHA1_32</code> so mandatory RTCP authentication is not weakened and libsrtp interop
+holds (RFC 4568 §6.2, RFC 5764 §4.1.2 footnote). Neither log fixed the tag-length policy; the code
+documents and enforces it.</li>
+</ul>
+<h2 id="consequences">Consequences</h2>
+<p>Positive: RTCP under a negotiated SRTP call is now encrypted and authenticated end-to-end; the
+control channel no longer fails open. The core was proven in isolation (KDF known-answers, layout,
+round-trip, tamper/replay/wrong-key rejection) before touching the live path, and the SRTP hot path
+was never modified. The per-SSRC design made the same core directly reusable for BUNDLE
+(<code>BundledInboundPipeline</code>/<code>BundledOutboundPipeline</code>) and the video SDES path
+(<code>VideoRtpStream._sdesOutboundSrtcp/_sdesInboundSrtcp</code>) without redesign.</p>
+<p>Honest divergences from the source logs:</p>
+<ul>
+<li><strong>Scope grew past the logs.</strong> The logs described a single-window, per-direction context wired only
+into <code>RtpSession</code>. The shipped code is per-SSRC (HARD-D1) with an explicit 80-bit tag policy, and
+the same <code>SrtcpContext</code> now serves BUNDLE and video — evolution, not regression.</li>
+<li><strong>Crypto-primitive duplication was resolved, not left open.</strong> Both logs listed &quot;consolidate the
+mirrored <code>AesCmXor</code>/<code>BuildIv</code>/<code>ComputeAuthTag</code> between <code>SrtpContext</code> and <code>SrtcpContext</code>&quot; as
+follow-up. Current <code>SrtcpContext</code> imports the shared <code>AesCmCipher</code> from <code>Srtp.Crypto</code> and reuses
+<code>SlidingReplayWindow</code>; the mirror is gone.</li>
+<li><strong>The receive-loop DoS is owned elsewhere.</strong> The wiring slice found (and fixed) a HIGH
+remote-DoS: a short RTCP-looking runt made <code>UnprotectRtcp</code> throw <code>ArgumentException</code>, uncaught,
+killing the receive loop; it also flagged the identical latent bug on the RTP arm as
+KRITISCH follow-up. Both catches now exist (<code>RtpSession</code> RTCP arm L584, RTP arm L665,
+secondary L822: <code>catch when (ex is ArgumentException or CryptographicException or ObjectDisposedException)</code>). That decision is <strong>owned by ADR C07-02</strong> (wire-boundary DoS); this ADR
+only records that SRTCP wiring was its origin.</li>
+<li><strong>Rekey.</strong> No RTCP rekey problem was engineered — RTCP is periodic; the contexts are minted/disposed
+with the SRTP contexts on the same key material.</li>
+</ul>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li><strong>Never fall through to plain RTCP</strong> once encryption is required or a context is installed — suppress
+and log (K1); this holds on both send (RtpSession L326-329, and the disposed-during-teardown race
+L318-324) and receive (L560).</li>
+<li><strong>SRTCP auth tag stays 80-bit</strong> across all suites; do not truncate to 32-bit for SHA1_32 (RFC 4568
+§6.2). Interop and security both depend on it.</li>
+<li><strong>Verify-then-decrypt with constant-time compare</strong> on the receive path (RFC 3711 §3.3;
+<code>FixedTimeEquals</code>) — never decrypt unauthenticated SRTCP.</li>
+<li><strong>Per-SSRC index/replay state</strong> must be preserved as multi-sender BUNDLE reuses the core (HARD-D1);
+a single shared window would be a correctness regression.</li>
+<li><strong>Keys zeroed on dispose</strong> (<code>SrtpSessionKeys.Zero</code>, K5); contexts owned and disposed by the media
+session that created them.</li>
+<li>Any <code>UnprotectRtcp</code> throw on the receive path must remain a clean drop, never an unhandled throw
+that stops the loop (guardrail enforced by ADR C07-02).</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Logs:
+<ul>
+<li><code>docs/archive/agent-log/2026-07-09-dev-srtcp-crypto-core.md</code> — isolated §3.4 crypto core,
+<code>DeriveRtcp</code> labels 3/4/5, KDF known-answers, tamper/replay/wrong-key tests, primitives mirrored
+(consolidation deferred).</li>
+<li><code>docs/archive/agent-log/2026-07-09-dev-srtcp-wiring.md</code> — wiring into <code>RtpSession</code>
+send/receive + <code>RtpCallMediaSession</code> context creation; HIGH receive-loop DoS found+fixed; RTP-twin
+DoS flagged as KRITISCH follow-up.</li>
+</ul>
+</li>
+<li>Code (graphify-verified):
+<ul>
+<li><code>src/Core/Infrastructure/Srtp/Context/SrtcpContext.cs</code> — transform, layout, IV, 80-bit tag,
+verify-then-decrypt, dispose-zeroing.</li>
+<li><code>src/Core/Infrastructure/Srtp/Context/ISrtcpContext.cs</code> — <code>ProtectRtcp</code>/<code>UnprotectRtcp</code> contract.</li>
+<li><code>src/Core/Infrastructure/Srtp/Context/SrtcpSsrcState.cs</code> — per-SSRC send index + replay window.</li>
+<li><code>src/Core/Infrastructure/Srtp/Crypto/SrtpKeyDerivation.cs</code> — <code>DeriveRtcp</code> labels 3/4/5.</li>
+<li><code>src/Core/Infrastructure/Rtp/Session/RtpSession.cs</code> — protect (L303-329), unprotect
+(L560-598), fail-closed, disposed-race suppression.</li>
+<li><code>src/Core/Infrastructure/Rtp/RtpCallMediaSession.cs</code> — context 4-tuple + dispose.</li>
+<li><code>src/Core/Infrastructure/Rtp/SdesMediaCryptoContextFactory.cs</code> — mints RTP+RTCP from one
+<code>SrtpKeyMaterial</code>.</li>
+</ul>
+</li>
+<li>Markers / RFC: RFC 3711 §3.2.3 (per-SSRC crypto context, HARD-D1), §3.3 (verify-then-decrypt),
+§3.4 (SRTCP transform + layout), §4.1 (IV), §4.2 (HMAC-SHA1 auth), §4.3.2 (KDF labels 3/4/5),
+§5.2 (32-bit truncation is SRTP-only), §9.4 (key hygiene); RFC 4568 §6.2 and RFC 5764 §4.1.2
+(SRTCP tag stays 80-bit); ENGINEERING_RULES K1 (fail-closed media security), K5 (secrets zeroed /
+constant-time), K7 (RFC references at code). DoS-catch decision: ADR C07-02.</li>
+</ul>
+<pre><code>
+</code></pre>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-031-srtcp-crypto-core-and-rtcp-path-wiring.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

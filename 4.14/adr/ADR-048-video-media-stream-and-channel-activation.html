@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-048: Video Media Stream and SIP Channel Activation | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-048: Video Media Stream and SIP Channel Activation | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-048-video-media-stream-and-channel-activation.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-048-video-media-stream-and-sip-channel-activation">ADR-048: Video Media Stream and SIP Channel Activation</h1>
+
+<p>Status: Accepted
+Date: 2026-07-14</p>
+<h2 id="context">Context</h2>
+<p>Once video can be negotiated in SDP (ADR-C12-01), encoded frames must actually flow: a media
+stream that packetises frames onto an RTP session on the video port, and a config-gated
+activation path so video is reachable from a real SIP call (not only from directly-constructed
+<code>CallMediaParameters</code>). This is the transport plumbing that ties the C12 pieces
+(packetisation, reorder, feedback, security, ICE) into one stream object and exposes it to the
+public API. No BUNDLE — the video stream owns its own socket/port/DTLS association.</p>
+<h3 id="verified-current-state-graphify-grounded">Verified current state (graphify-grounded)</h3>
+<ul>
+<li><code>IVideoMediaStream</code> (Application port): <code>CodecName</code>/<code>PayloadType</code>, <code>SendFrameAsync(frame, rtpTimestamp, ct)</code>, <code>event FrameReceived(byte[], uint, bool)</code>, <code>event KeyFrameRequested</code>, plus
+the congestion-recommendation surface (<code>RecommendedBitrateBps</code>, <code>NetworkQuality</code>,
+<code>CongestionUpdated</code>). <code>ICallMediaSession.Video</code> is a default interface member returning <code>null</code>
+so audio-only sessions and test fakes need no change.</li>
+<li><code>VideoRtpStream</code> (<code>src/Core/Infrastructure/Rtp/VideoRtpStream.cs</code>) is the implementation and the
+composition root for the whole video path: its own <code>RtpSession</code> on the video port (L148-168),
+packetiser/depacketiser by codec (<code>VideoPayloadFormat.Create</code>, L138), its own
+<code>DtlsMediaAttachment</code> with the video remote endpoint as override (L245-249, RFC 5763: one
+association per m-line without BUNDLE), and frame-atomic send under a <code>SemaphoreSlim</code>
+(<code>SendFrameAsync</code>, L370-391) so two frames' packets never interleave. <code>TryCreate</code> (L345-358)
+returns <code>null</code> for audio-only legs and throws up front on a codec with no payload format or a
+DTLS leg missing its dependencies (fail closed). Ordered <code>DisposeAsync</code> (L479-525) tears down
+before the socket, mirroring audio.</li>
+<li>Frames carry explicit timestamps; <code>SamplesPerPacket = ClockRate / 30</code> is a nominal frame
+interval to keep RTCP maths sane (L155-157). <code>SendTimestampedAsync</code> stamps the per-packet
+sequence and holds the timestamp fixed across a frame.</li>
+<li>Activation: <code>SdkConfiguration.EnableVideo</code> + <code>PreferredVideoCodecs</code> (default off) flow
+<code>VoipClient</code> → <code>SipLineChannel</code> (inbound + outbound) → <code>SipCoreCallChannel</code>, which reserves a
+second UDP socket/port for the <code>m=video</code> line only when enabled, released before the video RTP
+bind and idempotently on dispose. <code>BuildSdpOptions</code>/<code>BuildLocalSdpOptions</code> set
+<code>SdpVideoNegotiationOptions{Port, Codecs}</code>. <code>RtpCallMediaSession</code> wires the video stream
+(<code>TryCreate</code>, <code>Video</code> property, <code>Start</code>, teardown before the audio socket).</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<ol>
+<li><strong>One <code>VideoRtpStream</code> per video leg</strong> owning its own socket, RTP session, DTLS association,
+packetisation, feedback, security, ICE, and congestion control — the single composition point
+for the C12 stack. Not multiplexed onto audio (no BUNDLE on this path).</li>
+<li><strong><code>IVideoMediaStream</code> is the Application-layer port</strong>; <code>ICallMediaSession.Video</code> defaults to
+<code>null</code> so audio-only and fakes are unaffected.</li>
+<li><strong>Frame-atomic send</strong>: whole frames are serialised under a semaphore; all packets of a frame
+are consecutive and share one timestamp (interleaving would corrupt the peer's reassembly).</li>
+<li><strong>Config-gated activation.</strong> <code>EnableVideo</code> reserves the video port and plumbs the negotiation
+options through the SIP channel; disabled is a byte-for-byte no-op. The port is stable across
+Hold/re-offer.</li>
+<li><strong>Fail-closed construction</strong>: <code>TryCreate</code> validates codec/DTLS dependencies up front and
+inherits <code>RequireEncryptedMedia</code>; a secure leg never sends/accepts plaintext video.</li>
+</ol>
+<h3 id="crux">Crux</h3>
+<p><code>VideoRtpStream</code> is where every other C12 decision is composed, so its construction order and
+teardown order carry the correctness: DTLS/SDES contexts installed before frames flow, ICE gated
+on negotiation, RTX/reorder only on RTX legs, and teardown draining the receive loop and closing
+DTLS before the socket. The port-reservation timing is the other load-bearing detail — the
+reserved socket must be released <strong>before</strong> the synchronous <code>MediaParametersNegotiated</code> invoke
+that binds the video RTP session, or the bind hits EADDRINUSE.</p>
+<h2 id="consequences">Consequences</h2>
+<p>Positive: video is reachable from real SIP calls via one config flag; the stream is a clean
+Application port; audio-only paths are untouched.</p>
+<p>Divergence / honesty:</p>
+<ul>
+<li><strong>Outbound video is suppressed under an SDES-offering policy</strong> (SDES + video is fail-closed on
+the offerer side until the SDES-video-offer slice, ADR-C12-04): outbound video needs DTLS or a
+disabled-crypto policy; inbound plain/DTLS video is always answered. Documented on <code>EnableVideo</code>.</li>
+<li>At the channel-activation slice, <strong>video ICE gathered no video candidates</strong> (host/srflx/relay
+landed in the later ICE slices, ADR-C12-05) — documented as a caveat rather than a silent gap.</li>
+<li>Hold/Unhold with video is code-consistent but <strong>not E2E-tested</strong>.</li>
+<li><strong>Transport-only</strong>: frames flow encrypted end-to-end (loopback evidence), but there is no native
+codec — the application supplies encoded frames. <strong>No interop against foreign stacks/browsers,
+no DONE/compliant claim.</strong></li>
+</ul>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li>Video port reserved only under <code>EnableVideo</code>; released before the RTP bind and idempotently on
+dispose (leak/EADDRINUSE-free).</li>
+<li>Disabled path is byte-for-byte unchanged (regression net).</li>
+<li>Whole-frame send atomicity preserved (semaphore); one timestamp per frame.</li>
+<li><code>TryCreate</code> fails closed on missing codec/DTLS deps; <code>RequireEncryptedMedia</code> inherited.</li>
+<li>Teardown order: stream collaborators → DTLS close_notify → RTP session → socket (mirrors audio).</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Logs: <code>docs/archive/agent-log/2026-07-14-dev-video-media-stream.md</code>,
+<code>…-video-channel-activation.md</code>.</li>
+<li>Code (graphify-verified): <code>src/Core/Infrastructure/Rtp/VideoRtpStream.cs</code> (ctor L128,
+<code>SendFrameAsync</code> L370, DTLS attach L245, <code>TryCreate</code> L345, <code>Start</code> L361, <code>DisposeAsync</code> L479);
+<code>src/Core/Application/Media/IVideoMediaStream.cs</code>; <code>RtpCallMediaSession</code> (video wiring —
+<code>Video</code> property, <code>SendFrameAsync</code> L257, <code>StartAsync</code> L243); <code>SipCoreCallChannel</code> (video port
+reservation, <code>BuildSdpOptions</code>); <code>SdkConfiguration</code> (<code>EnableVideo</code>, <code>PreferredVideoCodecs</code>);
+<code>src/Core/Infrastructure/Dtls/DtlsMediaAttachment.cs</code> (<code>remoteEndPointOverride</code>).</li>
+<li>Related: ADR-C12-01 (SDP), C12-03 (feedback), C12-04 (security), C12-05 (ICE); ADR-010/011
+(BUNDLE — the multiplexed alternative not taken here).</li>
+<li>RFC: 5763 (one DTLS association per m-line without BUNDLE), 3550 (RTP timestamps/sequence).</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-048-video-media-stream-and-channel-activation.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

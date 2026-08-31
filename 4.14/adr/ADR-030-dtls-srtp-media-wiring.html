@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ADR-030: DTLS-SRTP Media Wiring and Fail-Closed Context Installation | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ADR-030: DTLS-SRTP Media Wiring and Fail-Closed Context Installation | CalloraVoipSdk ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-030-dtls-srtp-media-wiring.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="adr-030-dtls-srtp-media-wiring-and-fail-closed-context-installation">ADR-030: DTLS-SRTP Media Wiring and Fail-Closed Context Installation</h1>
+
+<p>Status: Accepted
+Date: 2026-07-14</p>
+<h2 id="context">Context</h2>
+<p>The keying core produces SRTP master keys; the signaling layer decides a leg is DTLS-keyed. This
+ADR covers the layer between them: <strong>how the media session actually runs the DTLS handshake on
+the live media socket and installs the resulting SRTP contexts</strong> — late, once, and fail-closed,
+without ever leaking plaintext on the wire during the window before keys exist.</p>
+<p>The design constraint is that a DTLS handshake completes <em>after</em> the RTP socket is up, so the
+SRTP contexts cannot be constructor-injected the way SDES contexts (keyed from SDP) can. Media
+must be blocked until the handshake yields keys, and must stay blocked forever if it fails.</p>
+<h3 id="verified-current-state">Verified current state</h3>
+<ul>
+<li><strong><code>DtlsMediaAttachment</code></strong> (<code>src/Core/Infrastructure/Dtls/DtlsMediaAttachment.cs</code>) bridges DTLS
+records between the shared RTP socket (<code>sendRaw</code> ↔ <code>QueueDatagramTransport</code>), runs the
+handshake in the negotiated role as a background task, derives the four SRTP/SRTCP contexts
+from the exported keys, and hands them back via <code>onContextsReady</code> (plus optional RTX
+secondary contexts). It owns those contexts and the DTLS association (close_notify on
+dispose). It mirrors the <code>IceMediaAttachment</code> pattern to keep the media session small.</li>
+<li><strong>Fail-closed at creation</strong> (<code>EnsureDependencies</code>, <code>TryCreate</code>): a DTLS-negotiated leg with no
+handshaker/certificate, or no remote fingerprint, <strong>throws</strong> (RFC 5763 §6.7.1 — refuse
+unauthenticated media) <em>before</em> any socket/context is allocated. Returns <code>null</code> when the leg
+did not negotiate DTLS.</li>
+<li><strong>Fail-closed on the hot path</strong> (<code>RtpSession</code> + <code>RequireEncryptedMedia</code>): SRTP/SRTCP contexts
+moved from readonly options to Volatile fields, installed once via <code>InstallSecurityContexts</code>;
+all four crypto paths (RTP/RTCP × send/receive) drop rather than emit/accept plaintext until
+keys are installed, and <code>ObjectDisposedException</code> in protect/unprotect is a clean drop
+(teardown race). <code>RequireEncryptedMedia = IsSrtpNegotiated || IsDtlsNegotiated</code> — a
+keyless-secure leg stays silent, never plain (verified: passive peer counts 0 RTP-shaped
+datagrams pre-keying, including the DTMF path).</li>
+<li><strong>Strict inbound source filter</strong>: inbound DTLS records are accepted only from the nominated
+remote endpoint. For BUNDLE the endpoint is mutable (Volatile, updated from the ICE
+nomination path via <code>UpdateRemoteEndPoint</code>); the SIP path keeps a fixed nominated remote, so
+its strict behavior is unchanged.</li>
+<li><strong>Dispose ordering</strong>: <code>StopTransmission → attachment dispose → socket teardown</code>; the result
+is disposed <em>before</em> the lifetime cancel so <code>close_notify</code> is not suppressed; contexts are
+zeroed on dispose. <code>SdesMediaCryptoContextFactory</code> was extracted from <code>RtpCallMediaSession</code>
+(1000-line limit) as a behavior-neutral split.</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<p>Wire DTLS-SRTP into the media session as a <strong>self-owning attachment with late, once-only,
+fail-closed context installation</strong>:</p>
+<ol>
+<li><strong><code>DtlsMediaAttachment</code> owns the handshake and the derived contexts.</strong> The media session
+passes <code>sendRaw</code> and receives contexts via callback; it does not run TLS itself.</li>
+<li><strong>Validate before allocating</strong> (<code>EnsureDependencies</code>): a DTLS leg missing its
+handshaker/certificate/fingerprint fails closed <em>before</em> socket/context allocation — never a
+half-initialized secure leg.</li>
+<li><strong>Contexts install exactly once</strong>, late, into Volatile fields (<code>InstallSecurityContexts</code>);
+until then every crypto path drops.</li>
+<li><strong><code>RequireEncryptedMedia</code> is the media backstop</strong>: no plaintext egress or ingress on a leg
+that negotiated security, ever — pre-keying, on handshake failure, or on fingerprint
+mismatch.</li>
+<li><strong>Strict inbound source filter</strong> on DTLS records, endpoint-mutable only for the
+ICE-nominated BUNDLE case.</li>
+<li><strong>Ephemeral ECDSA-P256 certificate per client instance</strong> as a composition-root fallback,
+DI-overridable.</li>
+</ol>
+<h3 id="crux">Crux</h3>
+<p>The whole design turns on the ordering asymmetry: <strong>keys arrive after the socket is live.</strong> So
+the safe default is &quot;drop until installed&quot; enforced at all four crypto paths behind a Volatile
+gate, with <code>RequireEncryptedMedia</code> making that drop mandatory for any secure leg — a handshake
+that never completes (or authenticates) leaves the leg permanently silent instead of silently
+plaintext. Ownership of the contexts sits in the attachment so the dispose sequence
+(result-before-cancel for close_notify, contexts zeroed) is one place, not scattered.</p>
+<h2 id="consequences">Consequences</h2>
+<p>Positive: the media layer runs DTLS-SRTP end-to-end on a real UDP socket with encrypted
+round-trips, and demonstrably emits <strong>no plaintext</strong> when unkeyed, on handshake failure, or on
+fingerprint mismatch (E2E-tested including the DTMF path). Fail-closed is enforced at both
+creation and the hot path, not just documented.</p>
+<p>Tradeoffs / honest divergence:</p>
+<ul>
+<li><strong>Strict source filter is not NAT-tolerant yet</strong>: inbound records are pinned to the nominated
+remote; a symmetric-DTLS latch (analogous to the RTP one; the fingerprint already
+authenticates) is deferred follow-up (m1).</li>
+<li><strong>Handshake timeout / app-surfacing is thin</strong>: failure is Log + StopTransmission; media
+supervision only reacts indirectly — no explicit timeout or app-facing failure event yet
+(m3).</li>
+<li><strong>BC↔BC loopback only</strong> — no browser/foreign-stack interop validated at this layer.</li>
+<li>Per-context key copies are still not zeroed at teardown (shared with the foundation ADR's
+follow-up).</li>
+</ul>
+<h2 id="guardrails">Guardrails</h2>
+<ul>
+<li>A DTLS-negotiated leg with missing handshaker/certificate/fingerprint fails closed at creation
+(<code>EnsureDependencies</code>), before any resource allocation.</li>
+<li>SRTP/SRTCP contexts install once, late, via Volatile fields; every crypto path drops until
+installed.</li>
+<li><code>RequireEncryptedMedia</code> (<code>IsSrtpNegotiated || IsDtlsNegotiated</code>) forbids plaintext egress and
+ingress on any secure leg — pre-keying, handshake failure, or fingerprint mismatch — verified
+by no-plaintext-egress E2E tests.</li>
+<li>Inbound DTLS records accepted only from the nominated remote (mutable only for the ICE-BUNDLE
+case, Volatile).</li>
+<li>Dispose order: StopTransmission → attachment (result-before-cancel so close_notify is sent,
+contexts zeroed) → socket teardown.</li>
+</ul>
+<h2 id="sources">Sources</h2>
+<ul>
+<li>Logs: <code>docs/archive/agent-log/2026-07-14-dev-dtls-media-wiring.md</code></li>
+<li>Code (graphify-verified): <code>Dtls/DtlsMediaAttachment.cs</code>
+(<code>EnsureDependencies</code>, <code>TryCreate</code>, <code>UpdateRemoteEndPoint</code>, dispose ordering),
+<code>Rtp/Session/RtpSession.cs</code> (<code>InstallSecurityContexts</code>, <code>RequireEncryptedMedia</code>, four crypto
+paths), <code>Rtp/SdesMediaCryptoContextFactory.cs</code>, <code>Rtp/RtpCallMediaSession.cs</code> (+ factory
+wiring), <code>Dtls/QueueDatagramTransport.cs</code>, <code>Domain/Calls/CallMediaParameters.cs</code>
+(<code>IsDtlsNegotiated</code>, <code>DtlsIsClient</code>, remote-fingerprint fields); tests
+<code>DtlsMediaPathE2eTests</code>, <code>DtlsSignalingToMediaE2eTests</code> (full-chain)</li>
+<li>Markers: RFC 5763 §6.7.1; K1 (fail-closed media — no keyless secure egress),
+K3 (threading: Volatile hot-path state, idempotent dispose), K5 (context zeroization on
+dispose); Review M1/M2 (dispose race, close_notify suppression) fixed</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/docs/adr/ADR-030-dtls-srtp-media-wiring.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>
