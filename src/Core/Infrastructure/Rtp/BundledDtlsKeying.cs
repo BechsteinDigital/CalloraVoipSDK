@@ -61,6 +61,8 @@ internal sealed class BundledDtlsKeying : IAsyncDisposable
         _inbound.DtlsPacketReceived += _attachment.OnDtlsPacketReceived;
     }
 
+    private int _nominated;
+
     /// <summary>Starts the shared DTLS handshake in the negotiated role.</summary>
     public void Start(CancellationToken cancellationToken = default) => _attachment.Start(cancellationToken);
 
@@ -69,7 +71,46 @@ internal sealed class BundledDtlsKeying : IAsyncDisposable
     /// filter accepts the connectivity-checked candidate pair instead of the initial SDP endpoint.
     /// </summary>
     /// <param name="remoteEndPoint">The nominated remote endpoint.</param>
-    public void SetRemoteEndPoint(IPEndPoint remoteEndPoint) => _attachment.UpdateRemoteEndPoint(remoteEndPoint);
+    public void SetRemoteEndPoint(IPEndPoint remoteEndPoint)
+    {
+        Volatile.Write(ref _nominated, 1);
+        _attachment.UpdateRemoteEndPoint(remoteEndPoint);
+    }
+
+    /// <summary>
+    /// Points the association at a source ICE has authenticated but not yet nominated, so the handshake can
+    /// start against it instead of being dropped until nomination completes.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The second of two seconds.</b> A browser starts its DTLS handshake as soon as it has a usable
+    /// candidate pair, which is well before the controlling agent sets USE-CANDIDATE. Until nomination
+    /// reached us the association still pointed at the SDP endpoint — <c>0.0.0.0:9</c>, the "no address"
+    /// placeholder — so every record was dropped, the browser never got a reply, and it retransmitted on
+    /// a doubling timer. Measured in a real call: drops at +406 ms and +813 ms, and a handshake that took
+    /// two seconds for what needs two round trips.
+    /// </para>
+    /// <para>
+    /// <b>Why this is safe.</b> The filter exists so an off-path sender cannot feed the handshake, and a
+    /// source that reaches here is not off-path: it produced a STUN check whose MESSAGE-INTEGRITY verified
+    /// against our local ICE password (<c>IceInboundCheckProcessor</c> discards a failed one rather than
+    /// answering it), so it holds the credential from our SDP. The fingerprint remains the authentication
+    /// boundary either way (RFC 5763 §6.7.1).
+    /// </para>
+    /// <para>
+    /// A nomination always wins and is never undone: once <see cref="SetRemoteEndPoint"/> has run, a later
+    /// validated source is ignored, so a candidate that is merely authenticated cannot pull the filter off
+    /// the pair ICE actually chose.
+    /// </para>
+    /// </remarks>
+    /// <param name="remoteEndPoint">The ICE-authenticated source.</param>
+    public void AdoptValidatedSource(IPEndPoint remoteEndPoint)
+    {
+        if (Volatile.Read(ref _nominated) != 0)
+            return;
+
+        _attachment.UpdateRemoteEndPoint(remoteEndPoint);
+    }
 
     /// <summary>
     /// Detaches from the inbound DTLS feed and disposes the association (close_notify, key zeroing).

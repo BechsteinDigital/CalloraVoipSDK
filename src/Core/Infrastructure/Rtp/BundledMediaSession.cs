@@ -309,7 +309,13 @@ internal sealed class BundledMediaSession : IAsyncDisposable
                 // so the handshake's inbound source filter follows the connectivity-checked pair.
                 PairNominated: OnPairNominated,
                 // A nominated relay pair additionally switches the transport onto the relay data path.
-                RelayPairNominated: OnRelayPairNominated),
+                RelayPairNominated: OnRelayPairNominated,
+                // Only DTLS follows an ICE-authenticated source, and only until a pair is nominated: the peer
+                // starts its handshake before nomination, and dropping it until then costs a retransmission
+                // round. The transport keeps its target — authenticated is not the same as chosen. Reading
+                // _dtls inside the lambda is deliberate; it is assigned just below, and ICE cannot fire before
+                // the session is started.
+                SourceValidated: source => _dtls.AdoptValidatedSource(source)),
             loggerFactory, _logger);
         _congestion = keying.Congestion;
         _rtcpDispatcher = keying.RtcpDispatcher;
