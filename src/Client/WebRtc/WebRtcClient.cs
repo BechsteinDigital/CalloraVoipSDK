@@ -104,6 +104,7 @@ public sealed class WebRtcClient : IWebRtcClient
             // Also peer-wide, and for the same reason: whether inbound audio is paced is a property of what
             // this app does with it, not of any one m-line.
             AudioReceivePlayoutDelayMs = _config.AudioReceivePlayoutDelayMs,
+            RemoteEndPointTranslator = _config.RemoteEndPointTranslator,
             Dtls = new SdpDtlsParameters
             {
                 Algorithm = certificate.Fingerprint.Algorithm,

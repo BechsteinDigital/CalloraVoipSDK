@@ -309,16 +309,13 @@ internal sealed class BundledMediaSession : IAsyncDisposable
                 // so the handshake's inbound source filter follows the connectivity-checked pair.
                 PairNominated: OnPairNominated,
                 // A nominated relay pair additionally switches the transport onto the relay data path.
-                RelayPairNominated: OnRelayPairNominated,
-                // Only DTLS follows an ICE-authenticated source, and only until a pair is nominated: the peer
-                // starts its handshake before nomination, and dropping it until then costs a retransmission
-                // round. The transport keeps its target — authenticated is not the same as chosen.
-                //
-                // The null-forgiveness is the honest form of "assigned below, called much later": _dtls is
-                // still default when this lambda is built, and the compiler is right to say so. It is set on
-                // the next statement, and ICE cannot deliver a check before the session is started.
-                SourceValidated: source => _dtls!.AdoptValidatedSource(source)),
+                RelayPairNominated: OnRelayPairNominated),
             loggerFactory, _logger);
+        // Inbound DTLS is accepted from any endpoint ICE recognises as the peer, not only the nominated
+        // pair: a peer begins its handshake as soon as it has a usable pair, and waiting for nomination
+        // cost a retransmission round. Sending still follows the nominated pair — see OnPairNominated.
+        keying.Dtls.SetKnownRemotePredicate(keying.Ice.IsKnownRemoteEndPoint);
+
         _congestion = keying.Congestion;
         _rtcpDispatcher = keying.RtcpDispatcher;
         _dtls = keying.Dtls;

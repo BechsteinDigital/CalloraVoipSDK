@@ -318,6 +318,18 @@ internal sealed class BundledMediaTransport : IBundledDatagramSender, IRelayCont
     {
         ArgumentNullException.ThrowIfNull(target);
 
+        // The unspecified address is not a destination; sending there fails at the socket, or worse, is
+        // silently accepted by the OS and goes nowhere. It reaches here when a description that named no
+        // address is mistaken for one that did — a trickling peer writes 0.0.0.0, and that single value
+        // once cost two seconds on every call by sitting in the checklist as the highest-priority pair.
+        // Refusing it here is the second line of defence, where the mistake cannot hide: SIPSorcery keeps
+        // the same guard on its send path for the same reason.
+        if (target.Address.Equals(IPAddress.Any) || target.Address.Equals(IPAddress.IPv6Any))
+        {
+            _logger.LogWarning("Refusing to send to the unspecified address {Target}; it names no destination.", target);
+            return;
+        }
+
         if (Volatile.Read(ref _streamMediaSend) is { } streamSend)
         {
             // Stream relay mode: the one bound channel over the stream carries every send to the bound peer, so a

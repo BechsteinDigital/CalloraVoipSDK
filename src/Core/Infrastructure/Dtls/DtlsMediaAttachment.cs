@@ -27,6 +27,7 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
     // remote. Accessed via Volatile — written from the nomination path, read on the receive loop. The SIP
     // path never updates it (fixed nominated remote), so its strict behaviour is unchanged.
     private IPEndPoint _remoteEndPoint;
+    private Func<IPEndPoint, bool>? _isKnownRemote;
     private readonly DtlsFingerprint _expectedRemoteFingerprint;
     private readonly IDtlsSrtpHandshaker _handshaker;
     private readonly DtlsCertificate _certificate;
@@ -243,17 +244,49 @@ internal sealed class DtlsMediaAttachment : IAsyncDisposable
     }
 
     /// <summary>
-    /// Inbound DTLS records demultiplexed off the RTP socket (RFC 5764 §5.1.2). Records
-    /// from any source other than the current remote media endpoint are dropped — an
-    /// off-path sender must not be able to feed the handshake. The remote endpoint follows
-    /// ICE nomination via <see cref="UpdateRemoteEndPoint"/>, so switching to a
-    /// connectivity-checked candidate pair keeps the handshake flowing; the fingerprint
-    /// remains the authentication boundary (RFC 5763 §6.7.1).
+    /// Supplies the test for "is this endpoint the peer?", which ICE can answer and this association
+    /// cannot: it knows the candidates the remote description carried, the ones that trickled in, and the
+    /// peer-reflexive ones discovered through authenticated checks.
     /// </summary>
+    /// <remarks>
+    /// A predicate rather than a copy of the set, because the set keeps growing while ICE runs — a peer
+    /// trickles candidates for as long as it is gathering. Absent (the SIP path never sets it), the filter
+    /// stays exactly as it was: the negotiated remote and nothing else.
+    /// </remarks>
+    /// <param name="isKnownRemote">ICE's test, invoked per inbound datagram, so it must be cheap.</param>
+    public void SetKnownRemotePredicate(Func<IPEndPoint, bool> isKnownRemote)
+    {
+        ArgumentNullException.ThrowIfNull(isKnownRemote);
+        Volatile.Write(ref _isKnownRemote, isKnownRemote);
+    }
+
+    /// <summary>
+    /// Inbound DTLS records demultiplexed off the RTP socket (RFC 5764 §5.1.2).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A record is accepted from the current remote media endpoint or from any endpoint ICE recognises as
+    /// the peer's (<see cref="SetKnownRemotePredicate"/>). Everything else is dropped: an off-path sender
+    /// who guesses the local port must not be able to flood ClientHello records into the handshake.
+    /// </para>
+    /// <para>
+    /// <b>Accepting more than the nominated pair is the point.</b> A peer starts its handshake as soon as
+    /// it has a usable candidate pair, well before the controlling agent nominates one, and sends from
+    /// whichever candidate that pair uses. Gating on the nominated remote alone dropped the handshake
+    /// until nomination caught up, and the peer retransmitted on a doubling timer — about two seconds for
+    /// an exchange that needs two round trips. The nominated pair is the correct set for <em>sending</em>;
+    /// inbound records can legitimately arrive from any of the peer's candidates. libwebrtc demultiplexes
+    /// this way (a Connection per remote candidate, not just the selected one), and SIPSorcery arrived at
+    /// the same rule through its issues #1559 (the flooding attack) and #1731 (this exact symptom).
+    /// </para>
+    /// <para>
+    /// The fingerprint remains the authentication boundary either way (RFC 5763 §6.7.1).
+    /// </para>
+    /// </remarks>
     public void OnDtlsPacketReceived(ReadOnlySpan<byte> datagram, IPEndPoint source)
     {
         var remote = Volatile.Read(ref _remoteEndPoint);
-        if (!remote.Equals(source))
+        if (!remote.Equals(source) && Volatile.Read(ref _isKnownRemote)?.Invoke(source) != true)
         {
             _logger.LogDebug(
                 "Dropping DTLS record from unexpected source {Source}; current remote is {Remote}.",

@@ -25,7 +25,7 @@ internal sealed class BundledIceControl : IAsyncDisposable
     private readonly Action<IPEndPoint>? _onPairNominated;
     private readonly Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>? _relaySend;
     private readonly Action<IPEndPoint>? _onRelayPairNominated;
-    private readonly Action<IPEndPoint>? _onSourceValidated;
+    private readonly Func<IPEndPoint, IPEndPoint>? _remoteEndPointTranslator;
     // Plain object rather than System.Threading.Lock: this assembly also targets net8.0, where that type
     // does not exist.
     private readonly object _restartGate = new();
@@ -90,7 +90,7 @@ internal sealed class BundledIceControl : IAsyncDisposable
         Action<IPEndPoint>? onPairNominated = null,
         Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>? relaySend = null,
         Action<IPEndPoint>? onRelayPairNominated = null,
-        Action<IPEndPoint>? onSourceValidated = null,
+        Func<IPEndPoint, IPEndPoint>? remoteEndPointTranslator = null,
         Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>? sendUnframed = null)
     {
         _inbound = inbound ?? throw new ArgumentNullException(nameof(inbound));
@@ -102,7 +102,7 @@ internal sealed class BundledIceControl : IAsyncDisposable
         _onPairNominated = onPairNominated;
         _relaySend = relaySend;
         _onRelayPairNominated = onRelayPairNominated;
-        _onSourceValidated = onSourceValidated;
+        _remoteEndPointTranslator = remoteEndPointTranslator;
 
         _attachment = Attach(parameters);
 
@@ -187,7 +187,8 @@ internal sealed class BundledIceControl : IAsyncDisposable
     {
         var attachment = new IceMediaAttachment(
             parameters, _sendRaw, _loggerFactory, _onConsentLost, _onConnectivityDegraded,
-            _onConnectivityRecovered, _onPairNominated, _relaySend, _onRelayPairNominated, _onSourceValidated);
+            _onConnectivityRecovered, _onPairNominated, _relaySend, _onRelayPairNominated,
+            _remoteEndPointTranslator);
 
         if (_lateRelay is { } relay)
             attachment.AddRelayLocalCandidate(relay.Send, relay.EnsurePermission, relay.OnNominated);
@@ -200,6 +201,16 @@ internal sealed class BundledIceControl : IAsyncDisposable
 
     /// <summary>True when ICE is active on this transport (inbound checks and/or consent freshness).</summary>
     public bool IsActive => _attachment.IsActive;
+
+    /// <summary>
+    /// Whether inbound non-STUN traffic from this endpoint belongs to the peer — the test the DTLS source
+    /// filter uses so a handshake need not wait for nomination.
+    /// </summary>
+    /// <remarks>
+    /// Forwarded per call rather than handed out as a method group: an ICE restart replaces the attachment,
+    /// and a delegate bound to the old one would answer from a candidate set that no longer applies.
+    /// </remarks>
+    public bool IsKnownRemoteEndPoint(IPEndPoint source) => _attachment.IsKnownRemoteEndPoint(source);
 
     /// <summary>Starts the consent-freshness loop (no-op when consent is inactive).</summary>
     public void Start() => _attachment.Start();

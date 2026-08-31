@@ -1,3 +1,4 @@
+using System.Net.Sockets;
 using System.Net;
 using Microsoft.Extensions.Logging;
 using CalloraVoipSdk.Core.Application.Media.Ice;
@@ -195,8 +196,25 @@ internal sealed class IceMediaConsentSession : IAsyncDisposable
             {
                 await send(datagram, target, ct).ConfigureAwait(false);
             }
+            catch (SocketException ex) when (!ct.IsCancellationRequested && IsUnreachable(ex))
+            {
+                // The target cannot be reached from this socket, and retransmitting will not change that:
+                // an IPv6 candidate on an IPv4 socket fails identically every time (SocketError
+                // .AddressFamilyNotSupported), as does an address with no route. Retrying anyway cost the
+                // full transaction budget — three transmissions, 500 ms apart — and, worse, held the pair
+                // "in flight" for it. Regular nomination waits for higher-priority pairs to resolve before
+                // it nominates (see IceNominationDriver), so a dead high-priority candidate delayed the
+                // whole session by that budget while a working pair sat validated and unused. Measured on
+                // a host with several virtual interfaces: about 1.5 s of the 2 s to nomination.
+                _logger.LogDebug(
+                    ex, "ICE check to {Target} is unreachable from this socket ({Error}); not retransmitting.",
+                    target, ex.SocketErrorCode);
+                return false;
+            }
             catch (Exception ex) when (!ct.IsCancellationRequested)
             {
+                // Anything else may be transient — a full send buffer, a momentary routing change — so the
+                // retransmission schedule still applies.
                 _logger.LogDebug(ex, "Failed to send ICE check transmission {Transmission} to {Target}.", transmission + 1, target);
             }
 
@@ -222,5 +240,16 @@ internal sealed class IceMediaConsentSession : IAsyncDisposable
     }
 
     /// <inheritdoc />
+    /// <summary>
+    /// Whether a send failure means this target is unreachable from this socket rather than momentarily
+    /// unavailable — in which case retransmitting the same datagram to the same address is certain to fail
+    /// the same way.
+    /// </summary>
+    private static bool IsUnreachable(SocketException ex) => ex.SocketErrorCode
+        is SocketError.AddressFamilyNotSupported
+        or SocketError.NetworkUnreachable
+        or SocketError.HostUnreachable
+        or SocketError.AddressNotAvailable;
+
     public ValueTask DisposeAsync() => _monitor.DisposeAsync();
 }

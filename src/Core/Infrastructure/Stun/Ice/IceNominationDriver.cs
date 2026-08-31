@@ -361,13 +361,23 @@ internal sealed class IceNominationDriver : IAsyncDisposable
         // retransmit schedule). This trades a bounded setup delay for always selecting the best working pair;
         // an aggressive policy would nominate the first validated pair sooner but risk locking onto a
         // suboptimal path. Revisit if setup latency on lossy high-priority pairs outweighs pair optimality.
-        var higherPending = _pairs.Any(pair =>
+        var blocker = _pairs.FirstOrDefault(pair =>
             pair.PairPriority > candidate.PairPriority
             && pair.Phase is IceNominationPairPhase.Frozen
                 or IceNominationPairPhase.Waiting
                 or IceNominationPairPhase.InProgress);
-        if (higherPending)
+        if (blocker is not null)
+        {
+            // Named, because this is where setup latency comes from and it is invisible otherwise. A pair
+            // that can never answer used to stand here forever: the placeholder a trickling peer sends
+            // (0.0.0.0) was turned into a candidate with top priority, and every real pair waited out its
+            // check timeout — ~2 s on every call. It is filtered at the source now; if this line ever
+            // repeats for seconds again, the blocker it names is the thing to look at.
+            _logger.LogDebug(
+                "ICE nomination waiting: {Candidate} is ready but {Blocker} has higher priority and is {Phase}.",
+                candidate.Remote.EndPoint, blocker.Remote.EndPoint, blocker.Phase);
             return;
+        }
 
         candidate.Phase = IceNominationPairPhase.Nominating;
         var generation = ++candidate.NominationGeneration;

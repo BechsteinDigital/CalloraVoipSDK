@@ -58,6 +58,12 @@ internal sealed record WebRtcPeerOptions
     /// </summary>
     public int AudioReceivePlayoutDelayMs { get; init; }
 
+    /// <summary>
+    /// Peer-wide source normalisation for the hairpin case.
+    /// See <see cref="Client.WebRtc.WebRtcConfiguration.RemoteEndPointTranslator"/>.
+    /// </summary>
+    public Func<IPEndPoint, IPEndPoint>? RemoteEndPointTranslator { get; init; }
+
     public required SdpDtlsParameters Dtls { get; init; }
 
     /// <summary>Local ICE credentials and candidates for the shared 5-tuple (RFC 8839).</summary>
