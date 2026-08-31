@@ -5,6 +5,18 @@ The authoritative changelog lives in the repository:
 
 ## Release highlights
 
+### 4.13.1 — 2026-08-31
+
+**A WebRTC call no longer spends two seconds in its DTLS handshake.** The association's inbound source
+filter opened only once ICE nominated a pair, but a browser starts its handshake as soon as it has a
+usable candidate pair — well before the controlling agent sets `USE-CANDIDATE`. Until then the filter
+still pointed at the SDP placeholder `0.0.0.0:9`, every record was dropped, and the peer retransmitted on
+a doubling timer (measured: +406 ms, +813 ms). It now accepts a source ICE has *authenticated*, which is
+available immediately. The protection is unchanged — such a source verified `MESSAGE-INTEGRITY` against
+our ICE password and is therefore not off-path — and a nomination always wins, with only the DTLS filter
+following the early source. **No API change, nothing to configure.** See
+[`RELEASE_NOTES_4.13.1.md`](https://github.com/BechsteinDigital/CalloraVoipSDK/blob/main/RELEASE_NOTES_4.13.1.md).
+
 ### 4.13.0 — 2026-08-28
 
 **Inbound WebRTC audio can be buffered before it is raised, for consumers that mix.** Packets on a WebRTC

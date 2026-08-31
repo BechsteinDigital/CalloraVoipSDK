@@ -21,8 +21,10 @@ and intelligent decision logic.
 
 ## Current Status
 
-Latest release: **v4.13.0** on [nuget.org](https://www.nuget.org/packages/CalloraVoipSdk) (this
-documentation). 4.13.0 lets a consumer that **mixes** buffer inbound WebRTC audio before it is raised
+Latest release: **v4.13.1** on [nuget.org](https://www.nuget.org/packages/CalloraVoipSdk) (this
+documentation). 4.13.1 removes two seconds from every WebRTC call's DTLS handshake: the inbound source
+filter no longer waits for ICE to nominate a pair before it will accept records from one ICE has already
+authenticated. It builds on 4.13.0, which lets a consumer that **mixes** buffer inbound WebRTC audio before it is raised
 (`WebRtcConfiguration.AudioReceivePlayoutDelayMs`, default 0 = raise on arrival): a mixer must produce a frame
 every frame interval and otherwise reads an Opus-DTX burst as one usable frame plus silence, which a caller
 hears as audio cutting out after every pause. It builds on 4.12.0, which added **simulcast when the SDK

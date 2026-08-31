@@ -1,0 +1,60 @@
+# CalloraVoipSdk 4.13.1
+
+**A WebRTC call no longer spends two seconds in its DTLS handshake.** One fix, no API change, nothing to
+configure — every WebRTC session connects faster. SemVer: **PATCH**.
+
+## The defect
+
+The DTLS association's inbound source filter opened only once ICE had nominated a pair. But a browser
+starts its handshake as soon as it has a usable candidate pair, which is well before the controlling agent
+sets `USE-CANDIDATE`. Until nomination reached us the filter still pointed at the SDP endpoint —
+`0.0.0.0:9`, the "no address" placeholder — so **every record was dropped**, the peer got no reply, and it
+retransmitted on a doubling timer.
+
+Measured in a real call between a telephone and a browser:
+
+```
+09:35:38.532  Dropping DTLS record … current remote is 0.0.0.0:9
+09:35:39.141  Dropping DTLS record …            +406 ms
+09:35:39.954  Dropping DTLS record …            +813 ms
+```
+
+The doubling intervals are the signature. Two seconds for an exchange that needs two round trips — on
+every call, not just this one.
+
+## The fix
+
+The filter now opens on a source ICE has **authenticated**, which is available immediately, instead of
+waiting for one it has *chosen*.
+
+## Why the security property is unchanged
+
+The filter exists so that an off-path sender cannot feed the handshake. A source that reaches this path is
+not off-path:
+
+- its inbound check verified `MESSAGE-INTEGRITY` against our local ICE password;
+- a check that fails that verification is discarded rather than answered;
+- so the sender holds the credential from our own SDP.
+
+The fingerprint remains the authentication boundary in either case (RFC 5763 §6.7.1).
+
+Two limits keep "authenticated" from being mistaken for "chosen":
+
+| Limit | Why |
+|---|---|
+| A nomination always wins, and is never undone by a later validated source | Otherwise a candidate that merely authenticated could pull the filter off the pair ICE actually selected |
+| Only the DTLS filter follows the early source — never the transport | Media keeps going to the nominated pair; the early source is trusted to *start a handshake*, not to receive audio |
+
+## Compatibility
+
+No public API change — every type involved is internal, and `PublicApi.approved.txt` is unchanged. No
+configuration, no opt-in: existing sessions simply connect sooner.
+
+## Scope
+
+This addresses the handshake half of the delay. The time spent waiting for the browser to nominate an ICE
+pair is RFC 8445 regular nomination and scales with the number of candidate pairs a host offers — a
+machine with many virtual network interfaces (a developer box running Docker, for instance) gives the
+browser more pairs to check. That is peer behaviour, not something the SDK can shorten.
+
+See [`CHANGELOG.md`](CHANGELOG.md) for the itemised list.
