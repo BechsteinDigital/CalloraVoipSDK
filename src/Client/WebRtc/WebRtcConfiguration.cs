@@ -171,6 +171,30 @@ public sealed class WebRtcConfiguration
     /// </remarks>
     public int AudioReceivePlayoutDelayMs { get; init; }
 
+    /// <summary>
+    /// Normalises the source address of an inbound packet before it is matched against the peer's ICE
+    /// candidates, or <see langword="null"/> (the default) to compare it exactly as observed.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The hairpin case.</b> When a peer reaches this agent through a TURN server running on the same
+    /// machine, the source address on the wire is a local interface — but the candidate it advertised
+    /// carries the relay's public address. Compared as observed the two never match, so the peer's own
+    /// media is refused as if it came from a stranger, and the call is silent with nothing in the log
+    /// that names a cause.
+    /// </para>
+    /// <para>
+    /// Only a deployment knows its own topology, which is why this is a hook rather than a heuristic: a
+    /// single-server install with its own coturn can map the local address back to the relay's, while a
+    /// deployment whose TURN server sits elsewhere needs no mapping at all and should leave it unset.
+    /// </para>
+    /// <para>
+    /// Invoked per inbound datagram on the media path, so it must be cheap and must not throw. Return the
+    /// endpoint unchanged when no translation applies.
+    /// </para>
+    /// </remarks>
+    public Func<IPEndPoint, IPEndPoint>? RemoteEndPointTranslator { get; init; }
+
     public X509Certificate2? DtlsCertificate { get; init; }
 
     /// <summary>Logger factory for diagnostics; <see langword="null"/> disables logging.</summary>

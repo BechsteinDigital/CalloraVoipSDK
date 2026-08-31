@@ -31,6 +31,7 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
     private readonly Action? _onConnectivityDegraded;
     private readonly Action? _onConnectivityRecovered;
     private readonly Action<IPEndPoint>? _onPairNominated;
+    private readonly Func<IPEndPoint, IPEndPoint>? _remoteEndPointTranslator;
     // Fires additionally to _onPairNominated when the nominated pair is a relay pair (its send path is relay-
     // framed), so the caller can switch the transport onto the relay data path (RFC 8656 ChannelBind). Direct
     // pairs never fire it.
@@ -81,6 +82,13 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
     /// path. Absent (<see langword="null"/>) when no TURN allocation was gathered — leaving behaviour identical
     /// to the direct-only path.
     /// </param>
+    /// <param name="remoteEndPointTranslator">
+    /// Normalises the observed source of an inbound packet before it is matched against the remote
+    /// candidates. Needed for the hairpin case: when the peer reaches this agent through a TURN server
+    /// running on the same machine, the source seen on the wire is a local interface address while the
+    /// candidate was advertised with the relay's public address, so the two never match and the peer's
+    /// own traffic is refused. <see langword="null"/> (the default) compares the address as observed.
+    /// </param>
     /// <param name="onRelayPairNominated">
     /// Invoked in addition to <paramref name="onPairNominated"/> only when the nominated pair is a relay pair, so
     /// the caller can switch the transport onto the relay data path (RFC 8656 ChannelBind). A direct nomination
@@ -96,7 +104,8 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
         Action? onConnectivityRecovered = null,
         Action<IPEndPoint>? onPairNominated = null,
         Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>? relaySend = null,
-        Action<IPEndPoint>? onRelayPairNominated = null)
+        Action<IPEndPoint>? onRelayPairNominated = null,
+        Func<IPEndPoint, IPEndPoint>? remoteEndPointTranslator = null)
     {
         ArgumentNullException.ThrowIfNull(parameters);
         ArgumentNullException.ThrowIfNull(sendRaw);
@@ -107,6 +116,7 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
         _onConnectivityDegraded = onConnectivityDegraded;
         _onConnectivityRecovered = onConnectivityRecovered;
         _onPairNominated = onPairNominated;
+        _remoteEndPointTranslator = remoteEndPointTranslator;
         _onRelayPairNominated = onRelayPairNominated;
         _relaySend = relaySend;
         _controlling = parameters.IceControlling ? 1 : 0;
@@ -149,12 +159,24 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
                 });
             }
 
+            // A trickling peer's description carries no address yet, only the placeholder RFC 3264 §5.1
+            // prescribes for it: the unspecified address, conventionally with the discard port. Treating
+            // that as a candidate
+            // put a pair in the checklist that nothing can ever answer — and, inheriting host priority, the
+            // highest-priority pair of all. Regular nomination waits for higher-priority pairs to resolve,
+            // so every real pair sat validated and unused until the placeholder's check timed out.
+            //
+            // Measured at ~2 s on every call, and independent of how many real candidates there were —
+            // which is why thinning those out never helped, and why it looked like a strategy problem
+            // rather than a pair that should never have existed.
             var remotes = parameters.RemoteCandidates.Count > 0
                 ? parameters.RemoteCandidates
-                : [new IceRemoteCandidate(parameters.RemoteEndPoint, HostLocalCandidatePriority)];
+                : IsUnspecified(parameters.RemoteEndPoint)
+                    ? []
+                    : (IReadOnlyList<IceRemoteCandidate>)[new IceRemoteCandidate(parameters.RemoteEndPoint, HostLocalCandidatePriority)];
             foreach (var remote in remotes)
             {
-                _remoteCandidateEndPoints.TryAdd(remote.EndPoint, 0);
+                _remoteCandidateEndPoints.TryAdd(Canonical(remote.EndPoint), 0);
             }
             _nominationDriver = new IceNominationDriver(
                 localCandidates,
@@ -196,16 +218,80 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
     /// Cheap on purpose: it runs per inbound datagram on the media path.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Whether this endpoint is the "no address yet" placeholder a trickling peer sends rather than a real
+    /// destination — the unspecified address, which RFC 3264 §5.1 pairs with the discard port 9.
+    /// </summary>
+    /// <remarks>
+    /// The address is the test, not the port. <c>0.0.0.0</c> can never be a destination, so a pair built on
+    /// it is dead by construction; port 9 on a real address is only a convention, and one that test fixtures
+    /// and some peers use for an endpoint they do intend to reach.
+    /// </remarks>
+    private static bool IsUnspecified(IPEndPoint endPoint)
+        => endPoint.Address.Equals(IPAddress.Any)
+        || endPoint.Address.Equals(IPAddress.IPv6Any);
+
     public bool IsKnownRemoteEndPoint(IPEndPoint source)
     {
         ArgumentNullException.ThrowIfNull(source);
 
-        if (_triggeredSources.ContainsKey(source) || source.Equals(_initialRemote))
+        // A dual-stack socket reports an IPv4 peer as ::ffff:a.b.c.d while the candidate was advertised
+        // as a.b.c.d, so comparing them verbatim rejects the peer's own traffic. SIPSorcery learned this
+        // one as issue #1603; the same canonicalisation already guards the relay path and the DTLS cookie.
+        var lookup = CanonicalSource(source);
+
+        if (_triggeredSources.ContainsKey(lookup))
         {
             return true;
         }
 
-        return _remoteCandidateEndPoints.ContainsKey(source);
+        // The initial remote counts only when it names a real destination. A trickling peer's placeholder
+        // is the unspecified address — nobody can legitimately send from it, so accepting traffic that
+        // claims to come from there would widen the filter for nothing.
+        if (!IsUnspecified(_initialRemote) && lookup.Equals(Canonical(_initialRemote)))
+        {
+            return true;
+        }
+
+        return _remoteCandidateEndPoints.ContainsKey(lookup);
+    }
+
+    /// <summary>
+    /// A candidate as it is stored for comparison: the 4-byte form of an IPv4-mapped IPv6 address, so a
+    /// dual-stack socket's spelling of a peer matches the one the peer advertised (SIPSorcery #1603).
+    /// </summary>
+    private static IPEndPoint Canonical(IPEndPoint endPoint) => endPoint.Address.IsIPv4MappedToIPv6
+        ? new IPEndPoint(endPoint.Address.MapToIPv4(), endPoint.Port)
+        : endPoint;
+
+    /// <summary>
+    /// An observed source, brought into the same terms as the stored candidates: the deployment's
+    /// translation first, then the same canonicalisation.
+    /// </summary>
+    /// <remarks>
+    /// The translation belongs on this side only. A candidate is what the peer said about itself and is
+    /// stored verbatim; the source is what the wire showed us, and only that can need reconciling — a
+    /// hairpin through a co-located TURN server shows a local interface address for a peer that
+    /// advertised the relay's public one.
+    /// </remarks>
+    private IPEndPoint CanonicalSource(IPEndPoint source)
+    {
+        if (_remoteEndPointTranslator is not { } translate)
+            return Canonical(source);
+
+        try
+        {
+            return Canonical(translate(source) ?? source);
+        }
+        catch (Exception ex)
+        {
+            // The contract says it must not throw, but it is a deployment's delegate running on the media
+            // path — one that does would otherwise take down every inbound datagram, not just its own. The
+            // untranslated source is the honest fallback: it is what the wire showed, and a hairpin peer is
+            // then refused rather than the whole session breaking.
+            _logger.LogError(ex, "The remote-endpoint translator threw for {Source}; using it untranslated.", source);
+            return Canonical(source);
+        }
     }
 
     // RFC 8445 §7.3.1.4: learn the peer-reflexive source and queue its check ahead of ordinary work.
@@ -214,16 +300,21 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
         uint priority,
         Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>? replyVia)
     {
+        // One address space for the whole method. Comparing the raw source against a canonicalised
+        // candidate is how a peer we already know gets treated as new — on a dual-stack socket, or with a
+        // hairpin translation in play, every check would look unfamiliar and earn another triggered pair.
+        var known = CanonicalSource(source);
+
         if (_consent is null
-            || source.Equals(_initialRemote)
-            || (_lastNominated is { } nominated && source.Equals(nominated.Remote)))
+            || known.Equals(Canonical(_initialRemote))
+            || (_lastNominated is { } nominated && known.Equals(Canonical(nominated.Remote))))
             return;
         if (_triggeredSources.Count >= MaxTriggeredSources)
         {
             _logger.LogWarning("ICE triggered-source cap {MaxSources} reached; ignoring {Source}.", MaxTriggeredSources, source);
             return;
         }
-        if (!_triggeredSources.TryAdd(source, 0))
+        if (!_triggeredSources.TryAdd(known, 0))
             return;
 
         _logger.LogDebug("ICE triggered check to peer-reflexive source {Source} (RFC 8445 §7.3.1.4).", source);
@@ -236,7 +327,7 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
                 ? _consent.SendCheckVia(replyVia, source, useCandidate: false, ct)
                 : _consent.SendCheckAsync(source, useCandidate: false, ct)) == true;
         if (!queued)
-            _triggeredSources.TryRemove(source, out _);
+            _triggeredSources.TryRemove(known, out _);
     }
 
     private void OnRoleChanged(CalloraVoipSdk.Core.Application.Media.Ice.IceRole role)
@@ -292,7 +383,7 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
         // gating that on nomination is what made a handshake wait for a pair it did not need.
         if (_remoteCandidateEndPoints.Count < MaxSeenRemoteAddresses)
         {
-            _remoteCandidateEndPoints.TryAdd(candidate.EndPoint, 0);
+            _remoteCandidateEndPoints.TryAdd(Canonical(candidate.EndPoint), 0);
         }
 
         _nominationDriver?.AddCandidate(candidate);

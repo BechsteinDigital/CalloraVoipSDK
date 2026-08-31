@@ -1166,6 +1166,7 @@
   CalloraVoipSdk.WebRtc.WebRtcConfiguration.LocalEndPoint : System.Net.IPEndPoint { get, init }
   CalloraVoipSdk.WebRtc.WebRtcConfiguration.LoggerFactory : Microsoft.Extensions.Logging.ILoggerFactory { get, init }
   CalloraVoipSdk.WebRtc.WebRtcConfiguration.OpaqueVideoFrames : System.Boolean { get, init }
+  CalloraVoipSdk.WebRtc.WebRtcConfiguration.RemoteEndPointTranslator : System.Func<System.Net.IPEndPoint, System.Net.IPEndPoint> { get, init }
   CalloraVoipSdk.WebRtc.WebRtcConfiguration.SimulcastLayers : System.Collections.Generic.IReadOnlyList<System.String> { get, init }
   CalloraVoipSdk.WebRtc.WebRtcConfiguration.SimulcastRecvLayers : System.Collections.Generic.IReadOnlyList<System.String> { get, init }
   CalloraVoipSdk.WebRtc.WebRtcConfiguration.UseStableNumericMediaIds : System.Boolean { get, init }

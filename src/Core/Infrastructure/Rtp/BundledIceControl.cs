@@ -25,6 +25,7 @@ internal sealed class BundledIceControl : IAsyncDisposable
     private readonly Action<IPEndPoint>? _onPairNominated;
     private readonly Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>? _relaySend;
     private readonly Action<IPEndPoint>? _onRelayPairNominated;
+    private readonly Func<IPEndPoint, IPEndPoint>? _remoteEndPointTranslator;
     // Plain object rather than System.Threading.Lock: this assembly also targets net8.0, where that type
     // does not exist.
     private readonly object _restartGate = new();
@@ -89,6 +90,7 @@ internal sealed class BundledIceControl : IAsyncDisposable
         Action<IPEndPoint>? onPairNominated = null,
         Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>? relaySend = null,
         Action<IPEndPoint>? onRelayPairNominated = null,
+        Func<IPEndPoint, IPEndPoint>? remoteEndPointTranslator = null,
         Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>? sendUnframed = null)
     {
         _inbound = inbound ?? throw new ArgumentNullException(nameof(inbound));
@@ -100,6 +102,7 @@ internal sealed class BundledIceControl : IAsyncDisposable
         _onPairNominated = onPairNominated;
         _relaySend = relaySend;
         _onRelayPairNominated = onRelayPairNominated;
+        _remoteEndPointTranslator = remoteEndPointTranslator;
 
         _attachment = Attach(parameters);
 
@@ -184,7 +187,8 @@ internal sealed class BundledIceControl : IAsyncDisposable
     {
         var attachment = new IceMediaAttachment(
             parameters, _sendRaw, _loggerFactory, _onConsentLost, _onConnectivityDegraded,
-            _onConnectivityRecovered, _onPairNominated, _relaySend, _onRelayPairNominated);
+            _onConnectivityRecovered, _onPairNominated, _relaySend, _onRelayPairNominated,
+            _remoteEndPointTranslator);
 
         if (_lateRelay is { } relay)
             attachment.AddRelayLocalCandidate(relay.Send, relay.EnsurePermission, relay.OnNominated);

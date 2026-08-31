@@ -89,9 +89,20 @@ internal static class WebRtcSessionFactory
         // The remote candidates the controlling agent runs connectivity checks against (RFC 8445 §7.2.2/§8).
         // Falls back to the resolved endpoint when the peer advertised no a=candidate (m-line address style),
         // so nomination still validates the one reachable pair.
+        //
+        // But only when that endpoint is somewhere. A trickling peer sends no candidates AND no address —
+        // it writes the placeholder RFC 3264 §5.1 prescribes, 0.0.0.0 on the discard port — and turning
+        // that into a candidate created a pair nothing can ever answer, holding the highest priority of
+        // all. Regular nomination waits for higher-priority pairs to resolve, so every real pair sat
+        // validated and unused until this one timed out: measured at ~2 s on every single call, and
+        // unchanged by how many real candidates there were, which is what made it look like a strategy
+        // problem instead of a pair that should never have been in the checklist.
         var remoteCandidates = RemoteCandidates(remoteAudio);
-        if (remoteCandidates.Count == 0)
+        if (remoteCandidates.Count == 0 && !remoteEndPoint.Address.Equals(IPAddress.Any)
+            && !remoteEndPoint.Address.Equals(IPAddress.IPv6Any))
+        {
             remoteCandidates = [new IceRemoteCandidate(remoteEndPoint, DefaultCandidatePriority)];
+        }
 
         // DTLS-SRTP (WebRTC is DTLS only): the peer's fingerprint, and our role from both a=setup values
         // (RFC 5763 §5 / RFC 4145: the active side is the client).
@@ -230,6 +241,7 @@ internal static class WebRtcSessionFactory
             AudioSendEnabled = audioSendEnabled,
             AdditionalAudioTracks = additionalAudioTracks,
             AudioReceivePlayoutDelayMs = options.AudioReceivePlayoutDelayMs,
+            RemoteEndPointTranslator = options.RemoteEndPointTranslator,
             VideoTracks = videoTracks,
             DtlsIsClient = dtlsIsClient,
             RemoteFingerprint = new DtlsFingerprint { Algorithm = fingerprint.Algorithm, Value = fingerprint.Value },

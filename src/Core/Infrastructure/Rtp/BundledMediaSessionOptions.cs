@@ -132,6 +132,13 @@ internal sealed record BundledMediaSessionOptions
     /// </remarks>
     public int AudioReceivePlayoutDelayMs { get; init; }
 
+    /// <summary>
+    /// Normalises the observed source of an inbound packet before it is matched against the peer's
+    /// candidates, or <see langword="null"/> to compare it as observed.
+    /// See <see cref="Client.WebRtc.WebRtcConfiguration.RemoteEndPointTranslator"/>.
+    /// </summary>
+    public Func<IPEndPoint, IPEndPoint>? RemoteEndPointTranslator { get; init; }
+
     /// <summary>Initial RTP sequence number for the outbound tracks (RFC 3550 §5.1 random start).</summary>
     public ushort InitialSequenceNumber { get; init; } = 1;
 

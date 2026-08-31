@@ -131,6 +131,9 @@ internal static class BundledMediaSessionComposition
             relaySend: dataPath.RelayBinding?.RelaySend,
             // A nominated relay pair additionally switches the transport onto the relay data path (ChannelBind).
             onRelayPairNominated: callbacks.RelayPairNominated,
+            // Reconciles the hairpin case, where a peer arrives through a TURN server on this machine and
+            // its source address is a local interface rather than the relay address it advertised.
+            remoteEndPointTranslator: options.RemoteEndPointTranslator,
             // Reaches a STUN server as-is in either transport mode, so the reflexive address can be re-probed
             // on a live transport after an ICE restart without giving up the socket.
             sendUnframed: dataPath.Transport.SendUnframedAsync);
