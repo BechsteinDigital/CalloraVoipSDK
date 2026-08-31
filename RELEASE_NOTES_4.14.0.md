@@ -1,0 +1,88 @@
+# CalloraVoipSdk 4.14.0
+
+**A WebRTC call now connects in about a second instead of four.** Five fixes in ICE and DTLS setup, one
+new opt-in hook, nothing removed or changed. SemVer: **MINOR**.
+
+## The one that mattered
+
+A peer that trickles its candidates sends neither candidates nor an address in its initial description —
+it carries the placeholder RFC 3264 §5.1 prescribes, the unspecified address. Two separate places in the
+SDK turned that into a candidate pair, each as a reasonable-looking fallback for *"the description named
+no `a=candidate`"*.
+
+That pair inherits host priority, which makes it the highest-priority entry in the checklist, and nothing
+can ever answer from `0.0.0.0`. Regular nomination (RFC 8445 §8.1.1) waits for higher-priority pairs to
+resolve before it nominates — so every real, working, already-validated pair waited for one impossible
+pair to time out. From a real call:
+
+```
+12:03:42.303  pair 192.168.178.76:34686 validated      ← usable after 215 ms
+12:03:42.310  ready: …:34686, blocked by 0.0.0.0:9
+     …        blocked by 0.0.0.0:9   (7 of 10 pairs already Succeeded)
+12:03:44.452  ICE nominated pair                       ← +2.14 s
+```
+
+Seven working pairs, all waiting. **Measured end to end: ~4.5 s to audio before, ~1.3 s after.**
+
+Worth recording, because it shaped the search: the delay did *not* scale with the number of real
+candidates. Thinning them out — removing stale Docker networks, disabling TURN, dropping unreachable IPv6
+targets — changed nothing measurable, which made it look like a nomination-strategy problem for far
+longer than it should have.
+
+## Also fixed
+
+**Inbound DTLS is accepted from any of the peer's candidates**, not only the nominated pair. A peer starts
+its handshake as soon as it has a usable pair, well before nomination, so its records were dropped and it
+retransmitted on a doubling timer (+406 ms, +813 ms, observed). Sending still follows the nominated pair —
+that half was always right. This is how libwebrtc demultiplexes: a Connection per remote candidate, not
+just the selected one. **The off-path protection is unchanged**: an endpoint nobody has heard from is
+still refused.
+
+**An unreachable target is no longer retransmitted to.** An IPv6 candidate on an IPv4 socket fails the
+same way every time, yet cost three transmissions 500 ms apart and held the pair "in flight" for its whole
+budget. Transient failures — a full send buffer, a momentary routing change — still get the full RFC 8445
+§14 schedule.
+
+**Sending to the unspecified address is refused** with a log line naming it, instead of failing at the
+socket or being quietly accepted by the OS.
+
+## Two fixes that are latent today
+
+Both are invisible in a typical deployment right now and decisive in others. Stated plainly rather than
+counted as measured improvements:
+
+| Fix | When it starts to matter |
+|---|---|
+| IPv4-mapped IPv6 canonicalisation in source comparison | Immediately on a dual-stack socket (`::`); latent while binding to an IPv4 address, because the two spellings never meet |
+| `RemoteEndPointTranslator` (below) | Only with a TURN server on the same machine as the SDK |
+
+## New: `WebRtcConfiguration.RemoteEndPointTranslator`
+
+```csharp
+var config = new WebRtcConfiguration
+{
+    // Only where a TURN server runs on this machine. Default (null) compares the source as observed.
+    RemoteEndPointTranslator = ep => IsOurRelayInterface(ep) ? RelayPublicEndPoint(ep) : ep,
+};
+```
+
+The hairpin case: a peer that reaches this agent through a co-located TURN server shows a **local
+interface address** on the wire, while the candidate it advertised carries the **relay's public address**.
+Compared as observed the two never match, so the peer's own media is refused as if it came from a
+stranger — a silent call with nothing in the log naming a cause.
+
+A hook rather than a heuristic, because only a deployment knows its own topology. Three properties worth
+knowing:
+
+- it applies to the **observed source only** — a candidate is what the peer said about itself and is
+  stored verbatim;
+- it runs per inbound datagram on the media path, so it must be cheap;
+- a translator that throws is **caught and logged**, and the source is used untranslated. Refusing one
+  hairpin peer is a local failure; opening the filter for everyone would not be.
+
+## Compatibility
+
+Purely additive. One new public member; nothing removed or changed, verified against
+`PublicApi.approved.txt`. Existing sessions need no configuration change — they simply connect sooner.
+
+See [`CHANGELOG.md`](CHANGELOG.md) for the itemised list.

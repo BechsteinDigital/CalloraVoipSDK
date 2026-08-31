@@ -8,6 +8,52 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
 
 The next line. Entries here accumulate the consumer-visible changes not yet released.
 
+## [4.14.0] - 2026-08-31
+
+### Fixed
+
+- **A WebRTC call connects in about a second instead of four.** A peer that trickles sends no candidates
+  and no address — its description carries the placeholder RFC 3264 §5.1 prescribes, the unspecified
+  address. Two places turned that into a candidate pair as a fallback for "the description named no
+  `a=candidate`". The pair inherits host priority, so it outranks every real one, and nothing can ever
+  answer from it; regular nomination (RFC 8445 §8.1.1) waits for higher-priority pairs to resolve, so
+  working pairs sat validated and unused until it timed out. Measured at ~2 s on every call, and
+  independent of how many real candidates existed (#389).
+
+  Sending to the unspecified address is now refused with a log line naming it, rather than failing at the
+  socket or being silently accepted — the second line of defence against the same value.
+
+- **Inbound DTLS is accepted from any of the peer's candidates, not only the nominated pair.** A peer
+  starts its handshake as soon as it has a usable pair, well before the controlling agent nominates one,
+  so its records were dropped until nomination caught up and it retransmitted on a doubling timer
+  (+406 ms, +813 ms observed). The nominated pair remains the correct set for *sending*. This matches how
+  libwebrtc demultiplexes — a Connection per remote candidate, not just the selected one. The off-path
+  protection is unchanged: an endpoint nobody has heard from is still refused (#389).
+
+- **A connectivity check to an address unreachable from this socket is no longer retransmitted.** An IPv6
+  candidate on an IPv4 socket fails identically every time, yet cost three transmissions 500 ms apart and
+  held the pair "in flight" for its whole budget. Transient failures (a full send buffer, a momentary
+  routing change) still get the full RFC 8445 §14 schedule (#389).
+
+- **Source comparison canonicalises IPv4-mapped IPv6 addresses.** A dual-stack socket reports an IPv4 peer
+  as `::ffff:a.b.c.d` while its candidate says `a.b.c.d`; compared verbatim, the peer's own traffic was
+  refused. Latent while binding to an IPv4 address, immediate on `::` (#389).
+
+### Added
+
+- **`WebRtcConfiguration.RemoteEndPointTranslator`** normalises the observed source of an inbound packet
+  before it is matched against the peer's ICE candidates. It exists for the hairpin case: a peer that
+  reaches this agent through a TURN server **on the same machine** shows a local interface address, while
+  the candidate it advertised carries the relay's public one — compared as observed the two never match,
+  and the peer's media is refused as if it came from a stranger, with nothing in the log naming a cause.
+
+  A hook rather than a heuristic, because only a deployment knows its own topology; a single-server
+  install with co-located coturn needs it, one with an external TURN server should leave it unset
+  (the default). It applies to the observed source only — a candidate is what the peer said about itself
+  and stays verbatim — and a translator that throws is caught, logged, and falls back to the untranslated
+  source rather than taking the media path down with it. Purely additive: one line in
+  `PublicApi.approved.txt`.
+
 ## [4.13.1] - 2026-08-31
 
 ### Fixed

@@ -5,6 +5,20 @@ The authoritative changelog lives in the repository:
 
 ## Release highlights
 
+### 4.14.0 — 2026-08-31
+
+**A WebRTC call connects in about a second instead of four.** A peer that trickles sends no candidates and
+no address — its description carries the placeholder RFC 3264 §5.1 prescribes. Two places turned that into
+a candidate pair; it inherits host priority, outranks every real pair, and can never be answered, so
+regular nomination held seven validated pairs waiting for one impossible one to time out. Measured
+end to end: **~4.5 s to audio before, ~1.3 s after**. Along with it: inbound DTLS is accepted from any of
+the peer's candidates rather than only the nominated pair (sending still follows the nominated one, as in
+libwebrtc), unreachable targets are no longer retransmitted to, source comparison canonicalises
+IPv4-mapped IPv6 addresses, and sending to the unspecified address is refused with a log line naming it.
+New and opt-in: `WebRtcConfiguration.RemoteEndPointTranslator` for the hairpin case, where a peer arrives
+through a TURN server on the same machine. **Purely additive** — one new public member. See
+[`RELEASE_NOTES_4.14.0.md`](https://github.com/BechsteinDigital/CalloraVoipSDK/blob/main/RELEASE_NOTES_4.14.0.md).
+
 ### 4.13.1 — 2026-08-31
 
 **A WebRTC call no longer spends two seconds in its DTLS handshake.** The association's inbound source
