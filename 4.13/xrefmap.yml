@@ -13701,6 +13701,19 @@ references:
   isSpec: "True"
   fullName: CalloraVoipSdk.WebRtc.WebRtcConfiguration.OpaqueVideoFrames
   nameWithType: WebRtcConfiguration.OpaqueVideoFrames
+- uid: CalloraVoipSdk.WebRtc.WebRtcConfiguration.RemoteEndPointTranslator
+  name: RemoteEndPointTranslator
+  href: _api/CalloraVoipSdk.WebRtc.WebRtcConfiguration.html#CalloraVoipSdk_WebRtc_WebRtcConfiguration_RemoteEndPointTranslator
+  commentId: P:CalloraVoipSdk.WebRtc.WebRtcConfiguration.RemoteEndPointTranslator
+  fullName: CalloraVoipSdk.WebRtc.WebRtcConfiguration.RemoteEndPointTranslator
+  nameWithType: WebRtcConfiguration.RemoteEndPointTranslator
+- uid: CalloraVoipSdk.WebRtc.WebRtcConfiguration.RemoteEndPointTranslator*
+  name: RemoteEndPointTranslator
+  href: _api/CalloraVoipSdk.WebRtc.WebRtcConfiguration.html#CalloraVoipSdk_WebRtc_WebRtcConfiguration_RemoteEndPointTranslator_
+  commentId: Overload:CalloraVoipSdk.WebRtc.WebRtcConfiguration.RemoteEndPointTranslator
+  isSpec: "True"
+  fullName: CalloraVoipSdk.WebRtc.WebRtcConfiguration.RemoteEndPointTranslator
+  nameWithType: WebRtcConfiguration.RemoteEndPointTranslator
 - uid: CalloraVoipSdk.WebRtc.WebRtcConfiguration.SimulcastLayers
   name: SimulcastLayers
   href: _api/CalloraVoipSdk.WebRtc.WebRtcConfiguration.html#CalloraVoipSdk_WebRtc_WebRtcConfiguration_SimulcastLayers
