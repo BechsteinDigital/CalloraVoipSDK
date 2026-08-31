@@ -110,7 +110,7 @@ Kurzfassung — Details und Fundstellen in [`ENGINEERING_RULES.md`](ENGINEERING_
 - .NET SDK **10.0.100** (`global.json`, rollForward latestFeature); Ziel-TFMs
   `net8.0;net9.0;net10.0` überall (ArchitectureTests nur net10.0).
 - Version kommt aus `src/Directory.Build.props` (`VersionPrefix` + `VersionSuffix`, aktuell
-  `4.13.0`); Releases überschreiben per `/p:Version` aus dem Git-Tag.
+  `4.13.1`); Releases überschreiben per `/p:Version` aus dem Git-Tag.
 
 ```bash
 dotnet build CalloraVoipSdk.sln --configuration Release
@@ -336,6 +336,19 @@ Typische Erweiterungspunkte:
 > diese Form immer schon (`RtpCallMediaSession`); nur der WebRTC-Empfangspfad nicht. Rein additiv — eine
 > Public-API-Zeile ergänzt, nichts entfernt oder geändert (belegt via `PublicApi.approved.txt`). Details
 > in [`CHANGELOG.md`](CHANGELOG.md) und [`RELEASE_NOTES_4.13.0.md`](RELEASE_NOTES_4.13.0.md).
+
+> **Nachtrag 4.13.1 (2026-08-31):** Ein WebRTC-Anruf verlor bisher zwei Sekunden im DTLS-Handshake
+> (#385). Der Quellfilter der Association öffnete erst mit der ICE-Nominierung; ein Browser beginnt
+> seinen Handshake aber, sobald er ein brauchbares Kandidatenpaar hat, also lange bevor der
+> kontrollierende Agent `USE-CANDIDATE` setzt. Bis dahin stand der Filter auf dem SDP-Platzhalter
+> `0.0.0.0:9`, jedes Record wurde verworfen, und die Gegenstelle wiederholte mit verdoppelnden
+> Abständen — gemessen bei +406 ms und +813 ms. Jetzt genügt eine **ICE-authentifizierte** Quelle, die
+> sofort vorliegt. Die Schutzeigenschaft bleibt: Wer den Filter passiert, hat mit unserem ICE-Passwort
+> signiert (ein fehlgeschlagener Check wird verworfen statt beantwortet), ist also nicht off-path; der
+> Fingerprint bleibt ohnehin die Authentifizierungsgrenze (RFC 5763 §6.7.1). Eine Nominierung gewinnt
+> immer und wird nie zurückgenommen, und nur DTLS folgt der frühen Quelle — der Transport sendet weiter
+> an das nominierte Paar. Keine Änderung der öffentlichen Fläche. Details in
+> [`CHANGELOG.md`](CHANGELOG.md) und [`RELEASE_NOTES_4.13.1.md`](RELEASE_NOTES_4.13.1.md).
 
 Quellen: `docs/audit/INTEROP_SOAK_AUDIT.md` (F-Register) und die Tiefenanalyse 2026-07-22
 (`docs/audit/2026-07-22-quelltext-tiefenanalyse.md`). **Sämtliche P1-Befunde der Tiefenanalyse

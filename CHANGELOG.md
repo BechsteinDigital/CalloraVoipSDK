@@ -8,6 +8,26 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
 
 The next line. Entries here accumulate the consumer-visible changes not yet released.
 
+## [4.13.1] - 2026-08-31
+
+### Fixed
+
+- **A WebRTC call no longer spends two seconds in its DTLS handshake.** The association's inbound source
+  filter opened only once ICE nominated a pair. A browser starts its handshake as soon as it has a usable
+  candidate pair, which is well before the controlling agent sets `USE-CANDIDATE` — so until nomination
+  reached us the filter still pointed at the SDP endpoint `0.0.0.0:9`, the "no address" placeholder, every
+  record was dropped, and the peer retransmitted on a doubling timer. Measured in a real call: drops at
+  +406 ms and +813 ms, and two seconds spent on an exchange that needs two round trips. It now accepts a
+  source ICE has *authenticated*, which is available immediately (#385).
+
+  Behaviour note, because this touches a security boundary: the filter exists so an off-path sender cannot
+  feed the handshake, and that property is unchanged. A source reaching this path produced a check whose
+  `MESSAGE-INTEGRITY` verified against our local ICE password — a failed one is discarded rather than
+  answered — so it holds the credential from our own SDP and is by definition not off-path. The fingerprint
+  remains the authentication boundary (RFC 5763 §6.7.1). A nomination always wins and is never undone by a
+  later validated source, and only the DTLS filter follows the early source: the transport keeps sending to
+  the pair ICE actually chose.
+
 ## [4.13.0] - 2026-08-28
 
 ### Added

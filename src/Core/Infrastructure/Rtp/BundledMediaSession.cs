@@ -312,10 +312,12 @@ internal sealed class BundledMediaSession : IAsyncDisposable
                 RelayPairNominated: OnRelayPairNominated,
                 // Only DTLS follows an ICE-authenticated source, and only until a pair is nominated: the peer
                 // starts its handshake before nomination, and dropping it until then costs a retransmission
-                // round. The transport keeps its target — authenticated is not the same as chosen. Reading
-                // _dtls inside the lambda is deliberate; it is assigned just below, and ICE cannot fire before
-                // the session is started.
-                SourceValidated: source => _dtls.AdoptValidatedSource(source)),
+                // round. The transport keeps its target — authenticated is not the same as chosen.
+                //
+                // The null-forgiveness is the honest form of "assigned below, called much later": _dtls is
+                // still default when this lambda is built, and the compiler is right to say so. It is set on
+                // the next statement, and ICE cannot deliver a check before the session is started.
+                SourceValidated: source => _dtls!.AdoptValidatedSource(source)),
             loggerFactory, _logger);
         _congestion = keying.Congestion;
         _rtcpDispatcher = keying.RtcpDispatcher;

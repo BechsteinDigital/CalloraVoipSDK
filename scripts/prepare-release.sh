@@ -95,8 +95,13 @@ bump "README.md"                    "s{\Q$OLD\E}{$NEW}g"
 bump "MAINTAINING.md"               "s{\`\Q$OLD\E\`\); Releases überschreiben}{\`$NEW\`); Releases überschreiben}g"
 
 # versions.json roll: previous latest (path \"\") gets its numbered path; new label prepended as latest.
+# versions.json only rolls when the DOC line moves, i.e. on a minor or major. A patch stays inside the
+# line it is already the latest of; rolling it would append a second entry with the same label — the
+# portal then lists "4.13" twice, once as latest and once as an archive of itself.
 vj="docs/portal/versions.json"
-if [[ -f "$vj" ]] && command -v jq >/dev/null 2>&1; then
+if [[ "$MM" == "$OLD_MM" ]]; then
+  echo "    skip  $vj (patch release — $MM is already the latest line)"
+elif [[ -f "$vj" ]] && command -v jq >/dev/null 2>&1; then
   tmp="$(mktemp)"
   jq --arg new "$MM" --arg old "$OLD_MM" '
     .latest = $new
