@@ -110,7 +110,7 @@ Kurzfassung — Details und Fundstellen in [`ENGINEERING_RULES.md`](ENGINEERING_
 - .NET SDK **10.0.100** (`global.json`, rollForward latestFeature); Ziel-TFMs
   `net8.0;net9.0;net10.0` überall (ArchitectureTests nur net10.0).
 - Version kommt aus `src/Directory.Build.props` (`VersionPrefix` + `VersionSuffix`, aktuell
-  `4.13.1`); Releases überschreiben per `/p:Version` aus dem Git-Tag.
+  `4.14.0`); Releases überschreiben per `/p:Version` aus dem Git-Tag.
 
 ```bash
 dotnet build CalloraVoipSdk.sln --configuration Release
@@ -349,6 +349,28 @@ Typische Erweiterungspunkte:
 > immer und wird nie zurückgenommen, und nur DTLS folgt der frühen Quelle — der Transport sendet weiter
 > an das nominierte Paar. Keine Änderung der öffentlichen Fläche. Details in
 > [`CHANGELOG.md`](CHANGELOG.md) und [`RELEASE_NOTES_4.13.1.md`](RELEASE_NOTES_4.13.1.md).
+
+> **Nachtrag 4.14.0 (2026-08-31):** Ein WebRTC-Anruf verbindet jetzt in etwa einer statt vier Sekunden
+> (#389). Ein Peer, der trickelt, sendet weder Kandidaten noch Adresse — seine Description trägt den
+> Platzhalter aus RFC 3264 §5.1, die unspezifizierte Adresse. An **zwei** Stellen wurde daraus ein
+> Kandidatenpaar gemacht, als Rückfall für „die Description nannte kein `a=candidate`". Das Paar erbt
+> Host-Priorität, überragt damit jedes echte, und beantworten kann es niemand: Die reguläre Nominierung
+> wartet auf höherpriorisierte Paare, also standen sieben validierte Paare still, bis das eine unmögliche
+> ablief. Gemessen ~2 s pro Anruf — und unabhängig von der Zahl echter Kandidaten, was die Suche lange in
+> die falsche Richtung geschickt hat.
+>
+> Dazu, auf demselben Weg gefunden: DTLS nimmt eingehende Records jetzt von **jedem** Kandidaten des Peers
+> an statt nur vom nominierten Paar (gesendet wird weiterhin an das nominierte — so demultiplext auch
+> libwebrtc); ein Check an eine von diesem Socket unerreichbare Adresse wird nicht mehr dreimal
+> wiederholt; Quelladressen werden IPv4-mapped-kanonisiert (auf `::` sofort relevant, bei IPv4-Bindung
+> latent); und das Senden an die unspezifizierte Adresse wird mit benennender Logzeile abgewiesen.
+>
+> Neu auf der öffentlichen Fläche: **`WebRtcConfiguration.RemoteEndPointTranslator`** für den
+> Hairpin-Fall — ein Peer, der über einen TURN-Server *auf derselben Maschine* ankommt, zeigt eine lokale
+> Interface-Adresse, während sein Kandidat die öffentliche Relay-Adresse trägt. Ein Hook, keine Heuristik:
+> Nur das Deployment kennt seine Topologie. Rein additiv — eine Public-API-Zeile ergänzt, nichts entfernt
+> oder geändert (belegt via `PublicApi.approved.txt`). Details in [`CHANGELOG.md`](CHANGELOG.md) und
+> [`RELEASE_NOTES_4.14.0.md`](RELEASE_NOTES_4.14.0.md).
 
 Quellen: `docs/audit/INTEROP_SOAK_AUDIT.md` (F-Register) und die Tiefenanalyse 2026-07-22
 (`docs/audit/2026-07-22-quelltext-tiefenanalyse.md`). **Sämtliche P1-Befunde der Tiefenanalyse
