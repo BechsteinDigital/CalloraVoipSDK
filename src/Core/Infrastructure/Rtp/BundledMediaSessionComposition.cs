@@ -50,10 +50,6 @@ internal static class BundledMediaSessionComposition
     /// <param name="MediaConnectivityRecovered">Consent recovered after a degrade.</param>
     /// <param name="PairNominated">A pair won the connectivity checks; the transport and DTLS follow it.</param>
     /// <param name="RelayPairNominated">The nominated pair is relayed, so the data path must switch to ChannelData.</param>
-    /// <param name="SourceValidated">
-    /// A remote source passed its inbound ICE check, before any pair is nominated. Only DTLS follows it — the
-    /// transport keeps sending to whatever ICE nominated, because authenticated is not the same as chosen.
-    /// </param>
     internal sealed record BundledMediaKeyingCallbacks(
         Action HandshakeFailed,
         Action Connected,
@@ -62,8 +58,7 @@ internal static class BundledMediaSessionComposition
         Action MediaConnectivityDegraded,
         Action MediaConnectivityRecovered,
         Action<System.Net.IPEndPoint> PairNominated,
-        Action<System.Net.IPEndPoint> RelayPairNominated,
-        Action<System.Net.IPEndPoint> SourceValidated);
+        Action<System.Net.IPEndPoint> RelayPairNominated);
 
     /// <summary>
     /// The parts that key the bundle and report on it: congestion control, inbound RTCP fan-out, the DTLS
@@ -136,9 +131,6 @@ internal static class BundledMediaSessionComposition
             relaySend: dataPath.RelayBinding?.RelaySend,
             // A nominated relay pair additionally switches the transport onto the relay data path (ChannelBind).
             onRelayPairNominated: callbacks.RelayPairNominated,
-            // An ICE-authenticated source lets the DTLS handshake start before nomination, instead of being
-            // dropped against the SDP placeholder while the browser retransmits on a doubling timer.
-            onSourceValidated: callbacks.SourceValidated,
             // Reaches a STUN server as-is in either transport mode, so the reflexive address can be re-probed
             // on a live transport after an ICE restart without giving up the socket.
             sendUnframed: dataPath.Transport.SendUnframedAsync);

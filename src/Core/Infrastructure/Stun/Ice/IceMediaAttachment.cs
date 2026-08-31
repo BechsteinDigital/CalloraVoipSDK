@@ -19,11 +19,18 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
     private readonly IceMediaConsentSession? _consent;
     private readonly IceNominationDriver? _nominationDriver;
     private readonly ConcurrentDictionary<IPEndPoint, byte> _triggeredSources = new();
+
+    /// <summary>
+    /// Every remote candidate endpoint this agent knows: what the remote description carried plus what
+    /// trickled in. Read per inbound datagram by <see cref="IsKnownRemoteEndPoint"/>, so it is a
+    /// dictionary rather than a list scan. Bounded by the same reasoning as the address cap below — a
+    /// peer can trickle without limit, and this must not grow with it.
+    /// </summary>
+    private readonly ConcurrentDictionary<IPEndPoint, byte> _remoteCandidateEndPoints = new();
     private readonly Action? _onConsentLost;
     private readonly Action? _onConnectivityDegraded;
     private readonly Action? _onConnectivityRecovered;
     private readonly Action<IPEndPoint>? _onPairNominated;
-    private readonly Action<IPEndPoint>? _onSourceValidated;
     // Fires additionally to _onPairNominated when the nominated pair is a relay pair (its send path is relay-
     // framed), so the caller can switch the transport onto the relay data path (RFC 8656 ChannelBind). Direct
     // pairs never fire it.
@@ -61,11 +68,6 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
     /// remote candidates, a nomination driver runs connectivity checks and nominates a pair (RFC 8445 §7/§8);
     /// a controlled agent adopts the pair the peer nominates via its USE-CANDIDATE check.
     /// </summary>
-    /// <param name="onSourceValidated">
-    /// Invoked with a remote source whose inbound check verified against our ICE credential, before any pair
-    /// is nominated and possibly several times. Lets a consumer stop discarding traffic from a peer that is
-    /// authenticated but not yet chosen — the DTLS source filter is the case this exists for.
-    /// </param>
     /// <param name="onPairNominated">
     /// Invoked once with the nominated remote endpoint so the caller can redirect the media send target to
     /// the checked pair (typically the transport's <c>SetRemoteEndPoint</c>). Consent freshness is redirected
@@ -94,8 +96,7 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
         Action? onConnectivityRecovered = null,
         Action<IPEndPoint>? onPairNominated = null,
         Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>? relaySend = null,
-        Action<IPEndPoint>? onRelayPairNominated = null,
-        Action<IPEndPoint>? onSourceValidated = null)
+        Action<IPEndPoint>? onRelayPairNominated = null)
     {
         ArgumentNullException.ThrowIfNull(parameters);
         ArgumentNullException.ThrowIfNull(sendRaw);
@@ -106,7 +107,6 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
         _onConnectivityDegraded = onConnectivityDegraded;
         _onConnectivityRecovered = onConnectivityRecovered;
         _onPairNominated = onPairNominated;
-        _onSourceValidated = onSourceValidated;
         _onRelayPairNominated = onRelayPairNominated;
         _relaySend = relaySend;
         _controlling = parameters.IceControlling ? 1 : 0;
@@ -152,6 +152,10 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
             var remotes = parameters.RemoteCandidates.Count > 0
                 ? parameters.RemoteCandidates
                 : [new IceRemoteCandidate(parameters.RemoteEndPoint, HostLocalCandidatePriority)];
+            foreach (var remote in remotes)
+            {
+                _remoteCandidateEndPoints.TryAdd(remote.EndPoint, 0);
+            }
             _nominationDriver = new IceNominationDriver(
                 localCandidates,
                 remotes,
@@ -167,6 +171,41 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
             // The controlled agent adopts the pair the controlling peer nominates (RFC 8445 §7.3.1.5).
             _inbound.PairNominated += Nominate;
         }
+    }
+
+    /// <summary>
+    /// Whether inbound non-STUN traffic (DTLS, RTP, RTCP) from this source belongs to the peer: it is one
+    /// of the candidates the remote SDP advertised, or one discovered peer-reflexively through an
+    /// authenticated connectivity check.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The nominated pair is the right set for sending, not for receiving.</b> A peer starts its DTLS
+    /// handshake as soon as it has a usable candidate pair, well before the controlling agent nominates
+    /// one, and it sends from whichever of its candidates that pair uses. Gating inbound traffic on the
+    /// nominated remote therefore drops the handshake until nomination catches up, and the peer
+    /// retransmits on a doubling timer — about two seconds on an exchange that needs two round trips.
+    /// </para>
+    /// <para>
+    /// This is how libwebrtc demultiplexes (a Connection per remote candidate, not just the selected one)
+    /// and what SIPSorcery arrived at after two issues: #1559 for the attack this still blocks — an
+    /// off-path sender who guesses the local port and floods ClientHello records — and #1731 for exactly
+    /// the case above, media from a valid-but-not-yet-nominated pair.
+    /// </para>
+    /// <para>
+    /// Cheap on purpose: it runs per inbound datagram on the media path.
+    /// </para>
+    /// </remarks>
+    public bool IsKnownRemoteEndPoint(IPEndPoint source)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+
+        if (_triggeredSources.ContainsKey(source) || source.Equals(_initialRemote))
+        {
+            return true;
+        }
+
+        return _remoteCandidateEndPoints.ContainsKey(source);
     }
 
     // RFC 8445 §7.3.1.4: learn the peer-reflexive source and queue its check ahead of ordinary work.
@@ -189,18 +228,6 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
 
         _logger.LogDebug("ICE triggered check to peer-reflexive source {Source} (RFC 8445 §7.3.1.4).", source);
 
-        // Reported before the pair is nominated, and deliberately: the source has already proved it holds
-        // our ICE credential (the check would have been discarded otherwise), while nomination can still be
-        // seconds away. A consumer that gates on nomination — the DTLS source filter does — spends that time
-        // dropping a handshake the peer has already begun.
-        try
-        {
-            _onSourceValidated?.Invoke(source);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unhandled exception in the ICE validated-source handler.");
-        }
         var queued = _nominationDriver?.EnqueueTriggered(
             source,
             priority,
@@ -259,6 +286,13 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
             _logger.LogWarning(
                 "ICE seen-remote-address cap {Cap} reached; ignoring trickled candidate IP {Address}.", MaxSeenRemoteAddresses, address);
             return;
+        }
+
+        // Admitted above, so it counts as known: inbound DTLS/RTP from this endpoint is the peer, and
+        // gating that on nomination is what made a handshake wait for a pair it did not need.
+        if (_remoteCandidateEndPoints.Count < MaxSeenRemoteAddresses)
+        {
+            _remoteCandidateEndPoints.TryAdd(candidate.EndPoint, 0);
         }
 
         _nominationDriver?.AddCandidate(candidate);
