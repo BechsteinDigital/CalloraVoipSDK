@@ -23,6 +23,7 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
     private readonly Action? _onConnectivityDegraded;
     private readonly Action? _onConnectivityRecovered;
     private readonly Action<IPEndPoint>? _onPairNominated;
+    private readonly Action<IPEndPoint>? _onSourceValidated;
     // Fires additionally to _onPairNominated when the nominated pair is a relay pair (its send path is relay-
     // framed), so the caller can switch the transport onto the relay data path (RFC 8656 ChannelBind). Direct
     // pairs never fire it.
@@ -60,6 +61,11 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
     /// remote candidates, a nomination driver runs connectivity checks and nominates a pair (RFC 8445 §7/§8);
     /// a controlled agent adopts the pair the peer nominates via its USE-CANDIDATE check.
     /// </summary>
+    /// <param name="onSourceValidated">
+    /// Invoked with a remote source whose inbound check verified against our ICE credential, before any pair
+    /// is nominated and possibly several times. Lets a consumer stop discarding traffic from a peer that is
+    /// authenticated but not yet chosen — the DTLS source filter is the case this exists for.
+    /// </param>
     /// <param name="onPairNominated">
     /// Invoked once with the nominated remote endpoint so the caller can redirect the media send target to
     /// the checked pair (typically the transport's <c>SetRemoteEndPoint</c>). Consent freshness is redirected
@@ -88,7 +94,8 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
         Action? onConnectivityRecovered = null,
         Action<IPEndPoint>? onPairNominated = null,
         Func<ReadOnlyMemory<byte>, IPEndPoint, CancellationToken, ValueTask>? relaySend = null,
-        Action<IPEndPoint>? onRelayPairNominated = null)
+        Action<IPEndPoint>? onRelayPairNominated = null,
+        Action<IPEndPoint>? onSourceValidated = null)
     {
         ArgumentNullException.ThrowIfNull(parameters);
         ArgumentNullException.ThrowIfNull(sendRaw);
@@ -99,6 +106,7 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
         _onConnectivityDegraded = onConnectivityDegraded;
         _onConnectivityRecovered = onConnectivityRecovered;
         _onPairNominated = onPairNominated;
+        _onSourceValidated = onSourceValidated;
         _onRelayPairNominated = onRelayPairNominated;
         _relaySend = relaySend;
         _controlling = parameters.IceControlling ? 1 : 0;
@@ -180,6 +188,19 @@ internal sealed class IceMediaAttachment : IAsyncDisposable
             return;
 
         _logger.LogDebug("ICE triggered check to peer-reflexive source {Source} (RFC 8445 §7.3.1.4).", source);
+
+        // Reported before the pair is nominated, and deliberately: the source has already proved it holds
+        // our ICE credential (the check would have been discarded otherwise), while nomination can still be
+        // seconds away. A consumer that gates on nomination — the DTLS source filter does — spends that time
+        // dropping a handshake the peer has already begun.
+        try
+        {
+            _onSourceValidated?.Invoke(source);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled exception in the ICE validated-source handler.");
+        }
         var queued = _nominationDriver?.EnqueueTriggered(
             source,
             priority,
