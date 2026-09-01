@@ -43,6 +43,7 @@ internal sealed class SipLineChannel : ILineChannel
     private readonly object _sync = new();
 
     private Action<LineState>? _onState;
+    private IReadOnlyList<string> _announcedAddresses = [];
     private Action<int>? _onReconnecting;
     private Action<ReregisterFailReason, int>? _onReconnectFailed;
     private Action<ICallChannel, string>? _onInbound;
@@ -154,6 +155,18 @@ internal sealed class SipLineChannel : ILineChannel
     /// Invoked when re-registration fails permanently.
     /// First parameter is the <see cref="ReregisterFailReason"/>; second is the total attempt count.
     /// </param>
+    /// <inheritdoc />
+    public IReadOnlyList<string> AnnouncedAddresses
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _announcedAddresses;
+            }
+        }
+    }
+
     public void StartRegistration(
         Action<LineState> onStateChange,
         Action<int>? onReconnecting = null,
@@ -552,6 +565,16 @@ internal sealed class SipLineChannel : ILineChannel
                     {
                         _registrationCallId = result.CallId;
                         _registrationNextCSeq = result.NextCSeq;
+
+                        // Kept only when the registrar said something. A refresh that answers without
+                        // the header must not erase what the first response announced: registrars send
+                        // it on the initial registration and not always afterwards, and an application
+                        // that reads "no numbers" halfway through a session would conclude the line
+                        // lost them.
+                        if (result.AssociatedUris.Count > 0)
+                        {
+                            _announcedAddresses = result.AssociatedUris;
+                        }
                     }
 
                     // NAT: adopt the public address the registrar reflected. When it changes

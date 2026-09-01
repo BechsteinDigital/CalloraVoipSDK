@@ -570,6 +570,7 @@
   CalloraVoipSdk.Core.Domain.Events.TransferRequestedEventArgs.Call : CalloraVoipSdk.Core.Domain.Calls.ICall { get }
   CalloraVoipSdk.Core.Domain.Events.TransferRequestedEventArgs.Subscription : CalloraVoipSdk.Core.Domain.Calls.IReferSubscription { get }
   CalloraVoipSdk.Core.Domain.Events.TransferRequestedEventArgs.TargetUri : System.String { get }
+  CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.AnnouncedAddresses : System.Collections.Generic.IReadOnlyList<System.String> { get }
   CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.Account : CalloraVoipSdk.Core.Domain.Lines.SipAccount { get }
   CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.DialAsync(System.String targetUri, CalloraVoipSdk.Core.Domain.Calls.DialOptions options = default, System.Threading.CancellationToken ct = default) : System.Threading.Tasks.Task<CalloraVoipSdk.Core.Domain.Calls.ICall>
   CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.IncomingCall : event System.EventHandler<CalloraVoipSdk.Core.Domain.Events.IncomingCallEventArgs>

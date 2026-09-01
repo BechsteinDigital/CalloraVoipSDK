@@ -20,6 +20,16 @@ internal interface ILineChannel : IDisposable
     /// Invoked when re-registration fails permanently.
     /// First parameter is the <see cref="ReregisterFailReason"/>; second is the total attempt count.
     /// </param>
+    /// <summary>
+    /// The addresses the registrar announced for this line (RFC 3455 <c>P-Associated-URI</c>).
+    /// </summary>
+    /// <remarks>
+    /// Empty until a registration has succeeded, and empty forever with a registrar that does not send
+    /// the header — a CPE box on the local network generally does not, carrier registrars do. "Nobody
+    /// said" and "there are none" are the same value here and must be read as the first.
+    /// </remarks>
+    IReadOnlyList<string> AnnouncedAddresses => [];
+
     void StartRegistration(
         Action<LineState> onStateChange,
         Action<int>? onReconnecting = null,

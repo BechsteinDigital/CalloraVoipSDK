@@ -26,6 +26,9 @@ internal sealed class PhoneLine : IPhoneLine, IDisposable
     public SipAccount Account  { get; }
     public LineState  State    { get { lock (_sync) return _state; } }
 
+    /// <inheritdoc />
+    public IReadOnlyList<string> AnnouncedAddresses => _channel.AnnouncedAddresses;
+
     public event EventHandler<LineStateChangedEventArgs>?    StateChanged;
     public event EventHandler<IncomingCallEventArgs>?         IncomingCall;
     public event EventHandler<OutboundCallRingingEventArgs>? OutboundCallRinging;

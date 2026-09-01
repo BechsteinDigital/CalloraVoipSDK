@@ -24,6 +24,31 @@ public interface IPhoneLine
     /// <summary>Current registration state; changes are signalled by <see cref="StateChanged"/>.</summary>
     LineState  State    { get; }
 
+    /// <summary>
+    /// The addresses the registrar announced for this line — which numbers reach it (RFC 3455
+    /// <c>P-Associated-URI</c>).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The only source that needs no operator and no call.</b> A trunk contract brings a list
+    /// somebody can type in; a registration account brings nothing, and its username is as often
+    /// <c>admin123</c> as a number. A registrar that sends this header answers the question outright,
+    /// at registration time.
+    /// </para>
+    /// <para>
+    /// The first entry is the default public identity — the one the network uses when a request does
+    /// not say otherwise — so the order is meaningful and preserved. Both <c>sip:</c> and <c>tel:</c>
+    /// occur, often for the same number, and they are returned as announced: what counts as a
+    /// telephone number is a question about a dial plan, and this layer does not have one.
+    /// </para>
+    /// <para>
+    /// Empty means <em>nobody said</em>, never <em>there are none</em>. Carrier registrars send it; a
+    /// box on the local network generally does not, and reading the empty list as a statement would
+    /// turn a silent registrar into a line with no numbers.
+    /// </para>
+    /// </remarks>
+    IReadOnlyList<string> AnnouncedAddresses => [];
+
     // ── Events ────────────────────────────────────────────────────────────────
 
     /// <summary>Raised when the line's registration <see cref="State"/> changes (signaling thread).</summary>
