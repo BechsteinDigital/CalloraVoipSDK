@@ -59,9 +59,10 @@ zerlegt (Vorbild: Aufspaltung der Dialog-Dateien, u. a. `SipForkedInviteHandler`
 
 Baseline: leer.
 
-> Hinweis: Der Test scannt derzeit `samples/`, das Verzeichnis heißt aber `examples/` —
-> Beispiele werden faktisch nicht erfasst (bekannte Kleinstlücke, siehe Tiefenanalyse
-> 2026-07-22, Befund 9 im Test-Kapitel).
+> Der Test scannt `src`, `tests` und `examples` (`EngineeringRulesTests`). Hier stand einmal, er
+> scanne `samples/` — ein Verzeichnis, das es nie gab, sodass die Beispiele faktisch ungeprüft
+> blieben. Behoben; der Hinweis bleibt als Erinnerung daran, dass eine Regel nur so weit reicht wie
+> das Verzeichnis, das ihr Test tatsächlich öffnet.
 
 ### R4 — Keine privaten/protected verschachtelten Typen
 

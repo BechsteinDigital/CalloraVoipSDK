@@ -183,7 +183,12 @@ jobs:
             9.0.x
             10.0.x
 
-      - name: Browser interop tests (Playwright/headless Chromium + Firefox + WebKit)
+      # WebKit steht bewusst NICHT im Namen: davon läuft genau ein Test, und der startet den Browser
+      # (PlaywrightLaunchSmokeTests). Die WebRTC-Strecke — Angebot, Antwort, ICE, DTLS, Medien — wird
+      # gegen Chromium (11 Tests) und Firefox (5) gefahren. Ein Schrittname, der drei Motoren nennt,
+      # liest sich als drei geprüfte Motoren; das ist der Unterschied zwischen einem grünen Haken und
+      # einer Zusage.
+      - name: Browser interop tests (Playwright/headless — WebRTC on Chromium + Firefox, launch smoke on WebKit)
         # Browser + OS-Deps kommen aus dem Container. BrowserEngine.ResolveExecutable liest
         # PLAYWRIGHT_BROWSERS_PATH (/ms-playwright); Chromium startet mit ChromiumSandbox=false, weil der
         # Container als root läuft ("Running as root without --no-sandbox is not supported").

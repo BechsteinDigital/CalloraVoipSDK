@@ -20,6 +20,13 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Client\CalloraVoipSdk.Client.csproj" />
     <ProjectReference Include="..\..\src\Core\CalloraVoipSdk.Core.csproj" />
+    <!-- Die Audio-Pakete werden veröffentlicht und waren hier nicht referenziert — weshalb die
+         Public-API-Baseline sie nie erfassen KONNTE. Ein Gate sieht nur, was sein Projekt kennt.
+         Alle drei, weil alle drei auf nuget.org liegen; dass Audio.Windows unter Linux totes
+         Gerät ansteuert, ändert nichts an seiner öffentlichen Fläche. -->
+    <ProjectReference Include="..\..\src\Audio\Abstractions\CalloraVoipSdk.Audio.Abstractions.csproj" />
+    <ProjectReference Include="..\..\src\Audio\Windows\CalloraVoipSdk.Audio.Windows.csproj" />
+    <ProjectReference Include="..\..\src\Audio\Linux\CalloraVoipSdk.Audio.Linux.csproj" />
   </ItemGroup>
 
   <ItemGroup>

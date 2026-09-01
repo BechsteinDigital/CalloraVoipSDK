@@ -16,7 +16,40 @@ permissions:
   contents: read
 
 jobs:
+  # Der Torwächter. Der Pack-Job führt selbst nur die Unit-Menge aus — Interop, FreeSWITCH,
+  # Browser und Soak sind in seinem Filter ausdrücklich ausgeschlossen, weil sie Docker und
+  # einen Playwright-Container brauchen. Damit wurde bis hierher auf nuget.org veröffentlicht,
+  # ohne dass irgendetwas von dem gelaufen war, womit die README für das Paket wirbt:
+  # ein echtes Asterisk und echte Browser.
+  #
+  # Die Arbeit wird nicht verdoppelt (das wären dreißig Minuten ein zweites Mal), sondern
+  # nachgewiesen: Der CI-Workflow MUSS für genau diesen Commit erfolgreich durchgelaufen sein.
+  # Ein Tag auf einem Commit, dessen Lauf rot war oder gar nicht stattgefunden hat, bricht hier
+  # ab, bevor ein Paket entsteht.
+  require-full-ci:
+    runs-on: ubuntu-latest
+    steps:
+      - name: CI must have passed for this exact commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          conclusion=$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$SHA&per_page=1" \
+            --jq '.workflow_runs[0].conclusion // "none"')
+
+          echo "CI conclusion for $SHA: $conclusion"
+
+          if [ "$conclusion" != "success" ]; then
+            echo "::error::No successful CI run for $SHA (found: $conclusion). Push the tag onto a commit whose CI — including interop, browser, chaos and perf — is green."
+            exit 1
+          fi
+
   pack:
+    needs: require-full-ci
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -44,7 +77,10 @@ jobs:
       - name: Restore
         run: dotnet restore CalloraVoipSdk.sln
 
-      - name: Build and test (release gate)
+      # Die Unit-Menge, hier als letzte Kontrolle am Release-Build. Die ausgeschlossenen Kategorien
+      # brauchen Docker beziehungsweise den Playwright-Container und laufen im CI-Workflow — dass der
+      # für diesen Commit grün war, hat require-full-ci oben bereits erzwungen.
+      - name: Build and test (release build, unit set)
         run: |
           dotnet build CalloraVoipSdk.sln -c Release --no-restore
           dotnet test CalloraVoipSdk.sln -c Release --no-build --nologo --filter "Category!=SoakLong&Category!=Interop&Category!=InteropFreeSwitch&Category!=BrowserInterop"
