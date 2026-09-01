@@ -570,8 +570,8 @@
   CalloraVoipSdk.Core.Domain.Events.TransferRequestedEventArgs.Call : CalloraVoipSdk.Core.Domain.Calls.ICall { get }
   CalloraVoipSdk.Core.Domain.Events.TransferRequestedEventArgs.Subscription : CalloraVoipSdk.Core.Domain.Calls.IReferSubscription { get }
   CalloraVoipSdk.Core.Domain.Events.TransferRequestedEventArgs.TargetUri : System.String { get }
-  CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.AnnouncedAddresses : System.Collections.Generic.IReadOnlyList<System.String> { get }
   CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.Account : CalloraVoipSdk.Core.Domain.Lines.SipAccount { get }
+  CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.AnnouncedAddresses : System.Collections.Generic.IReadOnlyList<System.String> { get }
   CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.DialAsync(System.String targetUri, CalloraVoipSdk.Core.Domain.Calls.DialOptions options = default, System.Threading.CancellationToken ct = default) : System.Threading.Tasks.Task<CalloraVoipSdk.Core.Domain.Calls.ICall>
   CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.IncomingCall : event System.EventHandler<CalloraVoipSdk.Core.Domain.Events.IncomingCallEventArgs>
   CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.IncomingMessage : event System.EventHandler<CalloraVoipSdk.Core.Domain.Events.IncomingMessageEventArgs>
@@ -587,6 +587,7 @@
   CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.SendMessageAsync(System.String targetUri, System.String body, System.String contentType = default, System.Threading.CancellationToken ct = default) : System.Threading.Tasks.Task
   CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.State : CalloraVoipSdk.Core.Domain.Lines.LineState { get }
   CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.StateChanged : event System.EventHandler<CalloraVoipSdk.Core.Domain.Events.LineStateChangedEventArgs>
+  CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.SubscribeAsync(System.String eventType, System.String targetUri, System.Int32 expiresSeconds = default, System.String accept = default, System.Threading.CancellationToken ct = default) : System.Threading.Tasks.Task<CalloraVoipSdk.Core.Domain.Subscriptions.ISipSubscription>
   CalloraVoipSdk.Core.Domain.Lines.IPhoneLine.UnregisterAsync(System.Threading.CancellationToken ct = default) : System.Threading.Tasks.Task
   CalloraVoipSdk.Core.Domain.Lines.LineId..ctor(System.Guid Value)
   CalloraVoipSdk.Core.Domain.Lines.LineId.Deconstruct(out System.Guid Value) : System.Void
@@ -682,6 +683,52 @@
   CalloraVoipSdk.Core.Domain.Security.SrtpPolicy.Disabled = enum-value
   CalloraVoipSdk.Core.Domain.Security.SrtpPolicy.Optional = enum-value
   CalloraVoipSdk.Core.Domain.Security.SrtpPolicy.Required = enum-value
+  CalloraVoipSdk.Core.Domain.Subscriptions.ISipSubscription.EventType : System.String { get }
+  CalloraVoipSdk.Core.Domain.Subscriptions.ISipSubscription.Notified : event System.EventHandler<CalloraVoipSdk.Core.Domain.Subscriptions.SipNotificationEventArgs>
+  CalloraVoipSdk.Core.Domain.Subscriptions.ISipSubscription.UnsubscribeAsync(System.Threading.CancellationToken ct = default) : System.Threading.Tasks.Task
+  CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogInfo.Dialogs : System.Collections.Generic.IReadOnlyList<CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogInfoEntry> { get }
+  CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogInfo.Entity : System.String { get }
+  CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogInfo.IsBusy : System.Boolean { get }
+  CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogInfo.IsFullState : System.Boolean { get }
+  CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogInfo.TryParse(System.String xml) : CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogInfo
+  CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogInfo.Version : System.Nullable<System.Int64> { get }
+  CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogInfoEntry..ctor(System.String Id, CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogState State, System.String Direction, System.String LocalIdentity, System.String RemoteIdentity)
+  CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogInfoEntry.Deconstruct(out System.String Id, out CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogState State, out System.String Direction, out System.String LocalIdentity, out System.String RemoteIdentity) : System.Void
+  CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogInfoEntry.Direction : System.String { get, init }
+  CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogInfoEntry.Equals(CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogInfoEntry other) : System.Boolean
+  CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogInfoEntry.Equals(System.Object obj) : System.Boolean
+  CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogInfoEntry.GetHashCode() : System.Int32
+  CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogInfoEntry.Id : System.String { get, init }
+  CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogInfoEntry.LocalIdentity : System.String { get, init }
+  CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogInfoEntry.RemoteIdentity : System.String { get, init }
+  CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogInfoEntry.State : CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogState { get, init }
+  CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogInfoEntry.ToString() : System.String
+  CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogState.Confirmed = enum-value
+  CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogState.Early = enum-value
+  CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogState.Proceeding = enum-value
+  CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogState.Terminated = enum-value
+  CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogState.Trying = enum-value
+  CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogState.Unknown = enum-value
+  CalloraVoipSdk.Core.Domain.Subscriptions.SipNotificationEventArgs..ctor(System.String eventType, System.String subscriptionState, System.Boolean isTerminated, System.String contentType, System.String body)
+  CalloraVoipSdk.Core.Domain.Subscriptions.SipNotificationEventArgs.Body : System.String { get }
+  CalloraVoipSdk.Core.Domain.Subscriptions.SipNotificationEventArgs.ContentType : System.String { get }
+  CalloraVoipSdk.Core.Domain.Subscriptions.SipNotificationEventArgs.EventType : System.String { get }
+  CalloraVoipSdk.Core.Domain.Subscriptions.SipNotificationEventArgs.IsTerminated : System.Boolean { get }
+  CalloraVoipSdk.Core.Domain.Subscriptions.SipNotificationEventArgs.SubscriptionState : System.String { get }
+  CalloraVoipSdk.Core.Domain.Subscriptions.SipPresence.Entity : System.String { get }
+  CalloraVoipSdk.Core.Domain.Subscriptions.SipPresence.IsOpen : System.Boolean { get }
+  CalloraVoipSdk.Core.Domain.Subscriptions.SipPresence.TryParse(System.String xml) : CalloraVoipSdk.Core.Domain.Subscriptions.SipPresence
+  CalloraVoipSdk.Core.Domain.Subscriptions.SipPresence.Tuples : System.Collections.Generic.IReadOnlyList<CalloraVoipSdk.Core.Domain.Subscriptions.SipPresenceTuple> { get }
+  CalloraVoipSdk.Core.Domain.Subscriptions.SipPresenceTuple..ctor(System.String Id, System.Boolean IsOpen, System.String Contact, System.String Note)
+  CalloraVoipSdk.Core.Domain.Subscriptions.SipPresenceTuple.Contact : System.String { get, init }
+  CalloraVoipSdk.Core.Domain.Subscriptions.SipPresenceTuple.Deconstruct(out System.String Id, out System.Boolean IsOpen, out System.String Contact, out System.String Note) : System.Void
+  CalloraVoipSdk.Core.Domain.Subscriptions.SipPresenceTuple.Equals(CalloraVoipSdk.Core.Domain.Subscriptions.SipPresenceTuple other) : System.Boolean
+  CalloraVoipSdk.Core.Domain.Subscriptions.SipPresenceTuple.Equals(System.Object obj) : System.Boolean
+  CalloraVoipSdk.Core.Domain.Subscriptions.SipPresenceTuple.GetHashCode() : System.Int32
+  CalloraVoipSdk.Core.Domain.Subscriptions.SipPresenceTuple.Id : System.String { get, init }
+  CalloraVoipSdk.Core.Domain.Subscriptions.SipPresenceTuple.IsOpen : System.Boolean { get, init }
+  CalloraVoipSdk.Core.Domain.Subscriptions.SipPresenceTuple.Note : System.String { get, init }
+  CalloraVoipSdk.Core.Domain.Subscriptions.SipPresenceTuple.ToString() : System.String
   CalloraVoipSdk.DependencyInjection.CalloraBuilder.AddWebRtc(System.Action<CalloraVoipSdk.WebRtc.WebRtcOptions> configure = default) : CalloraVoipSdk.DependencyInjection.CalloraWebRtcBuilder
   CalloraVoipSdk.DependencyInjection.CalloraBuilder.WithAudioDevice() : CalloraVoipSdk.DependencyInjection.CalloraBuilder
   CalloraVoipSdk.DependencyInjection.CalloraBuilder.WithIce(System.Action<CalloraVoipSdk.IceOptions> configure) : CalloraVoipSdk.DependencyInjection.CalloraBuilder
@@ -1276,6 +1323,9 @@ TYPE class CalloraVoipSdk.Core.Domain.Lines.ReregisterOptions
 TYPE class CalloraVoipSdk.Core.Domain.Lines.SipAccount
 TYPE class CalloraVoipSdk.Core.Domain.Messages.SipInstantMessage
 TYPE class CalloraVoipSdk.Core.Domain.Security.SrtpDecisionReasonCodes
+TYPE class CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogInfo
+TYPE class CalloraVoipSdk.Core.Domain.Subscriptions.SipNotificationEventArgs
+TYPE class CalloraVoipSdk.Core.Domain.Subscriptions.SipPresence
 TYPE class CalloraVoipSdk.DependencyInjection.CalloraBuilder
 TYPE class CalloraVoipSdk.DependencyInjection.CalloraHostedService
 TYPE class CalloraVoipSdk.DependencyInjection.CalloraStunServerBuilder
@@ -1341,6 +1391,7 @@ TYPE enum CalloraVoipSdk.Core.Domain.Lines.LineState
 TYPE enum CalloraVoipSdk.Core.Domain.Lines.ReregisterFailReason
 TYPE enum CalloraVoipSdk.Core.Domain.Lines.SipTransport
 TYPE enum CalloraVoipSdk.Core.Domain.Security.SrtpPolicy
+TYPE enum CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogState
 TYPE enum CalloraVoipSdk.DialStatus
 TYPE enum CalloraVoipSdk.IceServerType
 TYPE enum CalloraVoipSdk.IceTransport
@@ -1371,6 +1422,7 @@ TYPE interface CalloraVoipSdk.Core.Application.Ports.Video.IVideoDevice
 TYPE interface CalloraVoipSdk.Core.Domain.Calls.ICall
 TYPE interface CalloraVoipSdk.Core.Domain.Calls.IReferSubscription
 TYPE interface CalloraVoipSdk.Core.Domain.Lines.IPhoneLine
+TYPE interface CalloraVoipSdk.Core.Domain.Subscriptions.ISipSubscription
 TYPE interface CalloraVoipSdk.Hosting.IStunServerHost
 TYPE interface CalloraVoipSdk.Hosting.ITurnServerHost
 TYPE interface CalloraVoipSdk.IDeviceManager
@@ -1402,6 +1454,8 @@ TYPE record CalloraVoipSdk.Core.Domain.Calls.CallMediaParameters
 TYPE record CalloraVoipSdk.Core.Domain.Calls.CallTerminationReason
 TYPE record CalloraVoipSdk.Core.Domain.Lines.SipCredentials
 TYPE record CalloraVoipSdk.Core.Domain.Publications.PublishResult
+TYPE record CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogInfoEntry
+TYPE record CalloraVoipSdk.Core.Domain.Subscriptions.SipPresenceTuple
 TYPE record struct CalloraVoipSdk.Core.Application.Media.MediaFrame
 TYPE record struct CalloraVoipSdk.Core.Application.Media.VideoFrame
 TYPE record struct CalloraVoipSdk.Core.Domain.Calls.CallId

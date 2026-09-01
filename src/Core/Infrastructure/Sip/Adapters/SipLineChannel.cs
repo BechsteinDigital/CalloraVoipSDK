@@ -299,6 +299,36 @@ internal sealed class SipLineChannel : ILineChannel
     }
 
     /// <inheritdoc />
+    public async Task<Domain.Subscriptions.ISipSubscription> SubscribeAsync(
+        string eventType,
+        string targetUri,
+        int expiresSeconds = 300,
+        string? accept = null,
+        CancellationToken ct = default)
+    {
+        ThrowIfDisposed();
+        ArgumentException.ThrowIfNullOrWhiteSpace(eventType);
+        ArgumentException.ThrowIfNullOrWhiteSpace(targetUri);
+
+        var handle = await _callSignalingService.SubscribeAsync(
+                new SipSubscribeRequest
+                {
+                    LocalUsername = _account.Username,
+                    LocalDomain = _account.SipServer,
+                    AuthPassword = _account.Password,
+                    RemoteUri = targetUri,
+                    EventType = eventType,
+                    ExpiresSeconds = expiresSeconds,
+                    AcceptHeader = accept,
+                    Transport = MapTransport(_account.Transport),
+                },
+                ct)
+            .ConfigureAwait(false);
+
+        return new SipSubscriptionAdapter(eventType, handle);
+    }
+
+    /// <inheritdoc />
     public async Task<Domain.Publications.PublishResult> PublishAsync(
         string eventType, string body, string contentType, int expiresSeconds, string? ifMatch = null, CancellationToken ct = default)
     {

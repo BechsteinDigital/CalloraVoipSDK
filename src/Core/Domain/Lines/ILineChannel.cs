@@ -81,5 +81,16 @@ internal interface ILineChannel : IDisposable
     /// and returns the assigned SIP-ETag and granted lifetime. Throws on a non-2xx final response or no response.
     /// </summary>
     /// <param name="ifMatch">SIP-If-Match entity-tag of a prior publication to refresh/modify/remove; null for an initial publication.</param>
+    /// <summary>Subscribes to somebody's state (RFC 6665). See <see cref="IPhoneLine.SubscribeAsync"/>.</summary>
+    Task<Subscriptions.ISipSubscription> SubscribeAsync(
+        string eventType,
+        string targetUri,
+        int expiresSeconds = 300,
+        string? accept = null,
+        CancellationToken ct = default)
+        => throw new NotSupportedException(
+            "This line does not support subscriptions. Implemented by the SIP line channel; a default "
+            + "is provided so adding this member does not break implementations outside this repository.");
+
     Task<PublishResult> PublishAsync(string eventType, string body, string contentType, int expiresSeconds, string? ifMatch = null, CancellationToken ct = default);
 }

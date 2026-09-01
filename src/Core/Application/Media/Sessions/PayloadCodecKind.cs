@@ -36,6 +36,18 @@ internal enum PayloadCodecKind
     ComfortNoise = 5,
 
     /// <summary>
+    /// G.729 (RTP payload type 18).
+    /// </summary>
+    /// <remarks>
+    /// Named rather than left to <see cref="Unknown"/>, and that is the entire point of the value: the
+    /// SDK carries no G.729 codec — the algorithm needs a licence — so it can negotiate the format and
+    /// forward it untouched, but never decode it. Recognising it turns "some codec we could not
+    /// transcode" into a sentence an operator can act on, and stops it from being confused with a codec
+    /// nobody has heard of.
+    /// </remarks>
+    G729 = 8,
+
+    /// <summary>
     /// Unrecognized or unsupported payload codec.
     /// </summary>
     Unknown = 6,

@@ -199,6 +199,15 @@ internal sealed class PhoneLine : IPhoneLine, IDisposable
     public Task SendMessageAsync(string targetUri, string body, string contentType = "text/plain", CancellationToken ct = default)
         => _channel.SendMessageAsync(targetUri, body, contentType, ct);
 
+    /// <inheritdoc />
+    public Task<Subscriptions.ISipSubscription> SubscribeAsync(
+        string eventType,
+        string targetUri,
+        int expiresSeconds = 300,
+        string? accept = null,
+        CancellationToken ct = default)
+        => _channel.SubscribeAsync(eventType, targetUri, expiresSeconds, accept, ct);
+
     public Task<Publications.PublishResult> PublishAsync(string eventType, string body, string contentType = "text/plain", int expiresSeconds = 3600, CancellationToken ct = default)
         => _channel.PublishAsync(eventType, body, contentType, expiresSeconds, ct: ct);
 

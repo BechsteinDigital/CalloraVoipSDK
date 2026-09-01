@@ -33,7 +33,16 @@ internal static class SdpUtilities
     // announced as opus/48000/2 (dynamic PT), regardless of the operating mode.
     private static readonly IReadOnlyList<SdpCodecDefinition> OptInCodecs =
     [
-        new SdpCodecDefinition { PayloadType = 107, Name = "opus", ClockRate = 48000, Channels = 2 }
+        new SdpCodecDefinition { PayloadType = 107, Name = "opus", ClockRate = 48000, Channels = 2 },
+        // G.729 (RFC 3551, static PT 18). Negotiable, never decodable: the algorithm needs a licence
+        // and the SDK carries no implementation. Offering it is therefore a promise to FORWARD the
+        // payload, not to understand it — which is exactly right for a leg that is bridged to another
+        // leg speaking the same codec, and exactly wrong for one whose audio somebody wants to hear.
+        //
+        // Opt-in for that reason, not because it is exotic: a carrier that offers only G.729 answers
+        // 488 today and the call never happens at all. That is the same failure a µ-law-only offer
+        // produced in Europe, one codec further along.
+        new SdpCodecDefinition { PayloadType = 18, Name = "G729", ClockRate = 8000 }
     ];
 
     /// <summary>
