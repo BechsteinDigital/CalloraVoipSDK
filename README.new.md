@@ -12,6 +12,11 @@ self-hostable STUN/TURN server — one facade, no native dependencies.
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 [![Docs](https://img.shields.io/badge/docs-github%20pages-blue)](https://bechsteindigital.github.io/callora-voip-sdk/)
 
+<p align="center">
+  <img src="docs/assets/call.svg" width="800"
+       alt="A terminal showing an outbound SIP call placed with CalloraVoipSdk: registration over TLS, dial, SRTP media, RTCP quality metrics, DTMF, attended transfer and hangup — followed by the CI interop checks against a real Asterisk and real browsers.">
+</p>
+
 </div>
 
 ---
