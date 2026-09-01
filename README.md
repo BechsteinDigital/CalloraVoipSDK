@@ -61,7 +61,7 @@ tracked `PublicApi.approved.txt` baseline).
 - **Media-flow/silence monitoring, RTP header-extension coverage (RFC 8285 two-byte, AV1 Dependency
   Descriptor), SIP hardening (RFC 3261 §19.1.4 / §8.2.2.1) and static-IP-trunk support.**
 
-Full detail in [`CHANGELOG.md`](CHANGELOG.md) and [`RELEASE_NOTES_4.14.0.md`](RELEASE_NOTES_4.14.0.md).
+Full detail in [`CHANGELOG.md`](CHANGELOG.md) and [`docs/release-notes/4.14.0.md`](docs/release-notes/4.14.0.md).
 
 ## What's new in 4.10
 
@@ -75,7 +75,7 @@ contact-center agent or multi-line softphone can mute one call while another sta
   mute, not speaker).
 - **`ICall.IsMuted`** — reads the current outgoing-mute state.
 
-Full detail in [`CHANGELOG.md`](CHANGELOG.md) and [`RELEASE_NOTES_4.10.0.md`](RELEASE_NOTES_4.10.0.md).
+Full detail in [`CHANGELOG.md`](CHANGELOG.md) and [`docs/release-notes/4.10.0.md`](docs/release-notes/4.10.0.md).
 
 ## What's new in 4.9
 
@@ -109,7 +109,7 @@ The hardening is defensive throughout — fail-closed decoding, constant-time co
 anti-slowloris deadlines, source binding on plaintext legs, DTLS post-handshake `close_notify` handling
 (ADR-066), and bounded wire-DoS caps at every parser and listener. **The public API only grew** (nothing
 removed); `TlsConfiguration.AcceptUntrustedCertificates` is now an `[Obsolete]` alias for `TrustMode`. Full
-detail in [`CHANGELOG.md`](CHANGELOG.md) and [`RELEASE_NOTES_4.8.0.md`](RELEASE_NOTES_4.8.0.md).
+detail in [`CHANGELOG.md`](CHANGELOG.md) and [`docs/release-notes/4.8.0.md`](docs/release-notes/4.8.0.md).
 
 ## What's new in 4.7
 

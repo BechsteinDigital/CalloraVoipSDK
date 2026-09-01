@@ -457,7 +457,7 @@ single outbound choke point, so both the default microphone path and custom audi
 RTP is sent for this call's outgoing direction and **inbound audio is unaffected** (it is microphone/outgoing
 mute, not speaker/output). It is valid in any live state and is a no-op if already in the requested state.
 **`PublicApi.approved.txt` gains two `ICall` members and nothing else** — a purely additive minor with no
-breaking change. See `RELEASE_NOTES_4.10.0.md`.
+breaking change. See `docs/release-notes/4.10.0.md`.
 
 ### Added
 
@@ -476,7 +476,7 @@ neither — the display name was parsed and then discarded. Four additive, read-
 identity, threaded through the same pass-through as `RemoteAssertedIdentity`, and the SDK parses the user parts
 once (`SipProtocol`) so consumers no longer each roll their own SIP-URI parser. **`PublicApi.approved.txt` gains
 four `ICall` members and nothing else** — a purely additive minor with no breaking change; every property is
-`null` on outbound legs and when the data is absent. See `RELEASE_NOTES_4.9.0.md`.
+`null` on outbound legs and when the data is absent. See `docs/release-notes/4.9.0.md`.
 
 ### Added
 
@@ -499,7 +499,7 @@ RTCP/SDP/SIP/WebRTC/Audio), plus two additive public features: **mutual TLS per 
 certificate from memory** and a **public PCM transcoding surface**. The new public APIs are purely
 additive — `PublicApi.approved.txt` only grew, nothing was removed — so an existing consumer that
 does not opt into the new configuration surfaces stays behaviour-identical. Every hardening cap sits
-far above any real signalling/media, so legitimate traffic is unaffected. See `RELEASE_NOTES_4.8.0.md`
+far above any real signalling/media, so legitimate traffic is unaffected. See `docs/release-notes/4.8.0.md`
 and ADR-064 (per-line mTLS), ADR-065 (transcoding surface) and ADR-066 (DTLS close-block) for detail.
 
 ### Added
@@ -636,7 +636,7 @@ scheduler is reworked so a call reaches a working candidate pair faster, especia
 candidate is unreachable. **`PublicApi.approved.txt` is unchanged** (no API break); the ICE latency rework is
 transparent, and the review fixes change a few on-wire details for correctness — type-scoped ICE foundations,
 and stable append-only MIDs / call-order m-lines for runtime-added tracks (a fixed 1+1 peer stays
-byte-identical). See `RELEASE_NOTES_4.7.2.md`, ADR-062 (ICE checklist) and ADR-063 (track MIDs) for detail.
+byte-identical). See `docs/release-notes/4.7.2.md`, ADR-062 (ICE checklist) and ADR-063 (track MIDs) for detail.
 
 ### Fixed
 
@@ -688,7 +688,7 @@ TURN hardening (review #155):
 ## [4.7.1] - 2026-07-31
 
 WebRTC/SFU correctness patch for the 4.7 line. Additive and transport-only — a peer that uses none of the 4.7
-features negotiates byte-identical SDP to 4.6. Full detail in `RELEASE_NOTES_4.7.1.md`.
+features negotiates byte-identical SDP to 4.6. Full detail in `docs/release-notes/4.7.1.md`.
 
 ### Added
 

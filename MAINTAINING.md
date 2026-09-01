@@ -246,7 +246,7 @@ deren PDBs Pfade verschobener Dateien und verfälschen die Zahl.
 3. Doku: `release-docs.yml` deployt DocFX nach GitHub Pages (root + versioniert) bei Push
    auf main; `docs.yml` ist das PR-Gate für den Doku-Build.
 4. **Release-Doku (pro Minor/Major):** `VersionPrefix` in `src/Directory.Build.props` hochziehen;
-   `CHANGELOG.md` (`[Unreleased]` → `[X.Y.Z] - DATUM` + frische `[Unreleased]`); `RELEASE_NOTES_X.Y.Z.md`
+   `CHANGELOG.md` (`[Unreleased]` → `[X.Y.Z] - DATUM` + frische `[Unreleased]`); `docs/release-notes/X.Y.Z.md`
    schreiben; `docs/portal/changelog.md` (Release-Highlight), README-Abschnitt „What's new", Status-Zeile und
    „latest release" nachziehen. Die Public-API-Fläche ist über `tests/CalloraVoipSdk.ArchitectureTests/PublicApi.approved.txt`
    (test-erzwungen) belegt — ein Removal oder eine Signatur-Änderung dort ⇒ Major-Bump, sonst Minor (additiv).
@@ -308,14 +308,14 @@ Typische Erweiterungspunkte:
 > PCM-Transcoding-Fläche ([ADR-065](docs/adr/ADR-065-public-pcm-transcoding-surface.md)) und
 > DTLS-post-handshake-`close_notify`-Servicing ([ADR-066](docs/adr/ADR-066-dtls-post-handshake-association-servicing.md)).
 > Die einzelnen Punkte unten stammen aus dem 4.6.0-Stand — Details zu allem Neuen in
-> [`CHANGELOG.md`](CHANGELOG.md) und [`RELEASE_NOTES_4.8.0.md`](RELEASE_NOTES_4.8.0.md).
+> [`CHANGELOG.md`](CHANGELOG.md) und [`docs/release-notes/4.8.0.md`](docs/release-notes/4.8.0.md).
 
 > **Nachtrag 4.11.0 (2026-08-19):** Seither: WebRTC-**ICE-Restart am verbundenen Peer** (#226), **recv-Simulcast**
 > (#317), RFC-8285-Zwei-Byte-Header-Extensions und AV1-Dependency-Descriptor, Media-Flow/Silence-Monitoring auf
 > `ICall`, SIP-Härtung (RFC 3261 §19.1.4 / §8.2.2.1) und Static-IP-Trunk-Support — sowie der **TCP/TLS-TURN-Relay**
 > (#240, [ADR-073](docs/adr/ADR-073-stream-relay-transport-tcp-tls.md)): unit-bewiesen, Browser/Real-Server-Interop
 > noch offen (#228). Rein additiv, keine Public-API entfernt oder geändert (belegt via `PublicApi.approved.txt`).
-> Details in [`CHANGELOG.md`](CHANGELOG.md) und [`RELEASE_NOTES_4.11.0.md`](RELEASE_NOTES_4.11.0.md).
+> Details in [`CHANGELOG.md`](CHANGELOG.md) und [`docs/release-notes/4.11.0.md`](docs/release-notes/4.11.0.md).
 
 > **Nachtrag 4.12.0 (2026-08-27):** Seither: WebRTC-**Simulcast als Answerer** (#369) — ein angebotenes
 > `a=simulcast:send` (die verbreitete SFU-Topologie) wird jetzt in der Antwort bestätigt und die empfangenen
@@ -325,7 +325,7 @@ Typische Erweiterungspunkte:
 > einzelne Simulcast-RID wird nun beobachtbar (geloggt) zu einem Single-Stream degradiert statt still (#377).
 > Rein additiv — eine Public-API-Zeile ergänzt (`ICall.DiversionChain`), nichts entfernt oder geändert (belegt
 > via `PublicApi.approved.txt`). Details in [`CHANGELOG.md`](CHANGELOG.md) und
-> [`RELEASE_NOTES_4.12.0.md`](RELEASE_NOTES_4.12.0.md).
+> [`docs/release-notes/4.12.0.md`](docs/release-notes/4.12.0.md).
 
 > **Nachtrag 4.13.0 (2026-08-28):** Seither: ein **Jitter-Buffer im WebRTC-Empfangspfad**, opt-in über
 > `WebRtcConfiguration.AudioReceivePlayoutDelayMs` (Default 0 = unverändertes Verhalten). Er ist für
@@ -335,7 +335,7 @@ Typische Erweiterungspunkte:
 > und nicht die Ausnahme, und hörbar als Ton, der nach jeder Sprechpause abreißt. Der SIP-Pfad hatte
 > diese Form immer schon (`RtpCallMediaSession`); nur der WebRTC-Empfangspfad nicht. Rein additiv — eine
 > Public-API-Zeile ergänzt, nichts entfernt oder geändert (belegt via `PublicApi.approved.txt`). Details
-> in [`CHANGELOG.md`](CHANGELOG.md) und [`RELEASE_NOTES_4.13.0.md`](RELEASE_NOTES_4.13.0.md).
+> in [`CHANGELOG.md`](CHANGELOG.md) und [`docs/release-notes/4.13.0.md`](docs/release-notes/4.13.0.md).
 
 > **Nachtrag 4.13.1 (2026-08-31):** Ein WebRTC-Anruf verlor bisher zwei Sekunden im DTLS-Handshake
 > (#385). Der Quellfilter der Association öffnete erst mit der ICE-Nominierung; ein Browser beginnt
@@ -348,7 +348,7 @@ Typische Erweiterungspunkte:
 > Fingerprint bleibt ohnehin die Authentifizierungsgrenze (RFC 5763 §6.7.1). Eine Nominierung gewinnt
 > immer und wird nie zurückgenommen, und nur DTLS folgt der frühen Quelle — der Transport sendet weiter
 > an das nominierte Paar. Keine Änderung der öffentlichen Fläche. Details in
-> [`CHANGELOG.md`](CHANGELOG.md) und [`RELEASE_NOTES_4.13.1.md`](RELEASE_NOTES_4.13.1.md).
+> [`CHANGELOG.md`](CHANGELOG.md) und [`docs/release-notes/4.13.1.md`](docs/release-notes/4.13.1.md).
 
 > **Nachtrag 4.14.0 (2026-08-31):** Ein WebRTC-Anruf verbindet jetzt in etwa einer statt vier Sekunden
 > (#389). Ein Peer, der trickelt, sendet weder Kandidaten noch Adresse — seine Description trägt den
@@ -370,7 +370,7 @@ Typische Erweiterungspunkte:
 > Interface-Adresse, während sein Kandidat die öffentliche Relay-Adresse trägt. Ein Hook, keine Heuristik:
 > Nur das Deployment kennt seine Topologie. Rein additiv — eine Public-API-Zeile ergänzt, nichts entfernt
 > oder geändert (belegt via `PublicApi.approved.txt`). Details in [`CHANGELOG.md`](CHANGELOG.md) und
-> [`RELEASE_NOTES_4.14.0.md`](RELEASE_NOTES_4.14.0.md).
+> [`docs/release-notes/4.14.0.md`](docs/release-notes/4.14.0.md).
 
 Quellen: `docs/audit/INTEROP_SOAK_AUDIT.md` (F-Register) und die Tiefenanalyse 2026-07-22
 (`docs/audit/2026-07-22-quelltext-tiefenanalyse.md`). **Sämtliche P1-Befunde der Tiefenanalyse
