@@ -9,6 +9,7 @@ For the machine-readable list of every change, see [`CHANGELOG.md`](../../CHANGE
 
 | Version | Notes |
 | --- | --- |
+| 4.15.0 | [`4.15.0.md`](4.15.0.md) |
 | 4.14.0 | [`4.14.0.md`](4.14.0.md) |
 | 4.13.1 | [`4.13.1.md`](4.13.1.md) |
 | 4.13.0 | [`4.13.0.md`](4.13.0.md) |

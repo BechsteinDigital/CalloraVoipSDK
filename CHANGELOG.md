@@ -8,6 +8,75 @@ The format is based on Keep a Changelog and this repository follows Semantic Ver
 
 The next line. Entries here accumulate the consumer-visible changes not yet released.
 
+## [4.15.0] - 2026-09-01
+
+### Added
+
+- **`IPhoneLine.AnnouncedAddresses` — a registration account can now say which numbers reach it.**
+  "Which numbers reach me on this line?" is the question every telephone system has to answer, and a
+  registration account brought nothing to answer it with: it sends no list, and its username is as often
+  `admin123` as a number. RFC 3455 §5.1 answers it outright — the registrar lists the URIs associated
+  with the address-of-record in the 200 OK to REGISTER. Order is preserved (the first entry is the
+  default public identity) and duplicates are not. An empty result means **nobody said**, never **there
+  are none**: a CPE box on the local network generally sends no such header, and read the other way a
+  silent registrar becomes a line nobody can reach. A refresh that answers without the header does not
+  erase what the first response announced.
+
+- **`IPhoneLine.SubscribeAsync` and `ISipSubscription` — SIP subscriptions are reachable.** They were
+  fully built and fully internal: SUBSCRIBE, the handle, the NOTIFY event, the refresh. Public now is
+  the interface with exactly three things — which package, an event per NOTIFY, and ending it. The
+  internal handle stays internal; it carries the machinery.
+
+- **`SipDialogInfo` (RFC 4235) and `SipPresence` (RFC 3863) — the two documents a PBX lives on are
+  parsed, not passed through.** dialog-info is the busy lamp: subscribe to an extension's dialog package
+  and every notification says free, ringing or on a call. Three traps are encoded in the types: a
+  **partial** document carries only what changed and says nothing about the rest, so reading it as full
+  state clears a lamp that should be lit; an unrecognised state is `Unknown`, not free; and `early`
+  counts as busy, because a colleague whose phone is ringing cannot take a second call either. Both are
+  read namespace-tolerantly — the RFC fixes the namespace, deployments do not.
+
+- **G.729 is negotiable (opt-in via `PreferredAudioCodecs`), never decodable.** A carrier that offers
+  only G.729 answers a call today with 488 and it never happens — the same failure a µ-law-only offer
+  produced in Europe, one codec further along. This SDK carries no G.729 implementation, so offering it
+  is a promise to **forward** the payload, not to understand it: correct for a leg bridged to another
+  G.729 leg, wrong for one whose audio somebody wants to hear. It has its own payload-codec kind so the
+  bridge can say which of the two happened, and what to do about it.
+
+### Fixed
+
+- **DTMF is sent as a tone, not as a burst in microseconds.** Both send paths — the SIP RTP session and
+  the bundled WebRTC one — emitted three packets back to back, one start and two ends, all within
+  microseconds, while the payload claimed a duration of 160 ms. Two failures follow, and both appear at
+  one customer and not the next: a gateway that reconstructs the tone from packet **arrival times** (what
+  happens crossing to analogue or ISDN, and what several IVRs do) sees a tone that never lasted and
+  reports no digit; and with nothing between start and end, one lost packet was one lost digit, which is
+  exactly what the RFC's design prevents. Now three start packets (marker only on the very first),
+  intermediate packets every 20 ms with growing duration, three end packets — all on the same RTP
+  timestamp, because that is the event's start time (RFC 4733 §2.5.1.2). Cancelling mid-tone still sends
+  the end: an event without one is a stuck tone at the far end.
+
+- **Hold in the older style is recognised.** Detection read the direction attribute only. RFC 2543 held
+  a call by setting the connection address to `0.0.0.0`, and RFC 3264 §8.4 records that this is what it
+  means; plenty of gateways and older systems still send it. The failure was the dangerous kind — silent:
+  the call reported itself connected while the far end had it on hold. Compared as a parsed address in
+  both families (`0.0.0.0`, `::` and `::0` are one address in three spellings), and an address on the
+  m-section beats the session's (RFC 8866 §5.7).
+
+- **RTP is no longer sent to the unspecified address.** Until the far end sends a packet for symmetric
+  RTP to latch onto there is nothing there to hit; sending throws on some stacks and vanishes on others,
+  once per packet for as long as the hold lasts. The bundled transport had this guard since the ICE fix,
+  the SIP path did not. A packet not sent is not counted as sent either — the sender report otherwise
+  claimed packets that never left, and the far end's loss calculation hangs on that counter.
+
+### Changed
+
+- **Every published package is covered by the public-API baseline, and every release is anchored to a
+  green interop run.** 109 public members in the audio packages were outside the baseline — they could
+  change shape between versions with nothing to review. The release workflow ran the unit set only, so
+  packages were published without any of what the README advertises having run; it now requires a
+  successful `ci` run for the exact commit being tagged. A version must be anchored to its tag, and a
+  version already complete on nuget.org is refused rather than silently skipped.
+
 ## [4.14.0] - 2026-08-31
 
 ### Fixed
