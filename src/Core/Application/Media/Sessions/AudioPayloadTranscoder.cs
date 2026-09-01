@@ -327,9 +327,9 @@ internal static class AudioPayloadTranscoder
         if (normalized.Contains("OPUS", StringComparison.Ordinal))
             return PayloadCodecKind.Opus;
 
-        // Named so the failure downstream can name it too. The SDK cannot decode G.729 — the algorithm
-        // needs a licence — and the alternative was PayloadCodecKind.Unknown, which reads as "a codec
-        // nobody has heard of" for one that half the carrier world still offers.
+        // Named so the failure downstream can name it too. This SDK carries no G.729 implementation,
+        // and the alternative was PayloadCodecKind.Unknown — which reads as "a codec nobody has heard
+        // of" for one that half the carrier world still offers.
         if (normalized.Contains("G729", StringComparison.Ordinal) ||
             normalized.Contains("G.729", StringComparison.Ordinal))
         {

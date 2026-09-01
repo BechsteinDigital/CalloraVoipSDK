@@ -34,10 +34,10 @@ internal static class SdpUtilities
     private static readonly IReadOnlyList<SdpCodecDefinition> OptInCodecs =
     [
         new SdpCodecDefinition { PayloadType = 107, Name = "opus", ClockRate = 48000, Channels = 2 },
-        // G.729 (RFC 3551, static PT 18). Negotiable, never decodable: the algorithm needs a licence
-        // and the SDK carries no implementation. Offering it is therefore a promise to FORWARD the
-        // payload, not to understand it — which is exactly right for a leg that is bridged to another
-        // leg speaking the same codec, and exactly wrong for one whose audio somebody wants to hear.
+        // G.729 (RFC 3551, static PT 18). Negotiable, not decodable: this SDK carries no G.729
+        // implementation, so offering it is a promise to FORWARD the payload rather than to understand
+        // it — exactly right for a leg bridged to another leg speaking the same codec, exactly wrong
+        // for one whose audio somebody wants to hear.
         //
         // Opt-in for that reason, not because it is exotic: a carrier that offers only G.729 answers
         // 488 today and the call never happens at all. That is the same failure a µ-law-only offer
