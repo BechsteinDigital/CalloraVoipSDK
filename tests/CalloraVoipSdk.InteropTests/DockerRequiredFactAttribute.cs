@@ -13,6 +13,12 @@ public sealed class DockerRequiredFactAttribute : FactAttribute
     private static readonly bool DockerAvailable = ProbeDocker();
 
     /// <summary>
+    /// Ob ein Docker-Daemon antwortet. Öffentlich, damit <see cref="InteropPrerequisiteTests"/> in CI
+    /// prüfen kann, dass sich hier nicht die ganze Suite stillschweigend wegspringt.
+    /// </summary>
+    internal static bool IsDockerAvailable => DockerAvailable;
+
+    /// <summary>
     /// Erstellt das Attribut und setzt <see cref="FactAttribute.Skip"/>, falls kein Docker-Daemon
     /// erreichbar ist.
     /// </summary>
