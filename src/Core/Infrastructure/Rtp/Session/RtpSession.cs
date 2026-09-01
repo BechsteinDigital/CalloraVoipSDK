@@ -368,7 +368,28 @@ internal sealed class RtpSession : IRtpSession
             return;
         }
 
-        await _udp.SendAsync(datagram, _latch.Target(_options.RemoteEndPoint), cancellationToken).ConfigureAwait(false);
+        await SendToPeerAsync(datagram, cancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Sends one datagram to the peer, or drops it when there is no peer to send it to.
+    /// </summary>
+    /// <remarks>
+    /// The remote description may name no address at all: <c>c=0.0.0.0</c> is the RFC 2543 way of
+    /// putting a call on hold and several gateways still send it. Until the far end sends us a packet
+    /// for symmetric RTP to latch onto, there is nothing to aim at — and aiming at the unspecified
+    /// address throws on some stacks and goes nowhere on others, once per packet, for as long as the
+    /// hold lasts.
+    /// </remarks>
+    private async ValueTask SendToPeerAsync(ReadOnlyMemory<byte> datagram, CancellationToken cancellationToken)
+    {
+        if (_latch.Target(_options.RemoteEndPoint) is not { } target)
+        {
+            return;
+        }
+
+        await _udp.SendAsync(datagram, target, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -480,7 +501,7 @@ internal sealed class RtpSession : IRtpSession
             return;
         }
 
-        await _udp.SendAsync(datagram, _latch.Target(_options.RemoteEndPoint), cancellationToken)
+        await SendToPeerAsync(datagram, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -757,7 +778,15 @@ internal sealed class RtpSession : IRtpSession
             return;
         }
 
-        await _udp.SendAsync(datagram, _latch.Target(_options.RemoteEndPoint), cancellationToken).ConfigureAwait(false);
+        if (_latch.Target(_options.RemoteEndPoint) is not { } target)
+        {
+            // No peer to send to (see SendToPeerAsync). Counted as unsent rather than as sent: the
+            // sender report would otherwise claim packets that never left, and the far end's loss
+            // calculation is derived from exactly that count.
+            return;
+        }
+
+        await _udp.SendAsync(datagram, target, cancellationToken).ConfigureAwait(false);
 
         Interlocked.Increment(ref _packetsSent);
         Interlocked.Add(ref _octetsSent, payload.Length);
