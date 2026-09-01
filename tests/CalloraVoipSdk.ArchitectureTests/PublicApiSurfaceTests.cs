@@ -53,6 +53,13 @@ public sealed class PublicApiSurfaceTests
         typeof(CalloraVoipSdk.Audio.Linux.LinuxAudioDevice),                  // .Audio.Linux
     ];
 
+    /// <summary>
+    /// The assembly names the baseline covers — read by <see cref="PublishedPackageAnchorTests"/>,
+    /// which checks that every published package is among them.
+    /// </summary>
+    internal static IReadOnlyCollection<string> AnchoredAssemblyNames =>
+        [.. AssemblyAnchors.Select(anchor => anchor.Assembly.GetName().Name!)];
+
     [Fact]
     public void Public_API_Surface_matches_approved_baseline()
     {
