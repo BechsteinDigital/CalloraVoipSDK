@@ -43,6 +43,7 @@ internal sealed class SipLineChannel : ILineChannel
     private readonly object _sync = new();
 
     private Action<LineState>? _onState;
+    private IReadOnlyList<string> _announcedAddresses = [];
     private Action<int>? _onReconnecting;
     private Action<ReregisterFailReason, int>? _onReconnectFailed;
     private Action<ICallChannel, string>? _onInbound;
@@ -154,6 +155,18 @@ internal sealed class SipLineChannel : ILineChannel
     /// Invoked when re-registration fails permanently.
     /// First parameter is the <see cref="ReregisterFailReason"/>; second is the total attempt count.
     /// </param>
+    /// <inheritdoc />
+    public IReadOnlyList<string> AnnouncedAddresses
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _announcedAddresses;
+            }
+        }
+    }
+
     public void StartRegistration(
         Action<LineState> onStateChange,
         Action<int>? onReconnecting = null,
@@ -283,6 +296,36 @@ internal sealed class SipLineChannel : ILineChannel
 
         if (status is < 200 or >= 300)
             throw new InvalidOperationException($"SIP MESSAGE to '{targetUri}' failed with status {status}.");
+    }
+
+    /// <inheritdoc />
+    public async Task<Domain.Subscriptions.ISipSubscription> SubscribeAsync(
+        string eventType,
+        string targetUri,
+        int expiresSeconds = 300,
+        string? accept = null,
+        CancellationToken ct = default)
+    {
+        ThrowIfDisposed();
+        ArgumentException.ThrowIfNullOrWhiteSpace(eventType);
+        ArgumentException.ThrowIfNullOrWhiteSpace(targetUri);
+
+        var handle = await _callSignalingService.SubscribeAsync(
+                new SipSubscribeRequest
+                {
+                    LocalUsername = _account.Username,
+                    LocalDomain = _account.SipServer,
+                    AuthPassword = _account.Password,
+                    RemoteUri = targetUri,
+                    EventType = eventType,
+                    ExpiresSeconds = expiresSeconds,
+                    AcceptHeader = accept,
+                    Transport = MapTransport(_account.Transport),
+                },
+                ct)
+            .ConfigureAwait(false);
+
+        return new SipSubscriptionAdapter(eventType, handle);
     }
 
     /// <inheritdoc />
@@ -552,6 +595,16 @@ internal sealed class SipLineChannel : ILineChannel
                     {
                         _registrationCallId = result.CallId;
                         _registrationNextCSeq = result.NextCSeq;
+
+                        // Kept only when the registrar said something. A refresh that answers without
+                        // the header must not erase what the first response announced: registrars send
+                        // it on the initial registration and not always afterwards, and an application
+                        // that reads "no numbers" halfway through a session would conclude the line
+                        // lost them.
+                        if (result.AssociatedUris.Count > 0)
+                        {
+                            _announcedAddresses = result.AssociatedUris;
+                        }
                     }
 
                     // NAT: adopt the public address the registrar reflected. When it changes

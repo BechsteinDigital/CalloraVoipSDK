@@ -33,7 +33,16 @@ internal static class SdpUtilities
     // announced as opus/48000/2 (dynamic PT), regardless of the operating mode.
     private static readonly IReadOnlyList<SdpCodecDefinition> OptInCodecs =
     [
-        new SdpCodecDefinition { PayloadType = 107, Name = "opus", ClockRate = 48000, Channels = 2 }
+        new SdpCodecDefinition { PayloadType = 107, Name = "opus", ClockRate = 48000, Channels = 2 },
+        // G.729 (RFC 3551, static PT 18). Negotiable, not decodable: this SDK carries no G.729
+        // implementation, so offering it is a promise to FORWARD the payload rather than to understand
+        // it — exactly right for a leg bridged to another leg speaking the same codec, exactly wrong
+        // for one whose audio somebody wants to hear.
+        //
+        // Opt-in for that reason, not because it is exotic: a carrier that offers only G.729 answers
+        // 488 today and the call never happens at all. That is the same failure a µ-law-only offer
+        // produced in Europe, one codec further along.
+        new SdpCodecDefinition { PayloadType = 18, Name = "G729", ClockRate = 8000 }
     ];
 
     /// <summary>
@@ -315,8 +324,32 @@ internal static class SdpUtilities
 
         var audio = parsed.Media.FirstOrDefault(m => m.MediaType.Equals("audio", StringComparison.OrdinalIgnoreCase));
         var direction = audio?.Direction ?? parsed.SessionDirection;
-        return direction is SdpMediaDirection.SendOnly or SdpMediaDirection.Inactive;
+        if (direction is SdpMediaDirection.SendOnly or SdpMediaDirection.Inactive)
+        {
+            return true;
+        }
+
+        // The older way of saying the same thing, and still what several gateways and PBXs emit:
+        // RFC 2543 put a call on hold by setting the connection address to 0.0.0.0 rather than by
+        // changing the direction, and RFC 3264 §8.4 records that this is what it means. Reading only
+        // the direction therefore misses half the deployed base — and misses it silently, which is the
+        // dangerous shape: the call reports itself as connected while the other side has us on hold,
+        // and the media path keeps sending to an address that goes nowhere.
+        return IsUnspecifiedAddress(audio?.ConnectionAddress ?? parsed.ConnectionAddress);
     }
+
+    /// <summary>
+    /// Whether an SDP connection address is the "no media here" placeholder.
+    /// </summary>
+    /// <remarks>
+    /// Both families: <c>0.0.0.0</c> for IPv4 and <c>::</c> for IPv6. Compared as parsed addresses
+    /// rather than as strings, because <c>0.0.0.0</c>, <c>::</c> and <c>::0</c> are the same address
+    /// written three ways and a string comparison catches one of them.
+    /// </remarks>
+    public static bool IsUnspecifiedAddress(string? connectionAddress)
+        => !string.IsNullOrWhiteSpace(connectionAddress)
+            && System.Net.IPAddress.TryParse(connectionAddress.Trim(), out var address)
+            && (address.Equals(System.Net.IPAddress.Any) || address.Equals(System.Net.IPAddress.IPv6Any));
 
     private static IReadOnlyDictionary<int, string> BuildCodecMap(
         IReadOnlyList<SdpCodecDefinition> codecs,

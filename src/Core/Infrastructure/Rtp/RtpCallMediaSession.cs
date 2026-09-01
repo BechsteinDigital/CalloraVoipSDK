@@ -313,42 +313,23 @@ internal sealed class RtpCallMediaSession : ICallMediaSession
         var payloadType = _telephoneEventPayloadType
             ?? throw new InvalidOperationException("RTP telephone-event was not negotiated for this call media session.");
         var durationRtpUnits = RtpTelephoneEventCodec.DurationMsToRtpUnits(durationMs, _clockRate);
-        var startDurationRtpUnits = (ushort)Math.Max(1, durationRtpUnits / 2);
         // Stamp the whole burst with the audio stream's current cursor and reserve the event's full duration so
         // the cursor advances past it — otherwise a following DTMF event reuses this timestamp and a receiver
         // folds it into this event, dropping the repeated tone (RFC 4733 §2.5.1.4).
         var eventTimestamp = _rtp.ReserveTimestamp(durationRtpUnits);
 
-        var startPacketPayload = RtpTelephoneEventCodec.BuildPayload(
-            toneCode,
-            endOfEvent: false,
-            durationRtpUnits: startDurationRtpUnits);
-        var endPacketPayload = RtpTelephoneEventCodec.BuildPayload(
-            toneCode,
-            endOfEvent: true,
-            durationRtpUnits: durationRtpUnits);
-
-        await _rtp.SendTimestampedAsync(
-                startPacketPayload,
-                marker: true,
-                payloadType: (byte)payloadType,
-                timestamp: eventTimestamp,
-                cancellationToken: ct)
-            .ConfigureAwait(false);
-        await _rtp.SendTimestampedAsync(
-                endPacketPayload,
-                marker: false,
-                payloadType: (byte)payloadType,
-                timestamp: eventTimestamp,
-                cancellationToken: ct)
-            .ConfigureAwait(false);
-        // RFC 4733 reliability recommendation: repeat final packet.
-        await _rtp.SendTimestampedAsync(
-                endPacketPayload,
-                marker: false,
-                payloadType: (byte)payloadType,
-                timestamp: eventTimestamp,
-                cancellationToken: ct)
+        await RtpTelephoneEventBurst.SendAsync(
+                async (payload, marker, token) => await _rtp.SendTimestampedAsync(
+                        payload,
+                        marker: marker,
+                        payloadType: (byte)payloadType,
+                        timestamp: eventTimestamp,
+                        cancellationToken: token).ConfigureAwait(false),
+                static (ms, token) => Task.Delay(ms, token),
+                toneCode,
+                durationMs,
+                _clockRate,
+                ct)
             .ConfigureAwait(false);
     }
 

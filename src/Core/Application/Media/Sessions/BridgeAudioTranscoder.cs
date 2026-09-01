@@ -60,6 +60,18 @@ internal sealed class BridgeAudioTranscoder
                     wireKind, wirePayloadType);
                 return new BridgeAudioTranscoder(wireKind, wirePayloadType, logger);
 
+            case PayloadCodecKind.G729:
+                // Its own case so the sentence is actionable. G.729 needs a licensed codec the SDK does
+                // not carry, so there is nothing to resample and nothing to fix by configuration: the
+                // payload is forwarded untouched, which is correct for a leg bridged to another G.729
+                // leg and produces noise for anything that tries to play it.
+                logger.LogWarning(
+                    "Bridge PCMU tap requested on a G.729 call (PT {Pt}). The SDK carries no G.729 codec, "
+                    + "so the payload is forwarded untouched: bridge it to another G.729 leg, or take "
+                    + "G729 out of PreferredAudioCodecs so the call negotiates a codec this tap can read.",
+                    wirePayloadType);
+                return null;
+
             default:
                 logger.LogWarning(
                     "Bridge PCMU tap requested but wire codec {WireKind} cannot be transcoded to µ-law "

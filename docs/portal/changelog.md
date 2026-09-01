@@ -17,7 +17,7 @@ libwebrtc), unreachable targets are no longer retransmitted to, source compariso
 IPv4-mapped IPv6 addresses, and sending to the unspecified address is refused with a log line naming it.
 New and opt-in: `WebRtcConfiguration.RemoteEndPointTranslator` for the hairpin case, where a peer arrives
 through a TURN server on the same machine. **Purely additive** — one new public member. See
-[`RELEASE_NOTES_4.14.0.md`](https://github.com/BechsteinDigital/CalloraVoipSDK/blob/main/RELEASE_NOTES_4.14.0.md).
+[`4.14.0`](https://github.com/BechsteinDigital/CalloraVoipSDK/blob/main/docs/release-notes/4.14.0.md).
 
 ### 4.13.1 — 2026-08-31
 
@@ -29,7 +29,7 @@ a doubling timer (measured: +406 ms, +813 ms). It now accepts a source ICE has *
 available immediately. The protection is unchanged — such a source verified `MESSAGE-INTEGRITY` against
 our ICE password and is therefore not off-path — and a nomination always wins, with only the DTLS filter
 following the early source. **No API change, nothing to configure.** See
-[`RELEASE_NOTES_4.13.1.md`](https://github.com/BechsteinDigital/CalloraVoipSDK/blob/main/RELEASE_NOTES_4.13.1.md).
+[`4.13.1`](https://github.com/BechsteinDigital/CalloraVoipSDK/blob/main/docs/release-notes/4.13.1.md).
 
 ### 4.13.0 — 2026-08-28
 
@@ -43,7 +43,7 @@ the packets after a pause arrive together), audible as audio that cuts out after
 event; the default of 0 keeps the previous behaviour exactly. The SIP path has always worked this way
 (`RtpCallMediaSession`); only the WebRTC receive path did not. **Purely additive** — one new public member,
 nothing removed or changed (verified against `PublicApi.approved.txt`). See
-[`RELEASE_NOTES_4.13.0.md`](https://github.com/BechsteinDigital/CalloraVoipSDK/blob/main/RELEASE_NOTES_4.13.0.md).
+[`4.13.0`](https://github.com/BechsteinDigital/CalloraVoipSDK/blob/main/docs/release-notes/4.13.0.md).
 
 ### 4.12.0 — 2026-08-27
 
@@ -56,7 +56,7 @@ public API change; a single configured RID now falls back to a single stream wit
 degenerate `a=simulcast`. Separately, `ICall.DiversionChain` lists every address a forwarded call was diverted
 from, read from `History-Info` (RFC 4244) and `Diversion` (RFC 5806) alike. **Purely additive** — one new
 public member, nothing removed or changed (verified against `PublicApi.approved.txt`). See
-[`RELEASE_NOTES_4.12.0.md`](https://github.com/BechsteinDigital/CalloraVoipSDK/blob/main/RELEASE_NOTES_4.12.0.md).
+[`4.12.0`](https://github.com/BechsteinDigital/CalloraVoipSDK/blob/main/docs/release-notes/4.12.0.md).
 
 ### 4.11.0 — 2026-08-19
 
@@ -71,7 +71,7 @@ rebuilt, and an offer can now ask the peer to simulcast (`WebRtcConfiguration.Si
 media-flow/silence monitoring on `ICall`, RFC 8285 two-byte header extensions and the AV1 Dependency Descriptor
 on the RTP path, SIP hardening (RFC 3261 §19.1.4 / §8.2.2.1) and static-IP-trunk support. **Purely additive —
 no public API removed or changed** (verified against `PublicApi.approved.txt`). See
-[`RELEASE_NOTES_4.11.0.md`](https://github.com/BechsteinDigital/CalloraVoipSDK/blob/main/RELEASE_NOTES_4.11.0.md).
+[`4.11.0`](https://github.com/BechsteinDigital/CalloraVoipSDK/blob/main/docs/release-notes/4.11.0.md).
 
 ### 4.10.0 — 2026-08-07
 

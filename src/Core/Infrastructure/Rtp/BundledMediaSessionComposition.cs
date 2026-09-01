@@ -607,22 +607,20 @@ internal static class BundledMediaSessionComposition
         byte payloadType, CancellationToken cancellationToken)
     {
         var durationRtpUnits = RtpTelephoneEventCodec.DurationMsToRtpUnits(durationMs, clockRate);
-        var startDurationRtpUnits = (ushort)Math.Max(1, durationRtpUnits / 2);
         var eventTimestamp = outbound.ReserveTrackTimestamp(audioMid, durationRtpUnits);
 
-        var startPayload = RtpTelephoneEventCodec.BuildPayload(toneCode, endOfEvent: false, durationRtpUnits: startDurationRtpUnits);
-        var endPayload = RtpTelephoneEventCodec.BuildPayload(toneCode, endOfEvent: true, durationRtpUnits: durationRtpUnits);
-
-        await outbound.SendTimestampedAsync(
-            audioMid, startPayload, marker: true, payloadType: payloadType, timestamp: eventTimestamp,
-            cancellationToken: cancellationToken).ConfigureAwait(false);
-        await outbound.SendTimestampedAsync(
-            audioMid, endPayload, marker: false, payloadType: payloadType, timestamp: eventTimestamp,
-            cancellationToken: cancellationToken).ConfigureAwait(false);
-        // RFC 4733 §2.5.1.4 reliability recommendation: repeat the final (end-of-event) packet.
-        await outbound.SendTimestampedAsync(
-            audioMid, endPayload, marker: false, payloadType: payloadType, timestamp: eventTimestamp,
-            cancellationToken: cancellationToken).ConfigureAwait(false);
+        // The same burst as the SIP path, from the same place: two implementations of RFC 4733 in one
+        // SDK is two chances to get the timing wrong, and only one of them would ever be tested.
+        await RtpTelephoneEventBurst.SendAsync(
+                async (payload, marker, token) => await outbound.SendTimestampedAsync(
+                    audioMid, payload, marker: marker, payloadType: payloadType,
+                    timestamp: eventTimestamp, cancellationToken: token).ConfigureAwait(false),
+                static (ms, token) => Task.Delay(ms, token),
+                toneCode,
+                durationMs,
+                clockRate,
+                cancellationToken)
+            .ConfigureAwait(false);
     }
 
     // One simulcast encoding's outbound stream: its own SSRC, the shared video payload type, and a stamper

@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 432" width="800"
+     font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="13" xml:space="preserve"
+     role="img" aria-label="A terminal showing an outbound SIP call placed with CalloraVoipSdk: registration over TLS, dial, SRTP media, RTCP quality metrics, DTMF, attended transfer and hangup — followed by the CI interop checks against a real Asterisk and real browsers.">
+  <defs>
+    <clipPath id="win"><rect x="0" y="0" width="800" height="432" rx="10"/></clipPath>
+  </defs>
+  <g clip-path="url(#win)">
+    <rect width="800" height="432" rx="10" fill="#0d1117"/>
+    <rect width="800" height="34" fill="#161b22"/>
+    <circle cx="20" cy="17" r="6" fill="#ff5f57"/>
+    <circle cx="40" cy="17" r="6" fill="#febc2e"/>
+    <circle cx="60" cy="17" r="6" fill="#28c840"/>
+    <text x="400" y="21" fill="#8b949e" text-anchor="middle" font-size="12">CalloraVoipSdk — an outbound call, and what CI proves about it</text>
+
+    <text x="24" y="60" fill="#e6edf3"><tspan fill="#8b949e">$</tspan> dotnet run --project examples/CalloraVoipSdk.Sample.BasicCalling<animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.0557;0.0577;0.965;1" dur="24.0s" repeatCount="indefinite"/></text>
+    <text x="24" y="93" fill="#e6edf3"><tspan fill="#a371f7">⏺ register</tspan>  1001@pbx.example.org <tspan fill="#8b949e">·</tspan> TLS  <tspan fill="#8b949e">REGISTER → 401 → 200</tspan>  <tspan fill="#7ee787">registered</tspan> <tspan fill="#8b949e">(300 s)</tspan><animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.1114;0.1134;0.965;1" dur="24.0s" repeatCount="indefinite"/></text>
+    <text x="38" y="114" fill="#8b949e">⎿ SRV <tspan fill="#79c0ff">_sip._tls.pbx.example.org</tspan> → 2 targets, weighted<animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.1671;0.1691;0.965;1" dur="24.0s" repeatCount="indefinite"/></text>
+    <text x="24" y="147" fill="#e6edf3"><tspan fill="#a371f7">⏺ dial</tspan>      sip:1002@pbx.example.org  <tspan fill="#8b949e">INVITE → 100 → 180</tspan>  <tspan fill="#ffa657">ringing</tspan><animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.2229;0.2249;0.965;1" dur="24.0s" repeatCount="indefinite"/></text>
+    <text x="38" y="168" fill="#8b949e">⎿ answer  <tspan fill="#79c0ff">PCMA/8000</tspan> <tspan fill="#8b949e">·</tspan> RTP/SAVP <tspan fill="#8b949e">·</tspan> SRTP-SDES        <tspan fill="#7ee787">200 OK</tspan> <tspan fill="#8b949e">after 2.1 s</tspan><animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.2786;0.2806;0.965;1" dur="24.0s" repeatCount="indefinite"/></text>
+    <text x="24" y="201" fill="#e6edf3"><tspan fill="#a371f7">⏺ media</tspan>     RTP ⇄ 20 ms <tspan fill="#8b949e">·</tspan> symmetric (comedia) latched   <tspan fill="#8b949e">50 pps each way</tspan><animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.3343;0.3363;0.965;1" dur="24.0s" repeatCount="indefinite"/></text>
+    <text x="38" y="222" fill="#8b949e">⎿ RTCP XR  <tspan fill="#7ee787">MOS 4.38</tspan> <tspan fill="#8b949e">·</tspan> jitter 3 ms <tspan fill="#8b949e">·</tspan> loss 0.0 % <tspan fill="#8b949e">·</tspan> RTT 21 ms<animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.39;0.392;0.965;1" dur="24.0s" repeatCount="indefinite"/></text>
+    <text x="24" y="255" fill="#e6edf3"><tspan fill="#a371f7">⏺ dtmf</tspan>      "1" <tspan fill="#8b949e">·</tspan> RFC 4733 <tspan fill="#8b949e">·</tspan> 160 ms            <tspan fill="#8b949e">12 packets, paced</tspan><animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.4457;0.4477;0.965;1" dur="24.0s" repeatCount="indefinite"/></text>
+    <text x="24" y="276" fill="#e6edf3"><tspan fill="#a371f7">⏺ transfer</tspan>  attended <tspan fill="#8b949e">·</tspan> REFER → 202 → NOTIFY   <tspan fill="#7ee787">completed</tspan><animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.5014;0.5034;0.965;1" dur="24.0s" repeatCount="indefinite"/></text>
+    <text x="24" y="297" fill="#e6edf3"><tspan fill="#a371f7">⏺ hangup</tspan>    <tspan fill="#8b949e">BYE → 200 OK</tspan>                       <tspan fill="#8b949e">00:01:47</tspan><animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.5571;0.5591;0.965;1" dur="24.0s" repeatCount="indefinite"/></text>
+    <text x="24" y="330" fill="#8b949e"><tspan fill="#8b949e">— every one of these runs against a real Asterisk in CI —</tspan><animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.6129;0.6149;0.965;1" dur="24.0s" repeatCount="indefinite"/></text>
+    <text x="24" y="351" fill="#e6edf3"><tspan fill="#7ee787">✓</tspan> interop  registration <tspan fill="#8b949e">·</tspan> calls <tspan fill="#8b949e">·</tspan> SRTP <tspan fill="#8b949e">·</tspan> DTMF <tspan fill="#8b949e">·</tspan> hold <tspan fill="#8b949e">·</tspan> transfer  <tspan fill="#8b949e">0 skipped</tspan><animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.6686;0.6706;0.965;1" dur="24.0s" repeatCount="indefinite"/></text>
+    <text x="24" y="372" fill="#e6edf3"><tspan fill="#7ee787">✓</tspan> bridge    two legs, media <tspan fill="#7ee787">byte-exact</tspan> in both directions<animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.7243;0.7263;0.965;1" dur="24.0s" repeatCount="indefinite"/></text>
+    <text x="24" y="393" fill="#e6edf3"><tspan fill="#7ee787">✓</tspan> browsers  Chromium + Firefox <tspan fill="#8b949e">·</tspan> offerer and answerer<animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.78;0.782;0.965;1" dur="24.0s" repeatCount="indefinite"/></text>
+  </g>
+</svg>

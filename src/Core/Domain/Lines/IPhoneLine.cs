@@ -24,6 +24,71 @@ public interface IPhoneLine
     /// <summary>Current registration state; changes are signalled by <see cref="StateChanged"/>.</summary>
     LineState  State    { get; }
 
+    /// <summary>
+    /// The addresses the registrar announced for this line — which numbers reach it (RFC 3455
+    /// <c>P-Associated-URI</c>).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The only source that needs no operator and no call.</b> A trunk contract brings a list
+    /// somebody can type in; a registration account brings nothing, and its username is as often
+    /// <c>admin123</c> as a number. A registrar that sends this header answers the question outright,
+    /// at registration time.
+    /// </para>
+    /// <para>
+    /// The first entry is the default public identity — the one the network uses when a request does
+    /// not say otherwise — so the order is meaningful and preserved. Both <c>sip:</c> and <c>tel:</c>
+    /// occur, often for the same number, and they are returned as announced: what counts as a
+    /// telephone number is a question about a dial plan, and this layer does not have one.
+    /// </para>
+    /// <para>
+    /// Empty means <em>nobody said</em>, never <em>there are none</em>. Carrier registrars send it; a
+    /// box on the local network generally does not, and reading the empty list as a statement would
+    /// turn a silent registrar into a line with no numbers.
+    /// </para>
+    /// </remarks>
+    IReadOnlyList<string> AnnouncedAddresses => [];
+
+    /// <summary>
+    /// Subscribes to somebody else's state and keeps receiving it as it changes (RFC 6665).
+    /// </summary>
+    /// <param name="eventType">
+    /// The event package: <c>dialog</c> for what a line is doing, <c>presence</c> for whether somebody
+    /// is available, or anything else the far end offers.
+    /// </param>
+    /// <param name="targetUri">Whose state to watch, as a SIP URI.</param>
+    /// <param name="expiresSeconds">Requested lifetime; the SDK refreshes before it runs out.</param>
+    /// <param name="accept">
+    /// Optional <c>Accept</c> header. Left out, the far end picks the document format it prefers — which
+    /// is usually right and occasionally means receiving one this SDK does not parse.
+    /// </param>
+    /// <param name="ct">Cancels the initial SUBSCRIBE.</param>
+    /// <returns>The live subscription. Dispose it to unsubscribe.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>This is how a telephone system shows its colleagues.</b> Subscribing to the <c>dialog</c>
+    /// package of an extension and reading <see cref="Subscriptions.SipDialogInfo"/> out of each
+    /// notification is a busy lamp: idle, ringing, on a call. Polling cannot do it — by the time the
+    /// answer arrives the state has moved.
+    /// </para>
+    /// <para>
+    /// Notifications carry the document unparsed as well.
+    /// <see cref="Subscriptions.SipDialogInfo.TryParse"/> and
+    /// <see cref="Subscriptions.SipPresence.TryParse"/> read the two this SDK understands; an event
+    /// package it does not know still reaches the application intact rather than being dropped for not
+    /// fitting a model.
+    /// </para>
+    /// </remarks>
+    Task<Subscriptions.ISipSubscription> SubscribeAsync(
+        string eventType,
+        string targetUri,
+        int expiresSeconds = 300,
+        string? accept = null,
+        CancellationToken ct = default)
+        => throw new NotSupportedException(
+            "This line does not support subscriptions. Implemented by the SIP line channel; a default "
+            + "is provided so adding this member does not break implementations outside this repository.");
+
     // ── Events ────────────────────────────────────────────────────────────────
 
     /// <summary>Raised when the line's registration <see cref="State"/> changes (signaling thread).</summary>

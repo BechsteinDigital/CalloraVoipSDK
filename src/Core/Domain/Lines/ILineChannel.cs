@@ -20,6 +20,16 @@ internal interface ILineChannel : IDisposable
     /// Invoked when re-registration fails permanently.
     /// First parameter is the <see cref="ReregisterFailReason"/>; second is the total attempt count.
     /// </param>
+    /// <summary>
+    /// The addresses the registrar announced for this line (RFC 3455 <c>P-Associated-URI</c>).
+    /// </summary>
+    /// <remarks>
+    /// Empty until a registration has succeeded, and empty forever with a registrar that does not send
+    /// the header — a CPE box on the local network generally does not, carrier registrars do. "Nobody
+    /// said" and "there are none" are the same value here and must be read as the first.
+    /// </remarks>
+    IReadOnlyList<string> AnnouncedAddresses => [];
+
     void StartRegistration(
         Action<LineState> onStateChange,
         Action<int>? onReconnecting = null,
@@ -71,5 +81,16 @@ internal interface ILineChannel : IDisposable
     /// and returns the assigned SIP-ETag and granted lifetime. Throws on a non-2xx final response or no response.
     /// </summary>
     /// <param name="ifMatch">SIP-If-Match entity-tag of a prior publication to refresh/modify/remove; null for an initial publication.</param>
+    /// <summary>Subscribes to somebody's state (RFC 6665). See <see cref="IPhoneLine.SubscribeAsync"/>.</summary>
+    Task<Subscriptions.ISipSubscription> SubscribeAsync(
+        string eventType,
+        string targetUri,
+        int expiresSeconds = 300,
+        string? accept = null,
+        CancellationToken ct = default)
+        => throw new NotSupportedException(
+            "This line does not support subscriptions. Implemented by the SIP line channel; a default "
+            + "is provided so adding this member does not break implementations outside this repository.");
+
     Task<PublishResult> PublishAsync(string eventType, string body, string contentType, int expiresSeconds, string? ifMatch = null, CancellationToken ct = default);
 }

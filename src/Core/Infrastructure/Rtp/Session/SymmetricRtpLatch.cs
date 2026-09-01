@@ -33,7 +33,20 @@ internal sealed class SymmetricRtpLatch
     /// The address outbound media should target: the latched source once one is established, otherwise
     /// <paramref name="fallback"/> (the SDP-advertised remote).
     /// </summary>
-    public IPEndPoint Target(IPEndPoint fallback) => Volatile.Read(ref _latched) ?? fallback;
+    public IPEndPoint? Target(IPEndPoint fallback)
+    {
+        var target = Volatile.Read(ref _latched) ?? fallback;
+
+        // The unspecified address is not a destination. It reaches here from a remote description that
+        // named none — the RFC 2543 way of putting a call on hold is c=0.0.0.0, and several gateways
+        // still send it — and until the far end sends us a packet to latch onto there is nothing else
+        // to aim at. Sending there fails at the socket on some stacks and goes nowhere on others; both
+        // are noise on every packet of a held call. The bundled transport keeps the same guard, and so
+        // does SIPSorcery.
+        return target.Address.Equals(IPAddress.Any) || target.Address.Equals(IPAddress.IPv6Any)
+            ? null
+            : target;
+    }
 
     /// <summary>
     /// Considers a validated inbound packet's <paramref name="source"/> for the latch and returns whether the

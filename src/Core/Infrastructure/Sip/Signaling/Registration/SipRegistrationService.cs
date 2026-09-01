@@ -298,6 +298,7 @@ internal sealed class SipRegistrationService : ISipRegistrationService
                         Authenticated = authAttempted,
                         NextCSeq = cseq + 1,
                         ServiceRoute = ExtractServiceRoute(response),
+                        AssociatedUris = SipAssociatedUris.Parse(response.HeaderValues("P-Associated-URI")),
                         RegisteredBindings = bindings,
                         ObservedPublicHost = observedHost,
                         ObservedPublicPort = observedPort

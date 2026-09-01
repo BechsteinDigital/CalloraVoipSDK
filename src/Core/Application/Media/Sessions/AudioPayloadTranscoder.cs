@@ -327,6 +327,15 @@ internal static class AudioPayloadTranscoder
         if (normalized.Contains("OPUS", StringComparison.Ordinal))
             return PayloadCodecKind.Opus;
 
+        // Named so the failure downstream can name it too. This SDK carries no G.729 implementation,
+        // and the alternative was PayloadCodecKind.Unknown — which reads as "a codec nobody has heard
+        // of" for one that half the carrier world still offers.
+        if (normalized.Contains("G729", StringComparison.Ordinal) ||
+            normalized.Contains("G.729", StringComparison.Ordinal))
+        {
+            return PayloadCodecKind.G729;
+        }
+
         if (normalized.Contains("CN", StringComparison.Ordinal) ||
             normalized.Contains("COMFORT-NOISE", StringComparison.Ordinal))
         {
@@ -339,6 +348,7 @@ internal static class AudioPayloadTranscoder
             8 => PayloadCodecKind.Pcma,
             9 => PayloadCodecKind.G722,
             13 => PayloadCodecKind.ComfortNoise,
+            18 => PayloadCodecKind.G729,
             _ => PayloadCodecKind.Unknown,
         };
     }

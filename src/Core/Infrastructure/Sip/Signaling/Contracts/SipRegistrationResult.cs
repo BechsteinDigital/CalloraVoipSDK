@@ -45,6 +45,17 @@ internal sealed class SipRegistrationResult
     public string? ServiceRoute { get; init; }
 
     /// <summary>
+    /// RFC 3455 §5.1 — the addresses the registrar says belong to this registration.
+    /// </summary>
+    /// <remarks>
+    /// The first entry is the default public identity: the one the network uses when a request does not
+    /// say otherwise. Order is therefore meaningful and preserved. Empty when the registrar said
+    /// nothing, which is not the same as having none — carrier registrars send this header, a CPE box
+    /// on the local network generally does not.
+    /// </remarks>
+    public IReadOnlyList<string> AssociatedUris { get; init; } = [];
+
+    /// <summary>
     /// Contact bindings returned by the registrar in the 200 OK Contact headers.
     /// Contains one entry per active binding.
     /// </summary>

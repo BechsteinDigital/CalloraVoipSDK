@@ -21,29 +21,18 @@ and intelligent decision logic.
 
 ## Current Status
 
-Latest release: **v4.14.0** on [nuget.org](https://www.nuget.org/packages/CalloraVoipSdk) (this
-documentation). 4.14.0 cuts WebRTC call setup from about four seconds to one: the placeholder a trickling
-peer sends for "no address yet" is no longer treated as an ICE candidate, where it outranked every real
-pair and could never be answered. It also accepts inbound DTLS from any of the peer's candidates rather
-than only the nominated pair, and adds `RemoteEndPointTranslator` for deployments whose TURN server runs
-on the same machine. It builds on 4.13.1, which addressed the DTLS half of that same delay, and on
-4.13.0, which lets a consumer that **mixes** buffer inbound WebRTC audio before it is raised
-(`WebRtcConfiguration.AudioReceivePlayoutDelayMs`, default 0 = raise on arrival): a mixer must produce a frame
-every frame interval and otherwise reads an Opus-DTX burst as one usable frame plus silence, which a caller
-hears as audio cutting out after every pause. It builds on 4.12.0, which added **simulcast when the SDK
-answers** — an offered `a=simulcast:send` (the common
-SFU topology, client offers and server answers) is confirmed in the answer with the received layers tagged by
-RID, both directions SDK↔SDK media-proven — and **`ICall.DiversionChain`**, the full retargeting history of an
-inbound call read from `History-Info` (RFC 4244) and `Diversion` (RFC 5806) alike. It builds on 4.11, which
-closed the two limits the 4.10 line called out: the TURN relay data path is no longer
-UDP-only — a relay candidate can carry media over a persistent **TCP/TLS** connection to the server (a stream
-relay, RFC 8656 §12 ChannelData), unit-proven with browser/real-server interop tracked in the matrix — and a
-WebRTC peer now **survives an ICE restart** in place (`CreateIceRestartOfferAsync`) instead of being disposed
-and rebuilt. Simulcast is now negotiated in **both roles** (offerer since 4.11, answerer since 4.12); also
-media-flow/silence monitoring on `ICall`, RFC 8285 two-byte header extensions and the AV1 Dependency Descriptor,
-and SIP hardening.
-All additive — no public API was removed or changed — on top of the multi-party WebRTC facade (4.7),
-DTLS-SRTP with AEAD-AES-GCM, the self-hostable STUN/TURN server, and the stable SIP + RTP core.
+Latest release: **v4.14.0** on [nuget.org](https://www.nuget.org/packages/CalloraVoipSdk) — the version
+this documentation describes.
+
+What each release changed, and why, is in the
+[release notes](https://github.com/BechsteinDigital/CalloraVoipSDK/tree/main/docs/release-notes); the
+full list of changes is in the
+[changelog](https://github.com/BechsteinDigital/CalloraVoipSDK/blob/main/CHANGELOG.md). Every release
+in the 4.x line has been additive — no public API has been removed or changed, which the tracked
+`PublicApi.approved.txt` baseline enforces on every build.
+
+The table below is what matters here: which parts are mature, which are opt-in, and which are not
+implemented at all.
 
 > **How to read the status column.** *Stable* = mature, covered by the RFC-oriented test suite and
 > by automated interop, and the intended production surface. *Opt-in* = shipped and tested, but off
