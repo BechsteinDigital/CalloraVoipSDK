@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class SipDialogInfo | CalloraVoipSdk </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class SipDialogInfo | CalloraVoipSdk ">
+      
+      <meta name="description" content="What a watched line is currently doing (dialog-info, RFC 4235).">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/BechsteinDigital/callora-voip-sdk/new/main/apiSpec/new?filename=CalloraVoipSdk_Core_Domain_Subscriptions_SipDialogInfo.md&amp;value=---%0Auid%3A%20CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogInfo%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="">
+            
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogInfo">
+
+
+
+  <h1 id="CalloraVoipSdk_Core_Domain_Subscriptions_SipDialogInfo" data-uid="CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogInfo" class="text-break">
+Class SipDialogInfo  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Subscriptions/SipDialogInfo.cs/#L26"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="CalloraVoipSdk.html">CalloraVoipSdk</a>.<a class="xref" href="CalloraVoipSdk.Core.html">Core</a>.<a class="xref" href="CalloraVoipSdk.Core.Domain.html">Domain</a>.<a class="xref" href="CalloraVoipSdk.Core.Domain.Subscriptions.html">Subscriptions</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>CalloraVoipSdk.Core.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>What a watched line is currently doing (dialog-info, RFC 4235).</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sealed class SipDialogInfo</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">SipDialogInfo</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="CalloraVoipSdk_Core_Domain_Subscriptions_SipDialogInfo_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>This is the busy lamp.</b> Subscribe to the <code>dialog</code> package of an extension and each
+notification says whether it is idle, ringing, or on a call — the difference between a telephone
+system that shows its colleagues and one that does not.
+</p>
+<p>
+<b>Partial updates are the trap.</b> A document is <code>full</code> or <code>partial</code>: a full one lists
+every dialog and therefore says "everything not mentioned is over", a partial one carries only what
+changed and says nothing about the rest. Treating a partial document as complete clears a lamp that
+should still be lit — so <a class="xref" href="CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogInfo.html#CalloraVoipSdk_Core_Domain_Subscriptions_SipDialogInfo_IsFullState">IsFullState</a> is exposed rather than smoothed away, and a
+consumer that ignores it will get it wrong in exactly that one direction.
+</p>
+<p>
+<a class="xref" href="CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogInfo.html#CalloraVoipSdk_Core_Domain_Subscriptions_SipDialogInfo_Version">Version</a> comes with the same warning: notifications may arrive out of order, and a
+document older than the one already applied has to be dropped rather than merged.
+</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Subscriptions_SipDialogInfo_Dialogs_" data-uid="CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogInfo.Dialogs*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Subscriptions_SipDialogInfo_Dialogs" data-uid="CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogInfo.Dialogs">
+  Dialogs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Subscriptions/SipDialogInfo.cs/#L49"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The dialogs the document reports.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IReadOnlyList&lt;SipDialogInfoEntry&gt; Dialogs { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogInfoEntry.html">SipDialogInfoEntry</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Subscriptions_SipDialogInfo_Entity_" data-uid="CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogInfo.Entity*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Subscriptions_SipDialogInfo_Entity" data-uid="CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogInfo.Entity">
+  Entity
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Subscriptions/SipDialogInfo.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Whose dialogs these are, from the <code>entity</code> attribute.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? Entity { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Subscriptions_SipDialogInfo_IsBusy_" data-uid="CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogInfo.IsBusy*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Subscriptions_SipDialogInfo_IsBusy" data-uid="CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogInfo.IsBusy">
+  IsBusy
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Subscriptions/SipDialogInfo.cs/#L58"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Whether the watched party is on a call or being called right now.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsBusy { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="CalloraVoipSdk_Core_Domain_Subscriptions_SipDialogInfo_IsBusy_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Early counts as busy, and that is deliberate: a colleague whose phone is ringing cannot take a
+second call either, and a lamp that only lights on <code>confirmed</code> invites exactly that.</p>
+</div>
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Subscriptions_SipDialogInfo_IsFullState_" data-uid="CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogInfo.IsFullState*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Subscriptions_SipDialogInfo_IsFullState" data-uid="CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogInfo.IsFullState">
+  IsFullState
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Subscriptions/SipDialogInfo.cs/#L46"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Whether this document lists every dialog (<code>full</code>) or only what changed (<code>partial</code>).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsFullState { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Subscriptions_SipDialogInfo_Version_" data-uid="CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogInfo.Version*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Subscriptions_SipDialogInfo_Version" data-uid="CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogInfo.Version">
+  Version
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Subscriptions/SipDialogInfo.cs/#L41"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Document version; increases per notification. Null when the sender omitted it.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public long? Version { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="CalloraVoipSdk_Core_Domain_Subscriptions_SipDialogInfo_TryParse_" data-uid="CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogInfo.TryParse*"></a>
+
+  <h3 id="CalloraVoipSdk_Core_Domain_Subscriptions_SipDialogInfo_TryParse_System_String_" data-uid="CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogInfo.TryParse(System.String)">
+  TryParse(string?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Subscriptions/SipDialogInfo.cs/#L66"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Reads a dialog-info document, or returns null when it is not one.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static SipDialogInfo? TryParse(string? xml)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>xml</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="CalloraVoipSdk.Core.Domain.Subscriptions.SipDialogInfo.html">SipDialogInfo</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="CalloraVoipSdk_Core_Domain_Subscriptions_SipDialogInfo_TryParse_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Null rather than an exception: it arrives on a NOTIFY from somebody else's server, and their
+malformed XML must not take down a call path of ours.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/BechsteinDigital/callora-voip-sdk/blob/main/src/Core/Domain/Subscriptions/SipDialogInfo.cs/#L26" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          CalloraVoipSdk — Commercial .NET VoIP SDK
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>
