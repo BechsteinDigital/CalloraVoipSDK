@@ -103,9 +103,10 @@ docs/*
 !docs/portal
 !docs/audit/
 !docs/maintainers/
-!docs/handover/
 !docs/adr/
 !docs/reference/
+!docs/release-notes/
+!docs/assets/
 
 # The RFC compliance references are tracked while the rest of docs/archive/ stays local. They call themselves
 # the binding reference for this SDK's development and are cited by name in commit messages and reviews, so
