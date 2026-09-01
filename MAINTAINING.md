@@ -247,9 +247,15 @@ deren PDBs Pfade verschobener Dateien und verfälschen die Zahl.
    auf main; `docs.yml` ist das PR-Gate für den Doku-Build.
 4. **Release-Doku (pro Minor/Major):** `VersionPrefix` in `src/Directory.Build.props` hochziehen;
    `CHANGELOG.md` (`[Unreleased]` → `[X.Y.Z] - DATUM` + frische `[Unreleased]`); `docs/release-notes/X.Y.Z.md`
-   schreiben; `docs/portal/changelog.md` (Release-Highlight), README-Abschnitt „What's new", Status-Zeile und
-   „latest release" nachziehen. Die Public-API-Fläche ist über `tests/CalloraVoipSdk.ArchitectureTests/PublicApi.approved.txt`
+   schreiben; `docs/portal/changelog.md` (Release-Highlight), die Status-Tabelle der README prüfen (die Release-Historie steht seit dem Umbau in
+   `docs/release-notes/`, nicht mehr in der README). Die Public-API-Fläche ist über `tests/CalloraVoipSdk.ArchitectureTests/PublicApi.approved.txt`
    (test-erzwungen) belegt — ein Removal oder eine Signatur-Änderung dort ⇒ Major-Bump, sonst Minor (additiv).
+
+   **Ein neues Paket** braucht zwei Schritte, und `PublishedPackageAnchorTests` erzwingt beide: eine
+   `ProjectReference` im Architektur-Testprojekt und einen Eintrag in `PublicApiSurfaceTests.AssemblyAnchors`.
+   Die Reihenfolge ist nicht beliebig — ohne die Referenz gibt es keinen Typ zum Verankern. Genau daran
+   sind die drei Audio-Pakete monatelang vorbeigelaufen: veröffentlicht, aber von keiner Baseline erfasst,
+   weil das Testprojekt sie nicht kannte. Ein Metapaket ohne eigene Quelldateien ist automatisch ausgenommen.
 
 ### 3.6 Doku-Grenzen
 

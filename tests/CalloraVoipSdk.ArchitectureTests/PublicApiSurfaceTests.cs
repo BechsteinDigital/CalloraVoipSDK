@@ -38,11 +38,27 @@ public sealed class PublicApiSurfaceTests
     /// Die Assembly-Namen der consumer-facing Assemblies. Aufgeloest ueber Referenztypen,
     /// damit ProjectReferences tatsaechlich geladen sind (kein AppDomain-Rate-Spiel).
     /// </summary>
+    /// <remarks>
+    /// Every assembly a consumer can install has to be anchored here, and the audio packages were not:
+    /// their surface could change in any direction without the gate noticing, which is the one thing
+    /// this test exists to prevent. They are shipped separately and referenced directly — an
+    /// application that writes its own <c>IAudioDevice</c> binds their types, not the facade's.
+    /// </remarks>
     private static readonly Type[] AssemblyAnchors =
     [
-        typeof(CalloraVoipSdk.IVoipClient),          // CalloraVoipSdk.Client
-        typeof(CalloraVoipSdk.Core.Domain.Calls.ICall), // CalloraVoipSdk.Core
+        typeof(CalloraVoipSdk.IVoipClient),                                  // CalloraVoipSdk.Client
+        typeof(CalloraVoipSdk.Core.Domain.Calls.ICall),                      // CalloraVoipSdk.Core
+        typeof(CalloraVoipSdk.Audio.Abstractions.Processing.ActiveCodec),    // .Audio.Abstractions
+        typeof(CalloraVoipSdk.Audio.Windows.WindowsAudioDevice),              // .Audio.Windows
+        typeof(CalloraVoipSdk.Audio.Linux.LinuxAudioDevice),                  // .Audio.Linux
     ];
+
+    /// <summary>
+    /// The assembly names the baseline covers — read by <see cref="PublishedPackageAnchorTests"/>,
+    /// which checks that every published package is among them.
+    /// </summary>
+    internal static IReadOnlyCollection<string> AnchoredAssemblyNames =>
+        [.. AssemblyAnchors.Select(anchor => anchor.Assembly.GetName().Name!)];
 
     [Fact]
     public void Public_API_Surface_matches_approved_baseline()

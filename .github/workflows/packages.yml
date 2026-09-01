@@ -16,7 +16,134 @@ permissions:
   contents: read
 
 jobs:
+  # Der Torwächter. Der Pack-Job führt selbst nur die Unit-Menge aus — Interop, FreeSWITCH,
+  # Browser und Soak sind in seinem Filter ausdrücklich ausgeschlossen, weil sie Docker und
+  # einen Playwright-Container brauchen. Damit wurde bis hierher auf nuget.org veröffentlicht,
+  # ohne dass irgendetwas von dem gelaufen war, womit die README für das Paket wirbt:
+  # ein echtes Asterisk und echte Browser.
+  #
+  # Die Arbeit wird nicht verdoppelt (das wären dreißig Minuten ein zweites Mal), sondern
+  # nachgewiesen: Der CI-Workflow MUSS für genau diesen Commit erfolgreich durchgelaufen sein.
+  # Ein Tag auf einem Commit, dessen Lauf rot war oder gar nicht stattgefunden hat, bricht hier
+  # ab, bevor ein Paket entsteht.
+  require-full-ci:
+    runs-on: ubuntu-latest
+    outputs:
+      # Genau eine Stelle bestimmt die Version, und es ist die, die über sie entscheidet. Eine zweite
+      # Ableitung im Pack-Job wäre dieselben vier Zeilen — und die Sorte Duplikat, bei der eines Tages
+      # das Gate eine andere Version prüft als die, die veröffentlicht wird.
+      version: ${{ steps.version.outputs.version }}
+    # Der Workflow steht global auf `contents: read`, weil Veröffentlichen über NUGET_API_KEY läuft
+    # und nicht über den GITHUB_TOKEN. Das Lesen fremder Workflow-Läufe braucht aber `actions: read`
+    # — ohne das antwortet die API mit 403, und dieses Gate hätte JEDEN Release blockiert statt nur
+    # die schlechten. Job-lokal erweitert, damit die Rechte des Pack- und Push-Jobs eng bleiben.
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: CI must have passed for this exact commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          conclusion=$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$SHA&per_page=1" \
+            --jq '.workflow_runs[0].conclusion // "none"')
+
+          echo "CI conclusion for $SHA: $conclusion"
+
+          if [ "$conclusion" != "success" ]; then
+            # `cancelled` ist der häufigste Fall und sieht nicht nach einem Defekt aus: ci.yml fährt
+            # `cancel-in-progress` pro Ref, ein zweiter Push auf main bricht den Lauf des ersten Commits
+            # ab. Wer ihn danach taggt, landet hier — und braucht nicht die Ursache zu suchen, sondern
+            # einen neuen Lauf.
+            echo "::error::No successful CI run for $SHA (found: $conclusion). Tag a commit whose ci.yml run — including interop, browser, chaos and perf — finished green. A 'cancelled' conclusion usually means a later push superseded that run: re-run it, then tag again."
+            exit 1
+          fi
+
+      - name: Resolve package version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Version: $VERSION"
+
+      # Ein Paket auf nuget.org, das auf keinen Commit zurückzeigt, ist ein Paket, dessen Quellstand
+      # niemand mehr feststellen kann. Beim Tag-Push ist der Bezug gegeben; `workflow_dispatch` nimmt
+      # dagegen jede eingetippte Version auf jedem Ref — dieser Weg existiert, um einen fehlgeschlagenen
+      # Tag-Lauf nachzuholen, und in dem Fall gibt es den Tag bereits. Er muss also da sein und auf
+      # genau diesen Commit zeigen.
+      - name: Version must be anchored to its tag
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
+          VERSION: ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          target=$(gh api "repos/$REPO/git/ref/tags/v$VERSION" --jq '.object.sha' 2>/dev/null || echo "")
+
+          if [ -z "$target" ]; then
+            echo "::error::Es gibt kein Tag v$VERSION. Setze es auf den Commit, der veröffentlicht werden soll — sonst liegt auf nuget.org eine Version, zu der kein Stand im Repository gehört."
+            exit 1
+          fi
+
+          # Ein annotiertes Tag zeigt auf ein Tag-Objekt, nicht direkt auf den Commit; einmal auflösen.
+          type=$(gh api "repos/$REPO/git/ref/tags/v$VERSION" --jq '.object.type')
+          if [ "$type" = "tag" ]; then
+            target=$(gh api "repos/$REPO/git/tags/$target" --jq '.object.sha')
+          fi
+
+          if [ "$target" != "$SHA" ]; then
+            echo "::error::v$VERSION zeigt auf $target, veröffentlicht würde aber $SHA. Wähle den Ref des Tags, oder setze das Tag um."
+            exit 1
+          fi
+
+      # `dotnet nuget push --skip-duplicate` schweigt, wenn eine Version schon oben liegt. Das ist
+      # richtig für den Fall, für den es gedacht ist — der zweite Versuch, nachdem drei von sechs
+      # Paketen durch waren. Es ist still falsch für den anderen Fall: Tag gelöscht, korrigiert, neu
+      # gesetzt. Dann läuft der Release grün durch, und auf nuget.org liegt weiterhin der alte Inhalt
+      # unter der neuen Zusage.
+      #
+      # Die Fälle sind unterscheidbar: Beim Nachholversuch fehlt mindestens ein Paket, beim
+      # Re-Release ist die Version vollständig vorhanden. Nur der zweite wird abgewiesen.
+      - name: A complete version must not already be on nuget.org
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          missing=0
+          for id in calloravoipsdk calloravoipsdk.core calloravoipsdk.client \
+                    calloravoipsdk.audio.abstractions calloravoipsdk.audio.windows calloravoipsdk.audio.linux; do
+            versions=$(curl -fsS "https://api.nuget.org/v3-flatcontainer/$id/index.json" 2>/dev/null || echo '{}')
+            if ! printf '%s' "$versions" | grep -q "\"$VERSION\""; then
+              missing=$((missing + 1))
+            fi
+          done
+
+          if [ "$missing" -eq 0 ]; then
+            echo "::error::$VERSION liegt vollständig auf nuget.org. Eine veröffentlichte Version ist unveränderlich — --skip-duplicate würde diesen Lauf grün melden, ohne etwas zu ändern. Wähle die nächste Versionsnummer."
+            exit 1
+          fi
+
+          echo "$missing von 6 Paketen fehlen auf nuget.org — Veröffentlichung geht weiter."
+
   pack:
+    needs: require-full-ci
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -30,47 +157,39 @@ jobs:
             9.0.x
             10.0.x
 
-      - name: Resolve package version
-        id: version
-        shell: bash
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION="${{ inputs.version }}"
-          else
-            VERSION="${GITHUB_REF_NAME#v}"
-          fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-
       - name: Restore
         run: dotnet restore CalloraVoipSdk.sln
 
-      - name: Build and test (release gate)
+      # Die Unit-Menge, hier als letzte Kontrolle am Release-Build. Die ausgeschlossenen Kategorien
+      # brauchen Docker beziehungsweise den Playwright-Container und laufen im CI-Workflow — dass der
+      # für diesen Commit grün war, hat require-full-ci oben bereits erzwungen.
+      - name: Build and test (release build, unit set)
         run: |
           dotnet build CalloraVoipSdk.sln -c Release --no-restore
           dotnet test CalloraVoipSdk.sln -c Release --no-build --nologo --filter "Category!=SoakLong&Category!=Interop&Category!=InteropFreeSwitch&Category!=BrowserInterop"
 
       - name: Pack CalloraVoipSdk.Core
-        run: dotnet pack src/Core/CalloraVoipSdk.Core.csproj -c Release --no-restore -o artifacts/nuget /p:Version=${{ steps.version.outputs.version }}
+        run: dotnet pack src/Core/CalloraVoipSdk.Core.csproj -c Release --no-restore -o artifacts/nuget /p:Version=${{ needs.require-full-ci.outputs.version }}
 
       - name: Pack CalloraVoipSdk
-        run: dotnet pack src/CalloraVoipSdk/CalloraVoipSdk.csproj -c Release --no-restore -o artifacts/nuget /p:Version=${{ steps.version.outputs.version }}
+        run: dotnet pack src/CalloraVoipSdk/CalloraVoipSdk.csproj -c Release --no-restore -o artifacts/nuget /p:Version=${{ needs.require-full-ci.outputs.version }}
 
       - name: Pack CalloraVoipSdk.Client
-        run: dotnet pack src/Client/CalloraVoipSdk.Client.csproj -c Release --no-restore -o artifacts/nuget /p:Version=${{ steps.version.outputs.version }}
+        run: dotnet pack src/Client/CalloraVoipSdk.Client.csproj -c Release --no-restore -o artifacts/nuget /p:Version=${{ needs.require-full-ci.outputs.version }}
 
       - name: Pack CalloraVoipSdk.Audio.Abstractions
-        run: dotnet pack src/Audio/Abstractions/CalloraVoipSdk.Audio.Abstractions.csproj -c Release --no-restore -o artifacts/nuget /p:Version=${{ steps.version.outputs.version }}
+        run: dotnet pack src/Audio/Abstractions/CalloraVoipSdk.Audio.Abstractions.csproj -c Release --no-restore -o artifacts/nuget /p:Version=${{ needs.require-full-ci.outputs.version }}
 
       - name: Pack CalloraVoipSdk.Audio.Windows
-        run: dotnet pack src/Audio/Windows/CalloraVoipSdk.Audio.Windows.csproj -c Release --no-restore -o artifacts/nuget /p:Version=${{ steps.version.outputs.version }}
+        run: dotnet pack src/Audio/Windows/CalloraVoipSdk.Audio.Windows.csproj -c Release --no-restore -o artifacts/nuget /p:Version=${{ needs.require-full-ci.outputs.version }}
 
       - name: Pack CalloraVoipSdk.Audio.Linux
-        run: dotnet pack src/Audio/Linux/CalloraVoipSdk.Audio.Linux.csproj -c Release --no-restore -o artifacts/nuget /p:Version=${{ steps.version.outputs.version }}
+        run: dotnet pack src/Audio/Linux/CalloraVoipSdk.Audio.Linux.csproj -c Release --no-restore -o artifacts/nuget /p:Version=${{ needs.require-full-ci.outputs.version }}
 
       - name: Upload package artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: nuget-${{ steps.version.outputs.version }}
+          name: nuget-${{ needs.require-full-ci.outputs.version }}
           path: artifacts/nuget/*
 
       - name: Publish to NuGet.org
@@ -78,7 +197,7 @@ jobs:
         run: |
           set -euo pipefail
           SOURCE="https://api.nuget.org/v3/index.json"
-          VERSION="${{ steps.version.outputs.version }}"
+          VERSION="${{ needs.require-full-ci.outputs.version }}"
 
           dotnet nuget push "artifacts/nuget/CalloraVoipSdk.Core.${VERSION}.nupkg" --api-key "${{ secrets.NUGET_API_KEY }}" --source "$SOURCE" --skip-duplicate
           dotnet nuget push "artifacts/nuget/CalloraVoipSdk.Client.${VERSION}.nupkg" --api-key "${{ secrets.NUGET_API_KEY }}" --source "$SOURCE" --skip-duplicate

@@ -1,6 +1,6 @@
 {
-  "lineRatePercent": 70.97,
+  "lineRatePercent": 74.22,
   "tolerancePercentagePoints": 2.0,
-  "coveredLines": 25149,
-  "totalLines": 35436
+  "coveredLines": 28364,
+  "totalLines": 38217
 }
