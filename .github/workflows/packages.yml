@@ -28,6 +28,13 @@ jobs:
   # ab, bevor ein Paket entsteht.
   require-full-ci:
     runs-on: ubuntu-latest
+    # Der Workflow steht global auf `contents: read`, weil Veröffentlichen über NUGET_API_KEY läuft
+    # und nicht über den GITHUB_TOKEN. Das Lesen fremder Workflow-Läufe braucht aber `actions: read`
+    # — ohne das antwortet die API mit 403, und dieses Gate hätte JEDEN Release blockiert statt nur
+    # die schlechten. Job-lokal erweitert, damit die Rechte des Pack- und Push-Jobs eng bleiben.
+    permissions:
+      contents: read
+      actions: read
     steps:
       - name: CI must have passed for this exact commit
         env:
